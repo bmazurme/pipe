@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -19,7 +21,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
       database: configService.get<string>('POSTGRES_DB') ?? 'ntlstl-db',
       entities: [User, StoredFile, PurgeEntry],
       synchronize: isDev,
-      migrations: isDev ? [] : ['dist/migrations/*.js'],
+      migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],
       migrationsRun: !isDev,
     };
   },
