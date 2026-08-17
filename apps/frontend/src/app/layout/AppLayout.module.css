@@ -1,0 +1,58 @@
+.content {
+  padding: 24px;
+}
+
+.contentMobile {
+  padding: 16px;
+}
+
+.soonTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.soonBadge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--g-border-radius-s);
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.burgerFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: var(--g-border-radius-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.userRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+/* Keeps a long email from pushing the avatar out of the row. */
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}

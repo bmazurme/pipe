@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Sidebar items for services that aren't built yet. Hover stays enabled so the
+   collapsed sidebar can still show the item's tooltip — the items carry no
+   click handler, so there is nothing to guard against. */
+.ntlstl-soon-item {
+  opacity: 0.55;
+  cursor: default;
+}

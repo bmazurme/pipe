@@ -1,0 +1,91 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 24px;
+  border: 1px dashed var(--g-color-line-generic-accent);
+  border-radius: var(--g-border-radius-l);
+  text-align: center;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.dropzoneActive {
+  border-color: var(--g-color-line-brand);
+  background: var(--g-color-base-selection);
+}
+
+.dropzoneIcon {
+  color: var(--g-color-text-secondary);
+}
+
+.filesCard {
+  padding: 16px;
+  /* Flex items default to min-width:auto, which would let the wide table push
+     the card past the viewport instead of scrolling inside .tableWrapper. */
+  min-width: 0;
+}
+
+.filesHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 0;
+}
+
+.emptyIcon {
+  color: var(--g-color-text-hint);
+}
+
+/* Table columns don't collapse gracefully, so scroll it instead of the page. */
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.fileList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+.fileRow:first-child {
+  border-top: none;
+}
+
+/* Without this the long file name stops the row from shrinking. */
+.fileInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
