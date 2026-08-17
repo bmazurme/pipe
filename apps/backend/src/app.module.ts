@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 
 import { AuthModule } from './auth/auth.module';
 import { OauthModule } from './oauth/oauth.module';
+import { PurgeModule } from './purge/purge.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
 
@@ -17,6 +18,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     TypeOrmModuleConfig,
     AuthModule,
     OauthModule,
+    PurgeModule,
     StorageModule,
     UsersModule,
   ],

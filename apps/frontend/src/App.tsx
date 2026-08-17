@@ -7,6 +7,7 @@ import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { OAuthErrorPage } from './pages/OAuthErrorPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { PurgePage } from './pages/PurgePage';
 import { StoragePage } from './pages/StoragePage';
 import { RequireAuth } from './widgets/RequireAuth';
 
@@ -23,6 +24,7 @@ export function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/storage" element={<StoragePage />} />
+                <Route path="/purge" element={<PurgePage />} />
               </Route>
             </Route>
           </Routes>

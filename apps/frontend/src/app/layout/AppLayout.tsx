@@ -29,7 +29,6 @@ const LOGO = { icon: LogoMark, text: 'ntlstl', href: '/' };
 const FEATURE_LINKS = [
   { id: 'time', title: 'Time', icon: Clock },
   { id: 'rag', title: 'RAG', icon: MagicWand },
-  { id: 'purge', title: 'Purge', icon: TrashBin },
 ];
 
 const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'system'];
@@ -78,6 +77,13 @@ export function AppLayout() {
       icon: Bucket,
       current: location.pathname === '/storage',
       onItemClick: () => navigate('/storage'),
+    },
+    {
+      id: 'purge',
+      title: 'Purge',
+      icon: TrashBin,
+      current: location.pathname === '/purge',
+      onItemClick: () => navigate('/purge'),
     },
     { id: 'soon-divider', title: '', type: 'divider' as const },
     // The burger menu ignores item.className, so the "скоро" hint lives in the

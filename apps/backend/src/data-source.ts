@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 
+import { PurgeEntry } from './purge/entities/purge-entry.entity';
 import { StoredFile } from './storage/entities/stored-file.entity';
 import { User } from './users/entities/user.entity';
 
@@ -13,6 +14,6 @@ export const AppDataSource = new DataSource({
   username: process.env.POSTGRES_USER ?? 'postgres',
   password: process.env.POSTGRES_PASSWORD ?? 'postgres',
   database: process.env.POSTGRES_DB ?? 'ntlstl-db',
-  entities: [User, StoredFile],
+  entities: [User, StoredFile, PurgeEntry],
   migrations: ['src/migrations/*.ts'],
 });

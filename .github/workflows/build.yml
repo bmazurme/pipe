@@ -114,7 +114,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
           cat > ~/.ssh/config <<EOF
-          Host $SWARM_HOST
+          Host *
             IdentityFile ~/.ssh/id_ed25519
             IdentitiesOnly yes
             StrictHostKeyChecking yes
