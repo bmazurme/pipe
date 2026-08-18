@@ -19,6 +19,7 @@
     "@gravity-ui/navigation": "^6.4.1",
     "@gravity-ui/uikit": "^7.42.0",
     "@reduxjs/toolkit": "^2.12.0",
+    "fflate": "^0.8.3",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-redux": "^9.3.0",

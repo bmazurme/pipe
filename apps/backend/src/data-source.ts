@@ -1,3 +1,5 @@
+import './pg-timestamp-parser';
+
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 

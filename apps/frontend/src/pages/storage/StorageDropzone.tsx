@@ -2,6 +2,7 @@ import { DragEvent, useRef, useState } from 'react';
 import { CloudArrowUpIn } from '@gravity-ui/icons';
 import { Button, Icon, Text } from '@gravity-ui/uikit';
 
+import { MAX_FILE_SIZE_MB } from '../../store/api';
 import styles from '../StoragePage.module.css';
 
 interface StorageDropzoneProps {
@@ -62,7 +63,7 @@ export function StorageDropzone({ isUploading, onUpload }: StorageDropzoneProps)
         Выбрать файл
       </Button>
       <Text color="hint" variant="caption-2" className={styles.dropzoneHint}>
-        До 10 МБ · файл удаляется с сервера сразу после скачивания
+        До {MAX_FILE_SIZE_MB} МБ · файл удаляется с сервера сразу после скачивания
       </Text>
       <input
         ref={fileInputRef}

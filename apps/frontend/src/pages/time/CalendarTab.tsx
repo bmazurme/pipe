@@ -5,7 +5,7 @@ import { dateTime, DateTime } from '@gravity-ui/date-utils';
 
 import { useListDayOffsQuery } from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { timeDayOffsSelector, timeYearSelector, yearChanged } from '../../store/slices';
+import { timeYearSelector, yearChanged } from '../../store/slices';
 import styles from '../TimePage.module.css';
 import { CalendarMonth } from './CalendarMonth';
 
@@ -18,8 +18,7 @@ function lastDayOfMonth(year: number, month: number): number {
 export function CalendarTab() {
   const dispatch = useAppDispatch();
   const year = useAppSelector(timeYearSelector);
-  const { isLoading, isError } = useListDayOffsQuery(year);
-  const dayOffs = useAppSelector(timeDayOffsSelector);
+  const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
 
   const dayOffDates = useMemo(() => new Set(dayOffs.map((dayOff) => dayOff.date)), [dayOffs]);
 

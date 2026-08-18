@@ -14,6 +14,7 @@ import { storageFilesSelector } from '../store/slices';
 import { PageHeader } from '../widgets/PageHeader';
 import { StorageDropzone } from './storage/StorageDropzone';
 import { StorageFileList } from './storage/StorageFileList';
+import { StorageProjectUpload } from './storage/StorageProjectUpload';
 import styles from './StoragePage.module.css';
 
 const FILES_POLL_INTERVAL_MS = 4000;
@@ -61,6 +62,8 @@ export function StoragePage() {
       />
 
       <StorageDropzone isUploading={isUploading} onUpload={(file) => void handleUpload(file)} />
+
+      <StorageProjectUpload onError={setError} />
 
       {error && (
         <Alert

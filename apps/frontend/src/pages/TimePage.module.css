@@ -139,6 +139,28 @@
   background: var(--g-color-base-simple-hover);
 }
 
+/* A period is a run of 2+ consecutive days (see groupConsecutiveDayOffs) —
+   tinted so it reads as one block; colors cycle per period, not per row, so
+   two periods sitting next to each other in the list stay visually
+   distinct. A lone day (not part of any run) keeps the plain row style. */
+.periodColorA {
+  background: var(--g-color-base-info-light);
+}
+
+.periodColorB {
+  background: var(--g-color-base-positive-light);
+}
+
+.periodColorC {
+  background: var(--g-color-base-misc-light);
+}
+
+.periodColorA:hover,
+.periodColorB:hover,
+.periodColorC:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
 .centered {
   display: flex;
   justify-content: center;

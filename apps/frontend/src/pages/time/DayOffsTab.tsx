@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Calendar, Plus, TrashBin } from '@gravity-ui/icons';
+import { useMemo, useState } from 'react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Card, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
 import { RangeDatePicker, type RangeValue } from '@gravity-ui/date-components';
 import { DateTime } from '@gravity-ui/date-utils';
@@ -10,11 +10,14 @@ import {
   useDeleteDayOffMutation,
   useListDayOffsQuery,
 } from '../../store/api';
-import { useAppSelector } from '../../store/hooks';
-import { timeDayOffsSelector, timeYearSelector } from '../../store/slices';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { timeYearSelector, yearChanged } from '../../store/slices';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
+import { groupConsecutiveDayOffs } from './dayOffUtils';
+
+const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
 
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('ru-RU', {
@@ -25,11 +28,17 @@ function formatDate(date: string): string {
 }
 
 export function DayOffsTab() {
+  const dispatch = useAppDispatch();
   const year = useAppSelector(timeYearSelector);
-  const { isLoading, isError } = useListDayOffsQuery(year);
-  const dayOffs = useAppSelector(timeDayOffsSelector);
+  const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
   const [createDayOff] = useCreateDayOffMutation();
   const [deleteDayOff] = useDeleteDayOffMutation();
+
+  // Runs of 2+ consecutive calendar days get a shared tint so a vacation or
+  // sick-leave stretch reads as one block; a lone day stays untinted. Colors
+  // cycle across periods (not within one) so two periods that end up next to
+  // each other in the list still stay visually separated.
+  const dayOffGroups = useMemo(() => groupConsecutiveDayOffs(dayOffs), [dayOffs]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<RangeValue<DateTime> | null>(null);
@@ -95,6 +104,18 @@ export function DayOffsTab() {
 
   return (
     <div className={styles.tabPanel}>
+      <div className={styles.yearSwitcher}>
+        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year - 1))} aria-label="Предыдущий год">
+          <Icon data={ChevronLeft} size={16} />
+        </Button>
+        <Text variant="subheader-1" className={styles.yearValue}>
+          {year}
+        </Text>
+        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year + 1))} aria-label="Следующий год">
+          <Icon data={ChevronRight} size={16} />
+        </Button>
+      </div>
+
       <Card view="outlined" className={styles.card}>
         <SectionHeader
           title="Дни отдыха"
@@ -131,19 +152,29 @@ export function DayOffsTab() {
 
         {!isLoading && dayOffs.length > 0 && (
           <ul className={styles.dayOffList}>
-            {dayOffs.map((dayOff) => (
-              <li key={dayOff.id} className={styles.dayOffRow}>
-                <Text>{formatDate(dayOff.date)}</Text>
-                <Button
-                  view="flat-danger"
-                  size="s"
-                  aria-label={`Удалить ${formatDate(dayOff.date)}`}
-                  onClick={() => setDayOffToRemove(dayOff)}
+            {dayOffGroups.map((group, groupIndex) => {
+              const colorClass =
+                group.length > 1
+                  ? PERIOD_COLOR_CLASSES[groupIndex % PERIOD_COLOR_CLASSES.length]
+                  : undefined;
+
+              return group.map((dayOff) => (
+                <li
+                  key={dayOff.id}
+                  className={[styles.dayOffRow, colorClass].filter(Boolean).join(' ')}
                 >
-                  <Icon data={TrashBin} size={16} />
-                </Button>
-              </li>
-            ))}
+                  <Text>{formatDate(dayOff.date)}</Text>
+                  <Button
+                    view="flat-danger"
+                    size="s"
+                    aria-label={`Удалить ${formatDate(dayOff.date)}`}
+                    onClick={() => setDayOffToRemove(dayOff)}
+                  >
+                    <Icon data={TrashBin} size={16} />
+                  </Button>
+                </li>
+              ));
+            })}
           </ul>
         )}
       </Card>

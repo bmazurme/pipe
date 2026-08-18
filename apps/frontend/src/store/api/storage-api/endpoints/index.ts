@@ -2,7 +2,9 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 import storageApi from '..';
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+// Mirrors the backend's multer limit (apps/backend/src/storage/config/multer.config.ts).
+export const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
+export const MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024);
 
 export interface StoredFileMeta {
   id: number;
@@ -18,7 +20,7 @@ const storageApiEndpoints = storageApi.injectEndpoints({
       query: () => 'storage',
       providesTags: ['Storage'],
     }),
-    // A custom queryFn so the 10 MB check happens before anything hits the
+    // A custom queryFn so the size check happens before anything hits the
     // network, and a 413 from the server still resolves to the same
     // friendly message either way.
     uploadFile: builder.mutation<StoredFileMeta, File>({
@@ -27,7 +29,7 @@ const storageApiEndpoints = storageApi.injectEndpoints({
           return {
             error: {
               status: 'CUSTOM_ERROR',
-              error: `«${file.name}» превышает лимит 10 МБ`,
+              error: `«${file.name}» превышает лимит ${MAX_FILE_SIZE_MB} МБ`,
             } as FetchBaseQueryError,
           };
         }
@@ -43,7 +45,7 @@ const storageApiEndpoints = storageApi.injectEndpoints({
         if (result.error) {
           const message =
             result.error.status === 413
-              ? 'Файл превышает лимит 10 МБ'
+              ? `Файл превышает лимит ${MAX_FILE_SIZE_MB} МБ`
               : 'Не удалось загрузить файл';
           return {
             error: { status: 'CUSTOM_ERROR', error: message } as FetchBaseQueryError,
