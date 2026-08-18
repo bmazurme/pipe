@@ -1,4 +1,4 @@
-import { API_URL } from '../config/env';
+import { API_URL } from './env';
 
 export interface CheckAuthResponse {
   isAuthenticated: boolean;

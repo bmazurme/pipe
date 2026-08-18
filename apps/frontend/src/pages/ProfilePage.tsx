@@ -3,9 +3,10 @@ import { TrashBin } from '@gravity-ui/icons';
 import { Button, Card, Icon, Loader, Text, TextInput } from '@gravity-ui/uikit';
 
 import { useAuth } from '../app/providers/AuthProvider';
-import { listSessions, revokeSession, Session } from '../shared/api/sessions';
-import { updateUser } from '../shared/api/users';
 import { parseUserAgent } from '../shared/lib/parseUserAgent';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { updateUserStatus } from '../store/slices/authSlice';
+import { fetchSessions, revokeSession } from '../store/slices/sessionsSlice';
 import styles from './ProfilePage.module.css';
 
 function formatDate(value: string): string {
@@ -19,43 +20,15 @@ function formatDate(value: string): string {
 }
 
 function DevicesSection() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [revokingId, setRevokingId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const sessions = useAppSelector((state) => state.sessions.sessions);
+  const isLoading = useAppSelector((state) => state.sessions.isLoading);
+  const error = useAppSelector((state) => state.sessions.error);
+  const revokingId = useAppSelector((state) => state.sessions.revokingId);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const result = await listSessions();
-        if (!cancelled) setSessions(result);
-      } catch {
-        if (!cancelled) setError('Не удалось загрузить список устройств');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleRevoke = async (session: Session) => {
-    setError(null);
-    setRevokingId(session.id);
-
-    try {
-      await revokeSession(session.id);
-      setSessions((prev) => prev.filter((item) => item.id !== session.id));
-    } catch {
-      setError('Не удалось завершить сеанс');
-    } finally {
-      setRevokingId(null);
-    }
-  };
+    void dispatch(fetchSessions());
+  }, [dispatch]);
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -94,7 +67,7 @@ function DevicesSection() {
                     title="Завершить сеанс"
                     aria-label="Завершить сеанс"
                     loading={revokingId === session.id}
-                    onClick={() => void handleRevoke(session)}
+                    onClick={() => void dispatch(revokeSession(session.id))}
                   >
                     <Icon data={TrashBin} size={16} />
                   </Button>
@@ -109,6 +82,7 @@ function DevicesSection() {
 }
 
 export function ProfilePage() {
+  const dispatch = useAppDispatch();
   const { user, refreshUser } = useAuth();
   const [status, setStatus] = useState(user?.status ?? '');
   const [isSaving, setIsSaving] = useState(false);
@@ -127,7 +101,7 @@ export function ProfilePage() {
     setIsSaved(false);
 
     try {
-      await updateUser(user.id, { status });
+      await dispatch(updateUserStatus({ id: user.id, status })).unwrap();
       await refreshUser();
       setIsSaved(true);
     } catch {

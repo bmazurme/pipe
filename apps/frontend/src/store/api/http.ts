@@ -1,4 +1,4 @@
-import { API_URL } from '../config/env';
+import { API_URL } from './env';
 import { tokenStore } from './token-store';
 
 let refreshPromise: Promise<string | null> | null = null;

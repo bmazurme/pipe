@@ -1,13 +1,14 @@
 import {
   createContext,
   ReactNode,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from 'react';
 import { ThemeProvider as GravityThemeProvider } from '@gravity-ui/uikit';
+
+import { useLocalStorage } from '../../shared/hooks/useLocalStorage';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
@@ -28,16 +29,10 @@ function getSystemTheme(): ResolvedTheme {
     : 'light';
 }
 
-function readStoredThemeMode(): ThemeMode {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === 'light' || stored === 'dark' || stored === 'system'
-    ? stored
-    : 'system';
-}
-
 export function AppThemeProvider({ children }: { children: ReactNode }) {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(
-    readStoredThemeMode,
+  const [themeMode, setThemeMode] = useLocalStorage<ThemeMode>(
+    STORAGE_KEY,
+    'system',
   );
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(
     getSystemTheme,
@@ -48,11 +43,6 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     const listener = () => setSystemTheme(getSystemTheme());
     media.addEventListener('change', listener);
     return () => media.removeEventListener('change', listener);
-  }, []);
-
-  const setThemeMode = useCallback((mode: ThemeMode) => {
-    setThemeModeState(mode);
-    localStorage.setItem(STORAGE_KEY, mode);
   }, []);
 
   const resolvedTheme: ResolvedTheme =

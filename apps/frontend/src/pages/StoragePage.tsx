@@ -10,14 +10,16 @@ import {
   Text,
 } from '@gravity-ui/uikit';
 
+import { useIsMobile } from '../shared/lib/useIsMobile';
+import { StoredFileMeta } from '../store/api/storage';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   downloadFile,
-  listFiles,
-  MAX_FILE_SIZE_BYTES,
-  StoredFileMeta,
+  fetchFiles,
+  pollFiles,
+  storageErrorDismissed,
   uploadFile,
-} from '../shared/api/storage';
-import { useIsMobile } from '../shared/lib/useIsMobile';
+} from '../store/slices/storageSlice';
 import styles from './StoragePage.module.css';
 
 function formatSize(bytes: number): string {
@@ -38,18 +40,13 @@ function formatDate(value: string): string {
 
 const FILES_POLL_INTERVAL_MS = 4000;
 
-// Cheap identity check so a poll that finds nothing new doesn't replace the
-// array (and re-render the table) for no reason.
-function sameFileIds(a: StoredFileMeta[], b: StoredFileMeta[]): boolean {
-  return a.length === b.length && a.every((file, index) => file.id === b[index]?.id);
-}
-
 export function StoragePage() {
-  const [files, setFiles] = useState<StoredFileMeta[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUploading, setIsUploading] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const files = useAppSelector((state) => state.storage.files);
+  const isLoading = useAppSelector((state) => state.storage.isLoading);
+  const isUploading = useAppSelector((state) => state.storage.isUploading);
+  const downloadingId = useAppSelector((state) => state.storage.downloadingId);
+  const error = useAppSelector((state) => state.storage.error);
   const [isDragOver, setIsDragOver] = useState(false);
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,85 +54,32 @@ export function StoragePage() {
   const dragDepth = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const result = await listFiles();
-        if (!cancelled) setFiles(result);
-      } catch {
-        if (!cancelled) setError('Не удалось загрузить список файлов');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void dispatch(fetchFiles());
+  }, [dispatch]);
 
   // Picks up files uploaded from another open device/tab. Uploads and
-  // downloads already update `files` optimistically, so this only ever
-  // has to fill in what happened elsewhere — a no-op poll leaves the
-  // array reference untouched via sameFileIds.
+  // downloads already update `files` optimistically via the slice, so this
+  // only ever has to fill in what happened elsewhere.
   useEffect(() => {
-    let cancelled = false;
     let inFlight = false;
 
     const interval = setInterval(() => {
       if (inFlight) return;
-
       inFlight = true;
-      (async () => {
-        try {
-          const latest = await listFiles();
-          if (cancelled) return;
-          setFiles((prev) => (sameFileIds(prev, latest) ? prev : latest));
-        } catch {
-          // Transient poll failure — try again next tick.
-        } finally {
-          inFlight = false;
-        }
-      })();
+      void dispatch(pollFiles()).finally(() => {
+        inFlight = false;
+      });
     }, FILES_POLL_INTERVAL_MS);
 
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [dispatch]);
 
-  const handleUpload = async (file: File) => {
-    setError(null);
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setError(`«${file.name}» превышает лимит 10 МБ`);
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      const uploaded = await uploadFile(file);
-      setFiles((prev) => [uploaded, ...prev]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить файл');
-    } finally {
-      setIsUploading(false);
-    }
+  const handleUpload = (file: File) => {
+    void dispatch(uploadFile(file));
   };
 
-  const handleDownload = async (file: StoredFileMeta) => {
-    setError(null);
-    setDownloadingId(file.id);
-    try {
-      await downloadFile(file);
-      setFiles((prev) => prev.filter((item) => item.id !== file.id));
-    } catch {
-      setError('Не удалось скачать файл');
-    } finally {
-      setDownloadingId(null);
-    }
+  const handleDownload = (file: StoredFileMeta) => {
+    void dispatch(downloadFile(file));
   };
 
   const handleDrop = (event: React.DragEvent) => {
@@ -144,7 +88,7 @@ export function StoragePage() {
     setIsDragOver(false);
 
     const file = event.dataTransfer.files?.[0];
-    if (file) void handleUpload(file);
+    if (file) handleUpload(file);
   };
 
   const handleDragEnter = (event: React.DragEvent) => {
@@ -202,7 +146,7 @@ export function StoragePage() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void handleUpload(file);
+            if (file) handleUpload(file);
           }}
         />
       </div>
@@ -212,7 +156,7 @@ export function StoragePage() {
           theme="danger"
           view="filled"
           message={error}
-          onClose={() => setError(null)}
+          onClose={() => dispatch(storageErrorDismissed())}
         />
       )}
 
@@ -255,7 +199,7 @@ export function StoragePage() {
                   title="Скачать и удалить с сервера"
                   aria-label={`Скачать ${file.originalName}`}
                   loading={downloadingId === file.id}
-                  onClick={() => void handleDownload(file)}
+                  onClick={() => handleDownload(file)}
                 >
                   <Icon data={ArrowDownToLine} size={16} />
                 </Button>
@@ -297,7 +241,7 @@ export function StoragePage() {
                       size="s"
                       title="Скачать и удалить с сервера"
                       loading={downloadingId === item.id}
-                      onClick={() => void handleDownload(item)}
+                      onClick={() => handleDownload(item)}
                     >
                       <Icon data={ArrowDownToLine} size={16} />
                       Скачать

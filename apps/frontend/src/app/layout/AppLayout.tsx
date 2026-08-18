@@ -1,4 +1,3 @@
-import { useCallback, useState } from 'react';
 import {
   ArrowRightFromSquare,
   Bucket,
@@ -18,6 +17,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
 import { ThemeMode, useAppTheme } from '../providers/ThemeProvider';
 import { useIsMobile } from '../../shared/lib/useIsMobile';
+import { useLocalStorage } from '../../shared/hooks/useLocalStorage';
 import { LogoMark } from '../../shared/ui/Logo';
 import { ThemeSwitcher } from '../../widgets/ThemeSwitcher';
 import styles from './AppLayout.module.css';
@@ -43,22 +43,13 @@ const THEME_TITLE: Record<ThemeMode, string> = {
   system: 'Системная тема',
 };
 
-function readStoredCompact(): boolean {
-  return localStorage.getItem(COMPACT_STORAGE_KEY) === 'true';
-}
-
 export function AppLayout() {
-  const [compact, setCompact] = useState(readStoredCompact);
+  const [compact, setCompact] = useLocalStorage(COMPACT_STORAGE_KEY, false);
   const { user, logout } = useAuth();
   const { themeMode, setThemeMode } = useAppTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-
-  const handleChangeCompact = useCallback((value: boolean) => {
-    setCompact(value);
-    localStorage.setItem(COMPACT_STORAGE_KEY, String(value));
-  }, []);
 
   const nextThemeMode =
     THEME_ORDER[(THEME_ORDER.indexOf(themeMode) + 1) % THEME_ORDER.length];
@@ -183,7 +174,7 @@ export function AppLayout() {
   return (
     <AsideHeader
       compact={compact}
-      onChangeCompact={handleChangeCompact}
+      onChangeCompact={setCompact}
       logo={LOGO}
       menuItems={menuItems}
       renderContent={() => content}

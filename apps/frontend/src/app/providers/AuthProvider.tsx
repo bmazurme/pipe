@@ -1,15 +1,8 @@
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
+import { ReactNode, useEffect } from 'react';
 
-import { checkAuth, logout as logoutRequest } from '../../shared/api/auth';
-import { tokenStore } from '../../shared/api/token-store';
-import { fetchMe, Me } from '../../shared/api/users';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { Me } from '../../store/api/users';
+import { initAuth, logout, refreshUser } from '../../store/slices/authSlice';
 
 interface AuthContextValue {
   isLoading: boolean;
@@ -19,68 +12,34 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
-
+// Kicks off the one-time session check on mount. State itself lives in the
+// auth slice (Redux), not React context — useAuth() below reads straight
+// from the store so every consumer stays in sync without a Provider tree.
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<Me | null>(null);
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
-    let cancelled = false;
+    void dispatch(initAuth());
+  }, [dispatch]);
 
-    (async () => {
-      const result = await checkAuth();
-
-      if (cancelled) return;
-
-      if (result.isAuthenticated && result.accessToken) {
-        tokenStore.set(result.accessToken);
-
-        try {
-          const me = await fetchMe();
-          if (!cancelled) {
-            setUser(me);
-            setIsAuthenticated(true);
-          }
-        } catch {
-          if (!cancelled) setIsAuthenticated(false);
-        }
-      }
-
-      if (!cancelled) setIsLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const logout = useCallback(async () => {
-    await logoutRequest();
-    tokenStore.set(null);
-    setUser(null);
-    setIsAuthenticated(false);
-  }, []);
-
-  const refreshUser = useCallback(async () => {
-    const me = await fetchMe();
-    setUser(me);
-  }, []);
-
-  return (
-    <AuthContext.Provider
-      value={{ isLoading, isAuthenticated, user, logout, refreshUser }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return <>{children}</>;
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return ctx;
+  const dispatch = useAppDispatch();
+  const isLoading = useAppSelector((state) => state.auth.isLoading);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const user = useAppSelector((state) => state.auth.user);
+
+  return {
+    isLoading,
+    isAuthenticated,
+    user,
+    logout: async () => {
+      await dispatch(logout());
+    },
+    refreshUser: async () => {
+      await dispatch(refreshUser()).unwrap();
+    },
+  };
 }

@@ -2,7 +2,7 @@ import { Button, Card, Text } from '@gravity-ui/uikit';
 import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '../app/providers/AuthProvider';
-import { getYandexLoginUrl } from '../shared/api/auth';
+import { getYandexLoginUrl } from '../store/api/auth';
 import { LogoMark } from '../shared/ui/Logo';
 import { ThemeSwitcher } from '../widgets/ThemeSwitcher';
 import styles from './LoginPage.module.css';
