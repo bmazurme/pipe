@@ -1,18 +1,22 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { CookieOptions, Request as CustomRequest, Response } from 'express';
+import { CookieOptions, Response } from 'express';
 
-import { User } from '../users/entities/user.entity';
-import { UsersService } from '../users/users.service';
 import { CheckAuthResponseDto } from './dto/check-auth.response.dto';
+import { SessionResponseDto } from './dto/session-response.dto';
 import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token.exception';
 import { RefreshTokenNotFoundException } from './exceptions/refresh-token-not-found.exception';
+import { RequestWithAuthSession } from './guards/refresh-token.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-
-type AuthRequest = CustomRequest & {
-  cookies?: { refreshToken?: string };
-};
+import { SessionsService } from './sessions.service';
 
 @Injectable()
 export class AuthService {
@@ -20,8 +24,8 @@ export class AuthService {
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly usersService: UsersService,
     private readonly configService: ConfigService,
+    private readonly sessionsService: SessionsService,
   ) {}
 
   getCookieOptions(): CookieOptions {
@@ -40,9 +44,10 @@ export class AuthService {
   }
 
   async generateNewTokens(
-    user: User,
+    userId: number,
+    sessionId: number,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload: JwtPayload = { sub: user.id };
+    const payload: JwtPayload = { sub: userId, sessionId };
     const accessToken = this.signAccessToken(payload);
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('REFRESH_JWT_SECRET'),
@@ -57,11 +62,14 @@ export class AuthService {
     return { isAuthenticated: false };
   }
 
-  async logout(req: AuthRequest, response: Response) {
-    const refreshToken = req.cookies?.refreshToken;
+  async logout(req: RequestWithAuthSession, response: Response) {
+    const authSession = req.authSession;
 
-    if (!refreshToken) {
-      throw new RefreshTokenNotFoundException();
+    if (authSession) {
+      await this.sessionsService.revoke(
+        authSession.sessionId,
+        authSession.userId,
+      );
     }
 
     response.clearCookie('refreshToken', this.getCookieOptions());
@@ -70,32 +78,20 @@ export class AuthService {
   }
 
   async checkAuth(
-    req: AuthRequest,
+    req: RequestWithAuthSession,
     res: Response,
   ): Promise<CheckAuthResponseDto> {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const authSession = req.authSession;
 
-      if (!refreshToken) {
+      if (!authSession) {
         return this.unauthorizedResponse(res);
       }
 
-      const decoded = this.jwtService.verify<JwtPayload>(refreshToken, {
-        secret: this.configService.get<string>('REFRESH_JWT_SECRET'),
-      });
-
-      if (!decoded.sub) {
-        return this.unauthorizedResponse(res);
-      }
-
-      const currentUser =
-        await this.usersService.findByRefreshToken(refreshToken);
-
-      if (!currentUser) {
-        return this.unauthorizedResponse(res);
-      }
-
-      const { accessToken } = await this.generateNewTokens(currentUser);
+      const { accessToken } = await this.generateNewTokens(
+        authSession.userId,
+        authSession.sessionId,
+      );
 
       res.status(HttpStatus.OK);
 
@@ -109,27 +105,26 @@ export class AuthService {
     }
   }
 
-  async refreshTokens(req: AuthRequest, res: Response) {
+  async refreshTokens(req: RequestWithAuthSession, res: Response) {
     try {
-      const refreshToken = req.cookies?.refreshToken;
+      const authSession = req.authSession;
 
-      if (!refreshToken) {
+      if (!authSession) {
         throw new RefreshTokenNotFoundException();
       }
 
-      const user = await this.usersService.findByRefreshToken(refreshToken);
+      const { accessToken, refreshToken } = await this.generateNewTokens(
+        authSession.userId,
+        authSession.sessionId,
+      );
+      await this.sessionsService.attachRefreshToken(
+        authSession.sessionId,
+        refreshToken,
+      );
 
-      if (!user) {
-        throw new InvalidRefreshTokenException();
-      }
+      res.cookie('refreshToken', refreshToken, this.getCookieOptions());
 
-      const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
-        await this.generateNewTokens(user);
-      await this.usersService.saveRefreshToken(user.id, newRefreshToken);
-
-      res.cookie('refreshToken', newRefreshToken, this.getCookieOptions());
-
-      return { accessToken: newAccessToken, expiresIn: '15m' };
+      return { accessToken, expiresIn: '15m' };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -141,5 +136,34 @@ export class AuthService {
       );
       throw new InvalidRefreshTokenException();
     }
+  }
+
+  async listSessions(
+    userId: number,
+    currentSessionId: number,
+  ): Promise<SessionResponseDto[]> {
+    const sessions = await this.sessionsService.findActiveByUser(userId);
+
+    return sessions.map((session) =>
+      SessionResponseDto.fromSession(session, currentSessionId),
+    );
+  }
+
+  async revokeSession(
+    userId: number,
+    targetSessionId: number,
+    currentSessionId: number,
+  ): Promise<{ message: string }> {
+    if (targetSessionId === currentSessionId) {
+      throw new ForbiddenException('Use logout to end the current session');
+    }
+
+    const revoked = await this.sessionsService.revoke(targetSessionId, userId);
+
+    if (!revoked) {
+      throw new NotFoundException('Session not found');
+    }
+
+    return { message: 'Session revoked' };
   }
 }
