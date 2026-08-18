@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowDownToLine, CloudArrowUpIn, Paperclip } from '@gravity-ui/icons';
 import {
   Alert,
@@ -11,15 +11,15 @@ import {
 } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
-import { StoredFileMeta } from '../store/api/storage';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
-  downloadFile,
-  fetchFiles,
-  pollFiles,
-  storageErrorDismissed,
-  uploadFile,
-} from '../store/slices/storageSlice';
+  getErrorMessage,
+  StoredFileMeta,
+  useDownloadFileMutation,
+  useListFilesQuery,
+  useUploadFileMutation,
+} from '../store/api';
+import { useAppSelector } from '../store/hooks';
+import { storageFilesSelector } from '../store/slices';
 import styles from './StoragePage.module.css';
 
 function formatSize(bytes: number): string {
@@ -41,45 +41,42 @@ function formatDate(value: string): string {
 const FILES_POLL_INTERVAL_MS = 4000;
 
 export function StoragePage() {
-  const dispatch = useAppDispatch();
-  const files = useAppSelector((state) => state.storage.files);
-  const isLoading = useAppSelector((state) => state.storage.isLoading);
-  const isUploading = useAppSelector((state) => state.storage.isUploading);
-  const downloadingId = useAppSelector((state) => state.storage.downloadingId);
-  const error = useAppSelector((state) => state.storage.error);
+  // Picks up files uploaded from another open device/tab — RTK Query's
+  // structural sharing means a poll that finds nothing new doesn't cause a
+  // re-render on its own.
+  const { isLoading } = useListFilesQuery(undefined, {
+    pollingInterval: FILES_POLL_INTERVAL_MS,
+  });
+  const files = useAppSelector(storageFilesSelector);
+  const [uploadFile, { isLoading: isUploading }] = useUploadFileMutation();
+  const [downloadFile] = useDownloadFileMutation();
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Counts nested dragenter/dragleave pairs so hovering a child doesn't drop the highlight.
   const dragDepth = useRef(0);
 
-  useEffect(() => {
-    void dispatch(fetchFiles());
-  }, [dispatch]);
-
-  // Picks up files uploaded from another open device/tab. Uploads and
-  // downloads already update `files` optimistically via the slice, so this
-  // only ever has to fill in what happened elsewhere.
-  useEffect(() => {
-    let inFlight = false;
-
-    const interval = setInterval(() => {
-      if (inFlight) return;
-      inFlight = true;
-      void dispatch(pollFiles()).finally(() => {
-        inFlight = false;
-      });
-    }, FILES_POLL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [dispatch]);
-
-  const handleUpload = (file: File) => {
-    void dispatch(uploadFile(file));
+  const handleUpload = async (file: File) => {
+    setError(null);
+    try {
+      await uploadFile(file).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось загрузить файл'));
+    }
   };
 
-  const handleDownload = (file: StoredFileMeta) => {
-    void dispatch(downloadFile(file));
+  const handleDownload = async (file: StoredFileMeta) => {
+    setError(null);
+    setDownloadingId(file.id);
+    try {
+      await downloadFile(file).unwrap();
+    } catch {
+      setError('Не удалось скачать файл');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleDrop = (event: React.DragEvent) => {
@@ -88,7 +85,7 @@ export function StoragePage() {
     setIsDragOver(false);
 
     const file = event.dataTransfer.files?.[0];
-    if (file) handleUpload(file);
+    if (file) void handleUpload(file);
   };
 
   const handleDragEnter = (event: React.DragEvent) => {
@@ -146,7 +143,7 @@ export function StoragePage() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) handleUpload(file);
+            if (file) void handleUpload(file);
           }}
         />
       </div>
@@ -156,7 +153,7 @@ export function StoragePage() {
           theme="danger"
           view="filled"
           message={error}
-          onClose={() => dispatch(storageErrorDismissed())}
+          onClose={() => setError(null)}
         />
       )}
 
@@ -199,7 +196,7 @@ export function StoragePage() {
                   title="Скачать и удалить с сервера"
                   aria-label={`Скачать ${file.originalName}`}
                   loading={downloadingId === file.id}
-                  onClick={() => handleDownload(file)}
+                  onClick={() => void handleDownload(file)}
                 >
                   <Icon data={ArrowDownToLine} size={16} />
                 </Button>
@@ -241,7 +238,7 @@ export function StoragePage() {
                       size="s"
                       title="Скачать и удалить с сервера"
                       loading={downloadingId === item.id}
-                      onClick={() => handleDownload(item)}
+                      onClick={() => void handleDownload(item)}
                     >
                       <Icon data={ArrowDownToLine} size={16} />
                       Скачать

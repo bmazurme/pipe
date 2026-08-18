@@ -1,8 +1,14 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode } from 'react';
 
+import {
+  Me,
+  useCheckAuthQuery,
+  useGetMeQuery,
+  useLogoutMutation,
+  usersApiEndpoints,
+} from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { Me } from '../../store/api/users';
-import { initAuth, logout, refreshUser } from '../../store/slices/authSlice';
+import { usersLoadingSelector, usersSelector } from '../../store/slices';
 
 interface AuthContextValue {
   isLoading: boolean;
@@ -12,34 +18,37 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>;
 }
 
-// Kicks off the one-time session check on mount. State itself lives in the
-// auth slice (Redux), not React context — useAuth() below reads straight
-// from the store so every consumer stays in sync without a Provider tree.
+// checkAuth runs on mount; getMe only fires once isAuthenticated flips true
+// (auth-slice's own matcher sets that from checkAuth's result). Both feed
+// users-slice via matchers, so no component-side orchestration is needed —
+// this component only has to keep the queries subscribed.
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const dispatch = useAppDispatch();
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
 
-  useEffect(() => {
-    void dispatch(initAuth());
-  }, [dispatch]);
+  useCheckAuthQuery();
+  useGetMeQuery(undefined, { skip: !isAuthenticated });
 
   return <>{children}</>;
 }
 
 export function useAuth(): AuthContextValue {
   const dispatch = useAppDispatch();
-  const isLoading = useAppSelector((state) => state.auth.isLoading);
+  const isLoading = useAppSelector(usersLoadingSelector);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
-  const user = useAppSelector((state) => state.auth.user);
+  const user = useAppSelector(usersSelector);
+  const [logoutMutation] = useLogoutMutation();
 
   return {
     isLoading,
     isAuthenticated,
     user,
     logout: async () => {
-      await dispatch(logout());
+      await logoutMutation();
     },
     refreshUser: async () => {
-      await dispatch(refreshUser()).unwrap();
+      await dispatch(
+        usersApiEndpoints.endpoints.getMe.initiate(undefined, { forceRefetch: true }),
+      ).unwrap();
     },
   };
 }

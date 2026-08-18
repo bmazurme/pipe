@@ -27,17 +27,22 @@ import {
 } from '@gravity-ui/uikit';
 
 import { useLocalStorage } from '../shared/hooks/useLocalStorage';
-import { PurgeEntry } from '../store/api/purge';
+import {
+  PurgeEntry,
+  purgeApiEndpoints,
+  useCreateEntryMutation,
+  useDeleteEntryMutation,
+  useGetDraftTextQuery,
+  useListEntriesQuery,
+  useUpdateEntryMutation,
+} from '../store/api';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
-  createEntry,
-  deleteEntry,
   draftTextChanged,
-  fetchDraftText,
-  fetchEntries,
-  saveDraftText,
-  updateEntry,
-} from '../store/slices/purgeSlice';
+  purgeEntriesSelector,
+  purgeLastSyncedTextSelector,
+  purgeTextSelector,
+} from '../store/slices';
 import styles from './PurgePage.module.css';
 
 type Direction = 'keyToValue' | 'valueToKey';
@@ -149,15 +154,23 @@ const DRAFT_POLL_INTERVAL_MS = 4000;
 
 export function PurgePage() {
   const dispatch = useAppDispatch();
-  const entries = useAppSelector((state) => state.purge.entries);
-  const isLoading = useAppSelector((state) => state.purge.isEntriesLoading);
-  const loadError = useAppSelector((state) => state.purge.entriesError);
-  const text = useAppSelector((state) => state.purge.text);
-  const lastSyncedText = useAppSelector((state) => state.purge.lastSyncedText);
+  const { isLoading, isError: isEntriesError } = useListEntriesQuery();
+  const entries = useAppSelector(purgeEntriesSelector);
+  const [createEntryTrigger, { isLoading: isSaving }] = useCreateEntryMutation();
+  const [updateEntryTrigger, { isLoading: isEditSaving }] = useUpdateEntryMutation();
+  const [deleteEntryTrigger] = useDeleteEntryMutation();
+
+  const text = useAppSelector(purgeTextSelector);
+  const lastSyncedText = useAppSelector(purgeLastSyncedTextSelector);
   // A local edit not yet confirmed saved — covers the whole typing burst
   // (every keystroke keeps `text` ahead of `lastSyncedText`) and the in-flight
   // PUT itself, so the poll below never clobbers unsent input.
   const hasPendingSave = text !== lastSyncedText;
+  const {
+    data: initialDraft,
+    isSuccess: isDraftSuccess,
+    isError: isDraftError,
+  } = useGetDraftTextQuery();
 
   const [activeTab, setActiveTab] = useState('apply');
 
@@ -174,7 +187,6 @@ export function PurgePage() {
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [isValueTouched, setIsValueTouched] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [dictError, setDictError] = useState<string | null>(null);
 
   const [isImporting, setIsImporting] = useState(false);
@@ -187,7 +199,6 @@ export function PurgePage() {
   const [editKey, setEditKey] = useState('');
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
-  const [isEditSaving, setIsEditSaving] = useState(false);
 
   // Delete is two clicks: the first arms the row (and auto-disarms after a
   // few seconds), the second actually deletes. Cheap insurance against the
@@ -200,47 +211,38 @@ export function PurgePage() {
   const newKeyInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void dispatch(fetchEntries());
-  }, [dispatch]);
+    if (draftLoadedRef.current) return;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const draft = await dispatch(fetchDraftText()).unwrap();
-        if (cancelled) return;
-
-        if (!draft && initialStoredTextRef.current) {
-          // Nothing saved on the backend yet — fall back to whatever this
-          // browser had stored locally and push it up so other devices see it.
-          dispatch(draftTextChanged(initialStoredTextRef.current));
-          void dispatch(saveDraftText(initialStoredTextRef.current));
-        }
-      } catch {
-        if (!cancelled) dispatch(draftTextChanged(initialStoredTextRef.current));
-      } finally {
-        if (!cancelled) draftLoadedRef.current = true;
+    if (isDraftSuccess) {
+      if (!initialDraft?.text && initialStoredTextRef.current) {
+        // Nothing saved on the backend yet — fall back to whatever this
+        // browser had stored locally and push it up so other devices see it.
+        dispatch(draftTextChanged(initialStoredTextRef.current));
+        void dispatch(
+          purgeApiEndpoints.endpoints.saveDraftText.initiate(
+            initialStoredTextRef.current,
+          ),
+        );
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatch]);
+      draftLoadedRef.current = true;
+    } else if (isDraftError) {
+      dispatch(draftTextChanged(initialStoredTextRef.current));
+      draftLoadedRef.current = true;
+    }
+  }, [isDraftSuccess, isDraftError, initialDraft, dispatch]);
 
   useEffect(() => {
     setStoredText(text);
 
-    // Skip syncing the very first render (before the initial backend fetch
-    // above has resolved) so we don't overwrite the backend draft with '',
-    // and skip when nothing local differs from what the backend already has
-    // (e.g. right after a poll picked up another device's save).
+    // Skip syncing before the initial backend fetch above has resolved (so
+    // we don't overwrite the backend draft with ''), and skip when nothing
+    // local differs from what the backend already has (e.g. right after a
+    // poll picked up another device's save).
     if (!draftLoadedRef.current || !hasPendingSave) return;
 
     if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
     draftSaveTimeout.current = setTimeout(() => {
-      void dispatch(saveDraftText(text));
+      void dispatch(purgeApiEndpoints.endpoints.saveDraftText.initiate(text));
     }, DRAFT_SAVE_DEBOUNCE_MS);
 
     return () => {
@@ -257,7 +259,11 @@ export function PurgePage() {
       if (inFlight || !draftLoadedRef.current || hasPendingSave) return;
 
       inFlight = true;
-      void dispatch(fetchDraftText()).finally(() => {
+      void dispatch(
+        purgeApiEndpoints.endpoints.getDraftText.initiate(undefined, {
+          forceRefetch: true,
+        }),
+      ).finally(() => {
         inFlight = false;
       });
     }, DRAFT_POLL_INTERVAL_MS);
@@ -300,7 +306,7 @@ export function PurgePage() {
       await navigator.clipboard.writeText(text);
       dispatch(draftTextChanged(''));
       if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
-      void dispatch(saveDraftText(''));
+      void dispatch(purgeApiEndpoints.endpoints.saveDraftText.initiate(''));
       setApplyMessage(null);
       setCopyMessage('Скопировано в буфер обмена — поле очищено');
     } catch {
@@ -328,18 +334,15 @@ export function PurgePage() {
     const value = newValue.trim();
     if (!key || !value) return;
 
-    setIsSaving(true);
     setDictError(null);
 
     try {
-      await dispatch(createEntry({ key, value })).unwrap();
+      await createEntryTrigger({ key, value }).unwrap();
       setNewKey('');
       setNewValue('');
       setIsValueTouched(false);
     } catch (err) {
       setDictError(typeof err === 'string' ? err : 'Не удалось добавить запись');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -347,7 +350,7 @@ export function PurgePage() {
     setDictError(null);
     if (editingId === id) setEditingId(null);
     try {
-      await dispatch(deleteEntry(id)).unwrap();
+      await deleteEntryTrigger(id).unwrap();
     } catch {
       setDictError('Не удалось удалить запись');
     }
@@ -421,18 +424,15 @@ export function PurgePage() {
     const value = editValue.trim();
     if (!key || !value) return;
 
-    setIsEditSaving(true);
     setEditError(null);
 
     try {
-      await dispatch(updateEntry({ id, key, value })).unwrap();
+      await updateEntryTrigger({ id, key, value }).unwrap();
       setEditingId(null);
     } catch (err) {
       setEditError(
         typeof err === 'string' ? err : 'Не удалось сохранить изменения',
       );
-    } finally {
-      setIsEditSaving(false);
     }
   };
 
@@ -479,7 +479,7 @@ export function PurgePage() {
       // backend per request, so concurrent inserts could race each other.
       for (const item of items) {
         try {
-          await dispatch(createEntry({ key: item.key, value: item.value })).unwrap();
+          await createEntryTrigger({ key: item.key, value: item.value }).unwrap();
           imported += 1;
         } catch {
           skipped += 1;
@@ -699,11 +699,15 @@ export function PurgePage() {
                 </div>
               )}
 
-              {loadError && !isLoading && (
-                <Alert theme="danger" view="filled" message={loadError} />
+              {isEntriesError && !isLoading && (
+                <Alert
+                  theme="danger"
+                  view="filled"
+                  message="Не удалось загрузить словарь"
+                />
               )}
 
-              {!isLoading && !loadError && entries.length === 0 && (
+              {!isLoading && !isEntriesError && entries.length === 0 && (
                 <div className={styles.centered}>
                   <Icon data={Book} size={24} className={styles.emptyIcon} />
                   <Text color="secondary">Словарь пуст</Text>

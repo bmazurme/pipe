@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
 import { Button, Card, Icon, Loader, Text, TextInput } from '@gravity-ui/uikit';
 
 import { useAuth } from '../app/providers/AuthProvider';
 import { parseUserAgent } from '../shared/lib/parseUserAgent';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { updateUserStatus } from '../store/slices/authSlice';
-import { fetchSessions, revokeSession } from '../store/slices/sessionsSlice';
+import {
+  Session,
+  useListSessionsQuery,
+  useRevokeSessionMutation,
+  useUpdateUserMutation,
+} from '../store/api';
+import { useAppSelector } from '../store/hooks';
+import { sessionsSelector } from '../store/slices';
 import styles from './ProfilePage.module.css';
 
 function formatDate(value: string): string {
@@ -20,15 +25,24 @@ function formatDate(value: string): string {
 }
 
 function DevicesSection() {
-  const dispatch = useAppDispatch();
-  const sessions = useAppSelector((state) => state.sessions.sessions);
-  const isLoading = useAppSelector((state) => state.sessions.isLoading);
-  const error = useAppSelector((state) => state.sessions.error);
-  const revokingId = useAppSelector((state) => state.sessions.revokingId);
+  const { isLoading, isError } = useListSessionsQuery();
+  const sessions = useAppSelector(sessionsSelector);
+  const [revokeSession] = useRevokeSessionMutation();
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void dispatch(fetchSessions());
-  }, [dispatch]);
+  const handleRevoke = async (session: Session) => {
+    setError(null);
+    setRevokingId(session.id);
+
+    try {
+      await revokeSession(session.id).unwrap();
+    } catch {
+      setError('Не удалось завершить сеанс');
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -43,7 +57,11 @@ function DevicesSection() {
           </div>
         )}
 
-        {error && <Text color="danger">{error}</Text>}
+        {(error || isError) && (
+          <Text color="danger">
+            {error ?? 'Не удалось загрузить список устройств'}
+          </Text>
+        )}
 
         {!isLoading && sessions.length > 0 && (
           <ul className={styles.deviceList}>
@@ -67,7 +85,7 @@ function DevicesSection() {
                     title="Завершить сеанс"
                     aria-label="Завершить сеанс"
                     loading={revokingId === session.id}
-                    onClick={() => void dispatch(revokeSession(session.id))}
+                    onClick={() => void handleRevoke(session)}
                   >
                     <Icon data={TrashBin} size={16} />
                   </Button>
@@ -82,8 +100,8 @@ function DevicesSection() {
 }
 
 export function ProfilePage() {
-  const dispatch = useAppDispatch();
   const { user, refreshUser } = useAuth();
+  const [updateUser] = useUpdateUserMutation();
   const [status, setStatus] = useState(user?.status ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +119,7 @@ export function ProfilePage() {
     setIsSaved(false);
 
     try {
-      await dispatch(updateUserStatus({ id: user.id, status })).unwrap();
+      await updateUser({ id: user.id, status }).unwrap();
       await refreshUser();
       setIsSaved(true);
     } catch {
