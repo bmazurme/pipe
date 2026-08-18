@@ -18,6 +18,8 @@ import {
 } from '../../store/api';
 import { useAppSelector } from '../../store/hooks';
 import { purgeEntriesSelector } from '../../store/slices';
+import { EmptyState } from '../../widgets/EmptyState';
+import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../PurgePage.module.css';
 import { DictionaryEntryRow } from './DictionaryEntryRow';
 import { parseImportedEntries, suggestUniqueValue } from './purgeUtils';
@@ -278,49 +280,52 @@ export function PurgeDictionaryTab({ isActive }: PurgeDictionaryTabProps) {
       </Card>
 
       <Card view="outlined" className={styles.card}>
-        <div className={styles.entriesHeader}>
-          <Text variant="subheader-2">Записи</Text>
-          <div className={styles.toolbar}>
-            <Button
-              view="flat"
-              size="s"
-              title={showKeys ? 'Скрыть ключи' : 'Показать ключи'}
-              aria-label={showKeys ? 'Скрыть ключи' : 'Показать ключи'}
-              onClick={() => setShowKeys((value) => !value)}
-            >
-              <Icon data={showKeys ? EyeSlash : Eye} size={16} />
-            </Button>
-            <Button
-              view="flat"
-              size="s"
-              disabled={entries.length === 0}
-              onClick={handleExport}
-            >
-              <Icon data={ArrowDownToLine} size={16} />
-              Экспорт
-            </Button>
-            <Button
-              view="flat"
-              size="s"
-              loading={isImporting}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Icon data={ArrowUpFromLine} size={16} />
-              Импорт
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file) void handleImportFile(file);
-              }}
-            />
-          </div>
-        </div>
+        <SectionHeader
+          title="Записи"
+          meta={entries.length > 0 ? String(entries.length) : undefined}
+          actions={
+            <>
+              <Button
+                view="flat"
+                size="s"
+                title={showKeys ? 'Скрыть ключи' : 'Показать ключи'}
+                aria-label={showKeys ? 'Скрыть ключи' : 'Показать ключи'}
+                onClick={() => setShowKeys((value) => !value)}
+              >
+                <Icon data={showKeys ? EyeSlash : Eye} size={16} />
+              </Button>
+              <Button
+                view="flat"
+                size="s"
+                disabled={entries.length === 0}
+                onClick={handleExport}
+              >
+                <Icon data={ArrowDownToLine} size={16} />
+                Экспорт
+              </Button>
+              <Button
+                view="flat"
+                size="s"
+                loading={isImporting}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon data={ArrowUpFromLine} size={16} />
+                Импорт
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) void handleImportFile(file);
+                }}
+              />
+            </>
+          }
+        />
 
         {importMessage && <Text color="secondary">{importMessage}</Text>}
 
@@ -347,17 +352,19 @@ export function PurgeDictionaryTab({ isActive }: PurgeDictionaryTabProps) {
         )}
 
         {!isLoading && !isEntriesError && entries.length === 0 && (
-          <div className={styles.centered}>
-            <Icon data={Book} size={24} className={styles.emptyIcon} />
-            <Text color="secondary">Словарь пуст</Text>
-          </div>
+          <EmptyState
+            icon={Book}
+            title="Словарь пуст"
+            description="Добавьте пару «ключ — значение» выше, чтобы начать заменять слова."
+          />
         )}
 
         {!isLoading && entries.length > 0 && filteredEntries.length === 0 && (
-          <div className={styles.centered}>
-            <Icon data={Magnifier} size={24} className={styles.emptyIcon} />
-            <Text color="secondary">Ничего не найдено</Text>
-          </div>
+          <EmptyState
+            icon={Magnifier}
+            title="Ничего не найдено"
+            description="Попробуйте другой запрос или очистите поиск."
+          />
         )}
 
         {!isLoading && filteredEntries.length > 0 && (

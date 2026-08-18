@@ -1,14 +1,8 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 860px;
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
 }
 
 .dropzone {
@@ -16,8 +10,8 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 32px 24px;
-  border: 1px dashed var(--g-color-line-generic-accent);
+  padding: 36px 24px;
+  border: 1.5px dashed var(--g-color-line-generic-accent);
   border-radius: var(--g-border-radius-l);
   text-align: center;
   transition: background 0.15s ease-out, border-color 0.15s ease-out;
@@ -29,43 +23,41 @@
 }
 
 .dropzoneIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--g-color-base-generic);
   color: var(--g-color-text-secondary);
+  transition: background 0.15s ease-out, color 0.15s ease-out;
+}
+
+.dropzoneActive .dropzoneIcon {
+  background: var(--g-color-base-selection-hover);
+  color: var(--g-color-text-brand);
+}
+
+.dropzoneHint {
+  margin-top: 4px;
 }
 
 .filesCard {
-  padding: 16px;
-  /* Flex items default to min-width:auto, which would let the wide table push
-     the card past the viewport instead of scrolling inside .tableWrapper. */
+  padding: var(--ntlstl-card-padding);
+  /* Flex items default to min-width:auto, which would otherwise let a long
+     file name push the card past the viewport. */
   min-width: 0;
 }
 
-.filesHeader {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.centered {
+/* Mirrors .deviceList on the profile page — same rhythm, same hover, so the
+   two lists in the app read as one component. */
+.fileList {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 32px 0;
-}
-
-.emptyIcon {
-  color: var(--g-color-text-hint);
-}
-
-/* Table columns don't collapse gracefully, so scroll it instead of the page. */
-.tableWrapper {
-  overflow-x: auto;
-}
-
-.fileList {
-  margin: 0;
+  gap: 4px;
+  margin: 12px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -74,18 +66,35 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
-  border-top: 1px solid var(--g-color-line-generic);
+  padding: 8px;
+  border-radius: var(--g-border-radius-m);
 }
 
-.fileRow:first-child {
-  border-top: none;
+.fileRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.fileIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+}
+
+.fileIconSkeleton {
+  flex-shrink: 0;
 }
 
 /* Without this the long file name stops the row from shrinking. */
 .fileInfo {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }

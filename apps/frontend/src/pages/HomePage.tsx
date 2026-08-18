@@ -1,6 +1,7 @@
 import { Text } from '@gravity-ui/uikit';
 
 import { useAuth } from '../app/providers/AuthProvider';
+import { PageHeader } from '../widgets/PageHeader';
 import styles from './HomePage.module.css';
 
 export function HomePage() {
@@ -8,12 +9,11 @@ export function HomePage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <Text variant="header-1" as="h1">
-          Добро пожаловать
-        </Text>
-        <Text color="secondary">{user?.username}</Text>
-      </div>
+      <PageHeader title="Добро пожаловать" description={user?.username} />
+      <Text color="secondary">
+        Выберите сервис слева — или загляните в профиль, чтобы посмотреть
+        активные сеансы.
+      </Text>
     </div>
   );
 }

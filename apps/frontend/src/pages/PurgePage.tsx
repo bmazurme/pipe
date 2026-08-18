@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Tab, TabList, TabPanel, TabProvider, Text } from '@gravity-ui/uikit';
+import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
 import { useLocalStorage } from '../shared/hooks/useLocalStorage';
 import { purgeApiEndpoints, useGetDraftTextQuery } from '../store/api';
@@ -10,6 +10,7 @@ import {
   purgeLastSyncedTextSelector,
   purgeTextSelector,
 } from '../store/slices';
+import { PageHeader } from '../widgets/PageHeader';
 import { PurgeApplyTab } from './purge/PurgeApplyTab';
 import { PurgeDictionaryTab } from './purge/PurgeDictionaryTab';
 import styles from './PurgePage.module.css';
@@ -112,14 +113,10 @@ export function PurgePage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <Text variant="header-1" as="h1">
-          Purge
-        </Text>
-        <Text color="secondary">
-          Замена слов в тексте по словарю «ключ — значение».
-        </Text>
-      </div>
+      <PageHeader
+        title="Purge"
+        description="Замена слов в тексте по словарю «ключ — значение»."
+      />
 
       <TabProvider value={activeTab} onUpdate={setActiveTab}>
         <TabList>

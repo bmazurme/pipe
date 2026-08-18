@@ -1,0 +1,72 @@
+.wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* svh keeps the card centred while mobile browser chrome slides in and out;
+     vh is the fallback for browsers without the newer units. */
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+  overflow: hidden;
+}
+
+.glow {
+  position: absolute;
+  top: -20vmax;
+  left: 50%;
+  width: min(720px, 120vw);
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--ntlstl-brand-glow) 0%,
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+.themeSwitcher {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+}
+
+.card {
+  position: relative;
+  width: min(400px, 100%);
+  padding: clamp(24px, 7vw, 36px);
+  text-align: center;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px -16px rgba(0, 0, 0, 0.35);
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.title {
+  margin: 0;
+}
+
+.description {
+  margin-top: 10px;
+  /* The card is already a narrow measure — pretty just evens out the last
+     line rather than leaving one orphaned word. */
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.footer {
+  margin-top: 20px;
+}

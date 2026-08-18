@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Card, Text } from '@gravity-ui/uikit';
+import { Alert, Card } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../store/api';
 import { useAppSelector } from '../store/hooks';
 import { storageFilesSelector } from '../store/slices';
+import { PageHeader } from '../widgets/PageHeader';
 import { StorageDropzone } from './storage/StorageDropzone';
 import { StorageFileList } from './storage/StorageFileList';
 import styles from './StoragePage.module.css';
@@ -54,14 +55,10 @@ export function StoragePage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <Text variant="header-1" as="h1">
-          Storage
-        </Text>
-        <Text color="secondary">
-          До 10 МБ на файл. Файл удаляется с сервера сразу после скачивания.
-        </Text>
-      </div>
+      <PageHeader
+        title="Storage"
+        description="Быстрый обмен файлами между вашими устройствами."
+      />
 
       <StorageDropzone isUploading={isUploading} onUpload={(file) => void handleUpload(file)} />
 

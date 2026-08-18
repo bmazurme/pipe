@@ -1,9 +1,15 @@
 .content {
+  /* Caps the reading measure on ultrawide screens instead of letting page
+     content stretch across the full viewport next to the sidebar. */
   padding: 32px;
+  max-width: 1280px;
 }
 
 .contentMobile {
-  padding: 20px 16px;
+  /* Bottom padding clears the home indicator; the sides clear a notch in
+     landscape. Extra bottom space keeps the last row above the gesture bar. */
+  padding: 20px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-left));
 }
 
 .soonTitle {
@@ -26,11 +32,18 @@
   text-transform: uppercase;
 }
 
+/* Logout is the one destructive row in the sidebar footer — tint it on hover
+   so it reads differently from theme/profile before it is clicked. */
+.logoutItem:hover {
+  color: var(--g-color-text-danger);
+}
+
 .burgerFooter {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 8px;
+  padding: 12px calc(12px + env(safe-area-inset-left))
+    calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-right));
   border-top: 1px solid var(--g-color-line-generic);
 }
 
@@ -39,7 +52,8 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 8px;
+  /* 44px+ tall including the avatar — a comfortable thumb target. */
+  padding: 10px 8px;
   border: none;
   border-radius: var(--g-border-radius-m);
   background: transparent;
@@ -49,8 +63,13 @@
   font: inherit;
 }
 
-.userRow:hover {
+.userRow:hover,
+.userRow:focus-visible {
   background: var(--g-color-base-simple-hover);
+}
+
+.userRow[aria-current='page'] {
+  background: rgba(var(--ntlstl-brand-rgb), 0.16);
 }
 
 /* Keeps a long email from pushing the avatar out of the row. */
@@ -58,4 +77,20 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
+}
+
+.userRowChevron {
+  flex-shrink: 0;
+  color: var(--g-color-text-hint);
+}
+
+/* Grid, not flex: the switcher is width="max", so it needs a column that
+   actually bounds it — otherwise it either overflows or collapses. */
+.themeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
 }

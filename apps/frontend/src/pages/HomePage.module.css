@@ -1,12 +1,6 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 860px;
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
 }

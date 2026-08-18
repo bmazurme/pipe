@@ -47,11 +47,12 @@ export function StorageDropzone({ isUploading, onUpload }: StorageDropzoneProps)
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <Icon data={CloudArrowUpIn} size={32} className={styles.dropzoneIcon} />
+      <span className={styles.dropzoneIcon}>
+        <Icon data={CloudArrowUpIn} size={24} />
+      </span>
       <Text variant="subheader-2">
         {isDragOver ? 'Отпустите файл' : 'Перетащите файл сюда'}
       </Text>
-      <Text color="secondary">или</Text>
       <Button
         view="action"
         size="l"
@@ -60,6 +61,9 @@ export function StorageDropzone({ isUploading, onUpload }: StorageDropzoneProps)
       >
         Выбрать файл
       </Button>
+      <Text color="hint" variant="caption-2" className={styles.dropzoneHint}>
+        До 10 МБ · файл удаляется с сервера сразу после скачивания
+      </Text>
       <input
         ref={fileInputRef}
         type="file"
