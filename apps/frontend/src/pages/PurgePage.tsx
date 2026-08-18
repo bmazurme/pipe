@@ -45,7 +45,7 @@ import {
 } from '../store/slices';
 import styles from './PurgePage.module.css';
 
-type Direction = 'keyToValue' | 'valueToKey';
+export type Direction = 'keyToValue' | 'valueToKey';
 
 const SUGGESTION_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -65,7 +65,7 @@ function randomToken(length: number): string {
 // Same length as the key, retried a few times against the values already in
 // use so the suggestion is unique out of the box — the user can still type
 // over it before submitting.
-function suggestUniqueValue(length: number, taken: Set<string>): string {
+export function suggestUniqueValue(length: number, taken: Set<string>): string {
   if (length <= 0) return '';
 
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -76,7 +76,7 @@ function suggestUniqueValue(length: number, taken: Set<string>): string {
   return randomToken(length);
 }
 
-function buildDictionary(
+export function buildDictionary(
   entries: PurgeEntry[],
   direction: Direction,
 ): Map<string, string> {
@@ -96,7 +96,7 @@ function buildDictionary(
   return map;
 }
 
-function applyDictionary(
+export function applyDictionary(
   text: string,
   dictionary: Map<string, string>,
 ): { result: string; count: number } {
@@ -125,23 +125,47 @@ function applyDictionary(
   return { result, count };
 }
 
-interface ImportedEntry {
+export interface ImportedEntry {
   key: string;
   value: string;
 }
 
-function parseImportedEntries(raw: string): ImportedEntry[] {
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error('Ожидается JSON-массив вида [{"key": "...", "value": "..."}]');
+// Matches the file format used by the ntlstl/purge desktop app (a plain
+// JSON array of { key, value }, no envelope) so a dictionary exported from
+// either app can be imported into the other. That app only requires a
+// non-empty `key` — `value` can be missing/empty — so entries are validated
+// the same way here; an empty value just won't survive createEntry (the
+// backend requires one), which the import loop already reports as skipped.
+export function parseImportedEntries(raw: string): ImportedEntry[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('Файл повреждён или не является корректным JSON');
   }
 
-  return parsed
-    .map((item) => ({
-      key: typeof item?.key === 'string' ? item.key.trim() : '',
-      value: typeof item?.value === 'string' ? item.value.trim() : '',
-    }))
-    .filter((item) => item.key && item.value);
+  if (!Array.isArray(parsed)) {
+    throw new Error('Файл должен содержать массив пар { key, value }');
+  }
+
+  const entries = parsed.map((item, index) => {
+    const key = (item as { key?: unknown } | null)?.key;
+    if (typeof key !== 'string' || !key.trim()) {
+      throw new Error(`Запись №${index + 1}: отсутствует или пустой "key"`);
+    }
+
+    const value = (item as { value?: unknown } | null)?.value;
+    return {
+      key: key.trim(),
+      value: typeof value === 'string' ? value.trim() : String(value ?? ''),
+    };
+  });
+
+  if (entries.length === 0) {
+    throw new Error('Файл не содержит ни одной пары');
+  }
+
+  return entries;
 }
 
 // The result of a replacement stays in the store (and in localStorage) until
@@ -456,7 +480,7 @@ export function PurgePage() {
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'purge-dictionary.json';
+    link.download = `purge-dictionary-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -486,9 +510,12 @@ export function PurgePage() {
         }
       }
 
+      // A skip can now mean a duplicate key/value (our own dictionary rule)
+      // or an empty value (ntlstl/purge allows one, our backend doesn't) —
+      // no longer just duplicates, so the message stays generic.
       setImportMessage(
         skipped > 0
-          ? `Импортировано: ${imported}, пропущено (дубликаты): ${skipped}`
+          ? `Импортировано: ${imported}, пропущено: ${skipped}`
           : `Импортировано: ${imported}`,
       );
     } catch (err) {
