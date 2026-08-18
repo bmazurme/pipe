@@ -29,5 +29,12 @@ COPY --from=builder /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 
+# Nest's loadPackage() swallows the real error and only ever logs "package is
+# missing" at runtime, which is useless for diagnosing why. Fail the build
+# instead, with the real stack trace, if any prod dependency can't load from
+# exactly the node_modules this image ships. Resolved from apps/backend, same
+# as dist/main.js itself, not from /app — class-validator nests one level in.
+RUN cd apps/backend && node -e "require('class-validator'); require('class-transformer'); require('validator'); console.log('deps ok')"
+
 EXPOSE 3000
 CMD ["node", "apps/backend/dist/main"]
