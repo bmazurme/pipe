@@ -224,7 +224,15 @@ jobs:
 
           if [ -n "$PUBLIC_URL" ]; then
             for i in $(seq 1 8); do
-              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$PUBLIC_URL/" || echo 000)
+              curl_log=$(mktemp)
+              if ! code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$PUBLIC_URL/" 2>"$curl_log"); then
+                # curl itself failed (DNS, connect, TLS, timeout) — this is a
+                # network/DNS problem reaching $PUBLIC_URL from the runner,
+                # not the same failure mode as a wrong proxy_pass (that shows
+                # up as a non-200 HTTP response, handled below).
+                echo "::error::curl could not reach $PUBLIC_URL on attempt $i: $(cat "$curl_log") — check the HOST secret is a valid, resolvable URL and that DNS for it is up (this is not the reverse proxy)"
+                exit 1
+              fi
               if [ "$code" != "200" ]; then
                 echo "::error::$PUBLIC_URL returned $code on attempt $i — check the reverse proxy (proxy_pass must use 127.0.0.1, not localhost)"
                 exit 1
