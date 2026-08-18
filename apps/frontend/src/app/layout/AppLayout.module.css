@@ -1,9 +1,9 @@
 .content {
-  padding: 24px;
+  padding: 32px;
 }
 
 .contentMobile {
-  padding: 16px;
+  padding: 20px 16px;
 }
 
 .soonTitle {
@@ -15,12 +15,15 @@
 
 .soonBadge {
   flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: var(--g-border-radius-s);
+  padding: 2px 7px;
+  border-radius: 999px;
   background: var(--g-color-base-generic);
   color: var(--g-color-text-secondary);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .burgerFooter {

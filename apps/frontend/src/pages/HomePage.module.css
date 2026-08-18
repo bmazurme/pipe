@@ -1,3 +1,12 @@
-.subtitle {
-  margin-top: 12px;
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }

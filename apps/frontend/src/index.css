@@ -1,5 +1,16 @@
 :root {
   color-scheme: light dark;
+
+  /* Sidebar/burger menu accent — ties the active & hover states to the
+     logo's brand purple instead of the uikit default. Public theming hooks
+     exposed by @gravity-ui/navigation's CompositeBar item. */
+  --gn-aside-header-item-current-background-color: rgba(108, 92, 231, 0.16);
+  --gn-aside-header-item-current-background-color-hover: rgba(108, 92, 231, 0.22);
+  --gn-aside-header-item-background-color-hover: rgba(108, 92, 231, 0.08);
+  --gn-aside-header-item-current-icon-color: #6c5ce7;
+  --gn-aside-header-item-current-text-color: #6c5ce7;
+  --gn-aside-header-item-expanded-radius: 10px;
+  --gn-aside-header-item-collapsed-radius: 10px;
 }
 
 *,
@@ -21,4 +32,13 @@ body,
 .ntlstl-soon-item {
   opacity: 0.55;
   cursor: default;
+}
+
+/* The mobile burger menu's current-item highlight comes from uikit's generic
+   List component (not the aside header's CompositeBar, which the
+   --gn-aside-header-* variables above already theme), so it needs its own
+   rule to match the desktop sidebar's brand-purple accent. Scoped to the
+   drawer so it doesn't affect List usage elsewhere (e.g. a Select dropdown). */
+.g-drawer .g-list__item_selected {
+  background: rgba(108, 92, 231, 0.16);
 }
