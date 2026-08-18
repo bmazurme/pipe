@@ -5,6 +5,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
+# node:22-alpine bundles npm 10.9.8, which has a bug resolving nested
+# optionalDependencies (e.g. vitest's own esbuild copy) that makes npm ci
+# wrongly reject platform packages with EBADPLATFORM. npm 11+ fixes it.
+RUN npm install -g npm@11
 
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json apps/backend/package.json

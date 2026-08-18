@@ -3,6 +3,10 @@
 #   docker build -f apps/backend/Dockerfile -t bridge-backend .
 FROM node:22-alpine AS builder
 WORKDIR /app
+# node:22-alpine bundles npm 10.9.8, which has a bug resolving nested
+# optionalDependencies (e.g. vitest's own esbuild copy) that makes npm ci
+# wrongly reject platform packages with EBADPLATFORM. npm 11+ fixes it.
+RUN npm install -g npm@11
 
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json apps/backend/package.json
