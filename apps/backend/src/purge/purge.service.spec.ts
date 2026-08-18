@@ -57,33 +57,43 @@ describe('PurgeService', () => {
   describe('create', () => {
     it('saves a new entry when the key and value are both free', async () => {
       repository.findOne!.mockResolvedValue(null);
-      repository.save!.mockImplementation((entry) => Promise.resolve({ id: 1, ...entry }));
+      repository.save!.mockImplementation((entry) =>
+        Promise.resolve({ id: 1, ...entry }),
+      );
 
       const result = await service.create(7, { key: 'foo', value: 'bar' });
 
-      expect(repository.save).toHaveBeenCalledWith({ userId: 7, key: 'foo', value: 'bar' });
+      expect(repository.save).toHaveBeenCalledWith({
+        userId: 7,
+        key: 'foo',
+        value: 'bar',
+      });
       expect(result).toMatchObject({ key: 'foo', value: 'bar' });
     });
 
     it('rejects a duplicate key for the same user', async () => {
       repository.findOne!.mockImplementation(({ where }) =>
-        Promise.resolve(where.key === 'foo' ? { id: 1, key: 'foo', value: 'other' } : null),
+        Promise.resolve(
+          where.key === 'foo' ? { id: 1, key: 'foo', value: 'other' } : null,
+        ),
       );
 
-      await expect(service.create(7, { key: 'foo', value: 'bar' })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.create(7, { key: 'foo', value: 'bar' }),
+      ).rejects.toThrow(BadRequestException);
       expect(repository.save).not.toHaveBeenCalled();
     });
 
     it('rejects a duplicate value for the same user', async () => {
       repository.findOne!.mockImplementation(({ where }) =>
-        Promise.resolve(where.value === 'bar' ? { id: 1, key: 'other', value: 'bar' } : null),
+        Promise.resolve(
+          where.value === 'bar' ? { id: 1, key: 'other', value: 'bar' } : null,
+        ),
       );
 
-      await expect(service.create(7, { key: 'foo', value: 'bar' })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.create(7, { key: 'foo', value: 'bar' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -91,14 +101,19 @@ describe('PurgeService', () => {
     it('throws NotFoundException for an entry owned by another user', async () => {
       repository.findOne!.mockResolvedValue(null);
 
-      await expect(
-        service.update(1, 7, { key: 'new-key' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update(1, 7, { key: 'new-key' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('rejects renaming to a key already used by this user', async () => {
-      repository.findOne!
-        .mockResolvedValueOnce({ id: 1, userId: 7, key: 'old', value: 'v' })
+      repository
+        .findOne!.mockResolvedValueOnce({
+          id: 1,
+          userId: 7,
+          key: 'old',
+          value: 'v',
+        })
         .mockResolvedValueOnce({ id: 2, userId: 7, key: 'taken', value: 'v2' });
 
       await expect(service.update(1, 7, { key: 'taken' })).rejects.toThrow(
@@ -151,7 +166,9 @@ describe('PurgeService', () => {
 
     it('saveDraft delegates to UsersService and echoes the text back', async () => {
       usersService.savePurgeDraft!.mockResolvedValue(undefined);
-      await expect(service.saveDraft(7, 'draft text')).resolves.toBe('draft text');
+      await expect(service.saveDraft(7, 'draft text')).resolves.toBe(
+        'draft text',
+      );
       expect(usersService.savePurgeDraft).toHaveBeenCalledWith(7, 'draft text');
     });
   });

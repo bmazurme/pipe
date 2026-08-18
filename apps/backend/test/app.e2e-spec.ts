@@ -24,8 +24,15 @@ describe('Purge API (e2e)', () => {
     const user = await usersService.create({
       email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@ntlstl.test`,
     });
-    const session = await sessionsService.createSession(user.id, 'jest', '127.0.0.1');
-    const accessToken = jwtService.sign({ sub: user.id, sessionId: session.id });
+    const session = await sessionsService.createSession(
+      user.id,
+      'jest',
+      '127.0.0.1',
+    );
+    const accessToken = jwtService.sign({
+      sub: user.id,
+      sessionId: session.id,
+    });
 
     return { userId: user.id, accessToken };
   }
@@ -43,7 +50,9 @@ describe('Purge API (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.use(cookieParser());
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
   });
 
@@ -65,7 +74,10 @@ describe('Purge API (e2e)', () => {
           .send({ key: 'e2e-key', value: 'e2e-value' }),
         accessToken,
       ).expect(201);
-      expect(created.body).toMatchObject({ key: 'e2e-key', value: 'e2e-value' });
+      expect(created.body).toMatchObject({
+        key: 'e2e-key',
+        value: 'e2e-value',
+      });
       const id = created.body.id;
 
       const list = await authed(
@@ -75,10 +87,16 @@ describe('Purge API (e2e)', () => {
       expect(list.body).toContainEqual(created.body);
 
       const updated = await authed(
-        request(app.getHttpServer()).patch(`/api/v1/purge/${id}`).send({ value: 'changed' }),
+        request(app.getHttpServer())
+          .patch(`/api/v1/purge/${id}`)
+          .send({ value: 'changed' }),
         accessToken,
       ).expect(200);
-      expect(updated.body).toMatchObject({ id, key: 'e2e-key', value: 'changed' });
+      expect(updated.body).toMatchObject({
+        id,
+        key: 'e2e-key',
+        value: 'changed',
+      });
 
       await authed(
         request(app.getHttpServer()).delete(`/api/v1/purge/${id}`),
@@ -89,19 +107,25 @@ describe('Purge API (e2e)', () => {
         request(app.getHttpServer()).get('/api/v1/purge'),
         accessToken,
       ).expect(200);
-      expect(afterDelete.body.find((e: { id: number }) => e.id === id)).toBeUndefined();
+      expect(
+        afterDelete.body.find((e: { id: number }) => e.id === id),
+      ).toBeUndefined();
     });
 
     it('rejects a duplicate key for the same user', async () => {
       const { accessToken } = await authenticatedUser();
 
       await authed(
-        request(app.getHttpServer()).post('/api/v1/purge').send({ key: 'dup', value: 'a' }),
+        request(app.getHttpServer())
+          .post('/api/v1/purge')
+          .send({ key: 'dup', value: 'a' }),
         accessToken,
       ).expect(201);
 
       await authed(
-        request(app.getHttpServer()).post('/api/v1/purge').send({ key: 'dup', value: 'b' }),
+        request(app.getHttpServer())
+          .post('/api/v1/purge')
+          .send({ key: 'dup', value: 'b' }),
         accessToken,
       ).expect(400);
     });
@@ -110,12 +134,16 @@ describe('Purge API (e2e)', () => {
       const { accessToken } = await authenticatedUser();
 
       await authed(
-        request(app.getHttpServer()).post('/api/v1/purge').send({ key: 'a', value: 'dup' }),
+        request(app.getHttpServer())
+          .post('/api/v1/purge')
+          .send({ key: 'a', value: 'dup' }),
         accessToken,
       ).expect(201);
 
       await authed(
-        request(app.getHttpServer()).post('/api/v1/purge').send({ key: 'b', value: 'dup' }),
+        request(app.getHttpServer())
+          .post('/api/v1/purge')
+          .send({ key: 'b', value: 'dup' }),
         accessToken,
       ).expect(400);
     });
@@ -128,7 +156,9 @@ describe('Purge API (e2e)', () => {
       const { accessToken } = await authenticatedUser();
 
       await authed(
-        request(app.getHttpServer()).post('/api/v1/purge').send({ key: 'k', value: '' }),
+        request(app.getHttpServer())
+          .post('/api/v1/purge')
+          .send({ key: 'k', value: '' }),
         accessToken,
       ).expect(400);
     });
@@ -137,7 +167,9 @@ describe('Purge API (e2e)', () => {
       const { accessToken } = await authenticatedUser();
 
       await authed(
-        request(app.getHttpServer()).patch('/api/v1/purge/999999').send({ value: 'x' }),
+        request(app.getHttpServer())
+          .patch('/api/v1/purge/999999')
+          .send({ value: 'x' }),
         accessToken,
       ).expect(404);
 
