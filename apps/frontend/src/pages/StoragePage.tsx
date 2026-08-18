@@ -36,6 +36,14 @@ function formatDate(value: string): string {
   });
 }
 
+const FILES_POLL_INTERVAL_MS = 4000;
+
+// Cheap identity check so a poll that finds nothing new doesn't replace the
+// array (and re-render the table) for no reason.
+function sameFileIds(a: StoredFileMeta[], b: StoredFileMeta[]): boolean {
+  return a.length === b.length && a.every((file, index) => file.id === b[index]?.id);
+}
+
 export function StoragePage() {
   const [files, setFiles] = useState<StoredFileMeta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +72,37 @@ export function StoragePage() {
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Picks up files uploaded from another open device/tab. Uploads and
+  // downloads already update `files` optimistically, so this only ever
+  // has to fill in what happened elsewhere — a no-op poll leaves the
+  // array reference untouched via sameFileIds.
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+
+    const interval = setInterval(() => {
+      if (inFlight) return;
+
+      inFlight = true;
+      (async () => {
+        try {
+          const latest = await listFiles();
+          if (cancelled) return;
+          setFiles((prev) => (sameFileIds(prev, latest) ? prev : latest));
+        } catch {
+          // Transient poll failure — try again next tick.
+        } finally {
+          inFlight = false;
+        }
+      })();
+    }, FILES_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
     };
   }, []);
 
