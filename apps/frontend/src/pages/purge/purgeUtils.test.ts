@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { PurgeEntry } from '../store/api/purge-api/endpoints';
+import { PurgeEntry } from '../../store/api/purge-api/endpoints';
 import {
   applyDictionary,
   buildDictionary,
+  mask,
   parseImportedEntries,
   suggestUniqueValue,
-} from './PurgePage';
+} from './purgeUtils';
 
 function entry(id: number, key: string, value: string): PurgeEntry {
   return { id, key, value, createdAt: new Date().toISOString() };
@@ -128,5 +129,19 @@ describe('suggestUniqueValue', () => {
     const taken = new Set(['a', 'b', 'c']);
     const result = suggestUniqueValue(1, taken);
     expect(taken.has(result)).toBe(false);
+  });
+});
+
+describe('mask', () => {
+  it('replaces every character with a dot, keeping the length', () => {
+    expect(mask('secret')).toBe('••••••');
+  });
+
+  it('returns an empty string for an empty value', () => {
+    expect(mask('')).toBe('');
+  });
+
+  it('caps the mask length for very long values', () => {
+    expect(mask('x'.repeat(500))).toHaveLength(40);
   });
 });

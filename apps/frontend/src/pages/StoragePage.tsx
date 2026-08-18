@@ -1,14 +1,5 @@
-import { useRef, useState } from 'react';
-import { ArrowDownToLine, CloudArrowUpIn, Paperclip } from '@gravity-ui/icons';
-import {
-  Alert,
-  Button,
-  Card,
-  Icon,
-  Loader,
-  Table,
-  Text,
-} from '@gravity-ui/uikit';
+import { useState } from 'react';
+import { Alert, Card, Text } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
@@ -20,23 +11,9 @@ import {
 } from '../store/api';
 import { useAppSelector } from '../store/hooks';
 import { storageFilesSelector } from '../store/slices';
+import { StorageDropzone } from './storage/StorageDropzone';
+import { StorageFileList } from './storage/StorageFileList';
 import styles from './StoragePage.module.css';
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const FILES_POLL_INTERVAL_MS = 4000;
 
@@ -52,11 +29,7 @@ export function StoragePage() {
   const [downloadFile] = useDownloadFileMutation();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const isMobile = useIsMobile();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Counts nested dragenter/dragleave pairs so hovering a child doesn't drop the highlight.
-  const dragDepth = useRef(0);
 
   const handleUpload = async (file: File) => {
     setError(null);
@@ -79,32 +52,6 @@ export function StoragePage() {
     }
   };
 
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    dragDepth.current = 0;
-    setIsDragOver(false);
-
-    const file = event.dataTransfer.files?.[0];
-    if (file) void handleUpload(file);
-  };
-
-  const handleDragEnter = (event: React.DragEvent) => {
-    event.preventDefault();
-    dragDepth.current += 1;
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (event: React.DragEvent) => {
-    event.preventDefault();
-    dragDepth.current -= 1;
-    if (dragDepth.current <= 0) {
-      dragDepth.current = 0;
-      setIsDragOver(false);
-    }
-  };
-
-  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -116,37 +63,7 @@ export function StoragePage() {
         </Text>
       </div>
 
-      <div
-        className={`${styles.dropzone} ${isDragOver ? styles.dropzoneActive : ''}`}
-        onDragEnter={handleDragEnter}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <Icon data={CloudArrowUpIn} size={32} className={styles.dropzoneIcon} />
-        <Text variant="subheader-2">
-          {isDragOver ? 'Отпустите файл' : 'Перетащите файл сюда'}
-        </Text>
-        <Text color="secondary">или</Text>
-        <Button
-          view="action"
-          size="l"
-          loading={isUploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Выбрать файл
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void handleUpload(file);
-          }}
-        />
-      </div>
+      <StorageDropzone isUploading={isUploading} onUpload={(file) => void handleUpload(file)} />
 
       {error && (
         <Alert
@@ -158,97 +75,13 @@ export function StoragePage() {
       )}
 
       <Card view="outlined" className={styles.filesCard}>
-        <div className={styles.filesHeader}>
-          <Text variant="subheader-2">Файлы</Text>
-          {files.length > 0 && (
-            <Text color="secondary">
-              {files.length} · {formatSize(totalSize)}
-            </Text>
-          )}
-        </div>
-
-        {isLoading && (
-          <div className={styles.centered}>
-            <Loader size="m" />
-          </div>
-        )}
-
-        {!isLoading && files.length === 0 && (
-          <div className={styles.centered}>
-            <Icon data={Paperclip} size={24} className={styles.emptyIcon} />
-            <Text color="secondary">Файлов пока нет</Text>
-          </div>
-        )}
-
-        {/* A 4-column table would push the download action off a phone screen. */}
-        {!isLoading && files.length > 0 && isMobile && (
-          <ul className={styles.fileList}>
-            {files.map((file) => (
-              <li key={file.id} className={styles.fileRow}>
-                <div className={styles.fileInfo}>
-                  <Text ellipsis>{file.originalName}</Text>
-                  <Text color="secondary" ellipsis>
-                    {formatSize(file.size)} · {formatDate(file.createdAt)}
-                  </Text>
-                </div>
-                <Button
-                  view="flat"
-                  title="Скачать и удалить с сервера"
-                  aria-label={`Скачать ${file.originalName}`}
-                  loading={downloadingId === file.id}
-                  onClick={() => void handleDownload(file)}
-                >
-                  <Icon data={ArrowDownToLine} size={16} />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {!isLoading && files.length > 0 && !isMobile && (
-          <div className={styles.tableWrapper}>
-            <Table
-              width="max"
-              data={files}
-              getRowId={(item) => String(item.id)}
-              columns={[
-                {
-                  id: 'originalName',
-                  name: 'Имя файла',
-                  primary: true,
-                },
-                {
-                  id: 'size',
-                  name: 'Размер',
-                  align: 'end',
-                  template: (item) => formatSize(item.size),
-                },
-                {
-                  id: 'createdAt',
-                  name: 'Загружен',
-                  template: (item) => formatDate(item.createdAt),
-                },
-                {
-                  id: 'actions',
-                  name: '',
-                  align: 'end',
-                  template: (item) => (
-                    <Button
-                      view="flat"
-                      size="s"
-                      title="Скачать и удалить с сервера"
-                      loading={downloadingId === item.id}
-                      onClick={() => void handleDownload(item)}
-                    >
-                      <Icon data={ArrowDownToLine} size={16} />
-                      Скачать
-                    </Button>
-                  ),
-                },
-              ]}
-            />
-          </div>
-        )}
+        <StorageFileList
+          files={files}
+          isLoading={isLoading}
+          isMobile={isMobile}
+          downloadingId={downloadingId}
+          onDownload={(file) => void handleDownload(file)}
+        />
       </Card>
     </div>
   );
