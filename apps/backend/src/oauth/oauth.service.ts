@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 
 import { AuthService } from '../auth/auth.service';
+import { SessionsService } from '../auth/sessions.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 
@@ -13,6 +14,7 @@ export class OauthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private readonly sessionsService: SessionsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -28,6 +30,8 @@ export class OauthService {
   async signinOrSignup(
     { email }: { email: string },
     response: Response,
+    userAgent: string | null,
+    ip: string | null,
   ): Promise<void> {
     const allowedEmails = this.configService.get<string>('EMAILS');
     if (allowedEmails) {
@@ -56,10 +60,18 @@ export class OauthService {
       throw new Error(`Failed to create user with email: ${email}`);
     }
 
-    const { refreshToken } =
-      await this.authService.generateNewTokens(currentUser);
+    const session = await this.sessionsService.createSession(
+      currentUser.id,
+      userAgent,
+      ip,
+    );
 
-    await this.usersService.saveRefreshToken(currentUser.id, refreshToken);
+    const { refreshToken } = await this.authService.generateNewTokens(
+      currentUser.id,
+      session.id,
+    );
+
+    await this.sessionsService.attachRefreshToken(session.id, refreshToken);
 
     response.cookie(
       'refreshToken',

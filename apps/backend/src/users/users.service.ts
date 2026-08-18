@@ -36,26 +36,6 @@ export class UsersService {
     return this.userRepository.findOne({ where: { id } });
   }
 
-  async findByRefreshToken(refreshToken: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { refreshToken } });
-  }
-
-  async saveRefreshToken(id: number, refreshToken: string): Promise<void> {
-    await this.userRepository.update(id, { refreshToken });
-  }
-
-  async isRefreshTokenValid(
-    userId: number,
-    refreshToken: string,
-  ): Promise<boolean> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, refreshToken },
-      select: { id: true },
-    });
-
-    return Boolean(user);
-  }
-
   async update(
     id: number,
     updateFields: Partial<User>,

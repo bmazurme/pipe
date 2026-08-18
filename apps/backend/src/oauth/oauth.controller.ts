@@ -8,7 +8,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 import { OauthService } from './oauth.service';
 
@@ -29,6 +29,13 @@ export class OauthController {
     @Req() req: Request & { user: { user: { email: string } } },
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    return this.oauthService.signinOrSignup(req.user.user, response);
+    const userAgent = req.headers['user-agent'] ?? null;
+
+    return this.oauthService.signinOrSignup(
+      req.user.user,
+      response,
+      userAgent,
+      req.ip ?? null,
+    );
   }
 }
