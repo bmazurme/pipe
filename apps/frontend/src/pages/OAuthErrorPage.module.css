@@ -1,4 +1,5 @@
 .wrapper {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -6,10 +7,21 @@
   padding: 16px;
 }
 
+.themeSwitcher {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
 .card {
   width: min(360px, 100%);
   padding: clamp(20px, 6vw, 32px);
   text-align: center;
+}
+
+.icon {
+  color: var(--g-color-text-danger);
+  margin-bottom: 16px;
 }
 
 .subtitle {
