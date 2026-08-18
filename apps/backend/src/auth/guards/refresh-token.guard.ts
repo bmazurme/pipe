@@ -10,7 +10,16 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
-import { UsersService } from '../../users/users.service';
+import { Session } from '../entities/session.entity';
+import { SessionsService } from '../sessions.service';
+
+export type AuthSession = {
+  userId: number;
+  sessionId: number;
+  session: Session;
+};
+
+export type RequestWithAuthSession = Request & { authSession?: AuthSession };
 
 @Injectable()
 export class RefreshTokenGuard implements CanActivate {
@@ -19,11 +28,11 @@ export class RefreshTokenGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly usersService: UsersService,
+    private readonly sessionsService: SessionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<RequestWithAuthSession>();
     const refreshToken = request.cookies?.refreshToken;
 
     if (!refreshToken) {
@@ -32,7 +41,7 @@ export class RefreshTokenGuard implements CanActivate {
     }
 
     try {
-      await this.validateRefreshToken(refreshToken);
+      request.authSession = await this.validateRefreshToken(refreshToken);
       return true;
     } catch (error) {
       this.logger.warn(
@@ -42,24 +51,27 @@ export class RefreshTokenGuard implements CanActivate {
     }
   }
 
-  private async validateRefreshToken(token: string): Promise<void> {
+  private async validateRefreshToken(token: string): Promise<AuthSession> {
     const decoded = this.jwtService.verify<JwtPayload>(token, {
       secret: this.configService.get<string>('REFRESH_JWT_SECRET'),
     });
 
-    if (!decoded.sub) {
+    if (!decoded.sub || decoded.sessionId === undefined) {
       throw new UnauthorizedException(
-        'Invalid refresh token payload: missing user ID',
+        'Invalid refresh token payload: missing user or session ID',
       );
     }
 
-    const isTokenValid = await this.usersService.isRefreshTokenValid(
+    const session = await this.sessionsService.validateSession(
+      decoded.sessionId,
       decoded.sub,
       token,
     );
 
-    if (!isTokenValid) {
+    if (!session) {
       throw new UnauthorizedException('Refresh token not found or expired');
     }
+
+    return { userId: decoded.sub, sessionId: decoded.sessionId, session };
   }
 }
