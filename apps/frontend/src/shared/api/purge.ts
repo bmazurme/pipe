@@ -77,3 +77,26 @@ export async function deleteEntry(id: number): Promise<void> {
     throw new Error('Не удалось удалить запись');
   }
 }
+
+export async function getDraftText(): Promise<string> {
+  const response = await apiFetch('/api/v1/purge/draft/text');
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch draft text');
+  }
+
+  const data = await response.json();
+  return data.text ?? '';
+}
+
+export async function saveDraftText(text: string): Promise<void> {
+  const response = await apiFetch('/api/v1/purge/draft/text', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to save draft text');
+  }
+}

@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { UsersService } from '../users/users.service';
 import { CreatePurgeEntryDto } from './dto/create-purge-entry.dto';
 import { UpdatePurgeEntryDto } from './dto/update-purge-entry.dto';
 import { PurgeEntry } from './entities/purge-entry.entity';
@@ -15,7 +16,17 @@ export class PurgeService {
   constructor(
     @InjectRepository(PurgeEntry)
     private readonly purgeEntryRepository: Repository<PurgeEntry>,
+    private readonly usersService: UsersService,
   ) {}
+
+  async getDraft(userId: number): Promise<string> {
+    return (await this.usersService.getPurgeDraft(userId)) ?? '';
+  }
+
+  async saveDraft(userId: number, text: string): Promise<string> {
+    await this.usersService.savePurgeDraft(userId, text);
+    return text;
+  }
 
   async findAllByUser(userId: number): Promise<PurgeEntry[]> {
     return this.purgeEntryRepository.find({

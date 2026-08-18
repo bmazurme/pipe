@@ -29,8 +29,10 @@ import {
 import {
   createEntry,
   deleteEntry,
+  getDraftText,
   listEntries,
   PurgeEntry,
+  saveDraftText,
   updateEntry,
 } from '../shared/api/purge';
 import styles from './PurgePage.module.css';
@@ -135,8 +137,11 @@ function parseImportedEntries(raw: string): ImportedEntry[] {
 }
 
 // The result of a replacement stays here — and in the textarea — until the
-// user copies it out, surviving tab switches, navigation and page reloads.
+// user copies it out, surviving tab switches, navigation, page reloads and
+// (via the backend) switching devices. localStorage is kept as an instant
+// offline mirror; the backend copy is the source of truth on load.
 const TEXT_STORAGE_KEY = 'ntlstl-purge-text';
+const DRAFT_SAVE_DEBOUNCE_MS = 800;
 
 function readStoredText(): string {
   return localStorage.getItem(TEXT_STORAGE_KEY) ?? '';
@@ -148,7 +153,9 @@ export function PurgePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [text, setText] = useState(readStoredText);
+  const [text, setText] = useState('');
+  const draftLoadedRef = useRef(false);
+  const draftSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [direction, setDirection] = useState<Direction>('keyToValue');
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -201,11 +208,55 @@ export function PurgePage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const draft = await getDraftText();
+        if (cancelled) return;
+
+        if (draft) {
+          setText(draft);
+        } else {
+          // Nothing saved on the backend yet — fall back to whatever this
+          // browser had stored locally and push it up so other devices see it.
+          const local = readStoredText();
+          if (local) {
+            setText(local);
+            void saveDraftText(local);
+          }
+        }
+      } catch {
+        if (!cancelled) setText(readStoredText());
+      } finally {
+        if (!cancelled) draftLoadedRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (text) {
       localStorage.setItem(TEXT_STORAGE_KEY, text);
     } else {
       localStorage.removeItem(TEXT_STORAGE_KEY);
     }
+
+    // Skip syncing the very first render (before the initial backend fetch
+    // above has resolved) so we don't overwrite the backend draft with ''.
+    if (!draftLoadedRef.current) return;
+
+    if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
+    draftSaveTimeout.current = setTimeout(() => {
+      void saveDraftText(text);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
+    };
   }, [text]);
 
   useEffect(() => {
@@ -242,6 +293,8 @@ export function PurgePage() {
     try {
       await navigator.clipboard.writeText(text);
       setText('');
+      if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
+      void saveDraftText('');
       setApplyMessage(null);
       setCopyMessage('Скопировано в буфер обмена — поле очищено');
     } catch {

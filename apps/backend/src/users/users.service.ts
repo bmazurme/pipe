@@ -36,6 +36,19 @@ export class UsersService {
     return this.userRepository.findOne({ where: { id } });
   }
 
+  async getPurgeDraft(id: number): Promise<string | null> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      select: { purgeDraft: true },
+    });
+
+    return user?.purgeDraft ?? null;
+  }
+
+  async savePurgeDraft(id: number, purgeDraft: string): Promise<void> {
+    await this.userRepository.update(id, { purgeDraft: purgeDraft || null });
+  }
+
   async update(
     id: number,
     updateFields: Partial<User>,

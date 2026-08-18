@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 
@@ -16,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CreatePurgeEntryDto } from './dto/create-purge-entry.dto';
 import { PurgeEntryResponseDto } from './dto/purge-entry-response.dto';
+import { SaveDraftDto } from './dto/save-draft.dto';
 import { UpdatePurgeEntryDto } from './dto/update-purge-entry.dto';
 import { PurgeService } from './purge.service';
 
@@ -31,6 +33,25 @@ export class PurgeController {
     const entries = await this.purgeService.findAllByUser(currentUser.id);
 
     return entries.map(PurgeEntryResponseDto.fromEntity);
+  }
+
+  @Get('draft/text')
+  async getDraft(
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{ text: string }> {
+    const text = await this.purgeService.getDraft(currentUser.id);
+
+    return { text };
+  }
+
+  @Put('draft/text')
+  async saveDraft(
+    @Body() dto: SaveDraftDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{ text: string }> {
+    const text = await this.purgeService.saveDraft(currentUser.id, dto.text);
+
+    return { text };
   }
 
   @Post()

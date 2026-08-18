@@ -12,4 +12,7 @@ export class User extends BaseEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   status: string;
+
+  @Column({ type: 'text', nullable: true })
+  purgeDraft: string | null;
 }
