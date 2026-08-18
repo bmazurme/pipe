@@ -142,6 +142,7 @@ function parseImportedEntries(raw: string): ImportedEntry[] {
 // offline mirror; the backend copy is the source of truth on load.
 const TEXT_STORAGE_KEY = 'ntlstl-purge-text';
 const DRAFT_SAVE_DEBOUNCE_MS = 800;
+const DRAFT_POLL_INTERVAL_MS = 4000;
 
 function readStoredText(): string {
   return localStorage.getItem(TEXT_STORAGE_KEY) ?? '';
@@ -156,6 +157,11 @@ export function PurgePage() {
   const [text, setText] = useState('');
   const draftLoadedRef = useRef(false);
   const draftSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isTextFocused, setIsTextFocused] = useState(false);
+  const [hasPendingSave, setHasPendingSave] = useState(false);
+  // Set right before a poll-driven setText, so the very next [text] effect
+  // run doesn't turn straight around and PUT the value we just fetched.
+  const suppressNextSaveRef = useRef(false);
   const [direction, setDirection] = useState<Direction>('keyToValue');
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -249,15 +255,60 @@ export function PurgePage() {
     // above has resolved) so we don't overwrite the backend draft with ''.
     if (!draftLoadedRef.current) return;
 
+    // This change came from the poll below picking up another device's
+    // save — it's already on the backend, so don't PUT it right back.
+    if (suppressNextSaveRef.current) {
+      suppressNextSaveRef.current = false;
+      return;
+    }
+
+    setHasPendingSave(true);
     if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
     draftSaveTimeout.current = setTimeout(() => {
-      void saveDraftText(text);
+      void saveDraftText(text).finally(() => setHasPendingSave(false));
     }, DRAFT_SAVE_DEBOUNCE_MS);
 
     return () => {
       if (draftSaveTimeout.current) clearTimeout(draftSaveTimeout.current);
     };
   }, [text]);
+
+  // Picks up a save made on another open device/tab. Paused while this
+  // device is itself typing or has an unsent edit, so an idle poll never
+  // clobbers text the user hasn't finished writing yet.
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+
+    const interval = setInterval(() => {
+      if (inFlight || !draftLoadedRef.current || isTextFocused || hasPendingSave) {
+        return;
+      }
+
+      inFlight = true;
+      (async () => {
+        try {
+          const latest = await getDraftText();
+          if (cancelled) return;
+
+          setText((current) => {
+            if (latest === current) return current;
+            suppressNextSaveRef.current = true;
+            return latest;
+          });
+        } catch {
+          // Transient poll failure — try again next tick.
+        } finally {
+          inFlight = false;
+        }
+      })();
+    }, DRAFT_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isTextFocused, hasPendingSave]);
 
   useEffect(() => {
     if (activeTab === 'dictionary') {
@@ -552,6 +603,8 @@ export function PurgePage() {
                     setCopyMessage(null);
                   }}
                   onKeyDown={handleTextareaKeyDown}
+                  onFocus={() => setIsTextFocused(true)}
+                  onBlur={() => setIsTextFocused(false)}
                   placeholder="Вставьте текст"
                   minRows={10}
                   size="l"
