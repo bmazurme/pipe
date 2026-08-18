@@ -12,7 +12,4 @@ export class User extends BaseEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   status: string;
-
-  @Column({ type: 'varchar', length: 255, unique: true, nullable: true })
-  refreshToken: string;
 }
