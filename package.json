@@ -6,7 +6,8 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,green \"npm run start:dev -w backend\" \"npm run dev -w frontend\"",
+    "dev": "npm run dev:db && concurrently -n backend,frontend -c blue,green \"npm run start:dev -w backend\" \"npm run dev -w frontend\"",
+    "dev:db": "docker compose up -d postgres",
     "dev:backend": "npm run start:dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w backend && npm run build -w frontend",

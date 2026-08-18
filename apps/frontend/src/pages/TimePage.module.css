@@ -1,0 +1,146 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max-wide);
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.card {
+  padding: var(--ntlstl-card-padding);
+  min-width: 0;
+}
+
+.yearSwitcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.yearValue {
+  min-width: 4ch;
+  text-align: center;
+}
+
+/* One column by default: below ~600px, two 7-column day grids side by side
+   no longer fit their own digits without overlapping (each card needs
+   ~260px+ to stay legible). */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 600px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.monthCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  min-width: 0;
+}
+
+.monthTitle {
+  margin-bottom: 4px;
+  text-transform: capitalize;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legendColor {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background-color: currentColor;
+}
+
+.legendWeekend {
+  color: var(--g-color-text-secondary);
+}
+
+.legendDayOff {
+  color: var(--g-color-text-positive);
+}
+
+/* Targets the calendar's own day buttons — see CalendarMonth's classList
+   toggle for why this has to reach into the library's DOM. Both classes must
+   stay inside :global(): the second one is set directly via classList.toggle
+   with the raw string 'dayOff', so it must not be hashed like a normal CSS
+   module class. */
+.monthCard :global(.g-date-calendar__button.dayOff) {
+  color: var(--g-color-text-positive);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+/* Each mini-calendar is bounded to exactly one month (minValue = maxValue),
+   so its own built-in "January 2026 ⌄ ‹ ›" header is dead weight — we already
+   have a page-level year switcher and our own month title above it. Hiding
+   it also saves real vertical space when 12 cards are stacked in one column
+   on mobile. */
+.monthCard :global(.g-date-calendar__header) {
+  display: none;
+}
+
+/* The library's own root is `display: inline-block` with no width, so
+   without this it shrink-wraps to the bare input's default browser size and
+   clips the "MM/DD/YYYY — MM/DD/YYYY" placeholder inside the dialog. */
+.rangePicker {
+  display: block;
+  width: 100%;
+}
+
+.dayOffList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dayOffRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--g-border-radius-m);
+}
+
+.dayOffRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}

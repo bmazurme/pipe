@@ -40,13 +40,11 @@ const NAV_ITEMS = [
   { id: 'home', title: 'Главная', icon: House, path: '/' },
   { id: 'storage', title: 'Storage', icon: Bucket, path: '/storage' },
   { id: 'purge', title: 'Purge', icon: TrashBin, path: '/purge' },
+  { id: 'time', title: 'Time', icon: Clock, path: '/time' },
 ];
 
 // Placeholder links for services that will be added in later steps.
-const SOON_ITEMS = [
-  { id: 'time', title: 'Time', icon: Clock },
-  { id: 'rag', title: 'RAG', icon: MagicWand },
-];
+const SOON_ITEMS = [{ id: 'rag', title: 'RAG', icon: MagicWand }];
 
 const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'system'];
 const THEME_ICON: Record<ThemeMode, typeof Sun> = {

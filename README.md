@@ -18,11 +18,14 @@ deploy/
 
 ```bash
 npm install
-docker compose up -d postgres      # Postgres для локальной разработки
 cp apps/backend/.env.example apps/backend/.env
 cp apps/frontend/.env.example apps/frontend/.env
-npm run dev                        # backend + frontend одновременно
+npm run dev                        # Postgres + backend + frontend одной командой
 ```
+
+`npm run dev` сам поднимает Postgres (`docker compose up -d postgres`) и затем
+запускает backend и frontend параллельно. Поднять только базу (например,
+чтобы прогнать миграции отдельно) — `npm run dev:db`.
 
 Backend: `http://localhost:3002` (порт задаётся `PORT` в `apps/backend/.env`).
 Frontend: `http://localhost:5173`.

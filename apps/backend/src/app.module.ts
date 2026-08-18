@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { OauthModule } from './oauth/oauth.module';
 import { PurgeModule } from './purge/purge.module';
 import { StorageModule } from './storage/storage.module';
+import { TimeModule } from './time/time.module';
 import { UsersModule } from './users/users.module';
 
 import { TypeOrmModuleConfig } from './config/type-orm.config';
@@ -20,6 +21,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     OauthModule,
     PurgeModule,
     StorageModule,
+    TimeModule,
     UsersModule,
   ],
   controllers: [AppController],

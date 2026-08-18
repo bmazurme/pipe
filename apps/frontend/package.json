@@ -13,6 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@gravity-ui/date-components": "^4.0.0",
+    "@gravity-ui/date-utils": "^2.7.1",
     "@gravity-ui/icons": "^2.13.0",
     "@gravity-ui/navigation": "^6.4.1",
     "@gravity-ui/uikit": "^7.42.0",
