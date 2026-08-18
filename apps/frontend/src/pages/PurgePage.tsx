@@ -157,7 +157,6 @@ export function PurgePage() {
   const [text, setText] = useState('');
   const draftLoadedRef = useRef(false);
   const draftSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isTextFocused, setIsTextFocused] = useState(false);
   const [hasPendingSave, setHasPendingSave] = useState(false);
   // Set right before a poll-driven setText, so the very next [text] effect
   // run doesn't turn straight around and PUT the value we just fetched.
@@ -274,14 +273,16 @@ export function PurgePage() {
   }, [text]);
 
   // Picks up a save made on another open device/tab. Paused while this
-  // device is itself typing or has an unsent edit, so an idle poll never
-  // clobbers text the user hasn't finished writing yet.
+  // device has an unsent edit (hasPendingSave covers the whole typing burst,
+  // since every keystroke re-arms it — deliberately not gated on textarea
+  // focus, which can get stuck "focused" forever if the user clicks in on
+  // one device and then switches to another without a DOM blur ever firing).
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
 
     const interval = setInterval(() => {
-      if (inFlight || !draftLoadedRef.current || isTextFocused || hasPendingSave) {
+      if (inFlight || !draftLoadedRef.current || hasPendingSave) {
         return;
       }
 
@@ -308,7 +309,7 @@ export function PurgePage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [isTextFocused, hasPendingSave]);
+  }, [hasPendingSave]);
 
   useEffect(() => {
     if (activeTab === 'dictionary') {
@@ -603,8 +604,6 @@ export function PurgePage() {
                     setCopyMessage(null);
                   }}
                   onKeyDown={handleTextareaKeyDown}
-                  onFocus={() => setIsTextFocused(true)}
-                  onBlur={() => setIsTextFocused(false)}
                   placeholder="Вставьте текст"
                   minRows={10}
                   size="l"
