@@ -5,7 +5,7 @@ import baseQuery from '../../base-query-with-reauth';
 const timeApi = createApi({
   reducerPath: 'timeApi',
   baseQuery,
-  tagTypes: ['DayOffs'],
+  tagTypes: ['DayOffs', 'Report'],
   endpoints: () => ({}),
 });
 

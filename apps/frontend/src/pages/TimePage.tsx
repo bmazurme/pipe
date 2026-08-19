@@ -4,6 +4,7 @@ import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 import { PageHeader } from '../widgets/PageHeader';
 import { CalendarTab } from './time/CalendarTab';
 import { DayOffsTab } from './time/DayOffsTab';
+import { ReportTab } from './time/ReportTab';
 import styles from './TimePage.module.css';
 
 export function TimePage() {
@@ -20,6 +21,7 @@ export function TimePage() {
         <TabList>
           <Tab value="calendar">Календарь</Tab>
           <Tab value="day-offs">Day off</Tab>
+          <Tab value="report">Отчёт</Tab>
         </TabList>
 
         <TabPanel value="calendar">
@@ -28,6 +30,10 @@ export function TimePage() {
 
         <TabPanel value="day-offs">
           <DayOffsTab />
+        </TabPanel>
+
+        <TabPanel value="report">
+          <ReportTab />
         </TabPanel>
       </TabProvider>
     </div>

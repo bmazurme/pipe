@@ -7,6 +7,7 @@ import { Session } from '../auth/entities/session.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
+import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
 
 export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
@@ -21,7 +22,14 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
       username: configService.get<string>('POSTGRES_USER') ?? 'postgres',
       password: configService.get<string>('POSTGRES_PASSWORD') ?? 'postgres',
       database: configService.get<string>('POSTGRES_DB') ?? 'ntlstl-db',
-      entities: [User, StoredFile, PurgeEntry, Session, DayOff],
+      entities: [
+        User,
+        StoredFile,
+        PurgeEntry,
+        Session,
+        DayOff,
+        TimeReportEntry,
+      ],
       synchronize: isDev,
       migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],
       migrationsRun: !isDev,

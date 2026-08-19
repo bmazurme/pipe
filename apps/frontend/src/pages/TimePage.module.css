@@ -23,6 +23,55 @@
   gap: 4px;
 }
 
+.periodSwitcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.monthValue {
+  min-width: 10ch;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.reportTableWrap {
+  overflow-x: auto;
+}
+
+.reportTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--g-text-body-1-font-size, 13px);
+}
+
+.reportTable th,
+.reportTable td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--g-color-line-generic);
+  vertical-align: top;
+}
+
+.reportTable thead th {
+  color: var(--g-color-text-secondary);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+.reportTable tbody tr:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.reportTable tfoot td {
+  border-bottom: none;
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+.reportHoursCell {
+  text-align: right;
+  white-space: nowrap;
+}
+
 .yearValue {
   min-width: 4ch;
   text-align: center;

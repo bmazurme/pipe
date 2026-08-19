@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,13 +10,21 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UploadedFile,
+  UseFilters,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { reportImportMulterConfig } from './config/report-import-multer.config';
 import { CreateDayOffDto } from './dto/create-day-off.dto';
 import { DayOffResponseDto } from './dto/day-off-response.dto';
+import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
+import { TimeReportEntryResponseDto } from './dto/time-report-entry-response.dto';
+import { ReportImportMulterExceptionFilter } from './filters/report-import-multer-exception.filter';
 import { TimeService } from './time.service';
 
 @Controller('api/v1/time')
@@ -53,5 +62,34 @@ export class TimeController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<void> {
     await this.timeService.delete(id, currentUser.id);
+  }
+
+  @Get('reports')
+  async listReports(
+    @Query('year', ParseIntPipe) year: number,
+    @Query('month', ParseIntPipe) month: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<TimeReportEntryResponseDto[]> {
+    const entries = await this.timeService.findReportEntries(
+      currentUser.id,
+      year,
+      month,
+    );
+
+    return entries.map(TimeReportEntryResponseDto.fromEntity);
+  }
+
+  @Post('reports/import')
+  @UseFilters(ReportImportMulterExceptionFilter)
+  @UseInterceptors(FileInterceptor('file', reportImportMulterConfig))
+  async importReport(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ImportTimeReportResponseDto> {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    return this.timeService.importReport(currentUser.id, file);
   }
 }
