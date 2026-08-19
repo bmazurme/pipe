@@ -1,4 +1,5 @@
 export { default as authApi, getYandexLoginUrl } from './auth-api';
+export { API_URL } from './env';
 export { getErrorMessage } from './getErrorMessage';
 export { default as usersApi } from './users-api';
 export { default as storageApi } from './storage-api';

@@ -155,6 +155,8 @@ jobs:
           COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN }}
           EMAILS: ${{ secrets.EMAILS }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          TIME_EXPORT_API_KEY: ${{ secrets.TIME_EXPORT_API_KEY }}
+          TIME_EXPORT_USER_ID: ${{ secrets.TIME_EXPORT_USER_ID }}
         run: |
           docker stack deploy \
             --compose-file deploy/swarm/bridge-stack.yml \

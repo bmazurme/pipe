@@ -20,15 +20,17 @@ export function CalendarTab() {
   const year = useAppSelector(timeYearSelector);
   const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
 
-  // A short day stays a working day (just fewer hours), so it's kept out of
-  // this map — only "off" and "holiday" dates count as non-working for the
-  // isWeekend-style calendar highlight.
   const dateTypes = useMemo(() => new Map(dayOffs.map((dayOff) => [dayOff.date, dayOff.type])), [dayOffs]);
 
+  // "off" and "holiday" count as non-working. "short" stays a working day
+  // (just fewer hours). "compensatory" is the inverse of all three — a
+  // weekend swapped in as a working day — so it force-overrides the native
+  // Sat/Sun check rather than adding to it.
   const isWeekendOrDayOff = (date: DateTime): boolean => {
     const dateStr = date.format('YYYY-MM-DD');
     const type = dateTypes.get(dateStr);
     if (type === 'off' || type === 'holiday') return true;
+    if (type === 'compensatory') return false;
 
     const dayOfWeek = new Date(date.year(), date.month(), date.date()).getDay();
     return dayOfWeek === 0 || dayOfWeek === 6;
@@ -106,6 +108,12 @@ export function CalendarTab() {
           <span className={`${styles.legendColor} ${styles.legendShort}`} />
           <Text color="secondary" variant="body-2">
             Короткий день
+          </Text>
+        </div>
+        <div className={styles.legendItem}>
+          <span className={`${styles.legendColor} ${styles.legendCompensatory}`} />
+          <Text color="secondary" variant="body-2">
+            Рабочий выходной
           </Text>
         </div>
       </div>

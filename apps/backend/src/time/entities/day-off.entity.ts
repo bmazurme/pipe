@@ -6,6 +6,10 @@ export enum DayOffType {
   Off = 'off',
   Holiday = 'holiday',
   Short = 'short',
+  // A weekend day that's actually a working day (a compensatory workday
+  // swapped in around a holiday) — the inverse of the other three, which
+  // all mark a date as non-working.
+  Compensatory = 'compensatory',
 }
 
 @Entity({ name: 'day_offs' })

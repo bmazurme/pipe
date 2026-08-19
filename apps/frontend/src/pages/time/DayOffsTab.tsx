@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Gift, Plus, TrashBin } from '@gravity-ui/icons';
+import {
+  ArrowRightArrowLeft,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Gift,
+  Plus,
+  TrashBin,
+} from '@gravity-ui/icons';
 import {
   Alert,
   Button,
@@ -30,25 +39,27 @@ import { groupConsecutiveDayOffs } from './dayOffUtils';
 
 const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
 
+const DAY_OFF_TYPES = ['off', 'holiday', 'short', 'compensatory'] as const;
+
 const TYPE_META: Record<
   DayOffType,
   {
     optionLabel: string;
     badgeLabel: string;
-    badgeTheme: 'utility' | 'danger' | 'warning';
+    badgeTheme: 'utility' | 'danger' | 'warning' | 'info';
     icon: typeof Calendar;
     removalHint: string;
   }
 > = {
   off: {
-    optionLabel: 'Отгул / отпуск / больничный',
+    optionLabel: 'Отгул',
     badgeLabel: 'День отдыха',
     badgeTheme: 'utility',
     icon: Calendar,
     removalHint: 'снова станет обычным рабочим или выходным днём по календарю.',
   },
   holiday: {
-    optionLabel: 'Праздничный день',
+    optionLabel: 'Праздник',
     badgeLabel: 'Праздник',
     badgeTheme: 'danger',
     icon: Gift,
@@ -60,6 +71,13 @@ const TYPE_META: Record<
     badgeTheme: 'warning',
     icon: Clock,
     removalHint: 'снова станет днём обычной продолжительности.',
+  },
+  compensatory: {
+    optionLabel: 'Рабочий выходной',
+    badgeLabel: 'Рабочий выходной',
+    badgeTheme: 'info',
+    icon: ArrowRightArrowLeft,
+    removalHint: 'снова станет обычным выходным днём.',
   },
 };
 
@@ -86,7 +104,7 @@ export function DayOffsTab() {
   const dayOffGroups = useMemo(() => groupConsecutiveDayOffs(dayOffs), [dayOffs]);
 
   const typeCounts = useMemo(() => {
-    const counts: Record<DayOffType, number> = { off: 0, holiday: 0, short: 0 };
+    const counts: Record<DayOffType, number> = { off: 0, holiday: 0, short: 0, compensatory: 0 };
     for (const dayOff of dayOffs) counts[dayOff.type] += 1;
     return counts;
   }, [dayOffs]);
@@ -154,7 +172,8 @@ export function DayOffsTab() {
     }
   };
 
-  const hasSpecialDays = typeCounts.holiday > 0 || typeCounts.short > 0;
+  const hasSpecialDays =
+    typeCounts.holiday > 0 || typeCounts.short > 0 || typeCounts.compensatory > 0;
 
   return (
     <div className={styles.tabPanel}>
@@ -191,8 +210,7 @@ export function DayOffsTab() {
 
         {hasSpecialDays && (
           <div className={styles.typeSummary}>
-            {(['off', 'holiday', 'short'] as const)
-              .filter((type) => typeCounts[type] > 0)
+            {DAY_OFF_TYPES.filter((type) => typeCounts[type] > 0)
               .map((type) => (
                 <Label key={type} theme={TYPE_META[type].badgeTheme} icon={<Icon data={TYPE_META[type].icon} size={12} />}>
                   {TYPE_META[type].badgeLabel}: {typeCounts[type]}
@@ -219,7 +237,7 @@ export function DayOffsTab() {
           <EmptyState
             icon={Calendar}
             title={`За ${year} год отгулов нет`}
-            description="Добавьте отпуск, отгул, больничный, праздник или короткий день — рабочий календарь обновится автоматически."
+            description="Добавьте отпуск, отгул, больничный, праздник, короткий день или рабочий выходной — рабочий календарь обновится автоматически."
           />
         )}
 
@@ -273,7 +291,7 @@ export function DayOffsTab() {
               onUpdate={(value) => setSelectedType(value as DayOffType)}
               width="max"
             >
-              {(['off', 'holiday', 'short'] as const).map((type) => (
+              {DAY_OFF_TYPES.map((type) => (
                 <SegmentedRadioGroup.Option key={type} value={type}>
                   {TYPE_META[type].optionLabel}
                 </SegmentedRadioGroup.Option>

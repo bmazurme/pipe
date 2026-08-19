@@ -44,6 +44,7 @@ export function CalendarMonth({
       button.classList.toggle('dayOff', type === 'off');
       button.classList.toggle('holiday', type === 'holiday');
       button.classList.toggle('short', type === 'short');
+      button.classList.toggle('compensatory', type === 'compensatory');
     });
   });
 

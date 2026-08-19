@@ -8,10 +8,26 @@ export interface TimeState {
   reportMonth: number;
 }
 
+// Only the calendar/day-offs year is remembered across reloads — the report
+// tab's period is re-derived from whatever file gets imported next, so
+// persisting it would just show a stale period until the next import.
+export const TIME_YEAR_STORAGE_KEY = 'ntlstl-time-year';
+
+function readStoredYear(fallback: number): number {
+  try {
+    const raw = window.localStorage.getItem(TIME_YEAR_STORAGE_KEY);
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isInteger(parsed) ? parsed : fallback;
+  } catch {
+    // Storage unavailable (e.g. private browsing) — fall back silently.
+    return fallback;
+  }
+}
+
 const now = new Date();
 
 const initialState: TimeState = {
-  year: now.getFullYear(),
+  year: readStoredYear(now.getFullYear()),
   reportYear: now.getFullYear(),
   reportMonth: now.getMonth() + 1,
 };

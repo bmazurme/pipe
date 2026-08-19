@@ -44,6 +44,10 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN is required}
       EMAILS: ${EMAILS:-}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      # Optional: enables GET /api/v1/time/export/day-offs for ntlstl.time to
+      # import from. Empty TIME_EXPORT_API_KEY leaves the route disabled.
+      TIME_EXPORT_API_KEY: ${TIME_EXPORT_API_KEY:-}
+      TIME_EXPORT_USER_ID: ${TIME_EXPORT_USER_ID:-}
     ports:
       - target: 3000
         published: ${BACKEND_PUBLISHED_PORT:-3300}

@@ -147,11 +147,15 @@
   color: var(--g-color-text-warning);
 }
 
+.legendCompensatory {
+  color: var(--g-color-text-info);
+}
+
 /* Targets the calendar's own day buttons — see CalendarMonth's classList
    toggle for why this has to reach into the library's DOM. These classes
    must stay inside :global(): they're set directly via classList.toggle with
-   the raw strings 'dayOff'/'holiday'/'short', so they must not be hashed
-   like normal CSS module classes. */
+   the raw strings 'dayOff'/'holiday'/'short'/'compensatory', so they must
+   not be hashed like normal CSS module classes. */
 .monthCard :global(.g-date-calendar__button.dayOff) {
   color: var(--g-color-text-positive);
   font-weight: var(--g-text-body-2-font-weight, 500);
@@ -172,6 +176,17 @@
 .monthCard :global(.g-date-calendar__button.short) {
   text-decoration: underline;
   text-decoration-color: var(--g-color-text-warning);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+/* A compensatory workday is the inverse of the other three types — a
+   weekend turned working day — so it must NOT get the library's own
+   isWeekend styling (isWeekendOrDayOff already returns false for it) and
+   instead gets its own accent so it still stands out from a plain weekday. */
+.monthCard :global(.g-date-calendar__button.compensatory) {
+  text-decoration: underline;
+  text-decoration-color: var(--g-color-text-info);
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
 }

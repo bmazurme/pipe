@@ -58,6 +58,21 @@
   gap: 8px;
 }
 
+.endpointRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-generic);
+}
+
+.endpointRow > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
 .form {
   display: flex;
   flex-direction: column;

@@ -8,6 +8,7 @@ import {
   ClipboardButton,
   Icon,
   Label,
+  Link,
   Text,
   TextInput,
 } from '@gravity-ui/uikit';
@@ -15,9 +16,11 @@ import {
 import { useAuth } from '../app/providers/AuthProvider';
 import { getInitial } from '../shared/ui/InitialIcon';
 import { PageHeader } from '../widgets/PageHeader';
-import { getErrorMessage, useUpdateUserMutation } from '../store/api';
+import { API_URL, getErrorMessage, useUpdateUserMutation } from '../store/api';
 import { DevicesSection } from './profile/DevicesSection';
 import styles from './ProfilePage.module.css';
+
+const DAY_OFFS_EXPORT_URL = `${API_URL}/api/v1/time/export/day-offs?year=${new Date().getFullYear()}`;
 
 const MAX_STATUS_LENGTH = 140;
 /** Show the counter only once the limit is actually in play. */
@@ -160,6 +163,38 @@ export function ProfilePage() {
                 )}
               </div>
             </form>
+          </Card>
+
+          <Card view="outlined" className={styles.card}>
+            <div className={styles.form}>
+              <Text variant="subheader-2" as="h2" className={styles.cardTitle}>
+                Интеграции
+              </Text>
+              <Text color="secondary" variant="body-2">
+                Эндпоинт для импорта дней отдыха в{' '}
+                <Link
+                  href="https://github.com/bmazurme/ntlstl.time"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ntlstl.time
+                </Link>
+                . Запрос должен нести заголовок <code>X-Api-Key</code> со значением{' '}
+                <code>TIME_EXPORT_API_KEY</code>, заданным на сервере.
+              </Text>
+              <div className={styles.endpointRow}>
+                <Text variant="code-inline-2" ellipsis title={DAY_OFFS_EXPORT_URL}>
+                  {DAY_OFFS_EXPORT_URL}
+                </Text>
+                <ClipboardButton
+                  text={DAY_OFFS_EXPORT_URL}
+                  size="xs"
+                  view="flat-secondary"
+                  tooltipInitialText="Скопировать ссылку"
+                  tooltipSuccessText="Скопировано"
+                />
+              </div>
+            </div>
           </Card>
         </div>
 

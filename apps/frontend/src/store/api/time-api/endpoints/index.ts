@@ -2,7 +2,7 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 import timeApi from '..';
 
-export type DayOffType = 'off' | 'holiday' | 'short';
+export type DayOffType = 'off' | 'holiday' | 'short' | 'compensatory';
 
 export interface DayOff {
   id: number;
