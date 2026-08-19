@@ -3,6 +3,7 @@ import { Calendar } from '@gravity-ui/date-components';
 import { DateTime } from '@gravity-ui/date-utils';
 import { Card, Text } from '@gravity-ui/uikit';
 
+import { DayOffType } from '../../store/api';
 import styles from '../TimePage.module.css';
 
 interface CalendarMonthProps {
@@ -10,21 +11,21 @@ interface CalendarMonthProps {
   minDate: DateTime;
   maxDate: DateTime;
   isWeekendOrDayOff: (date: DateTime) => boolean;
-  dayOffDates: Set<string>;
+  dateTypes: Map<string, DayOffType>;
   lastDay: number;
 }
 
 // The library renders each day as a plain button with no per-date data
-// attribute, so marking a day off (as opposed to a native weekend, which the
-// Calendar already styles via `isWeekend`) means walking the rendered DOM
-// after each render and toggling a class by button index. Mirrors the
-// approach used by the reference `reports` app's calendar page.
+// attribute, so marking a day off/holiday/short day (as opposed to a native
+// weekend, which the Calendar already styles via `isWeekend`) means walking
+// the rendered DOM after each render and toggling a class by button index.
+// Mirrors the approach used by the reference `reports` app's calendar page.
 export function CalendarMonth({
   title,
   minDate,
   maxDate,
   isWeekendOrDayOff,
-  dayOffDates,
+  dateTypes,
   lastDay,
 }: CalendarMonthProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,7 +40,10 @@ export function CalendarMonth({
       if (day > lastDay) return;
 
       const dateStr = `${minDate.year()}-${String(minDate.month() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      button.classList.toggle('dayOff', dayOffDates.has(dateStr));
+      const type = dateTypes.get(dateStr);
+      button.classList.toggle('dayOff', type === 'off');
+      button.classList.toggle('holiday', type === 'holiday');
+      button.classList.toggle('short', type === 'short');
     });
   });
 

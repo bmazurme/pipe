@@ -2,9 +2,17 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 import timeApi from '..';
 
+export type DayOffType = 'off' | 'holiday' | 'short';
+
 export interface DayOff {
   id: number;
   date: string;
+  type: DayOffType;
+}
+
+export interface CreateDayOffPayload {
+  date: string;
+  type: DayOffType;
 }
 
 export interface TimeReportEntry {
@@ -38,8 +46,8 @@ const timeApiEndpoints = timeApi.injectEndpoints({
       query: (year) => `time/day-offs?year=${year}`,
       providesTags: ['DayOffs'],
     }),
-    createDayOff: builder.mutation<DayOff, string>({
-      query: (date) => ({ url: 'time/day-offs', method: 'POST', body: { date } }),
+    createDayOff: builder.mutation<DayOff, CreateDayOffPayload>({
+      query: (body) => ({ url: 'time/day-offs', method: 'POST', body }),
       invalidatesTags: ['DayOffs'],
       transformErrorResponse: (response) =>
         duplicateDateMessage(response.data) ?? 'Не удалось добавить день',

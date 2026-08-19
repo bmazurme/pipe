@@ -8,7 +8,7 @@ import { Between, Repository } from 'typeorm';
 
 import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
 import { TimeReportEntryResponseDto } from './dto/time-report-entry-response.dto';
-import { DayOff } from './entities/day-off.entity';
+import { DayOff, DayOffType } from './entities/day-off.entity';
 import { TimeReportEntry } from './entities/time-report-entry.entity';
 import {
   extractPeriodFromFilename,
@@ -31,7 +31,11 @@ export class TimeService {
     });
   }
 
-  async create(userId: number, date: string): Promise<DayOff> {
+  async create(
+    userId: number,
+    date: string,
+    type: DayOffType = DayOffType.Off,
+  ): Promise<DayOff> {
     const existing = await this.dayOffRepository.findOne({
       where: { userId, date },
     });
@@ -40,7 +44,7 @@ export class TimeService {
       throw new BadRequestException(`Day off for ${date} already exists`);
     }
 
-    return this.dayOffRepository.save({ userId, date });
+    return this.dayOffRepository.save({ userId, date, type });
   }
 
   async delete(id: number, userId: number): Promise<void> {

@@ -139,14 +139,41 @@
   color: var(--g-color-text-positive);
 }
 
+.legendHoliday {
+  color: var(--g-color-text-danger);
+}
+
+.legendShort {
+  color: var(--g-color-text-warning);
+}
+
 /* Targets the calendar's own day buttons — see CalendarMonth's classList
-   toggle for why this has to reach into the library's DOM. Both classes must
-   stay inside :global(): the second one is set directly via classList.toggle
-   with the raw string 'dayOff', so it must not be hashed like a normal CSS
-   module class. */
+   toggle for why this has to reach into the library's DOM. These classes
+   must stay inside :global(): they're set directly via classList.toggle with
+   the raw strings 'dayOff'/'holiday'/'short', so they must not be hashed
+   like normal CSS module classes. */
 .monthCard :global(.g-date-calendar__button.dayOff) {
   color: var(--g-color-text-positive);
   font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+/* A holiday is a non-working day like a day off, but distinct enough (an
+   organization-wide date, not a personal one) to warrant its own color —
+   the conventional "public holiday" red rather than the personal-day green.
+   Takes precedence since a date can't be both (see day-off type "off"). */
+.monthCard :global(.g-date-calendar__button.holiday) {
+  color: var(--g-color-text-danger);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+/* A short day stays a working day (not part of isWeekendOrDayOff), so it
+   only gets an underline rather than the bold weekend-style color the other
+   two types share via the library's own isWeekend prop. */
+.monthCard :global(.g-date-calendar__button.short) {
+  text-decoration: underline;
+  text-decoration-color: var(--g-color-text-warning);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
 }
 
 /* Each mini-calendar is bounded to exactly one month (minValue = maxValue),
@@ -166,6 +193,13 @@
   width: 100%;
 }
 
+.typeSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .dayOffList {
   display: flex;
   flex-direction: column;
@@ -182,6 +216,18 @@
   gap: 12px;
   padding: 8px;
   border-radius: var(--g-border-radius-m);
+}
+
+.dayOffRowMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dayOffRowIcon {
+  color: var(--g-color-text-secondary);
+  flex-shrink: 0;
 }
 
 .dayOffRow:hover {

@@ -7,11 +7,13 @@ function isNextCalendarDay(date: string, nextDate: string): boolean {
 }
 
 /**
- * Splits a date-ascending list into runs of consecutive calendar days, so
- * the UI can highlight a vacation/sick-leave period as one visual block
- * instead of unrelated single days that happen to be adjacent in the list.
+ * Splits a date-ascending list into runs of consecutive calendar days of the
+ * *same type*, so the UI can highlight a vacation/sick-leave period as one
+ * visual block instead of unrelated single days that happen to be adjacent
+ * in the list — and so a holiday or short day never gets visually merged
+ * into a neighboring day-off run.
  */
-export function groupConsecutiveDayOffs<T extends { date: string }>(
+export function groupConsecutiveDayOffs<T extends { date: string; type: string }>(
   dayOffs: T[],
 ): T[][] {
   const groups: T[][] = [];
@@ -20,7 +22,11 @@ export function groupConsecutiveDayOffs<T extends { date: string }>(
     const currentGroup = groups[groups.length - 1];
     const lastInGroup = currentGroup?.[currentGroup.length - 1];
 
-    if (lastInGroup && isNextCalendarDay(lastInGroup.date, dayOff.date)) {
+    if (
+      lastInGroup &&
+      lastInGroup.type === dayOff.type &&
+      isNextCalendarDay(lastInGroup.date, dayOff.date)
+    ) {
       currentGroup.push(dayOff);
     } else {
       groups.push([dayOff]);

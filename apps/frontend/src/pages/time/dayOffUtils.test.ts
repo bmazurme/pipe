@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { groupConsecutiveDayOffs } from './dayOffUtils';
 
-function d(date: string) {
-  return { id: date, date };
+function d(date: string, type: 'off' | 'holiday' | 'short' = 'off') {
+  return { id: date, date, type };
 }
 
 describe('groupConsecutiveDayOffs', () => {
@@ -34,5 +34,17 @@ describe('groupConsecutiveDayOffs', () => {
 
   it('returns an empty array for an empty input', () => {
     expect(groupConsecutiveDayOffs([])).toEqual([]);
+  });
+
+  it('splits an otherwise-consecutive run when the type changes', () => {
+    const groups = groupConsecutiveDayOffs([
+      d('2026-01-01', 'holiday'),
+      d('2026-01-02', 'holiday'),
+      d('2026-01-03', 'off'),
+    ]);
+    expect(groups).toEqual([
+      [d('2026-01-01', 'holiday'), d('2026-01-02', 'holiday')],
+      [d('2026-01-03', 'off')],
+    ]);
   });
 });

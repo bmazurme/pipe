@@ -20,11 +20,15 @@ export function CalendarTab() {
   const year = useAppSelector(timeYearSelector);
   const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
 
-  const dayOffDates = useMemo(() => new Set(dayOffs.map((dayOff) => dayOff.date)), [dayOffs]);
+  // A short day stays a working day (just fewer hours), so it's kept out of
+  // this map — only "off" and "holiday" dates count as non-working for the
+  // isWeekend-style calendar highlight.
+  const dateTypes = useMemo(() => new Map(dayOffs.map((dayOff) => [dayOff.date, dayOff.type])), [dayOffs]);
 
   const isWeekendOrDayOff = (date: DateTime): boolean => {
     const dateStr = date.format('YYYY-MM-DD');
-    if (dayOffDates.has(dateStr)) return true;
+    const type = dateTypes.get(dateStr);
+    if (type === 'off' || type === 'holiday') return true;
 
     const dayOfWeek = new Date(date.year(), date.month(), date.date()).getDay();
     return dayOfWeek === 0 || dayOfWeek === 6;
@@ -71,7 +75,7 @@ export function CalendarTab() {
                 minDate={minDate}
                 maxDate={maxDate}
                 isWeekendOrDayOff={isWeekendOrDayOff}
-                dayOffDates={dayOffDates}
+                dateTypes={dateTypes}
                 lastDay={lastDay}
               />
             );
@@ -90,6 +94,18 @@ export function CalendarTab() {
           <span className={`${styles.legendColor} ${styles.legendDayOff}`} />
           <Text color="secondary" variant="body-2">
             Day off
+          </Text>
+        </div>
+        <div className={styles.legendItem}>
+          <span className={`${styles.legendColor} ${styles.legendHoliday}`} />
+          <Text color="secondary" variant="body-2">
+            Праздник
+          </Text>
+        </div>
+        <div className={styles.legendItem}>
+          <span className={`${styles.legendColor} ${styles.legendShort}`} />
+          <Text color="secondary" variant="body-2">
+            Короткий день
           </Text>
         </div>
       </div>

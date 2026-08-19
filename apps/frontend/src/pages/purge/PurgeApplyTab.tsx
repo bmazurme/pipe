@@ -96,7 +96,9 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
             }}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Вставьте текст"
-            minRows={10}
+            // Hugs short text instead of always showing a 10-row box; still
+            // grows unbounded for long pastes, same as before.
+            minRows={4}
             size="l"
           />
 

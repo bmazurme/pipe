@@ -50,7 +50,11 @@ export class TimeController {
     @Body() dto: CreateDayOffDto,
     @CurrentUser() currentUser: { id: number },
   ): Promise<DayOffResponseDto> {
-    const entry = await this.timeService.create(currentUser.id, dto.date);
+    const entry = await this.timeService.create(
+      currentUser.id,
+      dto.date,
+      dto.type,
+    );
 
     return DayOffResponseDto.fromEntity(entry);
   }

@@ -1,11 +1,22 @@
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Gift, Plus, TrashBin } from '@gravity-ui/icons';
+import {
+  Alert,
+  Button,
+  Card,
+  Dialog,
+  Icon,
+  Label,
+  Loader,
+  SegmentedRadioGroup,
+  Text,
+} from '@gravity-ui/uikit';
 import { RangeDatePicker, type RangeValue } from '@gravity-ui/date-components';
 import { DateTime } from '@gravity-ui/date-utils';
 
 import {
   DayOff,
+  DayOffType,
   useCreateDayOffMutation,
   useDeleteDayOffMutation,
   useListDayOffsQuery,
@@ -18,6 +29,39 @@ import styles from '../TimePage.module.css';
 import { groupConsecutiveDayOffs } from './dayOffUtils';
 
 const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
+
+const TYPE_META: Record<
+  DayOffType,
+  {
+    optionLabel: string;
+    badgeLabel: string;
+    badgeTheme: 'utility' | 'danger' | 'warning';
+    icon: typeof Calendar;
+    removalHint: string;
+  }
+> = {
+  off: {
+    optionLabel: 'Отгул / отпуск / больничный',
+    badgeLabel: 'День отдыха',
+    badgeTheme: 'utility',
+    icon: Calendar,
+    removalHint: 'снова станет обычным рабочим или выходным днём по календарю.',
+  },
+  holiday: {
+    optionLabel: 'Праздничный день',
+    badgeLabel: 'Праздник',
+    badgeTheme: 'danger',
+    icon: Gift,
+    removalHint: 'снова станет рабочим днём.',
+  },
+  short: {
+    optionLabel: 'Короткий день',
+    badgeLabel: 'Короткий день',
+    badgeTheme: 'warning',
+    icon: Clock,
+    removalHint: 'снова станет днём обычной продолжительности.',
+  },
+};
 
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('ru-RU', {
@@ -34,13 +78,21 @@ export function DayOffsTab() {
   const [createDayOff] = useCreateDayOffMutation();
   const [deleteDayOff] = useDeleteDayOffMutation();
 
-  // Runs of 2+ consecutive calendar days get a shared tint so a vacation or
-  // sick-leave stretch reads as one block; a lone day stays untinted. Colors
-  // cycle across periods (not within one) so two periods that end up next to
-  // each other in the list still stay visually separated.
+  // Runs of 2+ consecutive calendar days of the *same type* get a shared
+  // tint so a vacation/sick-leave stretch (or a multi-day holiday) reads as
+  // one block; a lone day stays untinted. Colors cycle across periods (not
+  // within one) so two periods next to each other in the list stay visually
+  // separated.
   const dayOffGroups = useMemo(() => groupConsecutiveDayOffs(dayOffs), [dayOffs]);
 
+  const typeCounts = useMemo(() => {
+    const counts: Record<DayOffType, number> = { off: 0, holiday: 0, short: 0 };
+    for (const dayOff of dayOffs) counts[dayOff.type] += 1;
+    return counts;
+  }, [dayOffs]);
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState<DayOffType>('off');
   const [selectedRange, setSelectedRange] = useState<RangeValue<DateTime> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +122,7 @@ export function DayOffsTab() {
     // concurrent creates could race on the same duplicate check.
     for (const date of dates) {
       try {
-        await createDayOff(date).unwrap();
+        await createDayOff({ date, type: selectedType }).unwrap();
         added += 1;
       } catch {
         skipped += 1;
@@ -102,6 +154,8 @@ export function DayOffsTab() {
     }
   };
 
+  const hasSpecialDays = typeCounts.holiday > 0 || typeCounts.short > 0;
+
   return (
     <div className={styles.tabPanel}>
       <div className={styles.yearSwitcher}>
@@ -121,12 +175,31 @@ export function DayOffsTab() {
           title="Дни отдыха"
           meta={dayOffs.length > 0 ? String(dayOffs.length) : undefined}
           actions={
-            <Button view="action" size="m" onClick={() => setIsDialogOpen(true)}>
+            <Button
+              view="action"
+              size="m"
+              onClick={() => {
+                setSelectedType('off');
+                setIsDialogOpen(true);
+              }}
+            >
               <Icon data={Plus} size={16} />
               Добавить
             </Button>
           }
         />
+
+        {hasSpecialDays && (
+          <div className={styles.typeSummary}>
+            {(['off', 'holiday', 'short'] as const)
+              .filter((type) => typeCounts[type] > 0)
+              .map((type) => (
+                <Label key={type} theme={TYPE_META[type].badgeTheme} icon={<Icon data={TYPE_META[type].icon} size={12} />}>
+                  {TYPE_META[type].badgeLabel}: {typeCounts[type]}
+                </Label>
+              ))}
+          </div>
+        )}
 
         {error && (
           <Alert theme="danger" view="filled" message={error} onClose={() => setError(null)} />
@@ -146,7 +219,7 @@ export function DayOffsTab() {
           <EmptyState
             icon={Calendar}
             title={`За ${year} год отгулов нет`}
-            description="Добавьте отпуск, отгул или больничный — эти дни выпадут из рабочего календаря."
+            description="Добавьте отпуск, отгул, больничный, праздник или короткий день — рабочий календарь обновится автоматически."
           />
         )}
 
@@ -158,22 +231,34 @@ export function DayOffsTab() {
                   ? PERIOD_COLOR_CLASSES[groupIndex % PERIOD_COLOR_CLASSES.length]
                   : undefined;
 
-              return group.map((dayOff) => (
-                <li
-                  key={dayOff.id}
-                  className={[styles.dayOffRow, colorClass].filter(Boolean).join(' ')}
-                >
-                  <Text>{formatDate(dayOff.date)}</Text>
-                  <Button
-                    view="flat-danger"
-                    size="s"
-                    aria-label={`Удалить ${formatDate(dayOff.date)}`}
-                    onClick={() => setDayOffToRemove(dayOff)}
+              return group.map((dayOff) => {
+                const meta = TYPE_META[dayOff.type];
+
+                return (
+                  <li
+                    key={dayOff.id}
+                    className={[styles.dayOffRow, colorClass].filter(Boolean).join(' ')}
                   >
-                    <Icon data={TrashBin} size={16} />
-                  </Button>
-                </li>
-              ));
+                    <div className={styles.dayOffRowMain}>
+                      <Icon data={meta.icon} size={16} className={styles.dayOffRowIcon} />
+                      <Text>{formatDate(dayOff.date)}</Text>
+                      {dayOff.type !== 'off' && (
+                        <Label theme={meta.badgeTheme} size="xs">
+                          {meta.badgeLabel}
+                        </Label>
+                      )}
+                    </div>
+                    <Button
+                      view="flat-danger"
+                      size="s"
+                      aria-label={`Удалить ${formatDate(dayOff.date)}`}
+                      onClick={() => setDayOffToRemove(dayOff)}
+                    >
+                      <Icon data={TrashBin} size={16} />
+                    </Button>
+                  </li>
+                );
+              });
             })}
           </ul>
         )}
@@ -182,11 +267,25 @@ export function DayOffsTab() {
       <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
         <Dialog.Header caption="Добавить дни отдыха" />
         <Dialog.Body>
-          <RangeDatePicker
-            className={styles.rangePicker}
-            value={selectedRange}
-            onUpdate={setSelectedRange}
-          />
+          <div className={styles.form}>
+            <SegmentedRadioGroup
+              value={selectedType}
+              onUpdate={(value) => setSelectedType(value as DayOffType)}
+              width="max"
+            >
+              {(['off', 'holiday', 'short'] as const).map((type) => (
+                <SegmentedRadioGroup.Option key={type} value={type}>
+                  {TYPE_META[type].optionLabel}
+                </SegmentedRadioGroup.Option>
+              ))}
+            </SegmentedRadioGroup>
+
+            <RangeDatePicker
+              className={styles.rangePicker}
+              value={selectedRange}
+              onUpdate={setSelectedRange}
+            />
+          </div>
         </Dialog.Body>
         <Dialog.Footer
           loading={isSaving}
@@ -203,7 +302,7 @@ export function DayOffsTab() {
         <Dialog.Body>
           {dayOffToRemove && (
             <Text color="secondary">
-              {formatDate(dayOffToRemove.date)} снова станет рабочим или выходным по календарю.
+              {formatDate(dayOffToRemove.date)} {TYPE_META[dayOffToRemove.type].removalHint}
             </Text>
           )}
         </Dialog.Body>
