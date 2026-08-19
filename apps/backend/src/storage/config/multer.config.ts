@@ -16,6 +16,12 @@ export const multerConfig: MulterOptions = {
   storage: diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, callback) => {
+      // Busboy decodes multipart headers (incl. the filename) as latin1, but
+      // browsers send it UTF-8-encoded, so non-Latin1 names (e.g. Cyrillic)
+      // come through mangled unless re-decoded here.
+      file.originalname = Buffer.from(file.originalname, 'latin1').toString(
+        'utf8',
+      );
       callback(null, `${randomUUID()}${extname(file.originalname)}`);
     },
   }),
