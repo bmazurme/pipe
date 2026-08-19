@@ -71,6 +71,14 @@ export class TimeService {
     });
   }
 
+  async deleteReportEntries(
+    userId: number,
+    year: number,
+    month: number,
+  ): Promise<void> {
+    await this.timeReportEntryRepository.delete({ userId, year, month });
+  }
+
   async importReport(
     userId: number,
     file: Express.Multer.File,

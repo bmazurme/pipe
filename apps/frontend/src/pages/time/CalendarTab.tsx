@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Loader, Text } from '@gravity-ui/uikit';
 import { dateTime, DateTime } from '@gravity-ui/date-utils';
 
 import { useListDayOffsQuery } from '../../store/api';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { timeYearSelector, yearChanged } from '../../store/slices';
+import { useAppSelector } from '../../store/hooks';
+import { timeYearSelector } from '../../store/slices';
 import styles from '../TimePage.module.css';
 import { CalendarMonth } from './CalendarMonth';
+import { YearSwitcher } from './YearSwitcher';
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => index + 1);
 
@@ -16,9 +16,12 @@ function lastDayOfMonth(year: number, month: number): number {
 }
 
 export function CalendarTab() {
-  const dispatch = useAppDispatch();
   const year = useAppSelector(timeYearSelector);
   const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
+
+  const today = new Date();
+  const currentMonth =
+    today.getFullYear() === year ? today.getMonth() + 1 : null;
 
   const dateTypes = useMemo(() => new Map(dayOffs.map((dayOff) => [dayOff.date, dayOff.type])), [dayOffs]);
 
@@ -38,17 +41,7 @@ export function CalendarTab() {
 
   return (
     <div className={styles.tabPanel}>
-      <div className={styles.yearSwitcher}>
-        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year - 1))} aria-label="Предыдущий год">
-          <Icon data={ChevronLeft} size={16} />
-        </Button>
-        <Text variant="subheader-1" className={styles.yearValue}>
-          {year}
-        </Text>
-        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year + 1))} aria-label="Следующий год">
-          <Icon data={ChevronRight} size={16} />
-        </Button>
-      </div>
+      <YearSwitcher />
 
       {isError && (
         <Alert theme="danger" view="filled" message="Не удалось загрузить дни отдыха" />
@@ -79,6 +72,7 @@ export function CalendarTab() {
                 isWeekendOrDayOff={isWeekendOrDayOff}
                 dateTypes={dateTypes}
                 lastDay={lastDay}
+                isCurrent={month === currentMonth}
               />
             );
           })}
@@ -86,6 +80,12 @@ export function CalendarTab() {
       )}
 
       <div className={styles.legend}>
+        <div className={styles.legendItem}>
+          <span className={`${styles.legendColor} ${styles.legendToday}`} />
+          <Text color="secondary" variant="body-2">
+            Сегодня
+          </Text>
+        </div>
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendWeekend}`} />
           <Text color="secondary" variant="body-2">

@@ -1,8 +1,9 @@
 import { ChangeEvent, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, FileArrowUp, LayoutHeaderCells } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { FileArrowUp, LayoutHeaderCells, TrashBin } from '@gravity-ui/icons';
+import { Alert, Button, Card, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
 
 import {
+  useDeleteReportEntriesMutation,
   useImportReportMutation,
   useListReportEntriesQuery,
 } from '../../store/api';
@@ -15,6 +16,7 @@ import {
   timeReportYearSelector,
 } from '../../store/slices';
 import { EmptyState } from '../../widgets/EmptyState';
+import { PeriodStepper } from '../../widgets/PeriodStepper';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
 
@@ -44,12 +46,20 @@ export function ReportTab() {
     isError,
   } = useListReportEntriesQuery({ year, month });
   const [importReport, { isLoading: isImporting }] = useImportReportMutation();
+  const [deleteReportEntries, { isLoading: isDeleting }] = useDeleteReportEntriesMutation();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const isCurrentPeriod = year === currentYear && month === currentMonth;
 
   const handleFile = async (file: File) => {
     setImportError(null);
@@ -75,52 +85,50 @@ export function ReportTab() {
     if (file) void handleFile(file);
   };
 
+  const handleDelete = async () => {
+    setDeleteError(null);
+
+    try {
+      await deleteReportEntries({ year, month }).unwrap();
+      setImportSummary(null);
+      setIsDeleteDialogOpen(false);
+    } catch (err) {
+      setDeleteError(typeof err === 'string' ? err : 'Не удалось удалить отчёт');
+    }
+  };
+
   return (
     <div className={styles.tabPanel}>
       <div className={styles.periodSwitcher}>
-        <div className={styles.yearSwitcher}>
-          <Button
-            view="flat"
-            size="m"
-            onClick={() => dispatch(reportYearChanged(year - 1))}
-            aria-label="Предыдущий год"
-          >
-            <Icon data={ChevronLeft} size={16} />
-          </Button>
-          <Text variant="subheader-1" className={styles.yearValue}>
-            {year}
-          </Text>
-          <Button
-            view="flat"
-            size="m"
-            onClick={() => dispatch(reportYearChanged(year + 1))}
-            aria-label="Следующий год"
-          >
-            <Icon data={ChevronRight} size={16} />
-          </Button>
-        </div>
+        <PeriodStepper
+          value={year}
+          onStep={(delta) => dispatch(reportYearChanged(year + delta))}
+          prevLabel="Предыдущий год"
+          nextLabel="Следующий год"
+          valueClassName={styles.yearValue}
+        />
 
-        <div className={styles.yearSwitcher}>
+        <PeriodStepper
+          value={MONTH_NAMES[month - 1]}
+          onStep={(delta) => dispatch(reportMonthStepped(delta))}
+          prevLabel="Предыдущий месяц"
+          nextLabel="Следующий месяц"
+          valueClassName={styles.monthValue}
+        />
+
+        {/* An import jumps the tab to the imported file's period, which can be
+            months away from where the user started — this is the way back. */}
+        {!isCurrentPeriod && (
           <Button
             view="flat"
             size="m"
-            onClick={() => dispatch(reportMonthStepped(-1))}
-            aria-label="Предыдущий месяц"
+            onClick={() =>
+              dispatch(reportPeriodSet({ year: currentYear, month: currentMonth }))
+            }
           >
-            <Icon data={ChevronLeft} size={16} />
+            Текущий месяц
           </Button>
-          <Text variant="subheader-1" className={styles.monthValue}>
-            {MONTH_NAMES[month - 1]}
-          </Text>
-          <Button
-            view="flat"
-            size="m"
-            onClick={() => dispatch(reportMonthStepped(1))}
-            aria-label="Следующий месяц"
-          >
-            <Icon data={ChevronRight} size={16} />
-          </Button>
-        </div>
+        )}
       </div>
 
       <Card view="outlined" className={styles.card}>
@@ -128,10 +136,21 @@ export function ReportTab() {
           title="Отчёт"
           meta={entries.length > 0 ? String(entries.length) : undefined}
           actions={
-            <Button view="action" size="m" loading={isImporting} onClick={() => inputRef.current?.click()}>
-              <Icon data={FileArrowUp} size={16} />
-              Импортировать
-            </Button>
+            <>
+              <Button view="action" size="m" loading={isImporting} onClick={() => inputRef.current?.click()}>
+                <Icon data={FileArrowUp} size={16} />
+                Импортировать
+              </Button>
+              <Button
+                view="flat-danger"
+                size="m"
+                disabled={entries.length === 0}
+                onClick={() => setIsDeleteDialogOpen(true)}
+                aria-label="Удалить отчёт"
+              >
+                <Icon data={TrashBin} size={16} />
+              </Button>
+            </>
           }
         />
 
@@ -143,6 +162,10 @@ export function ReportTab() {
 
         {importSummary && !importError && (
           <Alert theme="success" view="filled" message={importSummary} onClose={() => setImportSummary(null)} />
+        )}
+
+        {deleteError && (
+          <Alert theme="danger" view="filled" message={deleteError} onClose={() => setDeleteError(null)} />
         )}
 
         {isError && !isLoading && (
@@ -192,6 +215,24 @@ export function ReportTab() {
           </div>
         )}
       </Card>
+
+      <Dialog open={isDeleteDialogOpen} onClose={() => setIsDeleteDialogOpen(false)}>
+        <Dialog.Header caption="Удалить отчёт?" />
+        <Dialog.Body>
+          <Text color="secondary">
+            Все задачи за {MONTH_NAMES[month - 1].toLowerCase()} {year} года будут удалены.
+            Это действие нельзя отменить.
+          </Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          preset="danger"
+          loading={isDeleting}
+          textButtonApply="Удалить"
+          textButtonCancel="Отмена"
+          onClickButtonCancel={() => setIsDeleteDialogOpen(false)}
+          onClickButtonApply={() => void handleDelete()}
+        />
+      </Dialog>
     </div>
   );
 }

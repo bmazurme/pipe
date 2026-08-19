@@ -1,0 +1,12 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.value {
+  text-align: center;
+  /* Digits keep a single width, so stepping 2025 → 2026 doesn't nudge the
+     arrows sideways. */
+  font-variant-numeric: tabular-nums;
+}

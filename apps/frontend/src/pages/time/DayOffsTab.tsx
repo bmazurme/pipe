@@ -2,8 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   ArrowRightArrowLeft,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Gift,
   Plus,
@@ -30,12 +28,13 @@ import {
   useDeleteDayOffMutation,
   useListDayOffsQuery,
 } from '../../store/api';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { timeYearSelector, yearChanged } from '../../store/slices';
+import { useAppSelector } from '../../store/hooks';
+import { timeYearSelector } from '../../store/slices';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
 import { groupConsecutiveDayOffs } from './dayOffUtils';
+import { YearSwitcher } from './YearSwitcher';
 
 const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
 
@@ -90,7 +89,6 @@ function formatDate(date: string): string {
 }
 
 export function DayOffsTab() {
-  const dispatch = useAppDispatch();
   const year = useAppSelector(timeYearSelector);
   const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
   const [createDayOff] = useCreateDayOffMutation();
@@ -177,17 +175,7 @@ export function DayOffsTab() {
 
   return (
     <div className={styles.tabPanel}>
-      <div className={styles.yearSwitcher}>
-        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year - 1))} aria-label="Предыдущий год">
-          <Icon data={ChevronLeft} size={16} />
-        </Button>
-        <Text variant="subheader-1" className={styles.yearValue}>
-          {year}
-        </Text>
-        <Button view="flat" size="m" onClick={() => dispatch(yearChanged(year + 1))} aria-label="Следующий год">
-          <Icon data={ChevronRight} size={16} />
-        </Button>
-      </div>
+      <YearSwitcher />
 
       <Card view="outlined" className={styles.card}>
         <SectionHeader

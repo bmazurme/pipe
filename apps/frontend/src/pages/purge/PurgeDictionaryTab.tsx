@@ -24,11 +24,7 @@ import styles from '../PurgePage.module.css';
 import { DictionaryEntryRow } from './DictionaryEntryRow';
 import { parseImportedEntries, suggestUniqueValue } from './purgeUtils';
 
-interface PurgeDictionaryTabProps {
-  isActive: boolean;
-}
-
-export function PurgeDictionaryTab({ isActive }: PurgeDictionaryTabProps) {
+export function PurgeDictionaryTab() {
   const { isLoading, isError: isEntriesError } = useListEntriesQuery();
   const entries = useAppSelector(purgeEntriesSelector);
   const [createEntryTrigger, { isLoading: isSaving }] = useCreateEntryMutation();
@@ -60,9 +56,11 @@ export function PurgeDictionaryTab({ isActive }: PurgeDictionaryTabProps) {
 
   const newKeyInputRef = useRef<HTMLInputElement>(null);
 
+  // The tab mounts only once it becomes active, so this fires exactly when
+  // the user arrives — whether by switching tabs or by opening the tab's URL.
   useEffect(() => {
-    if (isActive) newKeyInputRef.current?.focus();
-  }, [isActive]);
+    newKeyInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     return () => {

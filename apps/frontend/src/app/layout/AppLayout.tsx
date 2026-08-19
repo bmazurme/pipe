@@ -1,17 +1,12 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
+import { ReactNode, Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowRightFromSquare,
-  Bucket,
   ChevronRight,
-  Clock,
   Display,
-  House,
-  MagicWand,
   Moon,
   Sun,
-  TrashBin,
 } from '@gravity-ui/icons';
-import { Avatar, Button, Icon, Text } from '@gravity-ui/uikit';
+import { Avatar, Button, Icon, Loader, Text } from '@gravity-ui/uikit';
 import {
   AsideHeader,
   AsideHeaderItem,
@@ -24,6 +19,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../providers/AuthProvider';
 import { ThemeMode, useAppTheme } from '../providers/ThemeProvider';
+import { HOME_LINK, SERVICES, SOON_SERVICES } from '../../shared/config/services';
 import { useIsMobile } from '../../shared/lib/useIsMobile';
 import { useLocalStorage } from '../../shared/hooks/useLocalStorage';
 import { LogoMark } from '../../shared/ui/Logo';
@@ -36,15 +32,7 @@ const COMPACT_STORAGE_KEY = 'ntlstl-sidebar-compact';
 const COMPACT_HOTKEY = '[';
 const LOGO = { icon: LogoMark, text: 'ntlstl', href: '/' };
 
-const NAV_ITEMS = [
-  { id: 'home', title: 'Главная', icon: House, path: '/' },
-  { id: 'storage', title: 'Storage', icon: Bucket, path: '/storage' },
-  { id: 'purge', title: 'Purge', icon: TrashBin, path: '/purge' },
-  { id: 'time', title: 'Time', icon: Clock, path: '/time' },
-];
-
-// Placeholder links for services that will be added in later steps.
-const SOON_ITEMS = [{ id: 'rag', title: 'RAG', icon: MagicWand }];
+const NAV_ITEMS = [HOME_LINK, ...SERVICES];
 
 const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'system'];
 const THEME_ICON: Record<ThemeMode, typeof Sun> = {
@@ -153,7 +141,7 @@ export function AppLayout() {
       onItemClick: () => navigate(item.path),
     })),
     { id: 'soon-divider', title: '', type: 'divider' as const },
-    ...SOON_ITEMS.map((item) => ({
+    ...SOON_SERVICES.map((item) => ({
       id: item.id,
       icon: item.icon,
       title: soonTitle(item.title),
@@ -174,7 +162,7 @@ export function AppLayout() {
       onItemClick: () => navigate(item.path),
     })),
     { id: 'soon-divider', title: '', type: 'divider' as const },
-    ...SOON_ITEMS.map((item) => ({
+    ...SOON_SERVICES.map((item) => ({
       id: item.id,
       icon: item.icon,
       title: soonTitle(item.title),
@@ -271,9 +259,21 @@ export function AppLayout() {
     </div>
   );
 
+  // Suspense sits inside the shell, not around it: while a route's chunk
+  // loads, the sidebar and header stay painted and only the content area
+  // shows a loader — a full-page spinner on every first visit to a page
+  // would read as the whole app reloading.
   const content = (
     <div className={isMobile ? styles.contentMobile : styles.content}>
-      <Outlet />
+      <Suspense
+        fallback={
+          <div className={styles.routeLoader}>
+            <Loader size="m" />
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
     </div>
   );
 

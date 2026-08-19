@@ -83,6 +83,16 @@ export class TimeController {
     return entries.map(TimeReportEntryResponseDto.fromEntity);
   }
 
+  @Delete('reports')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteReports(
+    @Query('year', ParseIntPipe) year: number,
+    @Query('month', ParseIntPipe) month: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.timeService.deleteReportEntries(currentUser.id, year, month);
+  }
+
   @Post('reports/import')
   @UseFilters(ReportImportMulterExceptionFilter)
   @UseInterceptors(FileInterceptor('file', reportImportMulterConfig))

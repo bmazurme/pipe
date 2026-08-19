@@ -17,21 +17,15 @@
   min-width: 0;
 }
 
-.yearSwitcher {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .periodSwitcher {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 16px;
 }
 
 .monthValue {
   min-width: 10ch;
-  text-align: center;
   text-transform: capitalize;
 }
 
@@ -74,7 +68,6 @@
 
 .yearValue {
   min-width: 4ch;
-  text-align: center;
 }
 
 /* One column by default: below ~600px, two 7-column day grids side by side
@@ -106,8 +99,20 @@
   min-width: 0;
 }
 
-.monthTitle {
+/* Twelve near-identical cards are hard to scan, so the one holding today gets
+   an accent ring and a badge — it's the month a user almost always wants. */
+.monthCardCurrent {
+  box-shadow: inset 0 0 0 2px var(--ntlstl-brand);
+}
+
+.monthTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 4px;
+}
+
+.monthTitle {
   text-transform: capitalize;
 }
 
@@ -129,6 +134,13 @@
   height: 12px;
   border-radius: 3px;
   background-color: currentColor;
+}
+
+/* Today is drawn as a ring in the calendar, so its swatch is a ring too — a
+   filled square would read as yet another day type. */
+.legendToday {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 2px var(--ntlstl-brand);
 }
 
 .legendWeekend {
@@ -189,6 +201,14 @@
   text-decoration-color: var(--g-color-text-info);
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
+}
+
+/* Today, marked independently of the day's type so it stays visible whether
+   it's a plain workday, a day off or a holiday. Ring rather than a color, for
+   the same reason. */
+.monthCard :global(.g-date-calendar__button.today) {
+  box-shadow: inset 0 0 0 1px var(--ntlstl-brand);
+  border-radius: var(--g-border-radius-s);
 }
 
 /* Each mini-calendar is bounded to exactly one month (minValue = maxValue),

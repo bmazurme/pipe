@@ -94,3 +94,11 @@
   gap: 12px;
   padding: 4px 8px;
 }
+
+/* Holds the height of a typical page header while a route chunk loads, so
+   the content area doesn't collapse and snap back open. */
+.routeLoader {
+  display: flex;
+  justify-content: center;
+  padding: 64px 0;
+}

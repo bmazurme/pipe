@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Calendar } from '@gravity-ui/date-components';
 import { DateTime } from '@gravity-ui/date-utils';
-import { Card, Text } from '@gravity-ui/uikit';
+import { Card, Label, Text } from '@gravity-ui/uikit';
 
 import { DayOffType } from '../../store/api';
 import styles from '../TimePage.module.css';
@@ -13,6 +13,14 @@ interface CalendarMonthProps {
   isWeekendOrDayOff: (date: DateTime) => boolean;
   dateTypes: Map<string, DayOffType>;
   lastDay: number;
+  /** The month containing today — accented so it's findable among twelve. */
+  isCurrent?: boolean;
+}
+
+function todayKey(): string {
+  const now = new Date();
+
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 // The library renders each day as a plain button with no per-date data
@@ -27,6 +35,7 @@ export function CalendarMonth({
   isWeekendOrDayOff,
   dateTypes,
   lastDay,
+  isCurrent,
 }: CalendarMonthProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +43,7 @@ export function CalendarMonth({
     const buttons = containerRef.current?.querySelectorAll<HTMLElement>(
       '.g-date-calendar__current-state .g-date-calendar__button:not(.g-date-calendar__button_out-of-boundary)',
     );
+    const today = todayKey();
 
     buttons?.forEach((button, index) => {
       const day = index + 1;
@@ -45,14 +55,28 @@ export function CalendarMonth({
       button.classList.toggle('holiday', type === 'holiday');
       button.classList.toggle('short', type === 'short');
       button.classList.toggle('compensatory', type === 'compensatory');
+      button.classList.toggle('today', dateStr === today);
     });
   });
 
   return (
-    <Card view="outlined" className={styles.monthCard} ref={containerRef}>
-      <Text variant="subheader-1" className={styles.monthTitle}>
-        {title}
-      </Text>
+    <Card
+      view="outlined"
+      className={[styles.monthCard, isCurrent && styles.monthCardCurrent]
+        .filter(Boolean)
+        .join(' ')}
+      ref={containerRef}
+    >
+      <div className={styles.monthTitleRow}>
+        <Text variant="subheader-1" className={styles.monthTitle}>
+          {title}
+        </Text>
+        {isCurrent && (
+          <Label theme="normal" size="xs">
+            Сейчас
+          </Label>
+        )}
+      </div>
       <Calendar
         mode="days"
         size="m"

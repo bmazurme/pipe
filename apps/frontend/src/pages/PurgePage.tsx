@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
 import { useLocalStorage } from '../shared/hooks/useLocalStorage';
+import { useTabParam } from '../shared/hooks/useTabParam';
 import { purgeApiEndpoints, useGetDraftTextQuery } from '../store/api';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -23,6 +24,8 @@ const TEXT_STORAGE_KEY = 'ntlstl-purge-text';
 const DRAFT_SAVE_DEBOUNCE_MS = 800;
 const DRAFT_POLL_INTERVAL_MS = 4000;
 
+const TABS = ['apply', 'dictionary'] as const;
+
 export function PurgePage() {
   const dispatch = useAppDispatch();
   const entries = useAppSelector(purgeEntriesSelector);
@@ -38,7 +41,7 @@ export function PurgePage() {
     isError: isDraftError,
   } = useGetDraftTextQuery();
 
-  const [activeTab, setActiveTab] = useState('apply');
+  const [activeTab, setActiveTab] = useTabParam(TABS, 'apply');
 
   const [storedText, setStoredText] = useLocalStorage(TEXT_STORAGE_KEY, '');
   // Only the value at first render matters — it's the offline fallback used
@@ -126,12 +129,17 @@ export function PurgePage() {
           </Tab>
         </TabList>
 
+        {/* Only the active panel's children are built — TabPanel hides the
+            others with CSS but still mounts them. Safe here because the draft
+            text and the dictionary both live in the store, not in the tabs. */}
         <TabPanel value="apply">
-          <PurgeApplyTab onGoToDictionary={() => setActiveTab('dictionary')} />
+          {activeTab === 'apply' && (
+            <PurgeApplyTab onGoToDictionary={() => setActiveTab('dictionary')} />
+          )}
         </TabPanel>
 
         <TabPanel value="dictionary">
-          <PurgeDictionaryTab isActive={activeTab === 'dictionary'} />
+          {activeTab === 'dictionary' && <PurgeDictionaryTab />}
         </TabPanel>
       </TabProvider>
     </div>

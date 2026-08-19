@@ -97,6 +97,14 @@ const timeApiEndpoints = timeApi.injectEndpoints({
       },
       invalidatesTags: ['Report'],
     }),
+    deleteReportEntries: builder.mutation<void, { year: number; month: number }>({
+      query: ({ year, month }) => ({
+        url: `time/reports?year=${year}&month=${month}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Report'],
+      transformErrorResponse: () => 'Не удалось удалить отчёт',
+    }),
   }),
 });
 
@@ -106,5 +114,6 @@ export const {
   useDeleteDayOffMutation,
   useListReportEntriesQuery,
   useImportReportMutation,
+  useDeleteReportEntriesMutation,
 } = timeApiEndpoints;
 export { timeApiEndpoints };
