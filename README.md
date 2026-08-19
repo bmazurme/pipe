@@ -103,8 +103,8 @@ Repo → Settings → Secrets and variables → Actions.
 | `COOKIE_DOMAIN` | домен для refresh-токен куки |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
-| `TIME_EXPORT_API_KEY` | опционально: включает `GET /api/v1/time/export/day-offs` (для импорта в [ntlstl.time](https://github.com/bmazurme/ntlstl.time)) — значение сверяется с заголовком `X-Api-Key`; пусто = эндпоинт выключен |
-| `TIME_EXPORT_USER_ID` | id пользователя, чьи Day off отдаёт `TIME_EXPORT_API_KEY` |
+| `TIME_EXPORT_API_KEY` | опционально: общий ключ для интеграции с [ntlstl.time](https://github.com/bmazurme/ntlstl.time) — включает `GET /api/v1/time/export/day-offs` (bridge → ntlstl.time) и `POST /api/v1/time/import/reports` (ntlstl.time → bridge); значение сверяется с заголовком `X-Api-Key`; пусто = оба эндпоинта выключены |
+| `TIME_EXPORT_USER_ID` | id пользователя, которым владеют оба эндпоинта выше |
 
 **Сборка frontend:**
 

@@ -12,6 +12,7 @@ import { DayOff, DayOffType } from './entities/day-off.entity';
 import { TimeReportEntry } from './entities/time-report-entry.entity';
 import {
   extractPeriodFromFilename,
+  ParsedTimeReportEntry,
   parseTimeReportWorkbook,
 } from './time-report-import.util';
 
@@ -88,28 +89,46 @@ export class TimeService {
       throw new BadRequestException('В файле не найдено ни одной задачи');
     }
 
-    // Re-importing the same period replaces its rows outright rather than
-    // merging — the source file is the CRM export, so the latest upload is
-    // always the source of truth for that month.
-    await this.timeReportEntryRepository.delete({
+    return this.replaceReportEntries(
       userId,
-      year: period.year,
-      month: period.month,
-    });
+      period.year,
+      period.month,
+      parsedEntries,
+    );
+  }
 
-    const entries = await this.timeReportEntryRepository.save(
-      parsedEntries.map((entry) => ({
-        userId,
-        year: period.year,
-        month: period.month,
-        ...entry,
-      })),
+  // Shared by the xlsx upload (importReport) and a JSON push from an
+  // external caller (importReportEntries) — both land on the same
+  // replace-the-period semantics, since either source is meant to be the
+  // full picture for that month, not a partial update.
+  async importReportEntries(
+    userId: number,
+    year: number,
+    month: number,
+    entries: ParsedTimeReportEntry[],
+  ): Promise<ImportTimeReportResponseDto> {
+    return this.replaceReportEntries(userId, year, month, entries);
+  }
+
+  private async replaceReportEntries(
+    userId: number,
+    year: number,
+    month: number,
+    entries: ParsedTimeReportEntry[],
+  ): Promise<ImportTimeReportResponseDto> {
+    // Re-importing the same period replaces its rows outright rather than
+    // merging — the source (CRM export or an external report push) is
+    // always the full picture for that month, so the latest one wins.
+    await this.timeReportEntryRepository.delete({ userId, year, month });
+
+    const saved = await this.timeReportEntryRepository.save(
+      entries.map((entry) => ({ userId, year, month, ...entry })),
     );
 
     return {
-      year: period.year,
-      month: period.month,
-      entries: entries.map(TimeReportEntryResponseDto.fromEntity),
+      year,
+      month,
+      entries: saved.map(TimeReportEntryResponseDto.fromEntity),
     };
   }
 }
