@@ -1,6 +1,7 @@
 import { KeyboardEvent, useState } from 'react';
 import { Copy } from '@gravity-ui/icons';
 import {
+  Alert,
   Button,
   Icon,
   SegmentedRadioGroup,
@@ -26,20 +27,22 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
   const text = useAppSelector(purgeTextSelector);
 
   const [direction, setDirection] = useState<Direction>('keyToValue');
-  const [applyMessage, setApplyMessage] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  // One notice, not one per action: every path already cleared the other's
+  // message, so only one was ever on screen. Carrying the tone with the text
+  // is what lets a failed copy read as a failure instead of grey small print.
+  const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null);
+
+  const canApply = Boolean(text) && entries.length > 0;
 
   const handleApply = () => {
     const dictionary = buildDictionary(entries, direction);
     const { result, count } = applyDictionary(text, dictionary);
 
     dispatch(draftTextChanged(result));
-    setCopyMessage(null);
-    setApplyMessage(
-      count > 0
-        ? `Заменено слов: ${count}`
-        : 'Совпадений со словарём не найдено',
-    );
+    setNotice({
+      text: count > 0 ? `Заменено слов: ${count}` : 'Совпадений со словарём не найдено',
+      isError: false,
+    });
   };
 
   // The result stays in the field (and in localStorage, via PurgePage's sync
@@ -51,20 +54,25 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
     try {
       await navigator.clipboard.writeText(text);
       dispatch(draftTextChanged(''));
-      setApplyMessage(null);
-      setCopyMessage('Скопировано в буфер обмена — поле очищено');
+      setNotice({ text: 'Скопировано в буфер обмена — поле очищено', isError: false });
     } catch {
-      setCopyMessage('Не удалось скопировать — проверьте разрешения браузера');
+      setNotice({
+        text: 'Не удалось скопировать — проверьте разрешения браузера',
+        isError: true,
+      });
     }
   };
 
+  // A disabled button with no reason is a dead end; say what's missing.
+  const applyHint =
+    entries.length === 0
+      ? 'Словарь пуст'
+      : text
+        ? '⌘/Ctrl + Enter'
+        : 'Вставьте текст в поле ниже';
+
   const handleTextareaKeyDown = (event: KeyboardEvent) => {
-    if (
-      (event.metaKey || event.ctrlKey) &&
-      event.key === 'Enter' &&
-      text &&
-      entries.length > 0
-    ) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canApply) {
       event.preventDefault();
       handleApply();
     }
@@ -74,25 +82,52 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
     <div className={styles.tabPanel}>
       <Card view="outlined" className={styles.card}>
         <div className={styles.form}>
-          <SegmentedRadioGroup
-            value={direction}
-            onUpdate={(value) => setDirection(value as Direction)}
-            width="max"
-          >
-            <SegmentedRadioGroup.Option value="keyToValue">
-              Ключ → значение
-            </SegmentedRadioGroup.Option>
-            <SegmentedRadioGroup.Option value="valueToKey">
-              Значение → ключ
-            </SegmentedRadioGroup.Option>
-          </SegmentedRadioGroup>
+          {/* Direction and both actions sit in one row above the field, so the
+              whole control set is in view before you start reading the text —
+              and the field itself, which grows without limit, stays the last
+              thing on the card. */}
+          <div className={styles.toolbar}>
+            <SegmentedRadioGroup
+              value={direction}
+              onUpdate={(value) => setDirection(value as Direction)}
+              className={styles.direction}
+            >
+              <SegmentedRadioGroup.Option value="keyToValue">
+                Ключ → значение
+              </SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="valueToKey">
+                Значение → ключ
+              </SegmentedRadioGroup.Option>
+            </SegmentedRadioGroup>
+
+            <div className={styles.buttonRow}>
+              <Button
+                view="action"
+                size="m"
+                disabled={!canApply}
+                title={applyHint}
+                onClick={handleApply}
+              >
+                Сохранить
+              </Button>
+              <Button
+                view="outlined"
+                size="m"
+                disabled={!text}
+                title={text ? 'Скопировать и очистить поле' : 'Поле пустое'}
+                onClick={() => void handleCopy()}
+              >
+                <Icon data={Copy} size={16} />
+                Копировать
+              </Button>
+            </div>
+          </div>
 
           <TextArea
             value={text}
             onUpdate={(value) => {
               dispatch(draftTextChanged(value));
-              setApplyMessage(null);
-              setCopyMessage(null);
+              setNotice(null);
             }}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Вставьте текст"
@@ -100,31 +135,28 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
             // grows unbounded for long pastes, same as before.
             minRows={4}
             size="l"
+            hasClear
+            // The actions scroll out of view once a long text is pasted, so
+            // the shortcut is worth stating rather than hiding in a tooltip.
+            note={
+              text
+                ? `Символов: ${text.length.toLocaleString('ru-RU')}${canApply ? ' · ⌘/Ctrl + Enter — заменить' : ''}`
+                : undefined
+            }
           />
 
-          {applyMessage && <Text color="secondary">{applyMessage}</Text>}
-          {copyMessage && <Text color="secondary">{copyMessage}</Text>}
-
-          <div className={styles.buttonRow}>
-            <Button
-              view="action"
-              size="l"
-              disabled={!text || entries.length === 0}
-              title="⌘/Ctrl + Enter"
-              onClick={handleApply}
-            >
-              Сохранить
-            </Button>
-            <Button
-              view="outlined"
-              size="l"
-              disabled={!text}
-              onClick={() => void handleCopy()}
-            >
-              <Icon data={Copy} size={16} />
-              Копировать
-            </Button>
-          </div>
+          {notice &&
+            (notice.isError ? (
+              <Alert
+                className={styles.notice}
+                theme="danger"
+                view="filled"
+                message={notice.text}
+                onClose={() => setNotice(null)}
+              />
+            ) : (
+              <Text color="secondary">{notice.text}</Text>
+            ))}
 
           {entries.length === 0 && !isLoading && (
             <div className={styles.emptyHint}>
