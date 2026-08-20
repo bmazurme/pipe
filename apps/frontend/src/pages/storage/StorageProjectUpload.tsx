@@ -10,7 +10,7 @@ import { buildDictionary, Direction } from '../purge/purgeUtils';
 import { formatSize } from './formatters';
 import { buildProjectZip, deriveZipName } from './projectZip';
 import styles from '../StoragePage.module.css';
-import { uploadZipWithProgress } from './uploadZipWithProgress';
+import { uploadWithProgress } from './uploadWithProgress';
 
 type Phase = 'idle' | 'preparing' | 'uploading';
 
@@ -56,7 +56,7 @@ export function StorageProjectUpload({ onError }: { onError: (message: string | 
 
       setPhase('uploading');
       const filename = deriveZipName(files);
-      await uploadZipWithProgress(blob, filename, accessToken, (fraction) =>
+      await uploadWithProgress(blob, filename, accessToken, (fraction) =>
         setProgress(Math.round(PREPARE_WEIGHT * 100 + fraction * (1 - PREPARE_WEIGHT) * 100)),
       );
 

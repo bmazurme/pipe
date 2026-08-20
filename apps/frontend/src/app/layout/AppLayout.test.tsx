@@ -37,6 +37,7 @@ const layoutRoutes = (
   <Routes>
     <Route element={<AppLayout />}>
       <Route path="/profile" element={<div>содержимое</div>} />
+      <Route path="/" element={<div>главная</div>} />
     </Route>
   </Routes>
 );
@@ -67,6 +68,33 @@ describe('AppLayout', () => {
     expect(screen.getByRole('button', { name: 'Открыть меню' })).toBeTruthy();
     expect(screen.queryByTitle('Свернуть меню ([)')).toBeNull();
     expect(screen.getByText('содержимое')).toBeTruthy();
+  });
+
+  it('offers a skip link that targets the main landmark', () => {
+    setViewport(false);
+    renderLayout(layoutRoutes);
+
+    // Reaching the page otherwise means tabbing through every sidebar row.
+    const skip = screen.getByRole('link', { name: 'Перейти к содержимому' });
+    expect(skip).toHaveAttribute('href', '#main-content');
+
+    const main = document.querySelector('main');
+    expect(main).toHaveAttribute('id', 'main-content');
+    // Focusable so the browser actually moves focus when the link is used.
+    expect(main).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('routes a logo click instead of reloading the document', async () => {
+    setViewport(false);
+    const user = userEvent.setup();
+    renderLayout(layoutRoutes);
+
+    expect(screen.getByText('содержимое')).toBeTruthy();
+    await user.click(screen.getByRole('link', { name: /ntlstl/ }));
+
+    // A bare href would have left the router untouched (and, in a browser,
+    // thrown away every cached query on the way to the same page).
+    expect(await screen.findByText('главная')).toBeTruthy();
   });
 
   it('closes the burger when a footer action navigates away', async () => {

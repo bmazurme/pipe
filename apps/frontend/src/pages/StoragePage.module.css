@@ -44,6 +44,22 @@
   margin-top: 4px;
 }
 
+/* Bounded so a long file name wraps inside the dropzone instead of stretching
+   it, and wide enough that the progress bar doesn't read as a hairline. */
+.uploadStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+}
+
+/* Several failed uploads are reported as one alert, one per line. */
+.errorAlert {
+  white-space: pre-line;
+}
+
 .filesCard {
   padding: var(--ntlstl-card-padding);
   /* Flex items default to min-width:auto, which would otherwise let a long

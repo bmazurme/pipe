@@ -30,9 +30,18 @@ import styles from './AppLayout.module.css';
 const COMPACT_STORAGE_KEY = 'ntlstl-sidebar-compact';
 /** Collapses/expands the desktop sidebar; matches the hint in its tooltip. */
 const COMPACT_HOTKEY = '[';
-const LOGO = { icon: LogoMark, text: 'ntlstl', href: '/' };
 
 const NAV_ITEMS = [HOME_LINK, ...SERVICES];
+const MAIN_CONTENT_ID = 'main-content';
+
+/**
+ * True when the browser, not the router, should handle the click — a modified
+ * click means "open this somewhere else", and hijacking it into a same-tab
+ * navigation is the thing that makes in-app sidebars feel broken.
+ */
+function isModifiedClick(event: React.MouseEvent): boolean {
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
 
 const THEME_ORDER: ThemeMode[] = ['light', 'dark', 'system'];
 const THEME_ICON: Record<ThemeMode, typeof Sun> = {
@@ -138,7 +147,22 @@ export function AppLayout() {
       title: item.title,
       icon: item.icon,
       current: isCurrentPath(location.pathname, item.path),
-      onItemClick: () => navigate(item.path),
+      // An href makes each row a real <a>: middle-click and ⌘/Ctrl+click open
+      // the service in a new tab, and the target shows in the status bar on
+      // hover. A plain click is still routed client-side.
+      href: item.path,
+      onItemClick: (
+        _item: AsideHeaderItem,
+        _collapsed: boolean,
+        event: React.MouseEvent<HTMLElement>,
+      ) => {
+        if (isModifiedClick(event)) {
+          return;
+        }
+
+        event.preventDefault();
+        navigate(item.path);
+      },
     })),
     { id: 'soon-divider', title: '', type: 'divider' as const },
     ...SOON_SERVICES.map((item) => ({
@@ -171,6 +195,28 @@ export function AppLayout() {
       closeMenuOnClick: false,
     })),
   ];
+
+  // The logo keeps its href so it behaves like a real home link, but a plain
+  // click has to be routed — left alone, the bare href reloaded the whole
+  // document, throwing away the Purge draft and every cached query on the way
+  // back to a page the router could have rendered instantly.
+  const logo = useMemo(
+    () => ({
+      icon: LogoMark,
+      text: 'ntlstl',
+      href: '/',
+      onClick: (event: React.MouseEvent<HTMLElement>) => {
+        if (isModifiedClick(event)) {
+          return;
+        }
+
+        event.preventDefault();
+        closeBurger();
+        navigate('/');
+      },
+    }),
+    [closeBurger, navigate],
+  );
 
   // Rebuilt only when the initial changes: a fresh component identity on every
   // render would remount the icon (and drop it mid-transition).
@@ -264,7 +310,14 @@ export function AppLayout() {
   // shows a loader — a full-page spinner on every first visit to a page
   // would read as the whole app reloading.
   const content = (
-    <div className={isMobile ? styles.contentMobile : styles.content}>
+    // A <main> landmark and a focusable skip target: without it, reaching the
+    // page from the keyboard meant tabbing past every nav row and all three
+    // footer rows, on every single navigation.
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className={isMobile ? styles.contentMobile : styles.content}
+    >
       <Suspense
         fallback={
           <div className={styles.routeLoader}>
@@ -274,35 +327,49 @@ export function AppLayout() {
       >
         <Outlet />
       </Suspense>
-    </div>
+    </main>
+  );
+
+  // Off-screen until focused, so it costs nothing visually but is the first
+  // stop for a Tab press.
+  const skipLink = (
+    <a href={`#${MAIN_CONTENT_ID}`} className={styles.skipLink}>
+      Перейти к содержимому
+    </a>
   );
 
   if (isMobile) {
     return (
-      <MobileHeader
-        ref={headerRef}
-        logo={LOGO}
-        burgerOpenTitle="Открыть меню"
-        burgerCloseTitle="Закрыть меню"
-        renderContent={() => content}
-        burgerMenu={{
-          items: burgerItems,
-          renderFooter: renderBurgerFooter,
-        }}
-      />
+      <>
+        {skipLink}
+        <MobileHeader
+          ref={headerRef}
+          logo={logo}
+          burgerOpenTitle="Открыть меню"
+          burgerCloseTitle="Закрыть меню"
+          renderContent={() => content}
+          burgerMenu={{
+            items: burgerItems,
+            renderFooter: renderBurgerFooter,
+          }}
+        />
+      </>
     );
   }
 
   return (
-    <AsideHeader
-      compact={compact}
-      onChangeCompact={setCompact}
-      logo={LOGO}
-      menuItems={menuItems}
-      collapseTitle={`Свернуть меню (${COMPACT_HOTKEY})`}
-      expandTitle={`Развернуть меню (${COMPACT_HOTKEY})`}
-      renderContent={() => content}
-      renderFooter={({ compact: isCompact }) => renderAsideFooter(isCompact)}
-    />
+    <>
+      {skipLink}
+      <AsideHeader
+        compact={compact}
+        onChangeCompact={setCompact}
+        logo={logo}
+        menuItems={menuItems}
+        collapseTitle={`Свернуть меню (${COMPACT_HOTKEY})`}
+        expandTitle={`Развернуть меню (${COMPACT_HOTKEY})`}
+        renderContent={() => content}
+        renderFooter={({ compact: isCompact }) => renderAsideFooter(isCompact)}
+      />
+    </>
   );
 }

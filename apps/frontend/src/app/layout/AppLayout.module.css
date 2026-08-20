@@ -102,3 +102,28 @@
   justify-content: center;
   padding: 64px 0;
 }
+
+/* Off-screen until it takes focus, then pinned over the sidebar. Not
+   display:none — that would take it out of the tab order, which is the one
+   thing it exists for. */
+.skipLink {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-float);
+  box-shadow: 0 2px 8px var(--g-color-sfx-shadow);
+  color: var(--g-color-text-primary);
+  font-size: 13px;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 16px));
+  transition: transform 0.15s ease-out;
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--ntlstl-brand);
+  outline-offset: 2px;
+}

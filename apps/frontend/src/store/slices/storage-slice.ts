@@ -20,9 +20,9 @@ const storageSlice = createSlice({
       .addMatcher(storageApiEndpoints.endpoints.listFiles.matchFulfilled, (state, action) => {
         state.files = action.payload;
       })
-      .addMatcher(storageApiEndpoints.endpoints.uploadFile.matchFulfilled, (state, action) => {
-        state.files.unshift(action.payload);
-      })
+      // Uploads don't go through RTK Query (they need XHR progress), so a
+      // finished batch lands here via the Storage tag invalidation that
+      // refetches listFiles — there's no upload action to match on.
       .addMatcher(storageApiEndpoints.endpoints.downloadFile.matchFulfilled, (state, action) => {
         state.files = state.files.filter((file) => file.id !== action.payload);
       });

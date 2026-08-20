@@ -3,23 +3,24 @@ import { Alert, Card } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
-  getErrorMessage,
   StoredFileMeta,
   useDownloadFileMutation,
   useListFilesQuery,
-  useUploadFileMutation,
 } from '../store/api';
-import { useAppSelector } from '../store/hooks';
+import { storageApiEndpoints } from '../store/api/storage-api/endpoints';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { storageFilesSelector } from '../store/slices';
 import { PageHeader } from '../widgets/PageHeader';
-import { StorageDropzone } from './storage/StorageDropzone';
+import { StorageDropzone, UploadProgress } from './storage/StorageDropzone';
 import { StorageFileList } from './storage/StorageFileList';
 import { StorageProjectUpload } from './storage/StorageProjectUpload';
+import { uploadWithProgress } from './storage/uploadWithProgress';
 import styles from './StoragePage.module.css';
 
 const FILES_POLL_INTERVAL_MS = 4000;
 
 export function StoragePage() {
+  const dispatch = useAppDispatch();
   // Picks up files uploaded from another open device/tab — RTK Query's
   // structural sharing means a poll that finds nothing new doesn't cause a
   // re-render on its own.
@@ -27,18 +28,48 @@ export function StoragePage() {
     pollingInterval: FILES_POLL_INTERVAL_MS,
   });
   const files = useAppSelector(storageFilesSelector);
-  const [uploadFile, { isLoading: isUploading }] = useUploadFileMutation();
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
   const [downloadFile] = useDownloadFileMutation();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upload, setUpload] = useState<UploadProgress | null>(null);
   const isMobile = useIsMobile();
 
-  const handleUpload = async (file: File) => {
+  // Sequential rather than parallel: these are big files on one connection,
+  // so uploading them at once would just split the same bandwidth and make
+  // every individual progress bar crawl.
+  const handleUpload = async (selected: File[]) => {
     setError(null);
-    try {
-      await uploadFile(file).unwrap();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Не удалось загрузить файл'));
+    const failures: string[] = [];
+
+    for (const [index, file] of selected.entries()) {
+      setUpload({
+        name: file.name,
+        index: index + 1,
+        total: selected.length,
+        percent: 0,
+      });
+
+      try {
+        await uploadWithProgress(file, file.name, accessToken, (fraction) =>
+          setUpload((current) =>
+            current && { ...current, percent: Math.round(fraction * 100) },
+          ),
+        );
+      } catch (err) {
+        failures.push(
+          err instanceof Error ? err.message : `Не удалось загрузить «${file.name}»`,
+        );
+      }
+    }
+
+    setUpload(null);
+    // One refresh at the end — the list is polled anyway, and invalidating
+    // per file would fire a request between each upload.
+    dispatch(storageApiEndpoints.util.invalidateTags(['Storage']));
+
+    if (failures.length > 0) {
+      setError(failures.join('\n'));
     }
   };
 
@@ -61,7 +92,7 @@ export function StoragePage() {
         description="Быстрый обмен файлами между вашими устройствами."
       />
 
-      <StorageDropzone isUploading={isUploading} onUpload={(file) => void handleUpload(file)} />
+      <StorageDropzone upload={upload} onUpload={(selected) => void handleUpload(selected)} />
 
       <StorageProjectUpload onError={setError} />
 
@@ -70,6 +101,7 @@ export function StoragePage() {
           theme="danger"
           view="filled"
           message={error}
+          className={styles.errorAlert}
           onClose={() => setError(null)}
         />
       )}

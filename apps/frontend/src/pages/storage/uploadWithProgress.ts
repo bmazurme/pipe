@@ -1,16 +1,23 @@
 import { API_URL } from '../../store/api/env';
-import { MAX_FILE_SIZE_MB, StoredFileMeta } from '../../store/api';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, StoredFileMeta } from '../../store/api';
 
-// fetchBaseQuery (plain fetch) has no upload-progress event, so the one
-// upload that needs a live progress bar goes around RTK Query and talks to
-// the same POST /storage endpoint directly via XHR.
-export function uploadZipWithProgress(
+// fetchBaseQuery (plain fetch) exposes no upload-progress event, so every
+// upload goes around RTK Query and talks to the same POST /storage endpoint
+// directly via XHR. Callers invalidate the Storage tag themselves once done.
+export function uploadWithProgress(
   blob: Blob,
   filename: string,
   accessToken: string | null,
   onProgress: (fraction: number) => void,
 ): Promise<StoredFileMeta> {
   return new Promise((resolve, reject) => {
+    // Checked before the request so a file that can't possibly land doesn't
+    // spend minutes uploading only to be rejected at the end.
+    if (blob.size > MAX_FILE_SIZE_BYTES) {
+      reject(new Error(`«${filename}» превышает лимит ${MAX_FILE_SIZE_MB} МБ`));
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', blob, filename);
 
@@ -36,14 +43,14 @@ export function uploadZipWithProgress(
       }
 
       if (xhr.status === 413) {
-        reject(new Error(`Архив превышает лимит ${MAX_FILE_SIZE_MB} МБ`));
+        reject(new Error(`«${filename}» превышает лимит ${MAX_FILE_SIZE_MB} МБ`));
         return;
       }
 
-      reject(new Error('Не удалось загрузить архив'));
+      reject(new Error(`Не удалось загрузить «${filename}»`));
     };
 
-    xhr.onerror = () => reject(new Error('Не удалось загрузить архив'));
+    xhr.onerror = () => reject(new Error(`Не удалось загрузить «${filename}»`));
 
     xhr.send(formData);
   });
