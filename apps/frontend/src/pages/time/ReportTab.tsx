@@ -1,5 +1,13 @@
-import { ChangeEvent, useRef, useState } from 'react';
-import { FileArrowUp, LayoutHeaderCells, TrashBin } from '@gravity-ui/icons';
+import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import {
+  ArrowDown,
+  ArrowsRotateLeft,
+  ArrowUp,
+  ArrowUpArrowDown,
+  FileArrowUp,
+  LayoutHeaderCells,
+  TrashBin,
+} from '@gravity-ui/icons';
 import { Alert, Button, Card, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
 
 import {
@@ -19,6 +27,19 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { PeriodStepper } from '../../widgets/PeriodStepper';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
+import {
+  ariaSort,
+  nextSort,
+  sortReportEntries,
+  type ReportSort,
+  type ReportSortColumn,
+} from './reportSort';
+
+const COLUMNS: { key: ReportSortColumn; title: string; numeric?: boolean }[] = [
+  { key: 'taskName', title: 'Задача' },
+  { key: 'status', title: 'Статус' },
+  { key: 'hours', title: 'Часы', numeric: true },
+];
 
 const MONTH_NAMES = [
   'Январь',
@@ -43,7 +64,9 @@ export function ReportTab() {
   const {
     data: entries = [],
     isLoading,
+    isFetching,
     isError,
+    refetch,
   } = useListReportEntriesQuery({ year, month });
   const [importReport, { isLoading: isImporting }] = useImportReportMutation();
   const [deleteReportEntries, { isLoading: isDeleting }] = useDeleteReportEntriesMutation();
@@ -53,6 +76,13 @@ export function ReportTab() {
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Sorting is client-side: a month's report is a few dozen rows that are
+  // already in memory, so a round trip per column click would be pure latency.
+  // The choice deliberately survives switching months — a user comparing two
+  // periods by hours shouldn't have to re-sort each time.
+  const [sort, setSort] = useState<ReportSort | null>(null);
+  const sortedEntries = useMemo(() => sortReportEntries(entries, sort), [entries, sort]);
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
 
@@ -137,6 +167,18 @@ export function ReportTab() {
           meta={entries.length > 0 ? String(entries.length) : undefined}
           actions={
             <>
+              {/* The report can be replaced from another device or pushed in
+                  by ntlstl.report, so what's on screen can go stale without
+                  anything happening in this tab. */}
+              <Button
+                view="flat"
+                size="m"
+                loading={isFetching}
+                onClick={() => void refetch()}
+                aria-label="Обновить данные"
+              >
+                <Icon data={ArrowsRotateLeft} size={16} />
+              </Button>
               <Button view="action" size="m" loading={isImporting} onClick={() => inputRef.current?.click()}>
                 <Icon data={FileArrowUp} size={16} />
                 Импортировать
@@ -191,13 +233,50 @@ export function ReportTab() {
             <table className={styles.reportTable}>
               <thead>
                 <tr>
-                  <th>Задача</th>
-                  <th>Статус</th>
-                  <th className={styles.reportHoursCell}>Часы</th>
+                  {COLUMNS.map((column) => {
+                    const state = ariaSort(sort, column.key);
+                    const icon =
+                      state === 'ascending'
+                        ? ArrowUp
+                        : state === 'descending'
+                          ? ArrowDown
+                          : ArrowUpArrowDown;
+
+                    return (
+                      <th
+                        key={column.key}
+                        className={column.numeric ? styles.reportHoursCell : undefined}
+                        aria-sort={state}
+                      >
+                        <button
+                          type="button"
+                          className={[
+                            styles.sortButton,
+                            column.numeric && styles.sortButtonNumeric,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          onClick={() => setSort(nextSort(sort, column.key))}
+                        >
+                          {column.title}
+                          <Icon
+                            data={icon}
+                            size={12}
+                            className={[
+                              styles.sortIcon,
+                              state === 'none' && styles.sortIconInactive,
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
+                          />
+                        </button>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry) => (
+                {sortedEntries.map((entry) => (
                   <tr key={entry.id}>
                     <td>{entry.taskName}</td>
                     <td>{entry.status}</td>

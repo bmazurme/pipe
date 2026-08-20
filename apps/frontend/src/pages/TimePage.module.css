@@ -50,6 +50,54 @@
 .reportTable thead th {
   color: var(--g-color-text-secondary);
   font-weight: var(--g-text-body-2-font-weight, 500);
+  /* The header's own padding moves onto the sort button so the whole cell is
+     clickable rather than just the label. */
+  padding: 0;
+}
+
+.sortButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--g-border-radius-s);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortButtonNumeric {
+  justify-content: flex-end;
+}
+
+.sortButton:hover {
+  color: var(--g-color-text-primary);
+  background: var(--g-color-base-simple-hover);
+}
+
+.sortButton:focus-visible {
+  outline: 2px solid var(--ntlstl-brand);
+  outline-offset: -2px;
+}
+
+.sortIcon {
+  flex-shrink: 0;
+}
+
+/* The unsorted arrows are a hint that the column *can* be sorted, not a state
+   worth reading — faint, but never hidden until hover: on a touch screen
+   there is no hover, and an invisible affordance is no affordance. */
+.sortIconInactive {
+  opacity: 0.3;
+}
+
+.sortButton:hover .sortIconInactive,
+.sortButton:focus-visible .sortIconInactive {
+  opacity: 0.7;
 }
 
 .reportTable tbody tr:hover {
