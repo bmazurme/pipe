@@ -11,6 +11,7 @@ import { Request } from 'express';
 
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { Session } from '../entities/session.entity';
+import { REFRESH_COOKIE_NAME, readCookieValues } from '../refresh-cookie';
 import { SessionsService } from '../sessions.service';
 
 export type AuthSession = {
@@ -33,22 +34,34 @@ export class RefreshTokenGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithAuthSession>();
-    const refreshToken = request.cookies?.refreshToken;
+    // Read straight from the header rather than req.cookies: duplicates of one
+    // name are collapsed there, and a shadowed-but-valid cookie has to still
+    // be reachable. See refresh-cookie.ts for how that situation arises.
+    const candidates = readCookieValues(
+      request.headers.cookie,
+      REFRESH_COOKIE_NAME,
+    );
 
-    if (!refreshToken) {
+    if (candidates.length === 0) {
       this.logger.warn('Refresh token not found in cookies');
       throw new UnauthorizedException('Refresh token is required');
     }
 
-    try {
-      request.authSession = await this.validateRefreshToken(refreshToken);
-      return true;
-    } catch (error) {
-      this.logger.warn(
-        `Refresh token validation failed: ${(error as Error).message}`,
-      );
-      throw new UnauthorizedException('Invalid refresh token');
+    let lastFailure: string | undefined;
+
+    for (const refreshToken of candidates) {
+      try {
+        request.authSession = await this.validateRefreshToken(refreshToken);
+        return true;
+      } catch (error) {
+        lastFailure = (error as Error).message;
+      }
     }
+
+    this.logger.warn(
+      `Refresh token validation failed (${candidates.length} candidate(s)): ${lastFailure}`,
+    );
+    throw new UnauthorizedException('Invalid refresh token');
   }
 
   private async validateRefreshToken(token: string): Promise<AuthSession> {

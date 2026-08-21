@@ -100,7 +100,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `YANDEX_SECRET` | client secret приложения на oauth.yandex.ru |
 | `NOTES_YANDEX_REDIRECT` | callback URL, зарегистрированный в приложении на oauth.yandex.ru (`https://<backend-host>/api/v1/oauth/yandex/redirect`) |
 | `NOTES_TARGET_URL` | куда браузер редиректит после логина/ошибки OAuth (адрес фронтенда) |
-| `COOKIE_DOMAIN` | домен для refresh-токен куки |
+| `COOKIE_DOMAIN` | домен для refresh-токен куки. Задавайте **конкретный хост** API (`api.bridge.ntlstl.dev`), а не родительский домен: соседние приложения на `*.ntlstl.dev` (notes, tools, rain) — порты этого же кода и ставят свою куку с `COOKIE_DOMAIN=.ntlstl.dev`, которая долетает и сюда. Кука bridge называется `bridgeRefreshToken` именно поэтому — совпадение имён приводило к 401 «invalid signature», лечившемуся только ручной очисткой кук |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
 | `TIME_EXPORT_API_KEY` | опционально: общий ключ для интеграции с [ntlstl.time](https://github.com/bmazurme/ntlstl.time) — включает `GET /api/v1/time/export/day-offs` (bridge → ntlstl.time) и `POST /api/v1/time/import/reports` (ntlstl.time → bridge); значение сверяется с заголовком `X-Api-Key`; пусто = оба эндпоинта выключены |

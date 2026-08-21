@@ -73,11 +73,7 @@ export class OauthService {
 
     await this.sessionsService.attachRefreshToken(session.id, refreshToken);
 
-    response.cookie(
-      'refreshToken',
-      refreshToken,
-      this.authService.getCookieOptions(),
-    );
+    this.authService.setRefreshCookie(response, refreshToken);
 
     response.redirect(this.getTargetUrl());
   }

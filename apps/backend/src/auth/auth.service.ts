@@ -16,6 +16,10 @@ import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token
 import { RefreshTokenNotFoundException } from './exceptions/refresh-token-not-found.exception';
 import { RequestWithAuthSession } from './guards/refresh-token.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import {
+  LEGACY_REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+} from './refresh-cookie';
 import { SessionsService } from './sessions.service';
 
 @Injectable()
@@ -37,6 +41,42 @@ export class AuthService {
       domain: this.configService.get('COOKIE_DOMAIN'),
       path: '/api/v1/auth',
     };
+  }
+
+  /**
+   * Deletion needs the same domain/path as the original cookie but must not
+   * carry maxAge: express's clearCookie sets `expires` to the epoch, then
+   * res.cookie recomputes `expires` from any maxAge it is given — so passing
+   * the full options emitted an empty-valued cookie dated seven days ahead
+   * and deleted nothing.
+   */
+  private getClearCookieOptions(): CookieOptions {
+    const options = this.getCookieOptions();
+    delete options.maxAge;
+
+    return options;
+  }
+
+  /**
+   * Writes the refresh cookie and retires this app's own copy of the old
+   * shared-name cookie in the same response. Scoped to COOKIE_DOMAIN, so the
+   * identically-named parent-domain cookie belonging to the sibling apps is
+   * untouched — clearing that would sign the user out of them.
+   */
+  setRefreshCookie(response: Response, refreshToken: string): void {
+    response.cookie(REFRESH_COOKIE_NAME, refreshToken, this.getCookieOptions());
+    response.clearCookie(
+      LEGACY_REFRESH_COOKIE_NAME,
+      this.getClearCookieOptions(),
+    );
+  }
+
+  clearRefreshCookie(response: Response): void {
+    response.clearCookie(REFRESH_COOKIE_NAME, this.getClearCookieOptions());
+    response.clearCookie(
+      LEGACY_REFRESH_COOKIE_NAME,
+      this.getClearCookieOptions(),
+    );
   }
 
   private signAccessToken(payload: JwtPayload): string {
@@ -72,7 +112,7 @@ export class AuthService {
       );
     }
 
-    response.clearCookie('refreshToken', this.getCookieOptions());
+    this.clearRefreshCookie(response);
 
     return { message: 'Successfully logged out' };
   }
@@ -122,7 +162,7 @@ export class AuthService {
         refreshToken,
       );
 
-      res.cookie('refreshToken', refreshToken, this.getCookieOptions());
+      this.setRefreshCookie(res, refreshToken);
 
       return { accessToken, expiresIn: '15m' };
     } catch (error) {
