@@ -123,6 +123,19 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
             </div>
           </div>
 
+          {notice &&
+            (notice.isError ? (
+              <Alert
+                className={styles.notice}
+                theme="danger"
+                view="filled"
+                message={notice.text}
+                onClose={() => setNotice(null)}
+              />
+            ) : (
+              <Text color="secondary">{notice.text}</Text>
+            ))}
+
           <TextArea
             value={text}
             onUpdate={(value) => {
@@ -144,19 +157,6 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
                 : undefined
             }
           />
-
-          {notice &&
-            (notice.isError ? (
-              <Alert
-                className={styles.notice}
-                theme="danger"
-                view="filled"
-                message={notice.text}
-                onClose={() => setNotice(null)}
-              />
-            ) : (
-              <Text color="secondary">{notice.text}</Text>
-            ))}
 
           {entries.length === 0 && !isLoading && (
             <div className={styles.emptyHint}>
