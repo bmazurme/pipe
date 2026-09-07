@@ -5,6 +5,9 @@ import { addCommand, listCommand, removeCommand } from './commands/add.js';
 import { loginCommand } from './commands/login.js';
 import { pushCommand } from './commands/push.js';
 import { pullCommand } from './commands/pull.js';
+import { setupProxy } from './setupProxy.js';
+
+setupProxy();
 
 const program = new Command();
 

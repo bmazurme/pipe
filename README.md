@@ -93,6 +93,16 @@ node dist/cli.js pull bridge
 проект, если в нём есть незакоммиченные изменения (git working tree грязный) —
 закоммитьте/застэшьте их или передайте `--force`.
 
+## Прокси
+
+Если сеть требует прокси для выхода в интернет (как у `reports`), укажите
+`HTTPS_PROXY`/`HTTP_PROXY` — sync-cli подхватит их так же, как это делает
+`reports/packages/server/src/utils/setup-proxy.ts`:
+
+```bash
+HTTPS_PROXY=http://user:pass@proxy.example.com:8080 sync-cli push bridge
+```
+
 ## Ограничения текущей версии
 
 - Только удаления файлов не переносятся: `pull` добавляет/обновляет файлы,
