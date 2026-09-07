@@ -74,14 +74,16 @@ function buildReplacer(pairs: [needle: string, replacement: string][]): (text: s
   return (text: string) => text.replace(pattern, (match) => replacementByNeedle.get(match) ?? match);
 }
 
-// push direction: de-personalize before it leaves this machine.
+// push direction: real value (key) -> placeholder (value), before it leaves this machine.
+// Matches Purge's own convention — you type the real term as "key" and it
+// suggests a same-length random "value" as the placeholder.
 export function toRemote(dictionary: Dictionary, text: string): string {
-  const replacer = buildReplacer(Object.entries(dictionary).map(([key, value]) => [value, key]));
+  const replacer = buildReplacer(Object.entries(dictionary));
   return replacer(text);
 }
 
-// pull direction: re-personalize for this machine after it arrives.
+// pull direction: placeholder (value) -> real value (key), after it arrives.
 export function toLocal(dictionary: Dictionary, text: string): string {
-  const replacer = buildReplacer(Object.entries(dictionary));
+  const replacer = buildReplacer(Object.entries(dictionary).map(([key, value]) => [value, key]));
   return replacer(text);
 }
