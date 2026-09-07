@@ -1,0 +1,4 @@
+{
+  "{{DB_HOST}}": "prod-db.internal.example.com",
+  "{{API_TOKEN}}": "sk-live-real-secret-value"
+}

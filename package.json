@@ -1,0 +1,27 @@
+{
+  "name": "sync-cli",
+  "version": "0.1.0",
+  "description": "Syncs JS/TS project source trees between machines through bridge's storage API, substituting values<->keys per a local dictionary.",
+  "type": "module",
+  "bin": {
+    "sync-cli": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b -w",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

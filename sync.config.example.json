@@ -1,0 +1,12 @@
+{
+  "bridge": {
+    "apiUrl": "https://api.bridge.ntlstl.dev"
+  },
+  "projects": [
+    {
+      "name": "bridge",
+      "path": "/Users/bogdanmazur/Documents/GitHub/bridge",
+      "dictionary": "dictionaries/bridge.json"
+    }
+  ]
+}
