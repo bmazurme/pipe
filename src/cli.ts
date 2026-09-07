@@ -50,7 +50,22 @@ program
   .option('-f, --force', 'pull even with a dirty git tree / unchanged hash')
   .action((name, options) => pullCommand(name, options));
 
+// fetch() wraps every network-level failure (DNS, TCP, TLS, proxy) as a bare
+// "TypeError: fetch failed" — the actual reason only shows up in `.cause`,
+// possibly nested (a proxy failure's cause is itself another error).
+function describeError(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+
+  while (current) {
+    parts.push(current instanceof Error ? current.message : String(current));
+    current = current instanceof Error ? current.cause : undefined;
+  }
+
+  return parts.join('\n  caused by: ');
+}
+
 program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(describeError(error));
   process.exitCode = 1;
 });
