@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { CONFIG_PATH } from './paths.js';
 import type { ProjectConfig, SyncConfig } from './types.js';
 
-const DEFAULT_INCLUDE = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.json'];
+const DEFAULT_INCLUDE = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue', '**/*.json'];
 const DEFAULT_EXCLUDE = [
   '**/node_modules/**',
   '**/.git/**',
