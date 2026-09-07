@@ -10,3 +10,4 @@ dictionaries/*.json
 !dictionaries/*.example.json
 
 sync.config.json
+.DS_Store
