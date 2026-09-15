@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b -w",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "test": "tsc -b && node --test 'dist/**/*.test.js'"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",

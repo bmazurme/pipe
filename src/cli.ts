@@ -3,8 +3,12 @@ import { Command } from 'commander';
 
 import { addCommand, listCommand, removeCommand } from './commands/add.js';
 import { loginCommand } from './commands/login.js';
+import { loginGitlabCommand } from './commands/loginGitlab.js';
+import { generateKeysCommand } from './commands/generateKeys.js';
 import { pushCommand } from './commands/push.js';
 import { pullCommand } from './commands/pull.js';
+import { pushIssueCommand } from './commands/pushIssue.js';
+import { pullIssueCommand } from './commands/pullIssue.js';
 import { setupProxy } from './setupProxy.js';
 
 setupProxy();
@@ -49,6 +53,36 @@ program
   .description('Download and transform (key->value) the latest push for a tracked project')
   .option('-f, --force', 'pull even with a dirty git tree / unchanged hash')
   .action((name, options) => pullCommand(name, options));
+
+program
+  .command('login-gitlab <token>')
+  .description('Store a GitLab personal access token, used by push-issue to read issue title/description')
+  .action(loginGitlabCommand);
+
+program
+  .command('push-issue <name> <projectId> <iid>')
+  .description(
+    'Transform and upload a tracked project as a parcel addressed to one GitLab issue ' +
+      '(${projectId}-${iid}.subscription.zip), compatible with reports\' Subscription module',
+  )
+  .action((name, projectId, iid) => pushIssueCommand(name, projectId, iid));
+
+program
+  .command('pull-issue <name> <projectId> <iid>')
+  .description(
+    'Download and transform the latest parcel addressed to one GitLab issue, ' +
+      'compatible with reports\' Subscription module',
+  )
+  .option('-f, --force', 'pull even with a dirty git tree')
+  .action((name, projectId, iid, options) => pullIssueCommand(name, projectId, iid, options));
+
+program
+  .command('generate-keys <name>')
+  .description(
+    'Generate an RSA-4096 keypair at the project\'s publicKeyPath/privateKeyPath, for push-issue/pull-issue encryption',
+  )
+  .option('-f, --force', 'overwrite existing key files')
+  .action((name, options) => generateKeysCommand(name, options));
 
 // fetch() wraps every network-level failure (DNS, TCP, TLS, proxy) as a bare
 // "TypeError: fetch failed" — the actual reason only shows up in `.cause`,

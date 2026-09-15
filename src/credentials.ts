@@ -14,6 +14,21 @@ export function loadCredentials(): Credentials {
   return JSON.parse(readFileSync(CREDENTIALS_PATH, 'utf-8')) as Credentials;
 }
 
+// Issue-mode only — unlike loadCredentials(), tolerates a missing/incomplete
+// file so "login-gitlab" can be run before (or without) "login".
+export function loadCredentialsOrEmpty(): Partial<Credentials> {
+  if (!existsSync(CREDENTIALS_PATH)) {
+    return {};
+  }
+
+  return JSON.parse(readFileSync(CREDENTIALS_PATH, 'utf-8')) as Credentials;
+}
+
+export function saveGitlabToken(gitlabToken: string): void {
+  const current = loadCredentialsOrEmpty();
+  saveCredentials({ refreshToken: current.refreshToken ?? '', gitlabToken });
+}
+
 export function saveCredentials(credentials: Credentials): void {
   writeFileSync(CREDENTIALS_PATH, JSON.stringify(credentials, null, 2) + '\n', {
     mode: 0o600,

@@ -10,8 +10,10 @@ export const CREDENTIALS_PATH = path.join(ROOT_DIR, '.sync-credentials.json');
 export const STATE_PATH = path.join(ROOT_DIR, '.sync-state.json');
 export const DICTIONARIES_DIR = path.join(ROOT_DIR, 'dictionaries');
 
+export function resolveFromRoot(ref: string): string {
+  return path.isAbsolute(ref) ? ref : path.join(ROOT_DIR, ref);
+}
+
 export function resolveDictionaryPath(dictionaryRef: string): string {
-  return path.isAbsolute(dictionaryRef)
-    ? dictionaryRef
-    : path.join(ROOT_DIR, dictionaryRef);
+  return resolveFromRoot(dictionaryRef);
 }

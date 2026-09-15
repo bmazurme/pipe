@@ -7,7 +7,7 @@ import AdmZip from 'adm-zip';
 
 import type { SyncManifest } from './types.js';
 
-const MANIFEST_ENTRY = '__sync_manifest__.json';
+export const MANIFEST_ENTRY = '__sync_manifest__.json';
 
 export interface PackedFile {
   relPath: string;
