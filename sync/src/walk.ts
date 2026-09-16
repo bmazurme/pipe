@@ -1,15 +1,4 @@
-import fg from 'fast-glob';
-
-export async function walkProjectFiles(
-  projectPath: string,
-  include: string[],
-  exclude: string[],
-): Promise<string[]> {
-  return fg(include, {
-    cwd: projectPath,
-    ignore: exclude,
-    dot: false,
-    onlyFiles: true,
-    followSymbolicLinks: false,
-  });
-}
+// The fast-glob wrapper now lives in @pipe/protocol, shared with reports'
+// subscription/walk.ts. Re-exported here so existing imports
+// (`from '../walk.js'`) don't need to change.
+export { walkProjectFiles } from '@pipe/protocol';

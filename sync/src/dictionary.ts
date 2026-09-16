@@ -1,5 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 
+import { applyDictionary as applySubstitution } from '@pipe/protocol';
+
 import { resolveDictionaryPath } from './paths.js';
 
 export type Dictionary = Record<string, string>;
@@ -56,41 +58,16 @@ export function loadOptionalDictionary(dictionaryRef: string | undefined): Dicti
   return dictionaryRef ? loadDictionary(dictionaryRef) : {};
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Mirrors bridge's own applyDictionary (apps/frontend/src/pages/purge/purgeUtils.ts):
-// longest-first so a term that's a prefix of another never shadows it, and
-// unicode-aware word boundaries so e.g. a key "id" doesn't match inside
-// "userId" or "валидный".
-function buildReplacer(pairs: [needle: string, replacement: string][]): (text: string) => string {
-  const nonEmpty = pairs.filter(([needle]) => needle.length > 0);
-
-  if (nonEmpty.length === 0) {
-    return (text) => text;
-  }
-
-  const sorted = [...nonEmpty].sort((a, b) => b[0].length - a[0].length);
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}_])(${sorted.map(([needle]) => escapeRegExp(needle)).join('|')})(?![\\p{L}\\p{N}_])`,
-    'gu',
-  );
-  const replacementByNeedle = new Map(sorted);
-
-  return (text: string) => text.replace(pattern, (match) => replacementByNeedle.get(match) ?? match);
-}
-
 // push direction: real value (key) -> placeholder (value), before it leaves this machine.
 // Matches Purge's own convention — you type the real term as "key" and it
-// suggests a same-length random "value" as the placeholder.
+// suggests a same-length random "value" as the placeholder. The actual
+// longest-first, Unicode-boundary substitution lives in @pipe/protocol,
+// shared with reports and bridge (see that package for the algorithm).
 export function toRemote(dictionary: Dictionary, text: string): string {
-  const replacer = buildReplacer(Object.entries(dictionary));
-  return replacer(text);
+  return applySubstitution(text, new Map(Object.entries(dictionary))).result;
 }
 
 // pull direction: placeholder (value) -> real value (key), after it arrives.
 export function toLocal(dictionary: Dictionary, text: string): string {
-  const replacer = buildReplacer(Object.entries(dictionary).map(([key, value]) => [value, key]));
-  return replacer(text);
+  return applySubstitution(text, new Map(Object.entries(dictionary).map(([key, value]) => [value, key]))).result;
 }

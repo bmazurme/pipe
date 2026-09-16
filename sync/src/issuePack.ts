@@ -3,14 +3,16 @@ import path from 'node:path';
 
 import AdmZip from 'adm-zip';
 
+import { buildArchive as buildArchiveGeneric, assertSchemaVersion, type BaseManifest, type PackedFile } from '@pipe/protocol';
+
 import { type Dictionary, toLocal } from './dictionary.js';
-import { contentHash, MANIFEST_ENTRY as LEGACY_MANIFEST_ENTRY, type PackedFile } from './pack.js';
+import { MANIFEST_ENTRY as LEGACY_MANIFEST_ENTRY } from './pack.js';
 
 // Matches reports' subscription/pack.ts (MANIFEST_ENTRY) — the manifest name
 // used inside a parcel addressed by GitLab issue rather than by project name.
 export const SUBSCRIPTION_MANIFEST_ENTRY = '__subscription_manifest__.json';
 
-export interface SubscriptionManifest {
+export interface SubscriptionManifest extends BaseManifest {
   issueId: string;
   issueIid: string;
   issueTitle: string;
@@ -18,22 +20,14 @@ export interface SubscriptionManifest {
   projectId: number;
   branch: string;
   createdAt: string;
-  contentHash: string;
 }
 
 export function buildIssueArchive(
   files: PackedFile[],
-  manifest: Omit<SubscriptionManifest, 'contentHash'>,
+  manifest: Omit<SubscriptionManifest, 'contentHash' | 'schemaVersion'>,
 ): Buffer {
-  const fullManifest: SubscriptionManifest = { ...manifest, contentHash: contentHash(files) };
-  const zip = new AdmZip();
-
-  for (const file of files) {
-    zip.addFile(file.relPath, Buffer.from(file.content, 'utf-8'));
-  }
-  zip.addFile(SUBSCRIPTION_MANIFEST_ENTRY, Buffer.from(JSON.stringify(fullManifest, null, 2), 'utf-8'));
-
-  return zip.toBuffer();
+  const { buffer } = buildArchiveGeneric<SubscriptionManifest>(SUBSCRIPTION_MANIFEST_ENTRY, files, manifest);
+  return buffer;
 }
 
 // Recognizes either manifest name actually present in the archive: the
@@ -65,11 +59,10 @@ export function extractIssueArchive(buffer: Buffer): {
     .map((entry) => ({ relPath: entry.entryName, content: entry.getData().toString('utf-8') }));
 
   if (subscriptionEntry) {
-    return {
-      manifest: JSON.parse(subscriptionEntry.getData().toString('utf-8')) as SubscriptionManifest,
-      files,
-      legacyManifest: false,
-    };
+    const manifest = JSON.parse(subscriptionEntry.getData().toString('utf-8')) as SubscriptionManifest;
+    assertSchemaVersion(manifest, SUBSCRIPTION_MANIFEST_ENTRY);
+
+    return { manifest, files, legacyManifest: false };
   }
 
   const legacy = JSON.parse(legacyEntry!.getData().toString('utf-8')) as {
@@ -87,6 +80,7 @@ export function extractIssueArchive(buffer: Buffer): {
       branch: '',
       createdAt: legacy.createdAt,
       contentHash: legacy.contentHash,
+      schemaVersion: 0,
     },
     files,
     legacyManifest: true,

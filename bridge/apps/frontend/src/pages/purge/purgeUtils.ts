@@ -1,12 +1,20 @@
+// Subpath import (not the package root) so bridge's browser bundle only
+// pulls in the isomorphic dictionary module, not @pipe/protocol's Node-only
+// pieces (encryption.ts uses node:crypto, pack.ts/walk.ts use adm-zip/fs) —
+// importing the root barrel here broke `vite build` for exactly that reason.
+import { applyDictionary } from '@pipe/protocol/dictionary';
+
 import { PurgeEntry } from '../../store/api';
 
 export type Direction = 'keyToValue' | 'valueToKey';
 
-const SUGGESTION_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+// The longest-first, Unicode-boundary substitution now lives in
+// @pipe/protocol, shared with sync's dictionary.ts and reports'
+// subscription/dictionary.ts. Re-exported here so existing imports
+// (`from './purgeUtils'`) don't need to change.
+export { applyDictionary };
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const SUGGESTION_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 function randomToken(length: number): string {
   let result = '';
@@ -49,35 +57,6 @@ export function buildDictionary(
   }
 
   return map;
-}
-
-export function applyDictionary(
-  text: string,
-  dictionary: Map<string, string>,
-): { result: string; count: number } {
-  if (!dictionary.size || !text) {
-    return { result: text, count: 0 };
-  }
-
-  // Longest terms first so a multi-word key matches before a shorter one
-  // that happens to be its prefix. Plain \b only recognizes ASCII word
-  // characters, so it never finds a boundary around Cyrillic text — the
-  // \p{L}/\p{N} lookaround below works for any script.
-  const terms = [...dictionary.keys()]
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegExp);
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}_])(${terms.join('|')})(?![\\p{L}\\p{N}_])`,
-    'gu',
-  );
-
-  let count = 0;
-  const result = text.replace(pattern, (match) => {
-    count += 1;
-    return dictionary.get(match) ?? match;
-  });
-
-  return { result, count };
 }
 
 export interface ImportedEntry {

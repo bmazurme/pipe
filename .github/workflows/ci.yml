@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22.18.0'
+
+jobs:
+  protocol:
+    name: protocol (build, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        working-directory: packages/protocol
+        run: npm run build
+
+      - name: Unit tests (includes the sync/reports interop round-trip)
+        working-directory: packages/protocol
+        run: node --test 'dist/**/*.test.js'
+
+  sync:
+    name: sync (build, tests)
+    runs-on: ubuntu-latest
+    needs: protocol
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+
+      - run: npm ci
+        working-directory: sync
+      - run: npm run build
+        working-directory: sync
+      - run: node --test 'dist/**/*.test.js'
+        working-directory: sync
+
+  reports:
+    name: reports (build, tests)
+    runs-on: ubuntu-latest
+    needs: protocol
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+
+      # reports has its own nested npm workspaces (packages/client, server,
+      # shared) — installed and run from its own root, same as it is today.
+      - run: npm ci
+        working-directory: reports
+
+      - name: Build shared
+        run: npm run build --workspace=packages/shared
+        working-directory: reports
+
+      - name: Server tests
+        run: npm test --workspace=packages/server
+        working-directory: reports
+
+      - name: Client lint
+        run: npm run lint --workspace=packages/client
+        working-directory: reports
+      - name: Client build
+        run: npm run build --workspace=packages/client
+        working-directory: reports
+      - name: Client tests
+        run: npm test --workspace=packages/client
+        working-directory: reports
+
+  bridge:
+    name: bridge (lint, build, tests)
+    runs-on: ubuntu-latest
+    needs: protocol
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+
+      # bridge has its own nested npm workspaces (apps/backend, apps/frontend)
+      # — installed and run from its own root, same as it is today. Lifted
+      # from bridge/.github/workflows/ci.yml, which GitHub Actions no longer
+      # discovers now that bridge is a subtree instead of a repo root.
+      - run: npm ci
+        working-directory: bridge
+
+      - name: Backend ESLint
+        working-directory: bridge/apps/backend
+        run: npx eslint "{src,test}/**/*.ts"
+      - name: Backend build
+        run: npm run build -w backend
+        working-directory: bridge
+      - name: Backend unit tests
+        run: npm test -w backend -- --passWithNoTests
+        working-directory: bridge
+
+      - name: Frontend ESLint
+        run: npm run lint -w frontend
+        working-directory: bridge
+      - name: Frontend production build
+        working-directory: bridge/apps/frontend
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          echo "VITE_API_URL=${VITE_API_URL:-http://localhost:3002}" > .env.production
+          npm run build
+      - name: Frontend unit tests
+        run: npm test -w frontend
+        working-directory: bridge

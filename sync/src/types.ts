@@ -1,3 +1,5 @@
+import type { BaseManifest } from '@pipe/protocol';
+
 export interface ProjectConfig {
   name: string;
   path: string;
@@ -54,11 +56,10 @@ export interface StoredFileResponse {
   createdAt: string;
 }
 
-export interface SyncManifest {
+export interface SyncManifest extends BaseManifest {
   project: string;
   machine: string;
   createdAt: string;
-  contentHash: string;
 }
 
 // agent-runner only — remembers the content hash of the last result *it*

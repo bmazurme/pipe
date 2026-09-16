@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@pipe/protocol": "file:../../../packages/protocol",
     "@gravity-ui/date-components": "^4.0.0",
     "@gravity-ui/date-utils": "^2.7.1",
     "@gravity-ui/icons": "^2.13.0",

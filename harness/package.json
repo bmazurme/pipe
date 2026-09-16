@@ -1,0 +1,22 @@
+{
+  "name": "@pipe/harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pipe-status: reads sync's and reports' local state files and prints one merged summary of in-flight tasks.",
+  "type": "module",
+  "bin": {
+    "pipe-status": "./dist/status.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b -w",
+    "start": "node dist/status.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -76,6 +76,7 @@ describe('extractIssue', () => {
     branch: 'user-20260914-42',
     createdAt: '2026-09-14T10:00:00.000Z',
     contentHash: 'deadbeef',
+    schemaVersion: 1,
   };
 
   it('de-anonymizes title/description and writes ISSUE.md into the project', () => {
