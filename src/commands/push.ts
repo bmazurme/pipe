@@ -1,6 +1,6 @@
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
-import { loadDictionary, toRemote } from '../dictionary.js';
+import { loadOptionalDictionary, toRemote } from '../dictionary.js';
 import { buildArchive, readAndTransform } from '../pack.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
@@ -8,7 +8,7 @@ import { walkProjectFiles } from '../walk.js';
 export async function pushCommand(name: string, options: { force?: boolean }): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
-  const dictionary = loadDictionary(project.dictionary);
+  const dictionary = loadOptionalDictionary(project.dictionary);
 
   const relPaths = await walkProjectFiles(project.path, projectInclude(project), projectExclude(project));
   if (relPaths.length === 0) {

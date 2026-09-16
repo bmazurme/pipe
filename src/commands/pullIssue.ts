@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
-import { loadDictionary, toLocal } from '../dictionary.js';
+import { loadOptionalDictionary, toLocal } from '../dictionary.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
@@ -26,7 +26,7 @@ export async function pullIssueCommand(
     );
   }
 
-  const dictionary = loadDictionary(project.dictionary);
+  const dictionary = loadOptionalDictionary(project.dictionary);
   const client = new BridgeClient(config.bridge.apiUrl);
 
   const plainName = issueParcelName(projectId, iid, false);

@@ -5,6 +5,7 @@ import { addCommand, listCommand, removeCommand } from './commands/add.js';
 import { loginCommand } from './commands/login.js';
 import { loginGitlabCommand } from './commands/loginGitlab.js';
 import { generateKeysCommand } from './commands/generateKeys.js';
+import { agentRunnerCommand } from './commands/agentRunner.js';
 import { pushCommand } from './commands/push.js';
 import { pullCommand } from './commands/pull.js';
 import { pushIssueCommand } from './commands/pushIssue.js';
@@ -28,8 +29,8 @@ program
   .action(loginCommand);
 
 program
-  .command('add <name> <path> <dictionary>')
-  .description('Track a project folder under <name>, using the given dictionary file')
+  .command('add <name> <path> [dictionary]')
+  .description('Track a project folder under <name>; omit dictionary for a project that never de-/anonymizes (e.g. agent-runner)')
   .action(addCommand);
 
 program
@@ -83,6 +84,16 @@ program
   )
   .option('-f, --force', 'overwrite existing key files')
   .action((name, options) => generateKeysCommand(name, options));
+
+program
+  .command('agent-runner <name>')
+  .description(
+    'Poll bridge for GitLab-issue parcels, run Claude Code on each in an isolated git worktree, ' +
+      'push before/after commits to the branch on origin, and push the result back to bridge. ' +
+      'No dictionary is used here — de-/anonymization stays reports\' responsibility.',
+  )
+  .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
+  .action((name, options) => agentRunnerCommand(name, options));
 
 // fetch() wraps every network-level failure (DNS, TCP, TLS, proxy) as a bare
 // "TypeError: fetch failed" — the actual reason only shows up in `.cause`,

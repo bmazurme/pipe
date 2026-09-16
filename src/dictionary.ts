@@ -49,6 +49,13 @@ export function loadDictionary(dictionaryRef: string): Dictionary {
   return parseDictionaryFile(readFileSync(path, 'utf-8'), path);
 }
 
+// Projects with no dictionary configured (agent-runner's whole point — see
+// README "agent-runner") get a no-op dictionary: toRemote/toLocal both
+// become identity, content passes through unchanged.
+export function loadOptionalDictionary(dictionaryRef: string | undefined): Dictionary {
+  return dictionaryRef ? loadDictionary(dictionaryRef) : {};
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

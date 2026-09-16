@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
-import { loadDictionary, toRemote } from '../dictionary.js';
+import { loadOptionalDictionary, toRemote } from '../dictionary.js';
 import { encryptBuffer } from '../encryption.js';
 import { getCurrentBranch } from '../gitStatus.js';
 import { getIssue } from '../gitlabClient.js';
@@ -20,7 +20,7 @@ export function issueParcelName(projectId: string, iid: string, encrypted: boole
 export async function pushIssueCommand(name: string, projectId: string, iid: string): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
-  const dictionary = loadDictionary(project.dictionary);
+  const dictionary = loadOptionalDictionary(project.dictionary);
 
   if (!config.gitlab?.apiUrl) {
     throw new Error(

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
-import { loadDictionary, toLocal } from '../dictionary.js';
+import { loadOptionalDictionary, toLocal } from '../dictionary.js';
 import { extractArchive } from '../pack.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { getLastHash, setLastHash } from '../state.js';
@@ -19,7 +19,7 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
     );
   }
 
-  const dictionary = loadDictionary(project.dictionary);
+  const dictionary = loadOptionalDictionary(project.dictionary);
   const client = new BridgeClient(config.bridge.apiUrl);
 
   const filename = `${name}.sync.zip`;

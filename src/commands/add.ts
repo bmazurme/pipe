@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { loadConfig, saveConfig } from '../config.js';
 
-export function addCommand(name: string, projectPath: string, dictionary: string): void {
+export function addCommand(name: string, projectPath: string, dictionary?: string): void {
   const config = loadConfig();
 
   if (config.projects.some((p) => p.name === name)) {
@@ -16,7 +16,10 @@ export function addCommand(name: string, projectPath: string, dictionary: string
   });
 
   saveConfig(config);
-  console.log(`Tracking "${name}" -> ${path.resolve(projectPath)} (dictionary: ${dictionary})`);
+  console.log(
+    `Tracking "${name}" -> ${path.resolve(projectPath)}` +
+      (dictionary ? ` (dictionary: ${dictionary})` : ' (no dictionary — content passes through unchanged)'),
+  );
 }
 
 export function removeCommand(name: string): void {
@@ -36,11 +39,11 @@ export function listCommand(): void {
   const config = loadConfig();
 
   if (config.projects.length === 0) {
-    console.log('No projects tracked yet. Use "sync-cli add <name> <path> <dictionary>".');
+    console.log('No projects tracked yet. Use "sync-cli add <name> <path> [dictionary]".');
     return;
   }
 
   for (const project of config.projects) {
-    console.log(`${project.name}\t${project.path}\t${project.dictionary}`);
+    console.log(`${project.name}\t${project.path}\t${project.dictionary ?? '(no dictionary)'}`);
   }
 }
