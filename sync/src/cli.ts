@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { addCommand, listCommand, removeCommand } from './commands/add.js';
 import { loginCommand } from './commands/login.js';
 import { loginGitlabCommand } from './commands/loginGitlab.js';
+import { loginApiKeyCommand } from './commands/loginApiKey.js';
 import { generateKeysCommand } from './commands/generateKeys.js';
 import { agentRunnerCommand } from './commands/agentRunner.js';
 import { pushCommand } from './commands/push.js';
@@ -27,6 +28,14 @@ program
   .command('login <refreshToken>')
   .description('Store bridge\'s refresh token (copy the bridgeRefreshToken cookie value after signing in via a browser)')
   .action(loginCommand);
+
+program
+  .command('login-api-key <apiKey>')
+  .description(
+    'Store a bridge personal API key (mint one from bridge\'s Profile page → API keys) — ' +
+      'preferred over "login" for an unattended machine, since it does not impersonate a human session',
+  )
+  .action(loginApiKeyCommand);
 
 program
   .command('add <name> <path> [dictionary]')

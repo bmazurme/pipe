@@ -51,6 +51,13 @@ export class BridgeClient {
   constructor(private readonly apiUrl: string) {}
 
   private async authHeader(): Promise<Record<string, string>> {
+    // An API key (see "login-api-key") needs no refresh dance at all — it's
+    // a static credential, presented as-is until revoked.
+    const { apiKey } = loadCredentials();
+    if (apiKey) {
+      return { Authorization: `Bearer ${apiKey}` };
+    }
+
     if (!this.accessToken) {
       this.accessToken = await refreshAccessToken(this.apiUrl);
     }

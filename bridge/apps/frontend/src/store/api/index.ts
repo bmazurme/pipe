@@ -5,6 +5,7 @@ export { default as usersApi } from './users-api';
 export { default as storageApi } from './storage-api';
 export { default as purgeApi } from './purge-api';
 export { default as sessionsApi } from './sessions-api';
+export { default as apiKeysApi } from './api-keys-api';
 export { default as timeApi } from './time-api';
 
 export * from './auth-api/endpoints';
@@ -12,4 +13,5 @@ export * from './users-api/endpoints';
 export * from './storage-api/endpoints';
 export * from './purge-api/endpoints';
 export * from './sessions-api/endpoints';
+export * from './api-keys-api/endpoints';
 export * from './time-api/endpoints';

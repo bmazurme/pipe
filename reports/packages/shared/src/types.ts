@@ -43,6 +43,11 @@ export type SettingsType = {
   bridgeApiUrl: string;
   bridgeApiKey: string;
   bridgeRefreshToken: string;
+  // Bridge Storage personal API key (Profile page → API keys) —
+  // distinct from bridgeApiKey above, which is the unrelated shared secret
+  // for bridge's /api/v1/time/* endpoints. Preferred over bridgeRefreshToken
+  // when set: no impersonated browser session, no rotation to persist.
+  bridgeStorageApiKey: string;
 };
 
 export type DayOffsImportType = {

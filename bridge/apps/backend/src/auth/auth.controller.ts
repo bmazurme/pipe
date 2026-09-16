@@ -1,10 +1,12 @@
 import {
+  Body,
   ClassSerializerInterceptor,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseIntPipe,
   Post,
@@ -16,8 +18,12 @@ import {
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 
+import { ApiKeysService } from './api-keys.service';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ApiKeyResponseDto } from './dto/api-key-response.dto';
+import { CreateApiKeyDto } from './dto/create-api-key.dto';
+import { CreatedApiKeyResponseDto } from './dto/created-api-key.response.dto';
 import { JwtGuard } from './guards/jwt.guard';
 import {
   RefreshTokenGuard,
@@ -27,7 +33,10 @@ import {
 @Controller('api/v1/auth')
 @UseInterceptors(ClassSerializerInterceptor)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly apiKeysService: ApiKeysService,
+  ) {}
 
   @UseGuards(RefreshTokenGuard)
   @Get('check')
@@ -78,5 +87,43 @@ export class AuthController {
       id,
       currentUser.sessionId,
     );
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('api-keys')
+  @ApiOperation({
+    summary:
+      'Create a personal API key (for machine callers like sync-cli, that cannot go through OAuth)',
+  })
+  async createApiKey(
+    @Body() dto: CreateApiKeyDto,
+    @CurrentUser() currentUser: { id: number },
+  ) {
+    const created = await this.apiKeysService.create(currentUser.id, dto.name);
+    return CreatedApiKeyResponseDto.fromCreatedApiKey(created);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('api-keys')
+  @ApiOperation({ summary: 'List active API keys for current user' })
+  async listApiKeys(@CurrentUser() currentUser: { id: number }) {
+    const apiKeys = await this.apiKeysService.findActiveByUser(currentUser.id);
+    return apiKeys.map(ApiKeyResponseDto.fromEntity);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('api-keys/:id')
+  @ApiOperation({ summary: 'Revoke an API key' })
+  async revokeApiKey(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ) {
+    const revoked = await this.apiKeysService.revoke(id, currentUser.id);
+
+    if (!revoked) {
+      throw new NotFoundException('API key not found');
+    }
+
+    return { message: 'API key revoked' };
   }
 }

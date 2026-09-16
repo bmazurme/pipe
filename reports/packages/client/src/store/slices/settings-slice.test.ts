@@ -17,6 +17,7 @@ describe('settings slice', () => {
       bridgeApiUrl: '',
       bridgeApiKey: '',
       bridgeRefreshToken: '',
+      bridgeStorageApiKey: '',
     });
   });
 
@@ -30,6 +31,7 @@ describe('settings slice', () => {
       bridgeApiUrl: 'http://localhost:3002/api/v1/time/export/day-offs',
       bridgeApiKey: 'dev-key',
       bridgeRefreshToken: 'dev-refresh-token',
+      bridgeStorageApiKey: 'brk_dev-key',
     };
 
     const state = settingsReducer(initialStateSettings, setSettings(next));

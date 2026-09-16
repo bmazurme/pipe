@@ -3,6 +3,7 @@ import './pg-timestamp-parser';
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 
+import { ApiKey } from './auth/entities/api-key.entity';
 import { Session } from './auth/entities/session.entity';
 import { PurgeEntry } from './purge/entities/purge-entry.entity';
 import { StoredFile } from './storage/entities/stored-file.entity';
@@ -19,6 +20,14 @@ export const AppDataSource = new DataSource({
   username: process.env.POSTGRES_USER ?? 'postgres',
   password: process.env.POSTGRES_PASSWORD ?? 'postgres',
   database: process.env.POSTGRES_DB ?? 'ntlstl-db',
-  entities: [User, StoredFile, PurgeEntry, Session, DayOff, TimeReportEntry],
+  entities: [
+    User,
+    StoredFile,
+    PurgeEntry,
+    Session,
+    ApiKey,
+    DayOff,
+    TimeReportEntry,
+  ],
   migrations: ['src/migrations/*.ts'],
 });

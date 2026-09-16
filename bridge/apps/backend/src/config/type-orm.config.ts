@@ -3,6 +3,7 @@ import { join } from 'path';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+import { ApiKey } from '../auth/entities/api-key.entity';
 import { Session } from '../auth/entities/session.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
@@ -27,6 +28,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         StoredFile,
         PurgeEntry,
         Session,
+        ApiKey,
         DayOff,
         TimeReportEntry,
       ],

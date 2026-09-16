@@ -62,11 +62,14 @@ sibling apps on the same parent domain caused a name collision before),
 **reports** (`SettingsType`, stored in the gitignored
 `reports/packages/server/src/settings/settings.json`, edited from the
 client's Settings page): `gitlabUrl`, `privateToken` (GitLab PAT),
-`bridgeApiUrl`, `bridgeApiKey`, `bridgeRefreshToken` (pasted from a bridge
-browser session cookie — see roadmap #8 below).
+`bridgeApiUrl`, `bridgeApiKey` (the unrelated `TIME_EXPORT_API_KEY` shared
+secret), `bridgeStorageApiKey` (personal bridge API key, preferred — see
+"Unified machine auth" below), `bridgeRefreshToken` (fallback: pasted from a
+bridge browser session cookie).
 
-**sync** (`sync/.sync-credentials.json`, `sync-cli login`/`login-gitlab`,
-gitignored): `refreshToken` (bridge), `gitlabToken` (issue mode only).
+**sync** (`sync/.sync-credentials.json`, `sync-cli login`/`login-gitlab`/`login-api-key`,
+gitignored): `refreshToken` (bridge, fallback), `apiKey` (bridge, preferred
+— see "Unified machine auth" below), `gitlabToken` (issue mode only).
 Per-project encryption key pairs live under `sync/keys/` (also gitignored).
 
 ## State files
@@ -114,21 +117,39 @@ allowlists/thresholds and their reasoning). It does not run in
 sync's README) — there's no "did the dictionary miss something" question to
 ask when no dictionary is in play.
 
+## Unified machine auth
+
+bridge now supports personal, revocable API keys alongside its existing
+browser OAuth flow — additive, nothing about existing sessions changed.
+Mint one from bridge's Profile page ("API-ключи" card,
+[ApiKeysSection.tsx](bridge/apps/frontend/src/pages/profile/ApiKeysSection.tsx));
+it's shown once at creation and only its SHA-256 hash is stored
+([api-keys.service.ts](bridge/apps/backend/src/auth/api-keys.service.ts),
+migration
+[AddApiKeys](bridge/apps/backend/src/migrations/1789587965450-AddApiKeys.ts)).
+`StorageController` accepts either the key (`X-Api-Key` header, or
+`Authorization: Bearer brk_...`) or a normal OAuth access token
+([JwtOrApiKeyGuard](bridge/apps/backend/src/auth/guards/jwt-or-api-key.guard.ts)) —
+so a machine caller no longer has to impersonate a human's browser session.
+
+- **sync**: `sync-cli login-api-key <key>` ([commands/loginApiKey.ts](sync/src/commands/loginApiKey.ts))
+  stores it alongside (not instead of) the existing refresh-token login;
+  [bridgeClient.ts](sync/src/bridgeClient.ts) prefers it when present, with
+  no refresh dance needed at all.
+- **reports**: new Settings field "Bridge storage API key"
+  (`bridgeStorageApiKey`, distinct from the pre-existing `bridgeApiKey`,
+  which is the unrelated `TIME_EXPORT_API_KEY` shared secret) — preferred by
+  [subscription/bridge-client.ts](reports/packages/server/src/subscription/bridge-client.ts)
+  over replaying `bridgeRefreshToken` when set.
+
+The refresh-token replay (browser cookie pasted into sync/reports) still
+works unchanged for anyone who hasn't switched over.
+
 ## Roadmap (not yet implemented)
 
-These three were scoped out of the initial monorepo pass because each is a
-standalone feature touching live credential flows or production surface
-area, and deserves its own design pass rather than being bolted on here.
-
-### Unified machine auth
-
-Three different ways to hold credentials today: sync — a local file via
-`login`; reports — pasting a bridge browser session cookie into Settings;
-bridge itself — browser-only OAuth (Yandex). None of these work for an
-unattended agent or worker; today that means copying `bridgeRefreshToken`
-out of DevTools by hand. A real harness needs a service-account/API-key
-flow on bridge's backend instead. Touches bridge's auth module directly and
-needs a migration path for existing sessions — its own design pass.
+These two were scoped out of the initial monorepo pass because each is a
+standalone feature touching production surface area, and deserves its own
+design pass rather than being bolted on here.
 
 ### GitLab worker + ready notifications
 

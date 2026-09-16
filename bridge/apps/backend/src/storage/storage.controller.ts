@@ -15,14 +15,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { JwtGuard } from '../auth/guards/jwt.guard';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from './config/multer.config';
 import { StoredFileResponseDto } from './dto/stored-file-response.dto';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
 import { StorageService } from './storage.service';
 
 @Controller('api/v1/storage')
-@UseGuards(JwtGuard)
+@UseGuards(JwtOrApiKeyGuard)
 export class StorageController {
   constructor(private readonly storageService: StorageService) {}
 

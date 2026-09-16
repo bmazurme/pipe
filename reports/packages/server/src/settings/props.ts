@@ -15,6 +15,7 @@ const defaultSettings: SettingsType = {
   bridgeApiUrl: '',
   bridgeApiKey: '',
   bridgeRefreshToken: '',
+  bridgeStorageApiKey: '',
 };
 
 export const getSettings = (): SettingsType => {

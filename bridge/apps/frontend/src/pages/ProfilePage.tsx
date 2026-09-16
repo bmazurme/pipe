@@ -17,6 +17,7 @@ import { useAuth } from '../app/providers/AuthProvider';
 import { getInitial } from '../shared/ui/InitialIcon';
 import { PageHeader } from '../widgets/PageHeader';
 import { API_URL, getErrorMessage, useUpdateUserMutation } from '../store/api';
+import { ApiKeysSection } from './profile/ApiKeysSection';
 import { DevicesSection } from './profile/DevicesSection';
 import styles from './ProfilePage.module.css';
 
@@ -198,7 +199,10 @@ export function ProfilePage() {
           </Card>
         </div>
 
-        <DevicesSection />
+        <div className={styles.column}>
+          <DevicesSection />
+          <ApiKeysSection />
+        </div>
       </div>
     </div>
   );

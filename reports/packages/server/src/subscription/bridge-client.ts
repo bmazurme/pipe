@@ -36,12 +36,13 @@ function extractRotatedRefreshToken(response: Response): string | undefined {
 }
 
 /**
- * bridge's storage API is guarded by JwtGuard (interactive OAuth), unlike the
- * X-Api-Key-guarded /api/v1/time/* endpoints reports already uses. There's no
- * password login — the user copies bridge's bridgeRefreshToken cookie once
- * (after signing in via Yandex in a browser) into Settings; this mirrors
- * ntlstl.sync's bridgeClient.ts refresh flow to mint short-lived access
- * tokens from it, persisting any rotated refresh token back to settings.
+ * bridge's storage API accepts either a personal API key (preferred —
+ * see bridgeStorageApiKey in authorizedFetch below, minted from bridge's
+ * Profile page, no browser session involved) or, for back-compat, a
+ * replayed bridgeRefreshToken cookie: the user copies it once (after signing
+ * in via Yandex in a browser) into Settings, and this mirrors ntlstl.sync's
+ * bridgeClient.ts refresh flow to mint short-lived access tokens from it,
+ * persisting any rotated refresh token back to settings.
  */
 async function refreshAccessToken(): Promise<string> {
   const { bridgeRefreshToken } = getSettings();
@@ -76,7 +77,12 @@ async function refreshAccessToken(): Promise<string> {
 
 async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const origin = getOrigin();
-  const accessToken = await refreshAccessToken();
+  // A personal API key (Settings → "Bridge storage API key", minted from
+  // bridge's Profile page) needs no refresh dance at all — it's a static
+  // credential, presented as-is until revoked. Falls back to the
+  // bridgeRefreshToken replay above when it isn't set.
+  const { bridgeStorageApiKey } = getSettings();
+  const accessToken = bridgeStorageApiKey || (await refreshAccessToken());
   const url = `${origin}${path}`;
 
   const response = await fetch(url, {

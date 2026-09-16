@@ -26,7 +26,12 @@ export function loadCredentialsOrEmpty(): Partial<Credentials> {
 
 export function saveGitlabToken(gitlabToken: string): void {
   const current = loadCredentialsOrEmpty();
-  saveCredentials({ refreshToken: current.refreshToken ?? '', gitlabToken });
+  saveCredentials({ refreshToken: current.refreshToken ?? '', gitlabToken, apiKey: current.apiKey });
+}
+
+export function saveApiKey(apiKey: string): void {
+  const current = loadCredentialsOrEmpty();
+  saveCredentials({ refreshToken: current.refreshToken ?? '', gitlabToken: current.gitlabToken, apiKey });
 }
 
 export function saveCredentials(credentials: Credentials): void {

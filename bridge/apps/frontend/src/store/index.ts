@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 
 import {
+  apiKeysApi,
   authApi,
   purgeApi,
   sessionsApi,
@@ -9,6 +10,7 @@ import {
   usersApi,
 } from './api';
 import authReducer from './slices/auth-slice';
+import apiKeysReducer from './slices/api-keys-slice';
 import purgeReducer from './slices/purge-slice';
 import sessionsReducer from './slices/sessions-slice';
 import storageReducer from './slices/storage-slice';
@@ -25,12 +27,14 @@ export const store = configureStore({
     storage: storageReducer,
     purge: purgeReducer,
     sessions: sessionsReducer,
+    apiKeys: apiKeysReducer,
     time: timeReducer,
     [authApi.reducerPath]: authApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
     [storageApi.reducerPath]: storageApi.reducer,
     [purgeApi.reducerPath]: purgeApi.reducer,
     [sessionsApi.reducerPath]: sessionsApi.reducer,
+    [apiKeysApi.reducerPath]: apiKeysApi.reducer,
     [timeApi.reducerPath]: timeApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -40,6 +44,7 @@ export const store = configureStore({
       storageApi.middleware,
       purgeApi.middleware,
       sessionsApi.middleware,
+      apiKeysApi.middleware,
       timeApi.middleware,
     ),
 });

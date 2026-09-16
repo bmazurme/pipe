@@ -27,6 +27,7 @@ function Settings() {
   const [showToken, setShowToken] = useState(false);
   const [showBridgeKey, setShowBridgeKey] = useState(false);
   const [showBridgeRefreshToken, setShowBridgeRefreshToken] = useState(false);
+  const [showBridgeStorageApiKey, setShowBridgeStorageApiKey] = useState(false);
   const [setSettingsRequest, { isLoading: isSaving }] = useSetSettingsMutation();
   const [activeTab, setActiveTab] = useState('general');
 
@@ -234,12 +235,30 @@ function Settings() {
                   )}
                 />
                 <TextInput
+                  label="Bridge storage API key"
+                  type={showBridgeStorageApiKey ? 'text' : 'password'}
+                  value={form.bridgeStorageApiKey}
+                  onUpdate={handleChange('bridgeStorageApiKey')}
+                  autoComplete="off"
+                  note="Личный API-ключ (Профиль → API-ключи в bridge) — рекомендуется вместо refresh token ниже: не привязан к браузерной сессии, действует до отзыва"
+                  endContent={(
+                    <Button
+                      view="flat"
+                      size="s"
+                      onClick={() => setShowBridgeStorageApiKey((prev) => !prev)}
+                      aria-label={showBridgeStorageApiKey ? 'Скрыть ключ' : 'Показать ключ'}
+                    >
+                      <Icon data={showBridgeStorageApiKey ? EyeSlash : Eye} size={16} />
+                    </Button>
+                  )}
+                />
+                <TextInput
                   label="Bridge refresh token"
                   type={showBridgeRefreshToken ? 'text' : 'password'}
                   value={form.bridgeRefreshToken}
                   onUpdate={handleChange('bridgeRefreshToken')}
                   autoComplete="off"
-                  note="Значение cookie bridgeRefreshToken из браузера после входа в bridge — нужно для Subscription (push/pull через bridge Storage)"
+                  note="Значение cookie bridgeRefreshToken из браузера после входа в bridge — используется, только если Bridge storage API key не задан"
                   endContent={(
                     <Button
                       view="flat"

@@ -40,6 +40,10 @@ export interface Credentials {
   refreshToken: string;
   // Issue-mode only — GitLab personal access token, set via "login-gitlab".
   gitlabToken?: string;
+  // Set via "login-api-key" — a bridge personal API key. When present,
+  // bridgeClient sends it directly instead of replaying refreshToken through
+  // bridge's OAuth refresh dance (no impersonated human session required).
+  apiKey?: string;
 }
 
 export interface SyncState {
