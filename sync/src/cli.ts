@@ -11,6 +11,7 @@ import { pushCommand } from './commands/push.js';
 import { pullCommand } from './commands/pull.js';
 import { pushIssueCommand } from './commands/pushIssue.js';
 import { pullIssueCommand } from './commands/pullIssue.js';
+import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
 import { setupProxy } from './setupProxy.js';
 
 setupProxy();
@@ -84,7 +85,17 @@ program
       'compatible with reports\' Subscription module',
   )
   .option('-f, --force', 'pull even with a dirty git tree')
+  .option('-w, --watch <seconds>', 'keep polling every <seconds> until the result appears, then notify and exit')
   .action((name, projectId, iid, options) => pullIssueCommand(name, projectId, iid, options));
+
+program
+  .command('gitlab-worker <name>')
+  .description(
+    'Poll GitLab for open issues assigned to you on this project, and push-issue each one not already sent, ' +
+      'without having to type the issue id by hand',
+  )
+  .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
+  .action((name, options) => gitlabWorkerCommand(name, options));
 
 program
   .command('generate-keys <name>')

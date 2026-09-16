@@ -145,28 +145,54 @@ so a machine caller no longer has to impersonate a human's browser session.
 The refresh-token replay (browser cookie pasted into sync/reports) still
 works unchanged for anyone who hasn't switched over.
 
+## GitLab worker + ready notifications
+
+Closes the two remaining manual steps around the parcel pipeline: noticing
+a new assigned GitLab issue, and noticing when its result is ready to pull.
+`agent-runner` already automated the *middle* of the pipeline (polls
+bridge, creates a worktree+branch, runs Claude, pushes the result back —
+see [commands/agentRunner.ts](sync/src/commands/agentRunner.ts)); this adds
+the front and back:
+
+- **`sync-cli gitlab-worker <name> [--watch <seconds>]`**
+  ([commands/gitlabWorker.ts](sync/src/commands/gitlabWorker.ts)) — polls
+  GitLab for open issues assigned to you on the tracked project
+  ([gitlabClient.ts](sync/src/gitlabClient.ts)'s new
+  `listAssignedOpenIssues`), and for each one not already sent
+  ([gitlabWorkerState.ts](sync/src/gitlabWorkerState.ts) tracks that,
+  `.gitlab-worker-state.json`, gitignored), pushes it as a parcel — the same
+  build-anonymize-scan-upload core `push-issue` already used, extracted into
+  `buildAndUploadIssueParcel` in
+  [commands/pushIssue.ts](sync/src/commands/pushIssue.ts) so both share it.
+  No git branch/worktree operation happens on the sending side: agent-runner
+  already creates the real task branch itself from `baseBranch` once the
+  parcel arrives, so the sender only needs a synthetic
+  `task/<projectId>-<iid>` label for addressing.
+- **`sync-cli pull-issue <name> <projectId> <iid> --watch <seconds>`**
+  ([commands/pullIssue.ts](sync/src/commands/pullIssue.ts)) — polls until a
+  result parcel appears, then pulls it and fires a notification, instead of
+  the human re-running `pull-issue` by hand to check.
+- **[notify.ts](sync/src/notify.ts)**: best-effort OS notification (macOS
+  `osascript`, Linux `notify-send`, console fallback everywhere else) used
+  by both of the above. Never blocks or fails the actual push/pull.
+
+**Deliberately not touched this pass**: `agent-runner`'s own "result ready"
+notification (i.e. notifying *from* the machine that ran the agent, in
+addition to the *waiting* side above) — the standalone `sync` repo has
+real uncommitted work on `agentRunner.ts`/`gitWorktree.ts`/`agentState.ts`
+(its `AgentRunnerState.pending` field already hints at an unfinished
+confirm-before-send flow), so everything here lives in new files plus one
+appended command block in `cli.ts`, rather than adding to files already
+mid-edit elsewhere.
+
 ## Roadmap (not yet implemented)
-
-These two were scoped out of the initial monorepo pass because each is a
-standalone feature touching production surface area, and deserves its own
-design pass rather than being bolted on here.
-
-### GitLab worker + ready notifications
-
-Already specced in detail in
-[sync/docs/roadmap.md](sync/docs/roadmap.md) (items 1, 3, 4): a GitLab
-client, a `__sync_tasks__.json` snapshot traveling with the code, and the
-full task → branch → agent → review pipeline. Linked here rather than
-re-derived. This is also what makes the next item necessary — without it,
-the current one-parcel-at-a-time flow is driven by a human and that's
-enough.
 
 ### Multi-parcel addressing
 
 sync's own "Ограничения текущей версии" section already names this:
 "one unread parcel per channel" only holds up because pushes and pulls
-today are synchronous and human-paced. A GitLab worker producing several
-task parcels in parallel needs bridge's storage addressed by task/branch,
-not by project name. Blocked on the GitLab worker above actually existing
-first — no reason to redesign addressing for a producer that isn't there
-yet.
+were, until now, synchronous and human-paced. `gitlab-worker` producing
+several task parcels in a row (each still delivered one at a time, but no
+longer human-paced) makes this a real, not theoretical, gap: bridge's
+storage needs addressing by task/branch, not just by matching filename
+patterns client-side the way `agent-runner`/`gitlab-worker` do today.

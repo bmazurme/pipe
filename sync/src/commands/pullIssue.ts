@@ -7,15 +7,18 @@ import { loadOptionalDictionary, toLocal } from '../dictionary.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
+import { notify } from '../notify.js';
 import { resolveFromRoot } from '../paths.js';
 import { issueParcelName } from './pushIssue.js';
 
-export async function pullIssueCommand(
+// Returns true once a parcel was found and pulled, false when there's
+// nothing on bridge yet — the shape --watch below polls on.
+async function tryPullOnce(
   name: string,
   projectId: string,
   iid: string,
   options: { force?: boolean },
-): Promise<void> {
+): Promise<boolean> {
   const config = loadConfig();
   const project = findProject(config, name);
 
@@ -38,7 +41,7 @@ export async function pullIssueCommand(
   const newest = candidates[0];
   if (!newest) {
     console.log(`Nothing to pull for issue #${iid} (project ${projectId}) — no one has pushed it yet.`);
-    return;
+    return false;
   }
 
   const isEncrypted = newest.originalName === encryptedName;
@@ -79,4 +82,37 @@ export async function pullIssueCommand(
   console.log(
     `Pulled ${files.length} files into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
   );
+
+  return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function pullIssueCommand(
+  name: string,
+  projectId: string,
+  iid: string,
+  options: { force?: boolean; watch?: string },
+): Promise<void> {
+  if (!options.watch) {
+    await tryPullOnce(name, projectId, iid, options);
+    return;
+  }
+
+  const intervalSec = Number(options.watch);
+  if (!Number.isFinite(intervalSec) || intervalSec <= 0) {
+    throw new Error(`--watch expects a positive number of seconds, got "${options.watch}".`);
+  }
+
+  console.log(`Watching for issue #${iid} (project ${projectId})'s result every ${intervalSec}s. Ctrl+C to stop.`);
+  for (;;) {
+    const found = await tryPullOnce(name, projectId, iid, options);
+    if (found) {
+      notify('Result ready', `Issue #${iid} (project ${projectId}) pulled into ${findProject(loadConfig(), name).path}.`);
+      return;
+    }
+    await sleep(intervalSec * 1000);
+  }
 }

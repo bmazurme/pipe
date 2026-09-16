@@ -10,7 +10,7 @@
     "build": "tsc -b",
     "dev": "tsc -b -w",
     "start": "node dist/cli.js",
-    "test": "tsc -b && node --test 'dist/**/*.test.js'"
+    "test": "tsc -b && node --test --test-concurrency=1 'dist/**/*.test.js'"
   },
   "dependencies": {
     "@pipe/protocol": "file:../packages/protocol",

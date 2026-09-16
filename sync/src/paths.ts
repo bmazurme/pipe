@@ -9,6 +9,7 @@ export const CONFIG_PATH = path.join(ROOT_DIR, 'sync.config.json');
 export const CREDENTIALS_PATH = path.join(ROOT_DIR, '.sync-credentials.json');
 export const STATE_PATH = path.join(ROOT_DIR, '.sync-state.json');
 export const AGENT_STATE_PATH = path.join(ROOT_DIR, '.sync-agent-state.json');
+export const GITLAB_WORKER_STATE_PATH = path.join(ROOT_DIR, '.gitlab-worker-state.json');
 export const AGENT_WORK_DIR = path.join(ROOT_DIR, '.agent-work');
 export const DICTIONARIES_DIR = path.join(ROOT_DIR, 'dictionaries');
 

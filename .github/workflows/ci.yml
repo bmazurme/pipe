@@ -52,7 +52,7 @@ jobs:
         working-directory: sync
       - run: npm run build
         working-directory: sync
-      - run: node --test 'dist/**/*.test.js'
+      - run: node --test --test-concurrency=1 'dist/**/*.test.js'
         working-directory: sync
 
   reports:

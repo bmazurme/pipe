@@ -6,6 +6,7 @@ dist/
 # and sync state all differ per computer by design.
 .sync-credentials.json
 .sync-state.json
+.gitlab-worker-state.json
 dictionaries/*.json
 !dictionaries/*.example.json
 
