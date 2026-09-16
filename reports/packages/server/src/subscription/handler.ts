@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, relative, resolve } from 'path';
 import type { Request, Response } from 'express';
 import type { StreamEvent, SubscriptionIssueType, SubscriptionPublishPayload } from '@reports/shared';
+import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 
 import { getSettings } from '../settings/props';
 import { getProjectDict } from '../reports/project-dict-props';
@@ -111,11 +112,23 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
       content: applyDictionary(readFileSync(join(trackedProject.path, relPath), 'utf-8'), dictionary, 'toRemote'),
     }));
 
+    const issueTitle = applyDictionary(issue.title, dictionary, 'toRemote');
+    const issueDescription = applyDictionary(issue.description ?? '', dictionary, 'toRemote');
+
+    const leaks = scanForLeaks([
+      ...files.map((f) => ({ source: f.relPath, content: f.content })),
+      { source: 'issue title', content: issueTitle },
+      { source: 'issue description', content: issueDescription },
+    ]);
+    if (leaks.length > 0) {
+      console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
+    }
+
     const archive = buildArchive(files, {
       issueId: issue.id,
       issueIid: issue.iid,
-      issueTitle: applyDictionary(issue.title, dictionary, 'toRemote'),
-      issueDescription: applyDictionary(issue.description ?? '', dictionary, 'toRemote'),
+      issueTitle,
+      issueDescription,
       projectId: issue.project_id,
       branch: state.branch,
       createdAt: new Date().toISOString(),

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
+
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
@@ -43,12 +45,23 @@ export async function pushIssueCommand(name: string, projectId: string, iid: str
 
   const files = readAndTransform(project.path, relPaths, (text) => toRemote(dictionary, text));
   const branch = getCurrentBranch(project.path);
+  const issueTitle = toRemote(dictionary, issue.title);
+  const issueDescription = toRemote(dictionary, issue.description ?? '');
+
+  const leaks = scanForLeaks([
+    ...files.map((f) => ({ source: f.relPath, content: f.content })),
+    { source: 'issue title', content: issueTitle },
+    { source: 'issue description', content: issueDescription },
+  ]);
+  if (leaks.length > 0) {
+    console.warn(formatLeakFindings(leaks));
+  }
 
   const archive = buildIssueArchive(files, {
     issueId: String(issue.id),
     issueIid: String(issue.iid),
-    issueTitle: toRemote(dictionary, issue.title),
-    issueDescription: toRemote(dictionary, issue.description ?? ''),
+    issueTitle,
+    issueDescription,
     projectId: issue.project_id,
     branch,
     createdAt: new Date().toISOString(),

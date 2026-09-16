@@ -12,7 +12,8 @@
     "./encryption": { "types": "./dist/encryption.d.ts", "default": "./dist/encryption.js" },
     "./dictionary": { "types": "./dist/dictionary.d.ts", "default": "./dist/dictionary.js" },
     "./pack": { "types": "./dist/pack.d.ts", "default": "./dist/pack.js" },
-    "./walk": { "types": "./dist/walk.d.ts", "default": "./dist/walk.js" }
+    "./walk": { "types": "./dist/walk.d.ts", "default": "./dist/walk.js" },
+    "./leakScan": { "types": "./dist/leakScan.d.ts", "default": "./dist/leakScan.js" }
   },
   "scripts": {
     "build": "tsc -b",

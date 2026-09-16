@@ -93,22 +93,32 @@ read with a warning, not an error. A parcel stamped with a `schemaVersion`
 newer than the reading build understands throws a clear error naming both
 versions, instead of silently misreading a format it doesn't recognize.
 
-## Roadmap (not yet implemented)
-
-These four were scoped out of the initial monorepo pass because each is a
-standalone feature touching live credential flows or production surface
-area, and deserves its own design pass rather than being bolted on here.
-
-### Anonymization completeness check
+## Anonymization completeness check
 
 A single dictionary substitution pass is fine while the other end of every
 parcel is "your own second machine." It stops being enough once a parcel
-might go to an external LLM provider. Needs a heuristic scanner (hostnames,
-emails, IP-looking tokens, high-entropy strings) run before `sync push`/`push-issue`
-and before reports' Subscription publish, warning on anything the active
-dictionary doesn't cover. Open question: false-positive rate has to be
-solved before this can be a hard gate rather than a warning — a scanner that
-cries wolf on every UUID will get ignored.
+might go to an external LLM provider. `@pipe/protocol`'s `scanForLeaks` runs
+a heuristic scan (email addresses, real-looking hostnames, IPv4 addresses,
+high-entropy token-shaped strings) over content *after* dictionary
+substitution, in both `sync push`/`push-issue`
+([commands/push.ts](sync/src/commands/push.ts),
+[commands/pushIssue.ts](sync/src/commands/pushIssue.ts)) and reports'
+`handlePushSubscriptionIssue`
+([subscription/handler.ts](reports/packages/server/src/subscription/handler.ts)),
+printing a warning (`console.warn`, via `formatLeakFindings`) for anything
+that still looks real. It is advisory only, not a gate — it doesn't block
+the push or throw — because the heuristic has real false-positive and
+false-negative rates (see `packages/protocol/src/leakScan.ts` for the exact
+allowlists/thresholds and their reasoning). It does not run in
+`agent-runner`, which is deliberately dictionary-free by design (see
+sync's README) — there's no "did the dictionary miss something" question to
+ask when no dictionary is in play.
+
+## Roadmap (not yet implemented)
+
+These three were scoped out of the initial monorepo pass because each is a
+standalone feature touching live credential flows or production surface
+area, and deserves its own design pass rather than being bolted on here.
 
 ### Unified machine auth
 

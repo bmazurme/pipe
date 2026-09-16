@@ -1,3 +1,5 @@
+import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
+
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadOptionalDictionary, toRemote } from '../dictionary.js';
@@ -17,6 +19,12 @@ export async function pushCommand(name: string, options: { force?: boolean }): P
   }
 
   const files = readAndTransform(project.path, relPaths, (text) => toRemote(dictionary, text));
+
+  const leaks = scanForLeaks(files.map((f) => ({ source: f.relPath, content: f.content })));
+  if (leaks.length > 0) {
+    console.warn(formatLeakFindings(leaks));
+  }
+
   const { buffer, manifest } = buildArchive(name, files);
 
   if (!options.force && manifest.contentHash === getLastHash(name)) {
