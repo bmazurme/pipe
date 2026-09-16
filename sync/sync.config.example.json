@@ -1,0 +1,22 @@
+{
+  "bridge": {
+    "apiUrl": "https://api.bridge.ntlstl.dev"
+  },
+  "gitlab": {
+    "apiUrl": "https://gitlab.example.com/api/v4"
+  },
+  "projects": [
+    {
+      "name": "bridge",
+      "path": "/Users/bogdanmazur/Documents/GitHub/bridge",
+      "dictionary": "dictionaries/bridge.json"
+    },
+    {
+      "name": "reports",
+      "path": "/Users/bogdanmazur/Documents/GitHub/reports",
+      "dictionary": "dictionaries/reports.json",
+      "publicKeyPath": "keys/reports-public.pem",
+      "privateKeyPath": "keys/reports-private.pem"
+    }
+  ]
+}

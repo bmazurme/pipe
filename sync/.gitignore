@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Machine-local, never shared: credentials, dictionaries (real secret values)
+# and sync state all differ per computer by design.
+.sync-credentials.json
+.sync-state.json
+dictionaries/*.json
+!dictionaries/*.example.json
+
+sync.config.json
+.DS_Store
