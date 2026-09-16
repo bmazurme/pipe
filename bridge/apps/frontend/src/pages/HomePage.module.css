@@ -1,0 +1,106 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mirrors the outlined Card treatment used on every other page, but on an
+   <a> so the row keeps native link behaviour. */
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--g-border-radius-l);
+  background: var(--g-color-base-generic-ultralight);
+  box-shadow: inset 0 0 0 1px var(--g-color-line-generic);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: inset 0 0 0 1px var(--ntlstl-brand);
+  transform: translateY(-1px);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--ntlstl-brand);
+  outline-offset: 2px;
+}
+
+.cardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--ntlstl-brand-glow);
+  color: var(--ntlstl-brand);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cardArrow {
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
+  color: var(--g-color-text-hint);
+}
+
+.card:hover .cardArrow {
+  color: var(--ntlstl-brand);
+}
+
+/* An unbuilt service is listed so the set of services reads as complete, but
+   it must not look or behave like something you can open. */
+.cardSoon {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cardSoon:hover {
+  box-shadow: inset 0 0 0 1px var(--g-color-line-generic);
+  transform: none;
+}
+
+.soonBadge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card:hover {
+    transform: none;
+  }
+}

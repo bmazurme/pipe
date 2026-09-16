@@ -1,0 +1,128 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 24px;
+  border: 1.5px dashed var(--g-color-line-generic-accent);
+  border-radius: var(--g-border-radius-l);
+  text-align: center;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.dropzoneActive {
+  border-color: var(--g-color-line-brand);
+  background: var(--g-color-base-selection);
+}
+
+.dropzoneIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+  transition: background 0.15s ease-out, color 0.15s ease-out;
+}
+
+.dropzoneActive .dropzoneIcon {
+  background: var(--g-color-base-selection-hover);
+  color: var(--g-color-text-brand);
+}
+
+.dropzoneHint {
+  margin-top: 4px;
+}
+
+/* Bounded so a long file name wraps inside the dropzone instead of stretching
+   it, and wide enough that the progress bar doesn't read as a hairline. */
+.uploadStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+}
+
+/* Several failed uploads are reported as one alert, one per line. */
+.errorAlert {
+  white-space: pre-line;
+}
+
+.filesCard {
+  padding: var(--ntlstl-card-padding);
+  /* Flex items default to min-width:auto, which would otherwise let a long
+     file name push the card past the viewport. */
+  min-width: 0;
+}
+
+.projectHint {
+  display: block;
+  margin: 4px 0 12px;
+}
+
+.projectForm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* Mirrors .deviceList on the profile page — same rhythm, same hover, so the
+   two lists in the app read as one component. */
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--g-border-radius-m);
+}
+
+.fileRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.fileIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+}
+
+.fileIconSkeleton {
+  flex-shrink: 0;
+}
+
+/* Without this the long file name stops the row from shrinking. */
+.fileInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}

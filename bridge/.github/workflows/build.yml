@@ -1,0 +1,298 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      keep_images:
+        description: 'How many images to keep on the swarm node (for rollback)'
+        required: false
+        default: '3'
+
+# One deploy at a time — two overlapping `docker stack deploy` runs against the
+# same swarm would fight over the rolling update.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & push images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Yandex Cloud CR Login
+        uses: yc-actions/yc-cr-login@v3
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      - name: Build and push backend image
+        env:
+          CR_HOST: ${{ secrets.CR_HOST }}
+          CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
+          CR_IMAGE: ${{ secrets.CR_BACKEND_IMAGE }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # The backend takes no build-time configuration: every value (DB,
+          # JWT, OAuth) is read at runtime, so the build context needs nothing
+          # beyond the source.
+          docker build -f apps/backend/Dockerfile \
+            -t "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" .
+          docker tag "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG"
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
+      - name: Build and push frontend image
+        env:
+          CR_HOST: ${{ secrets.CR_HOST }}
+          CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
+          CR_IMAGE: ${{ secrets.CR_FRONTEND_IMAGE }}
+          IMAGE_TAG: ${{ github.sha }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          # Vite inlines VITE_API_URL into the bundle at build time, so it has
+          # to be a build arg, not a runtime env var.
+          docker build -f apps/frontend/Dockerfile \
+            --build-arg VITE_API_URL="$VITE_API_URL" \
+            -t "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" .
+          docker tag "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG"
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
+  deploy:
+    name: Deploy to Docker Swarm
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    env:
+      STACK_NAME: bridge
+      # Deploy the exact image this run built, not :latest — the swarm records
+      # the tag in the service spec, which is what makes rollbacks meaningful.
+      IMAGE_TAG: ${{ github.sha }}
+      DOCKER_HOST: ssh://${{ secrets.SWARM_USER }}@${{ secrets.SWARM_HOST }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # The runner's registry credentials are forwarded to the swarm nodes by
+      # --with-registry-auth below, so the VM needs no docker login of its own.
+      - name: Yandex Cloud CR Login
+        uses: yc-actions/yc-cr-login@v3
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      - name: Set up SSH access to the swarm manager
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+          SWARM_SSH_KEY: ${{ secrets.SWARM_SSH_KEY }}
+          SWARM_SSH_KNOWN_HOSTS: ${{ secrets.SWARM_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SWARM_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          if [ -n "$SWARM_SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SWARM_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            # Trust-on-first-use fallback. Set SWARM_SSH_KNOWN_HOSTS to pin the
+            # host key instead of re-learning it on every run.
+            echo "::warning::SWARM_SSH_KNOWN_HOSTS is not set — falling back to ssh-keyscan"
+            ssh-keyscan -H "$SWARM_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          cat > ~/.ssh/config <<EOF
+          Host *
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Check the swarm is reachable
+        run: |
+          docker version --format 'daemon {{.Server.Version}} on {{.Server.Os}}/{{.Server.Arch}}'
+          if [ "$(docker info --format '{{.Swarm.ControlAvailable}}')" != 'true' ]; then
+            echo "::error::${{ secrets.SWARM_HOST }} is not a swarm manager — run deploy/swarm/bootstrap.sh on it first"
+            exit 1
+          fi
+
+      # `docker stack deploy` ignores env_file, so every value is interpolated
+      # here on the runner from GitHub secrets. Side effect: they are visible in
+      # `docker service inspect` on the VM.
+      - name: Deploy the stack
+        env:
+          CR_HOST: ${{ secrets.CR_HOST }}
+          CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
+          CR_BACKEND_IMAGE: ${{ secrets.CR_BACKEND_IMAGE }}
+          CR_FRONTEND_IMAGE: ${{ secrets.CR_FRONTEND_IMAGE }}
+          BACKEND_PUBLISHED_PORT: ${{ secrets.BACKEND_PUBLISHED_PORT }}
+          FRONTEND_PUBLISHED_PORT: ${{ secrets.FRONTEND_PUBLISHED_PORT }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          REFRESH_JWT_SECRET: ${{ secrets.REFRESH_JWT_SECRET }}
+          YANDEX_ID: ${{ secrets.YANDEX_ID }}
+          YANDEX_SECRET: ${{ secrets.YANDEX_SECRET }}
+          NOTES_YANDEX_REDIRECT: ${{ secrets.NOTES_YANDEX_REDIRECT }}
+          NOTES_TARGET_URL: ${{ secrets.NOTES_TARGET_URL }}
+          COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN }}
+          EMAILS: ${{ secrets.EMAILS }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          TIME_EXPORT_API_KEY: ${{ secrets.TIME_EXPORT_API_KEY }}
+          TIME_EXPORT_USER_ID: ${{ secrets.TIME_EXPORT_USER_ID }}
+        run: |
+          docker stack deploy \
+            --compose-file deploy/swarm/bridge-stack.yml \
+            --with-registry-auth \
+            --prune \
+            "$STACK_NAME"
+
+      - name: Wait for the rolling update to converge
+        run: |
+          services="${STACK_NAME}_backend ${STACK_NAME}_frontend"
+          deadline=$(( $(date +%s) + 300 ))
+
+          for svc in $services; do
+            while :; do
+              state=$(docker service inspect --format \
+                '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}completed{{end}}' "$svc")
+              replicas=$(docker service ls --filter "name=$svc" --format '{{.Replicas}}')
+
+              case "$state" in
+                completed|'')
+                  # Converged only once the running count matches the desired one.
+                  if [ -n "$replicas" ] && [ "${replicas%%/*}" = "${replicas##*/}" ]; then
+                    echo "$svc: $replicas ($state)"
+                    break
+                  fi
+                  ;;
+                rollback_completed|rollback_started|paused)
+                  echo "::error::$svc failed to update and swarm rolled it back (state: $state)"
+                  docker service ps --no-trunc "$svc"
+                  docker service logs --tail 100 "$svc" || true
+                  exit 1
+                  ;;
+              esac
+
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::$svc did not converge in time (state: $state, replicas: $replicas)"
+                docker service ps --no-trunc "$svc"
+                docker service logs --tail 100 "$svc" || true
+                exit 1
+              fi
+              sleep 5
+            done
+          done
+
+      - name: Smoke test
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+          SWARM_USER: ${{ secrets.SWARM_USER }}
+          BACKEND_PORT: ${{ secrets.BACKEND_PUBLISHED_PORT || '3300' }}
+          FRONTEND_PORT: ${{ secrets.FRONTEND_PUBLISHED_PORT || '3305' }}
+          PUBLIC_URL: ${{ secrets.HOST }}
+        run: |
+          # Published ports on the VM: what the reverse proxy talks to.
+          ssh "$SWARM_USER@$SWARM_HOST" '
+            set -e
+            for i in $(seq 1 20); do
+              if curl -sf "http://127.0.0.1:'"$BACKEND_PORT"'/" > /dev/null \
+                 && curl -sf "http://127.0.0.1:'"$FRONTEND_PORT"'/" > /dev/null; then
+                echo "backend/frontend ports on the VM: ok"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "backend/frontend ports on the VM: FAILED" >&2
+            exit 1
+          '
+
+          if [ -n "$PUBLIC_URL" ]; then
+            for i in $(seq 1 8); do
+              curl_log=$(mktemp)
+              if ! code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$PUBLIC_URL/" 2>"$curl_log"); then
+                # curl itself failed (DNS, connect, TLS, timeout) — this is a
+                # network/DNS problem reaching $PUBLIC_URL from the runner,
+                # not the same failure mode as a wrong proxy_pass (that shows
+                # up as a non-200 HTTP response, handled below).
+                echo "::error::curl could not reach $PUBLIC_URL on attempt $i: $(cat "$curl_log") — check the HOST secret is a valid, resolvable URL and that DNS for it is up (this is not the reverse proxy)"
+                exit 1
+              fi
+              if [ "$code" != "200" ]; then
+                echo "::error::$PUBLIC_URL returned $code on attempt $i — check the reverse proxy (proxy_pass must use 127.0.0.1, not localhost)"
+                exit 1
+              fi
+            done
+            echo "$PUBLIC_URL: 8/8 ok"
+          else
+            echo "::warning::HOST secret is not set — skipping the public smoke test"
+          fi
+
+      # Runs only after the smoke test passed, so a broken deploy still has its
+      # old images sitting on the node to roll back to.
+      - name: Clean up old images on the swarm node
+        env:
+          CR_HOST: ${{ secrets.CR_HOST }}
+          CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
+          CR_BACKEND_IMAGE: ${{ secrets.CR_BACKEND_IMAGE }}
+          CR_FRONTEND_IMAGE: ${{ secrets.CR_FRONTEND_IMAGE }}
+          KEEP_IMAGES: ${{ inputs.keep_images || '3' }}
+        run: |
+          clean_repo() {
+            svc="${STACK_NAME}_$1"
+            repo="$CR_HOST/$CR_REGISTRY/$2"
+
+            all=$(docker images "$repo" --no-trunc --format '{{.ID}}' | sort -u)
+            if [ -z "$all" ]; then
+              echo "no images for $repo on the node"
+              return 0
+            fi
+
+            # Whatever the live task actually runs, even after a rollback.
+            in_use=$(docker ps -q --filter "label=com.docker.swarm.service.name=$svc" \
+              | xargs -r docker inspect --format '{{.Image}}' 2>/dev/null || true)
+
+            # …plus the N newest, so `docker service rollback` does not have to
+            # re-pull from the registry.
+            recent=$(docker images "$repo" --no-trunc --format '{{.CreatedAt}}|{{.ID}}' \
+              | sort -r | head -n "$KEEP_IMAGES" | cut -d'|' -f2)
+
+            keep=$(printf '%s\n%s\n' "$in_use" "$recent" | grep . | sort -u)
+            stale=$(comm -23 <(printf '%s\n' "$all") <(printf '%s\n' "$keep"))
+
+            if [ -z "$stale" ]; then
+              echo "$repo: nothing to remove (keeping $(printf '%s\n' "$keep" | wc -l) images)"
+            else
+              echo "$repo: removing $(printf '%s\n' "$stale" | wc -l) stale image(s):"
+              printf '%s\n' "$stale" | xargs -r -n1 docker image rm || true
+            fi
+          }
+
+          clean_repo backend "$CR_BACKEND_IMAGE"
+          clean_repo frontend "$CR_FRONTEND_IMAGE"
+
+          docker system df
+
+      - name: Service state on failure
+        if: failure()
+        run: |
+          docker stack ps --no-trunc "$STACK_NAME" || true
+          docker service logs --tail 100 "${STACK_NAME}_backend" || true
+          docker service logs --tail 100 "${STACK_NAME}_frontend" || true

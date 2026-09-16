@@ -1,0 +1,129 @@
+.content {
+  /* Caps the reading measure on ultrawide screens instead of letting page
+     content stretch across the full viewport next to the sidebar. */
+  padding: 32px;
+  max-width: 1280px;
+}
+
+.contentMobile {
+  /* Bottom padding clears the home indicator; the sides clear a notch in
+     landscape. Extra bottom space keeps the last row above the gesture bar. */
+  padding: 20px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-left));
+}
+
+.soonTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.soonBadge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Logout is the one destructive row in the sidebar footer — tint it on hover
+   so it reads differently from theme/profile before it is clicked. */
+.logoutItem:hover {
+  color: var(--g-color-text-danger);
+}
+
+.burgerFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px calc(12px + env(safe-area-inset-left))
+    calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-right));
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  /* 44px+ tall including the avatar — a comfortable thumb target. */
+  padding: 10px 8px;
+  border: none;
+  border-radius: var(--g-border-radius-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.userRow:hover,
+.userRow:focus-visible {
+  background: var(--g-color-base-simple-hover);
+}
+
+.userRow[aria-current='page'] {
+  background: rgba(var(--ntlstl-brand-rgb), 0.16);
+}
+
+/* Keeps a long email from pushing the avatar out of the row. */
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.userRowChevron {
+  flex-shrink: 0;
+  color: var(--g-color-text-hint);
+}
+
+/* Grid, not flex: the switcher is width="max", so it needs a column that
+   actually bounds it — otherwise it either overflows or collapses. */
+.themeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+}
+
+/* Holds the height of a typical page header while a route chunk loads, so
+   the content area doesn't collapse and snap back open. */
+.routeLoader {
+  display: flex;
+  justify-content: center;
+  padding: 64px 0;
+}
+
+/* Off-screen until it takes focus, then pinned over the sidebar. Not
+   display:none — that would take it out of the tab order, which is the one
+   thing it exists for. */
+.skipLink {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-float);
+  box-shadow: 0 2px 8px var(--g-color-sfx-shadow);
+  color: var(--g-color-text-primary);
+  font-size: 13px;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 16px));
+  transition: transform 0.15s ease-out;
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--ntlstl-brand);
+  outline-offset: 2px;
+}

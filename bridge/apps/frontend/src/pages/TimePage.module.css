@@ -1,0 +1,346 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max-wide);
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.card {
+  padding: var(--ntlstl-card-padding);
+  min-width: 0;
+}
+
+.periodSwitcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.monthValue {
+  min-width: 10ch;
+  text-transform: capitalize;
+}
+
+.reportTableWrap {
+  overflow-x: auto;
+}
+
+.reportTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--g-text-body-1-font-size, 13px);
+}
+
+.reportTable th,
+.reportTable td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--g-color-line-generic);
+  vertical-align: top;
+}
+
+.reportTable thead th {
+  color: var(--g-color-text-secondary);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+  /* The header's own padding moves onto the sort button so the whole cell is
+     clickable rather than just the label. */
+  padding: 0;
+}
+
+.sortButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--g-border-radius-s);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortButtonNumeric {
+  justify-content: flex-end;
+}
+
+.sortButton:hover {
+  color: var(--g-color-text-primary);
+  background: var(--g-color-base-simple-hover);
+}
+
+.sortButton:focus-visible {
+  outline: 2px solid var(--ntlstl-brand);
+  outline-offset: -2px;
+}
+
+.sortIcon {
+  flex-shrink: 0;
+}
+
+/* The unsorted arrows are a hint that the column *can* be sorted, not a state
+   worth reading — faint, but never hidden until hover: on a touch screen
+   there is no hover, and an invisible affordance is no affordance. */
+.sortIconInactive {
+  opacity: 0.3;
+}
+
+.sortButton:hover .sortIconInactive,
+.sortButton:focus-visible .sortIconInactive {
+  opacity: 0.7;
+}
+
+.reportTable tbody tr:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.reportTable tfoot td {
+  border-bottom: none;
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+.reportHoursCell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.yearValue {
+  min-width: 4ch;
+}
+
+/* One column by default: below ~600px, two 7-column day grids side by side
+   no longer fit their own digits without overlapping (each card needs
+   ~260px+ to stay legible). */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 600px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.monthCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  min-width: 0;
+}
+
+/* Twelve near-identical cards are hard to scan, so the one holding today gets
+   an accent ring and a badge — it's the month a user almost always wants. */
+.monthCardCurrent {
+  box-shadow: inset 0 0 0 2px var(--ntlstl-brand);
+}
+
+.monthTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.monthTitle {
+  text-transform: capitalize;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legendColor {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background-color: currentColor;
+}
+
+/* Today is drawn as a ring in the calendar, so its swatch is a ring too — a
+   filled square would read as yet another day type. */
+.legendToday {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 2px var(--ntlstl-brand);
+}
+
+.legendWeekend {
+  color: var(--g-color-text-secondary);
+}
+
+.legendDayOff {
+  color: var(--g-color-text-positive);
+}
+
+.legendHoliday {
+  color: var(--g-color-text-danger);
+}
+
+.legendShort {
+  color: var(--g-color-text-warning);
+}
+
+.legendCompensatory {
+  color: var(--g-color-text-info);
+}
+
+/* Targets the calendar's own day buttons — see CalendarMonth's classList
+   toggle for why this has to reach into the library's DOM. These classes
+   must stay inside :global(): they're set directly via classList.toggle with
+   the raw strings 'dayOff'/'holiday'/'short'/'compensatory', so they must
+   not be hashed like normal CSS module classes. */
+.monthCard :global(.g-date-calendar__button.dayOff) {
+  color: var(--g-color-text-positive);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+/* A holiday is a non-working day like a day off, but distinct enough (an
+   organization-wide date, not a personal one) to warrant its own color —
+   the conventional "public holiday" red rather than the personal-day green.
+   Takes precedence since a date can't be both (see day-off type "off"). */
+.monthCard :global(.g-date-calendar__button.holiday) {
+  color: var(--g-color-text-danger);
+  font-weight: var(--g-text-body-2-font-weight, 500);
+}
+
+/* A short day stays a working day (not part of isWeekendOrDayOff), so it
+   only gets an underline rather than the bold weekend-style color the other
+   two types share via the library's own isWeekend prop. */
+.monthCard :global(.g-date-calendar__button.short) {
+  text-decoration: underline;
+  text-decoration-color: var(--g-color-text-warning);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+/* A compensatory workday is the inverse of the other three types — a
+   weekend turned working day — so it must NOT get the library's own
+   isWeekend styling (isWeekendOrDayOff already returns false for it) and
+   instead gets its own accent so it still stands out from a plain weekday. */
+.monthCard :global(.g-date-calendar__button.compensatory) {
+  text-decoration: underline;
+  text-decoration-color: var(--g-color-text-info);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+/* Today, marked independently of the day's type so it stays visible whether
+   it's a plain workday, a day off or a holiday. Ring rather than a color, for
+   the same reason. */
+.monthCard :global(.g-date-calendar__button.today) {
+  box-shadow: inset 0 0 0 1px var(--ntlstl-brand);
+  border-radius: var(--g-border-radius-s);
+}
+
+/* Each mini-calendar is bounded to exactly one month (minValue = maxValue),
+   so its own built-in "January 2026 ⌄ ‹ ›" header is dead weight — we already
+   have a page-level year switcher and our own month title above it. Hiding
+   it also saves real vertical space when 12 cards are stacked in one column
+   on mobile. */
+.monthCard :global(.g-date-calendar__header) {
+  display: none;
+}
+
+/* The library's own root is `display: inline-block` with no width, so
+   without this it shrink-wraps to the bare input's default browser size and
+   clips the "MM/DD/YYYY — MM/DD/YYYY" placeholder inside the dialog. */
+.rangePicker {
+  display: block;
+  width: 100%;
+}
+
+.typeSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dayOffList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dayOffRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--g-border-radius-m);
+}
+
+.dayOffRowMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dayOffRowIcon {
+  color: var(--g-color-text-secondary);
+  flex-shrink: 0;
+}
+
+.dayOffRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+/* A period is a run of 2+ consecutive days (see groupConsecutiveDayOffs) —
+   tinted so it reads as one block; colors cycle per period, not per row, so
+   two periods sitting next to each other in the list stay visually
+   distinct. A lone day (not part of any run) keeps the plain row style. */
+.periodColorA {
+  background: var(--g-color-base-info-light);
+}
+
+.periodColorB {
+  background: var(--g-color-base-positive-light);
+}
+
+.periodColorC {
+  background: var(--g-color-base-misc-light);
+}
+
+.periodColorA:hover,
+.periodColorB:hover,
+.periodColorC:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}

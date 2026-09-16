@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Matches the version used for local development (`node -v`).
+  NODE_VERSION: '22.18.0'
+  # The lockfile was generated with npm 11; Node 22 bundles npm 10, which can
+  # resolve optional peer deps differently. Pinning keeps `npm ci` deterministic.
+  NPM_VERSION: '11'
+
+jobs:
+  backend:
+    name: Backend (lint, build, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Pin npm
+        run: npm install -g npm@${{ env.NPM_VERSION }}
+
+      - run: npm ci
+
+      # apps/backend's own `lint` script passes --fix, which would let CI go
+      # green on violations it silently rewrote. Call eslint directly instead.
+      - name: ESLint
+        working-directory: apps/backend
+        run: npx eslint "{src,test}/**/*.ts"
+
+      - name: Nest build
+        run: npm run build -w backend
+
+      # No spec files exist yet — this still proves the test runner and
+      # config are wired correctly. Drop --passWithNoTests once specs land.
+      - name: Unit tests
+        run: npm test -w backend -- --passWithNoTests
+
+  frontend:
+    name: Frontend (lint, typecheck, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Pin npm
+        run: npm install -g npm@${{ env.NPM_VERSION }}
+
+      - run: npm ci
+
+      - name: ESLint
+        run: npm run lint -w frontend
+
+      # tsc -b (typecheck) + vite build. A placeholder VITE_API_URL keeps the
+      # build honest on forks/PRs where the secret is not available — this
+      # job only checks that the bundle compiles.
+      - name: Production build
+        working-directory: apps/frontend
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          echo "VITE_API_URL=${VITE_API_URL:-http://localhost:3002}" > .env.production
+          npm run build

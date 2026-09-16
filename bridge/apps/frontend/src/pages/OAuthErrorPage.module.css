@@ -1,0 +1,12 @@
+/* A tinted disc keeps the alarm icon from reading as a plain glyph and
+   matches the weight the logo mark has on the login screen. */
+.iconBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--g-color-base-danger-light);
+  color: var(--g-color-text-danger);
+}

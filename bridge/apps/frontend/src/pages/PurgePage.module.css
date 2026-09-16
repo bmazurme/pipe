@@ -1,0 +1,139 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.card {
+  padding: var(--ntlstl-card-padding);
+  min-width: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Direction switch and the two actions share one row; below ~560px the
+   buttons wrap onto their own line rather than squeezing the switch. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.direction {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notice {
+  width: 100%;
+}
+
+.addForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.addForm > * {
+  flex: 1;
+  min-width: 160px;
+}
+
+.search {
+  margin: 12px 0;
+}
+
+.searchIcon {
+  color: var(--g-color-text-secondary);
+}
+
+/* Loader placement while the dictionary is fetching. */
+.centered {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.emptyHint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* Same row treatment as the storage and devices lists — rounded, hover-lit,
+   separated by rhythm rather than by rules. */
+.entryList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entryRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--g-border-radius-m);
+}
+
+.entryRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.entryPair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.entryEditPair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.entryEditPair > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.editError {
+  flex-basis: 100%;
+}

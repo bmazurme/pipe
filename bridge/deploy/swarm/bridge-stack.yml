@@ -1,0 +1,150 @@
+# Swarm stack for bridge — deployed by .github/workflows/build.yml with
+#
+#   docker stack deploy -c deploy/swarm/bridge-stack.yml --with-registry-auth bridge
+#
+# `docker stack deploy` ignores `env_file` and `build`, so every value below is
+# interpolated on the CI runner from GitHub secrets.
+#
+# The frontend needs no runtime environment: VITE_API_URL is inlined into the
+# bundle at build time by Vite, so that service ships nothing but nginx plus
+# static files. The backend is the opposite — every value it reads comes from
+# the environment below.
+#
+# Postgres is not part of this stack — it is expected to already be reachable
+# (a managed instance, or a separate compose stack on the same host). A swarm
+# task sits on an overlay network and cannot resolve a compose service name by
+# its short name, so POSTGRES_HOST must be a routable address.
+#
+# Default published ports (3300/3305) follow the convention already in use on
+# the target node: each stack claims a free `X0` block (backend on X000,
+# frontend on X005) — see `docker stack ls` / `docker ps` on the node before
+# picking a different block. Taken at the time these were chosen: 3000/3005
+# (places), 3400/3405 (tools), 3450/3455 (notes), 3600/3605 (rain).
+version: '3.8'
+
+services:
+  backend:
+    image: ${CR_HOST:?CR_HOST is required}/${CR_REGISTRY:?CR_REGISTRY is required}/${CR_BACKEND_IMAGE:?CR_BACKEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}
+    networks:
+      - bridge
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      POSTGRES_HOST: ${POSTGRES_HOST:?POSTGRES_HOST is required}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:?REFRESH_JWT_SECRET is required}
+      YANDEX_ID: ${YANDEX_ID:?YANDEX_ID is required}
+      YANDEX_SECRET: ${YANDEX_SECRET:?YANDEX_SECRET is required}
+      NOTES_YANDEX_REDIRECT: ${NOTES_YANDEX_REDIRECT:?NOTES_YANDEX_REDIRECT is required}
+      NOTES_TARGET_URL: ${NOTES_TARGET_URL:?NOTES_TARGET_URL is required}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN is required}
+      EMAILS: ${EMAILS:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      # Optional: enables GET /api/v1/time/export/day-offs for ntlstl.time to
+      # import from. Empty TIME_EXPORT_API_KEY leaves the route disabled.
+      TIME_EXPORT_API_KEY: ${TIME_EXPORT_API_KEY:-}
+      TIME_EXPORT_USER_ID: ${TIME_EXPORT_USER_ID:-}
+    ports:
+      - target: 3000
+        published: ${BACKEND_PUBLISHED_PORT:-3300}
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      # GET / is the plain health endpoint — no auth, no DB round-trip. Proves
+      # the process is up and serving, not that Postgres answers.
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/ >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        order: start-first
+        parallelism: 1
+        delay: 10s
+        monitor: 60s
+        failure_action: rollback
+      rollback_config:
+        order: start-first
+        parallelism: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.60'
+          memory: 512M
+        reservations:
+          memory: 128M
+      labels:
+        app: bridge
+        component: backend
+
+  frontend:
+    image: ${CR_HOST:?CR_HOST is required}/${CR_REGISTRY:?CR_REGISTRY is required}/${CR_FRONTEND_IMAGE:?CR_FRONTEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}
+    networks:
+      - bridge
+    ports:
+      - target: 80
+        published: ${FRONTEND_PUBLISHED_PORT:-3305}
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1/ >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        order: start-first
+        parallelism: 1
+        delay: 5s
+        monitor: 30s
+        failure_action: rollback
+      rollback_config:
+        order: start-first
+        parallelism: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          memory: 32M
+      labels:
+        app: bridge
+        component: frontend
+
+networks:
+  bridge:
+    driver: overlay
+    attachable: true

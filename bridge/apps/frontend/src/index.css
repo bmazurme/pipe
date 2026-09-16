@@ -1,0 +1,111 @@
+:root {
+  color-scheme: light dark;
+
+  /* Single source of truth for the logo's purple. Everything brand-tinted —
+     sidebar accents, the auth glow, focus rings — derives from these. */
+  --ntlstl-brand: #6c5ce7;
+  --ntlstl-brand-rgb: 108, 92, 231;
+  --ntlstl-brand-hover: #5a4bd4;
+  --ntlstl-brand-glow: rgba(var(--ntlstl-brand-rgb), 0.16);
+
+  /* Page shell rhythm — every route uses these so headers, gutters and card
+     padding line up when you move between them. Single-column pages stop at
+     the reading width; only genuinely two-column layouts opt into -wide. */
+  --ntlstl-page-max: 880px;
+  --ntlstl-page-max-wide: 1100px;
+  --ntlstl-page-gap: 20px;
+  --ntlstl-card-padding: 20px;
+
+  /* Sidebar/burger menu accent — ties the active & hover states to the
+     logo's brand purple instead of the uikit default. Public theming hooks
+     exposed by @gravity-ui/navigation's CompositeBar item. */
+  --gn-aside-header-item-current-background-color: rgba(var(--ntlstl-brand-rgb), 0.16);
+  --gn-aside-header-item-current-background-color-hover: rgba(var(--ntlstl-brand-rgb), 0.22);
+  --gn-aside-header-item-background-color-hover: rgba(var(--ntlstl-brand-rgb), 0.08);
+  --gn-aside-header-item-current-icon-color: var(--ntlstl-brand);
+  --gn-aside-header-item-current-text-color: var(--ntlstl-brand);
+  --gn-aside-header-item-expanded-radius: 10px;
+  --gn-aside-header-item-collapsed-radius: 10px;
+}
+
+/* uikit ships a yellow accent, so out of the box the purple sidebar sat next
+   to orange buttons and tab underlines. Repointing uikit's own brand tokens
+   retunes every accented control at once — action buttons, selected segmented
+   options, tab indicators, focus rings, text selection — instead of chasing
+   them component by component. */
+body.g-root {
+  --g-color-base-brand: var(--ntlstl-brand);
+  --g-color-base-brand-hover: var(--ntlstl-brand-hover);
+  --g-color-line-brand: var(--ntlstl-brand);
+  --g-color-text-brand: var(--ntlstl-brand-hover);
+  --g-color-text-brand-heavy: var(--ntlstl-brand-hover);
+  /* Purple is dark enough to need light text on it; the yellow default asked
+     for dark text and would be unreadable here. */
+  --g-color-text-brand-contrast: var(--g-color-text-light-primary);
+  --g-color-base-selection: rgba(var(--ntlstl-brand-rgb), 0.16);
+  --g-color-base-selection-hover: rgba(var(--ntlstl-brand-rgb), 0.24);
+}
+
+/* uikit puts the theme modifier on <body>, so dark-only tweaks hang off it.
+   The accent needs to run lighter and the glow stronger on a dark ground to
+   keep the same perceived contrast. */
+body.g-root_theme_dark,
+body.g-root_theme_dark-hc {
+  --ntlstl-brand: #8c7aff;
+  --ntlstl-brand-rgb: 140, 122, 255;
+  --ntlstl-brand-hover: #9d8dff;
+  --ntlstl-brand-glow: rgba(var(--ntlstl-brand-rgb), 0.2);
+  --g-color-text-brand: #b3a6ff;
+  --g-color-text-brand-heavy: #b3a6ff;
+  /* On dark the accent is light, so it flips back to dark text. */
+  --g-color-text-brand-contrast: var(--g-color-text-dark-primary);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Sidebar items for services that aren't built yet. Hover stays enabled so the
+   collapsed sidebar can still show the item's tooltip — the items carry no
+   click handler, so there is nothing to guard against. */
+.ntlstl-soon-item {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* The mobile burger menu's current-item highlight comes from uikit's generic
+   List component (not the aside header's CompositeBar, which the
+   --gn-aside-header-* variables above already theme), so it needs its own
+   rule to match the desktop sidebar's brand-purple accent. Scoped to the
+   drawer so it doesn't affect List usage elsewhere (e.g. a Select dropdown). */
+.g-drawer .g-list__item_selected {
+  background: rgba(var(--ntlstl-brand-rgb), 0.16);
+}
+
+/* The burger rows are 48px tall but their tap target is the inner div; giving
+   the list item itself the full height keeps thumbs from missing between rows. */
+.g-drawer .g-list__item {
+  border-radius: 10px;
+}
+
+/* Respect a reduced-motion preference across the whole app — uikit animates
+   drawers, popups and the sidebar collapse by default. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
