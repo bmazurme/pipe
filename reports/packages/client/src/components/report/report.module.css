@@ -1,0 +1,103 @@
+.report {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: var(--app-page-gap);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.titleBox {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions button {
+  gap: 6px;
+}
+
+.card {
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+  background-color: var(--g-color-base-background);
+}
+
+.card :global(.g-table__table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.card :global(.g-table__head .g-table__cell) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--g-color-text-secondary);
+  background-color: var(--g-color-base-generic);
+}
+
+.card :global(.g-table__cell) {
+  padding-left: 16px;
+  padding-right: 16px;
+  overflow-wrap: break-word;
+}
+
+.card :global(.g-table__row) {
+  transition: background-color 0.1s ease;
+}
+
+.card :global(.g-table__row:hover) {
+  background-color: var(--g-color-base-simple-hover);
+}
+
+.timeCell {
+  font-variant-numeric: tabular-nums;
+  color: var(--g-color-text-secondary);
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--g-color-line-generic);
+  background-color: var(--g-color-base-generic-ultralight);
+}
+
+.summaryValue {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions > * {
+    flex: 1 1 0;
+  }
+}

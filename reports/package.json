@@ -1,0 +1,22 @@
+{
+  "name": "reports",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo: reports",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace=packages/shared",
+    "start": "npm run build --workspace=packages/shared && npm run dev",
+    "dev": "npm run dev --workspace=packages/server & npm run dev --workspace=packages/client",
+    "dev:client": "npm run dev --workspace=packages/client",
+    "dev:server": "npm run dev --workspace=packages/server"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

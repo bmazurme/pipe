@@ -1,0 +1,189 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.tabs {
+  margin-bottom: var(--app-page-gap);
+}
+
+.main {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.side {
+  max-width: 420px;
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--app-page-gap);
+}
+
+.addRow button {
+  gap: 6px;
+}
+
+.dialogHint {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.monthGroup {
+  margin-bottom: 20px;
+}
+
+.monthGroupTitle {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--g-color-text-secondary);
+}
+
+.offDaysList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.offDaysItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 10px;
+  background-color: var(--g-color-base-background);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.offDaysItem:hover {
+  border-color: var(--g-color-line-generic-hover);
+  background-color: var(--g-color-base-simple-hover);
+}
+
+.offDaysItem button:hover {
+  color: var(--g-color-text-danger);
+}
+
+.offDaysItemDate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.offDaysDateText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.offDaysDay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--g-color-base-generic);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.item {
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--app-card-radius);
+  padding: 12px;
+  background-color: var(--g-color-base-background);
+}
+
+.item :global(.g-date-calendar) {
+  width: 100%;
+}
+
+.item :global(.g-date-calendar__header) {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--g-color-line-generic);
+}
+
+.item :global(.g-date-calendar__header button) {
+  pointer-events: none;
+  cursor: default;
+}
+
+.item :global(.g-date-calendar__mode-label) {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.item :global(.g-date-calendar__header .g-button__icon) {
+  display: none;
+}
+
+.item :global(.g-date-calendar__controls) {
+  display: none;
+}
+
+/* Day markers — theme tokens so both light and dark stay legible */
+.shortDay {
+  color: var(--g-color-text-warning);
+}
+
+.holiday {
+  color: var(--g-color-text-misc);
+}
+
+.offDay {
+  color: var(--g-color-text-positive);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--app-card-radius);
+  background-color: var(--g-color-base-background);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legendColor {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background-color: currentColor;
+}
+
+@media (max-width: 768px) {
+  .side {
+    max-width: 100%;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

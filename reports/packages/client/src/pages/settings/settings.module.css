@@ -1,0 +1,227 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.tabs {
+  margin-bottom: var(--app-page-gap);
+}
+
+.page {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--app-page-gap);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1 1 360px;
+  max-width: 420px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--app-card-radius);
+  background-color: var(--g-color-base-background);
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.dirtyHint {
+  flex: 1 1 100%;
+}
+
+.codes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 300px;
+  max-width: 420px;
+  padding: 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--app-card-radius);
+  background-color: var(--g-color-base-background);
+}
+
+.codesEmpty {
+  display: block;
+  padding: 12px 0;
+}
+
+.codesList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.codesItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 8px;
+}
+
+.codesItem:hover {
+  background-color: var(--g-color-base-simple-hover);
+}
+
+.codesCode {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background-color: var(--g-color-base-generic);
+  font-family: var(--g-font-family-monospace);
+  font-size: 12px;
+}
+
+.codesLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codesRemove {
+  flex: none;
+}
+
+/* Reveal on hover only where hovering exists; always visible on touch */
+@media (hover: hover) {
+  .codesRemove {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .codesItem:hover .codesRemove,
+  .codesRemove:focus-visible {
+    opacity: 1;
+  }
+}
+
+.codesRemove:hover {
+  color: var(--g-color-text-danger);
+}
+
+.codesAdd {
+  gap: 6px;
+  margin-top: auto;
+}
+
+.codeForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar button {
+  gap: 4px;
+}
+
+.entryEditRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entryEditRow > * {
+  min-width: 0;
+}
+
+.templateRowButton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.rowTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keyLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.blurred {
+  filter: blur(4px);
+  transition: filter 0.15s ease;
+}
+
+.blurred:focus {
+  filter: none;
+}
+
+.templateBody {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 90px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 6px;
+  background-color: var(--g-color-base-background);
+  color: var(--g-color-text-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+@media (max-width: 768px) {
+  .form,
+  .codes {
+    max-width: 100%;
+  }
+}

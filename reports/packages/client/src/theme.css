@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap');
+
+.g-root {
+    --g-font-family-monospace: 'Roboto Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Ubuntu Mono', 'DejaVu Sans Mono', 'Courier New', 'Courier', monospace;
+}
+
+.g-root_theme_light {
+    --g-color-private-brand-50: rgb(203 255 92 / 0.1);
+    --g-color-private-brand-100: rgb(203 255 92 / 0.15);
+    --g-color-private-brand-150: rgb(203 255 92 / 0.2);
+    --g-color-private-brand-200: rgb(203 255 92 / 0.3);
+    --g-color-private-brand-250: rgb(203 255 92 / 0.4);
+    --g-color-private-brand-300: rgb(203 255 92 / 0.5);
+    --g-color-private-brand-350: rgb(203 255 92 / 0.6);
+    --g-color-private-brand-400: rgb(203 255 92 / 0.7);
+    --g-color-private-brand-450: rgb(203 255 92 / 0.8);
+    --g-color-private-brand-500: rgb(203 255 92 / 0.9);
+    --g-color-private-brand-550-solid: rgb(203 255 92);
+    --g-color-private-brand-1000-solid: rgb(59 63 43);
+    --g-color-private-brand-950-solid: rgb(68 74 46);
+    --g-color-private-brand-900-solid: rgb(85 97 51);
+    --g-color-private-brand-850-solid: rgb(102 119 57);
+    --g-color-private-brand-800-solid: rgb(119 142 63);
+    --g-color-private-brand-750-solid: rgb(135 165 69);
+    --g-color-private-brand-700-solid: rgb(152 187 75);
+    --g-color-private-brand-650-solid: rgb(169 210 80);
+    --g-color-private-brand-600-solid: rgb(186 232 86);
+    --g-color-private-brand-500-solid: rgb(208 255 108);
+    --g-color-private-brand-450-solid: rgb(213 255 125);
+    --g-color-private-brand-400-solid: rgb(219 255 141);
+    --g-color-private-brand-350-solid: rgb(224 255 157);
+    --g-color-private-brand-300-solid: rgb(229 255 174);
+    --g-color-private-brand-250-solid: rgb(234 255 190);
+    --g-color-private-brand-200-solid: rgb(239 255 206);
+    --g-color-private-brand-150-solid: rgb(245 255 222);
+    --g-color-private-brand-100-solid: rgb(247 255 231);
+    --g-color-private-brand-50-solid: rgb(250 255 239);
+
+    --g-color-text-brand: var(--g-color-private-brand-700-solid);
+    --g-color-text-brand-heavy: var(--g-color-private-brand-700-solid);
+    --g-color-text-brand-contrast: rgba(0 0 0 / 0.85);
+    --g-color-text-link: var(--g-color-private-brand-600-solid);
+    --g-color-text-link-hover: var(--g-color-private-brand-800-solid);
+    --g-color-text-link-visited: var(--g-color-private-purple-550-solid);
+    --g-color-text-link-visited-hover: var(--g-color-private-purple-800-solid);
+    --g-color-base-brand: var(--g-color-private-brand-550-solid);
+    --g-color-base-brand-hover: var(--g-color-private-brand-600-solid);
+    --g-color-base-selection: var(--g-color-private-brand-200);
+    --g-color-base-selection-hover: var(--g-color-private-brand-300);
+    --g-color-line-brand: var(--g-color-private-brand-600-solid);
+}
+
+.g-root_theme_dark {
+    --g-color-private-brand-50: rgb(203 255 92 / 0.1);
+    --g-color-private-brand-100: rgb(203 255 92 / 0.15);
+    --g-color-private-brand-150: rgb(203 255 92 / 0.2);
+    --g-color-private-brand-200: rgb(203 255 92 / 0.3);
+    --g-color-private-brand-250: rgb(203 255 92 / 0.4);
+    --g-color-private-brand-300: rgb(203 255 92 / 0.5);
+    --g-color-private-brand-350: rgb(203 255 92 / 0.6);
+    --g-color-private-brand-400: rgb(203 255 92 / 0.7);
+    --g-color-private-brand-450: rgb(203 255 92 / 0.8);
+    --g-color-private-brand-500: rgb(203 255 92 / 0.9);
+    --g-color-private-brand-550-solid: rgb(203 255 92);
+    --g-color-private-brand-1000-solid: rgb(247 255 231);
+    --g-color-private-brand-950-solid: rgb(245 255 222);
+    --g-color-private-brand-900-solid: rgb(239 255 206);
+    --g-color-private-brand-850-solid: rgb(234 255 190);
+    --g-color-private-brand-800-solid: rgb(229 255 174);
+    --g-color-private-brand-750-solid: rgb(224 255 157);
+    --g-color-private-brand-700-solid: rgb(219 255 141);
+    --g-color-private-brand-650-solid: rgb(213 255 125);
+    --g-color-private-brand-600-solid: rgb(208 255 108);
+    --g-color-private-brand-500-solid: rgb(186 232 86);
+    --g-color-private-brand-450-solid: rgb(169 210 80);
+    --g-color-private-brand-400-solid: rgb(152 187 75);
+    --g-color-private-brand-350-solid: rgb(135 165 69);
+    --g-color-private-brand-300-solid: rgb(119 142 63);
+    --g-color-private-brand-250-solid: rgb(102 119 57);
+    --g-color-private-brand-200-solid: rgb(85 97 51);
+    --g-color-private-brand-150-solid: rgb(68 74 46);
+    --g-color-private-brand-100-solid: rgb(59 63 43);
+    --g-color-private-brand-50-solid: rgb(51 52 40);
+
+    --g-color-text-brand: var(--g-color-private-brand-600-solid);
+    --g-color-text-brand-heavy: var(--g-color-private-brand-700-solid);
+    --g-color-text-brand-contrast: rgba(0 0 0 / 0.9);
+    --g-color-text-link: var(--g-color-private-brand-550-solid);
+    --g-color-text-link-hover: var(--g-color-private-brand-700-solid);
+    --g-color-text-link-visited: var(--g-color-private-purple-700-solid);
+    --g-color-text-link-visited-hover: var(--g-color-private-purple-850-solid);
+    --g-color-base-background: rgb(34 29 34);
+    --g-color-base-brand: var(--g-color-private-brand-550-solid);
+    --g-color-base-brand-hover: var(--g-color-private-brand-650-solid);
+    --g-color-base-selection: var(--g-color-private-brand-150);
+    --g-color-base-selection-hover: var(--g-color-private-brand-200);
+    --g-color-line-brand: var(--g-color-private-brand-600-solid);
+}
+
+/* Application-level tokens shared by page layouts */
+.g-root {
+    --app-page-gap: 20px;
+    --app-card-radius: 12px;
+    --app-transition: 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 768px) {
+    .g-root {
+        --app-page-gap: 14px;
+    }
+}
+
+/* Respect the OS "reduce motion" setting across every custom transition */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Visible keyboard focus for the custom (non-uikit) interactive elements */
+.g-root :focus-visible {
+    outline: 2px solid var(--g-color-line-focus, var(--g-color-line-brand));
+    outline-offset: 2px;
+}
