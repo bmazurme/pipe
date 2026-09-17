@@ -1,3 +1,12 @@
+# Explicit project name + a dedicated host port: without this, Docker Compose
+# derives the project name from the directory's basename, which is also
+# "bridge" for the original standalone checkout this repo was imported from —
+# the two would silently share the same container and volume (and therefore
+# the same data) despite being separate git histories. A distinct name plus
+# its own port makes that a loud "port already in use" if it ever happens
+# again, instead of quiet data sharing.
+name: pipe-bridge
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,9 +16,21 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ntlstl-db
     ports:
-      - '5433:5432'
+      - '5445:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
 volumes:
   postgres-data:
+
+networks:
+  default:
+    # This machine already has 30+ docker-compose projects, which had
+    # exhausted Docker's default network address pool (`docker compose up`
+    # failed with "could not find an available, non-overlapping IPv4 address
+    # pool"). Pinned to a specific subnet that isn't already in use by any
+    # other project's network on this machine (checked via `docker network
+    # inspect` over `docker network ls -q`).
+    ipam:
+      config:
+        - subnet: 192.168.64.0/24
