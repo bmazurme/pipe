@@ -131,8 +131,8 @@ function Settings() {
         />
         <TabProvider value={activeTab} onUpdate={setActiveTab}>
           <TabList className={style.tabs}>
-            <Tab value="general" icon={<Icon data={Gear} size={16} />} label={{ content: 'Основные' }} />
-            <Tab value="subscription" icon={<Icon data={CodeFork} size={16} />} label={{ content: 'Subscription' }} />
+            <Tab value="general" icon={<Icon data={Gear} size={16} />}>Основные</Tab>
+            <Tab value="subscription" icon={<Icon data={CodeFork} size={16} />}>Subscription</Tab>
           </TabList>
 
           <TabPanel value="general" className={style.page}>

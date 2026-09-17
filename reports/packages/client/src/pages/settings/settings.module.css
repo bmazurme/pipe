@@ -15,6 +15,15 @@
   gap: var(--app-page-gap);
 }
 
+/* Equal specificity to Gravity UI's own .g-tab-panel_hidden { display: none }
+   means whichever stylesheet loads last wins the cascade — .page's
+   display:flex was winning, so an inactive TabPanel stayed visible and
+   both tabs' content rendered stacked on top of each other. This compound
+   selector (0-2-0) beats both single-class rules regardless of load order. */
+.page:global(.g-tab-panel_hidden) {
+  display: none;
+}
+
 .form {
   display: flex;
   flex-direction: column;
