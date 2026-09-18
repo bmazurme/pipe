@@ -26,7 +26,7 @@ export class YandexStrategy extends PassportStrategy(Strategy, 'yandex') {
     super({
       clientID: clientID || 'not-configured',
       clientSecret: configService.get<string>('YANDEX_SECRET') ?? '',
-      callbackURL: configService.get<string>('NOTES_YANDEX_REDIRECT') ?? '',
+      callbackURL: configService.get<string>('BRIDGE_YANDEX_REDIRECT') ?? '',
     });
   }
 

@@ -98,8 +98,8 @@ Repo → Settings → Secrets and variables → Actions.
 | `REFRESH_JWT_SECRET` | секрет для refresh-токенов |
 | `YANDEX_ID` | client ID приложения на oauth.yandex.ru |
 | `YANDEX_SECRET` | client secret приложения на oauth.yandex.ru |
-| `NOTES_YANDEX_REDIRECT` | callback URL, зарегистрированный в приложении на oauth.yandex.ru (`https://<backend-host>/api/v1/oauth/yandex/redirect`) |
-| `NOTES_TARGET_URL` | куда браузер редиректит после логина/ошибки OAuth (адрес фронтенда) |
+| `BRIDGE_YANDEX_REDIRECT` | callback URL, зарегистрированный в приложении на oauth.yandex.ru (`https://<backend-host>/api/v1/oauth/yandex/redirect`) |
+| `BRIDGE_TARGET_URL` | куда браузер редиректит после логина/ошибки OAuth (адрес фронтенда) |
 | `COOKIE_DOMAIN` | домен для refresh-токен куки. Задавайте **конкретный хост** API (`api.bridge.ntlstl.dev`), а не родительский домен: соседние приложения на `*.ntlstl.dev` (notes, tools, rain) — порты этого же кода и ставят свою куку с `COOKIE_DOMAIN=.ntlstl.dev`, которая долетает и сюда. Кука bridge называется `bridgeRefreshToken` именно поэтому — совпадение имён приводило к 401 «invalid signature», лечившемуся только ручной очисткой кук |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
@@ -126,5 +126,5 @@ Repo → Settings → Secrets and variables → Actions.
 сверьтесь с `docker ps` / `docker stack ls`, чтобы не столкнуться с чужим
 стеком.
 
-Значения `NOTES_YANDEX_REDIRECT` и `NOTES_TARGET_URL` — без кавычек, `docker
+Значения `BRIDGE_YANDEX_REDIRECT` и `BRIDGE_TARGET_URL` — без кавычек, `docker
 stack deploy` их не снимает.

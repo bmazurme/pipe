@@ -19,10 +19,10 @@ export class OauthService {
   ) {}
 
   private getTargetUrl(): string {
-    const targetUrl = this.configService.get<string>('NOTES_TARGET_URL');
+    const targetUrl = this.configService.get<string>('BRIDGE_TARGET_URL');
 
     if (!targetUrl) {
-      throw new Error('NOTES_TARGET_URL is not configured');
+      throw new Error('BRIDGE_TARGET_URL is not configured');
     }
     return targetUrl;
   }

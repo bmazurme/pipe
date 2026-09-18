@@ -150,8 +150,8 @@ jobs:
           REFRESH_JWT_SECRET: ${{ secrets.REFRESH_JWT_SECRET }}
           YANDEX_ID: ${{ secrets.YANDEX_ID }}
           YANDEX_SECRET: ${{ secrets.YANDEX_SECRET }}
-          NOTES_YANDEX_REDIRECT: ${{ secrets.NOTES_YANDEX_REDIRECT }}
-          NOTES_TARGET_URL: ${{ secrets.NOTES_TARGET_URL }}
+          BRIDGE_YANDEX_REDIRECT: ${{ secrets.BRIDGE_YANDEX_REDIRECT }}
+          BRIDGE_TARGET_URL: ${{ secrets.BRIDGE_TARGET_URL }}
           COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN }}
           EMAILS: ${{ secrets.EMAILS }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
