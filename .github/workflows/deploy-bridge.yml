@@ -114,6 +114,11 @@ jobs:
     # trigger above gets uncommented too.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Safety net: nothing here should ever legitimately run this long. Without
+    # this, a hung step (e.g. `docker service logs` waiting on a task that
+    # never stabilizes) blocks the deploy-bridge concurrency group for up to
+    # GitHub's default 6h job timeout instead of failing loudly.
+    timeout-minutes: 30
 
     env:
       STACK_NAME: bridge
@@ -207,7 +212,12 @@ jobs:
       - name: Wait for the rolling update to converge
         run: |
           services="${STACK_NAME}_backend ${STACK_NAME}_frontend"
-          deadline=$(( $(date +%s) + 300 ))
+          # backend's update_config alone (start-first, 10s delay + 60s
+          # monitor) plus image-pull time on the swarm node routinely takes
+          # ~5 minutes end to end — a prior run finished at 307s, this one
+          # missed a 300s deadline by ~30s despite deploying successfully.
+          # 600s leaves real margin instead of racing the common case.
+          deadline=$(( $(date +%s) + 600 ))
 
           for svc in $services; do
             while :; do
@@ -225,16 +235,16 @@ jobs:
                   ;;
                 rollback_completed|rollback_started|paused)
                   echo "::error::$svc failed to update and swarm rolled it back (state: $state)"
-                  docker service ps --no-trunc "$svc"
-                  docker service logs --tail 100 "$svc" || true
+                  timeout 15 docker service ps --no-trunc "$svc" || true
+                  timeout 30 docker service logs --tail 100 "$svc" || true
                   exit 1
                   ;;
               esac
 
               if [ "$(date +%s)" -ge "$deadline" ]; then
                 echo "::error::$svc did not converge in time (state: $state, replicas: $replicas)"
-                docker service ps --no-trunc "$svc"
-                docker service logs --tail 100 "$svc" || true
+                timeout 15 docker service ps --no-trunc "$svc" || true
+                timeout 30 docker service logs --tail 100 "$svc" || true
                 exit 1
               fi
               sleep 5
@@ -332,7 +342,12 @@ jobs:
 
       - name: Service state on failure
         if: failure()
+        # `docker service logs` can hang indefinitely over an ssh:// DOCKER_HOST
+        # when a task never fully stabilizes (seen in practice: a deploy that
+        # actually converged just past the "Wait" step's deadline left this
+        # diagnostic step running for 1.5+ hours). timeout guarantees this step
+        # fails loudly instead of blocking the deploy-bridge concurrency group.
         run: |
-          docker stack ps --no-trunc "$STACK_NAME" || true
-          docker service logs --tail 100 "${STACK_NAME}_backend" || true
-          docker service logs --tail 100 "${STACK_NAME}_frontend" || true
+          timeout 15 docker stack ps --no-trunc "$STACK_NAME" || true
+          timeout 30 docker service logs --tail 100 "${STACK_NAME}_backend" || true
+          timeout 30 docker service logs --tail 100 "${STACK_NAME}_frontend" || true
