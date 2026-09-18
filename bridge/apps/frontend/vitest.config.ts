@@ -17,6 +17,11 @@ export default defineConfig({
   resolve: {
     alias: [{ find: /^@gravity-ui\/navigation$/, replacement: navigationEsm }],
   },
+  // vitest reads this file, not vite.config.ts, so __APP_VERSION__ needs
+  // defining here too — AppLayout renders it unconditionally.
+  define: {
+    __APP_VERSION__: JSON.stringify('test'),
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

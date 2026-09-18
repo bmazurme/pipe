@@ -203,7 +203,12 @@ export function AppLayout() {
   const logo = useMemo(
     () => ({
       icon: LogoMark,
-      text: 'ntlstl',
+      text: () => (
+        <span className={styles.logoText}>
+          <span>ntlstl</span>
+          <span className={styles.logoVersion}>v{__APP_VERSION__}</span>
+        </span>
+      ),
       href: '/',
       onClick: (event: React.MouseEvent<HTMLElement>) => {
         if (isModifiedClick(event)) {
