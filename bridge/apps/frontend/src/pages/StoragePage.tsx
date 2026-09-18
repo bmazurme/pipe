@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Alert, Card } from '@gravity-ui/uikit';
+import { Alert, Card, Dialog, Text } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
   StoredFileMeta,
   useDownloadFileMutation,
+  useListEntriesQuery,
   useListFilesQuery,
 } from '../store/api';
 import { storageApiEndpoints } from '../store/api/storage-api/endpoints';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { storageFilesSelector } from '../store/slices';
+import { purgeEntriesSelector, storageFilesSelector } from '../store/slices';
 import { PageHeader } from '../widgets/PageHeader';
+import { FileLeakFindings, scanFilesForLeaks } from './storage/scanFileForLeaks';
 import { StorageDropzone, UploadProgress } from './storage/StorageDropzone';
 import { StorageFileList } from './storage/StorageFileList';
 import { StorageProjectUpload } from './storage/StorageProjectUpload';
@@ -35,10 +37,21 @@ export function StoragePage() {
   const [upload, setUpload] = useState<UploadProgress | null>(null);
   const isMobile = useIsMobile();
 
+  // Only the "upload a project folder" path already applies the Purge
+  // dictionary (see storage/projectZip.ts) — a plain file dropped here goes
+  // up untouched otherwise. This is what closes that gap: entries are needed
+  // to check whether a real secret value survived unsubstituted.
+  useListEntriesQuery();
+  const purgeEntries = useAppSelector(purgeEntriesSelector);
+  const [pendingUpload, setPendingUpload] = useState<{
+    files: File[];
+    findings: FileLeakFindings[];
+  } | null>(null);
+
   // Sequential rather than parallel: these are big files on one connection,
   // so uploading them at once would just split the same bandwidth and make
   // every individual progress bar crawl.
-  const handleUpload = async (selected: File[]) => {
+  const startUpload = async (selected: File[]) => {
     setError(null);
     const failures: string[] = [];
 
@@ -71,6 +84,22 @@ export function StoragePage() {
     if (failures.length > 0) {
       setError(failures.join('\n'));
     }
+  };
+
+  // Scans before anything leaves the machine — a confirmation gate, not a
+  // silent after-the-fact warning like PurgeApplyTab's, because by the time
+  // an upload finishes the file has already left. Heuristic, so it's a
+  // question the user answers, not a hard block.
+  const handleUpload = async (selected: File[]) => {
+    setError(null);
+    const findings = await scanFilesForLeaks(selected, purgeEntries);
+
+    if (findings.length > 0) {
+      setPendingUpload({ files: selected, findings });
+      return;
+    }
+
+    await startUpload(selected);
   };
 
   const handleDownload = async (file: StoredFileMeta) => {
@@ -115,6 +144,48 @@ export function StoragePage() {
           onDownload={(file) => void handleDownload(file)}
         />
       </Card>
+
+      <Dialog
+        open={pendingUpload !== null}
+        onClose={() => setPendingUpload(null)}
+        maxWidth="s"
+        aria-labelledby="leak-confirm-title"
+      >
+        <Dialog.Header caption="Похоже, в файлах остались секреты" id="leak-confirm-title" />
+        <Dialog.Body>
+          <Text color="secondary">
+            Эвристическая проверка — не гарантия, но кое-что подозрительное нашла.
+            Проверьте перед загрузкой:
+          </Text>
+          <ul className={styles.leakList}>
+            {pendingUpload?.findings.map((finding) => (
+              <li key={finding.source}>
+                <Text variant="body-2">{finding.source}</Text>
+                {finding.dictionaryHits > 0 && (
+                  <Text color="warning" variant="caption-2" as="div">
+                    незаменённых значений словаря: {finding.dictionaryHits}
+                  </Text>
+                )}
+                {finding.patternFindings.map((leak, index) => (
+                  <Text key={index} color="secondary" variant="caption-2" as="div">
+                    {leak.kind}: {leak.match}
+                  </Text>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Всё равно загрузить"
+          onClickButtonCancel={() => setPendingUpload(null)}
+          onClickButtonApply={() => {
+            const selected = pendingUpload?.files ?? [];
+            setPendingUpload(null);
+            void startUpload(selected);
+          }}
+        />
+      </Dialog>
     </div>
   );
 }

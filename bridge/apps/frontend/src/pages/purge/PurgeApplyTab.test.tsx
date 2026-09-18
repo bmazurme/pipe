@@ -92,6 +92,47 @@ describe('PurgeApplyTab', () => {
     expect(writeText).toHaveBeenCalledWith('Иванов');
   });
 
+  it('warns when the result still looks like it contains a real secret', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'contact oncall@acme-corp.example about Иванов');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(textarea().value).toBe('contact oncall@acme-corp.example about Клиент А');
+    expect(await screen.findByText(/анонимизация неполная/i)).toBeTruthy();
+    // Scoped to the finding's own list item — the raw address also shows up
+    // in the textarea's auto-resize measuring node, so a bare substring match
+    // finds two elements.
+    expect(screen.getByText('email: oncall@acme-corp.example')).toBeTruthy();
+  });
+
+  it('does not warn once the result is clean', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'Иванов и Петров');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(screen.queryByText(/анонимизация неполная/i)).toBeNull();
+  });
+
+  it('clears the warning once the text is edited again', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'contact oncall@acme-corp.example');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await screen.findByText(/анонимизация неполная/i);
+
+    await user.type(textarea(), '!');
+
+    expect(screen.queryByText(/анонимизация неполная/i)).toBeNull();
+  });
+
   it('surfaces a failed copy as an error and keeps the text', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('navigator', {

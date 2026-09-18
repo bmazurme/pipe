@@ -1,6 +1,7 @@
 import { Zip, ZipDeflate } from 'fflate';
 
 import { applyDictionary } from '../purge/purgeUtils';
+import { isTextFile } from './textFiles';
 
 const EXCLUDED_DIRS = new Set([
   'node_modules',
@@ -26,19 +27,6 @@ function isExcludedPath(relativePath: string): boolean {
   const name = segments[segments.length - 1] ?? '';
 
   return dirs.some((segment) => EXCLUDED_DIRS.has(segment)) || isEnvFile(name);
-}
-
-const TEXT_EXTENSIONS = new Set([
-  'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'mts', 'cts',
-  'json', 'md', 'mdx', 'txt', 'css', 'scss', 'less',
-  'html', 'htm', 'xml', 'svg', 'yml', 'yaml', 'graphql', 'gql',
-  'vue', 'sql', 'sh',
-]);
-
-function isTextFile(name: string): boolean {
-  const dot = name.lastIndexOf('.');
-  if (dot === -1) return false;
-  return TEXT_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
 }
 
 export function deriveZipName(files: File[]): string {

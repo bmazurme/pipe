@@ -9,6 +9,7 @@ import {
   Text,
   TextArea,
 } from '@gravity-ui/uikit';
+import { scanForLeaks, type LeakFinding } from '@pipe/protocol/leakScan';
 
 import { useListEntriesQuery } from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -31,6 +32,10 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
   // message, so only one was ever on screen. Carrying the tone with the text
   // is what lets a failed copy read as a failure instead of grey small print.
   const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null);
+  // Separate from `notice`: this is advisory, not a result of the action
+  // just taken — it survives independently so a copy (which only clears
+  // `notice`'s cousin, the field itself) doesn't silently drop the warning.
+  const [leakWarning, setLeakWarning] = useState<LeakFinding[] | null>(null);
 
   const canApply = Boolean(text) && entries.length > 0;
 
@@ -43,6 +48,13 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
       text: count > 0 ? `Заменено слов: ${count}` : 'Совпадений со словарём не найдено',
       isError: false,
     });
+
+    // Heuristic check on the *result*, not the input — this is the same
+    // "did the dictionary actually catch everything" question sync/reports
+    // ask before a parcel leaves, applied here since Purge's whole job is
+    // producing text that's about to be pasted somewhere external.
+    const findings = scanForLeaks([{ source: 'результат', content: result }]);
+    setLeakWarning(findings.length > 0 ? findings : null);
   };
 
   // The result stays in the field (and in localStorage, via PurgePage's sync
@@ -55,6 +67,7 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
       await navigator.clipboard.writeText(text);
       dispatch(draftTextChanged(''));
       setNotice({ text: 'Скопировано в буфер обмена — поле очищено', isError: false });
+      setLeakWarning(null);
     } catch {
       setNotice({
         text: 'Не удалось скопировать — проверьте разрешения браузера',
@@ -136,11 +149,31 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
               <Text color="secondary">{notice.text}</Text>
             ))}
 
+          {leakWarning && (
+            <Alert
+              className={styles.notice}
+              theme="warning"
+              view="filled"
+              title="Похоже, анонимизация неполная"
+              message={
+                <ul className={styles.leakList}>
+                  {leakWarning.map((finding, index) => (
+                    <li key={index}>
+                      {finding.kind}: {finding.match}
+                    </li>
+                  ))}
+                </ul>
+              }
+              onClose={() => setLeakWarning(null)}
+            />
+          )}
+
           <TextArea
             value={text}
             onUpdate={(value) => {
               dispatch(draftTextChanged(value));
               setNotice(null);
+              setLeakWarning(null);
             }}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Вставьте текст"
