@@ -9,12 +9,36 @@ export interface PackedFile {
   content: string;
 }
 
-export function contentHash(files: PackedFile[]): string {
+// Binary content (e.g. images pulled from a GitLab issue description) can't
+// travel through PackedFile.content: that's always read/written as UTF-8
+// text (see buildArchive/extractArchive below), which corrupts arbitrary
+// bytes. Assets are zipped under a reserved prefix instead, going straight
+// from base64 to a Buffer with no lossy string round-trip in between.
+export interface PackedAsset {
+  relPath: string;
+  base64: string;
+}
+
+// Reserved — nothing under this prefix in a real project tree collides with
+// it (double-underscore, matches the __*_manifest__.json convention).
+// Exported since sync's issuePack.ts reads a parcel's entries by hand
+// (rather than through extractArchive below, to also handle a legacy
+// no-issue-metadata manifest) and needs the exact same prefix to recognize
+// asset entries.
+export const ASSET_PREFIX = '__issue_assets__/';
+
+export function contentHash(files: PackedFile[], assets: PackedAsset[] = []): string {
   const hash = createHash('sha256');
   for (const file of [...files].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
     hash.update(file.relPath);
     hash.update('\0');
     hash.update(file.content);
+    hash.update('\0');
+  }
+  for (const asset of [...assets].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
+    hash.update(asset.relPath);
+    hash.update('\0');
+    hash.update(asset.base64);
     hash.update('\0');
   }
   return hash.digest('hex');
@@ -28,16 +52,20 @@ export function buildArchive<M extends BaseManifest>(
   entryName: string,
   files: PackedFile[],
   manifestFields: Omit<M, 'schemaVersion' | 'contentHash'>,
+  assets: PackedAsset[] = [],
 ): { buffer: Buffer; manifest: M } {
   const manifest = {
     ...manifestFields,
     schemaVersion: PROTOCOL_SCHEMA_VERSION,
-    contentHash: contentHash(files),
+    contentHash: contentHash(files, assets),
   } as M;
 
   const zip = new AdmZip();
   for (const file of files) {
     zip.addFile(file.relPath, Buffer.from(file.content, 'utf-8'));
+  }
+  for (const asset of assets) {
+    zip.addFile(`${ASSET_PREFIX}${asset.relPath}`, Buffer.from(asset.base64, 'base64'));
   }
   zip.addFile(entryName, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
 
@@ -47,9 +75,10 @@ export function buildArchive<M extends BaseManifest>(
 export function extractArchive<M extends BaseManifest>(
   buffer: Buffer,
   entryName: string,
-): { files: PackedFile[]; manifest: M } {
+): { files: PackedFile[]; assets: PackedAsset[]; manifest: M } {
   const zip = new AdmZip(buffer);
   const files: PackedFile[] = [];
+  const assets: PackedAsset[] = [];
   let manifest: M | undefined;
 
   for (const entry of zip.getEntries()) {
@@ -57,6 +86,14 @@ export function extractArchive<M extends BaseManifest>(
 
     if (entry.entryName === entryName) {
       manifest = JSON.parse(entry.getData().toString('utf-8')) as M;
+      continue;
+    }
+
+    if (entry.entryName.startsWith(ASSET_PREFIX)) {
+      assets.push({
+        relPath: entry.entryName.slice(ASSET_PREFIX.length),
+        base64: entry.getData().toString('base64'),
+      });
       continue;
     }
 
@@ -69,5 +106,5 @@ export function extractArchive<M extends BaseManifest>(
 
   assertSchemaVersion(manifest, entryName);
 
-  return { files, manifest };
+  return { files, assets, manifest };
 }

@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildArchive, extractArchive, type PackedFile } from './pack.js';
-import type { BaseManifest } from './manifest.js';
+import { PROTOCOL_SCHEMA_VERSION, type BaseManifest } from './manifest.js';
 import { applyDictionary } from './dictionary.js';
 
 // Mirrors sync/src/types.ts SyncManifest.
@@ -45,7 +45,7 @@ describe('cross-repo manifest round trip', () => {
 
     assert.equal(manifest.project, 'demo');
     assert.equal(manifest.machine, 'host-a');
-    assert.equal(manifest.schemaVersion, 1);
+    assert.equal(manifest.schemaVersion, PROTOCOL_SCHEMA_VERSION);
     assert.deepEqual(read, files);
   });
 
@@ -64,7 +64,7 @@ describe('cross-repo manifest round trip', () => {
 
     assert.equal(manifest.projectId, 173);
     assert.equal(manifest.branch, 'b-mazur-16.09.2026-628');
-    assert.equal(manifest.schemaVersion, 1);
+    assert.equal(manifest.schemaVersion, PROTOCOL_SCHEMA_VERSION);
     assert.deepEqual(read, files);
   });
 

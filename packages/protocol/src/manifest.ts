@@ -1,7 +1,12 @@
 // Bumped whenever a manifest field is added/removed/renamed in a way that an
 // older reader can't safely interpret. See assertSchemaVersion below for what
 // "safely" means in practice.
-export const PROTOCOL_SCHEMA_VERSION = 1;
+//
+// v2: archives may carry binary `assets` (e.g. images extracted from a
+// GitLab issue description) alongside the usual text `files` — see pack.ts.
+// A v1 reader has no code path for the `__issue_assets__/` zip prefix those
+// live under, so it's a real, if additive, format change.
+export const PROTOCOL_SCHEMA_VERSION = 2;
 
 export interface BaseManifest {
   schemaVersion: number;

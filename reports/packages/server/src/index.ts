@@ -1,4 +1,8 @@
 
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 
@@ -32,7 +36,17 @@ import { setupProxy } from './utils/setup-proxy';
 setupProxy();
 
 const app = express();
-const port = process.env.PORT || 4000;
+const host = process.env.HOST || '127.0.0.1';
+const startPort = Number(process.env.PORT) || 4000;
+
+// Set only by the Docker image and the standalone launcher script (run.sh/
+// run.bat) — both build the client first and run this as the only process,
+// so nothing else needs to agree on a fixed port. Plain `npm run dev`/`npm
+// start` keep today's exact behavior (hard-fail on a taken port) because the
+// separately-running Vite dev server has its own build-time-baked API URL
+// that a silent port change would break.
+const clientDistDir = join(dirname(fileURLToPath(import.meta.url)), '../../client/dist');
+const isProductionMode = existsSync(join(clientDistDir, 'index.html'));
 
 app.use(cors());
 app.use(express.json());
@@ -67,19 +81,38 @@ app.delete('/api/subscription/config/comment-templates/:id', handleRemoveComment
 app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
 
-app.get('/', (req: Request, res: Response) => {
-  res.json({ message: 'Welcome to the Express + TypeScript Server!' });
-});
+if (isProductionMode) {
+  app.use(express.static(clientDistDir));
+  // Anything that isn't /api/* and isn't a static file falls through to the
+  // SPA's own client-side router.
+  app.get(/^\/(?!api\/).*/, (req: Request, res: Response) => {
+    res.sendFile(join(clientDistDir, 'index.html'));
+  });
+} else {
+  app.get('/', (req: Request, res: Response) => {
+    res.json({ message: 'Welcome to the Express + TypeScript Server!' });
+  });
+}
 
-const server = app.listen(port, () => {
-  console.log(`🚀 The server is running at http://localhost:${port}`);
-});
+function startServer(port: number, attemptsLeft: number) {
+  const server = app.listen(port, host, () => {
+    console.log(`🚀 Сервер запущен: http://${host}:${port}`);
+  });
 
-server.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EADDRINUSE') {
+      throw err;
+    }
+
+    if (isProductionMode && attemptsLeft > 0) {
+      console.warn(`Порт ${port} занят, пробую ${port + 1}...`);
+      startServer(port + 1, attemptsLeft - 1);
+      return;
+    }
+
     console.error(`Порт ${port} уже занят другим процессом. Задайте свободный порт через PORT в packages/server/.env и перезапустите.`);
     process.exit(1);
-  }
+  });
+}
 
-  throw err;
-});
+startServer(startPort, 20);

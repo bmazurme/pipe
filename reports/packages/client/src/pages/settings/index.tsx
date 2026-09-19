@@ -9,6 +9,7 @@ import { settingsSelector, setSettings, type SettingsState } from '../../store';
 import { useSetSettingsMutation, useGetProjectDictQuery, useAddProjectCodeMutation, useRemoveProjectCodeMutation } from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { useDocumentTitle } from '../../hooks/use-document-title';
+import { useUnsavedChangesGuard } from '../../hooks/use-unsaved-changes';
 import { describeError } from '../../utils/describe-error';
 import PageHeader from '../../components/page-header';
 import TrackedProjectsSection from './tracked-projects-section';
@@ -48,6 +49,8 @@ function Settings() {
   const codes = Object.entries(projectDict);
   const isDirty = JSON.stringify(form) !== JSON.stringify(settings);
   const isDuplicateCode = Boolean(codeForm.code) && codeForm.code in projectDict;
+
+  useUnsavedChangesGuard('settings-general', isDirty);
 
   const handleChange = (key: keyof SettingsState) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));

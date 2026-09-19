@@ -9,6 +9,7 @@ import {
   useGenerateEncryptionKeyPairMutation,
 } from '../../store/api';
 import { describeError } from '../../utils/describe-error';
+import { useUnsavedChangesGuard } from '../../hooks/use-unsaved-changes';
 
 import style from './settings.module.css';
 
@@ -34,6 +35,8 @@ function EncryptionSection() {
   }
 
   const isDirty = JSON.stringify(keys) !== JSON.stringify(persisted);
+
+  useUnsavedChangesGuard('settings-encryption', isDirty);
 
   const notifyError = (title: string, error: unknown) => {
     toaster.add({ name: 'encryption-error', theme: 'danger', title, content: describeError(error), isClosable: true });

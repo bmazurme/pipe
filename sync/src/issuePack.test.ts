@@ -1,10 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { buildIssueArchive, extractIssue, extractIssueArchive, ISSUE_FILE_NAME, SUBSCRIPTION_MANIFEST_ENTRY } from './issuePack.js';
+import {
+  buildIssueArchive,
+  extractIssue,
+  extractIssueArchive,
+  updateIssueFile,
+  ISSUE_FILE_NAME,
+  SUBSCRIPTION_MANIFEST_ENTRY,
+} from './issuePack.js';
 import { buildArchive } from './pack.js';
 
 describe('buildIssueArchive / extractIssueArchive', () => {
@@ -64,6 +71,22 @@ describe('buildIssueArchive / extractIssueArchive', () => {
   it('throws when neither manifest entry is present', () => {
     assert.throws(() => extractIssueArchive(Buffer.from('not a zip')));
   });
+
+  it('round-trips assets separately from files', () => {
+    const assets = [{ relPath: 'issue-images/shot.png', base64: Buffer.from([1, 2, 3]).toString('base64') }];
+    const buffer = buildIssueArchive(files, manifest, assets);
+    const { files: extractedFiles, assets: extractedAssets } = extractIssueArchive(buffer);
+
+    assert.equal(extractedFiles.length, files.length);
+    assert.deepEqual(extractedAssets, assets);
+  });
+
+  it('extracts no assets from an archive built without any', () => {
+    const buffer = buildIssueArchive(files, manifest);
+    const { assets } = extractIssueArchive(buffer);
+
+    assert.deepEqual(assets, []);
+  });
 });
 
 describe('extractIssue', () => {
@@ -95,5 +118,38 @@ describe('extractIssue', () => {
     assert.match(written, /See real-value for details/);
     assert.match(written, /Branch: user-20260914-42/);
     assert.match(written, /parcel id 7/);
+    assert.doesNotMatch(written, /## Images/);
+  });
+
+  it('writes assets to disk and lists them in ISSUE.md', () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-issue-assets-test-'));
+    const pngBytes = Buffer.from([1, 2, 3, 4]);
+    const assets = [{ relPath: 'issue-images/shot.png', base64: pngBytes.toString('base64') }];
+
+    const result = extractIssue(projectPath, manifest, {}, 7, assets);
+
+    assert.deepEqual(result.imagePaths, ['issue-images/shot.png']);
+    const writtenImage = readFileSync(path.join(projectPath, 'issue-images/shot.png'));
+    assert.deepEqual(writtenImage, pngBytes);
+
+    const written = readFileSync(result.path, 'utf-8');
+    assert.match(written, /## Images/);
+    assert.match(written, /- issue-images\/shot\.png/);
+  });
+
+  it('updateIssueFile rewrites the title/description while keeping the branch footer and images', () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-issue-update-test-'));
+    const result = extractIssue(projectPath, manifest, {}, 7, [
+      { relPath: 'issue-images/shot.png', base64: Buffer.from([1]).toString('base64') },
+    ]);
+
+    updateIssueFile(result.path, manifest, 'Edited title', 'Edited description', result.imagePaths, 7);
+
+    const written = readFileSync(result.path, 'utf-8');
+    assert.match(written, /Edited title/);
+    assert.match(written, /Edited description/);
+    assert.match(written, /issue-images\/shot\.png/);
+    assert.match(written, /Branch: user-20260914-42/);
+    assert.equal(existsSync(path.join(projectPath, 'issue-images/shot.png')), true);
   });
 });

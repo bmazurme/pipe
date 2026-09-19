@@ -20,11 +20,16 @@ function belongsToTrackedProject(issue: GitlabIssue, project: ProjectConfig): bo
   return !project.gitlabProjectId || String(issue.project_id) === project.gitlabProjectId;
 }
 
-async function processIssue(issue: GitlabIssue, project: ProjectConfig, config: SyncConfig): Promise<void> {
+async function processIssue(
+  issue: GitlabIssue,
+  project: ProjectConfig,
+  config: SyncConfig,
+  gitlabToken: string,
+): Promise<void> {
   const key = issueKey(issue.project_id, issue.iid);
   const branch = syntheticBranchName(issue);
 
-  const result = await buildAndUploadIssueParcel(project, config, issue, branch);
+  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken);
   if (!result) return;
 
   recordPushed(key, result.filename);
@@ -64,7 +69,7 @@ export async function runGitlabWorkerOnce(name: string): Promise<void> {
 
   for (const issue of newIssues) {
     try {
-      await processIssue(issue, project, config);
+      await processIssue(issue, project, config, gitlabToken);
     } catch (error) {
       console.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${(error as Error).message}`);
     }

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { ThemeProvider, Toaster, ToasterComponent, ToasterProvider } from '@gravity-ui/uikit';
 
 import { useTheme } from './hooks/use-theme';
+import { UnsavedChangesProvider } from './hooks/UnsavedChangesProvider';
 import AppLayout from './app-layout';
 import Content from './components/content';
 
@@ -22,7 +23,9 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <ToasterProvider toaster={toaster}>
-        <Content sidebar main={<AppLayout />} />
+        <UnsavedChangesProvider>
+          <Content sidebar main={<AppLayout />} />
+        </UnsavedChangesProvider>
         <ToasterComponent mobile={mobile} />
       </ToasterProvider>
     </ThemeProvider>

@@ -1,9 +1,16 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import AdmZip from 'adm-zip';
 
-import { buildArchive as buildArchiveGeneric, assertSchemaVersion, type BaseManifest, type PackedFile } from '@pipe/protocol';
+import {
+  buildArchive as buildArchiveGeneric,
+  assertSchemaVersion,
+  ASSET_PREFIX,
+  type BaseManifest,
+  type PackedFile,
+  type PackedAsset,
+} from '@pipe/protocol';
 
 import { type Dictionary, toLocal } from './dictionary.js';
 import { MANIFEST_ENTRY as LEGACY_MANIFEST_ENTRY } from './pack.js';
@@ -25,8 +32,9 @@ export interface SubscriptionManifest extends BaseManifest {
 export function buildIssueArchive(
   files: PackedFile[],
   manifest: Omit<SubscriptionManifest, 'contentHash' | 'schemaVersion'>,
+  assets: PackedAsset[] = [],
 ): Buffer {
-  const { buffer } = buildArchiveGeneric<SubscriptionManifest>(SUBSCRIPTION_MANIFEST_ENTRY, files, manifest);
+  const { buffer } = buildArchiveGeneric<SubscriptionManifest>(SUBSCRIPTION_MANIFEST_ENTRY, files, manifest, assets);
   return buffer;
 }
 
@@ -40,6 +48,7 @@ export function buildIssueArchive(
 export function extractIssueArchive(buffer: Buffer): {
   manifest: SubscriptionManifest;
   files: PackedFile[];
+  assets: PackedAsset[];
   legacyManifest: boolean;
 } {
   const zip = new AdmZip(buffer);
@@ -54,15 +63,21 @@ export function extractIssueArchive(buffer: Buffer): {
     );
   }
 
-  const files = entries
-    .filter((entry) => entry.entryName !== SUBSCRIPTION_MANIFEST_ENTRY && entry.entryName !== LEGACY_MANIFEST_ENTRY)
+  const contentEntries = entries.filter(
+    (entry) => entry.entryName !== SUBSCRIPTION_MANIFEST_ENTRY && entry.entryName !== LEGACY_MANIFEST_ENTRY,
+  );
+  const files = contentEntries
+    .filter((entry) => !entry.entryName.startsWith(ASSET_PREFIX))
     .map((entry) => ({ relPath: entry.entryName, content: entry.getData().toString('utf-8') }));
+  const assets = contentEntries
+    .filter((entry) => entry.entryName.startsWith(ASSET_PREFIX))
+    .map((entry) => ({ relPath: entry.entryName.slice(ASSET_PREFIX.length), base64: entry.getData().toString('base64') }));
 
   if (subscriptionEntry) {
     const manifest = JSON.parse(subscriptionEntry.getData().toString('utf-8')) as SubscriptionManifest;
     assertSchemaVersion(manifest, SUBSCRIPTION_MANIFEST_ENTRY);
 
-    return { manifest, files, legacyManifest: false };
+    return { manifest, files, assets, legacyManifest: false };
   }
 
   const legacy = JSON.parse(legacyEntry!.getData().toString('utf-8')) as {
@@ -83,11 +98,34 @@ export function extractIssueArchive(buffer: Buffer): {
       schemaVersion: 0,
     },
     files,
+    assets,
     legacyManifest: true,
   };
 }
 
 export const ISSUE_FILE_NAME = 'ISSUE.md';
+
+function buildIssueFileBody(
+  manifest: SubscriptionManifest,
+  title: string,
+  description: string,
+  imagePaths: string[],
+  parcelId: number,
+): string {
+  return [
+    `# Issue #${manifest.issueIid} (project ${manifest.projectId})`,
+    '',
+    title,
+    '',
+    description,
+    '',
+    ...(imagePaths.length > 0 ? ['## Images', '', ...imagePaths.map((p) => `- ${p}`), ''] : []),
+    '---',
+    `Branch: ${manifest.branch}`,
+    `Pulled: ${new Date().toISOString()} (parcel id ${parcelId})`,
+    '',
+  ].join('\n');
+}
 
 // De-anonymizes the manifest's title/description and writes them to a plain
 // file inside the pulled project — pull-issue used to only print these to
@@ -95,30 +133,47 @@ export const ISSUE_FILE_NAME = 'ISSUE.md';
 // and unusable by whatever picks up the branch next (a human, or an agent
 // per docs/roadmap.md's task->agent->review pipeline, which needs the task
 // text sitting next to the code, not in a terminal that already closed).
+//
+// Assets (images pulled from the issue description) are written to disk
+// too, listed by their local path rather than rewritten in place inline:
+// two differently-named-upstream images can collide to the same local
+// filename and get de-duplicated (see gitlabClient.ts getIssueImages), so
+// reconstructing "which inline ![]() referred to which written file" after
+// the fact isn't reliably unambiguous — an explicit list is.
 export function extractIssue(
   projectPath: string,
   manifest: SubscriptionManifest,
   dictionary: Dictionary,
   parcelId: number,
-): { path: string; title: string; description: string } {
+  assets: PackedAsset[] = [],
+): { path: string; title: string; description: string; imagePaths: string[] } {
   const title = toLocal(dictionary, manifest.issueTitle);
   const description = toLocal(dictionary, manifest.issueDescription);
 
-  const body = [
-    `# Issue #${manifest.issueIid} (project ${manifest.projectId})`,
-    '',
-    title,
-    '',
-    description,
-    '',
-    '---',
-    `Branch: ${manifest.branch}`,
-    `Pulled: ${new Date().toISOString()} (parcel id ${parcelId})`,
-    '',
-  ].join('\n');
+  const imagePaths = assets.map((asset) => asset.relPath);
+  for (const asset of assets) {
+    const destination = path.join(projectPath, asset.relPath);
+    mkdirSync(path.dirname(destination), { recursive: true });
+    writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
+  }
 
   const destination = path.join(projectPath, ISSUE_FILE_NAME);
-  writeFileSync(destination, body, 'utf-8');
+  writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId), 'utf-8');
 
-  return { path: destination, title, description };
+  return { path: destination, title, description, imagePaths };
+}
+
+// Re-writes ISSUE.md after a `--review` edit — keeps the same branch/pulled
+// footer and image list extractIssue already wrote, just with the (possibly
+// edited) title/description, so the file on disk matches what was actually
+// dispatched to the agent.
+export function updateIssueFile(
+  destination: string,
+  manifest: SubscriptionManifest,
+  title: string,
+  description: string,
+  imagePaths: string[],
+  parcelId: number,
+): void {
+  writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId), 'utf-8');
 }

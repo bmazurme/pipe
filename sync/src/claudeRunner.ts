@@ -11,9 +11,12 @@ import { spawn } from 'node:child_process';
 // 3 point 6) — the git-worktree isolation this module runs inside handles
 // disk state, but nothing here sandboxes network or process access. Do not
 // point this at a shared server user account.
-export function runClaude(cwd: string, prompt: string): Promise<{ exitCode: number; output: string }> {
+export function runClaude(cwd: string, prompt: string, model?: string): Promise<{ exitCode: number; output: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt, '--dangerously-skip-permissions'], {
+    const args = ['-p', prompt, '--dangerously-skip-permissions'];
+    if (model) args.push('--model', model);
+
+    const child = spawn('claude', args, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

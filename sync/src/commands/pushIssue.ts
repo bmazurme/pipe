@@ -8,7 +8,7 @@ import { loadCredentialsOrEmpty } from '../credentials.js';
 import { loadOptionalDictionary, toRemote } from '../dictionary.js';
 import { encryptBuffer } from '../encryption.js';
 import { getCurrentBranch } from '../gitStatus.js';
-import { getIssue, type GitlabIssue } from '../gitlabClient.js';
+import { getIssue, getIssueImages, type GitlabIssue } from '../gitlabClient.js';
 import { buildIssueArchive } from '../issuePack.js';
 import { resolveFromRoot } from '../paths.js';
 import { readAndTransform } from '../pack.js';
@@ -39,6 +39,7 @@ export async function buildAndUploadIssueParcel(
   config: SyncConfig,
   issue: GitlabIssue,
   branch: string,
+  gitlabToken: string,
 ): Promise<PushedIssueParcel | null> {
   const dictionary = loadOptionalDictionary(project.dictionary);
 
@@ -51,6 +52,9 @@ export async function buildAndUploadIssueParcel(
   const files = readAndTransform(project.path, relPaths, (text) => toRemote(dictionary, text));
   const issueTitle = toRemote(dictionary, issue.title);
   const issueDescription = toRemote(dictionary, issue.description ?? '');
+  const images = config.gitlab?.apiUrl
+    ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '')
+    : [];
 
   const leaks = scanForLeaks([
     ...files.map((f) => ({ source: f.relPath, content: f.content })),
@@ -61,15 +65,19 @@ export async function buildAndUploadIssueParcel(
     console.warn(formatLeakFindings(leaks));
   }
 
-  const archive = buildIssueArchive(files, {
-    issueId: String(issue.id),
-    issueIid: String(issue.iid),
-    issueTitle,
-    issueDescription,
-    projectId: issue.project_id,
-    branch,
-    createdAt: new Date().toISOString(),
-  });
+  const archive = buildIssueArchive(
+    files,
+    {
+      issueId: String(issue.id),
+      issueIid: String(issue.iid),
+      issueTitle,
+      issueDescription,
+      projectId: issue.project_id,
+      branch,
+      createdAt: new Date().toISOString(),
+    },
+    images,
+  );
 
   const shouldEncrypt = Boolean(project.publicKeyPath);
   const buffer = shouldEncrypt
@@ -107,7 +115,7 @@ export async function pushIssueCommand(name: string, projectId: string, iid: str
   const issue = await getIssue(config.gitlab.apiUrl, gitlabToken, projectId, iid);
   const branch = getCurrentBranch(project.path);
 
-  const result = await buildAndUploadIssueParcel(project, config, issue, branch);
+  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken);
   if (!result) return;
 
   console.log(

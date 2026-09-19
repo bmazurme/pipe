@@ -185,6 +185,41 @@ confirm-before-send flow), so everything here lives in new files plus one
 appended command block in `cli.ts`, rather than adding to files already
 mid-edit elsewhere.
 
+## Issue images, and reviewing before dispatch
+
+Two additions to the same issue-parcel flow:
+
+- **Images embedded in an issue description travel in the parcel now.**
+  `@pipe/protocol`'s `buildArchive`/`extractArchive`
+  ([pack.ts](packages/protocol/src/pack.ts)) accept an additive `assets`
+  list — binary content zipped under a reserved `__issue_assets__/` prefix,
+  base64 in/out, never round-tripped through the lossy UTF-8 string path
+  `PackedFile.content` uses (bumped `PROTOCOL_SCHEMA_VERSION` to `2`, since a
+  v1 reader has no code path for that prefix). Both push paths — reports'
+  `handlePushSubscriptionIssue`
+  ([subscription/handler.ts](reports/packages/server/src/subscription/handler.ts))
+  and sync's `buildAndUploadIssueParcel`
+  ([commands/pushIssue.ts](sync/src/commands/pushIssue.ts)) — call their own
+  `getIssueImages()` (mirrored in each product's `gitlab-client.ts`,
+  same duplication pattern as the rest of this flow) to pull `![]()` image
+  refs out of the description
+  ([markdownImages.ts](packages/protocol/src/markdownImages.ts), pure
+  parsing shared by both) and download whichever are relative or same-origin
+  as the configured GitLab instance — a link to some other host is left
+  alone. On the receiving end, sync's `extractIssue`
+  ([issuePack.ts](sync/src/issuePack.ts)) writes them to `issue-images/` in
+  the worktree and lists them in `ISSUE.md`; reports' pull handler does the
+  same under the tracked project. Not leak-scanned (that's text-pattern
+  based) and capped at 20 MB total per issue.
+- **`sync-cli agent-runner <name> --review`** pauses before each parcel is
+  dispatched to Claude: prints the issue and any pulled images, offers to
+  open the description in `$EDITOR`/`$VISUAL` (rewriting `ISSUE.md` if
+  changed, so the "before" commit matches what was actually sent), asks
+  which model to run it with (passed straight through as `claude --model`),
+  and confirms before proceeding — declining leaves the parcel unclaimed for
+  the next run. Needs a human at the keyboard, so it's rejected together
+  with `--watch` ([reviewPrompt.ts](sync/src/reviewPrompt.ts)).
+
 ## Roadmap (not yet implemented)
 
 ### Multi-parcel addressing

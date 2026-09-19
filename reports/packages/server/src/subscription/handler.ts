@@ -9,7 +9,7 @@ import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, issueKey } from './state-props';
-import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate } from './gitlab-client';
+import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
 import { buildBranchName, createBranch } from './git';
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
@@ -114,6 +114,7 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
 
     const issueTitle = applyDictionary(issue.title, dictionary, 'toRemote');
     const issueDescription = applyDictionary(issue.description ?? '', dictionary, 'toRemote');
+    const images = await getIssueImages(issue.description ?? '');
 
     const leaks = scanForLeaks([
       ...files.map((f) => ({ source: f.relPath, content: f.content })),
@@ -124,15 +125,19 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
       console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
     }
 
-    const archive = buildArchive(files, {
-      issueId: issue.id,
-      issueIid: issue.iid,
-      issueTitle,
-      issueDescription,
-      projectId: issue.project_id,
-      branch: state.branch,
-      createdAt: new Date().toISOString(),
-    });
+    const archive = buildArchive(
+      files,
+      {
+        issueId: issue.id,
+        issueIid: issue.iid,
+        issueTitle,
+        issueDescription,
+        projectId: issue.project_id,
+        branch: state.branch,
+        createdAt: new Date().toISOString(),
+      },
+      images,
+    );
 
     const shouldEncrypt = encryption.enabled && !!encryption.publicKey;
 
@@ -178,7 +183,7 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
 
     const downloaded = await downloadParcel(newest.id);
     const buffer = isEncrypted ? decryptBuffer(downloaded, encryption.privateKey) : downloaded;
-    const { files } = extractArchive(buffer);
+    const { files, assets } = extractArchive(buffer);
     const projectRoot = resolve(trackedProject.path);
 
     for (const file of files) {
@@ -190,6 +195,19 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
 
       mkdirSync(dirname(destination), { recursive: true });
       writeFileSync(destination, applyDictionary(file.content, dictionary, 'toLocal'), 'utf-8');
+    }
+
+    // Images extracted from the issue description — written next to the code
+    // so a human picking up the branch can actually see what the issue showed.
+    for (const asset of assets) {
+      const destination = resolve(projectRoot, asset.relPath);
+
+      if (destination !== projectRoot && relative(projectRoot, destination).startsWith('..')) {
+        throw new Error(`Посылка содержит путь вне репозитория: ${asset.relPath}`);
+      }
+
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
     }
 
     return setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });

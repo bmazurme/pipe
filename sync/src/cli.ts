@@ -113,6 +113,10 @@ program
       'No dictionary is used here — de-/anonymization stays reports\' responsibility.',
   )
   .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
+  .option(
+    '--review',
+    'pause before each dispatch to review/edit the issue and pick a model — not compatible with --watch',
+  )
   .action((name, options) => agentRunnerCommand(name, options));
 
 // fetch() wraps every network-level failure (DNS, TCP, TLS, proxy) as a bare

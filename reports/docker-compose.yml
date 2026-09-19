@@ -1,0 +1,39 @@
+# Explicit project name, matching bridge's docker-compose.yml — without it
+# Compose derives the name from the directory basename, which for a personal
+# checkout could collide with something else.
+name: pipe-reports
+
+services:
+  reports:
+    build:
+      context: ..
+      dockerfile: reports/Dockerfile
+    restart: unless-stopped
+    # A single service with no inter-container traffic doesn't need its own
+    # network — Compose creating one per project is what runs a heavily-used
+    # dev machine out of free IPv4 pools ("could not find an available,
+    # non-overlapping IPv4 address pool"). Docker's shared default bridge
+    # network is enough here.
+    network_mode: bridge
+    environment:
+      PORT: 4000
+    ports:
+      # Published to loopback only — this runs on one person's own machine,
+      # not a shared server; nothing on the LAN should be able to reach it.
+      - '127.0.0.1:4000:4000'
+    volumes:
+      # Server state (GitLab/bridge settings, calendar off-days, project
+      # codes, Subscription's tracked-issue state) is plain JSON written next
+      # to the compiled source (see packages/server/src/**/props.ts) — named
+      # volumes here so `docker compose down`/an image rebuild doesn't wipe
+      # it. Docker seeds each volume from the image's existing directory
+      # content the first time it's mounted, so counts/props.json's
+      # in-repo-seeded calendar data survives the first run too.
+      - reports-settings:/app/reports/packages/server/src/settings
+      - reports-counts:/app/reports/packages/server/src/counts
+      - reports-subscription:/app/reports/packages/server/src/subscription
+
+volumes:
+  reports-settings:
+  reports-counts:
+  reports-subscription:

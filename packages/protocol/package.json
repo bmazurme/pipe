@@ -13,7 +13,8 @@
     "./dictionary": { "types": "./dist/dictionary.d.ts", "default": "./dist/dictionary.js" },
     "./pack": { "types": "./dist/pack.d.ts", "default": "./dist/pack.js" },
     "./walk": { "types": "./dist/walk.d.ts", "default": "./dist/walk.js" },
-    "./leakScan": { "types": "./dist/leakScan.d.ts", "default": "./dist/leakScan.js" }
+    "./leakScan": { "types": "./dist/leakScan.d.ts", "default": "./dist/leakScan.js" },
+    "./markdownImages": { "types": "./dist/markdownImages.d.ts", "default": "./dist/markdownImages.js" }
   },
   "scripts": {
     "build": "tsc -b",

@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getIssue, listAssignedOpenIssues } from './gitlabClient.js';
+import { getIssue, getIssueImages, listAssignedOpenIssues } from './gitlabClient.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -52,5 +52,67 @@ describe('getIssue', () => {
     const issue = await getIssue('https://gitlab.example.com/api/v4', 'tok', 173, 628);
 
     assert.equal(issue.iid, 2);
+  });
+});
+
+describe('getIssueImages', () => {
+  const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
+
+  it('returns nothing when the description has no image references', async () => {
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      throw new Error('should not be called');
+    }) as typeof fetch;
+
+    const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', 'no images here');
+
+    assert.deepEqual(images, []);
+    assert.equal(called, false);
+  });
+
+  it('downloads a relative /uploads/ image with the private-token header', async () => {
+    let capturedUrl: string | undefined;
+    let capturedHeaders: HeadersInit | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedHeaders = init?.headers;
+      return new Response(PNG_BYTES, { status: 200 });
+    }) as typeof fetch;
+
+    const images = await getIssueImages(
+      'https://gitlab.example.com/api/v4',
+      'tok',
+      '![shot](/uploads/abc/shot.png)',
+    );
+
+    assert.equal(capturedUrl, 'https://gitlab.example.com/uploads/abc/shot.png');
+    assert.deepEqual(capturedHeaders, { 'Private-Token': 'tok' });
+    assert.deepEqual(images, [{ relPath: 'issue-images/shot.png', base64: Buffer.from(PNG_BYTES).toString('base64') }]);
+  });
+
+  it('skips an image hosted on a different origin', async () => {
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      throw new Error('should not be called');
+    }) as typeof fetch;
+
+    const images = await getIssueImages(
+      'https://gitlab.example.com/api/v4',
+      'tok',
+      '![external](https://evil.example/tracker.png)',
+    );
+
+    assert.deepEqual(images, []);
+    assert.equal(called, false);
+  });
+
+  it('warns and continues when one download fails', async () => {
+    globalThis.fetch = (async () => new Response('nope', { status: 404 })) as typeof fetch;
+
+    const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', '![shot](/uploads/abc/shot.png)');
+
+    assert.deepEqual(images, []);
   });
 });

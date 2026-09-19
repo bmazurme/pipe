@@ -69,7 +69,7 @@ describe('buildAndUploadIssueParcel', () => {
     }) as typeof fetch;
 
     const project = makeProject(projectPath, { dictionary: dictionaryPath, include: ['**/*.ts'] });
-    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628');
+    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token');
 
     assert.ok(result);
     assert.equal(result!.filename, '173-628.subscription.zip');
@@ -96,7 +96,7 @@ describe('buildAndUploadIssueParcel', () => {
     }) as typeof fetch;
 
     const project = makeProject(projectPath, { include: ['**/*.ts'] });
-    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628');
+    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token');
 
     assert.equal(result, null);
     assert.equal(fetchCalled, false);

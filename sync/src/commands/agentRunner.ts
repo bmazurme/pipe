@@ -7,9 +7,10 @@ import { buildIssuePrompt, runClaude } from '../claudeRunner.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { decryptBuffer, encryptBuffer } from '../encryption.js';
 import { addTaskWorktree, commitAll, pushBranch, removeTaskWorktree } from '../gitWorktree.js';
-import { buildIssueArchive, extractIssue, extractIssueArchive } from '../issuePack.js';
+import { buildIssueArchive, extractIssue, extractIssueArchive, updateIssueFile } from '../issuePack.js';
 import { AGENT_WORK_DIR, resolveFromRoot } from '../paths.js';
 import { contentHash, readAndTransform } from '../pack.js';
+import { reviewIssueBeforeDispatch } from '../reviewPrompt.js';
 import type { ProjectConfig, StoredFileResponse } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
 import { issueParcelName } from './pushIssue.js';
@@ -56,6 +57,7 @@ async function processCandidate(
   candidate: Candidate,
   project: ProjectConfig,
   client: BridgeClient,
+  review: boolean,
 ): Promise<void> {
   const key = issueKey(candidate.projectId, candidate.iid);
   const downloaded = await client.download(candidate.file.id);
@@ -69,7 +71,7 @@ async function processCandidate(
     buffer = decryptBuffer(downloaded, readFileSync(resolveFromRoot(project.privateKeyPath), 'utf-8'));
   }
 
-  const { manifest, files: packedFiles, legacyManifest } = extractIssueArchive(buffer);
+  const { manifest, files: packedFiles, assets, legacyManifest } = extractIssueArchive(buffer);
 
   if (legacyManifest) {
     console.error(`Skipping ${key}: parcel has no issue metadata (legacy manifest) — agent-runner needs a title/description to work from.`);
@@ -110,14 +112,40 @@ async function processCandidate(
   // No dictionary anywhere in agent-runner: the empty {} makes extractIssue's
   // internal de-anonymization step a no-op, so ISSUE.md keeps whatever
   // placeholders the parcel already carries — decoding stays reports' job.
-  const issueFile = extractIssue(worktreeDir, manifest, {}, candidate.file.id);
+  const issueFile = extractIssue(worktreeDir, manifest, {}, candidate.file.id, assets);
 
+  let title = issueFile.title;
+  let description = issueFile.description;
+  let model: string | undefined;
+
+  if (review) {
+    const result = await reviewIssueBeforeDispatch({ title, description, imagePaths: issueFile.imagePaths });
+
+    if (!result.proceed) {
+      console.log(`Skipping ${key}: declined at review — parcel left unclaimed for the next run.`);
+      removeTaskWorktree(project.path, worktreeDir);
+      rmSync(worktreeDir, { recursive: true, force: true });
+      return;
+    }
+
+    title = result.title;
+    description = result.description;
+    model = result.model;
+
+    if (title !== issueFile.title || description !== issueFile.description) {
+      updateIssueFile(issueFile.path, manifest, title, description, issueFile.imagePaths, candidate.file.id);
+    }
+  }
+
+  // The edited (or untouched) title/description is what actually becomes
+  // part of the repo's history — committed here, not applied silently after
+  // the fact — so "before" always matches what was really dispatched.
   commitAll(worktreeDir, `Task #${manifest.issueIid}: before (parcel ${candidate.file.id})`);
   pushBranch(worktreeDir, branch);
   console.log(`Pushed "before" commit to origin/${branch}.`);
 
-  const prompt = buildIssuePrompt(issueFile.title, issueFile.description);
-  const { exitCode } = await runClaude(worktreeDir, prompt);
+  const prompt = buildIssuePrompt(title, description);
+  const { exitCode } = await runClaude(worktreeDir, prompt, model);
 
   commitAll(
     worktreeDir,
@@ -161,7 +189,7 @@ async function processCandidate(
   removeTaskWorktree(project.path, worktreeDir);
 }
 
-export async function runAgentOnce(name: string): Promise<void> {
+export async function runAgentOnce(name: string, review = false): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
   const client = new BridgeClient(config.bridge.apiUrl);
@@ -177,7 +205,7 @@ export async function runAgentOnce(name: string): Promise<void> {
   for (const candidate of candidates) {
     const key = issueKey(candidate.projectId, candidate.iid);
     try {
-      await processCandidate(candidate, project, client);
+      await processCandidate(candidate, project, client, review);
     } catch (error) {
       const worktreeDir = path.join(AGENT_WORK_DIR, `${candidate.projectId}-${candidate.iid}`);
       console.error(
@@ -193,9 +221,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function agentRunnerCommand(name: string, options: { watch?: string }): Promise<void> {
+export async function agentRunnerCommand(name: string, options: { watch?: string; review?: boolean }): Promise<void> {
+  if (options.watch && options.review) {
+    throw new Error('--review needs a human at the keyboard for each parcel — it cannot be combined with --watch.');
+  }
+
   if (!options.watch) {
-    await runAgentOnce(name);
+    await runAgentOnce(name, options.review ?? false);
     return;
   }
 

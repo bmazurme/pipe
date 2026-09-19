@@ -1,13 +1,14 @@
-import type { ReactElement } from 'react';
+import type { MouseEvent, ReactElement } from 'react';
 import { Text, Button, Icon, Tooltip } from '@gravity-ui/uikit';
 import {
   House, Calendar as CalendarIcon, ListCheck, Gear, Moon, Sun, ChevronsLeft, ChevronsRight, Xmark,
 } from '@gravity-ui/icons';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { useTheme } from '../../hooks/use-theme';
 import { useSidebarCollapse } from '../../hooks/use-sidebar-collapse';
+import { useConfirmNavigation } from '../../hooks/use-unsaved-changes';
 
 import style from './sidebar.module.css';
 
@@ -20,6 +21,8 @@ const links = [
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const confirmNavigation = useConfirmNavigation();
   const { isDark, toggleTheme } = useTheme();
   const { collapsed, toggleCollapsed } = useSidebarCollapse();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -56,6 +59,22 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {links.map(({ to, label, icon }) => {
           const current = pathname === to;
 
+          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            onNavigate?.();
+
+            // Leave modifier/middle/right clicks (open in new tab, etc.) to the
+            // browser's native anchor behavior — only intercept a plain nav click.
+            const isPlainLeftClick = event.button === 0
+              && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
+            if (current || !isPlainLeftClick) {
+              return;
+            }
+
+            event.preventDefault();
+            confirmNavigation(() => navigate(to));
+          };
+
           return withTooltip(label, (
             <Button
               key={to}
@@ -67,7 +86,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               className={`${style.navButton} ${current ? style.navButtonActive : ''}`}
               aria-current={current ? 'page' : undefined}
               aria-label={collapsed ? label : undefined}
-              onClick={onNavigate}
+              onClick={handleClick}
             >
               <Icon data={icon} size={16} />
               <span className={`${style.label} ${collapsed ? style.hidden : ''}`}>{label}</span>

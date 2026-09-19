@@ -4,11 +4,12 @@ import {
   contentHash,
   type BaseManifest,
   type PackedFile,
+  type PackedAsset,
 } from '@pipe/protocol';
 
 export const MANIFEST_ENTRY = '__subscription_manifest__.json';
 
-export type { PackedFile };
+export type { PackedFile, PackedAsset };
 export { contentHash };
 
 export interface SubscriptionManifest extends BaseManifest {
@@ -24,11 +25,14 @@ export interface SubscriptionManifest extends BaseManifest {
 export function buildArchive(
   files: PackedFile[],
   manifest: Omit<SubscriptionManifest, 'contentHash' | 'schemaVersion'>,
+  assets: PackedAsset[] = [],
 ): Buffer {
-  const { buffer } = buildArchiveGeneric<SubscriptionManifest>(MANIFEST_ENTRY, files, manifest);
+  const { buffer } = buildArchiveGeneric<SubscriptionManifest>(MANIFEST_ENTRY, files, manifest, assets);
   return buffer;
 }
 
-export function extractArchive(buffer: Buffer): { manifest: SubscriptionManifest; files: PackedFile[] } {
+export function extractArchive(
+  buffer: Buffer,
+): { manifest: SubscriptionManifest; files: PackedFile[]; assets: PackedAsset[] } {
   return extractArchiveGeneric<SubscriptionManifest>(buffer, MANIFEST_ENTRY);
 }
