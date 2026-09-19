@@ -10,6 +10,13 @@ export const getProjectDict = (): ProjectDictType => {
   return JSON.parse(readFileSync(projectDictPath, 'utf-8'));
 };
 
+// Full replace, for restoring a settings-transfer bundle.
+export const setProjectDict = (projectDict: ProjectDictType): ProjectDictType => {
+  writeFileSync(projectDictPath, JSON.stringify(projectDict, null, 2) + '\n');
+
+  return projectDict;
+};
+
 export const addProjectCode = (code: string, label: string): ProjectDictType => {
   const projectDict = getProjectDict();
 

@@ -136,6 +136,21 @@ export type SubscriptionConfigType = {
   encryption: EncryptionSettingsType;
 };
 
+// Everything a user configures by hand, bundled for moving to a new machine
+// in one file — the calendar's holidays/shortDays/badDays are deliberately
+// left out: those come from bridge (see DayOffsImportType/importDayOffs),
+// not from the user, so re-importing them here would just be stale data
+// racing the real source. offDaysByYear only carries the personal
+// exceptions the user actually added (addOffDays).
+export type SettingsBundleType = {
+  version: number;
+  exportedAt: string;
+  settings: SettingsType;
+  subscriptionConfig: SubscriptionConfigType;
+  projectDict: ProjectDictType;
+  offDaysByYear: Record<string, string[]>;
+};
+
 export type SubscriptionStepType = 'init' | 'pushed' | 'pulled' | 'published';
 
 export type SubscriptionStateEntryType = {

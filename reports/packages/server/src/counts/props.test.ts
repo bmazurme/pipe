@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { getProps, addOffDays, removeOffDay } from './props';
+import { getProps, addOffDays, removeOffDay, getAllOffDaysByYear } from './props';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const propsPath = join(__dirname, 'props.json');
@@ -47,6 +47,18 @@ describe('addOffDays', () => {
     const result = addOffDays('2025', ['2099-02-01']);
 
     expect(result.offDays.length).toBe(before);
+  });
+});
+
+describe('getAllOffDaysByYear', () => {
+  it('returns only offDays, keyed by year, for every year on file', () => {
+    addOffDays('2025', ['2099-05-01']);
+
+    const byYear = getAllOffDaysByYear();
+
+    expect(byYear['2025']).toContain('2099-05-01');
+    expect(byYear['2025']).not.toHaveProperty('holidays');
+    expect(Object.keys(byYear).length).toBeGreaterThan(0);
   });
 });
 

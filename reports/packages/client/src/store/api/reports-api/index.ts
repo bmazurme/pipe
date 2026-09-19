@@ -7,6 +7,7 @@ import type {
   ProjectDictType,
   PushReportPayload,
   ReportType,
+  SettingsBundleType,
   SettingsType,
   StreamEvent,
   SubscriptionConfigType,
@@ -93,6 +94,19 @@ const reportsApi = createApi({
       }),
       transformResponse: unwrap<SettingsType>('Не удалось сохранить настройки'),
       invalidatesTags: ['Settings'],
+    }),
+    exportSettingsBundle: builder.query<SettingsBundleType, void>({
+      query: () => 'settings/export',
+      transformResponse: unwrap<SettingsBundleType>('Не удалось экспортировать настройки'),
+    }),
+    importSettingsBundle: builder.mutation<{ skippedYears: string[] }, SettingsBundleType>({
+      query: (bundle) => ({
+        url: 'settings/import',
+        method: 'POST',
+        body: bundle,
+      }),
+      transformResponse: unwrap<{ skippedYears: string[] }>('Не удалось импортировать настройки'),
+      invalidatesTags: ['Settings', 'ProjectDict', 'SubscriptionConfig', 'Counts'],
     }),
     getProjectDict: builder.query<ProjectDictType, void>({
       query: () => 'project-dict',
@@ -220,6 +234,8 @@ export const {
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,
+  useLazyExportSettingsBundleQuery,
+  useImportSettingsBundleMutation,
   useGetProjectDictQuery,
   useAddProjectCodeMutation,
   useRemoveProjectCodeMutation,

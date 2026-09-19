@@ -8,7 +8,7 @@ import cors from 'cors';
 
 import { handleCounts, handleAddOffDay, handleRemoveOffDay, handleImportDayOffs } from './counts/handler';
 import { handleReport, handlePushReport } from './reports/handler';
-import { handleGetSettings, handleSetSettings } from './settings/handler';
+import { handleGetSettings, handleSetSettings, handleExportSettingsBundle, handleImportSettingsBundle } from './settings/handler';
 import { handleGetProjectDict, handleAddProjectCode, handleRemoveProjectCode } from './reports/project-dict-handler';
 import {
   handleListSubscriptionIssues,
@@ -59,6 +59,8 @@ app.get('/api/reports', handleReport);
 app.post('/api/reports/push-to-bridge', handlePushReport);
 app.get('/api/settings', handleGetSettings);
 app.post('/api/settings', handleSetSettings);
+app.get('/api/settings/export', handleExportSettingsBundle);
+app.post('/api/settings/import', handleImportSettingsBundle);
 app.get('/api/project-dict', handleGetProjectDict);
 app.post('/api/project-dict', handleAddProjectCode);
 app.delete('/api/project-dict/:code', handleRemoveProjectCode);

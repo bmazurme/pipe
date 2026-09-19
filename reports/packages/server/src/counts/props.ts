@@ -22,6 +22,14 @@ export const getProps = (year: number | string | string[]): YearProps => {
   return props[String(year)];
 };
 
+// For the settings-transfer bundle — only offDays travel (see
+// SettingsBundleType's comment for why holidays/shortDays/badDays don't).
+export const getAllOffDaysByYear = (): Record<string, string[]> => {
+  const props = readProps();
+
+  return Object.fromEntries(Object.entries(props).map(([year, yearProps]) => [year, yearProps.offDays]));
+};
+
 export const addOffDays = (year: number | string | string[], dates: string[]): YearProps => {
   const props = readProps();
   const yearProps = props[String(year)];

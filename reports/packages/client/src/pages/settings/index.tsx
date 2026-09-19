@@ -16,6 +16,7 @@ import TrackedProjectsSection from './tracked-projects-section';
 import DictionarySection from './dictionary-section';
 import CommentTemplatesSection from './comment-templates-section';
 import EncryptionSection from './encryption-section';
+import SettingsTransferSection from './settings-transfer-section';
 
 import style from './settings.module.css';
 
@@ -132,6 +133,7 @@ function Settings() {
           title="Настройки"
           description="Подключение к GitLab, реквизиты отчёта и интеграция с bridge"
         />
+        <SettingsTransferSection />
         <TabProvider value={activeTab} onUpdate={setActiveTab}>
           <TabList className={style.tabs}>
             <Tab value="general" icon={<Icon data={Gear} size={16} />}>Основные</Tab>

@@ -29,6 +29,13 @@ export const getSubscriptionConfig = (): SubscriptionConfigType => {
   return { ...defaultConfig, ...JSON.parse(readFileSync(configPath, 'utf-8')) };
 };
 
+// Full replace, for restoring a settings-transfer bundle — merged over
+// defaults the same way getSubscriptionConfig reads it, so an older bundle
+// missing a field (e.g. commentTemplates, added later) doesn't wipe it.
+export const setSubscriptionConfig = (config: SubscriptionConfigType): SubscriptionConfigType => {
+  return save({ ...defaultConfig, ...config });
+};
+
 export const addTrackedProject = (project: TrackedProjectType): SubscriptionConfigType => {
   const config = getSubscriptionConfig();
   const trackedProjects = [

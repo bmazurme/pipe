@@ -9,6 +9,7 @@ import {
   updateDictionaryEntry,
   importDictionaryEntries,
   getSubscriptionConfig,
+  setSubscriptionConfig,
   setEncryptionSettings,
   generateAndSaveKeyPair,
 } from './config-props';
@@ -102,5 +103,31 @@ describe('encryption config-props', () => {
     expect(updated.encryption.enabled).toBe(true);
     expect(updated.encryption.publicKey).toContain('BEGIN PUBLIC KEY');
     expect(updated.encryption.privateKey).toContain('BEGIN PRIVATE KEY');
+  });
+});
+
+describe('setSubscriptionConfig', () => {
+  it('fully replaces the persisted config', () => {
+    addDictionaryEntry({ key: 'real', value: '{{PLACEHOLDER}}' });
+
+    const restored = setSubscriptionConfig({
+      trackedProjects: [{ gitlabProjectId: '173', path: '/repo' }],
+      dictionary: [{ key: 'imported', value: '{{X}}' }],
+      commentTemplates: [],
+      encryption: { enabled: false, publicKey: '', privateKey: '' },
+    });
+
+    expect(restored.dictionary).toEqual([{ key: 'imported', value: '{{X}}' }]);
+    expect(getSubscriptionConfig().trackedProjects).toEqual([{ gitlabProjectId: '173', path: '/repo' }]);
+  });
+
+  it('fills in defaults for fields missing from an older bundle', () => {
+    const restored = setSubscriptionConfig({
+      trackedProjects: [],
+      dictionary: [],
+    } as never);
+
+    expect(restored.commentTemplates).toEqual([]);
+    expect(restored.encryption).toEqual({ enabled: false, publicKey: '', privateKey: '' });
   });
 });

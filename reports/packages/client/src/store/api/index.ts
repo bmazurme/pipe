@@ -8,6 +8,8 @@ export {
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,
+  useLazyExportSettingsBundleQuery,
+  useImportSettingsBundleMutation,
   useGetProjectDictQuery,
   useAddProjectCodeMutation,
   useRemoveProjectCodeMutation,

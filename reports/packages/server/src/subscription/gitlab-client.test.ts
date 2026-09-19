@@ -1,19 +1,20 @@
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { SettingsType } from '@reports/shared';
 
-import { setSettings } from '../settings/props';
-import { getIssueImages } from './gitlab-client';
+// settings/props.ts reads/writes the real settings.json on disk — mocked
+// here instead of calling setSettings() for real, since that file is shared
+// with settings/props.test.ts's own tests and vitest runs test files in
+// parallel by default. Both writing to the same real file concurrently was
+// a genuine (if intermittent) race: settings/props.test.ts's own
+// "persists new settings" assertion could observe whatever this file's
+// beforeEach last wrote instead of what it just set.
+const getSettingsMock = vi.fn<() => SettingsType>();
+vi.mock('../settings/props', () => ({ getSettings: () => getSettingsMock() }));
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const settingsPath = join(__dirname, '..', 'settings', 'settings.json');
+const { getIssueImages } = await import('./gitlab-client');
 
-let originalContent: string | null;
-
-beforeEach(() => {
-  originalContent = existsSync(settingsPath) ? readFileSync(settingsPath, 'utf-8') : null;
-  setSettings({
+function stubSettings(overrides: Partial<SettingsType> = {}) {
+  getSettingsMock.mockReturnValue({
     gitlabUrl: 'https://gitlab.example.com/api/v4',
     privateToken: 'token-123',
     userId: '',
@@ -23,16 +24,16 @@ beforeEach(() => {
     bridgeApiKey: '',
     bridgeRefreshToken: '',
     bridgeStorageApiKey: '',
+    ...overrides,
   });
+}
+
+beforeEach(() => {
+  stubSettings();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  if (originalContent === null) {
-    rmSync(settingsPath, { force: true });
-  } else {
-    writeFileSync(settingsPath, originalContent);
-  }
 });
 
 const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
@@ -93,17 +94,7 @@ describe('getIssueImages', () => {
   });
 
   it('returns nothing when GitLab is not configured', async () => {
-    setSettings({
-      gitlabUrl: '',
-      privateToken: '',
-      userId: '',
-      employee: '',
-      company: '',
-      bridgeApiUrl: '',
-      bridgeApiKey: '',
-      bridgeRefreshToken: '',
-      bridgeStorageApiKey: '',
-    });
+    stubSettings({ gitlabUrl: '', privateToken: '' });
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
