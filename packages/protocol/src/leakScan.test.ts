@@ -34,6 +34,18 @@ describe('scanForLeaks', () => {
     assert.equal(findings.filter((f) => f.kind === 'hostname').length, 0);
   });
 
+  it('does not flag a code identifier from a pasted stack trace', () => {
+    const findings = scanForLeaks([
+      { source: 'a.ts', content: 'at Hooks.resolve (node:internal/modules/esm/hooks:240:30)' },
+    ]);
+    assert.equal(findings.filter((f) => f.kind === 'hostname').length, 0);
+  });
+
+  it('does not flag other capitalized method/property access patterns', () => {
+    const findings = scanForLeaks([{ source: 'a.ts', content: 'Object.assign(target, Array.prototype)' }]);
+    assert.equal(findings.filter((f) => f.kind === 'hostname').length, 0);
+  });
+
   it('flags a high-entropy token', () => {
     const findings = scanForLeaks([
       { source: 'a.ts', content: 'const apiKey = "sk_live_9fJ3kLp0Qz7Xw2Bv8Yc1Nm4RtGh6Ae5D";' },

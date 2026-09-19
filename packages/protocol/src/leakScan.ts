@@ -60,6 +60,15 @@ function isKnownPublicHost(host: string): boolean {
   return KNOWN_PUBLIC_HOSTS.some((known) => lower === known || lower.endsWith(`.${known}`));
 }
 
+// Real hostnames are conventionally all-lowercase; a capitalized label
+// ("Hooks.resolve", "Object.assign", "Array.prototype") is a method/property
+// access in code or a stack trace, not a domain — this is the single most
+// common false-positive shape for HOSTNAME_RE once file-extension noise is
+// already filtered out.
+function looksLikeCodeIdentifier(value: string): boolean {
+  return value.split('.').some((label) => /^[A-Z]/.test(label));
+}
+
 // Long runs of base64/hex-ish characters with no separators — the shape of
 // an API key, access token, or content hash. Length 24 and a required digit
 // keep this from tripping over ordinary long camelCase identifiers, which
@@ -104,6 +113,7 @@ function scanOne({ source, content }: LeakScanTarget): LeakFinding[] {
     const tld = value.slice(value.lastIndexOf('.') + 1).toLowerCase();
     if (CODE_FILE_EXTENSIONS.has(tld)) continue;
     if (isKnownPublicHost(value)) continue;
+    if (looksLikeCodeIdentifier(value)) continue;
     findings.push({ source, line: lineAt(content, match.index ?? 0), kind: 'hostname', match: value });
   }
 
