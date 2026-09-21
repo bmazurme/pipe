@@ -25,15 +25,36 @@ function git(cwd: string, args: string[]): string {
   });
 }
 
-// Directory names that must never be committed regardless of whether the
-// target repo's own .gitignore happens to list them — an agent run can
-// freely `npm install`/build inside the worktree, and a missing .gitignore
-// entry there must not turn into node_modules landing in real GitHub
-// history. Physically deleted before `git add -A` rather than excluded via
-// a git pathspec: git's default (non-glob) pathspec matching does not
-// reliably cross directory separators for a bare `**` pattern, so a
-// pathspec exclude can silently miss a nested `packages/*/node_modules`.
+// Directory names that must never be *committed* — an agent run can freely
+// `npm install`/build inside the worktree, and a missing .gitignore entry
+// there must not turn into node_modules landing in real GitHub history.
+// Only stripped when the target repo's own .gitignore doesn't already keep
+// them out of git (see isGitIgnored) — a repo that *does* gitignore
+// node_modules properly (the common case) needs it left alone, since a
+// pre-commit hook (husky, lint-staged, etc.) commonly reads
+// node_modules/.bin for its own tools; deleting it unconditionally right
+// before `git commit` broke exactly that (a real incident: husky's
+// pre-commit hook failed with "oxlint: command not found" because this
+// stripped node_modules moments before the hook ran, in a repo whose
+// .gitignore already excluded it — the strip was never needed there).
 const BUILD_ARTIFACT_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage']);
+
+function isGitIgnored(repoRoot: string, absolutePath: string): boolean {
+  try {
+    // Exit 0 = ignored (the only case that doesn't throw).
+    execFileSync('git', ['check-ignore', '-q', absolutePath], {
+      cwd: repoRoot,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    // Exit 1 = not ignored (the real "no" answer) — and any other nonzero
+    // (a git usage error, say) is treated the same way, erring toward
+    // stripping the directory, which is the behavior every caller already
+    // had before this check existed.
+    return false;
+  }
+}
 
 // Plain recursive walk rather than a glob library: stops descending the
 // moment it finds a match (no point walking into a node_modules tree just
@@ -64,7 +85,9 @@ function findArtifactDirs(dir: string, found: string[] = []): string[] {
 
 function stripBuildArtifacts(worktreeDir: string): void {
   for (const dir of findArtifactDirs(worktreeDir)) {
-    rmSync(dir, { recursive: true, force: true });
+    if (!isGitIgnored(worktreeDir, dir)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 }
 
