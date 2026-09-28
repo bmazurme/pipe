@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Button, Icon, Select, Text, TextInput, useToaster } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Select, Text, TextInput, useToaster } from '@gravity-ui/uikit';
 import { Check, CodeFork, ArrowUpFromLine, ArrowDownToLine, PaperPlane } from '@gravity-ui/icons';
-import type { SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
+import type { SubscriptionDraftType, SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
 
 import {
   useGetSubscriptionConfigQuery,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
+  useLazyGetSubscriptionDraftQuery,
   usePushSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
@@ -21,10 +22,16 @@ const STEP_LABELS = ['Init', 'Push', 'Pull', 'Publish'];
 function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
   const toaster = useToaster();
   const [init, { isLoading: isIniting }] = useInitSubscriptionIssueMutation();
+  const [getDraft, { isFetching: isLoadingDraft }] = useLazyGetSubscriptionDraftQuery();
   const [push, { isLoading: isPushing }] = usePushSubscriptionIssueMutation();
   const [pull, { isLoading: isPulling }] = usePullSubscriptionIssueMutation();
   const [publish, { isLoading: isPublishing }] = usePublishSubscriptionIssueMutation();
   const { data: config } = useGetSubscriptionConfigQuery();
+
+  // Set only while the review form is open — pre-filled from the draft
+  // endpoint's anonymized preview, edited in place, then sent back verbatim
+  // on confirm so what was reviewed is exactly what gets pushed.
+  const [reviewDraft, setReviewDraft] = useState<SubscriptionDraftType | null>(null);
 
   const currentIndex = issue.subscription ? STEP_ORDER.indexOf(issue.subscription.step) : -1;
   const nextIndex = currentIndex + 1;
@@ -60,7 +67,48 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
   };
 
   const handleInit = () => run(() => init(args).unwrap(), 'Ветка создана', 'Не удалось создать ветку');
-  const handlePush = () => run(() => push(args).unwrap(), 'Посылка отправлена в bridge', 'Не удалось отправить посылку');
+
+  const handleOpenReview = async () => {
+    try {
+      const draft = await getDraft(args).unwrap();
+      setReviewDraft(draft);
+    } catch (error) {
+      toaster.add({
+        name: `subscription-${issue.iid}-draft-error`,
+        theme: 'danger',
+        title: 'Не удалось подготовить предпросмотр',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleConfirmPush = async () => {
+    if (!reviewDraft) return;
+
+    try {
+      await push({
+        ...args,
+        payload: {
+          issueId: reviewDraft.issueId,
+          projectId: reviewDraft.projectId,
+          title: reviewDraft.title,
+          description: reviewDraft.description,
+        },
+      }).unwrap();
+      setReviewDraft(null);
+      toaster.add({ name: `subscription-${issue.iid}-ok`, theme: 'success', title: 'Посылка отправлена в bridge', autoHiding: 3000 });
+    } catch (error) {
+      toaster.add({
+        name: `subscription-${issue.iid}-error`,
+        theme: 'danger',
+        title: 'Не удалось отправить посылку',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+
   const handlePull = () => run(() => pull(args).unwrap(), 'Посылка получена из bridge', 'Не удалось получить посылку');
   const handlePublish = () => run(
     () => publish({ ...args, payload: { templateId, timeEstimate: timeEstimate || undefined } }).unwrap(),
@@ -98,15 +146,65 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
         </div>
       )}
 
-      {nextIndex === 1 && (
+      {nextIndex === 1 && !reviewDraft && (
         <div className={style.stepAction}>
           <Text variant="body-2" color="secondary">
             Упакует кодовую базу (с подстановкой словаря) и текст задачи в zip, отправит в bridge.
           </Text>
-          <Button view="action" size="m" onClick={handlePush} loading={isPushing} disabled={!!disabledReason} title={disabledReason}>
+          <Button view="action" size="m" onClick={handleOpenReview} loading={isLoadingDraft} disabled={!!disabledReason} title={disabledReason}>
             <Icon data={ArrowUpFromLine} size={16} />
             Отправить
           </Button>
+        </div>
+      )}
+
+      {reviewDraft && (
+        <div className={style.stepAction}>
+          <Text variant="body-2" color="secondary">
+            Проверьте анонимизированный текст задачи перед отправкой — можно исправить прямо здесь.
+          </Text>
+          <div className={style.publishForm}>
+            <TextInput
+              label="Заголовок"
+              value={reviewDraft.title}
+              onUpdate={(title) => setReviewDraft((prev) => (prev ? { ...prev, title } : prev))}
+            />
+            <textarea
+              className={style.templateBody}
+              value={reviewDraft.description}
+              onChange={(event) => {
+                const description = event.target.value;
+                setReviewDraft((prev) => (prev ? { ...prev, description } : prev));
+              }}
+            />
+          </div>
+
+          {reviewDraft.leaks.length > 0 && (
+            <Alert
+              theme="warning"
+              view="filled"
+              title="Похоже, анонимизация неполная"
+              message={(
+                <ul className={style.leakList}>
+                  {reviewDraft.leaks.map((finding) => (
+                    <li key={`${finding.kind}:${finding.match}:${finding.line}`}>
+                      {finding.kind}: {finding.match}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            />
+          )}
+
+          <div className={style.reviewActions}>
+            <Button view="action" size="m" onClick={handleConfirmPush} loading={isPushing}>
+              <Icon data={ArrowUpFromLine} size={16} />
+              Подтвердить и отправить
+            </Button>
+            <Button view="outlined" size="m" onClick={() => setReviewDraft(null)} disabled={isPushing}>
+              Отмена
+            </Button>
+          </div>
         </div>
       )}
 
@@ -152,12 +250,12 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
         <Text variant="body-2" color="positive">Пайплайн по задаче завершён.</Text>
       )}
 
-      {currentIndex >= 1 && (
+      {currentIndex >= 1 && !reviewDraft && (
         <div className={style.stepAction}>
           <Text variant="body-2" color="secondary">
             Внесли правки после ревью? Отправьте новую версию посылки — пайплайн вернётся на шаг pull.
           </Text>
-          <Button view="outlined" size="m" onClick={handlePush} loading={isPushing} disabled={!!disabledReason} title={disabledReason}>
+          <Button view="outlined" size="m" onClick={handleOpenReview} loading={isLoadingDraft} disabled={!!disabledReason} title={disabledReason}>
             <Icon data={ArrowUpFromLine} size={16} />
             Отправить повторно
           </Button>

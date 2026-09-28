@@ -44,3 +44,13 @@ export const setIssueState = (
 
   return next;
 };
+
+// For a GitLab-backed issue, this only resets local pipeline progress — the
+// issue itself stays listed (handleListSubscriptionIssues sources that from
+// GitLab, not from this file). For a manual issue, state is its only
+// record anywhere, so this makes it disappear entirely.
+export const removeIssueState = (projectId: string | number, iid: string | number): void => {
+  const state = readState();
+  delete state[issueKey(projectId, iid)];
+  writeState(state);
+};

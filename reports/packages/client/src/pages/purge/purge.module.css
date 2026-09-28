@@ -1,0 +1,58 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: var(--app-page-gap);
+}
+
+.card {
+  padding: 16px;
+  min-width: 0;
+  border-radius: var(--app-card-radius);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.direction {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notice {
+  width: 100%;
+}
+
+.leakList {
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.leakItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.leakItemError {
+  flex-basis: 100%;
+}

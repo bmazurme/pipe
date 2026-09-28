@@ -1,14 +1,21 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, relative, resolve } from 'path';
 import type { Request, Response } from 'express';
-import type { StreamEvent, SubscriptionIssueType, SubscriptionPublishPayload } from '@reports/shared';
+import type {
+  CreateManualSubscriptionIssuePayload,
+  StreamEvent,
+  SubscriptionDraftType,
+  SubscriptionIssueType,
+  SubscriptionPublishPayload,
+  SubscriptionPushPayload,
+} from '@reports/shared';
 import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 
 import { getSettings } from '../settings/props';
 import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
-import { getAllIssueStates, getIssueState, setIssueState, issueKey } from './state-props';
+import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
 import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
 import { walkProjectFiles } from './walk';
@@ -75,6 +82,30 @@ export async function handleListSubscriptionIssues(req: Request, res: Response) 
       subscription: states[issueKey(issue.project_id, issue.iid)],
     }));
 
+    // Manual parcels have no GitLab issue behind them, so they never appear
+    // in `issues` above — synthesize a row for each from its own stored
+    // state instead of a GitLab fetch.
+    for (const [key, state] of Object.entries(states)) {
+      if (!state.manual) continue;
+
+      const [manualProjectId, manualIid] = key.split(':');
+
+      result.push({
+        id: manualIid,
+        iid: manualIid,
+        projectId: state.projectId ?? Number(manualProjectId),
+        projectName: projectDict[manualProjectId] || manualProjectId,
+        title: state.title ?? '',
+        description: state.description ?? '',
+        webUrl: '',
+        timeEstimate: '',
+        state: 'manual',
+        status: 'Вручную',
+        tracked: config.trackedProjects.some((project) => project.gitlabProjectId === manualProjectId),
+        subscription: state,
+      });
+    }
+
     return result;
   });
 }
@@ -93,8 +124,84 @@ export async function handleInitSubscriptionIssue(req: Request, res: Response) {
   });
 }
 
+// No real GitLab issue behind this — same local pipeline (init → draft →
+// push → pull → publish) as a real one, just seeded from typed text instead
+// of a GitLab fetch. The `m-` prefix can't collide with a real iid, which is
+// always numeric.
+export async function handleCreateManualSubscriptionIssue(req: Request, res: Response) {
+  const { gitlabProjectId, title, description } = req.body as CreateManualSubscriptionIssuePayload;
+
+  await withStream(res, 'Create manual subscription issue', async () => {
+    const trackedProject = requireTrackedProject(gitlabProjectId);
+    const iid = `m-${Date.now().toString(36)}`;
+    // Unlike a real init, this shouldn't hard-require GitLab credentials
+    // just to prefix a branch name — falls back the same way git.ts's own
+    // sanitizeUsername does.
+    const username = await getCurrentUsername().catch(() => 'user');
+    const branch = buildBranchName(username, iid);
+
+    await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
+
+    return setIssueState(gitlabProjectId, iid, {
+      step: 'init',
+      branch,
+      manual: true,
+      title,
+      description,
+      projectId: Number(gitlabProjectId),
+    });
+  });
+}
+
+// For a GitLab-backed issue this only resets local progress — the issue
+// itself stays listed (handleListSubscriptionIssues sources that from
+// GitLab). For a manual one, state is its only record anywhere, so this is
+// the only way it can be removed.
+export async function handleRemoveSubscriptionIssue(req: Request, res: Response) {
+  const { projectId, iid } = req.params;
+
+  await withStream(res, 'Remove subscription issue', async () => {
+    removeIssueState(projectId, iid);
+    return { removed: true };
+  });
+}
+
+// Anonymized preview of what push would send, without sending it — the
+// client shows/edits this, then push (below) takes the reviewed text back
+// verbatim instead of re-fetching/re-anonymizing the issue itself, so what
+// was actually reviewed is what actually gets sent.
+export async function handleGetSubscriptionDraft(req: Request, res: Response) {
+  const { projectId, iid } = req.params;
+
+  await withStream(res, 'Get subscription draft', async () => {
+    const { dictionary } = getSubscriptionConfig();
+    const state = getIssueState(projectId, iid);
+
+    const [rawTitle, rawDescription, issueId, draftProjectId] = state?.manual
+      ? [state.title ?? '', state.description ?? '', iid, state.projectId ?? Number(projectId)]
+      : await getIssue(projectId, iid).then((issue) => [issue.title, issue.description ?? '', issue.id, issue.project_id]);
+
+    const title = applyDictionary(String(rawTitle), dictionary, 'toRemote');
+    const description = applyDictionary(String(rawDescription), dictionary, 'toRemote');
+
+    const draft: SubscriptionDraftType = {
+      issueId: String(issueId),
+      projectId: Number(draftProjectId),
+      title,
+      description,
+      leaks: scanForLeaks([
+        { source: 'issue title', content: title },
+        { source: 'issue description', content: description },
+      ]),
+    };
+
+    return draft;
+  });
+}
+
 export async function handlePushSubscriptionIssue(req: Request, res: Response) {
   const { projectId, iid } = req.params;
+  const { issueId, title: issueTitle, description: issueDescription } = req.body as SubscriptionPushPayload;
 
   await withStream(res, 'Push subscription issue', async () => {
     const trackedProject = requireTrackedProject(projectId);
@@ -105,16 +212,18 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
     }
 
     const { dictionary, encryption } = getSubscriptionConfig();
-    const issue = await getIssue(projectId, iid);
     const relPaths = await walkProjectFiles(trackedProject);
     const files = relPaths.map((relPath) => ({
       relPath,
       content: applyDictionary(readFileSync(join(trackedProject.path, relPath), 'utf-8'), dictionary, 'toRemote'),
     }));
 
-    const issueTitle = applyDictionary(issue.title, dictionary, 'toRemote');
-    const issueDescription = applyDictionary(issue.description ?? '', dictionary, 'toRemote');
-    const images = await getIssueImages(issue.description ?? '');
+    // Image refs only resolve against the *real* GitLab markdown — the
+    // dictionary-substituted description above isn't safe to scan for them
+    // (a substitution could alter an /uploads/... path), so this still
+    // needs its own live fetch for a real issue. A manual parcel has no
+    // GitLab-hosted markdown to scan at all.
+    const images = state.manual ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '');
 
     const leaks = scanForLeaks([
       ...files.map((f) => ({ source: f.relPath, content: f.content })),
@@ -128,11 +237,11 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
     const archive = buildArchive(
       files,
       {
-        issueId: issue.id,
-        issueIid: issue.iid,
+        issueId,
+        issueIid: iid,
         issueTitle,
         issueDescription,
-        projectId: issue.project_id,
+        projectId: Number(projectId),
         branch: state.branch,
         createdAt: new Date().toISOString(),
       },
@@ -243,12 +352,16 @@ export async function handlePublishSubscriptionIssue(req: Request, res: Response
     const template = templateId ? commentTemplates.find((item) => item.id === templateId) : undefined;
     const body = (template?.body ?? comment ?? '').replace(/{{\s*branch\s*}}/g, state?.branch ?? '');
 
-    if (body.trim()) {
-      await addIssueNote(projectId, iid, body);
-    }
+    // A manual entry has no GitLab issue to comment on or estimate — publish
+    // still just marks local pipeline state, for bookkeeping symmetry.
+    if (!state?.manual) {
+      if (body.trim()) {
+        await addIssueNote(projectId, iid, body);
+      }
 
-    if (timeEstimate?.trim()) {
-      await setIssueTimeEstimate(projectId, iid, timeEstimate.trim());
+      if (timeEstimate?.trim()) {
+        await setIssueTimeEstimate(projectId, iid, timeEstimate.trim());
+      }
     }
 
     return setIssueState(projectId, iid, { step: 'published', publishedAt: new Date().toISOString() });
@@ -258,5 +371,9 @@ export async function handlePublishSubscriptionIssue(req: Request, res: Response
 export async function handleGetSubscriptionIssueTime(req: Request, res: Response) {
   const { projectId, iid } = req.params;
 
-  await withStream(res, 'Get subscription issue time', () => getIssueTimeStats(projectId, iid));
+  await withStream(res, 'Get subscription issue time', () => {
+    const state = getIssueState(projectId, iid);
+
+    return state?.manual ? { humanTimeEstimate: null } : getIssueTimeStats(projectId, iid);
+  });
 }

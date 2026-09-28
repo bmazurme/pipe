@@ -14,19 +14,36 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 6px 8px 6px 16px;
   border: 1px solid var(--g-color-line-generic);
   border-radius: var(--app-card-radius);
   background-color: var(--g-color-base-background);
-  text-align: left;
-  cursor: pointer;
   transition: background-color 0.1s ease;
 }
 
 .row:hover {
   background-color: var(--g-color-base-simple-hover);
+}
+
+.rowClickable {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.rowRemove {
+  flex: none;
 }
 
 .rowMain {
@@ -149,4 +166,14 @@
   color: var(--g-color-text-primary);
   font: inherit;
   resize: vertical;
+}
+
+.leakList {
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.reviewActions {
+  display: flex;
+  gap: 8px;
 }

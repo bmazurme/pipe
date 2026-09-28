@@ -16,6 +16,7 @@ import './App.css';
 const CalendarPage = lazy(() => import('./pages/calendar'));
 const Settings = lazy(() => import('./pages/settings'));
 const Subscription = lazy(() => import('./pages/subscription'));
+const Purge = lazy(() => import('./pages/purge'));
 
 function AppLayout() {
   const dispatch = useAppDispatch();
@@ -115,6 +116,14 @@ function AppLayout() {
         element={(
           <Suspense fallback={<PageSkeleton />}>
             <Subscription />
+          </Suspense>
+        )}
+      />
+      <Route
+        path="/purge"
+        element={(
+          <Suspense fallback={<PageSkeleton />}>
+            <Purge />
           </Suspense>
         )}
       />

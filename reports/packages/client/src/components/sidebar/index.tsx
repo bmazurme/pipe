@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactElement } from 'react';
 import { Text, Button, Icon, Tooltip } from '@gravity-ui/uikit';
 import {
-  House, Calendar as CalendarIcon, ListCheck, Gear, Moon, Sun, ChevronsLeft, ChevronsRight, Xmark,
+  House, Calendar as CalendarIcon, ListCheck, ShieldKeyhole, Gear, Moon, Sun, ChevronsLeft, ChevronsRight, Xmark,
 } from '@gravity-ui/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -16,6 +16,7 @@ const links = [
   { to: '/', label: 'Отчёт', icon: House },
   { to: '/calendar', label: 'Календарь', icon: CalendarIcon },
   { to: '/subscription', label: 'Подписка', icon: ListCheck },
+  { to: '/purge', label: 'Purge', icon: ShieldKeyhole },
   { to: '/settings', label: 'Настройки', icon: Gear },
 ];
 

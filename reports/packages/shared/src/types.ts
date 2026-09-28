@@ -161,6 +161,16 @@ export type SubscriptionStateEntryType = {
   pulledAt?: string;
   publishedAt?: string;
   encrypted?: boolean;
+  // Set only for a parcel created by hand (no real GitLab issue backing
+  // it) — title/description live here instead of being fetched from
+  // GitLab, and projectId is stored since there's no live issue to read it
+  // off of. handleListSubscriptionIssues synthesizes a row for these;
+  // handlePushSubscriptionIssue/handlePublishSubscriptionIssue skip the
+  // GitLab-only parts (image scraping, posting a comment) for them.
+  manual?: boolean;
+  title?: string;
+  description?: string;
+  projectId?: number;
 };
 
 export type SubscriptionIssueType = {
@@ -182,4 +192,55 @@ export type SubscriptionPublishPayload = {
   templateId?: string;
   comment?: string;
   timeEstimate?: string;
+};
+
+// Mirrors @pipe/protocol's LeakFinding structurally, declared independently
+// rather than imported — reports' client has no dependency on @pipe/protocol
+// at all (unlike bridge's frontend), and this type only needs to travel as
+// plain JSON over the wire.
+export type LeakFindingType = {
+  source: string;
+  line: number;
+  kind: 'email' | 'ip' | 'hostname' | 'token';
+  match: string;
+};
+
+// GET .../draft's response — the anonymized title/description a push would
+// send, without actually sending it, so the client can show/edit it first.
+export type SubscriptionDraftType = {
+  issueId: string;
+  projectId: number;
+  title: string;
+  description: string;
+  leaks: LeakFindingType[];
+};
+
+// Body for both POST .../push (real or manual issue) and
+// POST /subscription/issues/manual (create a manual one).
+export type SubscriptionPushPayload = {
+  issueId: string;
+  projectId: number;
+  title: string;
+  description: string;
+};
+
+export type CreateManualSubscriptionIssuePayload = {
+  gitlabProjectId: string;
+  title: string;
+  description: string;
+};
+
+// Body/response for POST /subscription/purge/apply — reports' own
+// paste-text-get-(de)anonymized-result page, equivalent to bridge's Purge
+// Apply tab but running server-side (reports' client has no @pipe/protocol
+// dependency, unlike bridge's frontend).
+export type PurgeApplyPayload = {
+  text: string;
+  direction: 'toRemote' | 'toLocal';
+};
+
+export type PurgeApplyResultType = {
+  result: string;
+  count: number;
+  leaks: LeakFindingType[];
 };

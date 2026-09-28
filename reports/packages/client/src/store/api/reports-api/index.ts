@@ -1,18 +1,23 @@
 import { createApi, retry } from '@reduxjs/toolkit/query/react';
 import type {
   CommentTemplateType,
+  CreateManualSubscriptionIssuePayload,
   DateType,
   DictionaryEntryType,
   EncryptionSettingsType,
   ProjectDictType,
+  PurgeApplyPayload,
+  PurgeApplyResultType,
   PushReportPayload,
   ReportType,
   SettingsBundleType,
   SettingsType,
   StreamEvent,
   SubscriptionConfigType,
+  SubscriptionDraftType,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
+  SubscriptionPushPayload,
   SubscriptionStateEntryType,
   TrackedProjectType,
 } from '@reports/shared';
@@ -144,9 +149,27 @@ const reportsApi = createApi({
       transformResponse: unwrap<SubscriptionStateEntryType>('Не удалось создать ветку'),
       invalidatesTags: ['SubscriptionIssues'],
     }),
-    pushSubscriptionIssue: builder.mutation<SubscriptionStateEntryType, { projectId: number; iid: string }>({
-      query: ({ projectId, iid }) => ({ url: `subscription/issues/${projectId}/${iid}/push`, method: 'POST' }),
+    getSubscriptionDraft: builder.query<SubscriptionDraftType, { projectId: number; iid: string }>({
+      query: ({ projectId, iid }) => `subscription/issues/${projectId}/${iid}/draft`,
+      transformResponse: unwrap<SubscriptionDraftType>('Не удалось подготовить предпросмотр'),
+    }),
+    pushSubscriptionIssue: builder.mutation<SubscriptionStateEntryType, { projectId: number; iid: string; payload: SubscriptionPushPayload }>({
+      query: ({ projectId, iid, payload }) => ({
+        url: `subscription/issues/${projectId}/${iid}/push`,
+        method: 'POST',
+        body: payload,
+      }),
       transformResponse: unwrap<SubscriptionStateEntryType>('Не удалось отправить посылку в bridge'),
+      invalidatesTags: ['SubscriptionIssues'],
+    }),
+    createManualSubscriptionIssue: builder.mutation<SubscriptionStateEntryType, CreateManualSubscriptionIssuePayload>({
+      query: (payload) => ({ url: 'subscription/issues/manual', method: 'POST', body: payload }),
+      transformResponse: unwrap<SubscriptionStateEntryType>('Не удалось создать посылку'),
+      invalidatesTags: ['SubscriptionIssues'],
+    }),
+    removeSubscriptionIssue: builder.mutation<{ removed: boolean }, { projectId: number; iid: string }>({
+      query: ({ projectId, iid }) => ({ url: `subscription/issues/${projectId}/${iid}`, method: 'DELETE' }),
+      transformResponse: unwrap<{ removed: boolean }>('Не удалось удалить запись'),
       invalidatesTags: ['SubscriptionIssues'],
     }),
     pullSubscriptionIssue: builder.mutation<SubscriptionStateEntryType, { projectId: number; iid: string }>({
@@ -222,6 +245,10 @@ const reportsApi = createApi({
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось сгенерировать пару ключей'),
       invalidatesTags: ['SubscriptionConfig'],
     }),
+    applyPurge: builder.mutation<PurgeApplyResultType, PurgeApplyPayload>({
+      query: (payload) => ({ url: 'subscription/purge/apply', method: 'POST', body: payload }),
+      transformResponse: unwrap<PurgeApplyResultType>('Не удалось применить словарь'),
+    }),
   }),
 });
 
@@ -242,7 +269,10 @@ export const {
   useGetSubscriptionIssuesQuery,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
+  useLazyGetSubscriptionDraftQuery,
   usePushSubscriptionIssueMutation,
+  useCreateManualSubscriptionIssueMutation,
+  useRemoveSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
   useGetSubscriptionConfigQuery,
@@ -256,5 +286,6 @@ export const {
   useRemoveCommentTemplateMutation,
   useSetEncryptionSettingsMutation,
   useGenerateEncryptionKeyPairMutation,
+  useApplyPurgeMutation,
 } = reportsApi;
 export default reportsApi;

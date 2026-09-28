@@ -13,10 +13,13 @@ import { handleGetProjectDict, handleAddProjectCode, handleRemoveProjectCode } f
 import {
   handleListSubscriptionIssues,
   handleInitSubscriptionIssue,
+  handleGetSubscriptionDraft,
   handlePushSubscriptionIssue,
   handlePullSubscriptionIssue,
   handlePublishSubscriptionIssue,
   handleGetSubscriptionIssueTime,
+  handleCreateManualSubscriptionIssue,
+  handleRemoveSubscriptionIssue,
 } from './subscription/handler';
 import {
   handleGetSubscriptionConfig,
@@ -31,6 +34,7 @@ import {
   handleSetEncryptionSettings,
   handleGenerateEncryptionKeyPair,
 } from './subscription/config-handler';
+import { handlePurgeApply } from './subscription/purge-handler';
 import { setupProxy } from './utils/setup-proxy';
 
 setupProxy();
@@ -66,11 +70,14 @@ app.post('/api/project-dict', handleAddProjectCode);
 app.delete('/api/project-dict/:code', handleRemoveProjectCode);
 
 app.get('/api/subscription/issues', handleListSubscriptionIssues);
+app.post('/api/subscription/issues/manual', handleCreateManualSubscriptionIssue);
 app.post('/api/subscription/issues/:projectId/:iid/init', handleInitSubscriptionIssue);
+app.get('/api/subscription/issues/:projectId/:iid/draft', handleGetSubscriptionDraft);
 app.post('/api/subscription/issues/:projectId/:iid/push', handlePushSubscriptionIssue);
 app.post('/api/subscription/issues/:projectId/:iid/pull', handlePullSubscriptionIssue);
 app.post('/api/subscription/issues/:projectId/:iid/publish', handlePublishSubscriptionIssue);
 app.get('/api/subscription/issues/:projectId/:iid/time', handleGetSubscriptionIssueTime);
+app.delete('/api/subscription/issues/:projectId/:iid', handleRemoveSubscriptionIssue);
 app.get('/api/subscription/config', handleGetSubscriptionConfig);
 app.post('/api/subscription/config/tracked-projects', handleAddTrackedProject);
 app.delete('/api/subscription/config/tracked-projects/:gitlabProjectId', handleRemoveTrackedProject);
@@ -82,6 +89,7 @@ app.post('/api/subscription/config/comment-templates', handleAddCommentTemplate)
 app.delete('/api/subscription/config/comment-templates/:id', handleRemoveCommentTemplate);
 app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
+app.post('/api/subscription/purge/apply', handlePurgeApply);
 
 if (isProductionMode) {
   app.use(express.static(clientDistDir));

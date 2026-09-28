@@ -16,7 +16,10 @@ export {
   useGetSubscriptionIssuesQuery,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
+  useLazyGetSubscriptionDraftQuery,
   usePushSubscriptionIssueMutation,
+  useCreateManualSubscriptionIssueMutation,
+  useRemoveSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
   useGetSubscriptionConfigQuery,
@@ -30,4 +33,5 @@ export {
   useRemoveCommentTemplateMutation,
   useSetEncryptionSettingsMutation,
   useGenerateEncryptionKeyPairMutation,
+  useApplyPurgeMutation,
 } from './reports-api/index';

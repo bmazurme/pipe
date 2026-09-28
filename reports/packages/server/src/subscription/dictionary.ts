@@ -27,3 +27,16 @@ function buildMap(entries: DictionaryEntryType[], direction: Direction): Map<str
 export function applyDictionary(text: string, entries: DictionaryEntryType[], direction: Direction): string {
   return applySubstitution(text, buildMap(entries, direction)).result;
 }
+
+// Same substitution, but also reports how many replacements were made — for
+// the reports-native Purge page, which shows that count the way bridge's
+// own Purge page does. The existing applyDictionary() above already has
+// callers (push/pull) that only want the text, so this is additive rather
+// than changing its return shape.
+export function applyDictionaryWithCount(
+  text: string,
+  entries: DictionaryEntryType[],
+  direction: Direction,
+): { result: string; count: number } {
+  return applySubstitution(text, buildMap(entries, direction));
+}

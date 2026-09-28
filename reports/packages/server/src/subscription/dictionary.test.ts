@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { applyDictionary } from './dictionary';
+import { applyDictionary, applyDictionaryWithCount } from './dictionary';
 
 describe('applyDictionary', () => {
   const entries = [
@@ -28,5 +28,21 @@ describe('applyDictionary', () => {
 
   it('passes text through unchanged for an empty dictionary', () => {
     expect(applyDictionary('anything', [], 'toRemote')).toBe('anything');
+  });
+});
+
+describe('applyDictionaryWithCount', () => {
+  const entries = [
+    { key: 'prod-db.internal.example.com', value: '{{DB_HOST}}' },
+    { key: 'db', value: '{{DB}}' },
+  ];
+
+  it('reports how many replacements were made', () => {
+    expect(applyDictionaryWithCount('prod-db.internal.example.com and db', entries, 'toRemote'))
+      .toEqual({ result: '{{DB_HOST}} and {{DB}}', count: 2 });
+  });
+
+  it('reports zero when nothing matches', () => {
+    expect(applyDictionaryWithCount('anything', entries, 'toRemote')).toEqual({ result: 'anything', count: 0 });
   });
 });
