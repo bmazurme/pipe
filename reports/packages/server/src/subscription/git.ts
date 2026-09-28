@@ -57,3 +57,25 @@ export async function createBranch(path: string, branch: string, baseBranch = 'm
   await git(path, ['fetch', 'origin', baseBranch]);
   await git(path, ['checkout', '-b', branch, `origin/${baseBranch}`]);
 }
+
+// Stages exactly the files the pull just wrote — never `git add -A`. Unlike
+// sync's agent-runner, this runs against the developer's own regular
+// checkout, not a freshly-created isolated worktree, so a blanket add could
+// sweep up unrelated work already sitting there uncommitted.
+// --allow-empty: a parcel can legitimately carry only an image asset and no
+// file changes (or, in principle, none of either) — still worth a real
+// commit marking that the pull happened, not a silent no-op.
+export async function commitPulledFiles(path: string, relPaths: string[], message: string): Promise<void> {
+  if (relPaths.length > 0) {
+    await git(path, ['add', '--', ...relPaths]);
+  }
+
+  await git(path, ['commit', '-m', message, '--allow-empty']);
+}
+
+// Pushes the task branch only — never the target/base branch. Getting the
+// result into the target branch is a deliberate manual step (open a merge
+// request yourself) — nothing here does that automatically.
+export async function pushBranch(path: string, branch: string): Promise<void> {
+  await git(path, ['push', '-u', 'origin', branch]);
+}

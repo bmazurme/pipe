@@ -10,7 +10,7 @@ import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, issueKey } from './state-props';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
-import { buildBranchName, createBranch } from './git';
+import { buildBranchName, createBranch, commitPulledFiles, pushBranch } from './git';
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
 import { buildArchive, extractArchive } from './pack';
@@ -183,8 +183,13 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
 
     const downloaded = await downloadParcel(newest.id);
     const buffer = isEncrypted ? decryptBuffer(downloaded, encryption.privateKey) : downloaded;
-    const { files, assets } = extractArchive(buffer);
+    const { manifest, files, assets } = extractArchive(buffer);
     const projectRoot = resolve(trackedProject.path);
+
+    const state = getIssueState(projectId, iid);
+    if (!state?.branch) {
+      throw new Error('Сначала выполните init — ветка ещё не создана');
+    }
 
     for (const file of files) {
       const destination = resolve(projectRoot, file.relPath);
@@ -209,6 +214,15 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
       mkdirSync(dirname(destination), { recursive: true });
       writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
     }
+
+    // Commits and pushes the task branch only — never the target branch.
+    // Getting this into the target branch is a deliberate manual step (open
+    // a merge request yourself, after reviewing) — nothing here does that
+    // automatically.
+    const title = applyDictionary(manifest.issueTitle, dictionary, 'toLocal');
+    const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
+    await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
+    await pushBranch(trackedProject.path, state.branch);
 
     return setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });
   });
