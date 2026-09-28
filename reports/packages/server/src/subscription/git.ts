@@ -58,6 +58,22 @@ export async function createBranch(path: string, branch: string, baseBranch = 'm
   await git(path, ['checkout', '-b', branch, `origin/${baseBranch}`]);
 }
 
+// Guards against committing onto whatever branch happens to be checked out.
+// `init` leaves the repo on the task branch, but nothing stops it drifting
+// away between init and pull — switching branches for other work in the
+// meantime, say. Without this, pull's commit lands on HEAD wherever HEAD
+// happens to be (the target/base branch, another task's branch, ...), and a
+// later ordinary `git push` from there would carry it along. Refuses on a
+// dirty tree for the same reason createBranch does: switching branches with
+// uncommitted changes present would carry them along onto the task branch.
+export async function checkoutTaskBranch(path: string, branch: string): Promise<void> {
+  if (!(await isTreeClean(path))) {
+    throw new Error(`В репозитории ${path} есть незакоммиченные изменения — закоммитьте или сохраните их перед pull`);
+  }
+
+  await git(path, ['checkout', branch]);
+}
+
 // Stages exactly the files the pull just wrote — never `git add -A`. Unlike
 // sync's agent-runner, this runs against the developer's own regular
 // checkout, not a freshly-created isolated worktree, so a blanket add could

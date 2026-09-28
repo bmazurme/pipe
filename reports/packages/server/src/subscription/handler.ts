@@ -10,7 +10,7 @@ import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, issueKey } from './state-props';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
-import { buildBranchName, createBranch, commitPulledFiles, pushBranch } from './git';
+import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
 import { buildArchive, extractArchive } from './pack';
@@ -190,6 +190,11 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
     if (!state?.branch) {
       throw new Error('Сначала выполните init — ветка ещё не создана');
     }
+
+    // Guarantees the write+commit below lands on the task branch, not
+    // whatever the repo happened to be on (it can drift away from the task
+    // branch between init and pull) — see checkoutTaskBranch's own comment.
+    await checkoutTaskBranch(trackedProject.path, state.branch);
 
     for (const file of files) {
       const destination = resolve(projectRoot, file.relPath);

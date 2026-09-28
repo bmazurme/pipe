@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { buildBranchName, commitPulledFiles, pushBranch } from './git';
+import { buildBranchName, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -12,7 +12,10 @@ function git(cwd: string, args: string[]): string {
 
 function initRepo(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'reports-git-test-'));
-  git(dir, ['init', '--quiet']);
+  // Explicit -b: the host's init.defaultBranch config shouldn't affect
+  // whether these tests pass, and some of them specifically exercise
+  // "master" by name.
+  git(dir, ['init', '--quiet', '-b', 'master']);
   git(dir, ['config', 'user.email', 'test@example.com']);
   git(dir, ['config', 'user.name', 'Test']);
   writeFileSync(path.join(dir, 'README.md'), 'placeholder');
@@ -38,6 +41,39 @@ describe('buildBranchName', () => {
     const date = new Date('2026-01-05T10:00:00Z');
 
     expect(buildBranchName('...', 1, date)).toBe('user-05.01.2026-1');
+  });
+});
+
+describe('checkoutTaskBranch', () => {
+  it('switches onto the task branch from whatever was checked out before', async () => {
+    const dir = initRepo();
+    git(dir, ['branch', 'task-branch']);
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('master');
+
+    await checkoutTaskBranch(dir, 'task-branch');
+
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task-branch');
+  });
+
+  it('a subsequent commit lands on the task branch, leaving master exactly where it was', async () => {
+    const dir = initRepo();
+    git(dir, ['branch', 'task-branch']);
+    const masterBefore = git(dir, ['rev-parse', 'master']).trim();
+
+    await checkoutTaskBranch(dir, 'task-branch');
+    writeFileSync(path.join(dir, 'pulled.txt'), 'content');
+    await commitPulledFiles(dir, ['pulled.txt'], 'Pull issue #1');
+
+    expect(git(dir, ['rev-parse', 'master']).trim()).toBe(masterBefore);
+    expect(git(dir, ['log', '-1', '--format=%s', 'task-branch'])).toContain('Pull issue #1');
+  });
+
+  it('refuses to switch branches when the tree is dirty', async () => {
+    const dir = initRepo();
+    git(dir, ['branch', 'task-branch']);
+    writeFileSync(path.join(dir, 'uncommitted.txt'), 'oops');
+
+    await expect(checkoutTaskBranch(dir, 'task-branch')).rejects.toThrow('незакоммиченные изменения');
   });
 });
 
