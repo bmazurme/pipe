@@ -11,11 +11,11 @@ import {
 } from '@gravity-ui/uikit';
 import { scanForLeaks, type LeakFinding } from '@pipe/protocol/leakScan';
 
-import { useListEntriesQuery } from '../../store/api';
+import { useCreateEntryMutation, useListEntriesQuery } from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { draftTextChanged, purgeEntriesSelector, purgeTextSelector } from '../../store/slices';
 import styles from '../PurgePage.module.css';
-import { applyDictionary, buildDictionary, Direction } from './purgeUtils';
+import { applyDictionary, buildDictionary, Direction, suggestUniqueValue } from './purgeUtils';
 
 interface PurgeApplyTabProps {
   onGoToDictionary: () => void;
@@ -36,8 +36,43 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
   // just taken — it survives independently so a copy (which only clears
   // `notice`'s cousin, the field itself) doesn't silently drop the warning.
   const [leakWarning, setLeakWarning] = useState<LeakFinding[] | null>(null);
+  const [createEntryTrigger] = useCreateEntryMutation();
+  // Keyed by findingKey(), not array index — findings get removed from the
+  // list as they're resolved, which would shift indices out from under an
+  // in-flight request otherwise.
+  const [addingFinding, setAddingFinding] = useState<string | null>(null);
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
 
   const canApply = Boolean(text) && entries.length > 0;
+
+  const findingKey = (finding: LeakFinding) => `${finding.kind}:${finding.match}:${finding.line}`;
+
+  // Auto-generates the placeholder (same length as the real value, same
+  // collision-avoidance as the Dictionary tab's own "add entry" form) so
+  // resolving a leak-scan finding is one click, not a trip to retype it.
+  const handleAddFindingToDictionary = async (finding: LeakFinding) => {
+    const key = findingKey(finding);
+    setAddingFinding(key);
+    setAddErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
+
+    try {
+      const value = suggestUniqueValue(finding.match.length, new Set(entries.map((entry) => entry.value)));
+      await createEntryTrigger({ key: finding.match, value }).unwrap();
+      setLeakWarning((prev) => {
+        const next = (prev ?? []).filter((item) => item !== finding);
+        return next.length > 0 ? next : null;
+      });
+    } catch (error) {
+      // createEntry's transformErrorResponse reduces a failed response to a
+      // plain friendly string (e.g. duplicate-key), and unwrap() throws
+      // exactly that string — same pattern PurgeDictionaryTab's own
+      // add-entry form uses for this identical mutation.
+      const message = typeof error === 'string' ? error : 'Не удалось добавить в словарь';
+      setAddErrors((prev) => ({ ...prev, [key]: message }));
+    } finally {
+      setAddingFinding(null);
+    }
+  };
 
   const handleApply = () => {
     const dictionary = buildDictionary(entries, direction);
@@ -157,11 +192,30 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
               title="Похоже, анонимизация неполная"
               message={
                 <ul className={styles.leakList}>
-                  {leakWarning.map((finding, index) => (
-                    <li key={index}>
-                      {finding.kind}: {finding.match}
-                    </li>
-                  ))}
+                  {leakWarning.map((finding) => {
+                    const key = findingKey(finding);
+
+                    return (
+                      <li key={key} className={styles.leakItem}>
+                        <span>
+                          {finding.kind}: {finding.match}
+                        </span>
+                        <Button
+                          view="outlined"
+                          size="xs"
+                          loading={addingFinding === key}
+                          onClick={() => void handleAddFindingToDictionary(finding)}
+                        >
+                          В словарь
+                        </Button>
+                        {addErrors[key] && (
+                          <Text color="danger" variant="caption-2" className={styles.leakItemError}>
+                            {addErrors[key]}
+                          </Text>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               }
               onClose={() => setLeakWarning(null)}

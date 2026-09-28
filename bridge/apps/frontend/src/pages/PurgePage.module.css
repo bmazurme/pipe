@@ -53,6 +53,18 @@
   padding: 0 0 0 18px;
 }
 
+.leakItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.leakItemError {
+  flex-basis: 100%;
+}
+
 .addForm {
   display: flex;
   flex-wrap: wrap;

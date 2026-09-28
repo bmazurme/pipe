@@ -27,6 +27,17 @@ function textarea(): HTMLTextAreaElement {
   return screen.getByPlaceholderText('Вставьте текст');
 }
 
+// fetchBaseQuery calls the global fetch as fetch(new Request(url, init)) — a
+// single Request object, not fetch(url, init) — so a mock keyed off a
+// second `init` argument never sees the real method/body. Reading them off
+// the Request itself (cloned, since .text() consumes the body stream once)
+// is what actually works here.
+async function mockRequestMethodAndBody(request: Request): Promise<{ method: string; body: unknown }> {
+  const method = request.method;
+  const text = await request.clone().text();
+  return { method, body: text ? JSON.parse(text) : undefined };
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
@@ -131,6 +142,77 @@ describe('PurgeApplyTab', () => {
     await user.type(textarea(), '!');
 
     expect(screen.queryByText(/анонимизация неполная/i)).toBeNull();
+  });
+
+  it('adds a leak-scan finding to the dictionary with an auto-generated value', async () => {
+    const user = userEvent.setup();
+    let postBody: { key: string; value: string } | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const { method, body } = await mockRequestMethodAndBody(request);
+        if (method === 'POST') {
+          postBody = body as { key: string; value: string };
+          return new Response(JSON.stringify({ id: 3, ...postBody, createdAt: new Date().toISOString() }), {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(ENTRIES), { status: 200, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    // A single high-entropy token — unlike an email, this matches exactly
+    // one leak-scan pattern (kind: 'token'), so there's exactly one row.
+    const secret = 'sk_live_9fJ3kLp0Qz7Xw2Bv8Yc1Nm4RtGh6Ae5D';
+    await user.type(textarea(), `key: ${secret}`);
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await screen.findByText(`token: ${secret}`);
+
+    await user.click(screen.getByRole('button', { name: 'В словарь' }));
+
+    // The only finding was resolved — the whole warning clears, not just that row.
+    await waitFor(() => expect(screen.queryByText(/анонимизация неполная/i)).toBeNull());
+    expect(postBody?.key).toBe(secret);
+    expect(postBody?.value).toHaveLength(secret.length);
+    expect(postBody?.value).not.toBe(secret);
+  });
+
+  it('shows an inline error on a duplicate key without clearing the other findings', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const { method } = await mockRequestMethodAndBody(request);
+        if (method === 'POST') {
+          return new Response(JSON.stringify({ message: 'Key "oncall@acme-corp.example" already exists' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(ENTRIES), { status: 200, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'contact oncall@acme-corp.example and prod-db.internal.example.ru');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await screen.findByText('email: oncall@acme-corp.example');
+
+    await user.click(screen.getAllByRole('button', { name: 'В словарь' })[0]);
+
+    expect(await screen.findByText('Такой ключ уже есть в словаре')).toBeTruthy();
+    // Neither finding was removed — the failed one is still there to retry,
+    // and the unrelated one wasn't touched.
+    expect(screen.getByText('email: oncall@acme-corp.example')).toBeTruthy();
+    expect(screen.getByText('hostname: prod-db.internal.example.ru')).toBeTruthy();
   });
 
   it('surfaces a failed copy as an error and keeps the text', async () => {
