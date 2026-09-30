@@ -1,10 +1,18 @@
 # worker
 
-Отдельный сервис, устанавливается на сервере с Ubuntu: опрашивает bridge на
-предмет назначенных задач (раздел **Worker** в bridge), скачивает
-обезличенную посылку, прогоняет её через выбранную модель (Claude, GPT,
-DeepSeek, Qwen) и отправляет результат — статус и логи — обратно в bridge,
-где всё это видно в UI.
+Отдельный сервис, устанавливается на сервере с Ubuntu, и опрашивает bridge
+на предмет работы по двум независимым каналам:
+
+- **Задачи** (раздел **Worker** в bridge): скачивает обезличенную посылку,
+  прогоняет её через выбранную модель (Claude, GPT, DeepSeek, Qwen) и
+  отправляет результат — статус и логи — обратно в bridge.
+- **Чат** (раздел **Chat** в bridge, на [`@gravity-ui/aikit`](https://gravity-ui.com/ru/libraries/aikit)):
+  обычный диалог с той же пятёркой моделей напрямую, без посылки и без
+  редактирования файлов — отдельный, более простой путь выполнения (один
+  HTTP-запрос на реплику, без цикла вызова инструментов).
+
+Оба канала опрашиваются одним и тем же процессом/systemd-юнитом — это не
+два отдельных сервиса.
 
 ## Идея
 
@@ -17,12 +25,18 @@ DeepSeek, Qwen) и отправляет результат — статус и �
   ключ для расшифровки принадлежит только владельцу аккаунта bridge и
   сознательно не передаётся общему серверному процессу. В bridge UI такие
   посылки просто не предлагаются к выбору.
-- Sonnet/Opus выполняются через уже установленный CLI `claude` (Claude
-  Code) — так же, как это делает `sync-cli agent-runner`. GPT/DeepSeek/Qwen
-  выполняются через собственный минимальный цикл вызова инструментов
-  (`read_file`/`write_file`/`list_files`) поверх их OpenAI-совместимого
-  Chat Completions API — никакого дополнительного Python-тулчейна на
-  сервере не требуется, только Node.
+- Для задач Sonnet/Opus выполняются через уже установленный CLI `claude`
+  (Claude Code) — так же, как это делает `sync-cli agent-runner`.
+  GPT/DeepSeek/Qwen выполняются через собственный минимальный цикл вызова
+  инструментов (`read_file`/`write_file`/`list_files`) поверх их
+  OpenAI-совместимого Chat Completions API — никакого дополнительного
+  Python-тулчейна на сервере не требуется, только Node.
+- Для чата всё проще: одна реплика — один HTTP-запрос, без файлов и без
+  инструментов. Sonnet/Opus идут напрямую в Anthropic Messages API (нужен
+  отдельный `ANTHROPIC_API_KEY`, не связанный с логином `claude` CLI —
+  задачи продолжают использовать именно CLI, чат его не трогает);
+  GPT/DeepSeek/Qwen используют ровно ту же настройку
+  (`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`/`QWEN_API_KEY` и т.д.), что и задачи.
 
 ## Требования
 
@@ -57,14 +71,16 @@ cd /opt/pipe-worker-src/worker && npm install && npm run build
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
 | `WORKER_WORK_DIR` | нет (по умолчанию `./.worker-work`) | где создаются временные рабочие директории для задач |
 | `WORKER_NAME` | нет (по умолчанию hostname) | как этот процесс будет подписываться в списке задач bridge |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | ключ обязателен для GPT-задач | по умолчанию `https://api.openai.com/v1`, модель `gpt-4o` |
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek-задач | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
-| `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen-задач | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | ключ обязателен для GPT (задачи и чат) | по умолчанию `https://api.openai.com/v1`, модель `gpt-4o` |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek (задачи и чат) | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
+| `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen (задачи и чат) | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` | ключ обязателен для Sonnet/Opus **в чате** | по умолчанию `https://api.anthropic.com/v1`; не нужен для задач — те используют логин `claude` CLI |
+| `ANTHROPIC_SONNET_MODEL` / `ANTHROPIC_OPUS_MODEL` | нет | реальные id моделей Anthropic Messages API (по умолчанию `claude-sonnet-4-5`/`claude-opus-4-1`) — CLI-алиасы `sonnet`/`opus` этим API не понимаются напрямую |
 
 Достаточно настроить ключи только для тех моделей, которые реально
-собираетесь использовать — worker стартует и без них, задача с
-неподключённой моделью просто завершится ошибкой с понятным сообщением
-вместо падения всего процесса.
+собираетесь использовать — worker стартует и без них, задача или реплика
+чата с неподключённой моделью просто завершится ошибкой с понятным
+сообщением вместо падения всего процесса.
 
 ## Запуск
 
@@ -122,6 +138,7 @@ npm test        # tsc -b && node --test 'dist/**/*.test.js'
 автотестами — как и в `sync`, где у одноимённого модуля тоже нет теста:
 надёжно мокать потоковый вывод дочернего процесса без реального CLI даёт
 немного, основная проверка — ручной прогон. Остальное (`parcel.ts`,
-`providers.ts`, `config.ts`, `bridgeClient.ts`,
-`openAiCompatibleRunner.ts`) покрыто модульными тестами с замоканными
-`fetch`.
+`providers.ts`, `chatProviders.ts`, `config.ts`, `bridgeClient.ts`,
+`chatBridgeClient.ts`, `openAiCompatibleRunner.ts`,
+`chatRunners/anthropicChat.ts`, `chatRunners/openAiCompatibleChat.ts`)
+покрыто модульными тестами с замоканными `fetch`.

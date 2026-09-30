@@ -8,6 +8,7 @@ export { default as sessionsApi } from './sessions-api';
 export { default as apiKeysApi } from './api-keys-api';
 export { default as timeApi } from './time-api';
 export { default as workerApi } from './worker-api';
+export { default as chatApi } from './chat-api';
 
 export * from './auth-api/endpoints';
 export * from './users-api/endpoints';
@@ -17,3 +18,4 @@ export * from './sessions-api/endpoints';
 export * from './api-keys-api/endpoints';
 export * from './time-api/endpoints';
 export * from './worker-api/endpoints';
+export * from './chat-api/endpoints';

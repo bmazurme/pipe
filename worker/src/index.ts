@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 import type { PackedFile } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
+import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
+import { anthropicChat } from './chatRunners/anthropicChat.js';
+import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
+import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
 import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
@@ -104,9 +108,37 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
   }
 }
 
+// Chat has no working directory, no tool loop, no parcel — one HTTP call to
+// whichever provider the chat's model maps to, then report the reply (or
+// the failure) straight back. Deliberately separate from processJob: chat
+// and Worker jobs share only the poll loop and the OpenAI-compatible
+// provider config, nothing about execution.
+export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn): Promise<void> {
+  try {
+    const provider = resolveChatProvider(turn.model);
+
+    const reply = provider.tool === 'anthropic'
+      ? await anthropicChat(turn.history, provider)
+      : await openAiCompatibleChat(turn.history, provider);
+
+    await client.complete(turn.messageId, reply);
+    console.log(`[chat turn ${turn.messageId}] succeeded`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[chat turn ${turn.messageId}] failed:`, error);
+
+    try {
+      await client.fail(turn.messageId, message);
+    } catch (failError) {
+      console.error(`[chat turn ${turn.messageId}] additionally failed to report failure status:`, failError);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   const client = new WorkerBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
+  const chatClient = new ChatBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
 
   console.log(
     `pipe-worker (${config.workerName}) polling ${config.bridgeApiUrl} every ${config.pollIntervalSec}s`,
@@ -118,11 +150,24 @@ async function main(): Promise<void> {
     try {
       job = await client.claim(config.workerName);
     } catch (error) {
-      console.error('Poll failed:', error);
+      console.error('Job poll failed:', error);
     }
 
     if (job) {
       await processJob(client, job, config);
+      continue;
+    }
+
+    let turn: ClaimedChatTurn | null = null;
+
+    try {
+      turn = await chatClient.claim();
+    } catch (error) {
+      console.error('Chat poll failed:', error);
+    }
+
+    if (turn) {
+      await processChatTurn(chatClient, turn);
     } else {
       await sleep(config.pollIntervalSec * 1000);
     }

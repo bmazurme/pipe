@@ -1,4 +1,4 @@
-import { Bucket, Clock, FaceRobot, House, MagicWand, TrashBin } from '@gravity-ui/icons';
+import { Bucket, Clock, Comments, FaceRobot, House, MagicWand, TrashBin } from '@gravity-ui/icons';
 import type { IconData } from '@gravity-ui/uikit';
 
 export interface ServiceLink {
@@ -43,6 +43,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Запуск ИИ-агента (Claude, GPT, DeepSeek, Qwen) над посылкой из общего файлового хранилища.',
     icon: FaceRobot,
     path: '/worker',
+  },
+  {
+    id: 'chat',
+    title: 'Chat',
+    description: 'Диалог с моделью (Claude, GPT, DeepSeek, Qwen) напрямую, без посылки и без редактирования файлов.',
+    icon: Comments,
+    path: '/chat',
   },
 ];
 

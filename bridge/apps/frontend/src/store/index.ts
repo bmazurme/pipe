@@ -3,6 +3,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import {
   apiKeysApi,
   authApi,
+  chatApi,
   purgeApi,
   sessionsApi,
   storageApi,
@@ -38,6 +39,7 @@ export const store = configureStore({
     [apiKeysApi.reducerPath]: apiKeysApi.reducer,
     [timeApi.reducerPath]: timeApi.reducer,
     [workerApi.reducerPath]: workerApi.reducer,
+    [chatApi.reducerPath]: chatApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -49,6 +51,7 @@ export const store = configureStore({
       apiKeysApi.middleware,
       timeApi.middleware,
       workerApi.middleware,
+      chatApi.middleware,
     ),
 });
 

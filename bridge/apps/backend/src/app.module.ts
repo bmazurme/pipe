@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 import { AuthModule } from './auth/auth.module';
+import { ChatModule } from './chat/chat.module';
 import { OauthModule } from './oauth/oauth.module';
 import { PurgeModule } from './purge/purge.module';
 import { StorageModule } from './storage/storage.module';
@@ -19,6 +20,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModuleConfig,
     AuthModule,
+    ChatModule,
     OauthModule,
     PurgeModule,
     StorageModule,

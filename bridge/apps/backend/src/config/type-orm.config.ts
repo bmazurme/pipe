@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import { ApiKey } from '../auth/entities/api-key.entity';
 import { Session } from '../auth/entities/session.entity';
+import { Chat } from '../chat/entities/chat.entity';
+import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
@@ -33,6 +35,8 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         DayOff,
         TimeReportEntry,
         Job,
+        Chat,
+        ChatMessage,
       ],
       synchronize: isDev,
       migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],
