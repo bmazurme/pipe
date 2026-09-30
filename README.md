@@ -23,9 +23,10 @@ GitLab issue → sync-cli or reports' Subscription module
 | [`bridge/`](bridge/) | Storage relay + auth both other tools sit on top of |
 | [`packages/protocol/`](packages/protocol/) | Shared parcel format (dictionary substitution, zip/manifest, encryption, project walk) |
 | [`harness/`](harness/) | `pipe-status` — one merged view of sync's and reports' local task state |
+| [`worker/`](worker/) | Standalone service (installs on Ubuntu) — runs Claude/GPT/DeepSeek/Qwen against a parcel assigned from bridge's Worker page |
 
 Each has its own README with setup/usage detail. **[ECOSYSTEM.md](ECOSYSTEM.md)**
-covers what spans all three: ports, secrets, state files, and the roadmap.
+covers what spans them: ports, secrets, state files, and the roadmap.
 
 ## CI/CD
 

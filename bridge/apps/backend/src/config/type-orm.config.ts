@@ -10,6 +10,7 @@ import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
+import { Job } from '../worker/entities/job.entity';
 
 export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
@@ -31,6 +32,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         ApiKey,
         DayOff,
         TimeReportEntry,
+        Job,
       ],
       synchronize: isDev,
       migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],

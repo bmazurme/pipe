@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b -w",
-    "start": "node dist/status.js"
+    "start": "node dist/status.js",
+    "test": "tsc -b && node --test 'dist/**/*.test.js'"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

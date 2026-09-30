@@ -8,6 +8,7 @@ import {
   storageApi,
   timeApi,
   usersApi,
+  workerApi,
 } from './api';
 import authReducer from './slices/auth-slice';
 import apiKeysReducer from './slices/api-keys-slice';
@@ -36,6 +37,7 @@ export const store = configureStore({
     [sessionsApi.reducerPath]: sessionsApi.reducer,
     [apiKeysApi.reducerPath]: apiKeysApi.reducer,
     [timeApi.reducerPath]: timeApi.reducer,
+    [workerApi.reducerPath]: workerApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -46,6 +48,7 @@ export const store = configureStore({
       sessionsApi.middleware,
       apiKeysApi.middleware,
       timeApi.middleware,
+      workerApi.middleware,
     ),
 });
 

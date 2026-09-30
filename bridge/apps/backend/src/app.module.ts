@@ -10,6 +10,7 @@ import { PurgeModule } from './purge/purge.module';
 import { StorageModule } from './storage/storage.module';
 import { TimeModule } from './time/time.module';
 import { UsersModule } from './users/users.module';
+import { WorkerModule } from './worker/worker.module';
 
 import { TypeOrmModuleConfig } from './config/type-orm.config';
 
@@ -23,6 +24,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     StorageModule,
     TimeModule,
     UsersModule,
+    WorkerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

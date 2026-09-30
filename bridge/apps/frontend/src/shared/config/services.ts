@@ -1,4 +1,4 @@
-import { Bucket, Clock, House, MagicWand, TrashBin } from '@gravity-ui/icons';
+import { Bucket, Clock, FaceRobot, House, MagicWand, TrashBin } from '@gravity-ui/icons';
 import type { IconData } from '@gravity-ui/uikit';
 
 export interface ServiceLink {
@@ -36,6 +36,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Рабочий календарь, дни отдыха и отчёты по задачам.',
     icon: Clock,
     path: '/time',
+  },
+  {
+    id: 'worker',
+    title: 'Worker',
+    description: 'Запуск ИИ-агента (Claude, GPT, DeepSeek, Qwen) над посылкой из общего файлового хранилища.',
+    icon: FaceRobot,
+    path: '/worker',
   },
 ];
 

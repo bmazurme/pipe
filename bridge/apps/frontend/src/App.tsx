@@ -29,6 +29,9 @@ const PurgePage = lazy(() =>
 const TimePage = lazy(() =>
   import('./pages/TimePage').then((m) => ({ default: m.TimePage })),
 );
+const WorkerPage = lazy(() =>
+  import('./pages/WorkerPage').then((m) => ({ default: m.WorkerPage })),
+);
 
 export function App() {
   return (
@@ -45,6 +48,7 @@ export function App() {
                 <Route path="/storage" element={<StoragePage />} />
                 <Route path="/purge" element={<PurgePage />} />
                 <Route path="/time" element={<TimePage />} />
+                <Route path="/worker" element={<WorkerPage />} />
               </Route>
             </Route>
           </Routes>

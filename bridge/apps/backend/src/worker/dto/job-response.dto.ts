@@ -1,0 +1,35 @@
+import { Job, JobModel, JobStatus } from '../entities/job.entity';
+
+export class JobResponseDto {
+  id: number;
+  sourceFileId: number;
+  resultFileId: number | null;
+  model: JobModel;
+  status: JobStatus;
+  logs: string;
+  errorMessage: string | null;
+  workerName: string | null;
+  claimedAt: Date | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+
+  static fromEntity(job: Job): JobResponseDto {
+    return {
+      id: job.id,
+      sourceFileId: job.sourceFileId,
+      resultFileId: job.resultFileId,
+      model: job.model,
+      status: job.status,
+      logs: job.logs,
+      errorMessage: job.errorMessage,
+      workerName: job.workerName,
+      claimedAt: job.claimedAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    };
+  }
+}

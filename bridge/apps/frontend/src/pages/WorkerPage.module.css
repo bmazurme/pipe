@@ -1,0 +1,96 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--ntlstl-card-padding, 20px);
+}
+
+.createForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.createForm > * {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.createError {
+  width: 100%;
+}
+
+.jobList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jobRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--g-border-radius-m);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.jobRow:hover {
+  background: var(--g-color-base-simple-hover);
+}
+
+.jobRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.detailMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detailError {
+  margin-bottom: 12px;
+}
+
+.logsTitle {
+  margin-bottom: 6px;
+}
+
+.logs {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-generic-ultralight);
+  color: var(--g-color-text-primary);
+  font-family: var(--g-font-family-monospace, monospace);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

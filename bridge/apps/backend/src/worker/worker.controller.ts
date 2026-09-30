@@ -1,0 +1,153 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Post,
+  Res,
+  UploadedFile,
+  UseFilters,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { multerConfig } from '../storage/config/multer.config';
+import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
+import { AppendJobLogDto } from './dto/append-job-log.dto';
+import { ClaimJobDto } from './dto/claim-job.dto';
+import { CreateJobDto } from './dto/create-job.dto';
+import { JobResponseDto } from './dto/job-response.dto';
+import { UpdateJobStatusDto } from './dto/update-job-status.dto';
+import { WorkerService } from './worker.service';
+
+// One controller, one guard, for both audiences — JwtOrApiKeyGuard already
+// accepts a browser session OR a personal API key (the same "unified
+// machine auth" sync/reports already use), exactly like storage's own
+// controller. The browser calls the plain CRUD + result-download routes;
+// the worker process calls claim/parcel/status/logs/result using a
+// personal API key instead of a JWT.
+@Controller('api/v1/worker/jobs')
+@UseGuards(JwtOrApiKeyGuard)
+export class WorkerController {
+  constructor(private readonly workerService: WorkerService) {}
+
+  @Get()
+  async list(
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto[]> {
+    const jobs = await this.workerService.findAllByUser(currentUser.id);
+
+    return jobs.map(JobResponseDto.fromEntity);
+  }
+
+  @Post()
+  async create(
+    @Body() dto: CreateJobDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.create(currentUser.id, dto);
+
+    return JobResponseDto.fromEntity(job);
+  }
+
+  // POST, not GET — claiming mutates state (queued -> claimed), and needs a
+  // body (the worker's self-reported name). Being POST also means it can't
+  // collide with the GET ':id' route below regardless of registration order.
+  @Post('claim')
+  async claim(
+    @Body() dto: ClaimJobDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto | null> {
+    const job = await this.workerService.claim(currentUser.id, dto.workerName);
+
+    return job ? JobResponseDto.fromEntity(job) : null;
+  }
+
+  @Get(':id')
+  async get(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.findOwned(id, currentUser.id);
+
+    return JobResponseDto.fromEntity(job);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.workerService.remove(id, currentUser.id);
+  }
+
+  @Get(':id/parcel')
+  async downloadParcel(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.workerService.getSourceFile(id, currentUser.id);
+
+    res.download(this.workerService.filePath(file), file.originalName);
+  }
+
+  @Get(':id/result/download')
+  async downloadResult(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.workerService.getResultFile(id, currentUser.id);
+
+    res.download(this.workerService.filePath(file), file.originalName);
+  }
+
+  @Post(':id/status')
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateJobStatusDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.updateStatus(id, currentUser.id, dto);
+
+    return JobResponseDto.fromEntity(job);
+  }
+
+  @Post(':id/logs')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async appendLog(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AppendJobLogDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.workerService.appendLog(id, currentUser.id, dto.chunk);
+  }
+
+  @Post(':id/result')
+  @UseFilters(MulterExceptionFilter)
+  @UseInterceptors(FileInterceptor('file', multerConfig))
+  async uploadResult(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    const job = await this.workerService.setResult(id, currentUser.id, file);
+
+    return JobResponseDto.fromEntity(job);
+  }
+}
