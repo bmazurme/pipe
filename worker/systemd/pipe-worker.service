@@ -1,0 +1,26 @@
+[Unit]
+Description=pipe-worker — polls bridge for jobs and runs the assigned AI model
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Per claudeRunner.ts's own warning: --dangerously-skip-permissions runs
+# unattended, so this MUST be a dedicated, unprivileged OS user with no
+# access to real secrets — never a shared/admin account.
+# useradd --system --create-home --shell /usr/sbin/nologin pipe-worker
+User=pipe-worker
+Group=pipe-worker
+WorkingDirectory=/opt/pipe-worker
+EnvironmentFile=/opt/pipe-worker/.env
+ExecStart=/usr/bin/node /opt/pipe-worker/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# Defense in depth on top of the dedicated user — worker has no legitimate
+# reason to write anywhere outside its own working directory.
+ProtectSystem=strict
+ReadWritePaths=/opt/pipe-worker
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

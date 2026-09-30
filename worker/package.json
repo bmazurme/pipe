@@ -1,0 +1,27 @@
+{
+  "name": "pipe-worker",
+  "version": "0.1.0",
+  "description": "Standalone service (installs on an Ubuntu server): polls bridge for worker jobs, runs the assigned AI model (Claude via the claude CLI, or GPT/DeepSeek/Qwen via a minimal OpenAI-compatible tool-calling loop) against the job's parcel, and reports status/logs/result back to bridge.",
+  "type": "module",
+  "bin": {
+    "pipe-worker": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b -w",
+    "start": "node dist/index.js",
+    "test": "tsc -b && node --test 'dist/**/*.test.js'"
+  },
+  "dependencies": {
+    "@pipe/protocol": "file:../packages/protocol",
+    "adm-zip": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
