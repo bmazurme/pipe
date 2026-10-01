@@ -15,7 +15,12 @@ import type { ProjectConfig, StoredFileResponse } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
 import { issueParcelName } from './pushIssue.js';
 
-const PARCEL_NAME_PATTERN = /^(\d+)-(\d+)\.subscription\.zip(\.enc)?$/;
+// iid is `\d+` for a real GitLab issue, but reports' manual parcels (no
+// GitLab issue behind them — see reports/howto.md) use `m-<base36>`
+// instead (e.g. "m-mup3r0x2") — `.+` covers both; `candidate.iid` is only
+// ever threaded through as an opaque string from here on (branch/directory
+// naming, issueKey), never parsed as a number, so this is safe to relax.
+const PARCEL_NAME_PATTERN = /^(\d+)-(.+)\.subscription\.zip(\.enc)?$/;
 
 interface Candidate {
   file: StoredFileResponse;
@@ -24,7 +29,7 @@ interface Candidate {
   encrypted: boolean;
 }
 
-function findCandidates(files: StoredFileResponse[], gitlabProjectId: string | undefined): Candidate[] {
+export function findCandidates(files: StoredFileResponse[], gitlabProjectId: string | undefined): Candidate[] {
   const matches: Candidate[] = [];
 
   for (const file of files) {
