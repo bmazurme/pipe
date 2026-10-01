@@ -72,6 +72,35 @@ export async function checkoutTaskBranch(path: string, branch: string): Promise<
   }
 
   await git(path, ['checkout', branch]);
+
+  // The task branch can have moved on origin since this clone last saw it —
+  // sync-cli's agent-runner pushes its own "before"/"after" commits to the
+  // same branch from an entirely different clone/worktree, so this repo's
+  // local ref is routinely behind by the time pull runs (in fact on every
+  // *first* pull after agent-runner has already run once, since `init`
+  // only ever branches off origin/baseBranch, never fetches the task
+  // branch itself). Without catching up, commitPulledFiles' commit lands as
+  // a sibling rather than a descendant of what's already on origin, and the
+  // plain `git push` in pushBranch below is rejected as non-fast-forward —
+  // after the pulled files were already written and committed locally, so
+  // it looks like "the data landed but the step never completes".
+  //
+  // A missing remote branch (nobody has pushed to it since init, or there's
+  // no "origin" configured at all) isn't an error — there's simply nothing
+  // to catch up on yet, so this silently proceeds exactly as before.
+  try {
+    await git(path, ['fetch', 'origin', branch]);
+  } catch {
+    return;
+  }
+
+  try {
+    await git(path, ['merge', '--ff-only', `origin/${branch}`]);
+  } catch (error) {
+    throw new Error(
+      `Ветка ${branch} разошлась с origin — её нужно синхронизировать вручную перед pull. (${(error as Error).message})`,
+    );
+  }
 }
 
 // Stages exactly the files the pull just wrote — never `git add -A`. Unlike

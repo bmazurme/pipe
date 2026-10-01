@@ -75,6 +75,89 @@ describe('checkoutTaskBranch', () => {
 
     await expect(checkoutTaskBranch(dir, 'task-branch')).rejects.toThrow('незакоммиченные изменения');
   });
+
+  it('is a no-op when there is no "origin" remote at all (e.g. no prior push)', async () => {
+    const dir = initRepo();
+    git(dir, ['branch', 'task-branch']);
+
+    await expect(checkoutTaskBranch(dir, 'task-branch')).resolves.toBeUndefined();
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task-branch');
+  });
+
+  it('is a no-op when origin exists but has never seen this branch', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['branch', 'task-branch']);
+
+    await expect(checkoutTaskBranch(dir, 'task-branch')).resolves.toBeUndefined();
+  });
+
+  // Regression test: sync-cli's agent-runner pushes its own commits to the
+  // same task branch from a separate clone/worktree. Before this fix, pull
+  // would write+commit the parcel's files on top of a now-stale local
+  // branch ref, and the subsequent `git push` was rejected as
+  // non-fast-forward — after the files were already written to disk and
+  // committed locally, looking like "the data landed but nothing else did".
+  it('fast-forwards past commits agent-runner already pushed to origin from elsewhere', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['checkout', '-b', 'task-branch']);
+    git(dir, ['push', '-u', 'origin', 'task-branch']);
+
+    // Simulates agent-runner's own separate clone pushing "before"/"after"
+    // commits to the same branch.
+    const otherClone = mkdtempSync(path.join(tmpdir(), 'reports-git-test-clone-'));
+    git(otherClone, ['clone', '--quiet', remote, '.']);
+    git(otherClone, ['checkout', 'task-branch']);
+    writeFileSync(path.join(otherClone, 'agent-change.txt'), 'from agent-runner');
+    git(otherClone, ['add', '-A']);
+    git(otherClone, ['commit', '-m', 'agent-runner: after', '--quiet']);
+    git(otherClone, ['push', '--quiet']);
+
+    // `dir`'s local task-branch ref is now strictly behind origin.
+    git(dir, ['checkout', 'master']);
+    await checkoutTaskBranch(dir, 'task-branch');
+
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task-branch');
+    expect(git(dir, ['log', '-1', '--format=%s']).trim()).toBe('agent-runner: after');
+
+    // The pull's own commit on top now succeeds as a fast-forward push.
+    writeFileSync(path.join(dir, 'pulled.txt'), 'content');
+    await commitPulledFiles(dir, ['pulled.txt'], 'Pull issue #1');
+    await expect(pushBranch(dir, 'task-branch')).resolves.toBeUndefined();
+  });
+
+  it('throws a clear error when the branch has genuinely diverged, rather than committing blindly on top', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['checkout', '-b', 'task-branch']);
+    git(dir, ['push', '-u', 'origin', 'task-branch']);
+
+    const otherClone = mkdtempSync(path.join(tmpdir(), 'reports-git-test-clone-'));
+    git(otherClone, ['clone', '--quiet', remote, '.']);
+    git(otherClone, ['checkout', 'task-branch']);
+    writeFileSync(path.join(otherClone, 'agent-change.txt'), 'from agent-runner');
+    git(otherClone, ['add', '-A']);
+    git(otherClone, ['commit', '-m', 'agent-runner: after', '--quiet']);
+    git(otherClone, ['push', '--quiet']);
+
+    // dir's own local branch also moved, independently of origin — a real
+    // divergence, not a simple behind-by-N-commits case.
+    writeFileSync(path.join(dir, 'local-only.txt'), 'local divergent work');
+    git(dir, ['add', '-A']);
+    git(dir, ['commit', '-m', 'local divergent commit', '--quiet']);
+
+    await expect(checkoutTaskBranch(dir, 'task-branch')).rejects.toThrow('разошлась с origin');
+  });
 });
 
 describe('commitPulledFiles', () => {
