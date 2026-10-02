@@ -142,3 +142,38 @@ describe('ChatPage', () => {
     expect(await screen.findByText(/Модель недоступна/)).toBeTruthy();
   });
 });
+
+describe('ChatPage — opening an existing chat from history', () => {
+  it('renders an existing chat\'s already-complete messages after selecting it from history', async () => {
+    const user = userEvent.setup();
+    const existingChats = [
+      { ...CHAT, id: 1, title: null },
+      { ...CHAT, id: 2, title: null },
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse(existingChats);
+        if (url.includes('/chat/chats/1/messages') && method === 'GET') return jsonResponse(MESSAGES);
+        if (url.includes('/chat/chats/2/messages') && method === 'GET') return jsonResponse([]);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Chat');
+
+    const historyButton = document.querySelector('[data-qa="header-action-history"]');
+    if (!historyButton) throw new Error('history button not found');
+    await user.click(historyButton);
+    await user.click(await screen.findByText(`GPT · #1`));
+
+    expect(await screen.findByText('Привет')).toBeTruthy();
+    expect(await screen.findByText('Здравствуйте!')).toBeTruthy();
+  });
+});
