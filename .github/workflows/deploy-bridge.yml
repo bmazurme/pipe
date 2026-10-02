@@ -153,6 +153,11 @@ jobs:
       # the tag in the service spec, which is what makes rollbacks meaningful.
       IMAGE_TAG: ${{ github.sha }}
       DOCKER_HOST: ssh://${{ secrets.SWARM_USER }}@${{ secrets.SWARM_HOST }}
+      # ubuntu-latest's bundled Docker CLI has drifted ahead of the swarm
+      # node's older daemon ("client version X.48 is too new. Maximum
+      # supported API version is X.43") — pins the client to the daemon's
+      # actual max supported version instead of negotiating the newest.
+      DOCKER_API_VERSION: '1.43'
 
     steps:
       - name: Checkout repository
