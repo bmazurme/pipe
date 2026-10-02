@@ -8,8 +8,10 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -89,17 +91,27 @@ export class ChatController {
   @Post('turns/claim')
   async claim(
     @CurrentUser() currentUser: { id: number },
-  ): Promise<ClaimedTurnResponseDto | null> {
+    @Res() res: Response,
+  ): Promise<void> {
     const claimed = await this.chatService.claim(currentUser.id);
 
-    if (!claimed) return null;
+    // A bare `return null` sends a genuinely empty body (no content-type,
+    // nothing for .json() to parse) rather than the JSON text "null" —
+    // breaks a client that always calls response.json(). 204 is also the
+    // more correct status for "nothing to claim" than 201.
+    if (!claimed) {
+      res.status(HttpStatus.NO_CONTENT).end();
+      return;
+    }
 
-    return {
+    const payload: ClaimedTurnResponseDto = {
       messageId: claimed.message.id,
       chatId: claimed.chat.id,
       model: claimed.chat.model,
       history: claimed.history,
     };
+
+    res.status(HttpStatus.OK).json(payload);
   }
 
   @Post('turns/:messageId/complete')

@@ -29,8 +29,25 @@ describe('ChatBridgeClient', () => {
       assert.equal(turn?.messageId, 1);
     });
 
-    it('returns null when nothing is pending', async () => {
-      globalThis.fetch = (async () => new Response('null', { status: 200 })) as typeof fetch;
+    // Regression test: bridge actually sends 204 with a genuinely empty
+    // body for "nothing pending" (a bare `return null` from a Nest handler
+    // doesn't serialize to JSON "null" — it sends no body and no
+    // content-type at all). A naive `await response.json()` throws
+    // "Unexpected end of JSON input" on that empty body — this is exactly
+    // what broke worker's very first real deployment.
+    it('returns null when nothing is pending (bridge sends 204, no body)', async () => {
+      globalThis.fetch = (async () => new Response(null, { status: 204 })) as typeof fetch;
+
+      const client = new ChatBridgeClient('http://bridge.local', 'brk_test');
+      assert.equal(await client.claim(), null);
+    });
+
+    // Same case, pre-fix bridge behavior: an empty body with 201 rather
+    // than 204 — the client doesn't assume a specific status code for
+    // "empty", so this must also work against a bridge that hasn't
+    // redeployed the 204 fix yet.
+    it('returns null when nothing is pending (older bridge: empty body, 201)', async () => {
+      globalThis.fetch = (async () => new Response(null, { status: 201 })) as typeof fetch;
 
       const client = new ChatBridgeClient('http://bridge.local', 'brk_test');
       assert.equal(await client.claim(), null);

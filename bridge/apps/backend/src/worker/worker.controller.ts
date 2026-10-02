@@ -66,10 +66,20 @@ export class WorkerController {
   async claim(
     @Body() dto: ClaimJobDto,
     @CurrentUser() currentUser: { id: number },
-  ): Promise<JobResponseDto | null> {
+    @Res() res: Response,
+  ): Promise<void> {
     const job = await this.workerService.claim(currentUser.id, dto.workerName);
 
-    return job ? JobResponseDto.fromEntity(job) : null;
+    // A bare `return null` from a Nest handler sends a genuinely empty body
+    // (no content-type, nothing for .json() to parse) rather than the JSON
+    // text "null" — breaks a client that always calls response.json(). 204
+    // is also the more correct status for "nothing to claim" than 201.
+    if (!job) {
+      res.status(HttpStatus.NO_CONTENT).end();
+      return;
+    }
+
+    res.status(HttpStatus.OK).json(JobResponseDto.fromEntity(job));
   }
 
   @Get(':id')

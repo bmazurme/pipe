@@ -21,7 +21,13 @@ export class ChatBridgeClient {
     return { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
   }
 
-  // Returns null when nothing is pending right now.
+  // Returns null when nothing is pending right now — bridge sends an empty
+  // body for that case (204 is the current behavior; an older deployment
+  // may still send 201 with no body), never a 200 with JSON "null".
+  // response.json() throws on an empty body ("Unexpected end of JSON
+  // input"), so this checks the raw text first rather than assuming a
+  // specific status code — robust either way, and to bridge deployments
+  // that haven't picked up the 204 fix yet.
   async claim(): Promise<ClaimedChatTurn | null> {
     const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/claim`, {
       method: 'POST',
@@ -33,7 +39,8 @@ export class ChatBridgeClient {
       throw new Error(`Chat claim failed (${response.status}): ${await response.text()}`);
     }
 
-    return (await response.json()) as ClaimedChatTurn | null;
+    const text = await response.text();
+    return text ? (JSON.parse(text) as ClaimedChatTurn | null) : null;
   }
 
   async complete(messageId: number, content: string): Promise<void> {

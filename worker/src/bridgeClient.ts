@@ -24,7 +24,13 @@ export class WorkerBridgeClient {
     return headers;
   }
 
-  // Returns null when nothing is queued right now.
+  // Returns null when nothing is queued right now — bridge sends an empty
+  // body for that case (204 is the current behavior; an older deployment
+  // may still send 201 with no body), never a 200 with JSON "null".
+  // response.json() throws on an empty body ("Unexpected end of JSON
+  // input"), so this checks the raw text first rather than assuming a
+  // specific status code — robust either way, and to bridge deployments
+  // that haven't picked up the 204 fix yet.
   async claim(workerName: string): Promise<RemoteJob | null> {
     const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/claim`, {
       method: 'POST',
@@ -36,8 +42,8 @@ export class WorkerBridgeClient {
       throw new Error(`Claim failed (${response.status}): ${await response.text()}`);
     }
 
-    const body = (await response.json()) as RemoteJob | null;
-    return body;
+    const text = await response.text();
+    return text ? (JSON.parse(text) as RemoteJob | null) : null;
   }
 
   async downloadParcel(jobId: number): Promise<Buffer> {
