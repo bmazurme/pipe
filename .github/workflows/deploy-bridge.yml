@@ -24,6 +24,17 @@
 #   VPN_CLIENT_CONFIG (the full Xray client config.json content — embeds a
 #   real client UUID and Reality keys, never committed to the repo)
 #
+# New for bridge backend's /api/v1/vpn/* (see bridge/apps/backend/src/vpn/):
+#
+#   VPN_PANEL_URL, VPN_PANEL_API_TOKEN (ihor's x-ui panel — status, and the
+#   source of truth the "sync" button rebuilds VPN_CLIENT_CONFIG from),
+#   VPN_SERVER_ADDRESS (the VPN server's own IP, used in the rebuilt
+#   client config), BRIDGE_GITHUB_TOKEN (a PAT scoped to this repo only —
+#   Actions secrets: write, Actions: write — lets the backend push worker
+#   secrets and trigger this same workflow on the admin's behalf; named
+#   BRIDGE_GITHUB_TOKEN, not GITHUB_TOKEN, since the latter is a reserved
+#   name GitHub Actions auto-populates with a different, more limited token)
+#
 # Deliberately workflow_dispatch-only for now — run it manually from the
 # Actions tab (against main) until one run has deployed successfully. Once
 # proven, switch this to the commented block below and disable
@@ -257,6 +268,11 @@ jobs:
           WORKER_OPENAI_API_KEY: ${{ secrets.WORKER_OPENAI_API_KEY }}
           WORKER_DEEPSEEK_API_KEY: ${{ secrets.WORKER_DEEPSEEK_API_KEY }}
           WORKER_QWEN_API_KEY: ${{ secrets.WORKER_QWEN_API_KEY }}
+          VPN_PANEL_URL: ${{ secrets.VPN_PANEL_URL }}
+          VPN_PANEL_API_TOKEN: ${{ secrets.VPN_PANEL_API_TOKEN }}
+          VPN_SERVER_ADDRESS: ${{ secrets.VPN_SERVER_ADDRESS }}
+          BRIDGE_GITHUB_TOKEN: ${{ secrets.BRIDGE_GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
         run: |
           VPN_CLIENT_CONFIG_FILE="$RUNNER_TEMP/xray-client-config.json" \
           docker stack deploy \

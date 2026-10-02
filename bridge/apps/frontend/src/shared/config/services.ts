@@ -1,4 +1,13 @@
-import { Bucket, Clock, Comments, FaceRobot, House, MagicWand, TrashBin } from '@gravity-ui/icons';
+import {
+  Bucket,
+  Clock,
+  Comments,
+  FaceRobot,
+  House,
+  MagicWand,
+  ShieldKeyhole,
+  TrashBin,
+} from '@gravity-ui/icons';
 import type { IconData } from '@gravity-ui/uikit';
 
 export interface ServiceLink {
@@ -50,6 +59,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Диалог с моделью (Claude, GPT, DeepSeek, Qwen) напрямую, без посылки и без редактирования файлов.',
     icon: Comments,
     path: '/chat',
+  },
+  {
+    id: 'vpn',
+    title: 'VPN',
+    description: 'Статус туннеля worker → AI-провайдеры, его настройка и ключи worker.',
+    icon: ShieldKeyhole,
+    path: '/vpn',
   },
 ];
 

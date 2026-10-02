@@ -1,0 +1,39 @@
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+
+import { JwtGuard } from '../auth/guards/jwt.guard';
+import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
+import { VpnService, VpnStatus } from './vpn.service';
+
+// Browser session only — deliberately not JwtOrApiKeyGuard. This manages
+// deploy-triggering GitHub credentials and worker provider keys; sync/
+// reports/worker machine clients have no business calling it.
+@Controller('api/v1/vpn')
+@UseGuards(JwtGuard)
+export class VpnController {
+  constructor(private readonly vpnService: VpnService) {}
+
+  @Get('status')
+  async getStatus(): Promise<VpnStatus> {
+    return this.vpnService.getStatus();
+  }
+
+  @Post('sync')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async sync(): Promise<void> {
+    await this.vpnService.syncWorkerVpnConfig();
+  }
+
+  @Post('worker-secrets')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setWorkerSecret(@Body() dto: SetWorkerSecretDto): Promise<void> {
+    await this.vpnService.setWorkerSecret(dto.name, dto.value);
+  }
+}

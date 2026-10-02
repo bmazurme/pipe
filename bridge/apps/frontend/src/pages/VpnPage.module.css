@@ -1,0 +1,42 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--ntlstl-card-padding, 20px);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.secretRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.secretRow > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.secretField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

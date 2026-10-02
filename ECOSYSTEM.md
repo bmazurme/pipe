@@ -24,6 +24,13 @@ GitLab issue → sync-cli or reports' Subscription module
   Purge page). See its README/source for the API.
 - **[harness/](harness/)** — `pipe-status`, prints one merged view of
   sync's and reports' local task state (see "State files" below).
+- **[worker/](worker/)** — standalone service (installs on an Ubuntu
+  server): polls bridge for work along two independent channels — Worker
+  jobs (a parcel + an assigned model; runs Claude/GPT/DeepSeek/Qwen against
+  it and reports status/logs/result back, the bridge-hosted counterpart to
+  `sync-cli agent-runner`) and bridge's **Chat** section (a plain
+  conversation with the same five models, no parcel, no file editing — see
+  "Chat" below). One process/systemd unit serves both.
 
 Each product's own README has the full detail; this file only covers what
 spans all three.
@@ -38,6 +45,7 @@ spans all three.
 | reports server | `4000` | dev default (`PORT` in `reports/packages/server/.env`) |
 | reports client | `5174` | Vite dev server — deliberately not `5173`, since bridge's frontend already claims that default; running both locally at once was already a real collision this avoids |
 | sync | — | CLI only, no ports |
+| worker | — | outbound poller only, no listening port |
 
 **bridge production** (Docker Swarm), published ports `3300`/`3305`:
 chosen because `3000`/`3005` (places), `3400`/`3405` (tools), `3450`/`3455`
@@ -56,8 +64,21 @@ exact backend host, not a shared parent domain — the cookie is named
 `bridgeRefreshToken` specifically because a shared `COOKIE_DOMAIN` with
 sibling apps on the same parent domain caused a name collision before),
 `EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
-(optional ntlstl.time integration). Deploy-only: `YC_SA_JSON_CREDENTIALS`,
-`CR_*` (registry), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`.
+(optional ntlstl.time integration). `/api/v1/vpn/*` (browser-session only —
+the VPN status page, and the only part of bridge's backend that calls out to
+third-party APIs): `VPN_PANEL_URL`/`VPN_PANEL_API_TOKEN` (ihor's x-ui panel —
+status, and the source of truth the page's "sync" action rebuilds worker's
+`VPN_CLIENT_CONFIG` from, rather than trusting whatever was last pushed),
+`VPN_SERVER_ADDRESS`, `BRIDGE_GITHUB_TOKEN` (a PAT scoped to this repo only —
+Actions secrets: write, Actions: write — lets that page push worker provider
+keys and trigger a redeploy; named `BRIDGE_GITHUB_TOKEN` because `GITHUB_TOKEN`
+is a reserved name Actions auto-populates with a different, more limited
+token). Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
+`CR_WORKER_IMAGE`), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`,
+`WORKER_BRIDGE_API_URL`/`WORKER_BRIDGE_API_KEY`/`WORKER_CLAUDE_CODE_OAUTH_TOKEN`/`WORKER_OPENAI_API_KEY`/`WORKER_DEEPSEEK_API_KEY`/`WORKER_QWEN_API_KEY`
+(worker's own runtime secrets, injected as plain Swarm service env — same
+pattern as backend's), `VPN_CLIENT_CONFIG` (worker's Xray client config.json,
+rebuildable from the panel via the VPN page rather than hand-maintained).
 
 **reports** (`SettingsType`, stored in the gitignored
 `reports/packages/server/src/settings/settings.json`, edited from the
@@ -72,6 +93,19 @@ gitignored): `refreshToken` (bridge, fallback), `apiKey` (bridge, preferred
 — see "Unified machine auth" below), `gitlabToken` (issue mode only).
 Per-project encryption key pairs live under `sync/keys/` (also gitignored).
 
+**worker** (env vars only, no config file — see `worker/README.md`):
+`BRIDGE_API_URL`, `BRIDGE_API_KEY` (a personal bridge API key — the only
+auth method worker supports, see "Unified machine auth" below; there's no
+refresh-token fallback here, unlike sync/reports), plus one API key per AI
+provider it's meant to run (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`,
+`QWEN_API_KEY`) — sonnet/opus need no key here at all, for **either** jobs
+or chat: both run through the same separately-installed, separately-logged-in
+`claude` CLI (`CLAUDE_CODE_OAUTH_TOKEN`, a Claude.ai subscription, not a
+billed API key). Optional `WORKER_PROXY_URL` (an HTTP — not SOCKS5, neither
+the `claude` CLI nor undici's `ProxyAgent` support that — proxy for reaching
+AI providers from behind a geo-restricted host; scoped to provider calls
+only, never bridge's own API).
+
 ## State files
 
 What's on disk, per product, and how tasks are keyed:
@@ -79,13 +113,41 @@ What's on disk, per product, and how tasks are keyed:
 | File | Repo | Keyed by | What it tracks |
 |---|---|---|---|
 | `.sync-state.json` | sync | project name | last content hash pushed/pulled, project mode |
-| `.sync-agent-state.json` | sync | `projectId:iid` | agent-runner's pending/last-output state per GitLab issue |
+| `.sync-agent-state.json` | sync | `projectId:iid` | agent-runner's last-own-output dedup hash per GitLab issue (so it doesn't mistake its own push-back for a fresh incoming parcel) — not a progress record |
+| `.gitlab-worker-state.json` | sync | `projectId:iid` | which issues gitlab-worker has already turned into a pushed parcel, and when |
 | `packages/server/src/subscription/subscription-state.json` | reports | `projectId:iid` | Subscription module's step/branch/timestamps per GitLab issue |
 | — | bridge | — | none; bridge is the storage relay, it holds no task state of its own |
 
-Both task-state files already agree on the `projectId:iid` key (e.g.
+All three task-state files already agree on the `projectId:iid` key (e.g.
 `"173:628"`), which is what makes `pipe-status` (in `harness/`) able to
-merge them into one view instead of requiring two separate lookups.
+merge them into one view instead of requiring separate lookups.
+
+**worker's job state lives in bridge's own Postgres**, not a local file —
+the `jobs` table (`bridge/apps/backend/src/worker/entities/job.entity.ts`,
+migration `1790100000000-AddWorkerJobs`), one row per job: which
+`StoredFile` it reads from and writes to, the assigned model, its
+`queued → claimed → running → succeeded/failed` status, accumulated logs,
+and timestamps. Unlike everything else in this table, it isn't keyed by
+`projectId:iid` at all — a job is keyed to a specific bridge `StoredFile`
+id, since worker (unlike sync/reports) has no GitLab integration of its
+own and only ever acts on whatever's already sitting in storage. `harness`
+doesn't read it (it's DB-backed, not a local JSON file, and specific to
+one bridge account rather than one machine's checkout) — bridge's own
+Worker page is the only place this state is visible today. Encrypted
+(`.enc`) parcels are never eligible: worker has no access to the
+per-account private key that would decrypt them (see "Unified machine
+auth" below for why that boundary exists).
+
+**Chat's state is the same shape of idea, a separate pair of tables**:
+`chats` (`bridge/apps/backend/src/chat/entities/chat.entity.ts` — one row
+per conversation: model, optional title) and `chat_messages`
+(`chat-message.entity.ts` — one row per turn: role, content,
+`pending -> running -> complete`/`failed` status, cascade-deleted with
+their chat). Migration `1790200000000-AddChats`. Not keyed by
+`projectId:iid` either, for the same reason as `jobs` — no GitLab issue is
+involved. `ChatService.claim` uses the identical `FOR UPDATE SKIP LOCKED`
+pattern as `WorkerService.claim` to hand out at most one pending turn per
+poll.
 
 ## Manifest schema versioning
 
@@ -141,6 +203,17 @@ so a machine caller no longer has to impersonate a human's browser session.
   which is the unrelated `TIME_EXPORT_API_KEY` shared secret) — preferred by
   [subscription/bridge-client.ts](reports/packages/server/src/subscription/bridge-client.ts)
   over replaying `bridgeRefreshToken` when set.
+- **worker**: `BRIDGE_API_KEY` env var, consumed by
+  [worker/src/bridgeClient.ts](worker/src/bridgeClient.ts) — the *only*
+  auth method it supports (no refresh-token fallback at all, unlike
+  sync/reports, since worker is a headless server process with no browser
+  session to ever have replayed in the first place).
+  [WorkerController](bridge/apps/backend/src/worker/worker.controller.ts)
+  reuses the same `JwtOrApiKeyGuard` as `StorageController` for every
+  route, human and machine alike — as does
+  [ChatController](bridge/apps/backend/src/chat/chat.controller.ts): the
+  same `BRIDGE_API_KEY` worker already has authenticates its chat-turn
+  polling too, nothing separate to configure for that second channel.
 
 The refresh-token replay (browser cookie pasted into sync/reports) still
 works unchanged for anyone who hasn't switched over.
@@ -219,6 +292,39 @@ Two additions to the same issue-parcel flow:
   and confirms before proceeding — declining leaves the parcel unclaimed for
   the next run. Needs a human at the keyboard, so it's rejected together
   with `--watch` ([reviewPrompt.ts](sync/src/reviewPrompt.ts)).
+
+## reports' pull commits and pushes the task branch — never the target branch
+
+`handlePullSubscriptionIssue`
+([subscription/handler.ts](reports/packages/server/src/subscription/handler.ts))
+used to only write the parcel's files to disk, leaving them uncommitted —
+picking them up into an actual branch was entirely manual. It now also
+commits and pushes, via two new functions in
+[subscription/git.ts](reports/packages/server/src/subscription/git.ts):
+
+- `commitPulledFiles` stages **only** the exact paths the pull just wrote
+  (never `git add -A`) — unlike sync's `agent-runner`, this runs against the
+  developer's own regular checkout, not a freshly-created isolated worktree,
+  so a blanket add could sweep up unrelated work already sitting there
+  uncommitted. `--allow-empty` covers a parcel that carries only an image
+  asset and no file changes.
+- `pushBranch` pushes that one task branch (the one `init` created,
+  read back from the issue's tracked state) to `origin` — deliberately
+  nothing else. Getting the result into the target/base branch stays a
+  manual step (review it, open a merge request yourself); nothing in this
+  pipeline auto-merges anywhere.
+- `checkoutTaskBranch` runs before any of that: the repo can drift off the
+  task branch between `init` and `pull` (switched away for other work, a
+  previous run left it on a different task's branch, ...), and a commit
+  always lands on whatever HEAD currently is — without an explicit checkout
+  first, pull's commit could land on the target/base branch itself, one a
+  later ordinary `git push` from there would carry along. Refuses (same as
+  `createBranch`) if the tree is dirty, since switching branches would carry
+  those changes along onto the task branch.
+
+Pull now requires `init` to have run first (throws if the issue's tracked
+state has no `branch` yet) — previously pull would silently write files
+regardless of whether a branch existed for them to land on.
 
 ## Roadmap (not yet implemented)
 

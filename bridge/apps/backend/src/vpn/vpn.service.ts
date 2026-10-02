@@ -1,0 +1,246 @@
+import {
+  BadGatewayException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { encryptSecretForGitHub } from './github-secrets.util';
+import { WorkerSecretName } from './dto/set-worker-secret.dto';
+
+interface XrayRealitySettings {
+  target: string;
+  serverNames: string[];
+  shortIds: string[];
+  settings: {
+    publicKey: string;
+    fingerprint: string;
+    spiderX: string;
+  };
+}
+
+interface XrayInbound {
+  port: number;
+  clientStats?: {
+    id: number;
+    email: string;
+    uuid: string;
+    up: number;
+    down: number;
+    lastOnline: number;
+  }[];
+  settings: { clients: { id: string; flow: string }[] };
+  streamSettings: { realitySettings: XrayRealitySettings };
+}
+
+export interface VpnStatus {
+  // null when the client has never connected (a brand-new inbound, or one
+  // whose stats were reset) — distinct from "connected a long time ago",
+  // which the frontend renders differently.
+  lastOnline: string | null;
+  upBytes: number;
+  downBytes: number;
+  sni: string;
+  fingerprint: string;
+  port: number;
+}
+
+// A fresh client never connected is reported here as lastOnline: 0 by x-ui,
+// not absent — zero is not a valid epoch ms value for "just connected".
+const NEVER_ONLINE = 0;
+
+@Injectable()
+export class VpnService {
+  constructor(private readonly configService: ConfigService) {}
+
+  private panelUrl(): string {
+    return this.required('VPN_PANEL_URL').replace(/\/$/, '');
+  }
+
+  private required(key: string): string {
+    const value = this.configService.get<string>(key);
+    if (!value) {
+      throw new InternalServerErrorException(
+        `${key} is not configured on bridge's backend`,
+      );
+    }
+    return value;
+  }
+
+  private async panelRequest<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(`${this.panelUrl()}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${this.required('VPN_PANEL_API_TOKEN')}`,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `VPN panel request failed (${response.status})`,
+      );
+    }
+
+    const body = (await response.json()) as {
+      success: boolean;
+      msg?: string;
+      obj: T;
+    };
+    if (!body.success) {
+      throw new BadGatewayException(
+        `VPN panel reported failure: ${body.msg ?? 'unknown error'}`,
+      );
+    }
+    return body.obj;
+  }
+
+  private async getInbound(): Promise<XrayInbound> {
+    const inbounds = await this.panelRequest<XrayInbound[]>(
+      '/panel/api/inbounds/list',
+    );
+    const inbound = inbounds[0];
+    if (!inbound) {
+      throw new BadGatewayException('VPN panel has no inbound configured');
+    }
+    return inbound;
+  }
+
+  async getStatus(): Promise<VpnStatus> {
+    const inbound = await this.getInbound();
+    const stats = inbound.clientStats?.[0];
+    const reality = inbound.streamSettings.realitySettings;
+
+    return {
+      lastOnline:
+        stats && stats.lastOnline !== NEVER_ONLINE
+          ? new Date(stats.lastOnline).toISOString()
+          : null,
+      upBytes: stats?.up ?? 0,
+      downBytes: stats?.down ?? 0,
+      sni: reality.serverNames[0] ?? reality.target.split(':')[0],
+      fingerprint: reality.settings.fingerprint,
+      port: inbound.port,
+    };
+  }
+
+  // Rebuilds the worker's Xray client config from the VPN server's actual,
+  // current live settings (not whatever was last pushed) — this is the
+  // exact drift (panel edited independently of the worker's config) that
+  // caused real production incidents earlier, automated away.
+  private async buildClientConfig(): Promise<string> {
+    const inbound = await this.getInbound();
+    const client = inbound.settings.clients[0];
+    const reality = inbound.streamSettings.realitySettings;
+
+    if (!client) {
+      throw new BadGatewayException(
+        'VPN panel inbound has no client configured',
+      );
+    }
+
+    const config = {
+      log: { loglevel: 'warning' },
+      inbounds: [{ listen: '0.0.0.0', port: 1080, protocol: 'http' }],
+      outbounds: [
+        {
+          protocol: 'vless',
+          settings: {
+            vnext: [
+              {
+                address: this.required('VPN_SERVER_ADDRESS'),
+                port: inbound.port,
+                users: [
+                  { id: client.id, encryption: 'none', flow: client.flow },
+                ],
+              },
+            ],
+          },
+          streamSettings: {
+            network: 'tcp',
+            security: 'reality',
+            realitySettings: {
+              serverName:
+                reality.serverNames[0] ?? reality.target.split(':')[0],
+              fingerprint: reality.settings.fingerprint,
+              publicKey: reality.settings.publicKey,
+              shortId: reality.shortIds[0],
+              spiderX: reality.settings.spiderX,
+            },
+          },
+        },
+      ],
+    };
+
+    return JSON.stringify(config, null, 2);
+  }
+
+  private githubRepo(): string {
+    return this.required('GITHUB_REPO');
+  }
+
+  private async githubRequest<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(
+      `https://api.github.com/repos/${this.githubRepo()}${path}`,
+      {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${this.required('GITHUB_TOKEN')}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(init?.headers ?? {}),
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `GitHub API request failed (${response.status}): ${await response.text()}`,
+      );
+    }
+
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
+  }
+
+  // GitHub Actions secrets are write-only (sealed-box encrypted client-side,
+  // no corresponding read endpoint) — see github-secrets.util.ts.
+  private async setGithubSecret(name: string, value: string): Promise<void> {
+    const { key, key_id: keyId } = await this.githubRequest<{
+      key: string;
+      key_id: string;
+    }>('/actions/secrets/public-key');
+    const encryptedValue = await encryptSecretForGitHub(key, value);
+
+    await this.githubRequest(`/actions/secrets/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ encrypted_value: encryptedValue, key_id: keyId }),
+    });
+  }
+
+  private async triggerDeploy(): Promise<void> {
+    const workflowFile =
+      this.configService.get<string>('GITHUB_DEPLOY_WORKFLOW') ??
+      'deploy-bridge.yml';
+    await this.githubRequest(`/actions/workflows/${workflowFile}/dispatches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+  }
+
+  // Pushes the worker's VPN client config built from the VPN server's
+  // current live state, then redeploys — the one-button fix for the
+  // publicKey/SNI drift class of bug.
+  async syncWorkerVpnConfig(): Promise<void> {
+    const config = await this.buildClientConfig();
+    await this.setGithubSecret('VPN_CLIENT_CONFIG', config);
+    await this.triggerDeploy();
+  }
+
+  async setWorkerSecret(name: WorkerSecretName, value: string): Promise<void> {
+    await this.setGithubSecret(name, value);
+    await this.triggerDeploy();
+  }
+}

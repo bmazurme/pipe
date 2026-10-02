@@ -9,6 +9,7 @@ import {
   storageApi,
   timeApi,
   usersApi,
+  vpnApi,
   workerApi,
 } from './api';
 import authReducer from './slices/auth-slice';
@@ -40,6 +41,7 @@ export const store = configureStore({
     [timeApi.reducerPath]: timeApi.reducer,
     [workerApi.reducerPath]: workerApi.reducer,
     [chatApi.reducerPath]: chatApi.reducer,
+    [vpnApi.reducerPath]: vpnApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -52,6 +54,7 @@ export const store = configureStore({
       timeApi.middleware,
       workerApi.middleware,
       chatApi.middleware,
+      vpnApi.middleware,
     ),
 });
 

@@ -35,6 +35,9 @@ const WorkerPage = lazy(() =>
 const ChatPage = lazy(() =>
   import('./pages/ChatPage').then((m) => ({ default: m.ChatPage })),
 );
+const VpnPage = lazy(() =>
+  import('./pages/VpnPage').then((m) => ({ default: m.VpnPage })),
+);
 
 export function App() {
   return (
@@ -53,6 +56,7 @@ export function App() {
                 <Route path="/time" element={<TimePage />} />
                 <Route path="/worker" element={<WorkerPage />} />
                 <Route path="/chat" element={<ChatPage />} />
+                <Route path="/vpn" element={<VpnPage />} />
               </Route>
             </Route>
           </Routes>
