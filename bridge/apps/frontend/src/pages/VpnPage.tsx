@@ -6,7 +6,9 @@ import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelative
 import {
   WorkerSecretName,
   useGetClaudeUsageQuery,
+  useGetConnectionLinkQuery,
   useGetVpnStatusQuery,
+  useProvisionVpnServerMutation,
   useSetWorkerSecretMutation,
   useSyncVpnConfigMutation,
 } from '../store/api';
@@ -52,6 +54,114 @@ function UsageRow({ label, percent, resetsAt }: { label: string; percent: number
       </div>
       <Progress value={percent} text={`${percent}%`} theme={usageTheme(percent)} size="m" />
     </div>
+  );
+}
+
+function ConnectionLinkCard() {
+  const { data, isLoading, isError } = useGetConnectionLinkQuery();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!data?.link) return;
+    try {
+      await navigator.clipboard.writeText(data.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Подключение" />
+      <Text color="secondary" variant="caption-2">
+        Ссылка для импорта в VPN-клиент (v2rayNG, NekoBox и т.п.).
+      </Text>
+
+      {isLoading && <Skeleton height={40} />}
+      {isError && (
+        <Alert theme="danger" view="filled" message="Не удалось получить ссылку подключения" />
+      )}
+
+      {data && (
+        <div className={styles.secretRow}>
+          <TextInput value={data.link} readOnly />
+          <Button view="normal" onClick={() => void handleCopy()}>
+            {copied ? 'Скопировано' : 'Скопировать'}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ProvisionServerForm() {
+  const [host, setHost] = useState('');
+  const [sshUser, setSshUser] = useState('root');
+  const [sshPassword, setSshPassword] = useState('');
+  const [provisionVpnServer, { isLoading }] = useProvisionVpnServerMutation();
+  const [result, setResult] = useState<'success' | 'error' | null>(null);
+
+  const canSubmit = Boolean(host.trim() && sshUser.trim() && sshPassword.trim());
+
+  const handleCreate = async () => {
+    if (!canSubmit) return;
+    setResult(null);
+
+    try {
+      await provisionVpnServer({ host: host.trim(), sshUser: sshUser.trim(), sshPassword }).unwrap();
+      setSshPassword('');
+      setResult('success');
+    } catch {
+      setResult('error');
+    }
+  };
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Новый VPN-сервер" />
+      <Text color="secondary" variant="caption-2">
+        Устанавливает и настраивает AdGuard Home и 3x-ui на чистом Ubuntu-сервере по SSH. IP,
+        пользователь и пароль передаются один раз и нигде не сохраняются — как и ключи worker выше.
+      </Text>
+
+      <div className={styles.provisionGrid}>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            IP-адрес
+          </Text>
+          <TextInput value={host} onUpdate={setHost} placeholder="203.0.113.10" />
+        </label>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            Пользователь SSH
+          </Text>
+          <TextInput value={sshUser} onUpdate={setSshUser} placeholder="root" />
+        </label>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            Пароль SSH
+          </Text>
+          <TextInput type="password" value={sshPassword} onUpdate={setSshPassword} hasClear />
+        </label>
+      </div>
+
+      <Button view="action" loading={isLoading} disabled={!canSubmit} onClick={() => void handleCreate()}>
+        Создать
+      </Button>
+
+      {result === 'success' && (
+        <Alert
+          theme="success"
+          view="filled"
+          message="Запущена настройка сервера (~5-10 минут). После завершения нажмите «Синхронизировать настройки» выше, чтобы обновить worker."
+        />
+      )}
+      {result === 'error' && (
+        <Alert theme="danger" view="filled" message="Не удалось запустить настройку сервера" />
+      )}
+    </Card>
   );
 }
 
@@ -209,6 +319,8 @@ export function VpnPage() {
         )}
       </Card>
 
+      <ConnectionLinkCard />
+
       <Card view="outlined" className={styles.card}>
         <SectionHeader title="Лимиты Claude" />
 
@@ -253,6 +365,8 @@ export function VpnPage() {
           <WorkerSecretField key={field.name} {...field} />
         ))}
       </Card>
+
+      <ProvisionServerForm />
 
       {!isLoading && isError && !status && (
         <EmptyState icon={ShieldKeyhole} title="VPN не настроен или недоступен" />

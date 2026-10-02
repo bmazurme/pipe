@@ -58,3 +58,9 @@
   flex-direction: column;
   gap: 6px;
 }
+
+.provisionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}

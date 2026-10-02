@@ -79,7 +79,14 @@ from worker's `WORKER_CLAUDE_CODE_OAUTH_TOKEN` below, since Actions secrets
 are write-only and bridge can't read worker's copy back; left unset, that one
 endpoint errors and the rest of the page is unaffected; calls Anthropic's
 undocumented, reverse-engineered `GET /api/oauth/usage` endpoint, which could
-change or disappear without notice). Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
+change or disappear without notice). `POST /api/v1/vpn/provision` (the page's
+"Новый VPN-сервер" form) pushes `VPN_PROVISION_HOST`/`VPN_PROVISION_SSH_USER`/
+`VPN_PROVISION_SSH_PASSWORD` (transient — overwritten on every run) and
+dispatches `.github/workflows/provision-vpn-server.yml`, which SSHes in,
+installs AdGuard Home + 3x-ui (`bridge/deploy/provision-vpn-server.sh`),
+creates the initial Reality inbound, and pushes the resulting
+`VPN_PANEL_URL`/`VPN_PANEL_API_TOKEN`/`VPN_SERVER_ADDRESS` itself before
+redeploying — closing the loop back into the three secrets above. Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
 `CR_WORKER_IMAGE`), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`,
 `WORKER_BRIDGE_API_URL`/`WORKER_BRIDGE_API_KEY`/`WORKER_CLAUDE_CODE_OAUTH_TOKEN`/`WORKER_OPENAI_API_KEY`/`WORKER_DEEPSEEK_API_KEY`/`WORKER_QWEN_API_KEY`
 (worker's own runtime secrets, injected as plain Swarm service env — same

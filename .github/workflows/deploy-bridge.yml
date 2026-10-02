@@ -41,6 +41,15 @@
 #   write-only and bridge can't read worker's copy back. Left unset, that
 #   one endpoint errors and the rest of the page works as normal)
 #
+# For provision-vpn-server.yml (the VPN page's "Новый VPN-сервер" form —
+# POST /api/v1/vpn/provision pushes these three, then dispatches that
+# workflow; see bridge/deploy/provision-vpn-server.sh for what it installs):
+#
+#   VPN_PROVISION_HOST, VPN_PROVISION_SSH_USER, VPN_PROVISION_SSH_PASSWORD
+#   (transient — overwritten on every provisioning run; that workflow also
+#   reuses BRIDGE_GITHUB_TOKEN above to push the freshly generated
+#   VPN_PANEL_URL/VPN_PANEL_API_TOKEN/VPN_SERVER_ADDRESS and redeploy)
+#
 # Deliberately workflow_dispatch-only for now — run it manually from the
 # Actions tab (against main) until one run has deployed successfully. Once
 # proven, switch this to the commented block below and disable

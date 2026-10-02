@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { encryptSecretForGitHub } from './github-secrets.util';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
+import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 
 interface XrayRealitySettings {
   target: string;
@@ -238,15 +239,19 @@ export class VpnService {
     });
   }
 
-  private async triggerDeploy(): Promise<void> {
-    const workflowFile =
-      this.configService.get<string>('GITHUB_DEPLOY_WORKFLOW') ??
-      'deploy-bridge.yml';
+  private async triggerWorkflow(workflowFile: string): Promise<void> {
     await this.githubRequest(`/actions/workflows/${workflowFile}/dispatches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'main' }),
     });
+  }
+
+  private async triggerDeploy(): Promise<void> {
+    const workflowFile =
+      this.configService.get<string>('GITHUB_DEPLOY_WORKFLOW') ??
+      'deploy-bridge.yml';
+    await this.triggerWorkflow(workflowFile);
   }
 
   // Pushes the worker's VPN client config built from the VPN server's
@@ -261,6 +266,58 @@ export class VpnService {
   async setWorkerSecret(name: WorkerSecretName, value: string): Promise<void> {
     await this.setGithubSecret(name, value);
     await this.triggerDeploy();
+  }
+
+  // A ready vless:// Reality link for the end user's own VPN client
+  // (v2rayNG, NekoBox, ...) — same inbound data buildClientConfig() reads for
+  // worker's outbound, just rendered as the standard client import URI
+  // instead of an Xray outbound block.
+  async getConnectionLink(): Promise<{ link: string }> {
+    const inbound = await this.getInbound();
+    const client = inbound.settings.clients[0];
+    const reality = inbound.streamSettings.realitySettings;
+
+    if (!client) {
+      throw new BadGatewayException(
+        'VPN panel inbound has no client configured',
+      );
+    }
+
+    const sni = reality.serverNames[0] ?? reality.target.split(':')[0];
+    const params = new URLSearchParams({
+      security: 'reality',
+      encryption: 'none',
+      pbk: reality.settings.publicKey,
+      fp: reality.settings.fingerprint,
+      sni,
+      sid: reality.shortIds[0] ?? '',
+      spx: reality.settings.spiderX,
+      type: 'tcp',
+      flow: client.flow,
+    });
+
+    const host = this.required('VPN_SERVER_ADDRESS');
+    return {
+      link: `vless://${client.id}@${host}:${inbound.port}?${params.toString()}#pipe-vpn`,
+    };
+  }
+
+  // Provisions a brand-new VPN node from a bare IP + SSH credentials: pushes
+  // them as GitHub secrets (never touches bridge's own process/logs with the
+  // password) and triggers provision-vpn-server.yml, which SSHes in,
+  // installs AdGuard Home + 3x-ui, creates the initial Reality inbound, and
+  // — on success — pushes VPN_PANEL_URL/VPN_PANEL_API_TOKEN/
+  // VPN_SERVER_ADDRESS itself and redeploys bridge. See that workflow and
+  // bridge/deploy/provision-vpn-server.sh for the actual install steps.
+  //
+  // Worker's own VPN_CLIENT_CONFIG is NOT pushed as part of this — once
+  // bridge's redeploy lands, use the existing "Синхронизировать настройки"
+  // action to roll the new server's settings out to worker.
+  async provisionServer(dto: ProvisionVpnServerDto): Promise<void> {
+    await this.setGithubSecret('VPN_PROVISION_HOST', dto.host);
+    await this.setGithubSecret('VPN_PROVISION_SSH_USER', dto.sshUser);
+    await this.setGithubSecret('VPN_PROVISION_SSH_PASSWORD', dto.sshPassword);
+    await this.triggerWorkflow('provision-vpn-server.yml');
   }
 
   // https://api.anthropic.com/api/oauth/usage is not an officially

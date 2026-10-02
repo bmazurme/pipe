@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
 import { ClaudeUsage, VpnService, VpnStatus } from './vpn.service';
 
@@ -30,6 +31,11 @@ export class VpnController {
     return this.vpnService.getClaudeUsage();
   }
 
+  @Get('connection-link')
+  async getConnectionLink(): Promise<{ link: string }> {
+    return this.vpnService.getConnectionLink();
+  }
+
   @Post('sync')
   @HttpCode(HttpStatus.NO_CONTENT)
   async sync(): Promise<void> {
@@ -40,5 +46,11 @@ export class VpnController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async setWorkerSecret(@Body() dto: SetWorkerSecretDto): Promise<void> {
     await this.vpnService.setWorkerSecret(dto.name, dto.value);
+  }
+
+  @Post('provision')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async provision(@Body() dto: ProvisionVpnServerDto): Promise<void> {
+    await this.vpnService.provisionServer(dto);
   }
 }

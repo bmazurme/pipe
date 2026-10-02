@@ -241,4 +241,82 @@ describe('VpnService', () => {
       ).rejects.toThrow('Claude usage request failed (401)');
     });
   });
+
+  describe('getConnectionLink', () => {
+    it('builds a vless Reality link from the live inbound', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      ) as typeof fetch;
+
+      const { link } = await new VpnService(
+        configService(),
+      ).getConnectionLink();
+
+      expect(link).toBe(
+        'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
+      );
+    });
+
+    it('surfaces a BadGatewayException when the inbound has no client', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({
+          success: true,
+          obj: [{ ...INBOUND, settings: { clients: [] } }],
+        }),
+      ) as typeof fetch;
+
+      await expect(
+        new VpnService(configService()).getConnectionLink(),
+      ).rejects.toThrow('VPN panel inbound has no client configured');
+    });
+  });
+
+  describe('provisionServer', () => {
+    it('pushes the SSH credentials as secrets and triggers the provisioning workflow', async () => {
+      const calls: string[] = [];
+
+      globalThis.fetch = jest.fn(async (url: string) => {
+        calls.push(url);
+
+        if (url.endsWith('/actions/secrets/public-key')) {
+          return jsonResponse({
+            key: Buffer.alloc(32, 3).toString('base64'),
+            key_id: 'key-id-3',
+          });
+        }
+        if (
+          url.endsWith('/actions/secrets/VPN_PROVISION_HOST') ||
+          url.endsWith('/actions/secrets/VPN_PROVISION_SSH_USER') ||
+          url.endsWith('/actions/secrets/VPN_PROVISION_SSH_PASSWORD')
+        ) {
+          return new Response(null, { status: 204 });
+        }
+        if (
+          url.endsWith('/actions/workflows/provision-vpn-server.yml/dispatches')
+        ) {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      }) as typeof fetch;
+
+      await new VpnService(configService()).provisionServer({
+        host: '198.51.100.9',
+        sshUser: 'root',
+        sshPassword: 'hunter2',
+      });
+
+      expect(calls).toContain(
+        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_HOST',
+      );
+      expect(calls).toContain(
+        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_SSH_USER',
+      );
+      expect(calls).toContain(
+        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_SSH_PASSWORD',
+      );
+      expect(calls).toContain(
+        'https://api.github.com/repos/acme/pipe/actions/workflows/provision-vpn-server.yml/dispatches',
+      );
+    });
+  });
 });
