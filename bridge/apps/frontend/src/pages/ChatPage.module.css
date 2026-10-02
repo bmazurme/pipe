@@ -13,3 +13,19 @@
   border-radius: var(--g-border-radius-l);
   overflow: hidden;
 }
+
+/* AIKit measures these two (content area, message list) via a ResizeObserver
+   and applies the result as an inline `height`, for its own scroll/layout
+   math. min-height is a hard floor CSS always honors ahead of any smaller
+   `height` — including one set inline by JS — so if that measurement ever
+   races the surrounding layout and comes back 0/near-0 on first paint
+   (reported: messages existed in the DOM but the area they render into was
+   invisible), this keeps the area usable regardless. Plain, non-hashed AIKit
+   class names, scoped under .container so no other page is affected. */
+.container :global(.g-aikit-chat-container__content) {
+  min-height: 400px;
+}
+
+.container :global(.g-aikit-message-list) {
+  min-height: 300px;
+}
