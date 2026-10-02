@@ -235,8 +235,14 @@ services:
         component: worker
 
 configs:
+  # Swarm configs are immutable — deploying the same config name with
+  # different content fails ("only updates to Labels are allowed"). Naming it
+  # with a content hash means a changed VPN_CLIENT_CONFIG creates a fresh
+  # Swarm object instead of trying to mutate the old one; --prune removes the
+  # one nothing references anymore once the service picks up the new name.
   xray_client_config:
     file: ${VPN_CLIENT_CONFIG_FILE:?VPN_CLIENT_CONFIG_FILE is required}
+    name: xray_client_config_${VPN_CLIENT_CONFIG_HASH:?VPN_CLIENT_CONFIG_HASH is required}
 
 networks:
   bridge:

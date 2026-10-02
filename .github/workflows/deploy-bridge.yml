@@ -213,6 +213,10 @@ jobs:
         run: |
           umask 077
           printf '%s' "$VPN_CLIENT_CONFIG" > "$RUNNER_TEMP/xray-client-config.json"
+          # Swarm configs are immutable, so the Swarm-side object name has to
+          # change whenever the content does — see bridge-stack.yml's own
+          # comment on the configs: block.
+          echo "VPN_CLIENT_CONFIG_HASH=$(sha256sum "$RUNNER_TEMP/xray-client-config.json" | cut -c1-12)" >> "$GITHUB_ENV"
 
       # `docker stack deploy` ignores env_file, so every value is interpolated
       # here on the runner from GitHub secrets. Side effect: they are visible in
