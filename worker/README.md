@@ -75,7 +75,7 @@ cd /opt/pipe-worker-src/worker && npm install && npm run build
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | ключ обязателен для GPT (задачи и чат) | по умолчанию `https://api.openai.com/v1`, модель `gpt-4o` |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek (задачи и чат) | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
 | `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen (задачи и чат) | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |
-| `WORKER_PROXY_URL` | нет | SOCKS5/HTTP-прокси для обращений к AI-провайдерам, например `socks5://vpn-client:1080` — намеренно не затрагивает обращения к самому bridge (тот должен быть доступен напрямую оттуда, где запущен worker) |
+| `WORKER_PROXY_URL` | нет | HTTP-прокси для обращений к AI-провайдерам, например `http://vpn-client:1080` — **не SOCKS5**: ни claude CLI (`HTTP_PROXY`/`HTTPS_PROXY`), ни undici `ProxyAgent` (используется для OpenAI-совместимых запросов) не поддерживают SOCKS5, только HTTP-прокси (`claude` явно падает с `UnsupportedProxyProtocol`, если указать `socks5://`). Намеренно не затрагивает обращения к самому bridge (тот должен быть доступен напрямую оттуда, где запущен worker) |
 
 Достаточно настроить ключи только для тех моделей, которые реально
 собираетесь использовать — worker стартует и без них, задача или реплика

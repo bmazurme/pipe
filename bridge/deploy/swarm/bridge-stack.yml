@@ -203,7 +203,10 @@ services:
       # Scoped to AI-provider calls only (OpenAI-compatible fetches, and the
       # claude CLI's own env) — never bridge's own API, which is reachable
       # directly from this host. See worker/README.md.
-      WORKER_PROXY_URL: socks5://vpn-client:1080
+      # Must be http://, not socks5:// — see xray-client-config.example.json's
+      # own comment for why (the claude CLI and undici's ProxyAgent both only
+      # understand HTTP-style proxies).
+      WORKER_PROXY_URL: http://vpn-client:1080
     depends_on:
       - vpn-client
     logging:

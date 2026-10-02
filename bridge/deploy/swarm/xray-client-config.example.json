@@ -1,11 +1,11 @@
 {
+  "_comment": "Inbound MUST be 'http', not 'socks' — the claude CLI's HTTP_PROXY/HTTPS_PROXY support only understands HTTP-style proxies (confirmed: a socks5:// value fails with 'UnsupportedProxyProtocol'), and undici's ProxyAgent (used for the OpenAI-compatible fetch calls) doesn't support SOCKS5 either.",
   "log": { "loglevel": "warning" },
   "inbounds": [
     {
       "listen": "0.0.0.0",
       "port": 1080,
-      "protocol": "socks",
-      "settings": { "udp": true }
+      "protocol": "http"
     }
   ],
   "outbounds": [

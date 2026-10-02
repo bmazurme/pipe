@@ -58,7 +58,7 @@ describe('openAiCompatibleChat', () => {
     await openAiCompatibleChat(
       [{ role: 'user', content: 'hi' }],
       { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'x', model: 'deepseek-chat' },
-      'socks5://vpn-client:1080',
+      'http://vpn-client:1080',
     );
     assert.ok((capturedInit as { dispatcher?: unknown })?.dispatcher);
   });
