@@ -23,6 +23,18 @@ const storageApiEndpoints = storageApi.injectEndpoints({
     // See pages/storage/uploadWithProgress.ts — it posts to this same
     // endpoint over XHR and invalidates the Storage tag itself.
 
+    // Non-destructive raw-bytes read (the backend's /peek, not /download —
+    // that one deletes on success). Backs the Worker page's client-side
+    // decrypt-before-job-creation flow: it needs the file's bytes while
+    // leaving the Storage entry in place, since the user is about to turn
+    // around and reference the same file as a job's source.
+    peekFile: builder.mutation<Blob, number>({
+      query: (id) => ({
+        url: `storage/${id}/peek`,
+        responseHandler: (response: Response) => response.blob(),
+      }),
+    }),
+
     // The backend deletes the file as part of serving the download, so a
     // successful response also means it's gone — the resolved id lets the
     // slice drop it from the local list immediately.
@@ -47,5 +59,5 @@ const storageApiEndpoints = storageApi.injectEndpoints({
   }),
 });
 
-export const { useListFilesQuery, useDownloadFileMutation } = storageApiEndpoints;
+export const { useListFilesQuery, usePeekFileMutation, useDownloadFileMutation } = storageApiEndpoints;
 export { storageApiEndpoints };

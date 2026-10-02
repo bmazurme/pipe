@@ -64,6 +64,15 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось удалить задачу';
       },
     }),
+    // Raw bytes, no auto-save — backs the "download encrypted" flow, which
+    // needs to encrypt the result client-side before it ever touches disk.
+    peekJobResult: builder.mutation<Blob, number>({
+      query: (jobId) => ({
+        url: `worker/jobs/${jobId}/result/download`,
+        responseHandler: (response: Response) => response.blob(),
+      }),
+    }),
+
     // Same shape as storage-api's downloadFile: fetch as a blob and trigger
     // a browser download directly, rather than exposing a plain <a href>
     // link (the route needs an auth header, not just a URL).
@@ -92,5 +101,6 @@ export const {
   useCreateJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
+  usePeekJobResultMutation,
 } = workerApiEndpoints;
 export { workerApiEndpoints };

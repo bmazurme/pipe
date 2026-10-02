@@ -94,3 +94,26 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.decryptField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.encryptSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.encryptRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.encryptRow > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownToLine, FaceRobot, TrashBin } from '@gravity-ui/icons';
+import { ArrowDownToLine, FaceRobot, LockOpen, TrashBin } from '@gravity-ui/icons';
 import {
   Alert,
   Button,
@@ -9,6 +9,7 @@ import {
   Label,
   Select,
   Text,
+  TextArea,
 } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
@@ -24,14 +25,18 @@ import {
   useGetJobQuery,
   useListFilesQuery,
   useListJobsQuery,
+  usePeekFileMutation,
+  usePeekJobResultMutation,
 } from '../store/api';
+import { useAppSelector } from '../store/hooks';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
+import { decryptParcel, encryptParcel, isEncryptedFile, stripEncryptedSuffix, triggerBlobDownload } from './worker/parcelCrypto';
+import { uploadWithProgress } from './storage/uploadWithProgress';
 import styles from './WorkerPage.module.css';
 
 const JOB_POLL_INTERVAL_MS = 3000;
-const ENCRYPTED_SUFFIX = '.enc';
 
 const MODEL_OPTIONS: { value: WorkerJobModel; content: string }[] = [
   { value: 'sonnet', content: 'Claude Sonnet' },
@@ -74,7 +79,12 @@ function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   });
   const [deleteJob, { isLoading: isDeleting }] = useDeleteJobMutation();
   const [downloadResult, { isLoading: isDownloading }] = useDownloadJobResultMutation();
+  const [peekJobResult] = usePeekJobResultMutation();
   const [error, setError] = useState<string | null>(null);
+
+  const [encryptKey, setEncryptKey] = useState('');
+  const [isEncrypting, setIsEncrypting] = useState(false);
+  const [encryptError, setEncryptError] = useState<string | null>(null);
 
   if (!job) return null;
 
@@ -86,6 +96,25 @@ function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
       onClose();
     } catch (err) {
       setError((err as { data?: { message?: string } })?.data?.message ?? 'Не удалось удалить задачу');
+    }
+  };
+
+  // Encrypts client-side, same as the decrypt-before-job-creation flow
+  // below — bridge/worker never see the key or the plaintext-vs-ciphertext
+  // distinction, only ever the result's own already-plaintext bytes.
+  const handleDownloadEncrypted = async () => {
+    if (!encryptKey.trim()) return;
+    setEncryptError(null);
+    setIsEncrypting(true);
+
+    try {
+      const plain = await peekJobResult(job.id).unwrap();
+      const encrypted = await encryptParcel(plain, encryptKey.trim());
+      triggerBlobDownload(encrypted, `result-${job.id}.zip.enc`);
+    } catch (err) {
+      setEncryptError(err instanceof Error ? err.message : 'Не удалось зашифровать результат');
+    } finally {
+      setIsEncrypting(false);
     }
   };
 
@@ -107,6 +136,26 @@ function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
 
         <Text variant="subheader-1" className={styles.logsTitle}>Логи</Text>
         <pre className={styles.logs}>{job.logs || '(пока пусто)'}</pre>
+
+        {job.status === 'succeeded' && (
+          <div className={styles.encryptSection}>
+            <Text variant="body-2" color="secondary">
+              Публичный ключ получателя — чтобы скачать результат зашифрованным, а не в открытом виде
+            </Text>
+            <div className={styles.encryptRow}>
+              <TextArea value={encryptKey} onUpdate={setEncryptKey} rows={2} placeholder="-----BEGIN PUBLIC KEY-----" />
+              <Button
+                view="outlined"
+                loading={isEncrypting}
+                disabled={!encryptKey.trim()}
+                onClick={() => void handleDownloadEncrypted()}
+              >
+                Скачать зашифрованным
+              </Button>
+            </div>
+            {encryptError && <Alert theme="danger" view="filled" message={encryptError} />}
+          </div>
+        )}
 
         {error && <Alert theme="danger" view="filled" message={error} className={styles.detailError} />}
       </Dialog.Body>
@@ -136,34 +185,70 @@ export function WorkerPage() {
   });
   const { data: filesData, isLoading: isLoadingFiles } = useListFilesQuery();
   const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
+  const [peekFile] = usePeekFileMutation();
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
 
   const jobs = jobsData ?? [];
+  const files = filesData ?? [];
 
   const [sourceFileId, setSourceFileId] = useState<number | undefined>(undefined);
   const [model, setModel] = useState<WorkerJobModel | undefined>(undefined);
+  const [decryptKey, setDecryptKey] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
+  // Separate from isCreating (the createJob mutation itself): this covers
+  // the decrypt-and-re-upload round trip that has to finish first for an
+  // encrypted source, which createJob's own loading state knows nothing about.
+  const [isPreparingSource, setIsPreparingSource] = useState(false);
 
-  // Worker only ever accepts unencrypted parcels — see WorkerService.create
-  // on the backend. Excluding them here means the picker never offers
-  // something the backend would reject anyway.
-  const eligibleFiles = useMemo(
-    () => (filesData ?? []).filter((file: StoredFileMeta) => !file.originalName.endsWith(ENCRYPTED_SUFFIX)),
-    [filesData],
+  const selectedFile = useMemo(
+    () => filesData?.find((file: StoredFileMeta) => file.id === sourceFileId),
+    [filesData, sourceFileId],
   );
+  const needsDecryptKey = Boolean(selectedFile && isEncryptedFile(selectedFile.originalName));
 
   const handleCreate = async () => {
-    if (!sourceFileId || !model) return;
+    if (!sourceFileId || !model || !selectedFile) return;
+    if (needsDecryptKey && !decryptKey.trim()) return;
 
     setCreateError(null);
 
     try {
-      const job = await createJob({ sourceFileId, model }).unwrap();
+      // Worker only ever accepts unencrypted parcels (see
+      // WorkerService.create on the backend) — an encrypted source gets
+      // decrypted client-side first and re-uploaded as a plain Storage
+      // file, which then becomes the job's actual source. The key itself
+      // never leaves this tab.
+      let actualSourceFileId = sourceFileId;
+
+      if (needsDecryptKey) {
+        setIsPreparingSource(true);
+        const encrypted = await peekFile(sourceFileId).unwrap();
+        const decrypted = await decryptParcel(encrypted, decryptKey.trim());
+        const uploaded = await uploadWithProgress(
+          decrypted,
+          stripEncryptedSuffix(selectedFile.originalName),
+          accessToken,
+          () => {},
+        );
+        actualSourceFileId = uploaded.id;
+        setIsPreparingSource(false);
+      }
+
+      const job = await createJob({ sourceFileId: actualSourceFileId, model }).unwrap();
       setSourceFileId(undefined);
       setModel(undefined);
+      setDecryptKey('');
       setOpenJobId(job.id);
     } catch (err) {
-      setCreateError(typeof err === 'string' ? err : 'Не удалось создать задачу');
+      setIsPreparingSource(false);
+      // createJob's own rejection is a plain string (its transformErrorResponse);
+      // decryptParcel/uploadWithProgress throw real Error instances.
+      if (typeof err === 'string') {
+        setCreateError(err);
+      } else {
+        setCreateError(err instanceof Error ? err.message : 'Не удалось создать задачу');
+      }
     }
   };
 
@@ -177,40 +262,53 @@ export function WorkerPage() {
       <Card view="outlined" className={styles.card}>
         <SectionHeader title="Новая задача" />
 
-        {eligibleFiles.length === 0 && !isLoadingFiles ? (
-          <Text color="secondary">
-            В Storage нет доступных посылок (зашифрованные файлы worker не обрабатывает).
-          </Text>
+        {files.length === 0 && !isLoadingFiles ? (
+          <Text color="secondary">В Storage нет посылок — загрузите файл на странице Storage.</Text>
         ) : (
-          <div className={styles.createForm}>
-            <Select
-              placeholder="Посылка"
-              value={sourceFileId ? [String(sourceFileId)] : []}
-              onUpdate={([value]) => setSourceFileId(value ? Number(value) : undefined)}
-              options={eligibleFiles.map((file: StoredFileMeta) => ({
-                value: String(file.id),
-                content: file.originalName,
-              }))}
-              width="max"
-              loading={isLoadingFiles}
-            />
-            <Select
-              placeholder="Модель"
-              value={model ? [model] : []}
-              onUpdate={([value]) => setModel(value as WorkerJobModel)}
-              options={MODEL_OPTIONS}
-              width="max"
-            />
-            <Button
-              view="action"
-              onClick={() => void handleCreate()}
-              loading={isCreating}
-              disabled={!sourceFileId || !model}
-            >
-              <Icon data={FaceRobot} size={16} />
-              Запустить
-            </Button>
-          </div>
+          <>
+            <div className={styles.createForm}>
+              <Select
+                placeholder="Посылка"
+                value={sourceFileId ? [String(sourceFileId)] : []}
+                onUpdate={([value]) => {
+                  setSourceFileId(value ? Number(value) : undefined);
+                  setDecryptKey('');
+                }}
+                options={files.map((file: StoredFileMeta) => ({
+                  value: String(file.id),
+                  content: isEncryptedFile(file.originalName) ? `🔒 ${file.originalName}` : file.originalName,
+                }))}
+                width="max"
+                loading={isLoadingFiles}
+              />
+              <Select
+                placeholder="Модель"
+                value={model ? [model] : []}
+                onUpdate={([value]) => setModel(value as WorkerJobModel)}
+                options={MODEL_OPTIONS}
+                width="max"
+              />
+              <Button
+                view="action"
+                onClick={() => void handleCreate()}
+                loading={isCreating || isPreparingSource}
+                disabled={!sourceFileId || !model || (needsDecryptKey && !decryptKey.trim())}
+              >
+                <Icon data={FaceRobot} size={16} />
+                Запустить
+              </Button>
+            </div>
+
+            {needsDecryptKey && (
+              <label className={styles.decryptField}>
+                <Text variant="body-2" color="secondary">
+                  <Icon data={LockOpen} size={14} /> Эта посылка зашифрована — приватный ключ для расшифровки
+                  (используется только в браузере, на сервер не отправляется)
+                </Text>
+                <TextArea value={decryptKey} onUpdate={setDecryptKey} rows={2} placeholder="-----BEGIN PRIVATE KEY-----" />
+              </label>
+            )}
+          </>
         )}
 
         {createError && <Alert theme="danger" view="filled" message={createError} className={styles.createError} />}
