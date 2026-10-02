@@ -31,10 +31,11 @@
   инструментов (`read_file`/`write_file`/`list_files`) поверх их
   OpenAI-совместимого Chat Completions API — никакого дополнительного
   Python-тулчейна на сервере не требуется, только Node.
-- Для чата всё проще: одна реплика — один HTTP-запрос, без файлов и без
-  инструментов. Sonnet/Opus идут напрямую в Anthropic Messages API (нужен
-  отдельный `ANTHROPIC_API_KEY`, не связанный с логином `claude` CLI —
-  задачи продолжают использовать именно CLI, чат его не трогает);
+- Для чата: Sonnet/Opus идут через тот же залогиненный `claude` CLI, что и
+  задачи (одна реплика — один запуск `claude -p` во временной пустой
+  директории, без файлов и без инструментов; вся история реплики передаётся
+  целиком в самом промпте, так как CLI не хранит сессию между отдельными
+  запусками) — отдельный `ANTHROPIC_API_KEY` для чата не нужен.
   GPT/DeepSeek/Qwen используют ровно ту же настройку
   (`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`/`QWEN_API_KEY` и т.д.), что и задачи.
 
@@ -74,13 +75,28 @@ cd /opt/pipe-worker-src/worker && npm install && npm run build
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | ключ обязателен для GPT (задачи и чат) | по умолчанию `https://api.openai.com/v1`, модель `gpt-4o` |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek (задачи и чат) | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
 | `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen (задачи и чат) | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` | ключ обязателен для Sonnet/Opus **в чате** | по умолчанию `https://api.anthropic.com/v1`; не нужен для задач — те используют логин `claude` CLI |
-| `ANTHROPIC_SONNET_MODEL` / `ANTHROPIC_OPUS_MODEL` | нет | реальные id моделей Anthropic Messages API (по умолчанию `claude-sonnet-4-5`/`claude-opus-4-1`) — CLI-алиасы `sonnet`/`opus` этим API не понимаются напрямую |
+| `WORKER_PROXY_URL` | нет | SOCKS5/HTTP-прокси для обращений к AI-провайдерам, например `socks5://vpn-client:1080` — намеренно не затрагивает обращения к самому bridge (тот должен быть доступен напрямую оттуда, где запущен worker) |
 
 Достаточно настроить ключи только для тех моделей, которые реально
 собираетесь использовать — worker стартует и без них, задача или реплика
 чата с неподключённой моделью просто завершится ошибкой с понятным
 сообщением вместо падения всего процесса.
+
+`WORKER_PROXY_URL` решает конкретную задачу: если worker запущен на
+площадке, откуда AI-провайдеры (Anthropic, OpenAI и т.д.) недоступны
+напрямую (geo-блокировка), это единственная точка выхода наружу через
+VPN/прокси. Применяется только к:
+- HTTP-вызовам OpenAI-совместимого API (gpt/deepseek/qwen, и задачи, и чат);
+- переменным `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` в окружении дочернего
+  процесса `claude` CLI (sonnet/opus, и задачи, и чат) — сам CLI закрытый,
+  поэтому нет гарантии, что он их действительно учитывает: это стоит
+  проверить эмпирически после разворачивания (например, по фактическому
+  исходящему IP во время реального запроса).
+
+Пример конфигурации «worker в одном Docker Swarm stack с bridge, трафик к
+AI-провайдерам — через VPN на отдельном сервере» — см.
+`bridge/deploy/swarm/bridge-stack.yml` (сервисы `worker`/`vpn-client`) и
+`bridge/deploy/swarm/xray-client-config.example.json`.
 
 ## Запуск
 

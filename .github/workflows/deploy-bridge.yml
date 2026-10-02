@@ -15,6 +15,15 @@
 #   TIME_EXPORT_USER_ID, VITE_API_URL, BACKEND_PUBLISHED_PORT,
 #   FRONTEND_PUBLISHED_PORT, HOST
 #
+# New for worker + its VPN sidecar (see worker/README.md and
+# deploy/swarm/xray-client-config.example.json for the shape these feed):
+#
+#   CR_WORKER_IMAGE, WORKER_BRIDGE_API_URL, WORKER_BRIDGE_API_KEY,
+#   WORKER_CLAUDE_CODE_OAUTH_TOKEN, WORKER_OPENAI_API_KEY (optional),
+#   WORKER_DEEPSEEK_API_KEY (optional), WORKER_QWEN_API_KEY (optional),
+#   VPN_CLIENT_CONFIG (the full Xray client config.json content — embeds a
+#   real client UUID and Reality keys, never committed to the repo)
+#
 # Deliberately workflow_dispatch-only for now — run it manually from the
 # Actions tab (against main) until one run has deployed successfully. Once
 # proven, switch this to the commented block below and disable
@@ -105,6 +114,24 @@ jobs:
           docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG"
           docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
 
+      - name: Build and push worker image
+        env:
+          CR_HOST: ${{ secrets.CR_HOST }}
+          CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
+          CR_IMAGE: ${{ secrets.CR_WORKER_IMAGE }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Context is this repo's root, not worker/ — worker depends on
+          # @pipe/protocol via "file:../packages/protocol", which resolves
+          # outside a context scoped to worker/ alone (see the Dockerfile's
+          # own header comment).
+          docker build -f worker/Dockerfile \
+            -t "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" .
+          docker tag "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG"
+          docker push "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
+
   deploy:
     name: Deploy to Docker Swarm
     needs: build
@@ -175,6 +202,18 @@ jobs:
             exit 1
           fi
 
+      # The Xray client config embeds a real client UUID and Reality keys, so
+      # it lives only as a GitHub secret, never committed (see
+      # bridge/deploy/swarm/xray-client-config.example.json for its shape) —
+      # written to a file here, right before the one deploy step that needs
+      # it, rather than kept around any longer than that.
+      - name: Write the VPN client config
+        env:
+          VPN_CLIENT_CONFIG: ${{ secrets.VPN_CLIENT_CONFIG }}
+        run: |
+          umask 077
+          printf '%s' "$VPN_CLIENT_CONFIG" > "$RUNNER_TEMP/xray-client-config.json"
+
       # `docker stack deploy` ignores env_file, so every value is interpolated
       # here on the runner from GitHub secrets. Side effect: they are visible in
       # `docker service inspect` on the VM.
@@ -184,6 +223,7 @@ jobs:
           CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
           CR_BACKEND_IMAGE: ${{ secrets.CR_BACKEND_IMAGE }}
           CR_FRONTEND_IMAGE: ${{ secrets.CR_FRONTEND_IMAGE }}
+          CR_WORKER_IMAGE: ${{ secrets.CR_WORKER_IMAGE }}
           BACKEND_PUBLISHED_PORT: ${{ secrets.BACKEND_PUBLISHED_PORT }}
           FRONTEND_PUBLISHED_PORT: ${{ secrets.FRONTEND_PUBLISHED_PORT }}
           POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
@@ -202,16 +242,27 @@ jobs:
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
           TIME_EXPORT_API_KEY: ${{ secrets.TIME_EXPORT_API_KEY }}
           TIME_EXPORT_USER_ID: ${{ secrets.TIME_EXPORT_USER_ID }}
+          WORKER_BRIDGE_API_URL: ${{ secrets.WORKER_BRIDGE_API_URL }}
+          WORKER_BRIDGE_API_KEY: ${{ secrets.WORKER_BRIDGE_API_KEY }}
+          WORKER_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.WORKER_CLAUDE_CODE_OAUTH_TOKEN }}
+          WORKER_OPENAI_API_KEY: ${{ secrets.WORKER_OPENAI_API_KEY }}
+          WORKER_DEEPSEEK_API_KEY: ${{ secrets.WORKER_DEEPSEEK_API_KEY }}
+          WORKER_QWEN_API_KEY: ${{ secrets.WORKER_QWEN_API_KEY }}
         run: |
+          VPN_CLIENT_CONFIG_FILE="$RUNNER_TEMP/xray-client-config.json" \
           docker stack deploy \
             --compose-file bridge/deploy/swarm/bridge-stack.yml \
             --with-registry-auth \
             --prune \
             "$STACK_NAME"
 
+      - name: Clean up the VPN client config file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xray-client-config.json"
+
       - name: Wait for the rolling update to converge
         run: |
-          services="${STACK_NAME}_backend ${STACK_NAME}_frontend"
+          services="${STACK_NAME}_backend ${STACK_NAME}_frontend ${STACK_NAME}_worker ${STACK_NAME}_vpn-client"
           # backend's update_config alone (start-first, 10s delay + 60s
           # monitor) plus image-pull time on the swarm node routinely takes
           # ~5 minutes end to end — a prior run finished at 307s, this one
@@ -303,6 +354,7 @@ jobs:
           CR_REGISTRY: ${{ secrets.CR_REGISTRY }}
           CR_BACKEND_IMAGE: ${{ secrets.CR_BACKEND_IMAGE }}
           CR_FRONTEND_IMAGE: ${{ secrets.CR_FRONTEND_IMAGE }}
+          CR_WORKER_IMAGE: ${{ secrets.CR_WORKER_IMAGE }}
           KEEP_IMAGES: ${{ inputs.keep_images || '3' }}
         run: |
           clean_repo() {
@@ -337,6 +389,7 @@ jobs:
 
           clean_repo backend "$CR_BACKEND_IMAGE"
           clean_repo frontend "$CR_FRONTEND_IMAGE"
+          clean_repo worker "$CR_WORKER_IMAGE"
 
           docker system df
 
@@ -351,3 +404,5 @@ jobs:
           timeout 15 docker stack ps --no-trunc "$STACK_NAME" || true
           timeout 30 docker service logs --tail 100 "${STACK_NAME}_backend" || true
           timeout 30 docker service logs --tail 100 "${STACK_NAME}_frontend" || true
+          timeout 30 docker service logs --tail 100 "${STACK_NAME}_worker" || true
+          timeout 30 docker service logs --tail 100 "${STACK_NAME}_vpn-client" || true

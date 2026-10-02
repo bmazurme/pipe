@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 import { listFilesRecursively } from '../fsWalk.js';
+import { resolveDispatcher } from '../proxyAgent.js';
 import type { RunResult } from './claudeRunner.js';
 
 const MAX_TURNS = 20;
@@ -113,6 +114,7 @@ export async function runOpenAiCompatible(
   prompt: string,
   options: OpenAiCompatibleOptions,
   onOutput: (chunk: string) => void,
+  proxyUrl?: string,
 ): Promise<RunResult> {
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -134,7 +136,10 @@ export async function runOpenAiCompatible(
         tools: TOOLS,
         tool_choice: 'auto',
       }),
-    });
+      // `dispatcher` is a Node/undici-specific fetch extension not in the
+      // standard RequestInit type — real at runtime, just untyped here.
+      dispatcher: resolveDispatcher(proxyUrl),
+    } as RequestInit);
 
     if (!response.ok) {
       throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);

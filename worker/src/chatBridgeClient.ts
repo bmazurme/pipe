@@ -1,4 +1,7 @@
-import type { ChatHistoryEntry } from './chatRunners/anthropicChat.js';
+export interface ChatHistoryEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export interface ClaimedChatTurn {
   messageId: number;

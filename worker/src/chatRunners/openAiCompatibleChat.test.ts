@@ -41,6 +41,28 @@ describe('openAiCompatibleChat', () => {
     assert.equal(reply, 'sure, here you go');
   });
 
+  it('passes a dispatcher only when a proxy URL is given', async () => {
+    let capturedInit: RequestInit | undefined;
+
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
+    }) as typeof fetch;
+
+    await openAiCompatibleChat(
+      [{ role: 'user', content: 'hi' }],
+      { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'x', model: 'deepseek-chat' },
+    );
+    assert.equal((capturedInit as { dispatcher?: unknown })?.dispatcher, undefined);
+
+    await openAiCompatibleChat(
+      [{ role: 'user', content: 'hi' }],
+      { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'x', model: 'deepseek-chat' },
+      'socks5://vpn-client:1080',
+    );
+    assert.ok((capturedInit as { dispatcher?: unknown })?.dispatcher);
+  });
+
   it('throws a descriptive error on a failure status', async () => {
     globalThis.fetch = (async () => new Response('nope', { status: 500 })) as typeof fetch;
 

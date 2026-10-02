@@ -7,6 +7,12 @@ export interface WorkerConfig {
   pollIntervalSec: number;
   workDir: string;
   workerName: string;
+  // SOCKS5/HTTP proxy for reaching AI providers from behind a geo-restricted
+  // host — scoped to provider calls only (OpenAI-compatible fetches, and the
+  // claude CLI's own env), never bridge's own API: bridge is reachable
+  // directly from wherever worker runs, so routing that through the proxy
+  // too would just add an unnecessary hop.
+  proxyUrl?: string;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -27,5 +33,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     // machine's own hostname so multiple worker instances are distinguishable
     // without extra configuration.
     workerName: env.WORKER_NAME ?? hostname(),
+    proxyUrl: env.WORKER_PROXY_URL,
   };
 }

@@ -20,10 +20,18 @@ export function runClaude(
   prompt: string,
   claudeModel: 'sonnet' | 'opus',
   onOutput: (chunk: string) => void,
+  proxyUrl?: string,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel];
-    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    // The CLI is a closed-source binary — worker can't control its HTTP
+    // client directly, only hope it honors the standard proxy env vars (most
+    // tools built on common HTTP libraries do). Set whichever flavor it
+    // reads; unused ones are harmless.
+    const env = proxyUrl
+      ? { ...process.env, HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, ALL_PROXY: proxyUrl }
+      : process.env;
+    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
 
     let output = '';
     child.stdout?.on('data', (chunk: Buffer) => {

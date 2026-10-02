@@ -7,7 +7,7 @@ import type { PackedFile } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
-import { anthropicChat } from './chatRunners/anthropicChat.js';
+import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
@@ -68,8 +68,8 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
     const result = provider.tool === 'claude'
-      ? await runClaude(jobDir, prompt, provider.claudeModel, log)
-      : await runOpenAiCompatible(jobDir, prompt, provider, log);
+      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl)
+      : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl);
 
     if (result.exitCode !== 0) {
       throw new Error(`Model run exited with code ${result.exitCode}`);
@@ -108,18 +108,18 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
   }
 }
 
-// Chat has no working directory, no tool loop, no parcel — one HTTP call to
-// whichever provider the chat's model maps to, then report the reply (or
-// the failure) straight back. Deliberately separate from processJob: chat
-// and Worker jobs share only the poll loop and the OpenAI-compatible
-// provider config, nothing about execution.
-export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn): Promise<void> {
+// Chat has no parcel and no result to upload — one model call per turn, then
+// report the reply (or the failure) straight back. Sonnet/Opus spawn the
+// same claude CLI Worker jobs use (a scratch work dir only because the CLI
+// requires a cwd, removed right after); gpt/deepseek/qwen share the exact
+// OpenAI-compatible provider config jobs use, nothing about execution.
+export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig): Promise<void> {
   try {
     const provider = resolveChatProvider(turn.model);
 
-    const reply = provider.tool === 'anthropic'
-      ? await anthropicChat(turn.history, provider)
-      : await openAiCompatibleChat(turn.history, provider);
+    const reply = provider.tool === 'claude'
+      ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl)
+      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl);
 
     await client.complete(turn.messageId, reply);
     console.log(`[chat turn ${turn.messageId}] succeeded`);
@@ -167,7 +167,7 @@ async function main(): Promise<void> {
     }
 
     if (turn) {
-      await processChatTurn(chatClient, turn);
+      await processChatTurn(chatClient, turn, config);
     } else {
       await sleep(config.pollIntervalSec * 1000);
     }

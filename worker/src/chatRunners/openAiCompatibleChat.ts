@@ -1,4 +1,5 @@
-import type { ChatHistoryEntry } from './anthropicChat.js';
+import type { ChatHistoryEntry } from '../chatBridgeClient.js';
+import { resolveDispatcher } from '../proxyAgent.js';
 
 export interface OpenAiCompatibleChatOptions {
   baseUrl: string;
@@ -12,6 +13,7 @@ export interface OpenAiCompatibleChatOptions {
 export async function openAiCompatibleChat(
   history: ChatHistoryEntry[],
   options: OpenAiCompatibleChatOptions,
+  proxyUrl?: string,
 ): Promise<string> {
   const response = await fetch(`${options.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -23,7 +25,10 @@ export async function openAiCompatibleChat(
       model: options.model,
       messages: history.map((entry) => ({ role: entry.role, content: entry.content })),
     }),
-  });
+    // `dispatcher` is a Node/undici-specific fetch extension not in the
+    // standard RequestInit type — real at runtime, just untyped here.
+    dispatcher: resolveDispatcher(proxyUrl),
+  } as RequestInit);
 
   if (!response.ok) {
     throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);
