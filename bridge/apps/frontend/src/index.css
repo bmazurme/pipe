@@ -74,6 +74,19 @@ body,
   margin: 0;
 }
 
+/* @gravity-ui/navigation's AsideHeader renders our page content (via
+   renderContent) inside this wrapper, which it ships with a width but no
+   height — any page whose own layout depends on filling available height
+   (Chat's ChatContainer, which needs a real pixel height for its message
+   list to not collapse) inherits an auto-height ancestor here otherwise.
+   Substring-matched since the class name is CSS-module-hashed and the
+   library exposes no contentClassName/contentProps to target it directly. */
+[class*='gn-aside-header__content'] {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Sidebar items for services that aren't built yet. Hover stays enabled so the
    collapsed sidebar can still show the item's tooltip — the items carry no
    click handler, so there is nothing to guard against. */

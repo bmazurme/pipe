@@ -3,6 +3,18 @@
      content stretch across the full viewport next to the sidebar. */
   padding: 32px;
   max-width: 1280px;
+  /* AsideHeader's own content wrapper (gn-aside-header__content, see
+     index.css) sets width but no height — without an explicit height/flex
+     context here too, a page like Chat that fills available height (its
+     own .page{height:100%}) resolves against an auto-height ancestor chain.
+     That's spec-legal (a flex item's resolved size still counts as
+     definite for its own children), but it's one CSS edge case away from
+     silently collapsing — this makes the height explicit instead of
+     depending on that chain staying intact. */
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .contentMobile {
@@ -10,6 +22,10 @@
      landscape. Extra bottom space keeps the last row above the gesture bar. */
   padding: 20px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom))
     calc(16px + env(safe-area-inset-left));
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .soonTitle {
