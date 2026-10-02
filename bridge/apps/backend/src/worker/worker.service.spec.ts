@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
 import { StorageService } from '../storage/storage.service';
+import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { WorkerService } from './worker.service';
 
@@ -24,6 +25,9 @@ describe('WorkerService', () => {
   let service: WorkerService;
   let repository: MockRepository;
   let storageService: Partial<Record<keyof StorageService, jest.Mock>>;
+  let claudeCredentialsService: Partial<
+    Record<keyof ClaudeCredentialsService, jest.Mock>
+  >;
 
   beforeEach(async () => {
     repository = createMockRepository();
@@ -32,12 +36,19 @@ describe('WorkerService', () => {
       create: jest.fn(),
       path: jest.fn(),
     };
+    claudeCredentialsService = {
+      resolveToken: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkerService,
         { provide: getRepositoryToken(Job), useValue: repository },
         { provide: StorageService, useValue: storageService },
+        {
+          provide: ClaudeCredentialsService,
+          useValue: claudeCredentialsService,
+        },
       ],
     }).compile();
 
@@ -86,9 +97,51 @@ describe('WorkerService', () => {
         userId: 7,
         sourceFileId: 1,
         model: JobModel.Deepseek,
+        claudeCredentialId: null,
         status: JobStatus.Queued,
       });
       expect(job).toMatchObject({ id: 10, status: JobStatus.Queued });
+    });
+
+    it('rejects a Claude credential the user does not own', async () => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: '402-6.subscription.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue(null);
+
+      await expect(
+        service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          claudeCredentialId: 99,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('persists the chosen Claude credential id', async () => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: '402-6.subscription.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue(
+        'sk-ant-oat-test',
+      );
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 10, ...job }),
+      );
+
+      await service.create(7, {
+        sourceFileId: 1,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+      });
+
+      expect(claudeCredentialsService.resolveToken).toHaveBeenCalledWith(3, 7);
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ claudeCredentialId: 3 }),
+      );
     });
   });
 

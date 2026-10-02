@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, FaceRobot, LockOpen, TrashBin } from '@gravity-ui/icons';
 import {
   Alert,
@@ -17,15 +17,19 @@ import {
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
   ACTIVE_JOB_STATUSES,
+  ClaudeCredential,
   StoredFileMeta,
   WorkerJob,
   WorkerJobModel,
   WorkerJobStatus,
+  useCreateClaudeCredentialMutation,
   useCreateJobMutation,
+  useDeleteClaudeCredentialMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   useGetConnectionLinkQuery,
   useGetJobQuery,
+  useListClaudeCredentialsQuery,
   useListFilesQuery,
   useListJobsQuery,
   usePeekFileMutation,
@@ -185,6 +189,91 @@ function WorkerSecretsCard() {
   );
 }
 
+function ClaudeCredentialsCard() {
+  const { data: credentials, isLoading } = useListClaudeCredentialsQuery();
+  const [name, setName] = useState('');
+  const [token, setToken] = useState('');
+  const [createClaudeCredential, { isLoading: isCreating }] = useCreateClaudeCredentialMutation();
+  const [deleteClaudeCredential] = useDeleteClaudeCredentialMutation();
+  const [createError, setCreateErrorState] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const handleCreate = async () => {
+    if (!name.trim() || !token.trim()) return;
+    setCreateErrorState(null);
+
+    try {
+      await createClaudeCredential({ name: name.trim(), token: token.trim() }).unwrap();
+      setName('');
+      setToken('');
+    } catch (err) {
+      setCreateErrorState(typeof err === 'string' ? err : 'Не удалось сохранить токен');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeletingId(id);
+    try {
+      await deleteClaudeCredential(id).unwrap();
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Claude-токены" />
+      <Text color="secondary" variant="caption-2">
+        Несколько именованных Claude Code OAuth токенов — хранятся в базе bridge, без GitHub
+        Secrets и передеплоя. Первый в списке используется по умолчанию при запуске задачи на
+        Sonnet/Opus.
+      </Text>
+
+      {isLoading && <Skeleton height={40} />}
+
+      {credentials && credentials.length > 0 && (
+        <ul className={styles.jobList}>
+          {credentials.map((credential: ClaudeCredential) => (
+            <li key={credential.id} className={styles.credentialRow}>
+              <Text variant="body-2">{credential.name}</Text>
+              <Button
+                view="flat-danger"
+                size="s"
+                aria-label={`Удалить токен: ${credential.name}`}
+                loading={deletingId === credential.id}
+                onClick={() => void handleDelete(credential.id)}
+              >
+                <Icon data={TrashBin} size={16} />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className={styles.secretRow}>
+        <TextInput value={name} onUpdate={setName} placeholder="Название (например, личный)" />
+        <TextInput
+          type="password"
+          value={token}
+          onUpdate={setToken}
+          placeholder="claude token"
+          hasClear
+        />
+        <Button
+          view="normal"
+          loading={isCreating}
+          disabled={!name.trim() || !token.trim()}
+          onClick={() => void handleCreate()}
+        >
+          Добавить
+        </Button>
+      </div>
+
+      {createError && <Alert theme="danger" view="filled" message={createError} />}
+    </Card>
+  );
+}
+
 interface JobDetailDialogProps {
   jobId: number;
   onClose: () => void;
@@ -303,6 +392,7 @@ export function WorkerPage() {
     pollingInterval: JOB_POLL_INTERVAL_MS,
   });
   const { data: filesData, isLoading: isLoadingFiles } = useListFilesQuery();
+  const { data: claudeCredentialsData } = useListClaudeCredentialsQuery();
   const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
   const [peekFile] = usePeekFileMutation();
   const accessToken = useAppSelector((state) => state.auth.accessToken);
@@ -312,6 +402,7 @@ export function WorkerPage() {
 
   const [sourceFileId, setSourceFileId] = useState<number | undefined>(undefined);
   const [model, setModel] = useState<WorkerJobModel | undefined>(undefined);
+  const [claudeCredentialId, setClaudeCredentialId] = useState<number | undefined>(undefined);
   const [decryptKey, setDecryptKey] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
@@ -319,6 +410,17 @@ export function WorkerPage() {
   // the decrypt-and-re-upload round trip that has to finish first for an
   // encrypted source, which createJob's own loading state knows nothing about.
   const [isPreparingSource, setIsPreparingSource] = useState(false);
+
+  const isClaudeModel = model === 'sonnet' || model === 'opus';
+
+  // Defaults to the first (oldest-added) credential the moment the list
+  // loads — only while nothing has been explicitly picked yet, so a
+  // deliberate choice is never silently overwritten by a later refetch.
+  useEffect(() => {
+    if (claudeCredentialId === undefined && claudeCredentialsData && claudeCredentialsData.length > 0) {
+      setClaudeCredentialId(claudeCredentialsData[0].id);
+    }
+  }, [claudeCredentialId, claudeCredentialsData]);
 
   const selectedFile = useMemo(
     () => filesData?.find((file: StoredFileMeta) => file.id === sourceFileId),
@@ -354,7 +456,11 @@ export function WorkerPage() {
         setIsPreparingSource(false);
       }
 
-      const job = await createJob({ sourceFileId: actualSourceFileId, model }).unwrap();
+      const job = await createJob({
+        sourceFileId: actualSourceFileId,
+        model,
+        ...(isClaudeModel && claudeCredentialId ? { claudeCredentialId } : {}),
+      }).unwrap();
       setSourceFileId(undefined);
       setModel(undefined);
       setDecryptKey('');
@@ -381,6 +487,8 @@ export function WorkerPage() {
       <ConnectionLinkCard />
 
       <WorkerSecretsCard />
+
+      <ClaudeCredentialsCard />
 
       <Card view="outlined" className={styles.card}>
         <SectionHeader title="Новая задача" />
@@ -411,6 +519,18 @@ export function WorkerPage() {
                 options={MODEL_OPTIONS}
                 width="max"
               />
+              {isClaudeModel && (
+                <Select
+                  placeholder="Claude-токен"
+                  value={claudeCredentialId ? [String(claudeCredentialId)] : []}
+                  onUpdate={([value]) => setClaudeCredentialId(value ? Number(value) : undefined)}
+                  options={(claudeCredentialsData ?? []).map((credential: ClaudeCredential) => ({
+                    value: String(credential.id),
+                    content: credential.name,
+                  }))}
+                  width="max"
+                />
+              )}
               <Button
                 view="action"
                 onClick={() => void handleCreate()}

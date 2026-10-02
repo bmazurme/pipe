@@ -1,4 +1,4 @@
-import { IsEnum, IsInt } from 'class-validator';
+import { IsEnum, IsInt, IsOptional } from 'class-validator';
 
 import { JobModel } from '../entities/job.entity';
 
@@ -8,4 +8,8 @@ export class CreateJobDto {
 
   @IsEnum(JobModel)
   model: JobModel;
+
+  @IsOptional()
+  @IsInt()
+  claudeCredentialId?: number;
 }

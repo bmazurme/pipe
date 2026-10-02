@@ -114,7 +114,13 @@ provider it's meant to run (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`,
 `QWEN_API_KEY`) — sonnet/opus need no key here at all, for **either** jobs
 or chat: both run through the same separately-installed, separately-logged-in
 `claude` CLI (`CLAUDE_CODE_OAUTH_TOKEN`, a Claude.ai subscription, not a
-billed API key). Optional `WORKER_PROXY_URL` (an HTTP — not SOCKS5, neither
+billed API key) — this inherited env var is only the fallback now: a Worker
+job can instead pick one of several named Claude credentials stored in
+bridge's own DB (`POST /api/v1/worker/claude-credentials`, managed from the
+Worker page), in which case bridge resolves and hands worker the actual
+token value on claim (`RemoteJob.claudeToken`), overriding the inherited one
+for just that job's `claude` invocation — see `worker/src/modelRunners/claudeRunner.ts`.
+Optional `WORKER_PROXY_URL` (an HTTP — not SOCKS5, neither
 the `claude` CLI nor undici's `ProxyAgent` support that — proxy for reaching
 AI providers from behind a geo-restricted host; scoped to provider calls
 only, never bridge's own API).

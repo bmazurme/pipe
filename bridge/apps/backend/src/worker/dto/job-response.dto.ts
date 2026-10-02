@@ -5,6 +5,7 @@ export class JobResponseDto {
   sourceFileId: number;
   resultFileId: number | null;
   model: JobModel;
+  claudeCredentialId: number | null;
   status: JobStatus;
   logs: string;
   errorMessage: string | null;
@@ -21,6 +22,7 @@ export class JobResponseDto {
       sourceFileId: job.sourceFileId,
       resultFileId: job.resultFileId,
       model: job.model,
+      claudeCredentialId: job.claudeCredentialId,
       status: job.status,
       logs: job.logs,
       errorMessage: job.errorMessage,

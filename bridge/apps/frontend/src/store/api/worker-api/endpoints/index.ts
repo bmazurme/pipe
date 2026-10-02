@@ -22,6 +22,7 @@ export interface WorkerJob {
   sourceFileId: number;
   resultFileId: number | null;
   model: WorkerJobModel;
+  claudeCredentialId: number | null;
   status: WorkerJobStatus;
   logs: string;
   errorMessage: string | null;
@@ -31,6 +32,12 @@ export interface WorkerJob {
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ClaudeCredential {
+  id: number;
+  name: string;
+  createdAt: string;
 }
 
 const workerApiEndpoints = workerApi.injectEndpoints({
@@ -45,7 +52,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     }),
     createJob: builder.mutation<
       WorkerJob,
-      { sourceFileId: number; model: WorkerJobModel }
+      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),
       invalidatesTags: ['WorkerJob'],
@@ -63,6 +70,26 @@ const workerApiEndpoints = workerApi.injectEndpoints({
           ?.message;
         return message ?? 'Не удалось удалить задачу';
       },
+    }),
+    listClaudeCredentials: builder.query<ClaudeCredential[], void>({
+      query: () => 'worker/claude-credentials',
+      providesTags: ['ClaudeCredential'],
+    }),
+    createClaudeCredential: builder.mutation<
+      ClaudeCredential,
+      { name: string; token: string }
+    >({
+      query: (body) => ({ url: 'worker/claude-credentials', method: 'POST', body }),
+      invalidatesTags: ['ClaudeCredential'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)
+          ?.message;
+        return message ?? 'Не удалось сохранить токен';
+      },
+    }),
+    deleteClaudeCredential: builder.mutation<void, number>({
+      query: (id) => ({ url: `worker/claude-credentials/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['ClaudeCredential'],
     }),
     // Raw bytes, no auto-save — backs the "download encrypted" flow, which
     // needs to encrypt the result client-side before it ever touches disk.
@@ -102,5 +129,8 @@ export const {
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   usePeekJobResultMutation,
+  useListClaudeCredentialsQuery,
+  useCreateClaudeCredentialMutation,
+  useDeleteClaudeCredentialMutation,
 } = workerApiEndpoints;
 export { workerApiEndpoints };

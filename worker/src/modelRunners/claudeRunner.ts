@@ -21,6 +21,7 @@ export function runClaude(
   claudeModel: 'sonnet' | 'opus',
   onOutput: (chunk: string) => void,
   proxyUrl?: string,
+  claudeToken?: string | null,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel];
@@ -28,9 +29,15 @@ export function runClaude(
     // client directly, only hope it honors the standard proxy env vars (most
     // tools built on common HTTP libraries do). Set whichever flavor it
     // reads; unused ones are harmless.
-    const env = proxyUrl
-      ? { ...process.env, HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, ALL_PROXY: proxyUrl }
-      : process.env;
+    const env = {
+      ...process.env,
+      ...(proxyUrl ? { HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, ALL_PROXY: proxyUrl } : {}),
+      // A per-job credential (see bridge's named Claude tokens) overrides
+      // whatever this process inherited at startup — absent/null leaves the
+      // inherited value untouched, the same behavior as before this param
+      // existed.
+      ...(claudeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeToken } : {}),
+    };
     const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
 
     let output = '';

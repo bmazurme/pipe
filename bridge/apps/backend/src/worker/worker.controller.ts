@@ -22,7 +22,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from '../storage/config/multer.config';
 import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
+import { ClaudeCredentialsService } from './claude-credentials.service';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
+import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
 import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobResponseDto } from './dto/job-response.dto';
@@ -38,7 +40,10 @@ import { WorkerService } from './worker.service';
 @Controller('api/v1/worker/jobs')
 @UseGuards(JwtOrApiKeyGuard)
 export class WorkerController {
-  constructor(private readonly workerService: WorkerService) {}
+  constructor(
+    private readonly workerService: WorkerService,
+    private readonly claudeCredentialsService: ClaudeCredentialsService,
+  ) {}
 
   @Get()
   async list(
@@ -79,7 +84,23 @@ export class WorkerController {
       return;
     }
 
-    res.status(HttpStatus.OK).json(JobResponseDto.fromEntity(job));
+    // Resolved here, not inside WorkerService.claim, so the plain JobResponseDto
+    // used by every human-facing route never has to go anywhere near a real
+    // token value — only this one machine-facing response does. A
+    // credential removed after the job picked it just degrades to null
+    // (worker falls back to its own inherited env var) rather than failing
+    // the claim.
+    const claudeToken =
+      job.claudeCredentialId !== null
+        ? await this.claudeCredentialsService.resolveToken(
+            job.claudeCredentialId,
+            currentUser.id,
+          )
+        : null;
+
+    res
+      .status(HttpStatus.OK)
+      .json(ClaimedJobResponseDto.fromEntityWithToken(job, claudeToken));
   }
 
   @Get(':id')

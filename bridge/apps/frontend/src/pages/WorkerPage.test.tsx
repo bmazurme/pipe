@@ -57,6 +57,11 @@ const CONNECTION_LINK = {
   link: 'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
 };
 
+const CLAUDE_CREDENTIALS = [
+  { id: 1, name: 'personal', createdAt: '2026-09-30T07:00:00.000Z' },
+  { id: 2, name: 'work', createdAt: '2026-09-30T08:00:00.000Z' },
+];
+
 function renderPage() {
   return render(
     <Provider store={store}>
@@ -149,6 +154,104 @@ describe('WorkerPage', () => {
 
     await waitFor(() =>
       expect(secretBody).toEqual({ name: 'WORKER_OPENAI_API_KEY', value: 'sk-test-key' }),
+    );
+  });
+
+  it('lists Claude credentials and deletes one', async () => {
+    const user = userEvent.setup();
+    let deletedId: number | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/worker/claude-credentials')) return jsonResponse(CLAUDE_CREDENTIALS);
+        if (url.includes('/worker/claude-credentials/') && request.method === 'DELETE') {
+          deletedId = Number(url.split('/').pop());
+          return new Response(null, { status: 204 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('personal');
+    expect(screen.getByText('work')).toBeTruthy();
+
+    await user.click(screen.getByLabelText('Удалить токен: personal'));
+
+    await waitFor(() => expect(deletedId).toBe(1));
+  });
+
+  it('adds a Claude credential', async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/worker/claude-credentials') && request.method === 'POST') {
+          createdBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ id: 3, name: createdBody && (createdBody as { name: string }).name, createdAt: '2026-10-03T00:00:00.000Z' });
+        }
+        if (url.endsWith('/worker/claude-credentials')) return jsonResponse([]);
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Задача #1');
+
+    await user.type(screen.getByPlaceholderText('Название (например, личный)'), 'personal');
+    await user.type(screen.getByPlaceholderText('claude token'), 'sk-ant-oat-test');
+    await user.click(screen.getByText('Добавить'));
+
+    await waitFor(() =>
+      expect(createdBody).toEqual({ name: 'personal', token: 'sk-ant-oat-test' }),
+    );
+  });
+
+  it('defaults to the first Claude credential and sends it when creating a Sonnet job', async () => {
+    const user = userEvent.setup();
+    let createJobBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/worker/claude-credentials')) return jsonResponse(CLAUDE_CREDENTIALS);
+        if (url.includes('/worker/jobs') && method === 'POST') {
+          createJobBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...JOBS[1], id: 3 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Задача #1');
+
+    await user.click(screen.getByText('Посылка'));
+    await user.click(await screen.findByText('402-6.subscription.zip'));
+
+    await user.click(screen.getByText('Модель'));
+    await user.click(await screen.findByText('Claude Sonnet'));
+
+    await user.click(screen.getByText('Запустить'));
+
+    await waitFor(() =>
+      expect(createJobBody).toEqual({ sourceFileId: 10, model: 'sonnet', claudeCredentialId: 1 }),
     );
   });
 

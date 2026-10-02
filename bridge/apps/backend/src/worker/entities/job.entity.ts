@@ -43,6 +43,15 @@ export class Job extends BaseEntity {
   @Column({ type: 'enum', enum: JobModel })
   model: JobModel;
 
+  // Which named Claude credential (see ClaudeCredential) this job's run
+  // authenticates with, for sonnet/opus — null when none was picked (gpt/
+  // deepseek/qwen never set this; worker falls back to its own inherited
+  // CLAUDE_CODE_OAUTH_TOKEN env var either way). ON DELETE SET NULL in the
+  // migration — a deleted credential un-sets this rather than blocking the
+  // delete or orphaning the FK.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  claudeCredentialId: number | null;
+
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
 

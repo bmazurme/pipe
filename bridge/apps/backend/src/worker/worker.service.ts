@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 
 import { StorageService } from '../storage/storage.service';
 import { StoredFile } from '../storage/entities/stored-file.entity';
+import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobStatus } from './entities/job.entity';
@@ -20,6 +21,7 @@ export class WorkerService {
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
     private readonly storageService: StorageService,
+    private readonly claudeCredentialsService: ClaudeCredentialsService,
   ) {}
 
   async create(userId: number, dto: CreateJobDto): Promise<Job> {
@@ -34,10 +36,21 @@ export class WorkerService {
       );
     }
 
+    if (dto.claudeCredentialId !== undefined) {
+      const token = await this.claudeCredentialsService.resolveToken(
+        dto.claudeCredentialId,
+        userId,
+      );
+      if (token === null) {
+        throw new BadRequestException('Claude credential not found');
+      }
+    }
+
     return this.jobRepository.save({
       userId,
       sourceFileId: sourceFile.id,
       model: dto.model,
+      claudeCredentialId: dto.claudeCredentialId ?? null,
       status: JobStatus.Queued,
     });
   }
