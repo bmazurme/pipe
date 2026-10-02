@@ -38,6 +38,10 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: (id) => ({ url: `chat/chats/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Chat'],
     }),
+    renameChat: builder.mutation<ChatMeta, { id: number; title: string }>({
+      query: ({ id, title }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { title } }),
+      invalidatesTags: ['Chat'],
+    }),
     listMessages: builder.query<ChatMessageMeta[], number>({
       query: (chatId) => `chat/chats/${chatId}/messages`,
       providesTags: (_result, _error, chatId) => [{ type: 'ChatMessages', id: chatId }],
@@ -60,6 +64,7 @@ export const {
   useListChatsQuery,
   useCreateChatMutation,
   useDeleteChatMutation,
+  useRenameChatMutation,
   useListMessagesQuery,
   useSendMessageMutation,
 } = chatApiEndpoints;

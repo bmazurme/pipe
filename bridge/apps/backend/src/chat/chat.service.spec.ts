@@ -75,6 +75,31 @@ describe('ChatService', () => {
     });
   });
 
+  describe('renameChat', () => {
+    it('updates the title of an owned chat', async () => {
+      chatRepository.findOne!.mockResolvedValue({
+        id: 1,
+        userId: 7,
+        title: null,
+      });
+      chatRepository.save!.mockImplementation(async (chat) => chat);
+
+      const result = await service.renameChat(1, 7, 'New title');
+
+      expect(chatRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1, title: 'New title' }),
+      );
+      expect(result.title).toBe('New title');
+    });
+
+    it('throws NotFoundException for a chat owned by someone else', async () => {
+      chatRepository.findOne!.mockResolvedValue(null);
+      await expect(service.renameChat(1, 7, 'New title')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('removeChat', () => {
     it('deletes an owned chat', async () => {
       chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });

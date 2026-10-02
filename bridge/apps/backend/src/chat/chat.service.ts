@@ -41,6 +41,12 @@ export class ChatService {
     return chat;
   }
 
+  async renameChat(id: number, userId: number, title: string): Promise<Chat> {
+    const chat = await this.findOwnedChat(id, userId);
+    chat.title = title;
+    return this.chatRepository.save(chat);
+  }
+
   async removeChat(id: number, userId: number): Promise<void> {
     const chat = await this.findOwnedChat(id, userId);
     // chat_messages.chatId has an ON DELETE CASCADE FK (see the

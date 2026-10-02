@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Res,
   UseGuards,
@@ -22,6 +23,7 @@ import { ClaimedTurnResponseDto } from './dto/claimed-turn-response.dto';
 import { CompleteTurnDto } from './dto/complete-turn.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { FailTurnDto } from './dto/fail-turn.dto';
+import { RenameChatDto } from './dto/rename-chat.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 // One controller, one guard, for both audiences — same reasoning as
@@ -47,6 +49,20 @@ export class ChatController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<ChatResponseDto> {
     const chat = await this.chatService.createChat(currentUser.id, dto);
+    return ChatResponseDto.fromEntity(chat);
+  }
+
+  @Patch('chats/:id')
+  async renameChat(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RenameChatDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ChatResponseDto> {
+    const chat = await this.chatService.renameChat(
+      id,
+      currentUser.id,
+      dto.title,
+    );
     return ChatResponseDto.fromEntity(chat);
   }
 

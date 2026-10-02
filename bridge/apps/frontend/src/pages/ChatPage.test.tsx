@@ -143,6 +143,57 @@ describe('ChatPage', () => {
   });
 });
 
+describe('ChatPage — renaming a chat', () => {
+  it('renames the active chat via the header menu', async () => {
+    const user = userEvent.setup();
+    let renameBody: unknown;
+    let renamedTitle = CHAT.title;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') {
+          return jsonResponse([{ ...CHAT, title: renamedTitle }]);
+        }
+        if (url.endsWith(`/chat/chats/${CHAT.id}`) && method === 'PATCH') {
+          renameBody = JSON.parse(await request.clone().text());
+          renamedTitle = (renameBody as { title: string }).title;
+          return jsonResponse({ ...CHAT, title: renamedTitle });
+        }
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(MESSAGES);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Chat');
+
+    // Select the only existing chat so it becomes the active one.
+    const historyButton = document.querySelector('[data-qa="header-action-history"]');
+    if (!historyButton) throw new Error('history button not found');
+    await user.click(historyButton);
+    await user.click(await screen.findByText(CHAT.title));
+
+    await screen.findByText('Привет');
+
+    const menuButton = document.querySelector('[data-qa="header-menu-button"]');
+    if (!menuButton) throw new Error('header menu button not found');
+    await user.click(menuButton);
+    await user.click(await screen.findByText('Переименовать'));
+
+    const renameInput = await screen.findByDisplayValue(CHAT.title);
+    await user.clear(renameInput);
+    await user.type(renameInput, 'Новое имя{Enter}');
+
+    await waitFor(() => expect(renameBody).toEqual({ title: 'Новое имя' }));
+    expect(await screen.findByText('Новое имя')).toBeTruthy();
+  });
+});
+
 describe('ChatPage — opening an existing chat from history', () => {
   it('renders an existing chat\'s already-complete messages after selecting it from history', async () => {
     const user = userEvent.setup();

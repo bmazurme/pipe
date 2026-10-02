@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { ChatContainer } from '@gravity-ui/aikit';
-import type { ChatContainerTexts, ChatStatus, ChatType, TChatMessage, TSubmitData } from '@gravity-ui/aikit';
-import { Dialog, Select } from '@gravity-ui/uikit';
+import type {
+  ChatContainerTexts,
+  ChatStatus,
+  ChatType,
+  HeaderMenuItem,
+  TChatMessage,
+  TSubmitData,
+} from '@gravity-ui/aikit';
+import { Pencil } from '@gravity-ui/icons';
+import { Dialog, Icon, Select, TextInput } from '@gravity-ui/uikit';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
@@ -12,6 +20,7 @@ import {
   useDeleteChatMutation,
   useListChatsQuery,
   useListMessagesQuery,
+  useRenameChatMutation,
   useSendMessageMutation,
 } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
@@ -89,10 +98,13 @@ export function ChatPage() {
 
   const [createChat] = useCreateChatMutation();
   const [deleteChat] = useDeleteChatMutation();
+  const [renameChat] = useRenameChatMutation();
   const [sendMessage] = useSendMessageMutation();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newChatModel, setNewChatModel] = useState<ChatModelId>('sonnet');
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   const chats = useMemo(() => (chatsData ?? []).map(toChatType), [chatsData]);
   const activeChat = chats.find((chat) => chat.id === String(activeChatId)) ?? null;
@@ -132,6 +144,32 @@ export function ChatPage() {
     if (activeChatId === id) setActiveChatId(null);
   };
 
+  const handleOpenRenameDialog = () => {
+    if (!activeChat) return;
+    setRenameValue(activeChat.name);
+    setIsRenameDialogOpen(true);
+  };
+
+  const handleRenameChat = async () => {
+    const title = renameValue.trim();
+    if (activeChatId === null || !title) return;
+    setIsRenameDialogOpen(false);
+    await renameChat({ id: activeChatId, title }).unwrap();
+  };
+
+  // Only offered once a chat exists — renaming the "no chat selected" state
+  // makes no sense, same reasoning as NewChat's header-action gating.
+  const headerMenuItems: HeaderMenuItem[] | undefined = activeChat
+    ? [
+        {
+          id: 'rename',
+          label: 'Переименовать',
+          icon: <Icon data={Pencil} size={16} />,
+          onClick: handleOpenRenameDialog,
+        },
+      ]
+    : undefined;
+
   return (
     <div className={styles.page}>
       <PageHeader
@@ -151,6 +189,7 @@ export function ChatPage() {
           onSelectChat={(chat) => setActiveChatId(Number(chat.id))}
           onCreateChat={() => setIsCreateDialogOpen(true)}
           onDeleteChat={handleDeleteChat}
+          headerProps={{ menuItems: headerMenuItems }}
         />
       </div>
 
@@ -169,6 +208,27 @@ export function ChatPage() {
           textButtonApply="Создать"
           onClickButtonCancel={() => setIsCreateDialogOpen(false)}
           onClickButtonApply={() => void handleCreateChat()}
+        />
+      </Dialog>
+
+      <Dialog open={isRenameDialogOpen} onClose={() => setIsRenameDialogOpen(false)} maxWidth="s">
+        <Dialog.Header caption="Переименовать чат" />
+        <Dialog.Body>
+          <TextInput
+            value={renameValue}
+            onUpdate={setRenameValue}
+            autoFocus
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void handleRenameChat();
+            }}
+          />
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Сохранить"
+          propsButtonApply={{ disabled: !renameValue.trim() }}
+          onClickButtonCancel={() => setIsRenameDialogOpen(false)}
+          onClickButtonApply={() => void handleRenameChat()}
         />
       </Dialog>
     </div>
