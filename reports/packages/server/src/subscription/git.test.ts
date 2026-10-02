@@ -10,6 +10,16 @@ function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
 }
 
+// initRepo() sets user.email/user.name on the repo it creates via `git
+// init`, but a `git clone` into a fresh directory doesn't inherit that —
+// each clone needs its own identity configured before it can commit. This
+// only surfaced in CI (no global git config there), not on a dev machine
+// that already has one set globally.
+function configureIdentity(dir: string): void {
+  git(dir, ['config', 'user.email', 'test@example.com']);
+  git(dir, ['config', 'user.name', 'Test']);
+}
+
 function initRepo(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'reports-git-test-'));
   // Explicit -b: the host's init.defaultBranch config shouldn't affect
@@ -114,6 +124,7 @@ describe('checkoutTaskBranch', () => {
     // commits to the same branch.
     const otherClone = mkdtempSync(path.join(tmpdir(), 'reports-git-test-clone-'));
     git(otherClone, ['clone', '--quiet', remote, '.']);
+    configureIdentity(otherClone);
     git(otherClone, ['checkout', 'task-branch']);
     writeFileSync(path.join(otherClone, 'agent-change.txt'), 'from agent-runner');
     git(otherClone, ['add', '-A']);
@@ -144,6 +155,7 @@ describe('checkoutTaskBranch', () => {
 
     const otherClone = mkdtempSync(path.join(tmpdir(), 'reports-git-test-clone-'));
     git(otherClone, ['clone', '--quiet', remote, '.']);
+    configureIdentity(otherClone);
     git(otherClone, ['checkout', 'task-branch']);
     writeFileSync(path.join(otherClone, 'agent-change.txt'), 'from agent-runner');
     git(otherClone, ['add', '-A']);
