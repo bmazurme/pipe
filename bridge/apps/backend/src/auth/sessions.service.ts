@@ -1,12 +1,19 @@
 import { createHash } from 'crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 
 import { Session } from './entities/session.entity';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// "Отсутствовало более 3 суток" on the Devices section — a device that
+// hasn't been seen in this long auto-ends its session rather than waiting
+// out the full 7-day SESSION_TTL_MS, which only bounds how long an unused
+// refresh token stays valid, not how long a stale session is shown as active.
+const STALE_SESSION_MS = 3 * 24 * 60 * 60 * 1000;
 
 // How long a just-rotated-out refresh token still validates. Refresh token
 // rotation is a single-use scheme by design, but a client can legitimately
@@ -142,5 +149,26 @@ export class SessionsService {
     );
 
     return Boolean(result.affected);
+  }
+
+  // lastUsedAt is set on every session creation and refresh-token rotation
+  // (createSession, attachRefreshToken), so it's never null in practice —
+  // a plain LessThan comparison is enough, no fallback to createdAt needed.
+  async revokeStaleSessions(): Promise<number> {
+    const cutoff = new Date(Date.now() - STALE_SESSION_MS);
+    const result = await this.sessionRepository.update(
+      { revokedAt: IsNull(), lastUsedAt: LessThan(cutoff) },
+      { revokedAt: new Date() },
+    );
+
+    return result.affected ?? 0;
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleStaleSessionsCron(): Promise<void> {
+    const revoked = await this.revokeStaleSessions();
+    if (revoked > 0) {
+      this.logger.log(`Revoked ${revoked} session(s) idle for over 3 days`);
+    }
   }
 }

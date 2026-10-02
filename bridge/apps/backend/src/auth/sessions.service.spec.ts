@@ -157,4 +157,40 @@ describe('SessionsService', () => {
       expect(patch.previousRefreshTokenHash).toBe('');
     });
   });
+
+  describe('revokeStaleSessions', () => {
+    it('revokes only sessions whose lastUsedAt is older than 3 days', async () => {
+      repository.update!.mockResolvedValue({ affected: 2 });
+
+      const count = await service.revokeStaleSessions();
+
+      expect(count).toBe(2);
+      const [criteria, patch] = repository.update!.mock.calls[0];
+      expect(criteria).toMatchObject({ revokedAt: expect.anything() });
+      expect(criteria.lastUsedAt).toMatchObject({
+        _type: 'lessThan',
+        _value: expect.any(Date),
+      });
+      const cutoff = criteria.lastUsedAt._value as Date;
+      const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      expect(Math.abs(cutoff.getTime() - threeDaysAgo)).toBeLessThan(5000);
+      expect(patch.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('returns 0 when nothing is stale', async () => {
+      repository.update!.mockResolvedValue({ affected: 0 });
+
+      const count = await service.revokeStaleSessions();
+
+      expect(count).toBe(0);
+    });
+
+    it('handles an undefined affected count as 0', async () => {
+      repository.update!.mockResolvedValue({ affected: undefined });
+
+      const count = await service.revokeStaleSessions();
+
+      expect(count).toBe(0);
+    });
+  });
 });
