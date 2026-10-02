@@ -32,6 +32,7 @@ import {
   useListJobsQuery,
   usePeekFileMutation,
   usePeekJobResultMutation,
+  useSetClaudeOauthCredentialMutation,
 } from '../store/api';
 import { useAppSelector } from '../store/hooks';
 import { EmptyState } from '../widgets/EmptyState';
@@ -91,6 +92,59 @@ function UsageRow({ label, percent, resetsAt }: { label: string; percent: number
   );
 }
 
+function ClaudeOauthCredentialField() {
+  const [value, setValue] = useState('');
+  const [setClaudeOauthCredential, { isLoading }] = useSetClaudeOauthCredentialMutation();
+  const [result, setResult] = useState<'success' | 'error' | null>(null);
+
+  const handleSave = async () => {
+    if (!value.trim()) return;
+    setResult(null);
+
+    try {
+      await setClaudeOauthCredential({ refreshToken: value.trim() }).unwrap();
+      setValue('');
+      setResult('success');
+    } catch {
+      setResult('error');
+    }
+  };
+
+  return (
+    <label className={styles.secretField}>
+      <Text variant="body-2" color="secondary">
+        Refresh-токен Claude (claudeAiOauth.refreshToken из ~/.claude/.credentials.json) — нужен
+        один раз, дальше bridge обновляет его сам
+      </Text>
+      <div className={styles.secretRow}>
+        <TextInput
+          type="password"
+          value={value}
+          onUpdate={(next) => {
+            setValue(next);
+            setResult(null);
+          }}
+          placeholder="refresh token"
+          hasClear
+        />
+        <Button view="normal" loading={isLoading} disabled={!value.trim()} onClick={() => void handleSave()}>
+          Сохранить
+        </Button>
+      </div>
+      {result === 'success' && (
+        <Text color="positive" variant="caption-2">
+          Сохранено
+        </Text>
+      )}
+      {result === 'error' && (
+        <Text color="danger" variant="caption-2">
+          Не удалось сохранить — проверьте токен
+        </Text>
+      )}
+    </label>
+  );
+}
+
 function ClaudeUsageCard() {
   const { data: claudeUsage, isLoading, isError } = useGetClaudeUsageQuery();
 
@@ -124,6 +178,8 @@ function ClaudeUsageCard() {
           </div>
         </div>
       )}
+
+      <ClaudeOauthCredentialField />
     </Card>
   );
 }

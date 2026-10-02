@@ -10,6 +10,7 @@ import {
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
+import { SetClaudeOauthCredentialDto } from './dto/set-claude-oauth-credential.dto';
 import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
 import { ClaudeUsage, VpnService, VpnStatus } from './vpn.service';
 
@@ -52,5 +53,13 @@ export class VpnController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async provision(@Body() dto: ProvisionVpnServerDto): Promise<void> {
     await this.vpnService.provisionServer(dto);
+  }
+
+  @Post('claude-oauth-credential')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setClaudeOauthCredential(
+    @Body() dto: SetClaudeOauthCredentialDto,
+  ): Promise<void> {
+    await this.vpnService.setClaudeOauthCredential(dto.refreshToken);
   }
 }

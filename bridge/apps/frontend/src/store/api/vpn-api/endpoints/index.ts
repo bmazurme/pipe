@@ -37,6 +37,11 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     }),
     getClaudeUsage: builder.query<ClaudeUsage, void>({
       query: () => 'vpn/claude-usage',
+      providesTags: ['ClaudeUsage'],
+    }),
+    setClaudeOauthCredential: builder.mutation<void, { refreshToken: string }>({
+      query: (body) => ({ url: 'vpn/claude-oauth-credential', method: 'POST', body }),
+      invalidatesTags: ['ClaudeUsage'],
     }),
     getConnectionLink: builder.query<{ link: string }, void>({
       query: () => 'vpn/connection-link',
@@ -60,5 +65,6 @@ export const {
   useSyncVpnConfigMutation,
   useSetWorkerSecretMutation,
   useProvisionVpnServerMutation,
+  useSetClaudeOauthCredentialMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

@@ -12,6 +12,7 @@ import { StoredFile } from './storage/entities/stored-file.entity';
 import { DayOff } from './time/entities/day-off.entity';
 import { TimeReportEntry } from './time/entities/time-report-entry.entity';
 import { User } from './users/entities/user.entity';
+import { ClaudeOauthCredential } from './vpn/entities/claude-oauth-credential.entity';
 import { Job } from './worker/entities/job.entity';
 
 dotenv.config();
@@ -34,6 +35,7 @@ export const AppDataSource = new DataSource({
     Job,
     Chat,
     ChatMessage,
+    ClaudeOauthCredential,
   ],
   migrations: ['src/migrations/*.ts'],
 });

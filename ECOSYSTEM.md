@@ -65,7 +65,8 @@ exact backend host, not a shared parent domain — the cookie is named
 sibling apps on the same parent domain caused a name collision before),
 `EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
 (optional ntlstl.time integration). `/api/v1/vpn/*` (browser-session only —
-the VPN status page, and the only part of bridge's backend that calls out to
+backing the VPN page's status/config and the Worker page's connection-link/
+Claude-usage cards; the only part of bridge's backend that calls out to
 third-party APIs): `VPN_PANEL_URL`/`VPN_PANEL_API_TOKEN` (ihor's x-ui panel —
 status, and the source of truth the page's "sync" action rebuilds worker's
 `VPN_CLIENT_CONFIG` from, rather than trusting whatever was last pushed),
@@ -73,13 +74,16 @@ status, and the source of truth the page's "sync" action rebuilds worker's
 Actions secrets: write, Actions: write — lets that page push worker provider
 keys and trigger a redeploy; named `BRIDGE_GITHUB_TOKEN` because `GITHUB_TOKEN`
 is a reserved name Actions auto-populates with a different, more limited
-token), `CLAUDE_CODE_OAUTH_TOKEN` (optional — backs the VPN page's Claude
-usage-limits widget, `GET /api/v1/vpn/claude-usage`; its own token, separate
-from worker's `WORKER_CLAUDE_CODE_OAUTH_TOKEN` below, since Actions secrets
-are write-only and bridge can't read worker's copy back; left unset, that one
-endpoint errors and the rest of the page is unaffected; calls Anthropic's
-undocumented, reverse-engineered `GET /api/oauth/usage` endpoint, which could
-change or disappear without notice). `POST /api/v1/vpn/provision` (the page's
+token). The Worker page's Claude usage-limits widget (`GET /api/v1/vpn/claude-usage`,
+calling Anthropic's undocumented, reverse-engineered `GET /api/oauth/usage`,
+which could change or disappear without notice) needs no GitHub secret at
+all — `POST /api/v1/vpn/claude-oauth-credential` seeds it once from
+`claudeAiOauth.refreshToken` (copied out of `~/.claude/.credentials.json`;
+distinct from worker's own long-lived `WORKER_CLAUDE_CODE_OAUTH_TOKEN`, which
+is a different kind of credential this specific endpoint doesn't accept),
+and bridge persists + self-refreshes the resulting access token in its own
+`claude_oauth_credentials` table (see `VpnService.getValidClaudeAccessToken`)
+from then on. `POST /api/v1/vpn/provision` (the page's
 "Новый VPN-сервер" form) pushes `VPN_PROVISION_HOST`/`VPN_PROVISION_SSH_USER`/
 `VPN_PROVISION_SSH_PASSWORD` (transient — overwritten on every run) and
 dispatches `.github/workflows/provision-vpn-server.yml`, which SSHes in,

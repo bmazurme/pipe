@@ -12,6 +12,7 @@ import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
+import { ClaudeOauthCredential } from '../vpn/entities/claude-oauth-credential.entity';
 import { Job } from '../worker/entities/job.entity';
 
 export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
@@ -37,6 +38,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         Job,
         Chat,
         ChatMessage,
+        ClaudeOauthCredential,
       ],
       synchronize: isDev,
       migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],

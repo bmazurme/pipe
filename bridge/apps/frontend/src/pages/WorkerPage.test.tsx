@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -132,6 +132,42 @@ describe('WorkerPage', () => {
     expect(screen.getByText('Эта неделя')).toBeTruthy();
     expect(screen.getAllByText('17%').length).toBeGreaterThan(0);
     expect(screen.getByText('Полный сброс')).toBeTruthy();
+  });
+
+  it('saves the Claude OAuth refresh token', async () => {
+    const user = userEvent.setup();
+    let credentialBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
+        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/claude-oauth-credential') && request.method === 'POST') {
+          credentialBody = JSON.parse(await request.clone().text());
+          return new Response(null, { status: 204 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Текущая сессия');
+
+    const input = screen.getByPlaceholderText('refresh token');
+    await user.type(input, 'my-refresh-token');
+
+    const field = input.closest('label');
+    if (!field) throw new Error('field wrapper not found');
+    await user.click(within(field).getByText('Сохранить'));
+
+    await waitFor(() =>
+      expect(credentialBody).toEqual({ refreshToken: 'my-refresh-token' }),
+    );
+    expect(await screen.findByText('Сохранено')).toBeTruthy();
   });
 
   it('lists jobs with their model and status', async () => {
