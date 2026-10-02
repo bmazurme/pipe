@@ -170,6 +170,44 @@ describe('WorkerPage', () => {
     expect(await screen.findByText('Сохранено')).toBeTruthy();
   });
 
+  it('saves a worker provider key', async () => {
+    const user = userEvent.setup();
+    let secretBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
+        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/worker-secrets') && request.method === 'POST') {
+          secretBody = JSON.parse(await request.clone().text());
+          return new Response(null, { status: 204 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Текущая сессия');
+
+    const input = screen.getByPlaceholderText('sk-proj-...');
+    await user.type(input, 'sk-test-key');
+
+    // TextInput also renders its own built-in "Clear" icon button ahead of
+    // ours in DOM order — a plain querySelector('button') would grab that
+    // one instead, so this scopes to the field and matches by visible text.
+    const openAiField = input.closest('label');
+    if (!openAiField) throw new Error('field wrapper not found');
+    await user.click(within(openAiField).getByText('Сохранить'));
+
+    await waitFor(() =>
+      expect(secretBody).toEqual({ name: 'WORKER_OPENAI_API_KEY', value: 'sk-test-key' }),
+    );
+  });
+
   it('lists jobs with their model and status', async () => {
     renderPage();
 
