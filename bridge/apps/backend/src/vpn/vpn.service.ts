@@ -359,9 +359,14 @@ export class VpnService {
     });
 
     if (!response.ok) {
+      // The body (truncated) matters here — distinguishes a real OAuth
+      // rejection (e.g. invalid_grant) from a WAF/bot-check block in front
+      // of console.anthropic.com, which looks identical at the status-code
+      // level but needs a completely different fix.
+      const detail = (await response.text()).slice(0, 500);
       throw new BadGatewayException(
-        `Claude OAuth token refresh failed (${response.status}) — re-seed ` +
-          'credentials via POST /api/v1/vpn/claude-oauth-credential',
+        `Claude OAuth token refresh failed (${response.status}): ${detail} ` +
+          '— re-seed credentials via POST /api/v1/vpn/claude-oauth-credential',
       );
     }
 
