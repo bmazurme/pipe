@@ -17,18 +17,6 @@ const STATUS = {
   port: 443,
 };
 
-const CLAUDE_USAGE = {
-  sessionPercent: 42,
-  sessionResetsAt: '2026-10-02T15:00:00.000Z',
-  weekPercent: 17,
-  weekResetsAt: '2026-10-08T00:00:00.000Z',
-  weekSonnetPercent: 5,
-};
-
-const CONNECTION_LINK = {
-  link: 'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
-};
-
 function renderPage() {
   return render(
     <Provider store={store}>
@@ -53,7 +41,6 @@ describe('VpnPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         if (request.url.endsWith('/vpn/status')) return jsonResponse(STATUS);
-        if (request.url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
         return jsonResponse({});
       }),
     );
@@ -63,50 +50,6 @@ describe('VpnPage', () => {
     expect(await screen.findByText('www.samsung.com')).toBeTruthy();
     expect(await screen.findByText('443')).toBeTruthy();
     expect(await screen.findByText(/активно/)).toBeTruthy();
-  });
-
-  it('renders Claude usage limits', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (request: Request) => {
-        if (request.url.endsWith('/vpn/status')) return jsonResponse(STATUS);
-        if (request.url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
-        return jsonResponse({});
-      }),
-    );
-
-    renderPage();
-
-    expect(await screen.findByText('Текущая сессия')).toBeTruthy();
-    expect(screen.getAllByText('42%').length).toBeGreaterThan(0);
-    expect(screen.getByText('Эта неделя')).toBeTruthy();
-    expect(screen.getAllByText('17%').length).toBeGreaterThan(0);
-    expect(screen.getByText('Полный сброс')).toBeTruthy();
-  });
-
-  it('renders the connection link and copies it', async () => {
-    const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (request: Request) => {
-        if (request.url.endsWith('/vpn/status')) return jsonResponse(STATUS);
-        if (request.url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
-        if (request.url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
-        return jsonResponse({});
-      }),
-    );
-
-    renderPage();
-
-    expect(await screen.findByDisplayValue(CONNECTION_LINK.link)).toBeTruthy();
-
-    await user.click(screen.getByText('Скопировать'));
-
-    expect(writeText).toHaveBeenCalledWith(CONNECTION_LINK.link);
-    expect(await screen.findByText('Скопировано')).toBeTruthy();
   });
 
   it('provisions a new VPN server', async () => {

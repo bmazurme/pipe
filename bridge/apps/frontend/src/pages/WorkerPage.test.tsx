@@ -7,7 +7,7 @@ import { generateKeyPair, encryptBuffer } from '@pipe/protocol/encryption';
 
 import { WorkerPage } from './WorkerPage';
 import { store } from '../store';
-import { storageApi, workerApi } from '../store/api';
+import { storageApi, vpnApi, workerApi } from '../store/api';
 import { uploadWithProgress } from './storage/uploadWithProgress';
 
 vi.mock('./storage/uploadWithProgress', () => ({
@@ -53,6 +53,18 @@ const FILES = [
   { id: 12, originalName: '402-8.subscription.zip.enc', mimeType: 'application/zip', size: 4096, createdAt: '2026-09-30T07:00:00.000Z' },
 ];
 
+const CLAUDE_USAGE = {
+  sessionPercent: 42,
+  sessionResetsAt: '2026-10-02T15:00:00.000Z',
+  weekPercent: 17,
+  weekResetsAt: '2026-10-08T00:00:00.000Z',
+  weekSonnetPercent: 5,
+};
+
+const CONNECTION_LINK = {
+  link: 'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
+};
+
 function renderPage() {
   return render(
     <Provider store={store}>
@@ -77,6 +89,7 @@ beforeEach(() => {
   // fresh mock.
   store.dispatch(storageApi.util.resetApiState());
   store.dispatch(workerApi.util.resetApiState());
+  store.dispatch(vpnApi.util.resetApiState());
 
   vi.stubGlobal(
     'fetch',
@@ -87,6 +100,8 @@ beforeEach(() => {
       if (url.includes('/worker/jobs/2')) return jsonResponse(JOBS[1]);
       if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
       if (url.includes('/storage')) return jsonResponse(FILES);
+      if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
+      if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
 
       return jsonResponse([]);
     }),
@@ -94,6 +109,31 @@ beforeEach(() => {
 });
 
 describe('WorkerPage', () => {
+  it('renders the connection link and copies it', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+
+    renderPage();
+
+    expect(await screen.findByDisplayValue(CONNECTION_LINK.link)).toBeTruthy();
+
+    await user.click(screen.getByText('Скопировать'));
+
+    expect(writeText).toHaveBeenCalledWith(CONNECTION_LINK.link);
+    expect(await screen.findByText('Скопировано')).toBeTruthy();
+  });
+
+  it('renders Claude usage limits', async () => {
+    renderPage();
+
+    expect(await screen.findByText('Текущая сессия')).toBeTruthy();
+    expect(screen.getAllByText('42%').length).toBeGreaterThan(0);
+    expect(screen.getByText('Эта неделя')).toBeTruthy();
+    expect(screen.getAllByText('17%').length).toBeGreaterThan(0);
+    expect(screen.getByText('Полный сброс')).toBeTruthy();
+  });
+
   it('lists jobs with their model and status', async () => {
     renderPage();
 
