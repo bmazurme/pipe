@@ -10,7 +10,7 @@ import {
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
-import { VpnService, VpnStatus } from './vpn.service';
+import { ClaudeUsage, VpnService, VpnStatus } from './vpn.service';
 
 // Browser session only — deliberately not JwtOrApiKeyGuard. This manages
 // deploy-triggering GitHub credentials and worker provider keys; sync/
@@ -23,6 +23,11 @@ export class VpnController {
   @Get('status')
   async getStatus(): Promise<VpnStatus> {
     return this.vpnService.getStatus();
+  }
+
+  @Get('claude-usage')
+  async getClaudeUsage(): Promise<ClaudeUsage> {
+    return this.vpnService.getClaudeUsage();
   }
 
   @Post('sync')

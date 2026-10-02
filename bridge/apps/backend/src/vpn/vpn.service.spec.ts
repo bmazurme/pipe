@@ -9,6 +9,7 @@ const ENV: Record<string, string> = {
   VPN_SERVER_ADDRESS: '203.0.113.5',
   GITHUB_TOKEN: 'gh-token',
   GITHUB_REPO: 'acme/pipe',
+  CLAUDE_CODE_OAUTH_TOKEN: 'claude-token',
 };
 
 function configService(): ConfigService {
@@ -172,6 +173,72 @@ describe('VpnService', () => {
       expect(calls).toContain(
         'https://api.github.com/repos/acme/pipe/actions/workflows/deploy-bridge.yml/dispatches',
       );
+    });
+  });
+
+  describe('getClaudeUsage', () => {
+    it("requests Anthropic's OAuth usage endpoint and maps the response", async () => {
+      const calls: { url: string; init?: RequestInit }[] = [];
+
+      globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+
+        if (url === 'https://api.anthropic.com/api/oauth/usage') {
+          return jsonResponse({
+            five_hour: {
+              utilization: 42,
+              resets_at: '2026-10-02T15:00:00.000Z',
+            },
+            seven_day: {
+              utilization: 17,
+              resets_at: '2026-10-08T00:00:00.000Z',
+            },
+            seven_day_sonnet: {
+              utilization: 5,
+              resets_at: '2026-10-08T00:00:00.000Z',
+            },
+          });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      }) as typeof fetch;
+
+      const usage = await new VpnService(configService()).getClaudeUsage();
+
+      expect(calls).toHaveLength(1);
+      const headers = calls[0].init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer claude-token');
+      expect(headers['anthropic-beta']).toBe('oauth-2025-04-20');
+
+      expect(usage).toEqual({
+        sessionPercent: 42,
+        sessionResetsAt: '2026-10-02T15:00:00.000Z',
+        weekPercent: 17,
+        weekResetsAt: '2026-10-08T00:00:00.000Z',
+        weekSonnetPercent: 5,
+      });
+    });
+
+    it('defaults weekSonnetPercent to null when the response omits seven_day_sonnet', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({
+          five_hour: { utilization: 10, resets_at: '2026-10-02T15:00:00.000Z' },
+          seven_day: { utilization: 20, resets_at: '2026-10-08T00:00:00.000Z' },
+        }),
+      ) as typeof fetch;
+
+      const usage = await new VpnService(configService()).getClaudeUsage();
+
+      expect(usage.weekSonnetPercent).toBeNull();
+    });
+
+    it('surfaces a BadGatewayException when the upstream request fails', async () => {
+      globalThis.fetch = jest.fn(
+        async () => new Response('nope', { status: 401 }),
+      ) as typeof fetch;
+
+      await expect(
+        new VpnService(configService()).getClaudeUsage(),
+      ).rejects.toThrow('Claude usage request failed (401)');
     });
   });
 });

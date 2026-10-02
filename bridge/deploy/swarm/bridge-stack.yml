@@ -58,6 +58,12 @@ services:
       VPN_SERVER_ADDRESS: ${VPN_SERVER_ADDRESS:?VPN_SERVER_ADDRESS is required}
       GITHUB_TOKEN: ${BRIDGE_GITHUB_TOKEN:?BRIDGE_GITHUB_TOKEN is required}
       GITHUB_REPO: ${GITHUB_REPO:?GITHUB_REPO is required}
+      # Optional: powers GET /api/v1/vpn/claude-usage (the usage-limits
+      # widget on the VPN page). Its own OAuth token, separate from
+      # worker's WORKER_CLAUDE_CODE_OAUTH_TOKEN — GitHub Actions secrets are
+      # write-only, bridge can't read worker's copy back. Empty leaves that
+      # one endpoint erroring, nothing else on the page depends on it.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     ports:
       - target: 3000
         published: ${BACKEND_PUBLISHED_PORT:-3300}

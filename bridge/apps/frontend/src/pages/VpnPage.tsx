@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { ShieldKeyhole } from '@gravity-ui/icons';
-import { Alert, Button, Card, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Label, Progress, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
-import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
+import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
   WorkerSecretName,
+  useGetClaudeUsageQuery,
   useGetVpnStatusQuery,
   useSetWorkerSecretMutation,
   useSyncVpnConfigMutation,
@@ -33,6 +34,26 @@ const WORKER_SECRET_FIELDS: { name: WorkerSecretName; label: string; placeholder
   { name: 'WORKER_DEEPSEEK_API_KEY', label: 'DeepSeek API Key', placeholder: 'sk-...' },
   { name: 'WORKER_QWEN_API_KEY', label: 'Qwen API Key', placeholder: 'sk-...' },
 ];
+
+function usageTheme(percent: number): 'default' | 'warning' | 'danger' {
+  if (percent >= 90) return 'danger';
+  if (percent >= 70) return 'warning';
+  return 'default';
+}
+
+function UsageRow({ label, percent, resetsAt }: { label: string; percent: number; resetsAt: string }) {
+  return (
+    <div className={styles.usageRow}>
+      <div className={styles.usageRowHeader}>
+        <Text variant="body-2">{label}</Text>
+        <Text color="secondary" variant="caption-2">
+          сброс {formatDateTime(resetsAt)}
+        </Text>
+      </div>
+      <Progress value={percent} text={`${percent}%`} theme={usageTheme(percent)} size="m" />
+    </div>
+  );
+}
 
 function WorkerSecretField({ name, label, placeholder }: { name: WorkerSecretName; label: string; placeholder: string }) {
   const [value, setValue] = useState('');
@@ -90,6 +111,11 @@ export function VpnPage() {
   const { data: status, isLoading, isError } = useGetVpnStatusQuery(undefined, {
     pollingInterval: STATUS_POLL_INTERVAL_MS,
   });
+  const {
+    data: claudeUsage,
+    isLoading: isClaudeUsageLoading,
+    isError: isClaudeUsageError,
+  } = useGetClaudeUsageQuery(undefined, { pollingInterval: STATUS_POLL_INTERVAL_MS });
   const [syncVpnConfig, { isLoading: isSyncing }] = useSyncVpnConfigMutation();
   const [syncResult, setSyncResult] = useState<'success' | 'error' | null>(null);
 
@@ -178,6 +204,39 @@ export function VpnPage() {
                 Порт
               </Text>
               <Text variant="body-2">{status.port}</Text>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card view="outlined" className={styles.card}>
+        <SectionHeader title="Лимиты Claude" />
+
+        {isClaudeUsageLoading && (
+          <div className={styles.usageGrid}>
+            {[0, 1].map((row) => (
+              <Skeleton key={row} height={40} />
+            ))}
+          </div>
+        )}
+
+        {isClaudeUsageError && (
+          <Alert theme="danger" view="filled" message="Не удалось получить лимиты Claude" />
+        )}
+
+        {claudeUsage && (
+          <div className={styles.usageGrid}>
+            <UsageRow
+              label="Текущая сессия"
+              percent={claudeUsage.sessionPercent}
+              resetsAt={claudeUsage.sessionResetsAt}
+            />
+            <UsageRow label="Эта неделя" percent={claudeUsage.weekPercent} resetsAt={claudeUsage.weekResetsAt} />
+            <div className={styles.stat}>
+              <Text color="secondary" variant="caption-2">
+                Полный сброс
+              </Text>
+              <Text variant="body-2">{formatDateTime(claudeUsage.weekResetsAt)}</Text>
             </div>
           </div>
         )}

@@ -49,6 +49,25 @@ export interface VpnStatus {
 // not absent — zero is not a valid epoch ms value for "just connected".
 const NEVER_ONLINE = 0;
 
+interface ClaudeUsageWindow {
+  utilization: number;
+  resets_at: string;
+}
+
+interface ClaudeUsageApiResponse {
+  five_hour: ClaudeUsageWindow;
+  seven_day: ClaudeUsageWindow;
+  seven_day_sonnet?: ClaudeUsageWindow;
+}
+
+export interface ClaudeUsage {
+  sessionPercent: number;
+  sessionResetsAt: string;
+  weekPercent: number;
+  weekResetsAt: string;
+  weekSonnetPercent: number | null;
+}
+
 @Injectable()
 export class VpnService {
   constructor(private readonly configService: ConfigService) {}
@@ -242,5 +261,40 @@ export class VpnService {
   async setWorkerSecret(name: WorkerSecretName, value: string): Promise<void> {
     await this.setGithubSecret(name, value);
     await this.triggerDeploy();
+  }
+
+  // https://api.anthropic.com/api/oauth/usage is not an officially
+  // documented Anthropic endpoint — reverse-engineered by the Claude Code
+  // community (see e.g. github.com/ohugonnot/claude-code-statusline) from
+  // what the CLI's own /usage command calls. It could change or disappear
+  // without notice; this degrades to a BadGatewayException if it does,
+  // same as any other upstream failure here.
+  //
+  // Needs its own CLAUDE_CODE_OAUTH_TOKEN, separate from worker's — GitHub
+  // Actions secrets are write-only, so bridge can't read back the value
+  // already pushed to worker's own copy.
+  async getClaudeUsage(): Promise<ClaudeUsage> {
+    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
+      headers: {
+        Authorization: `Bearer ${this.required('CLAUDE_CODE_OAUTH_TOKEN')}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+      },
+    });
+
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `Claude usage request failed (${response.status})`,
+      );
+    }
+
+    const body = (await response.json()) as ClaudeUsageApiResponse;
+
+    return {
+      sessionPercent: body.five_hour.utilization,
+      sessionResetsAt: body.five_hour.resets_at,
+      weekPercent: body.seven_day.utilization,
+      weekResetsAt: body.seven_day.resets_at,
+      weekSonnetPercent: body.seven_day_sonnet?.utilization ?? null,
+    };
   }
 }

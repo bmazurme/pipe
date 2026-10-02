@@ -35,6 +35,12 @@
 #   BRIDGE_GITHUB_TOKEN, not GITHUB_TOKEN, since the latter is a reserved
 #   name GitHub Actions auto-populates with a different, more limited token)
 #
+#   CLAUDE_CODE_OAUTH_TOKEN (optional — powers GET /api/v1/vpn/claude-usage,
+#   the usage-limits widget on the VPN page; its own token, separate from
+#   WORKER_CLAUDE_CODE_OAUTH_TOKEN above, since GitHub Actions secrets are
+#   write-only and bridge can't read worker's copy back. Left unset, that
+#   one endpoint errors and the rest of the page works as normal)
+#
 # Deliberately workflow_dispatch-only for now — run it manually from the
 # Actions tab (against main) until one run has deployed successfully. Once
 # proven, switch this to the commented block below and disable
@@ -273,6 +279,7 @@ jobs:
           VPN_SERVER_ADDRESS: ${{ secrets.VPN_SERVER_ADDRESS }}
           BRIDGE_GITHUB_TOKEN: ${{ secrets.BRIDGE_GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           VPN_CLIENT_CONFIG_FILE="$RUNNER_TEMP/xray-client-config.json" \
           docker stack deploy \

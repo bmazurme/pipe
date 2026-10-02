@@ -73,7 +73,13 @@ status, and the source of truth the page's "sync" action rebuilds worker's
 Actions secrets: write, Actions: write — lets that page push worker provider
 keys and trigger a redeploy; named `BRIDGE_GITHUB_TOKEN` because `GITHUB_TOKEN`
 is a reserved name Actions auto-populates with a different, more limited
-token). Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
+token), `CLAUDE_CODE_OAUTH_TOKEN` (optional — backs the VPN page's Claude
+usage-limits widget, `GET /api/v1/vpn/claude-usage`; its own token, separate
+from worker's `WORKER_CLAUDE_CODE_OAUTH_TOKEN` below, since Actions secrets
+are write-only and bridge can't read worker's copy back; left unset, that one
+endpoint errors and the rest of the page is unaffected; calls Anthropic's
+undocumented, reverse-engineered `GET /api/oauth/usage` endpoint, which could
+change or disappear without notice). Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
 `CR_WORKER_IMAGE`), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`,
 `WORKER_BRIDGE_API_URL`/`WORKER_BRIDGE_API_KEY`/`WORKER_CLAUDE_CODE_OAUTH_TOKEN`/`WORKER_OPENAI_API_KEY`/`WORKER_DEEPSEEK_API_KEY`/`WORKER_QWEN_API_KEY`
 (worker's own runtime secrets, injected as plain Swarm service env — same
