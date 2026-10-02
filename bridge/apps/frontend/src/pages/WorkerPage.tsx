@@ -7,7 +7,6 @@ import {
   Dialog,
   Icon,
   Label,
-  Progress,
   Select,
   Skeleton,
   Text,
@@ -15,7 +14,7 @@ import {
   TextInput,
 } from '@gravity-ui/uikit';
 
-import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelativeTime';
+import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
   ACTIVE_JOB_STATUSES,
   StoredFileMeta,
@@ -25,14 +24,12 @@ import {
   useCreateJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
-  useGetClaudeUsageQuery,
   useGetConnectionLinkQuery,
   useGetJobQuery,
   useListFilesQuery,
   useListJobsQuery,
   usePeekFileMutation,
   usePeekJobResultMutation,
-  useSetClaudeOauthCredentialMutation,
   useSetWorkerSecretMutation,
   WorkerSecretName,
 } from '../store/api';
@@ -72,118 +69,6 @@ const STATUS_THEME: Record<WorkerJobStatus, 'normal' | 'info' | 'success' | 'dan
 
 function isActive(status: WorkerJobStatus): boolean {
   return ACTIVE_JOB_STATUSES.includes(status);
-}
-
-function usageTheme(percent: number): 'default' | 'warning' | 'danger' {
-  if (percent >= 90) return 'danger';
-  if (percent >= 70) return 'warning';
-  return 'default';
-}
-
-function UsageRow({ label, percent, resetsAt }: { label: string; percent: number; resetsAt: string }) {
-  return (
-    <div className={styles.usageRow}>
-      <div className={styles.usageRowHeader}>
-        <Text variant="body-2">{label}</Text>
-        <Text color="secondary" variant="caption-2">
-          сброс {formatDateTime(resetsAt)}
-        </Text>
-      </div>
-      <Progress value={percent} text={`${percent}%`} theme={usageTheme(percent)} size="m" />
-    </div>
-  );
-}
-
-function ClaudeOauthCredentialField() {
-  const [value, setValue] = useState('');
-  const [setClaudeOauthCredential, { isLoading }] = useSetClaudeOauthCredentialMutation();
-  const [result, setResult] = useState<'success' | 'error' | null>(null);
-
-  const handleSave = async () => {
-    if (!value.trim()) return;
-    setResult(null);
-
-    try {
-      await setClaudeOauthCredential({ refreshToken: value.trim() }).unwrap();
-      setValue('');
-      setResult('success');
-    } catch {
-      setResult('error');
-    }
-  };
-
-  return (
-    <label className={styles.secretField}>
-      <Text variant="body-2" color="secondary">
-        Refresh-токен Claude (claudeAiOauth.refreshToken из ~/.claude/.credentials.json) — нужен
-        один раз, дальше bridge обновляет его сам
-      </Text>
-      <div className={styles.secretRow}>
-        <TextInput
-          type="password"
-          value={value}
-          onUpdate={(next) => {
-            setValue(next);
-            setResult(null);
-          }}
-          placeholder="refresh token"
-          hasClear
-        />
-        <Button view="normal" loading={isLoading} disabled={!value.trim()} onClick={() => void handleSave()}>
-          Сохранить
-        </Button>
-      </div>
-      {result === 'success' && (
-        <Text color="positive" variant="caption-2">
-          Сохранено
-        </Text>
-      )}
-      {result === 'error' && (
-        <Text color="danger" variant="caption-2">
-          Не удалось сохранить — проверьте токен
-        </Text>
-      )}
-    </label>
-  );
-}
-
-function ClaudeUsageCard() {
-  const { data: claudeUsage, isLoading, isError } = useGetClaudeUsageQuery();
-
-  return (
-    <Card view="outlined" className={styles.card}>
-      <SectionHeader title="Лимиты Claude" />
-
-      {isLoading && (
-        <div className={styles.usageGrid}>
-          {[0, 1].map((row) => (
-            <Skeleton key={row} height={40} />
-          ))}
-        </div>
-      )}
-
-      {isError && <Alert theme="danger" view="filled" message="Не удалось получить лимиты Claude" />}
-
-      {claudeUsage && (
-        <div className={styles.usageGrid}>
-          <UsageRow
-            label="Текущая сессия"
-            percent={claudeUsage.sessionPercent}
-            resetsAt={claudeUsage.sessionResetsAt}
-          />
-          <UsageRow label="Эта неделя" percent={claudeUsage.weekPercent} resetsAt={claudeUsage.weekResetsAt} />
-          <div className={styles.stat}>
-            <Text color="secondary" variant="caption-2">
-              Полный сброс
-            </Text>
-            <Text variant="body-2">{formatDateTime(claudeUsage.weekResetsAt)}</Text>
-          </div>
-        </div>
-      )}
-
-      <ClaudeOauthCredentialField />
-    </Card>
-  );
 }
 
 function ConnectionLinkCard() {
@@ -494,8 +379,6 @@ export function WorkerPage() {
       />
 
       <ConnectionLinkCard />
-
-      <ClaudeUsageCard />
 
       <WorkerSecretsCard />
 

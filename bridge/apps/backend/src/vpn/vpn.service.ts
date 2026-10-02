@@ -4,13 +4,10 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 
 import { encryptSecretForGitHub } from './github-secrets.util';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
-import { ClaudeOauthCredential } from './entities/claude-oauth-credential.entity';
 
 interface XrayRealitySettings {
   target: string;
@@ -53,45 +50,9 @@ export interface VpnStatus {
 // not absent — zero is not a valid epoch ms value for "just connected".
 const NEVER_ONLINE = 0;
 
-// Anthropic's OAuth token endpoint and the public client id Claude Code's own
-// CLI uses against it — reverse-engineered (e.g. stencila/stencila's
-// rust/auth/src/claude_code.rs), not documented by Anthropic. The client id
-// identifies the client application, not a user or account, so it's fine to
-// keep in source rather than as a secret.
-const CLAUDE_OAUTH_TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token';
-const CLAUDE_OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
-
-// Refresh this far ahead of the recorded expiry, not exactly at it — avoids a
-// request landing in the last second of validity and getting rejected by
-// clock skew between bridge and Anthropic.
-const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000;
-
-interface ClaudeUsageWindow {
-  utilization: number;
-  resets_at: string;
-}
-
-interface ClaudeUsageApiResponse {
-  five_hour: ClaudeUsageWindow;
-  seven_day: ClaudeUsageWindow;
-  seven_day_sonnet?: ClaudeUsageWindow;
-}
-
-export interface ClaudeUsage {
-  sessionPercent: number;
-  sessionResetsAt: string;
-  weekPercent: number;
-  weekResetsAt: string;
-  weekSonnetPercent: number | null;
-}
-
 @Injectable()
 export class VpnService {
-  constructor(
-    private readonly configService: ConfigService,
-    @InjectRepository(ClaudeOauthCredential)
-    private readonly claudeCredRepo: Repository<ClaudeOauthCredential>,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   private panelUrl(): string {
     return this.required('VPN_PANEL_URL').replace(/\/$/, '');
@@ -338,128 +299,5 @@ export class VpnService {
     await this.setGithubSecret('VPN_PROVISION_SSH_USER', dto.sshUser);
     await this.setGithubSecret('VPN_PROVISION_SSH_PASSWORD', dto.sshPassword);
     await this.triggerWorkflow('provision-vpn-server.yml');
-  }
-
-  // Exchanges the credential's refresh token for a fresh access token —
-  // Anthropic rotates the refresh token on every call, so the new one must
-  // be persisted too or the next refresh would replay an already-invalidated
-  // token. Called both to mint the very first access token when a refresh
-  // token is first set, and to renew an expiring one thereafter.
-  private async refreshClaudeCredential(
-    cred: ClaudeOauthCredential,
-  ): Promise<string> {
-    const response = await fetch(CLAUDE_OAUTH_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        client_id: CLAUDE_OAUTH_CLIENT_ID,
-        refresh_token: cred.refreshToken,
-      }),
-    });
-
-    if (!response.ok) {
-      // The body (truncated) matters here — distinguishes a real OAuth
-      // rejection (e.g. invalid_grant) from a WAF/bot-check block in front
-      // of console.anthropic.com, which looks identical at the status-code
-      // level but needs a completely different fix.
-      const detail = (await response.text()).slice(0, 500);
-      throw new BadGatewayException(
-        `Claude OAuth token refresh failed (${response.status}): ${detail} ` +
-          '— re-seed credentials via POST /api/v1/vpn/claude-oauth-credential',
-      );
-    }
-
-    const body = (await response.json()) as {
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
-    };
-
-    cred.accessToken = body.access_token;
-    cred.refreshToken = body.refresh_token;
-    cred.expiresAt = new Date(Date.now() + body.expires_in * 1000);
-    await this.claudeCredRepo.save(cred);
-
-    return cred.accessToken;
-  }
-
-  // Singleton row — bridge holds credentials for exactly one Claude account.
-  private async findClaudeCredential(): Promise<ClaudeOauthCredential | null> {
-    const [cred] = await this.claudeCredRepo.find({ take: 1 });
-    return cred ?? null;
-  }
-
-  private async getValidClaudeAccessToken(): Promise<string> {
-    const cred = await this.findClaudeCredential();
-    if (!cred) {
-      throw new InternalServerErrorException(
-        'Claude OAuth credentials are not configured — set them via ' +
-          'POST /api/v1/vpn/claude-oauth-credential',
-      );
-    }
-
-    if (cred.expiresAt.getTime() - TOKEN_EXPIRY_SAFETY_MARGIN_MS > Date.now()) {
-      return cred.accessToken;
-    }
-
-    return this.refreshClaudeCredential(cred);
-  }
-
-  // Bootstraps (or rotates) bridge's Claude OAuth credential from a single
-  // refresh token — the only value the admin ever has to copy out of
-  // ~/.claude/.credentials.json's claudeAiOauth.refreshToken. Immediately
-  // exchanges it for a real access token so a bad/expired token is rejected
-  // here rather than silently stored and failing later.
-  async setClaudeOauthCredential(refreshToken: string): Promise<void> {
-    const existing = await this.findClaudeCredential();
-    const cred =
-      existing ??
-      this.claudeCredRepo.create({
-        accessToken: '',
-        refreshToken: '',
-        expiresAt: new Date(0),
-      });
-    cred.refreshToken = refreshToken;
-    await this.refreshClaudeCredential(cred);
-  }
-
-  // https://api.anthropic.com/api/oauth/usage is not an officially
-  // documented Anthropic endpoint — reverse-engineered by the Claude Code
-  // community (see e.g. github.com/ohugonnot/claude-code-statusline) from
-  // what the CLI's own /usage command calls. It could change or disappear
-  // without notice; this degrades to a BadGatewayException if it does,
-  // same as any other upstream failure here.
-  //
-  // Unlike the rest of this service, this needs a short-lived session access
-  // token (the same kind the `claude` CLI itself holds and refreshes locally)
-  // — a long-lived API-key-style secret doesn't work against this specific
-  // endpoint, hence the self-refreshing credential above instead of a plain
-  // env var.
-  async getClaudeUsage(): Promise<ClaudeUsage> {
-    const accessToken = await this.getValidClaudeAccessToken();
-
-    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'anthropic-beta': 'oauth-2025-04-20',
-      },
-    });
-
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `Claude usage request failed (${response.status})`,
-      );
-    }
-
-    const body = (await response.json()) as ClaudeUsageApiResponse;
-
-    return {
-      sessionPercent: body.five_hour.utilization,
-      sessionResetsAt: body.five_hour.resets_at,
-      weekPercent: body.seven_day.utilization,
-      weekResetsAt: body.seven_day.resets_at,
-      weekSonnetPercent: body.seven_day_sonnet?.utilization ?? null,
-    };
   }
 }

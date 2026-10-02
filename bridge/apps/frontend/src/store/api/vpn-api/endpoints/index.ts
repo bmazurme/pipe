@@ -15,14 +15,6 @@ export type WorkerSecretName =
   | 'WORKER_QWEN_API_KEY'
   | 'WORKER_CLAUDE_CODE_OAUTH_TOKEN';
 
-export interface ClaudeUsage {
-  sessionPercent: number;
-  sessionResetsAt: string;
-  weekPercent: number;
-  weekResetsAt: string;
-  weekSonnetPercent: number | null;
-}
-
 export interface ProvisionVpnServerBody {
   host: string;
   sshUser: string;
@@ -34,14 +26,6 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     getVpnStatus: builder.query<VpnStatus, void>({
       query: () => 'vpn/status',
       providesTags: ['VpnStatus'],
-    }),
-    getClaudeUsage: builder.query<ClaudeUsage, void>({
-      query: () => 'vpn/claude-usage',
-      providesTags: ['ClaudeUsage'],
-    }),
-    setClaudeOauthCredential: builder.mutation<void, { refreshToken: string }>({
-      query: (body) => ({ url: 'vpn/claude-oauth-credential', method: 'POST', body }),
-      invalidatesTags: ['ClaudeUsage'],
     }),
     getConnectionLink: builder.query<{ link: string }, void>({
       query: () => 'vpn/connection-link',
@@ -60,11 +44,9 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
 
 export const {
   useGetVpnStatusQuery,
-  useGetClaudeUsageQuery,
   useGetConnectionLinkQuery,
   useSyncVpnConfigMutation,
   useSetWorkerSecretMutation,
   useProvisionVpnServerMutation,
-  useSetClaudeOauthCredentialMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

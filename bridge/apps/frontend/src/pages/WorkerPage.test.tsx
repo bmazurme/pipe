@@ -53,14 +53,6 @@ const FILES = [
   { id: 12, originalName: '402-8.subscription.zip.enc', mimeType: 'application/zip', size: 4096, createdAt: '2026-09-30T07:00:00.000Z' },
 ];
 
-const CLAUDE_USAGE = {
-  sessionPercent: 42,
-  sessionResetsAt: '2026-10-02T15:00:00.000Z',
-  weekPercent: 17,
-  weekResetsAt: '2026-10-08T00:00:00.000Z',
-  weekSonnetPercent: 5,
-};
-
 const CONNECTION_LINK = {
   link: 'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
 };
@@ -100,7 +92,6 @@ beforeEach(() => {
       if (url.includes('/worker/jobs/2')) return jsonResponse(JOBS[1]);
       if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
       if (url.includes('/storage')) return jsonResponse(FILES);
-      if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
       if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
 
       return jsonResponse([]);
@@ -124,52 +115,6 @@ describe('WorkerPage', () => {
     expect(await screen.findByText('Скопировано')).toBeTruthy();
   });
 
-  it('renders Claude usage limits', async () => {
-    renderPage();
-
-    expect(await screen.findByText('Текущая сессия')).toBeTruthy();
-    expect(screen.getAllByText('42%').length).toBeGreaterThan(0);
-    expect(screen.getByText('Эта неделя')).toBeTruthy();
-    expect(screen.getAllByText('17%').length).toBeGreaterThan(0);
-    expect(screen.getByText('Полный сброс')).toBeTruthy();
-  });
-
-  it('saves the Claude OAuth refresh token', async () => {
-    const user = userEvent.setup();
-    let credentialBody: unknown;
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (request: Request) => {
-        const url = request.url;
-        if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
-        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
-        if (url.endsWith('/vpn/claude-oauth-credential') && request.method === 'POST') {
-          credentialBody = JSON.parse(await request.clone().text());
-          return new Response(null, { status: 204 });
-        }
-        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
-        if (url.includes('/storage')) return jsonResponse(FILES);
-        return jsonResponse([]);
-      }),
-    );
-
-    renderPage();
-    await screen.findByText('Текущая сессия');
-
-    const input = screen.getByPlaceholderText('refresh token');
-    await user.type(input, 'my-refresh-token');
-
-    const field = input.closest('label');
-    if (!field) throw new Error('field wrapper not found');
-    await user.click(within(field).getByText('Сохранить'));
-
-    await waitFor(() =>
-      expect(credentialBody).toEqual({ refreshToken: 'my-refresh-token' }),
-    );
-    expect(await screen.findByText('Сохранено')).toBeTruthy();
-  });
-
   it('saves a worker provider key', async () => {
     const user = userEvent.setup();
     let secretBody: unknown;
@@ -178,7 +123,6 @@ describe('WorkerPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/vpn/claude-usage')) return jsonResponse(CLAUDE_USAGE);
         if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
         if (url.endsWith('/vpn/worker-secrets') && request.method === 'POST') {
           secretBody = JSON.parse(await request.clone().text());
@@ -191,7 +135,7 @@ describe('WorkerPage', () => {
     );
 
     renderPage();
-    await screen.findByText('Текущая сессия');
+    await screen.findByText('Задача #1');
 
     const input = screen.getByPlaceholderText('sk-proj-...');
     await user.type(input, 'sk-test-key');

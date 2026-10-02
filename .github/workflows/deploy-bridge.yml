@@ -35,12 +35,6 @@
 #   BRIDGE_GITHUB_TOKEN, not GITHUB_TOKEN, since the latter is a reserved
 #   name GitHub Actions auto-populates with a different, more limited token)
 #
-# The Claude usage-limits widget (GET /api/v1/vpn/claude-usage) needs no
-# secret at all — it's seeded once from the Worker page (paste
-# claudeAiOauth.refreshToken from ~/.claude/.credentials.json into
-# POST /api/v1/vpn/claude-oauth-credential) and bridge persists + self-
-# refreshes the resulting access token in its own database from then on.
-#
 # For provision-vpn-server.yml (the VPN page's "Новый VPN-сервер" form —
 # POST /api/v1/vpn/provision pushes these three, then dispatches that
 # workflow; see bridge/deploy/provision-vpn-server.sh for what it installs):

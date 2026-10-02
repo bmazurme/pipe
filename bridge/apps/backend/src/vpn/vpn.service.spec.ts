@@ -1,8 +1,6 @@
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
 
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
-import { ClaudeOauthCredential } from './entities/claude-oauth-credential.entity';
 import { VpnService } from './vpn.service';
 
 const ENV: Record<string, string> = {
@@ -17,45 +15,8 @@ function configService(): ConfigService {
   return { get: (key: string) => ENV[key] } as unknown as ConfigService;
 }
 
-// A minimal in-memory stand-in for the real TypeORM repository — this
-// module only ever touches a single row, so `find`/`create`/`save` are
-// enough to exercise every path VpnService actually calls.
-function fakeClaudeCredRepo(seed?: Partial<ClaudeOauthCredential>) {
-  let row: ClaudeOauthCredential | null = seed
-    ? ({
-        id: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        accessToken: '',
-        refreshToken: '',
-        expiresAt: new Date(0),
-        ...seed,
-      } as ClaudeOauthCredential)
-    : null;
-
-  const repo = {
-    find: jest.fn(async () => (row ? [row] : [])),
-    create: jest.fn(
-      (partial: Partial<ClaudeOauthCredential>) =>
-        ({ ...partial }) as ClaudeOauthCredential,
-    ),
-    save: jest.fn(async (entity: ClaudeOauthCredential) => {
-      row = entity;
-      return entity;
-    }),
-  };
-
-  return {
-    repo: repo as unknown as Repository<ClaudeOauthCredential>,
-    getRow: () => row,
-  };
-}
-
-function vpnService(claudeCredRepo?: Repository<ClaudeOauthCredential>) {
-  return new VpnService(
-    configService(),
-    claudeCredRepo ?? fakeClaudeCredRepo().repo,
-  );
+function vpnService(): VpnService {
+  return new VpnService(configService());
 }
 
 const INBOUND = {
@@ -215,169 +176,6 @@ describe('VpnService', () => {
       expect(calls).toContain(
         'https://api.github.com/repos/acme/pipe/actions/workflows/deploy-bridge.yml/dispatches',
       );
-    });
-  });
-
-  describe('getClaudeUsage', () => {
-    const USAGE_RESPONSE = {
-      five_hour: { utilization: 42, resets_at: '2026-10-02T15:00:00.000Z' },
-      seven_day: { utilization: 17, resets_at: '2026-10-08T00:00:00.000Z' },
-      seven_day_sonnet: {
-        utilization: 5,
-        resets_at: '2026-10-08T00:00:00.000Z',
-      },
-    };
-
-    it("uses the stored access token directly when it isn't near expiry", async () => {
-      const { repo } = fakeClaudeCredRepo({
-        accessToken: 'live-access-token',
-        refreshToken: 'live-refresh-token',
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-      });
-
-      const calls: { url: string; init?: RequestInit }[] = [];
-      globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
-        calls.push({ url, init });
-        if (url === 'https://api.anthropic.com/api/oauth/usage') {
-          return jsonResponse(USAGE_RESPONSE);
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
-
-      const usage = await vpnService(repo).getClaudeUsage();
-
-      expect(calls).toHaveLength(1);
-      const headers = calls[0].init?.headers as Record<string, string>;
-      expect(headers.Authorization).toBe('Bearer live-access-token');
-      expect(headers['anthropic-beta']).toBe('oauth-2025-04-20');
-
-      expect(usage).toEqual({
-        sessionPercent: 42,
-        sessionResetsAt: '2026-10-02T15:00:00.000Z',
-        weekPercent: 17,
-        weekResetsAt: '2026-10-08T00:00:00.000Z',
-        weekSonnetPercent: 5,
-      });
-    });
-
-    it('refreshes an expiring access token first, persists the rotated credential, and retries', async () => {
-      const { repo, getRow } = fakeClaudeCredRepo({
-        accessToken: 'stale-access-token',
-        refreshToken: 'old-refresh-token',
-        expiresAt: new Date(Date.now() - 1000),
-      });
-
-      const calls: { url: string; init?: RequestInit }[] = [];
-      globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
-        calls.push({ url, init });
-        if (url === 'https://console.anthropic.com/v1/oauth/token') {
-          expect(JSON.parse(init!.body as string)).toEqual({
-            grant_type: 'refresh_token',
-            client_id: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
-            refresh_token: 'old-refresh-token',
-          });
-          return jsonResponse({
-            access_token: 'new-access-token',
-            refresh_token: 'new-refresh-token',
-            expires_in: 3600,
-          });
-        }
-        if (url === 'https://api.anthropic.com/api/oauth/usage') {
-          return jsonResponse(USAGE_RESPONSE);
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
-
-      await vpnService(repo).getClaudeUsage();
-
-      expect(calls).toHaveLength(2);
-      const usageHeaders = calls[1].init?.headers as Record<string, string>;
-      expect(usageHeaders.Authorization).toBe('Bearer new-access-token');
-
-      expect(getRow()).toMatchObject({
-        accessToken: 'new-access-token',
-        refreshToken: 'new-refresh-token',
-      });
-    });
-
-    it('throws when no Claude credential has been configured', async () => {
-      await expect(vpnService().getClaudeUsage()).rejects.toThrow(
-        'Claude OAuth credentials are not configured',
-      );
-    });
-
-    it('surfaces a BadGatewayException when the token refresh itself fails', async () => {
-      const { repo } = fakeClaudeCredRepo({
-        accessToken: 'stale-access-token',
-        refreshToken: 'revoked-refresh-token',
-        expiresAt: new Date(Date.now() - 1000),
-      });
-
-      globalThis.fetch = jest.fn(
-        async () => new Response('{"error":"invalid_grant"}', { status: 400 }),
-      ) as typeof fetch;
-
-      await expect(vpnService(repo).getClaudeUsage()).rejects.toThrow(
-        'Claude OAuth token refresh failed (400)',
-      );
-    });
-
-    it('surfaces a BadGatewayException when the usage request fails', async () => {
-      const { repo } = fakeClaudeCredRepo({
-        accessToken: 'live-access-token',
-        refreshToken: 'live-refresh-token',
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-      });
-
-      globalThis.fetch = jest.fn(
-        async () => new Response('nope', { status: 403 }),
-      ) as typeof fetch;
-
-      await expect(vpnService(repo).getClaudeUsage()).rejects.toThrow(
-        'Claude usage request failed (403)',
-      );
-    });
-  });
-
-  describe('setClaudeOauthCredential', () => {
-    it('exchanges a fresh refresh token and persists the resulting credential', async () => {
-      const { repo, getRow } = fakeClaudeCredRepo();
-
-      globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
-        if (url === 'https://console.anthropic.com/v1/oauth/token') {
-          expect(JSON.parse(init!.body as string)).toMatchObject({
-            grant_type: 'refresh_token',
-            refresh_token: 'seed-refresh-token',
-          });
-          return jsonResponse({
-            access_token: 'minted-access-token',
-            refresh_token: 'rotated-refresh-token',
-            expires_in: 3600,
-          });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
-
-      await vpnService(repo).setClaudeOauthCredential('seed-refresh-token');
-
-      expect(getRow()).toMatchObject({
-        accessToken: 'minted-access-token',
-        refreshToken: 'rotated-refresh-token',
-      });
-    });
-
-    it('rejects a bad refresh token without persisting anything', async () => {
-      const { repo, getRow } = fakeClaudeCredRepo();
-
-      globalThis.fetch = jest.fn(
-        async () => new Response('{"error":"invalid_grant"}', { status: 400 }),
-      ) as typeof fetch;
-
-      await expect(
-        vpnService(repo).setClaudeOauthCredential('bad-refresh-token'),
-      ).rejects.toThrow('Claude OAuth token refresh failed (400)');
-
-      expect(getRow()).toBeNull();
     });
   });
 

@@ -129,26 +129,3 @@
   min-width: 0;
 }
 
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.usageGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.usageRow {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.usageRowHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
