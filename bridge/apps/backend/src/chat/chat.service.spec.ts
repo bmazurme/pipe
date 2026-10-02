@@ -140,13 +140,16 @@ describe('ChatService', () => {
   });
 
   describe('claim', () => {
+    // node-postgres (via TypeORM's Repository.query) returns
+    // [rows, affectedCount] for an UPDATE, not a flat rows array — these
+    // mocks match that real shape, not a plain SELECT's.
     it('returns null when nothing is pending', async () => {
-      messageRepository.query!.mockResolvedValue([]);
+      messageRepository.query!.mockResolvedValue([[], 0]);
       await expect(service.claim(7)).resolves.toBeNull();
     });
 
     it('claims the oldest pending message atomically and returns history excluding the claimed placeholder', async () => {
-      messageRepository.query!.mockResolvedValue([{ id: 99 }]);
+      messageRepository.query!.mockResolvedValue([[{ id: 99 }], 1]);
       messageRepository.findOneByOrFail!.mockResolvedValue({
         id: 99,
         chatId: 1,

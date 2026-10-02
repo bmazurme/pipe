@@ -137,14 +137,17 @@ describe('WorkerService', () => {
   });
 
   describe('claim', () => {
+    // node-postgres (via TypeORM's Repository.query) returns
+    // [rows, affectedCount] for an UPDATE, not a flat rows array — these
+    // mocks match that real shape, not a plain SELECT's.
     it('returns null when nothing is queued', async () => {
-      repository.query!.mockResolvedValue([]);
+      repository.query!.mockResolvedValue([[], 0]);
       await expect(service.claim(7)).resolves.toBeNull();
       expect(repository.findOneBy).not.toHaveBeenCalled();
     });
 
     it('claims the oldest queued job atomically via SKIP LOCKED', async () => {
-      repository.query!.mockResolvedValue([{ id: 42 }]);
+      repository.query!.mockResolvedValue([[{ id: 42 }], 1]);
       repository.findOneBy!.mockResolvedValue({
         id: 42,
         status: JobStatus.Claimed,

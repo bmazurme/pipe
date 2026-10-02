@@ -96,8 +96,15 @@ export class ChatService {
     chat: Chat;
     history: ClaimedTurnHistoryEntry[];
   } | null> {
-    const rows: { id: number }[] = await this.messageRepository.query(
-      `UPDATE chat_messages SET status = $1, "updatedAt" = now()
+    // node-postgres's driver (via TypeORM's Repository.query) returns
+    // [rows, affectedCount] for an UPDATE/INSERT/DELETE — even one with a
+    // RETURNING clause — not a flat rows array the way a plain SELECT does.
+    // Indexing straight into the result ([0]?.id) silently reads the rows
+    // array itself as if it were the first row, always finding no `.id` and
+    // reporting "nothing to claim" even though the UPDATE just committed.
+    const [rows]: [{ id: number }[], number] =
+      await this.messageRepository.query(
+        `UPDATE chat_messages SET status = $1, "updatedAt" = now()
        WHERE id = (
          SELECT cm.id FROM chat_messages cm
          INNER JOIN chats c ON c.id = cm."chatId"
@@ -105,8 +112,8 @@ export class ChatService {
          ORDER BY cm."createdAt" ASC LIMIT 1 FOR UPDATE OF cm SKIP LOCKED
        )
        RETURNING id`,
-      [ChatMessageStatus.Running, ChatMessageStatus.Pending, userId],
-    );
+        [ChatMessageStatus.Running, ChatMessageStatus.Pending, userId],
+      );
 
     const claimedId = rows[0]?.id;
     if (claimedId === undefined) return null;

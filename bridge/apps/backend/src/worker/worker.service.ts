@@ -76,7 +76,13 @@ export class WorkerService {
   // processes polling the same account at once (each gets a different row,
   // or nothing, never the same one).
   async claim(userId: number, workerName?: string): Promise<Job | null> {
-    const rows = await this.jobRepository.query(
+    // node-postgres's driver (via TypeORM's Repository.query) returns
+    // [rows, affectedCount] for an UPDATE/INSERT/DELETE — even one with a
+    // RETURNING clause — not a flat rows array the way a plain SELECT does.
+    // Indexing straight into the result ([0]?.id) silently reads the rows
+    // array itself as if it were the first row, always finding no `.id` and
+    // reporting "nothing to claim" even though the UPDATE just committed.
+    const [rows]: [{ id: number }[], number] = await this.jobRepository.query(
       `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "updatedAt" = now()
        WHERE id = (
          SELECT id FROM jobs WHERE status = $3 AND "userId" = $4
