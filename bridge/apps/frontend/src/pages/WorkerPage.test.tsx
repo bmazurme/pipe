@@ -220,8 +220,9 @@ describe('WorkerPage', () => {
 
   // RSA-4096 keygen + a real Web Crypto RSA-OAEP decrypt genuinely takes a
   // few seconds — this is the one test actually exercising that, not a
-  // hang.
-  it('decrypts an encrypted parcel client-side, re-uploads it, and creates the job against the new file', { timeout: 15000 }, async () => {
+  // hang. 15s was enough locally but timed out on a slower CI runner; 30s
+  // gives real headroom without masking an actual hang.
+  it('decrypts an encrypted parcel client-side, re-uploads it, and creates the job against the new file', { timeout: 30000 }, async () => {
     const user = userEvent.setup();
     const { publicKey, privateKey } = generateKeyPair();
     const plaintext = Buffer.from('decrypted parcel bytes', 'utf-8');
