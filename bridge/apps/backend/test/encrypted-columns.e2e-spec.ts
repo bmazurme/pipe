@@ -37,7 +37,9 @@ describe('Encrypted columns (e2e)', () => {
     const userRepo = dataSource.getRepository(User);
     const credentialRepo = dataSource.getRepository(ClaudeCredential);
 
-    const user = await userRepo.save({ email: `e2e-enc-${Date.now()}@ntlstl.test` });
+    const user = await userRepo.save({
+      email: `e2e-enc-${Date.now()}@ntlstl.test`,
+    });
     const plaintextToken = 'sk-ant-oat-super-secret-value';
 
     const saved = await credentialRepo.save({
@@ -48,7 +50,10 @@ describe('Encrypted columns (e2e)', () => {
 
     // Raw SQL bypasses TypeORM's column transformer entirely — this is
     // what a DB dump or pgadmin access would actually see.
-    const [raw] = await dataSource.query('SELECT token FROM claude_credentials WHERE id = $1', [saved.id]);
+    const [raw] = await dataSource.query(
+      'SELECT token FROM claude_credentials WHERE id = $1',
+      [saved.id],
+    );
     expect(raw.token).not.toBe(plaintextToken);
     expect(raw.token).not.toContain(plaintextToken);
     expect(raw.token.split(':')).toHaveLength(4); // "<keyId>:<iv>:<authTag>:<ciphertext>"
