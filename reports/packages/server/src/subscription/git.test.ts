@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { buildBranchName, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
+import { buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, pushBranch } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -169,6 +169,54 @@ describe('checkoutTaskBranch', () => {
     git(dir, ['commit', '-m', 'local divergent commit', '--quiet']);
 
     await expect(checkoutTaskBranch(dir, 'task-branch')).rejects.toThrow('разошлась с origin');
+  });
+});
+
+describe('createBranch', () => {
+  // Regression test: a tracked project pointed at a repo with no commits/
+  // branches pushed yet produced a raw, unhelpful error — "Command failed:
+  // git fetch origin main\nfatal: couldn't find remote ref main" — with no
+  // indication of what to actually do about it.
+  it('throws a clear, actionable error when the base branch does not exist on origin', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+
+    await expect(createBranch(dir, 'mazur-28.09.2026-1', 'main')).rejects.toThrow(
+      /не удалось получить ветку "main" из origin/i,
+    );
+  });
+
+  it('branches off origin/baseBranch when it exists there', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['push', '-u', 'origin', 'master']);
+
+    await createBranch(dir, 'task-branch', 'master');
+
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task-branch');
+  });
+
+  it('checks out the branch directly, without touching origin, when it already exists locally', async () => {
+    const dir = initRepo();
+    git(dir, ['branch', 'task-branch']);
+    git(dir, ['checkout', 'master']);
+
+    await createBranch(dir, 'task-branch', 'main');
+
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task-branch');
+  });
+
+  it('refuses to create a branch when the tree is dirty', async () => {
+    const dir = initRepo();
+    writeFileSync(path.join(dir, 'uncommitted.txt'), 'oops');
+
+    await expect(createBranch(dir, 'task-branch', 'master')).rejects.toThrow('незакоммиченные изменения');
   });
 });
 

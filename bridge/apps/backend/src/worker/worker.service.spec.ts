@@ -294,20 +294,58 @@ describe('WorkerService', () => {
     it('creates a StoredFile, links it, and marks the job succeeded', async () => {
       const job: Job = {
         id: 1,
+        sourceFileId: 5,
         resultFileId: null,
         status: JobStatus.Running,
       } as Job;
       repository.findOne!.mockResolvedValue(job);
+      storageService.findOwned!.mockResolvedValue({
+        id: 5,
+        channel: null,
+        taskKey: null,
+      });
       storageService.create!.mockResolvedValue({ id: 99 });
       repository.save!.mockImplementation((j) => Promise.resolve(j));
 
       const file = { originalname: 'result.zip' } as Express.Multer.File;
       const result = await service.setResult(1, 7, file);
 
-      expect(storageService.create).toHaveBeenCalledWith(7, file);
+      expect(storageService.create).toHaveBeenCalledWith(7, file, {});
       expect(result.resultFileId).toBe(99);
       expect(result.status).toBe(JobStatus.Succeeded);
       expect(result.finishedAt).toBeInstanceOf(Date);
+    });
+
+    // Regression test: a Worker job run against an issue parcel (pushed by
+    // sync's push-issue or reports' Subscription) produced a result only
+    // ever retrievable through the Worker page — pull-issue/reports'
+    // Subscription pull had no way to find it, since it carried none of the
+    // source parcel's own channel/taskKey addressing (IMPROVEMENTS_TECH.md
+    // 2.3's read side only knew about agent-runner's results).
+    it("propagates the source file's channel/taskKey onto the result, as direction:'result'", async () => {
+      const job: Job = {
+        id: 1,
+        sourceFileId: 5,
+        resultFileId: null,
+        status: JobStatus.Running,
+      } as Job;
+      repository.findOne!.mockResolvedValue(job);
+      storageService.findOwned!.mockResolvedValue({
+        id: 5,
+        channel: 'issue',
+        taskKey: '402:6',
+      });
+      storageService.create!.mockResolvedValue({ id: 99 });
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      const file = { originalname: 'result.zip' } as Express.Multer.File;
+      await service.setResult(1, 7, file);
+
+      expect(storageService.create).toHaveBeenCalledWith(7, file, {
+        channel: 'issue',
+        taskKey: '402:6',
+        direction: 'result',
+      });
     });
   });
 });

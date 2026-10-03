@@ -7,7 +7,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { StorageService } from '../storage/storage.service';
-import { StoredFile } from '../storage/entities/stored-file.entity';
+import {
+  StoredFile,
+  StoredFileDirection,
+} from '../storage/entities/stored-file.entity';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
@@ -177,7 +180,29 @@ export class WorkerService {
     file: Express.Multer.File,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
-    const stored = await this.storageService.create(userId, file);
+    const sourceFile = await this.storageService.findOwned(
+      job.sourceFileId,
+      userId,
+    );
+
+    // Propagates the source parcel's own addressing (IMPROVEMENTS_TECH.md
+    // 2.3) onto the result, when it had any — lets sync's pull-issue and
+    // reports' Subscription find a Worker-job result the same way they'd
+    // find agent-runner's own, instead of a Worker job only ever being
+    // retrievable through the Worker page. Purely additive: a job run
+    // against a plain (non-issue) source still produces an unaddressed
+    // result, exactly as before.
+    const stored = await this.storageService.create(
+      userId,
+      file,
+      sourceFile.taskKey
+        ? {
+            channel: sourceFile.channel ?? undefined,
+            taskKey: sourceFile.taskKey,
+            direction: StoredFileDirection.Result,
+          }
+        : {},
+    );
 
     job.resultFileId = stored.id;
     job.status = JobStatus.Succeeded;

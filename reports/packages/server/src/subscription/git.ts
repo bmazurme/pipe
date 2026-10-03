@@ -54,7 +54,16 @@ export async function createBranch(path: string, branch: string, baseBranch = 'm
     return;
   }
 
-  await git(path, ['fetch', 'origin', baseBranch]);
+  try {
+    await git(path, ['fetch', 'origin', baseBranch]);
+  } catch (error) {
+    throw new Error(
+      `Не удалось получить ветку "${baseBranch}" из origin — убедитесь, что она существует в удалённом ` +
+        `репозитории (если репозиторий пуст, сделайте и запушьте первый коммит) или укажите правильную ` +
+        `базовую ветку в Settings → Отслеживаемые репозитории. (${(error as Error).message})`,
+    );
+  }
+
   await git(path, ['checkout', '-b', branch, `origin/${baseBranch}`]);
 }
 
