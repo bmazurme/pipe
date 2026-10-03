@@ -257,7 +257,15 @@ jobs:
       # plain env — see bridge-stack.yml's own `secrets:` block and
       # IMPROVEMENTS_TECH.md 1.6. Same immutable-object/content-hash-name
       # pattern as the VPN client config above; OPENAI/DEEPSEEK/QWEN keys are
-      # optional, but still need a (possibly empty) file to exist.
+      # optional (a deployment might only ever run sonnet/opus jobs) — but
+      # unlike a plain env var, `docker secret create` hard-rejects an empty
+      # value ("secret data must be larger than 0... bytes"), so an unset
+      # optional secret gets a non-empty placeholder instead of an empty
+      # file. Functionally equivalent to "not configured": worker only ever
+      # reads this when a job actually picks that provider, and the
+      # placeholder just fails against the real provider's API (a clean
+      # auth error) the same way a real-but-wrong key would — never
+      # silently treated as valid.
       - name: Write worker secrets
         env:
           WORKER_BRIDGE_API_KEY: ${{ secrets.WORKER_BRIDGE_API_KEY }}
@@ -270,7 +278,11 @@ jobs:
           for name in BRIDGE_API_KEY CLAUDE_CODE_OAUTH_TOKEN OPENAI_API_KEY DEEPSEEK_API_KEY QWEN_API_KEY; do
             value_var="WORKER_${name}"
             file_path="$RUNNER_TEMP/worker-${name,,}.secret"
-            printf '%s' "${!value_var}" > "$file_path"
+            if [ -z "${!value_var}" ]; then
+              printf 'not-configured' > "$file_path"
+            else
+              printf '%s' "${!value_var}" > "$file_path"
+            fi
             echo "WORKER_${name}_FILE=${file_path}" >> "$GITHUB_ENV"
             echo "WORKER_${name}_HASH=$(sha256sum "$file_path" | cut -c1-12)" >> "$GITHUB_ENV"
           done
