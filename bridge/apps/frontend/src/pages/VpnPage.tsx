@@ -31,7 +31,8 @@ const RECENT_THRESHOLD_MS = 5 * 60 * 1000;
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} ГБ`;
 }
 
 function VpnConnectionStatusGrid({ status }: { status: VpnStatus }) {
@@ -75,21 +76,38 @@ function VpnConnectionStatusGrid({ status }: { status: VpnStatus }) {
   );
 }
 
-function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
+interface VpnConnectionRowProps {
+  connection: VpnConnection;
+  // The active connection's status is already polled every 15s at page
+  // level (it's the one card that must never need a manual click to show
+  // something) — passed down instead of re-fetching, so this row reuses it
+  // rather than duplicating the top-level query and showing two different
+  // "Проверить" affordances for the same data.
+  liveStatus?: VpnStatus;
+  isLiveStatusLoading?: boolean;
+  isLiveStatusError?: boolean;
+}
+
+function VpnConnectionRow({
+  connection,
+  liveStatus,
+  isLiveStatusLoading,
+  isLiveStatusError,
+}: VpnConnectionRowProps) {
   const [activateVpnConnection, { isLoading: isActivating }] = useActivateVpnConnectionMutation();
   const [checkVpnConnectionStatus, { isLoading: isChecking }] = useCheckVpnConnectionStatusMutation();
   const [getVpnConnectionLink, { isLoading: isLinking }] = useGetVpnConnectionLinkMutation();
   const [deleteVpnConnection, { isLoading: isDeleting }] = useDeleteVpnConnectionMutation();
 
-  const [status, setStatus] = useState<VpnStatus | 'error' | null>(null);
+  const [checkedStatus, setCheckedStatus] = useState<VpnStatus | 'error' | null>(null);
   const [link, setLink] = useState<string | 'error' | null>(null);
   const [copied, setCopied] = useState(false);
 
   const handleCheck = async () => {
     try {
-      setStatus(await checkVpnConnectionStatus(connection.id).unwrap());
+      setCheckedStatus(await checkVpnConnectionStatus(connection.id).unwrap());
     } catch {
-      setStatus('error');
+      setCheckedStatus('error');
     }
   };
 
@@ -113,6 +131,10 @@ function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
     }
   };
 
+  // The active row shows the auto-polled status (always live, nothing to
+  // click); any other row shows whatever its own "Проверить" last fetched.
+  const status = connection.isActive ? (liveStatus ?? (isLiveStatusError ? 'error' : null)) : checkedStatus;
+
   return (
     <li className={styles.connectionRow}>
       <div className={styles.connectionHeader}>
@@ -126,18 +148,20 @@ function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
         </div>
         <div className={styles.connectionActions}>
           {!connection.isActive && (
-            <Button
-              view="normal"
-              size="s"
-              loading={isActivating}
-              onClick={() => void activateVpnConnection(connection.id)}
-            >
-              Сделать активным
-            </Button>
+            <>
+              <Button
+                view="normal"
+                size="s"
+                loading={isActivating}
+                onClick={() => void activateVpnConnection(connection.id)}
+              >
+                Сделать активным
+              </Button>
+              <Button view="normal" size="s" loading={isChecking} onClick={() => void handleCheck()}>
+                Проверить
+              </Button>
+            </>
           )}
-          <Button view="normal" size="s" loading={isChecking} onClick={() => void handleCheck()}>
-            Проверить
-          </Button>
           <Button view="normal" size="s" loading={isLinking} onClick={() => void handleGetLink()}>
             Ссылка
           </Button>
@@ -152,6 +176,14 @@ function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
           </Button>
         </div>
       </div>
+
+      {connection.isActive && isLiveStatusLoading && (
+        <div className={styles.statGrid}>
+          {[0, 1, 2, 3].map((row) => (
+            <Skeleton key={row} height={40} />
+          ))}
+        </div>
+      )}
 
       {status === 'error' && (
         <Text color="danger" variant="caption-2">
@@ -196,8 +228,7 @@ function parseVlessLink(raw: string): { serverAddress: string; name: string | nu
   };
 }
 
-function VpnConnectionsCard() {
-  const { data: connections, isLoading, isError } = useListVpnConnectionsQuery();
+function AddConnectionForm({ onDone }: { onDone: () => void }) {
   const [createVpnConnection, { isLoading: isCreating }] = useCreateVpnConnectionMutation();
 
   const [vlessLink, setVlessLink] = useState('');
@@ -245,38 +276,14 @@ function VpnConnectionsCard() {
         panelApiToken: panelApiToken.trim(),
         serverAddress: serverAddress.trim(),
       }).unwrap();
-      setVlessLink('');
-      setName('');
-      setNameEditedManually(false);
-      setPanelUrl('');
-      setPanelApiToken('');
-      setServerAddress('');
+      onDone();
     } catch (err) {
       setCreateError(typeof err === 'string' ? err : 'Не удалось добавить подключение');
     }
   };
 
   return (
-    <Card view="outlined" className={styles.card}>
-      <SectionHeader title="Доступные VPN" />
-      <Text color="secondary" variant="caption-2">
-        Несколько именованных VPN-подключений. Активное — то, из которого «Синхронизировать
-        настройки» выше пересобирает конфигурацию worker&apos;а.
-      </Text>
-
-      {isLoading && <Skeleton height={40} />}
-      {isError && (
-        <Alert theme="danger" view="filled" message="Не удалось получить список подключений" />
-      )}
-
-      {connections && connections.length > 0 && (
-        <ul className={styles.connectionList}>
-          {connections.map((connection: VpnConnection) => (
-            <VpnConnectionRow key={connection.id} connection={connection} />
-          ))}
-        </ul>
-      )}
-
+    <>
       <label className={styles.secretField}>
         <Text variant="body-2" color="secondary">
           Вставить ссылку подключения (необязательно)
@@ -286,6 +293,7 @@ function VpnConnectionsCard() {
           onUpdate={handleVlessLinkChange}
           placeholder="vless://uuid@host:port?...#название"
           hasClear
+          autoFocus
         />
         <Text color="secondary" variant="caption-2">
           Подставит адрес сервера (и название, если оно не указано) — URL и токен панели ссылка не
@@ -320,11 +328,95 @@ function VpnConnectionsCard() {
         </label>
       </div>
 
-      <Button view="action" loading={isCreating} disabled={!canSubmit} onClick={() => void handleCreate()}>
-        Добавить подключение
-      </Button>
+      <div className={styles.connectionActions}>
+        <Button view="action" loading={isCreating} disabled={!canSubmit} onClick={() => void handleCreate()}>
+          Добавить подключение
+        </Button>
+        <Button view="flat" onClick={onDone}>
+          Отмена
+        </Button>
+      </div>
 
       {createError && <Alert theme="danger" view="filled" message={createError} />}
+    </>
+  );
+}
+
+interface VpnConnectionsCardProps {
+  activeStatus?: VpnStatus;
+  isActiveStatusLoading: boolean;
+  isActiveStatusError: boolean;
+  onSync: () => void;
+  isSyncing: boolean;
+  syncResult: 'success' | 'error' | null;
+}
+
+function VpnConnectionsCard({
+  activeStatus,
+  isActiveStatusLoading,
+  isActiveStatusError,
+  onSync,
+  isSyncing,
+  syncResult,
+}: VpnConnectionsCardProps) {
+  const { data: connections, isLoading, isError } = useListVpnConnectionsQuery();
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader
+        title="Доступные VPN"
+        actions={
+          <Button view="normal" size="s" loading={isSyncing} onClick={onSync}>
+            Синхронизировать настройки
+          </Button>
+        }
+      />
+      <Text color="secondary" variant="caption-2">
+        Активное подключение (ниже) — то, из которого «Синхронизировать настройки» пересобирает
+        конфигурацию worker&apos;а и устраняет рассинхронизацию, если настройки сервера менялись
+        напрямую через его панель.
+      </Text>
+
+      {syncResult === 'success' && (
+        <Alert theme="success" view="filled" message="Запущен передеплой worker (~15 минут)." />
+      )}
+      {syncResult === 'error' && (
+        <Alert theme="danger" view="filled" message="Не удалось синхронизировать настройки" />
+      )}
+
+      {isLoading && <Skeleton height={40} />}
+      {isError && (
+        <Alert theme="danger" view="filled" message="Не удалось получить список подключений" />
+      )}
+
+      {connections && connections.length > 0 && (
+        <ul className={styles.connectionList}>
+          {connections.map((connection: VpnConnection) => (
+            <VpnConnectionRow
+              key={connection.id}
+              connection={connection}
+              liveStatus={connection.isActive ? activeStatus : undefined}
+              isLiveStatusLoading={connection.isActive ? isActiveStatusLoading : undefined}
+              isLiveStatusError={connection.isActive ? isActiveStatusError : undefined}
+            />
+          ))}
+        </ul>
+      )}
+
+      {!isLoading && connections && connections.length === 0 && (
+        <Text color="secondary" variant="body-2">
+          Подключений ещё нет — добавьте первое ниже.
+        </Text>
+      )}
+
+      {showAddForm ? (
+        <AddConnectionForm onDone={() => setShowAddForm(false)} />
+      ) : (
+        <Button view="outlined" onClick={() => setShowAddForm(true)}>
+          Новое подключение
+        </Button>
+      )}
     </Card>
   );
 }
@@ -423,49 +515,14 @@ export function VpnPage() {
         description="Статус туннеля, через который worker обращается к AI-провайдерам, и его настройка."
       />
 
-      <Card view="outlined" className={styles.card}>
-        <SectionHeader
-          title="Статус активного подключения"
-          actions={
-            <Button view="normal" size="s" loading={isSyncing} onClick={() => void handleSync()}>
-              Синхронизировать настройки
-            </Button>
-          }
-        />
-
-        <Text color="secondary" variant="caption-2">
-          Пересобирает конфигурацию worker-клиента из текущих настроек активного VPN-подключения
-          (адрес, SNI, публичный ключ) и переразворачивает worker — устраняет рассинхронизацию,
-          если настройки сервера менялись напрямую через его панель.
-        </Text>
-
-        {syncResult === 'success' && (
-          <Alert theme="success" view="filled" message="Запущен передеплой worker (~15 минут)." />
-        )}
-        {syncResult === 'error' && (
-          <Alert theme="danger" view="filled" message="Не удалось синхронизировать настройки" />
-        )}
-
-        {isLoading && (
-          <div className={styles.statGrid}>
-            {[0, 1, 2, 3].map((row) => (
-              <Skeleton key={row} height={40} />
-            ))}
-          </div>
-        )}
-
-        {isError && (
-          <Alert
-            theme="danger"
-            view="filled"
-            message="Не удалось получить статус — проверьте, что ниже выбрано активное подключение"
-          />
-        )}
-
-        {status && <VpnConnectionStatusGrid status={status} />}
-      </Card>
-
-      <VpnConnectionsCard />
+      <VpnConnectionsCard
+        activeStatus={status}
+        isActiveStatusLoading={isLoading}
+        isActiveStatusError={isError}
+        onSync={() => void handleSync()}
+        isSyncing={isSyncing}
+        syncResult={syncResult}
+      />
 
       <ProvisionServerForm />
 

@@ -45,7 +45,7 @@ beforeEach(() => {
 });
 
 describe('VpnPage', () => {
-  it('renders the active connection status', async () => {
+  it("shows the active connection's status inline on its own row, with no manual check needed", async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
@@ -57,9 +57,33 @@ describe('VpnPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('www.samsung.com')).toBeTruthy();
-    expect(await screen.findByText('443')).toBeTruthy();
-    expect(await screen.findByText(/^активно ·/)).toBeTruthy();
+    const primaryRow = (await screen.findByText('primary')).closest('li');
+    if (!primaryRow) throw new Error('primary row not found');
+
+    expect(within(primaryRow).getByText('www.samsung.com')).toBeTruthy();
+    expect(within(primaryRow).getByText('443')).toBeTruthy();
+    expect(within(primaryRow).getByText(/^активно ·/)).toBeTruthy();
+    // No separate "Проверить" for the active row — its status is already
+    // live from the polled query above, not a manual per-row fetch.
+    expect(within(primaryRow).queryByText('Проверить')).toBeNull();
+    expect(within(primaryRow).queryByText('Сделать активным')).toBeNull();
+  });
+
+  it('formats large traffic totals in GB, not an unreadable number of MB', async () => {
+    const bigTraffic = { ...STATUS, upBytes: 9_575_219_200, downBytes: 200_025_600_000 };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/vpn/status')) return jsonResponse(bigTraffic);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(CONNECTIONS);
+        return jsonResponse({});
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText(/↑ 8\.9 ГБ · ↓ 186\.3 ГБ/)).toBeTruthy();
   });
 
   it('lists connections, showing which one is active', async () => {
@@ -204,6 +228,7 @@ describe('VpnPage', () => {
 
     renderPage();
     await screen.findByText('primary');
+    await user.click(screen.getByText('Новое подключение'));
 
     await user.type(screen.getByPlaceholderText('Например, Нидерланды'), 'new');
     await user.type(screen.getByPlaceholderText('http://1.2.3.4:2053/abcdef'), 'http://panel.example.com');
@@ -241,6 +266,7 @@ describe('VpnPage', () => {
 
     renderPage();
     await screen.findByText('primary');
+    await user.click(screen.getByText('Новое подключение'));
 
     await user.type(
       screen.getByPlaceholderText('vless://uuid@host:port?...#название'),
