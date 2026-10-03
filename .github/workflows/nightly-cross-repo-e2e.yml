@@ -41,6 +41,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      # worker is a real root workspace member (IMPROVEMENTS_TECH.md 5.1) —
+      # the one root `npm ci` below already installs its dependencies.
+      # bridge is not, so it still needs its own separate install.
       - run: npm ci
       - run: npm run build --workspace=packages/protocol
 
@@ -50,8 +53,6 @@ jobs:
         run: npm run build -w backend
         working-directory: bridge
 
-      - run: npm ci
-        working-directory: worker
       - name: Build worker
         run: npm run build
         working-directory: worker

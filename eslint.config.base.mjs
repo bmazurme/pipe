@@ -5,12 +5,13 @@
 // deliberately not forced onto them, to avoid risking lint breakage in
 // packages that already pass.
 //
-// Each consuming package has its own independent install (this repo's
-// products are deliberately not one npm/pnpm workspace — see CLAUDE.md), so
-// each one still needs its own `eslint`/`typescript-eslint` devDependencies;
-// this file only centralizes the actual rule choices, imported by a thin
-// per-package `eslint.config.mjs` that adds that package's own
-// `languageOptions.parserOptions.project` and `ignores`.
+// packages/protocol, harness, sync, and worker are real root workspace
+// members now (IMPROVEMENTS_TECH.md 5.1) and share the root's hoisted
+// `eslint`/`typescript-eslint` — reports' server is still its own
+// independent install and keeps its own copies of both. Every consumer
+// still needs its own thin per-package `eslint.config.mjs` importing this
+// file, since each adds its own `languageOptions.parserOptions.project` and
+// `ignores` — this file only centralizes the actual rule choices.
 import tseslint from 'typescript-eslint';
 
 export const baseConfig = tseslint.config(

@@ -25,16 +25,19 @@ Cross-cutting detail that spans more than one product — port assignments, the 
 
 ## Repository layout & install model
 
-Only `packages/protocol` and `harness` are real npm workspaces (declared in the root `package.json`). `sync/`, `reports/`, and `bridge/` are deliberately **not** workspace members — each has its own independent `npm install`/lockfile/build lifecycle, and depends on `@pipe/protocol` via a `file:` path rather than a workspace reference:
+`packages/protocol`, `harness`, `sync`, and `worker` are real npm workspaces, declared in the root `package.json` (IMPROVEMENTS_TECH.md 5.1 — `reports/` and `bridge/` were deliberately left out of this, see below). A single `npm install` from the repo root sets up all four; `sync/package.json` and `worker/package.json` depend on `@pipe/protocol` via a plain workspace-resolved range (`"@pipe/protocol": "*"`), not a `file:` path, and neither has its own lockfile or `node_modules` anymore — everything hoists into the root's.
 
-- `sync/package.json` → `"@pipe/protocol": "file:../packages/protocol"`
+`reports/` and `bridge/` are still deliberately **not** root workspace members — each keeps its own independent `npm install`/lockfile/build lifecycle, and depends on `@pipe/protocol` via a `file:` path:
+
 - `reports/packages/server/package.json` → `"@pipe/protocol": "file:../../../packages/protocol"`
 - `bridge/apps/frontend/package.json` → `"@pipe/protocol": "file:../../../packages/protocol"`
 
-Consequences:
-- After changing `packages/protocol`, run `npm run build` there before the change is visible anywhere — a `file:` dependency resolves to the built `dist/`, not the source.
-- `npm install` at the repo root only sets up `packages/protocol` and `harness`; sync/reports/bridge each need their own `npm install` from their own directory.
-- `reports/` and `bridge/` are themselves npm workspace roots one level down (`reports/packages/{client,server,shared}`, `bridge/apps/{backend,frontend}`), independent of the outer root.
+Both are themselves npm workspace roots one level down (`reports/packages/{client,server,shared}`, `bridge/apps/{backend,frontend}`), independent of the outer root — folding either into the root workspace is a materially bigger, riskier change than sync/worker was (flattening an existing nested workspace, plus CWD-sensitive Vite/vitest config in both — see this file's own frontend-test-invocation warning below) and was deliberately scoped out of 5.1 rather than attempted in the same pass.
+
+Consequences that still apply everywhere, workspace member or not:
+- After changing `packages/protocol`, run `npm run build` there before the change is visible anywhere — its `exports` map points at `dist/`, not the source, regardless of how a consumer depends on it.
+- `reports/` and `bridge/` each still need their own `npm install` from their own directory; `sync`/`worker` do not — a root `npm install` covers them.
+- worker's own Dockerfile (`worker/Dockerfile`) reflects this: its build stage runs `npm ci` from the repo root (needing every workspace's `package.json` present, even ones it doesn't use, since `npm ci` validates the lockfile against all of them) rather than a self-contained install inside `worker/`.
 
 `packages/protocol`'s `exports` map has one subpath per module (`./dictionary`, `./manifest`, `./encryption`, `./pack`, `./walk`, `./leakScan`). Always import a specific subpath (e.g. `@pipe/protocol/leakScan`), never the bare `@pipe/protocol` barrel, from browser code (bridge's frontend) — the barrel re-exports `encryption.ts`, which pulls in `node:crypto` and breaks the Vite build.
 
@@ -56,7 +59,7 @@ Tests are `.test.ts` files compiled alongside source and run from `dist/` via No
 ### sync
 ```bash
 cd sync
-npm install
+npm install     # root workspace member — this actually installs for the whole workspace (protocol/harness/sync/worker), same as running it from the repo root
 npm run build   # tsc -b
 npm test        # tsc -b && node --test --test-concurrency=1 'dist/**/*.test.js'
 node --test --test-concurrency=1 dist/commands/pushIssue.test.js   # a single test file, after building
@@ -102,7 +105,7 @@ Run frontend tests via the `npm test -w frontend` script, not `vitest` invoked d
 ### worker
 ```bash
 cd worker
-npm install
+npm install     # root workspace member — same as sync, this installs for the whole workspace
 npm run build   # tsc -b
 npm start       # node dist/index.js — polls bridge, needs BRIDGE_API_URL/BRIDGE_API_KEY (see worker/README.md)
 npm test        # tsc -b && node --test 'dist/**/*.test.js'

@@ -5,7 +5,9 @@
   "description": "Monorepo for the sync/reports/bridge ecosystem: shared protocol package and cross-tool status harness.",
   "workspaces": [
     "packages/protocol",
-    "harness"
+    "harness",
+    "sync",
+    "worker"
   ],
   "engines": {
     "node": ">=22"
