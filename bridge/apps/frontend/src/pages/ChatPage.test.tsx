@@ -111,6 +111,66 @@ describe('ChatPage', () => {
     expect(await screen.findByText('Здравствуйте!')).toBeTruthy();
   });
 
+  it('lets the model be picked from the composer before any chat exists, and uses it for the implicit create', async () => {
+    const user = userEvent.setup();
+    let createBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([]);
+        if (url.endsWith('/chat/chats') && method === 'POST') {
+          createBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...CHAT, model: 'gpt' });
+        }
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`)) return jsonResponse(MESSAGES);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Chat');
+
+    expect(screen.getByText('Модель:')).toBeTruthy();
+
+    await user.click(screen.getByText('Claude Sonnet'));
+    await user.click(await screen.findByText('GPT'));
+
+    await user.type(input(), 'Привет{Enter}');
+
+    await waitFor(() => expect(createBody).toEqual({ model: 'gpt' }));
+  });
+
+  it('hides the composer model picker once a chat is active', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([CHAT]);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(MESSAGES);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+
+    const historyButtonEl = document.querySelector('[data-qa="header-action-history"]');
+    if (!historyButtonEl) throw new Error('history button not found');
+    const user = userEvent.setup();
+    await user.click(historyButtonEl);
+    await user.click(await screen.findByText(CHAT.title));
+
+    await screen.findByText('Привет');
+    expect(screen.queryByText('Модель:')).toBeNull();
+  });
+
   it('renders a failed assistant turn inline instead of leaving it blank', async () => {
     const user = userEvent.setup();
     const failedMessages = [

@@ -77,7 +77,10 @@ function toChatMessage(message: ChatMessageMeta): TChatMessage {
   const timestamp = message.createdAt;
 
   if (message.role === 'user') {
-    return { role: 'user', id, timestamp, content: message.content };
+    // Assistant replies render as markdown unconditionally (AIKit has no
+    // off switch for that side) — matching it here means a user's own
+    // pasted code block or list renders instead of showing raw `*`/backticks.
+    return { role: 'user', id, timestamp, content: message.content, format: 'markdown' };
   }
 
   const content = message.status === 'failed'
@@ -119,7 +122,10 @@ export function ChatPage() {
   // (AIKit's own welcome/empty state) — typing and sending there implicitly
   // starts a new chat with whatever model is currently picked, rather than
   // silently doing nothing until the user finds the explicit "Новый чат"
-  // dialog first.
+  // dialog first. That "currently picked" model has to be visible and
+  // changeable right there in the composer, not just inside the separate
+  // dialog — otherwise the first message of every implicit chat silently
+  // goes to sonnet with no way to tell or change that in advance.
   const handleSendMessage = async (data: TSubmitData) => {
     let chatId = activeChatId;
 
@@ -157,6 +163,22 @@ export function ChatPage() {
     await renameChat({ id: activeChatId, title }).unwrap();
   };
 
+  // Lets the user see/change which model their first message will go to
+  // before a chat exists. Once a chat is active its model is already fixed,
+  // so the picker disappears rather than implying it could still be changed.
+  const footerModelPicker = !activeChat ? (
+    <div className={styles.modelPicker}>
+      <span className={styles.modelPickerLabel}>Модель:</span>
+      <Select
+        size="s"
+        value={[newChatModel]}
+        onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
+        options={MODEL_OPTIONS}
+        width={150}
+      />
+    </div>
+  ) : undefined;
+
   // Only offered once a chat exists — renaming the "no chat selected" state
   // makes no sense, same reasoning as NewChat's header-action gating.
   const headerMenuItems: HeaderMenuItem[] | undefined = activeChat
@@ -190,6 +212,7 @@ export function ChatPage() {
           onCreateChat={() => setIsCreateDialogOpen(true)}
           onDeleteChat={handleDeleteChat}
           headerProps={{ menuItems: headerMenuItems }}
+          promptInputProps={{ footerProps: { bottomContent: footerModelPicker } }}
         />
       </div>
 

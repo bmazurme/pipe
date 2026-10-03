@@ -29,3 +29,15 @@
 .container :global(.g-aikit-message-list) {
   min-height: 300px;
 }
+
+.modelPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modelPickerLabel {
+  color: var(--g-color-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
