@@ -177,11 +177,38 @@ function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
   );
 }
 
+// A vless:// link has no panel URL/API token (those are admin-only, never
+// part of a client link) — it only ever autofills the server address, and
+// the name when the link carries a remark and nothing's been typed yet.
+function parseVlessLink(raw: string): { serverAddress: string; name: string | null } | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== 'vless:' || !url.hostname) return null;
+
+  return {
+    serverAddress: url.hostname,
+    name: url.hash ? decodeURIComponent(url.hash.slice(1)) || null : null,
+  };
+}
+
 function VpnConnectionsCard() {
   const { data: connections, isLoading, isError } = useListVpnConnectionsQuery();
   const [createVpnConnection, { isLoading: isCreating }] = useCreateVpnConnectionMutation();
 
+  const [vlessLink, setVlessLink] = useState('');
   const [name, setName] = useState('');
+  // Distinct from `!name.trim()` — typing the link char by char (as in a
+  // real paste-then-edit, or just `userEvent.type`) parses a valid URL
+  // before its #fragment is fully there yet, autofilling a truncated name;
+  // gating on "was this field ever touched directly" instead of "is it
+  // currently empty" means later, more-complete parses keep overwriting it
+  // instead of getting locked out by their own earlier partial fill.
+  const [nameEditedManually, setNameEditedManually] = useState(false);
   const [panelUrl, setPanelUrl] = useState('');
   const [panelApiToken, setPanelApiToken] = useState('');
   const [serverAddress, setServerAddress] = useState('');
@@ -190,6 +217,22 @@ function VpnConnectionsCard() {
   const canSubmit = Boolean(
     name.trim() && panelUrl.trim() && panelApiToken.trim() && serverAddress.trim(),
   );
+
+  const handleNameChange = (next: string) => {
+    setName(next);
+    setNameEditedManually(true);
+  };
+
+  const handleVlessLinkChange = (next: string) => {
+    setVlessLink(next);
+    const parsed = parseVlessLink(next);
+    if (!parsed) return;
+
+    setServerAddress(parsed.serverAddress);
+    if (parsed.name && !nameEditedManually) {
+      setName(parsed.name);
+    }
+  };
 
   const handleCreate = async () => {
     if (!canSubmit) return;
@@ -202,7 +245,9 @@ function VpnConnectionsCard() {
         panelApiToken: panelApiToken.trim(),
         serverAddress: serverAddress.trim(),
       }).unwrap();
+      setVlessLink('');
       setName('');
+      setNameEditedManually(false);
       setPanelUrl('');
       setPanelApiToken('');
       setServerAddress('');
@@ -232,12 +277,28 @@ function VpnConnectionsCard() {
         </ul>
       )}
 
+      <label className={styles.secretField}>
+        <Text variant="body-2" color="secondary">
+          Вставить ссылку подключения (необязательно)
+        </Text>
+        <TextInput
+          value={vlessLink}
+          onUpdate={handleVlessLinkChange}
+          placeholder="vless://uuid@host:port?...#название"
+          hasClear
+        />
+        <Text color="secondary" variant="caption-2">
+          Подставит адрес сервера (и название, если оно не указано) — URL и токен панели ссылка не
+          содержит, их нужно ввести отдельно.
+        </Text>
+      </label>
+
       <div className={styles.provisionGrid}>
         <label className={styles.secretField}>
           <Text variant="body-2" color="secondary">
             Название
           </Text>
-          <TextInput value={name} onUpdate={setName} placeholder="Например, Нидерланды" />
+          <TextInput value={name} onUpdate={handleNameChange} placeholder="Например, Нидерланды" />
         </label>
         <label className={styles.secretField}>
           <Text variant="body-2" color="secondary">

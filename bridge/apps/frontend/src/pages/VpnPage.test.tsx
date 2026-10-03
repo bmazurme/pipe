@@ -226,6 +226,31 @@ describe('VpnPage', () => {
     );
   });
 
+  it('autofills server address and name from a pasted vless link', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/status')) return jsonResponse(STATUS);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(CONNECTIONS);
+        return jsonResponse({});
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('primary');
+
+    await user.type(
+      screen.getByPlaceholderText('vless://uuid@host:port?...#название'),
+      'vless://6f760030-24e5-4a14-814f-7a6a275c125e@185.125.231.78:443?encryption=none&security=reality#vpn-main-main',
+    );
+
+    expect(screen.getByPlaceholderText('1.2.3.4')).toHaveValue('185.125.231.78');
+    expect(screen.getByPlaceholderText('Например, Нидерланды')).toHaveValue('vpn-main-main');
+  });
+
   it('provisions a new VPN server', async () => {
     const user = userEvent.setup();
     let provisionBody: unknown;
