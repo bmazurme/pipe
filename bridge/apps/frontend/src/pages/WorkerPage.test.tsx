@@ -97,6 +97,7 @@ beforeEach(() => {
       if (url.includes('/worker/jobs/1')) return jsonResponse(JOBS[0]);
       if (url.includes('/worker/jobs/2')) return jsonResponse(JOBS[1]);
       if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+      if (url.endsWith('/worker/status')) return jsonResponse({ isUp: false, workers: [] });
       if (url.includes('/storage')) return jsonResponse(FILES);
       if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
 
@@ -286,12 +287,116 @@ describe('WorkerPage', () => {
     expect(screen.queryByPlaceholderText('sk-proj-...')).toBeNull();
   });
 
+  it('shows the worker as down when no recent heartbeat exists', async () => {
+    renderPage();
+    expect(await screen.findByText('Не отвечает')).toBeTruthy();
+  });
+
+  it('shows the worker as up when the backend reports a recent heartbeat', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/worker/status')) {
+          return jsonResponse({
+            isUp: true,
+            workers: [{ name: 'worker-host-1', lastSeenAt: new Date().toISOString(), isUp: true }],
+          });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByText('Работает')).toBeTruthy();
+  });
+
+  it('shows the task state as idle when there are no jobs at all', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs')) return jsonResponse([]);
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: false, workers: [] });
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByText('Свободен')).toBeTruthy();
+  });
+
+  it('shows the task state as running when the most recent job is still active', async () => {
+    const mostRecentFirst = [JOBS[0], JOBS[1]]; // running first — deriveTaskState reads jobs[0] as "most recent"
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs')) return jsonResponse(mostRecentFirst);
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: false, workers: [] });
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByText('Выполняется задача')).toBeTruthy();
+  });
+
+  it('shows the task state as done when the most recent job succeeded', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs')) return jsonResponse([JOBS[1]]);
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: false, workers: [] });
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByText('Выполнено')).toBeTruthy();
+  });
+
+  it('shows the task state as error when the most recent job failed', async () => {
+    const failedJob = { ...JOBS[1], id: 3, status: 'failed', errorMessage: 'boom' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs')) return jsonResponse([failedJob]);
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: false, workers: [] });
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Задача #3');
+    // Anchored for the same reason as the "lists jobs" test above — the job
+    // row's own Label text is "Ошибка" too, so this just confirms the status
+    // card's badge (not the job row) renders, via getAllByText's count.
+    expect(screen.getAllByText('Ошибка')).toHaveLength(2);
+  });
+
   it('lists jobs with their model and status', async () => {
     renderPage();
 
     await screen.findByText('Задача #1');
     expect(screen.getByText('Задача #2')).toBeTruthy();
-    expect(screen.getByText(/Выполняется/)).toBeTruthy();
+    // The status card's own "Выполняется задача" badge also matches a loose
+    // /Выполняется/ regex — anchored to the job row's own "…"-suffixed text
+    // (see isActive's '…' append) so this only matches job #1's own label.
+    expect(screen.getByText(/^Выполняется…$/)).toBeTruthy();
     expect(screen.getByText('Готово')).toBeTruthy();
   });
 

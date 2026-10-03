@@ -29,6 +29,7 @@ import {
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   useGetJobQuery,
+  useGetWorkerStatusQuery,
   useListClaudeCredentialsQuery,
   useListFilesQuery,
   useListJobsQuery,
@@ -49,6 +50,10 @@ import { uploadWithProgress } from './storage/uploadWithProgress';
 import styles from './WorkerPage.module.css';
 
 const JOB_POLL_INTERVAL_MS = 3000;
+// Comfortably below the backend's own 30s staleness window
+// (WorkerHeartbeatService's STALE_AFTER_MS) so an actually-down worker
+// reads as "down" within one or two polls, not half a minute late.
+const WORKER_STATUS_POLL_INTERVAL_MS = 10000;
 
 const MODEL_OPTIONS: { value: WorkerJobModel; content: string }[] = [
   { value: 'sonnet', content: 'Claude Sonnet' },
@@ -76,6 +81,65 @@ const STATUS_THEME: Record<WorkerJobStatus, 'normal' | 'info' | 'success' | 'dan
 
 function isActive(status: WorkerJobStatus): boolean {
   return ACTIVE_JOB_STATUSES.includes(status);
+}
+
+type TaskState = 'idle' | 'running' | 'done' | 'error';
+
+const TASK_STATE_LABEL: Record<TaskState, string> = {
+  idle: 'Свободен',
+  running: 'Выполняется задача',
+  done: 'Выполнено',
+  error: 'Ошибка',
+};
+
+const TASK_STATE_THEME: Record<TaskState, 'normal' | 'info' | 'success' | 'danger'> = {
+  idle: 'normal',
+  running: 'info',
+  done: 'success',
+  error: 'danger',
+};
+
+// Jobs are already sorted newest-first (see WorkerService.findAllByUser),
+// so the current "task slot" state is just the most recent job's status,
+// collapsed into the four states the Worker page actually cares about —
+// no separate tracking needed.
+function deriveTaskState(jobs: WorkerJob[]): TaskState {
+  const latest = jobs[0];
+  if (!latest) return 'idle';
+  if (isActive(latest.status)) return 'running';
+  if (latest.status === 'failed') return 'error';
+  return 'done';
+}
+
+function WorkerStatusCard({ jobs }: { jobs: WorkerJob[] }) {
+  const { data: status, isLoading } = useGetWorkerStatusQuery(undefined, {
+    pollingInterval: WORKER_STATUS_POLL_INTERVAL_MS,
+  });
+  const taskState = deriveTaskState(jobs);
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Статус" />
+      <div className={styles.statusRow}>
+        <Text color="secondary" variant="body-2">
+          Worker
+        </Text>
+        {isLoading ? (
+          <Skeleton className={styles.statusSkeleton} />
+        ) : (
+          <Label theme={status?.isUp ? 'success' : 'danger'}>
+            {status?.isUp ? 'Работает' : 'Не отвечает'}
+          </Label>
+        )}
+      </div>
+      <div className={styles.statusRow}>
+        <Text color="secondary" variant="body-2">
+          Задачи
+        </Text>
+        <Label theme={TASK_STATE_THEME[taskState]}>{TASK_STATE_LABEL[taskState]}</Label>
+      </div>
+    </Card>
+  );
 }
 
 function VpnConnectionSelector() {
@@ -504,6 +568,8 @@ export function WorkerPage() {
         title="Worker"
         description="Запуск ИИ-агента над посылкой из Storage — Claude, GPT, DeepSeek или Qwen."
       />
+
+      <WorkerStatusCard jobs={jobs} />
 
       <Card view="outlined" className={styles.card}>
         <SectionHeader title="Новая задача" />

@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
 
 type MockRepository = Partial<Record<keyof Repository<Job>, jest.Mock>>;
@@ -28,6 +29,9 @@ describe('WorkerService', () => {
   let claudeCredentialsService: Partial<
     Record<keyof ClaudeCredentialsService, jest.Mock>
   >;
+  let heartbeatService: Partial<
+    Record<keyof WorkerHeartbeatService, jest.Mock>
+  >;
 
   beforeEach(async () => {
     repository = createMockRepository();
@@ -39,6 +43,9 @@ describe('WorkerService', () => {
     claudeCredentialsService = {
       resolveToken: jest.fn(),
     };
+    heartbeatService = {
+      record: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +56,7 @@ describe('WorkerService', () => {
           provide: ClaudeCredentialsService,
           useValue: claudeCredentialsService,
         },
+        { provide: WorkerHeartbeatService, useValue: heartbeatService },
       ],
     }).compile();
 
@@ -214,6 +222,18 @@ describe('WorkerService', () => {
       );
       expect(repository.findOneBy).toHaveBeenCalledWith({ id: 42 });
       expect(job).toMatchObject({ id: 42, status: JobStatus.Claimed });
+    });
+
+    it('records a heartbeat for the named worker even when nothing is queued', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+      await service.claim(7, 'worker-host-1');
+      expect(heartbeatService.record).toHaveBeenCalledWith(7, 'worker-host-1');
+    });
+
+    it('does not record a heartbeat when no worker name was given', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+      await service.claim(7);
+      expect(heartbeatService.record).not.toHaveBeenCalled();
     });
   });
 

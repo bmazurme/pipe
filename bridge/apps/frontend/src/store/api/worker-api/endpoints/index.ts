@@ -40,11 +40,25 @@ export interface ClaudeCredential {
   createdAt: string;
 }
 
+export interface WorkerHeartbeat {
+  name: string;
+  lastSeenAt: string;
+  isUp: boolean;
+}
+
+export interface WorkerStatus {
+  isUp: boolean;
+  workers: WorkerHeartbeat[];
+}
+
 const workerApiEndpoints = workerApi.injectEndpoints({
   endpoints: (builder) => ({
     listJobs: builder.query<WorkerJob[], void>({
       query: () => 'worker/jobs',
       providesTags: ['WorkerJob'],
+    }),
+    getWorkerStatus: builder.query<WorkerStatus, void>({
+      query: () => 'worker/status',
     }),
     getJob: builder.query<WorkerJob, number>({
       query: (id) => `worker/jobs/${id}`,
@@ -125,6 +139,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
 export const {
   useListJobsQuery,
   useGetJobQuery,
+  useGetWorkerStatusQuery,
   useCreateJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,

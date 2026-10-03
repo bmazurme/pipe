@@ -12,6 +12,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobStatus } from './entities/job.entity';
+import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
 
@@ -22,6 +23,7 @@ export class WorkerService {
     private readonly jobRepository: Repository<Job>,
     private readonly storageService: StorageService,
     private readonly claudeCredentialsService: ClaudeCredentialsService,
+    private readonly heartbeatService: WorkerHeartbeatService,
   ) {}
 
   async create(userId: number, dto: CreateJobDto): Promise<Job> {
@@ -89,6 +91,13 @@ export class WorkerService {
   // processes polling the same account at once (each gets a different row,
   // or nothing, never the same one).
   async claim(userId: number, workerName?: string): Promise<Job | null> {
+    // Recorded unconditionally — this is the actual liveness signal (see
+    // WorkerHeartbeatService): a worker polling an empty queue still proves
+    // it's alive here even though nothing below changes a single Job row.
+    if (workerName) {
+      await this.heartbeatService.record(userId, workerName);
+    }
+
     // node-postgres's driver (via TypeORM's Repository.query) returns
     // [rows, affectedCount] for an UPDATE/INSERT/DELETE — even one with a
     // RETURNING clause — not a flat rows array the way a plain SELECT does.

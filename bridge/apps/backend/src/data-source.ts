@@ -15,6 +15,7 @@ import { User } from './users/entities/user.entity';
 import { VpnConnection } from './vpn/entities/vpn-connection.entity';
 import { ClaudeCredential } from './worker/entities/claude-credential.entity';
 import { Job } from './worker/entities/job.entity';
+import { WorkerHeartbeat } from './worker/entities/worker-heartbeat.entity';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ export const AppDataSource = new DataSource({
     ChatMessage,
     ClaudeCredential,
     VpnConnection,
+    WorkerHeartbeat,
   ],
   migrations: ['src/migrations/*.ts'],
 });

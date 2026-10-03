@@ -15,6 +15,7 @@ import { User } from '../users/entities/user.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
 import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
 import { Job } from '../worker/entities/job.entity';
+import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
 
 export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
@@ -41,6 +42,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         ChatMessage,
         ClaudeCredential,
         VpnConnection,
+        WorkerHeartbeat,
       ],
       synchronize: isDev,
       migrations: isDev ? [] : [join(__dirname, '../migrations/*.js')],

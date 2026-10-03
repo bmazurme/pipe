@@ -12,6 +12,17 @@
   padding: var(--ntlstl-card-padding, 20px);
 }
 
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusSkeleton {
+  width: 90px;
+  height: 20px;
+}
+
 .createForm {
   display: flex;
   flex-wrap: wrap;
