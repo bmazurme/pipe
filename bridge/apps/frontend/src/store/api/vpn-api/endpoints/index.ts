@@ -21,14 +21,26 @@ export interface ProvisionVpnServerBody {
   sshPassword: string;
 }
 
+export interface VpnConnection {
+  id: number;
+  name: string;
+  serverAddress: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateVpnConnectionBody {
+  name: string;
+  panelUrl: string;
+  panelApiToken: string;
+  serverAddress: string;
+}
+
 const vpnApiEndpoints = vpnApi.injectEndpoints({
   endpoints: (builder) => ({
     getVpnStatus: builder.query<VpnStatus, void>({
       query: () => 'vpn/status',
       providesTags: ['VpnStatus'],
-    }),
-    getConnectionLink: builder.query<{ link: string }, void>({
-      query: () => 'vpn/connection-link',
     }),
     syncVpnConfig: builder.mutation<void, void>({
       query: () => ({ url: 'vpn/sync', method: 'POST' }),
@@ -39,14 +51,48 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     provisionVpnServer: builder.mutation<void, ProvisionVpnServerBody>({
       query: (body) => ({ url: 'vpn/provision', method: 'POST', body }),
     }),
+    listVpnConnections: builder.query<VpnConnection[], void>({
+      query: () => 'vpn/connections',
+      providesTags: ['VpnConnection'],
+    }),
+    createVpnConnection: builder.mutation<VpnConnection, CreateVpnConnectionBody>({
+      query: (body) => ({ url: 'vpn/connections', method: 'POST', body }),
+      invalidatesTags: ['VpnConnection'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)
+          ?.message;
+        return message ?? 'Не удалось добавить подключение';
+      },
+    }),
+    deleteVpnConnection: builder.mutation<void, number>({
+      query: (id) => ({ url: `vpn/connections/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['VpnConnection'],
+    }),
+    activateVpnConnection: builder.mutation<void, number>({
+      query: (id) => ({ url: `vpn/connections/${id}/activate`, method: 'POST' }),
+      invalidatesTags: ['VpnConnection', 'VpnStatus'],
+    }),
+    // Not a query — triggered on demand by each row's own "Проверить"
+    // button, not auto-fetched for every stored connection on page load.
+    checkVpnConnectionStatus: builder.mutation<VpnStatus, number>({
+      query: (id) => `vpn/connections/${id}/status`,
+    }),
+    getVpnConnectionLink: builder.mutation<{ link: string }, number>({
+      query: (id) => `vpn/connections/${id}/connection-link`,
+    }),
   }),
 });
 
 export const {
   useGetVpnStatusQuery,
-  useGetConnectionLinkQuery,
   useSyncVpnConfigMutation,
   useSetWorkerSecretMutation,
   useProvisionVpnServerMutation,
+  useListVpnConnectionsQuery,
+  useCreateVpnConnectionMutation,
+  useDeleteVpnConnectionMutation,
+  useActivateVpnConnectionMutation,
+  useCheckVpnConnectionStatusMutation,
+  useGetVpnConnectionLinkMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

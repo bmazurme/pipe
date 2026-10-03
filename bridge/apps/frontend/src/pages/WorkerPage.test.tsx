@@ -53,9 +53,10 @@ const FILES = [
   { id: 12, originalName: '402-8.subscription.zip.enc', mimeType: 'application/zip', size: 4096, createdAt: '2026-09-30T07:00:00.000Z' },
 ];
 
-const CONNECTION_LINK = {
-  link: 'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
-};
+const VPN_CONNECTIONS = [
+  { id: 1, name: 'primary', serverAddress: '203.0.113.5', isActive: true, createdAt: '2026-09-30T07:00:00.000Z' },
+  { id: 2, name: 'backup', serverAddress: '203.0.113.6', isActive: false, createdAt: '2026-09-30T08:00:00.000Z' },
+];
 
 const CLAUDE_CREDENTIALS = [
   { id: 1, name: 'personal', createdAt: '2026-09-30T07:00:00.000Z' },
@@ -97,7 +98,7 @@ beforeEach(() => {
       if (url.includes('/worker/jobs/2')) return jsonResponse(JOBS[1]);
       if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
       if (url.includes('/storage')) return jsonResponse(FILES);
-      if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+      if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
 
       return jsonResponse([]);
     }),
@@ -105,19 +106,34 @@ beforeEach(() => {
 });
 
 describe('WorkerPage', () => {
-  it('renders the connection link and copies it', async () => {
+  it('shows the active VPN connection and activates another one on selection', async () => {
     const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    let activatedId: number | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        if (url.endsWith('/vpn/connections/2/activate') && request.method === 'POST') {
+          activatedId = 2;
+          return new Response(null, { status: 204 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.includes('/storage')) return jsonResponse(FILES);
+        return jsonResponse([]);
+      }),
+    );
 
     renderPage();
+    await screen.findByText('Задача #1');
 
-    expect(await screen.findByDisplayValue(CONNECTION_LINK.link)).toBeTruthy();
+    expect(screen.getByText('primary')).toBeTruthy();
 
-    await user.click(screen.getByText('Скопировать'));
+    await user.click(screen.getByText('primary'));
+    await user.click(await screen.findByText('backup'));
 
-    expect(writeText).toHaveBeenCalledWith(CONNECTION_LINK.link);
-    expect(await screen.findByText('Скопировано')).toBeTruthy();
+    await waitFor(() => expect(activatedId).toBe(2));
   });
 
   it('saves a worker provider key', async () => {
@@ -128,7 +144,7 @@ describe('WorkerPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
         if (url.endsWith('/vpn/worker-secrets') && request.method === 'POST') {
           secretBody = JSON.parse(await request.clone().text());
           return new Response(null, { status: 204 });
@@ -165,7 +181,7 @@ describe('WorkerPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
         if (url.endsWith('/worker/claude-credentials')) return jsonResponse(CLAUDE_CREDENTIALS);
         if (url.includes('/worker/claude-credentials/') && request.method === 'DELETE') {
           deletedId = Number(url.split('/').pop());
@@ -194,7 +210,7 @@ describe('WorkerPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
         if (url.endsWith('/worker/claude-credentials') && request.method === 'POST') {
           createdBody = JSON.parse(await request.clone().text());
           return jsonResponse({ id: 3, name: createdBody && (createdBody as { name: string }).name, createdAt: '2026-10-03T00:00:00.000Z' });
@@ -227,7 +243,7 @@ describe('WorkerPage', () => {
       vi.fn(async (request: Request) => {
         const url = request.url;
         const method = request.method;
-        if (url.endsWith('/vpn/connection-link')) return jsonResponse(CONNECTION_LINK);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
         if (url.endsWith('/worker/claude-credentials')) return jsonResponse(CLAUDE_CREDENTIALS);
         if (url.includes('/worker/jobs') && method === 'POST') {
           createJobBody = JSON.parse(await request.clone().text());

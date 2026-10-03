@@ -1,12 +1,15 @@
+import {
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
+import { VpnConnection } from './entities/vpn-connection.entity';
+import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService } from './vpn.service';
 
 const ENV: Record<string, string> = {
-  VPN_PANEL_URL: 'https://vpn.example.com/panel',
-  VPN_PANEL_API_TOKEN: 'panel-token',
-  VPN_SERVER_ADDRESS: '203.0.113.5',
   GITHUB_TOKEN: 'gh-token',
   GITHUB_REPO: 'acme/pipe',
 };
@@ -15,8 +18,45 @@ function configService(): ConfigService {
   return { get: (key: string) => ENV[key] } as unknown as ConfigService;
 }
 
-function vpnService(): VpnService {
-  return new VpnService(configService());
+const ACTIVE_CONNECTION = {
+  id: 1,
+  name: 'primary',
+  panelUrl: 'https://vpn.example.com/panel',
+  panelApiToken: 'panel-token',
+  serverAddress: '203.0.113.5',
+  isActive: true,
+} as VpnConnection;
+
+// A minimal stand-in for VpnConnectionsService — VpnService only ever calls
+// getActive/findOne on it, never touches the repository directly.
+function fakeVpnConnectionsService(
+  connections: VpnConnection[] = [ACTIVE_CONNECTION],
+): VpnConnectionsService {
+  return {
+    getActive: jest.fn(async () => {
+      const active = connections.find((c) => c.isActive);
+      if (!active) {
+        throw new InternalServerErrorException(
+          'No active VPN connection is configured — add one and select it first',
+        );
+      }
+      return active;
+    }),
+    findOne: jest.fn(async (id: number) => {
+      const connection = connections.find((c) => c.id === id);
+      if (!connection) {
+        throw new NotFoundException('VPN connection not found');
+      }
+      return connection;
+    }),
+  } as unknown as VpnConnectionsService;
+}
+
+function vpnService(connections?: VpnConnection[]): VpnService {
+  return new VpnService(
+    configService(),
+    fakeVpnConnectionsService(connections),
+  );
 }
 
 const INBOUND = {
@@ -58,7 +98,7 @@ describe('VpnService', () => {
   });
 
   describe('getStatus', () => {
-    it("reports last-online/bytes/SNI from the panel's live inbound", async () => {
+    it("reports last-online/bytes/SNI from the active connection's live inbound", async () => {
       globalThis.fetch = jest.fn(async () =>
         jsonResponse({ success: true, obj: [INBOUND] }),
       ) as typeof fetch;
@@ -98,10 +138,38 @@ describe('VpnService', () => {
         'VPN panel request failed (500)',
       );
     });
+
+    it('throws when no connection is active', async () => {
+      await expect(vpnService([]).getStatus()).rejects.toThrow(
+        'No active VPN connection is configured',
+      );
+    });
+  });
+
+  describe('checkConnectionStatus', () => {
+    it('checks a specific connection regardless of which one is active', async () => {
+      const other = { ...ACTIVE_CONNECTION, id: 2, isActive: false };
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      ) as typeof fetch;
+
+      const status = await vpnService([
+        ACTIVE_CONNECTION,
+        other,
+      ]).checkConnectionStatus(2);
+
+      expect(status.port).toBe(443);
+    });
+
+    it('throws NotFoundException for an unknown connection id', async () => {
+      await expect(vpnService().checkConnectionStatus(99)).rejects.toThrow(
+        'VPN connection not found',
+      );
+    });
   });
 
   describe('syncWorkerVpnConfig', () => {
-    it('builds the client config from the live inbound, pushes it as a secret, and redeploys', async () => {
+    it("builds the client config from the active connection's live inbound, pushes it as a secret, and redeploys", async () => {
       const calls: { url: string; init?: RequestInit }[] = [];
 
       globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
@@ -180,12 +248,12 @@ describe('VpnService', () => {
   });
 
   describe('getConnectionLink', () => {
-    it('builds a vless Reality link from the live inbound', async () => {
+    it('builds a vless Reality link for the given connection', async () => {
       globalThis.fetch = jest.fn(async () =>
         jsonResponse({ success: true, obj: [INBOUND] }),
       ) as typeof fetch;
 
-      const { link } = await vpnService().getConnectionLink();
+      const { link } = await vpnService().getConnectionLink(1);
 
       expect(link).toBe(
         'vless://client-uuid@203.0.113.5:443?security=reality&encryption=none&pbk=pub-key&fp=chrome&sni=www.samsung.com&sid=abc123&spx=%2F&type=tcp&flow=xtls-rprx-vision#pipe-vpn',
@@ -200,8 +268,14 @@ describe('VpnService', () => {
         }),
       ) as typeof fetch;
 
-      await expect(vpnService().getConnectionLink()).rejects.toThrow(
+      await expect(vpnService().getConnectionLink(1)).rejects.toThrow(
         'VPN panel inbound has no client configured',
+      );
+    });
+
+    it('throws NotFoundException for an unknown connection id', async () => {
+      await expect(vpnService().getConnectionLink(99)).rejects.toThrow(
+        'VPN connection not found',
       );
     });
   });

@@ -26,3 +26,15 @@ URL.revokeObjectURL = URL.revokeObjectURL ?? (() => {});
 // without this it throws an unhandled error outside any test's own
 // assertions (and still fails the run) rather than a real test failure.
 Element.prototype.scrollTo = Element.prototype.scrollTo ?? (() => {});
+
+// jsdom doesn't implement IntersectionObserver, which Gravity UI's Select
+// popup uses (useIntersection, for its "load more" sentinel) the moment its
+// option list actually renders — opening any populated Select in a test
+// throws without this, same class of gap as the two above.
+window.IntersectionObserver =
+  window.IntersectionObserver ??
+  (class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver);

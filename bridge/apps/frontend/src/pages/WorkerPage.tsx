@@ -22,16 +22,17 @@ import {
   WorkerJob,
   WorkerJobModel,
   WorkerJobStatus,
+  useActivateVpnConnectionMutation,
   useCreateClaudeCredentialMutation,
   useCreateJobMutation,
   useDeleteClaudeCredentialMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
-  useGetConnectionLinkQuery,
   useGetJobQuery,
   useListClaudeCredentialsQuery,
   useListFilesQuery,
   useListJobsQuery,
+  useListVpnConnectionsQuery,
   usePeekFileMutation,
   usePeekJobResultMutation,
   useSetWorkerSecretMutation,
@@ -75,41 +76,37 @@ function isActive(status: WorkerJobStatus): boolean {
   return ACTIVE_JOB_STATUSES.includes(status);
 }
 
-function ConnectionLinkCard() {
-  const { data, isLoading, isError } = useGetConnectionLinkQuery();
-  const [copied, setCopied] = useState(false);
+function VpnConnectionSelector() {
+  const { data: connections, isLoading, isError } = useListVpnConnectionsQuery();
+  const [activateVpnConnection, { isLoading: isActivating }] = useActivateVpnConnectionMutation();
 
-  const handleCopy = async () => {
-    if (!data?.link) return;
-    try {
-      await navigator.clipboard.writeText(data.link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
+  const active = connections?.find((connection) => connection.isActive);
 
   return (
     <Card view="outlined" className={styles.card}>
-      <SectionHeader title="Подключение" />
+      <SectionHeader title="VPN" />
       <Text color="secondary" variant="caption-2">
-        Ссылка для импорта в VPN-клиент (v2rayNG, NekoBox и т.п.).
+        Подключение, через которое worker обращается к AI-провайдерам — добавить и проверить
+        можно на странице VPN.
       </Text>
 
-      {isLoading && <Skeleton height={40} />}
       {isError && (
-        <Alert theme="danger" view="filled" message="Не удалось получить ссылку подключения" />
+        <Alert theme="danger" view="filled" message="Не удалось получить список VPN-подключений" />
       )}
 
-      {data && (
-        <div className={styles.secretRow}>
-          <TextInput value={data.link} readOnly />
-          <Button view="normal" onClick={() => void handleCopy()}>
-            {copied ? 'Скопировано' : 'Скопировать'}
-          </Button>
-        </div>
-      )}
+      <Select
+        placeholder="VPN-подключение"
+        value={active ? [String(active.id)] : []}
+        onUpdate={([value]) => {
+          if (value) void activateVpnConnection(Number(value));
+        }}
+        options={(connections ?? []).map((connection) => ({
+          value: String(connection.id),
+          content: connection.name,
+        }))}
+        loading={isLoading || isActivating}
+        width="max"
+      />
     </Card>
   );
 }
@@ -484,7 +481,7 @@ export function WorkerPage() {
         description="Запуск ИИ-агента над посылкой из Storage — Claude, GPT, DeepSeek или Qwen."
       />
 
-      <ConnectionLinkCard />
+      <VpnConnectionSelector />
 
       <WorkerSecretsCard />
 

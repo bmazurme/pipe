@@ -1,12 +1,20 @@
 import { useState } from 'react';
-import { ShieldKeyhole } from '@gravity-ui/icons';
-import { Alert, Button, Card, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { ShieldKeyhole, TrashBin } from '@gravity-ui/icons';
+import { Alert, Button, Card, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
+  useActivateVpnConnectionMutation,
+  useCheckVpnConnectionStatusMutation,
+  useCreateVpnConnectionMutation,
+  useDeleteVpnConnectionMutation,
+  useGetVpnConnectionLinkMutation,
   useGetVpnStatusQuery,
+  useListVpnConnectionsQuery,
   useProvisionVpnServerMutation,
   useSyncVpnConfigMutation,
+  VpnConnection,
+  VpnStatus,
 } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
@@ -24,6 +32,240 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+}
+
+function VpnConnectionStatusGrid({ status }: { status: VpnStatus }) {
+  const isRecent = status.lastOnline
+    ? Date.now() - new Date(status.lastOnline).getTime() < RECENT_THRESHOLD_MS
+    : false;
+
+  return (
+    <div className={styles.statGrid}>
+      <div className={styles.stat}>
+        <Text color="secondary" variant="caption-2">
+          Соединение
+        </Text>
+        <Label theme={isRecent ? 'success' : 'normal'}>
+          {status.lastOnline
+            ? `${isRecent ? 'активно' : 'было'} · ${formatRelativeTime(status.lastOnline)}`
+            : 'ещё не подключалось'}
+        </Label>
+      </div>
+      <div className={styles.stat}>
+        <Text color="secondary" variant="caption-2">
+          Трафик
+        </Text>
+        <Text variant="body-2">
+          ↑ {formatBytes(status.upBytes)} · ↓ {formatBytes(status.downBytes)}
+        </Text>
+      </div>
+      <div className={styles.stat}>
+        <Text color="secondary" variant="caption-2">
+          SNI
+        </Text>
+        <Text variant="body-2">{status.sni}</Text>
+      </div>
+      <div className={styles.stat}>
+        <Text color="secondary" variant="caption-2">
+          Порт
+        </Text>
+        <Text variant="body-2">{status.port}</Text>
+      </div>
+    </div>
+  );
+}
+
+function VpnConnectionRow({ connection }: { connection: VpnConnection }) {
+  const [activateVpnConnection, { isLoading: isActivating }] = useActivateVpnConnectionMutation();
+  const [checkVpnConnectionStatus, { isLoading: isChecking }] = useCheckVpnConnectionStatusMutation();
+  const [getVpnConnectionLink, { isLoading: isLinking }] = useGetVpnConnectionLinkMutation();
+  const [deleteVpnConnection, { isLoading: isDeleting }] = useDeleteVpnConnectionMutation();
+
+  const [status, setStatus] = useState<VpnStatus | 'error' | null>(null);
+  const [link, setLink] = useState<string | 'error' | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCheck = async () => {
+    try {
+      setStatus(await checkVpnConnectionStatus(connection.id).unwrap());
+    } catch {
+      setStatus('error');
+    }
+  };
+
+  const handleGetLink = async () => {
+    try {
+      const result = await getVpnConnectionLink(connection.id).unwrap();
+      setLink(result.link);
+    } catch {
+      setLink('error');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!link || link === 'error') return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <li className={styles.connectionRow}>
+      <div className={styles.connectionHeader}>
+        <div className={styles.connectionTitle}>
+          <Text variant="body-2">{connection.name}</Text>
+          {connection.isActive && (
+            <Label theme="success" size="xs">
+              Активно
+            </Label>
+          )}
+        </div>
+        <div className={styles.connectionActions}>
+          {!connection.isActive && (
+            <Button
+              view="normal"
+              size="s"
+              loading={isActivating}
+              onClick={() => void activateVpnConnection(connection.id)}
+            >
+              Сделать активным
+            </Button>
+          )}
+          <Button view="normal" size="s" loading={isChecking} onClick={() => void handleCheck()}>
+            Проверить
+          </Button>
+          <Button view="normal" size="s" loading={isLinking} onClick={() => void handleGetLink()}>
+            Ссылка
+          </Button>
+          <Button
+            view="flat-danger"
+            size="s"
+            aria-label={`Удалить подключение: ${connection.name}`}
+            loading={isDeleting}
+            onClick={() => void deleteVpnConnection(connection.id)}
+          >
+            <Icon data={TrashBin} size={16} />
+          </Button>
+        </div>
+      </div>
+
+      {status === 'error' && (
+        <Text color="danger" variant="caption-2">
+          Не удалось получить статус
+        </Text>
+      )}
+      {status && status !== 'error' && <VpnConnectionStatusGrid status={status} />}
+
+      {link === 'error' && (
+        <Text color="danger" variant="caption-2">
+          Не удалось получить ссылку
+        </Text>
+      )}
+      {link && link !== 'error' && (
+        <div className={styles.secretRow}>
+          <TextInput value={link} readOnly />
+          <Button view="normal" size="s" onClick={() => void handleCopyLink()}>
+            {copied ? 'Скопировано' : 'Скопировать'}
+          </Button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function VpnConnectionsCard() {
+  const { data: connections, isLoading, isError } = useListVpnConnectionsQuery();
+  const [createVpnConnection, { isLoading: isCreating }] = useCreateVpnConnectionMutation();
+
+  const [name, setName] = useState('');
+  const [panelUrl, setPanelUrl] = useState('');
+  const [panelApiToken, setPanelApiToken] = useState('');
+  const [serverAddress, setServerAddress] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const canSubmit = Boolean(
+    name.trim() && panelUrl.trim() && panelApiToken.trim() && serverAddress.trim(),
+  );
+
+  const handleCreate = async () => {
+    if (!canSubmit) return;
+    setCreateError(null);
+
+    try {
+      await createVpnConnection({
+        name: name.trim(),
+        panelUrl: panelUrl.trim(),
+        panelApiToken: panelApiToken.trim(),
+        serverAddress: serverAddress.trim(),
+      }).unwrap();
+      setName('');
+      setPanelUrl('');
+      setPanelApiToken('');
+      setServerAddress('');
+    } catch (err) {
+      setCreateError(typeof err === 'string' ? err : 'Не удалось добавить подключение');
+    }
+  };
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Доступные VPN" />
+      <Text color="secondary" variant="caption-2">
+        Несколько именованных VPN-подключений. Активное — то, из которого «Синхронизировать
+        настройки» выше пересобирает конфигурацию worker&apos;а.
+      </Text>
+
+      {isLoading && <Skeleton height={40} />}
+      {isError && (
+        <Alert theme="danger" view="filled" message="Не удалось получить список подключений" />
+      )}
+
+      {connections && connections.length > 0 && (
+        <ul className={styles.connectionList}>
+          {connections.map((connection: VpnConnection) => (
+            <VpnConnectionRow key={connection.id} connection={connection} />
+          ))}
+        </ul>
+      )}
+
+      <div className={styles.provisionGrid}>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            Название
+          </Text>
+          <TextInput value={name} onUpdate={setName} placeholder="Например, Нидерланды" />
+        </label>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            URL панели
+          </Text>
+          <TextInput value={panelUrl} onUpdate={setPanelUrl} placeholder="http://1.2.3.4:2053/abcdef" />
+        </label>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            API-токен панели
+          </Text>
+          <TextInput type="password" value={panelApiToken} onUpdate={setPanelApiToken} hasClear />
+        </label>
+        <label className={styles.secretField}>
+          <Text variant="body-2" color="secondary">
+            Адрес сервера
+          </Text>
+          <TextInput value={serverAddress} onUpdate={setServerAddress} placeholder="1.2.3.4" />
+        </label>
+      </div>
+
+      <Button view="action" loading={isCreating} disabled={!canSubmit} onClick={() => void handleCreate()}>
+        Добавить подключение
+      </Button>
+
+      {createError && <Alert theme="danger" view="filled" message={createError} />}
+    </Card>
+  );
 }
 
 function ProvisionServerForm() {
@@ -53,7 +295,8 @@ function ProvisionServerForm() {
       <SectionHeader title="Новый VPN-сервер" />
       <Text color="secondary" variant="caption-2">
         Устанавливает и настраивает AdGuard Home и 3x-ui на чистом Ubuntu-сервере по SSH. IP,
-        пользователь и пароль передаются один раз и нигде не сохраняются.
+        пользователь и пароль передаются один раз и нигде не сохраняются. После успешной настройки
+        добавьте полученные панель/токен выше как новое подключение.
       </Text>
 
       <div className={styles.provisionGrid}>
@@ -85,7 +328,7 @@ function ProvisionServerForm() {
         <Alert
           theme="success"
           view="filled"
-          message="Запущена настройка сервера (~5-10 минут). После завершения нажмите «Синхронизировать настройки» выше, чтобы обновить worker."
+          message="Запущена настройка сервера (~5-10 минут). Следите за логом workflow — он печатает URL и API-токен новой панели."
         />
       )}
       {result === 'error' && (
@@ -112,10 +355,6 @@ export function VpnPage() {
     }
   };
 
-  const isRecent = status?.lastOnline
-    ? Date.now() - new Date(status.lastOnline).getTime() < RECENT_THRESHOLD_MS
-    : false;
-
   return (
     <div className={styles.page}>
       <PageHeader
@@ -125,7 +364,7 @@ export function VpnPage() {
 
       <Card view="outlined" className={styles.card}>
         <SectionHeader
-          title="Статус подключения"
+          title="Статус активного подключения"
           actions={
             <Button view="normal" size="s" loading={isSyncing} onClick={() => void handleSync()}>
               Синхронизировать настройки
@@ -134,9 +373,9 @@ export function VpnPage() {
         />
 
         <Text color="secondary" variant="caption-2">
-          Пересобирает конфигурацию worker-клиента из текущих настроек VPN-сервера (адрес, SNI,
-          публичный ключ) и переразворачивает worker — устраняет рассинхронизацию, если настройки
-          сервера менялись напрямую через его панель.
+          Пересобирает конфигурацию worker-клиента из текущих настроек активного VPN-подключения
+          (адрес, SNI, публичный ключ) и переразворачивает worker — устраняет рассинхронизацию,
+          если настройки сервера менялись напрямую через его панель.
         </Text>
 
         {syncResult === 'success' && (
@@ -154,48 +393,23 @@ export function VpnPage() {
           </div>
         )}
 
-        {isError && <Alert theme="danger" view="filled" message="Не удалось получить статус VPN" />}
-
-        {status && (
-          <div className={styles.statGrid}>
-            <div className={styles.stat}>
-              <Text color="secondary" variant="caption-2">
-                Соединение
-              </Text>
-              <Label theme={isRecent ? 'success' : 'normal'}>
-                {status.lastOnline
-                  ? `${isRecent ? 'активно' : 'было'} · ${formatRelativeTime(status.lastOnline)}`
-                  : 'ещё не подключалось'}
-              </Label>
-            </div>
-            <div className={styles.stat}>
-              <Text color="secondary" variant="caption-2">
-                Трафик
-              </Text>
-              <Text variant="body-2">
-                ↑ {formatBytes(status.upBytes)} · ↓ {formatBytes(status.downBytes)}
-              </Text>
-            </div>
-            <div className={styles.stat}>
-              <Text color="secondary" variant="caption-2">
-                SNI
-              </Text>
-              <Text variant="body-2">{status.sni}</Text>
-            </div>
-            <div className={styles.stat}>
-              <Text color="secondary" variant="caption-2">
-                Порт
-              </Text>
-              <Text variant="body-2">{status.port}</Text>
-            </div>
-          </div>
+        {isError && (
+          <Alert
+            theme="danger"
+            view="filled"
+            message="Не удалось получить статус — проверьте, что ниже выбрано активное подключение"
+          />
         )}
+
+        {status && <VpnConnectionStatusGrid status={status} />}
       </Card>
+
+      <VpnConnectionsCard />
 
       <ProvisionServerForm />
 
       {!isLoading && isError && !status && (
-        <EmptyState icon={ShieldKeyhole} title="VPN не настроен или недоступен" />
+        <EmptyState icon={ShieldKeyhole} title="Нет активного VPN-подключения" />
       )}
     </div>
   );

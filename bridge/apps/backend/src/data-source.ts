@@ -12,6 +12,7 @@ import { StoredFile } from './storage/entities/stored-file.entity';
 import { DayOff } from './time/entities/day-off.entity';
 import { TimeReportEntry } from './time/entities/time-report-entry.entity';
 import { User } from './users/entities/user.entity';
+import { VpnConnection } from './vpn/entities/vpn-connection.entity';
 import { ClaudeCredential } from './worker/entities/claude-credential.entity';
 import { Job } from './worker/entities/job.entity';
 
@@ -36,6 +37,7 @@ export const AppDataSource = new DataSource({
     Chat,
     ChatMessage,
     ClaudeCredential,
+    VpnConnection,
   ],
   migrations: ['src/migrations/*.ts'],
 });

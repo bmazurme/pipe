@@ -26,11 +26,6 @@ export class VpnController {
     return this.vpnService.getStatus();
   }
 
-  @Get('connection-link')
-  async getConnectionLink(): Promise<{ link: string }> {
-    return this.vpnService.getConnectionLink();
-  }
-
   @Post('sync')
   @HttpCode(HttpStatus.NO_CONTENT)
   async sync(): Promise<void> {

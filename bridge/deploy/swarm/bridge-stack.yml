@@ -48,14 +48,13 @@ services:
       # import from. Empty TIME_EXPORT_API_KEY leaves the route disabled.
       TIME_EXPORT_API_KEY: ${TIME_EXPORT_API_KEY:-}
       TIME_EXPORT_USER_ID: ${TIME_EXPORT_USER_ID:-}
-      # The /api/v1/vpn/* endpoints (see src/vpn/) — backend calls ihor's
-      # x-ui panel directly for status, and GitHub's API to push worker
-      # secrets + trigger this same deploy workflow. GITHUB_TOKEN needs repo
-      # (Actions secrets: write) + workflow (Actions: write) scope on
-      # GITHUB_REPO only — least privilege, not a broad admin PAT.
-      VPN_PANEL_URL: ${VPN_PANEL_URL:?VPN_PANEL_URL is required}
-      VPN_PANEL_API_TOKEN: ${VPN_PANEL_API_TOKEN:?VPN_PANEL_API_TOKEN is required}
-      VPN_SERVER_ADDRESS: ${VPN_SERVER_ADDRESS:?VPN_SERVER_ADDRESS is required}
+      # The /api/v1/vpn/* endpoints (see src/vpn/) — backend calls GitHub's
+      # API to push worker secrets + trigger this same deploy workflow.
+      # GITHUB_TOKEN needs repo (Actions secrets: write) + workflow (Actions:
+      # write) scope on GITHUB_REPO only — least privilege, not a broad admin
+      # PAT. The VPN panel(s) themselves (URL/API token/server address) are
+      # no longer env vars — they're rows in the vpn_connections table, added
+      # from the VPN page's "Доступные VPN" form.
       GITHUB_TOKEN: ${BRIDGE_GITHUB_TOKEN:?BRIDGE_GITHUB_TOKEN is required}
       GITHUB_REPO: ${GITHUB_REPO:?GITHUB_REPO is required}
     ports:

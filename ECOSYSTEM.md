@@ -65,28 +65,35 @@ exact backend host, not a shared parent domain — the cookie is named
 sibling apps on the same parent domain caused a name collision before),
 `EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
 (optional ntlstl.time integration). `/api/v1/vpn/*` (browser-session only —
-backing the VPN page's status/config and the Worker page's connection-link
-card; the only part of bridge's backend that calls out to third-party
-APIs): `VPN_PANEL_URL`/`VPN_PANEL_API_TOKEN` (ihor's x-ui panel —
-status, and the source of truth the page's "sync" action rebuilds worker's
-`VPN_CLIENT_CONFIG` from, rather than trusting whatever was last pushed),
-`VPN_SERVER_ADDRESS`, `BRIDGE_GITHUB_TOKEN` (a PAT scoped to this repo only —
-Actions secrets: write, Actions: write — lets that page push worker provider
-keys and trigger a redeploy; named `BRIDGE_GITHUB_TOKEN` because `GITHUB_TOKEN`
-is a reserved name Actions auto-populates with a different, more limited
-token). A Claude usage-limits widget was tried here (`GET /api/v1/vpn/claude-usage`,
-backed by a self-refreshing credential from Anthropic's undocumented
-`console.anthropic.com/v1/oauth/token`) and removed — that endpoint returns a
-deliberate `403 forbidden: "Request not allowed"` for refresh attempts from a
-server/datacenter context, not just a bad token, so it can't be made to work
-from bridge's backend. `POST /api/v1/vpn/provision` (the page's
-"Новый VPN-сервер" form) pushes `VPN_PROVISION_HOST`/`VPN_PROVISION_SSH_USER`/
-`VPN_PROVISION_SSH_PASSWORD` (transient — overwritten on every run) and
-dispatches `.github/workflows/provision-vpn-server.yml`, which SSHes in,
-installs AdGuard Home + 3x-ui (`bridge/deploy/provision-vpn-server.sh`),
-creates the initial Reality inbound, and pushes the resulting
-`VPN_PANEL_URL`/`VPN_PANEL_API_TOKEN`/`VPN_SERVER_ADDRESS` itself before
-redeploying — closing the loop back into the three secrets above. Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
+the only part of bridge's backend that calls out to third-party APIs):
+`BRIDGE_GITHUB_TOKEN` (a PAT scoped to this repo only — Actions secrets:
+write, Actions: write — lets the VPN page push worker provider keys and
+trigger a redeploy; named `BRIDGE_GITHUB_TOKEN` because `GITHUB_TOKEN` is a
+reserved name Actions auto-populates with a different, more limited token).
+The VPN panel(s) themselves are **not** env vars — each is a row in the
+`vpn_connections` table (`name`/`panelUrl`/`panelApiToken`/`serverAddress`,
+see `VpnConnectionsService`), added from the VPN page's "Доступные VPN"
+form (`POST /api/v1/vpn/connections`); exactly one is ever `isActive`, and
+that's the one `GET /api/v1/vpn/status`, `POST /api/v1/vpn/sync` (rebuilds
+worker's `VPN_CLIENT_CONFIG`), and the Worker page's VPN dropdown
+(`POST /api/v1/vpn/connections/:id/activate`) all act on — each row also
+has its own on-demand status check and `vless://` connection link
+(`GET /api/v1/vpn/connections/:id/status` / `.../connection-link`), not
+just the active one. A Claude usage-limits widget was tried here
+(`GET /api/v1/vpn/claude-usage`, backed by a self-refreshing credential from
+Anthropic's undocumented `console.anthropic.com/v1/oauth/token`) and
+removed — that endpoint returns a deliberate `403 forbidden: "Request not
+allowed"` for refresh attempts from a server/datacenter context, not just a
+bad token, so it can't be made to work from bridge's backend.
+`POST /api/v1/vpn/provision` (the page's "Новый VPN-сервер" form) pushes
+`VPN_PROVISION_HOST`/`VPN_PROVISION_SSH_USER`/`VPN_PROVISION_SSH_PASSWORD`
+(transient — overwritten on every run) and dispatches
+`.github/workflows/provision-vpn-server.yml`, which SSHes in and installs
+AdGuard Home + 3x-ui (`bridge/deploy/provision-vpn-server.sh`), creating the
+initial Reality inbound — it no longer pushes the resulting panel URL/token
+as secrets (bridge doesn't read those anymore); add the provisioned panel
+by hand via "Доступные VPN" once the workflow's own log prints it.
+Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
 `CR_WORKER_IMAGE`), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`,
 `WORKER_BRIDGE_API_URL`/`WORKER_BRIDGE_API_KEY`/`WORKER_CLAUDE_CODE_OAUTH_TOKEN`/`WORKER_OPENAI_API_KEY`/`WORKER_DEEPSEEK_API_KEY`/`WORKER_QWEN_API_KEY`
 (worker's own runtime secrets, injected as plain Swarm service env — same

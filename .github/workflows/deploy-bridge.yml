@@ -26,23 +26,29 @@
 #
 # New for bridge backend's /api/v1/vpn/* (see bridge/apps/backend/src/vpn/):
 #
-#   VPN_PANEL_URL, VPN_PANEL_API_TOKEN (ihor's x-ui panel — status, and the
-#   source of truth the "sync" button rebuilds VPN_CLIENT_CONFIG from),
-#   VPN_SERVER_ADDRESS (the VPN server's own IP, used in the rebuilt
-#   client config), BRIDGE_GITHUB_TOKEN (a PAT scoped to this repo only —
-#   Actions secrets: write, Actions: write — lets the backend push worker
-#   secrets and trigger this same workflow on the admin's behalf; named
-#   BRIDGE_GITHUB_TOKEN, not GITHUB_TOKEN, since the latter is a reserved
-#   name GitHub Actions auto-populates with a different, more limited token)
+#   BRIDGE_GITHUB_TOKEN (a PAT scoped to this repo only — Actions secrets:
+#   write, Actions: write — lets the backend push worker secrets and trigger
+#   this same workflow on the admin's behalf; named BRIDGE_GITHUB_TOKEN, not
+#   GITHUB_TOKEN, since the latter is a reserved name Actions auto-populates
+#   with a different, more limited token)
+#
+# VPN panel(s) themselves are no longer secrets — VPN_PANEL_URL/
+# VPN_PANEL_API_TOKEN/VPN_SERVER_ADDRESS are gone; each one is a row in the
+# vpn_connections table instead (POST /api/v1/vpn/connections, added from
+# the VPN page's "Доступные VPN" form — one of several, whichever is marked
+# active is what "Синхронизировать настройки" and worker's tunnel use).
 #
 # For provision-vpn-server.yml (the VPN page's "Новый VPN-сервер" form —
 # POST /api/v1/vpn/provision pushes these three, then dispatches that
 # workflow; see bridge/deploy/provision-vpn-server.sh for what it installs):
 #
 #   VPN_PROVISION_HOST, VPN_PROVISION_SSH_USER, VPN_PROVISION_SSH_PASSWORD
-#   (transient — overwritten on every provisioning run; that workflow also
-#   reuses BRIDGE_GITHUB_TOKEN above to push the freshly generated
-#   VPN_PANEL_URL/VPN_PANEL_API_TOKEN/VPN_SERVER_ADDRESS and redeploy)
+#   (transient — overwritten on every provisioning run). That workflow's own
+#   final step (as originally written) pushed the newly provisioned panel's
+#   URL/token/address as GitHub secrets — now pointless, since bridge no
+#   longer reads those; drop that step and instead read the panel URL/token
+#   it prints from the run's own log, then add them by hand via "Доступные
+#   VPN" above.
 #
 # Deliberately workflow_dispatch-only for now — run it manually from the
 # Actions tab (against main) until one run has deployed successfully. Once
@@ -277,9 +283,6 @@ jobs:
           WORKER_OPENAI_API_KEY: ${{ secrets.WORKER_OPENAI_API_KEY }}
           WORKER_DEEPSEEK_API_KEY: ${{ secrets.WORKER_DEEPSEEK_API_KEY }}
           WORKER_QWEN_API_KEY: ${{ secrets.WORKER_QWEN_API_KEY }}
-          VPN_PANEL_URL: ${{ secrets.VPN_PANEL_URL }}
-          VPN_PANEL_API_TOKEN: ${{ secrets.VPN_PANEL_API_TOKEN }}
-          VPN_SERVER_ADDRESS: ${{ secrets.VPN_SERVER_ADDRESS }}
           BRIDGE_GITHUB_TOKEN: ${{ secrets.BRIDGE_GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |

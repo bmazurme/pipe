@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import { encryptSecretForGitHub } from './github-secrets.util';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
+import { VpnConnection } from './entities/vpn-connection.entity';
+import { VpnConnectionsService } from './vpn-connections.service';
 
 interface XrayRealitySettings {
   target: string;
@@ -52,11 +54,10 @@ const NEVER_ONLINE = 0;
 
 @Injectable()
 export class VpnService {
-  constructor(private readonly configService: ConfigService) {}
-
-  private panelUrl(): string {
-    return this.required('VPN_PANEL_URL').replace(/\/$/, '');
-  }
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly vpnConnectionsService: VpnConnectionsService,
+  ) {}
 
   private required(key: string): string {
     const value = this.configService.get<string>(key);
@@ -68,11 +69,16 @@ export class VpnService {
     return value;
   }
 
-  private async panelRequest<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.panelUrl()}${path}`, {
+  private async panelRequest<T>(
+    connection: VpnConnection,
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
+    const panelUrl = connection.panelUrl.replace(/\/$/, '');
+    const response = await fetch(`${panelUrl}${path}`, {
       ...init,
       headers: {
-        Authorization: `Bearer ${this.required('VPN_PANEL_API_TOKEN')}`,
+        Authorization: `Bearer ${connection.panelApiToken}`,
         ...(init?.headers ?? {}),
       },
     });
@@ -96,8 +102,9 @@ export class VpnService {
     return body.obj;
   }
 
-  private async getInbound(): Promise<XrayInbound> {
+  private async getInbound(connection: VpnConnection): Promise<XrayInbound> {
     const inbounds = await this.panelRequest<XrayInbound[]>(
+      connection,
       '/panel/api/inbounds/list',
     );
     const inbound = inbounds[0];
@@ -107,8 +114,8 @@ export class VpnService {
     return inbound;
   }
 
-  async getStatus(): Promise<VpnStatus> {
-    const inbound = await this.getInbound();
+  private async getStatusFor(connection: VpnConnection): Promise<VpnStatus> {
+    const inbound = await this.getInbound(connection);
     const stats = inbound.clientStats?.[0];
     const reality = inbound.streamSettings.realitySettings;
 
@@ -125,12 +132,24 @@ export class VpnService {
     };
   }
 
-  // Rebuilds the worker's Xray client config from the VPN server's actual,
-  // current live settings (not whatever was last pushed) — this is the
-  // exact drift (panel edited independently of the worker's config) that
-  // caused real production incidents earlier, automated away.
-  private async buildClientConfig(): Promise<string> {
-    const inbound = await this.getInbound();
+  async getStatus(): Promise<VpnStatus> {
+    const active = await this.vpnConnectionsService.getActive();
+    return this.getStatusFor(active);
+  }
+
+  // Same status call against a specific connection, active or not — backs
+  // the "Проверить" button on each row of the connections list.
+  async checkConnectionStatus(id: number): Promise<VpnStatus> {
+    const connection = await this.vpnConnectionsService.findOne(id);
+    return this.getStatusFor(connection);
+  }
+
+  // Rebuilds the worker's Xray client config from the active connection's
+  // actual, current live settings (not whatever was last pushed) — this is
+  // the exact drift (panel edited independently of the worker's config)
+  // that caused real production incidents earlier, automated away.
+  private async buildClientConfig(connection: VpnConnection): Promise<string> {
+    const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
     const reality = inbound.streamSettings.realitySettings;
 
@@ -149,7 +168,7 @@ export class VpnService {
           settings: {
             vnext: [
               {
-                address: this.required('VPN_SERVER_ADDRESS'),
+                address: connection.serverAddress,
                 port: inbound.port,
                 users: [
                   { id: client.id, encryption: 'none', flow: client.flow },
@@ -235,11 +254,12 @@ export class VpnService {
     await this.triggerWorkflow(workflowFile);
   }
 
-  // Pushes the worker's VPN client config built from the VPN server's
+  // Pushes the worker's VPN client config built from the active connection's
   // current live state, then redeploys — the one-button fix for the
   // publicKey/SNI drift class of bug.
   async syncWorkerVpnConfig(): Promise<void> {
-    const config = await this.buildClientConfig();
+    const active = await this.vpnConnectionsService.getActive();
+    const config = await this.buildClientConfig(active);
     await this.setGithubSecret('VPN_CLIENT_CONFIG', config);
     await this.triggerDeploy();
   }
@@ -252,9 +272,12 @@ export class VpnService {
   // A ready vless:// Reality link for the end user's own VPN client
   // (v2rayNG, NekoBox, ...) — same inbound data buildClientConfig() reads for
   // worker's outbound, just rendered as the standard client import URI
-  // instead of an Xray outbound block.
-  async getConnectionLink(): Promise<{ link: string }> {
-    const inbound = await this.getInbound();
+  // instead of an Xray outbound block. Works against any stored connection,
+  // not only the active one — each row in the connections list can produce
+  // its own link.
+  async getConnectionLink(id: number): Promise<{ link: string }> {
+    const connection = await this.vpnConnectionsService.findOne(id);
+    const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
     const reality = inbound.streamSettings.realitySettings;
 
@@ -277,23 +300,22 @@ export class VpnService {
       flow: client.flow,
     });
 
-    const host = this.required('VPN_SERVER_ADDRESS');
     return {
-      link: `vless://${client.id}@${host}:${inbound.port}?${params.toString()}#pipe-vpn`,
+      link: `vless://${client.id}@${connection.serverAddress}:${inbound.port}?${params.toString()}#pipe-vpn`,
     };
   }
 
   // Provisions a brand-new VPN node from a bare IP + SSH credentials: pushes
   // them as GitHub secrets (never touches bridge's own process/logs with the
   // password) and triggers provision-vpn-server.yml, which SSHes in,
-  // installs AdGuard Home + 3x-ui, creates the initial Reality inbound, and
-  // — on success — pushes VPN_PANEL_URL/VPN_PANEL_API_TOKEN/
-  // VPN_SERVER_ADDRESS itself and redeploys bridge. See that workflow and
-  // bridge/deploy/provision-vpn-server.sh for the actual install steps.
+  // installs AdGuard Home + 3x-ui, and creates the initial Reality inbound.
+  // See that workflow and bridge/deploy/provision-vpn-server.sh for the
+  // actual install steps.
   //
-  // Worker's own VPN_CLIENT_CONFIG is NOT pushed as part of this — once
-  // bridge's redeploy lands, use the existing "Синхронизировать настройки"
-  // action to roll the new server's settings out to worker.
+  // This no longer writes VPN_PANEL_URL/VPN_PANEL_API_TOKEN/
+  // VPN_SERVER_ADDRESS anywhere — those are stored connections now (see
+  // VpnConnectionsService), added by hand via POST /api/v1/vpn/connections
+  // once the workflow's own log prints the new panel's URL/token.
   async provisionServer(dto: ProvisionVpnServerDto): Promise<void> {
     await this.setGithubSecret('VPN_PROVISION_HOST', dto.host);
     await this.setGithubSecret('VPN_PROVISION_SSH_USER', dto.sshUser);
