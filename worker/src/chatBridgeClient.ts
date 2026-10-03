@@ -1,3 +1,7 @@
+// Same reasoning as bridgeClient.ts's own API_TIMEOUT_MS — claim() runs in
+// the same poll loop, so a hung request here would freeze it just as badly.
+const API_TIMEOUT_MS = 15_000;
+
 export interface ChatHistoryEntry {
   role: 'user' | 'assistant';
   content: string;
@@ -36,6 +40,7 @@ export class ChatBridgeClient {
       method: 'POST',
       headers: this.authHeaders(),
       body: '{}',
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -51,6 +56,7 @@ export class ChatBridgeClient {
       method: 'POST',
       headers: this.authHeaders(),
       body: JSON.stringify({ content }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -63,6 +69,7 @@ export class ChatBridgeClient {
       method: 'POST',
       headers: this.authHeaders(),
       body: JSON.stringify({ errorMessage }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {

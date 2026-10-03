@@ -64,7 +64,11 @@ exact backend host, not a shared parent domain — the cookie is named
 `bridgeRefreshToken` specifically because a shared `COOKIE_DOMAIN` with
 sibling apps on the same parent domain caused a name collision before),
 `EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
-(optional ntlstl.time integration). `/api/v1/vpn/*` (browser-session only —
+(optional ntlstl.time integration), `CREDENTIALS_ENC_KEY` (base64, 32 raw
+bytes — AES-256-GCM key encrypting `ClaudeCredential.token` and
+`VpnConnection.panelApiToken` at rest, see
+`src/crypto/encrypted-column.transformer.ts`; required, no dev fallback,
+same as `JWT_SECRET`). `/api/v1/vpn/*` (browser-session only —
 the only part of bridge's backend that calls out to third-party APIs):
 `BRIDGE_GITHUB_TOKEN` (a PAT scoped to this repo only — Actions secrets:
 write, Actions: write — lets the VPN page push worker provider keys and

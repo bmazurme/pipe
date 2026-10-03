@@ -33,6 +33,7 @@ import {
   handleRemoveCommentTemplate,
   handleSetEncryptionSettings,
   handleGenerateEncryptionKeyPair,
+  handleSetLeakScanStrict,
 } from './subscription/config-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { setupProxy } from './utils/setup-proxy';
@@ -89,6 +90,7 @@ app.post('/api/subscription/config/comment-templates', handleAddCommentTemplate)
 app.delete('/api/subscription/config/comment-templates/:id', handleRemoveCommentTemplate);
 app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
+app.put('/api/subscription/config/leak-scan-strict', handleSetLeakScanStrict);
 app.post('/api/subscription/purge/apply', handlePurgeApply);
 
 if (isProductionMode) {

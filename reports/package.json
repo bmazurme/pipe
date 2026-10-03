@@ -14,7 +14,7 @@
     "dev:server": "npm run dev --workspace=packages/server"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=22"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

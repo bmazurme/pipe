@@ -37,7 +37,12 @@ export const setIssueState = (
 ): SubscriptionStateEntryType => {
   const state = readState();
   const key = issueKey(projectId, iid);
-  const next: SubscriptionStateEntryType = { step: 'init', ...state[key], ...patch };
+  const existing = state[key];
+  const next: SubscriptionStateEntryType = {
+    ...existing,
+    ...patch,
+    step: patch.step ?? existing?.step ?? 'init',
+  };
 
   state[key] = next;
   writeState(state);

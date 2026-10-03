@@ -14,6 +14,8 @@ import { pushReportToBridge } from './push-to-bridge';
 import { getSettings } from '../settings/props';
 import { getProjectDict } from './project-dict-props';
 
+const GITLAB_TIMEOUT_MS = 30_000;
+
 export async function handleReport(req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -33,13 +35,14 @@ export async function handleReport(req: Request, res: Response) {
   }
 
   const filename = buildName();
-  const { start, end } = getCurrentMonthDates();
+  const { start } = getCurrentMonthDates();
   const fetchConfig = {
     method: 'GET',
     headers: {
       'Private-Token': PRIVATE_TOKEN,
       'Content-Type': 'application/json'
     },
+    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
   };
   const closedUrl = `${GITLAB_URL}/issues?assignee_id=${USER_ID}&scope=all&state=closed&updated_after=${start}`;
   const openUrl = `${GITLAB_URL}/issues?assignee_id=${USER_ID}&scope=all&state=opened`;

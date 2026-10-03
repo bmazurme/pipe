@@ -15,6 +15,15 @@ import { readAndTransform } from '../pack.js';
 import type { ProjectConfig, SyncConfig } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
 
+// Russian plural: 1 изображение, 2-4 изображения, 5+/11-14 изображений.
+function pluralizeImages(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'изображение';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'изображения';
+  return 'изображений';
+}
+
 // Matches reports' subscription/handler.ts parcelName(): `${projectId}-${iid}.subscription.zip[.enc]`.
 export function issueParcelName(projectId: string, iid: string, encrypted: boolean): string {
   return `${projectId}-${iid}.subscription.zip${encrypted ? '.enc' : ''}`;
@@ -40,6 +49,7 @@ export async function buildAndUploadIssueParcel(
   issue: GitlabIssue,
   branch: string,
   gitlabToken: string,
+  options: { strict?: boolean } = {},
 ): Promise<PushedIssueParcel | null> {
   const dictionary = loadOptionalDictionary(project.dictionary);
 
@@ -56,6 +66,13 @@ export async function buildAndUploadIssueParcel(
     ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '')
     : [];
 
+  // Images never go through scanForLeaks — it operates on text content, not
+  // image bytes/EXIF — so this is the only signal the operator gets that
+  // they weren't checked at all, regardless of --strict.
+  if (images.length > 0) {
+    console.warn(`${images.length} ${pluralizeImages(images.length)} не проверялись на утечки.`);
+  }
+
   const leaks = scanForLeaks([
     ...files.map((f) => ({ source: f.relPath, content: f.content })),
     { source: 'issue title', content: issueTitle },
@@ -63,6 +80,12 @@ export async function buildAndUploadIssueParcel(
   ]);
   if (leaks.length > 0) {
     console.warn(formatLeakFindings(leaks));
+
+    if (options.strict) {
+      throw new Error(
+        `--strict: ${leaks.length} possible leak(s) found — aborting push. Re-run without --strict to push anyway.`,
+      );
+    }
   }
 
   const archive = buildIssueArchive(
@@ -97,7 +120,12 @@ export async function buildAndUploadIssueParcel(
   };
 }
 
-export async function pushIssueCommand(name: string, projectId: string, iid: string): Promise<void> {
+export async function pushIssueCommand(
+  name: string,
+  projectId: string,
+  iid: string,
+  options: { strict?: boolean } = {},
+): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
 
@@ -115,7 +143,7 @@ export async function pushIssueCommand(name: string, projectId: string, iid: str
   const issue = await getIssue(config.gitlab.apiUrl, gitlabToken, projectId, iid);
   const branch = getCurrentBranch(project.path);
 
-  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken);
+  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken, options);
   if (!result) return;
 
   console.log(

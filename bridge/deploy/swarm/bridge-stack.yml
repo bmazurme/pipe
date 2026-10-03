@@ -37,6 +37,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:?REFRESH_JWT_SECRET is required}
+      # Encrypts ClaudeCredential.token / VpnConnection.panelApiToken at rest
+      # (see src/crypto/encrypted-column.transformer.ts) — base64, 32 raw bytes.
+      CREDENTIALS_ENC_KEY: ${CREDENTIALS_ENC_KEY:?CREDENTIALS_ENC_KEY is required}
       YANDEX_ID: ${YANDEX_ID:?YANDEX_ID is required}
       YANDEX_SECRET: ${YANDEX_SECRET:?YANDEX_SECRET is required}
       BRIDGE_YANDEX_REDIRECT: ${BRIDGE_YANDEX_REDIRECT:?BRIDGE_YANDEX_REDIRECT is required}
@@ -63,9 +66,13 @@ services:
         protocol: tcp
         mode: ingress
     healthcheck:
-      # GET / is the plain health endpoint — no auth, no DB round-trip. Proves
-      # the process is up and serving, not that Postgres answers.
-      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/ >/dev/null || exit 1']
+      # /api/v1/health is readiness, not just liveness — it round-trips
+      # Postgres and checks for a migration that failed to apply on boot
+      # (see src/app.service.ts's getHealthStatus), returning a non-2xx if
+      # either is wrong. That's what actually lets update_config's
+      # failure_action: rollback below catch a bad deploy instead of only
+      # ever seeing the trivial "the process started" succeed.
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/api/v1/health >/dev/null || exit 1']
       interval: 15s
       timeout: 5s
       retries: 5

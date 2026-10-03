@@ -2,6 +2,9 @@
   "name": "bridge",
   "private": true,
   "version": "0.2.0",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "apps/*"
   ],

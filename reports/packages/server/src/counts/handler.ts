@@ -6,7 +6,9 @@ import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings } from '../settings/props';
 import { getProps, addOffDays, removeOffDay, importDayOffs } from './props';
 
-export async function handleCounts(req: Request, res: Response) {
+const BRIDGE_TIMEOUT_MS = 20_000;
+
+export async function handleCounts(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -31,7 +33,7 @@ export async function handleCounts(req: Request, res: Response) {
   }
 }
 
-export async function handleAddOffDay(req: Request, res: Response) {
+export async function handleAddOffDay(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   const { dates } = req.body;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -57,7 +59,7 @@ export async function handleAddOffDay(req: Request, res: Response) {
   }
 }
 
-export async function handleRemoveOffDay(req: Request, res: Response) {
+export async function handleRemoveOffDay(req: Request<Record<string, string>>, res: Response) {
   const { id, date } = req.params;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -82,7 +84,7 @@ export async function handleRemoveOffDay(req: Request, res: Response) {
   }
 }
 
-export async function handleImportDayOffs(req: Request, res: Response) {
+export async function handleImportDayOffs(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -103,6 +105,7 @@ export async function handleImportDayOffs(req: Request, res: Response) {
 
     const bridgeResponse = await fetch(url, {
       headers: { 'X-Api-Key': bridgeApiKey },
+      signal: AbortSignal.timeout(BRIDGE_TIMEOUT_MS),
     }).catch((error) => {
       throw describeFetchError(error, url);
     });

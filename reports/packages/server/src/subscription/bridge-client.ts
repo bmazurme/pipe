@@ -1,6 +1,13 @@
 import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings, setSettings } from '../settings/props';
 
+// No request here had an AbortSignal before. authorizedFetch is shared by
+// both small calls (listParcels) and real file transfers (upload/download
+// Parcel), so it gets the more generous of the two budgets rather than two
+// separate constants.
+const API_TIMEOUT_MS = 20_000;
+const TRANSFER_TIMEOUT_MS = 120_000;
+
 export type StoredFile = {
   id: number;
   originalName: string;
@@ -56,6 +63,7 @@ async function refreshAccessToken(): Promise<string> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { Cookie: `bridgeRefreshToken=${bridgeRefreshToken}` },
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);
   });
@@ -88,12 +96,13 @@ async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Re
   const response = await fetch(url, {
     ...init,
     headers: { ...init.headers, Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
+    const body = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
     const message = Array.isArray(body?.message) ? body.message.join('; ') : body?.message;
 
     throw new Error(`Bridge Storage вернул ошибку ${response.status}${message ? `: ${message}` : ''}`);

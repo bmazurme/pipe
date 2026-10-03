@@ -117,6 +117,12 @@ export const setEncryptionSettings = (encryption: EncryptionSettingsType): Subsc
   return save({ ...config, encryption });
 };
 
+export const setLeakScanStrict = (leakScanStrict: boolean): SubscriptionConfigType => {
+  const config = getSubscriptionConfig();
+
+  return save({ ...config, leakScanStrict });
+};
+
 /** Generates a fresh RSA key pair and stores it, leaving `enabled` untouched. */
 export const generateAndSaveKeyPair = (): SubscriptionConfigType => {
   const config = getSubscriptionConfig();

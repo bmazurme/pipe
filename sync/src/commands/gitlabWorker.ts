@@ -25,11 +25,12 @@ async function processIssue(
   project: ProjectConfig,
   config: SyncConfig,
   gitlabToken: string,
+  options: { strict?: boolean },
 ): Promise<void> {
   const key = issueKey(issue.project_id, issue.iid);
   const branch = syntheticBranchName(issue);
 
-  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken);
+  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken, options);
   if (!result) return;
 
   recordPushed(key, result.filename);
@@ -40,7 +41,10 @@ async function processIssue(
   notify('Task pushed', `#${issue.iid}: ${issue.title} — sent to bridge for agent-runner`);
 }
 
-export async function runGitlabWorkerOnce(name: string): Promise<void> {
+export async function runGitlabWorkerOnce(
+  name: string,
+  options: { strict?: boolean } = {},
+): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
 
@@ -69,7 +73,7 @@ export async function runGitlabWorkerOnce(name: string): Promise<void> {
 
   for (const issue of newIssues) {
     try {
-      await processIssue(issue, project, config, gitlabToken);
+      await processIssue(issue, project, config, gitlabToken, options);
     } catch (error) {
       console.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${(error as Error).message}`);
     }
@@ -80,9 +84,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function gitlabWorkerCommand(name: string, options: { watch?: string }): Promise<void> {
+export async function gitlabWorkerCommand(
+  name: string,
+  options: { watch?: string; strict?: boolean },
+): Promise<void> {
   if (!options.watch) {
-    await runGitlabWorkerOnce(name);
+    await runGitlabWorkerOnce(name, options);
     return;
   }
 
@@ -93,7 +100,7 @@ export async function gitlabWorkerCommand(name: string, options: { watch?: strin
 
   console.log(`Watching GitLab for new assigned issues every ${intervalSec}s. Ctrl+C to stop.`);
   for (;;) {
-    await runGitlabWorkerOnce(name).catch((error: unknown) => {
+    await runGitlabWorkerOnce(name, options).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : error);
     });
     await sleep(intervalSec * 1000);

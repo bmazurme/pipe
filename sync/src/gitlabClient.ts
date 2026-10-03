@@ -1,5 +1,10 @@
 import { extractMarkdownImageRefs } from '@pipe/protocol';
 
+// No request here had an AbortSignal before — a hung GitLab connection (or a
+// slow image host for getIssueImages below) would block push-issue/
+// gitlab-worker indefinitely.
+const GITLAB_TIMEOUT_MS = 30_000;
+
 export interface GitlabIssue {
   id: number;
   iid: number;
@@ -17,7 +22,10 @@ export async function getIssue(
   iid: string | number,
 ): Promise<GitlabIssue> {
   const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}`;
-  const response = await fetch(url, { headers: { 'Private-Token': privateToken } });
+  const response = await fetch(url, {
+    headers: { 'Private-Token': privateToken },
+    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
+  });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -33,7 +41,10 @@ export async function getIssue(
 // Settings for that; sync has no equivalent, and doesn't need one).
 export async function listAssignedOpenIssues(apiUrl: string, privateToken: string): Promise<GitlabIssue[]> {
   const url = `${apiUrl}/issues?scope=assigned_to_me&state=opened`;
-  const response = await fetch(url, { headers: { 'Private-Token': privateToken } });
+  const response = await fetch(url, {
+    headers: { 'Private-Token': privateToken },
+    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
+  });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -79,7 +90,10 @@ export async function getIssueImages(
 
     let response: Response;
     try {
-      response = await fetch(absoluteUrl, { headers: { 'Private-Token': privateToken } });
+      response = await fetch(absoluteUrl, {
+        headers: { 'Private-Token': privateToken },
+        signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
+      });
     } catch (error) {
       console.warn(`Could not download an image from the issue description (${absoluteUrl}):`, error);
       continue;

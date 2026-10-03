@@ -12,10 +12,12 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "jest",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:coverage": "jest --coverage",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts"
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts",
+    "migration:check": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts --check /tmp/migration-check"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -27,6 +29,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/swagger": "^7.4.2",
+    "@nestjs/throttler": "^6.7.1",
     "@nestjs/typeorm": "^11.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -57,6 +60,7 @@
     "@types/node": "^20.3.1",
     "@types/passport": "^1.0.17",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",

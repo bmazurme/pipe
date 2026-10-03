@@ -7,6 +7,11 @@ import type { RunResult } from './claudeRunner.js';
 
 const MAX_TURNS = 20;
 
+// Generous on purpose — a real completion (especially with tool calls) can
+// legitimately take minutes, unlike a plain API round trip. Without any
+// timeout at all, a provider that just hangs would block the job forever.
+const COMPLETION_TIMEOUT_MS = 300_000;
+
 const SYSTEM_PROMPT = [
   'You are a coding agent working in a plain directory (not a git repository).',
   'Use the read_file/list_files/write_file tools to inspect and edit files as needed.',
@@ -139,6 +144,7 @@ export async function runOpenAiCompatible(
       // `dispatcher` is a Node/undici-specific fetch extension not in the
       // standard RequestInit type — real at runtime, just untyped here.
       dispatcher: resolveDispatcher(proxyUrl),
+      signal: AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
     } as RequestInit);
 
     if (!response.ok) {

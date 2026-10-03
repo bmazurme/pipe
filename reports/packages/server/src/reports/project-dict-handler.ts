@@ -3,7 +3,7 @@ import type { StreamEvent } from '@reports/shared';
 
 import { getProjectDict, addProjectCode, removeProjectCode } from './project-dict-props';
 
-export async function handleGetProjectDict(req: Request, res: Response) {
+export async function handleGetProjectDict(req: Request<Record<string, string>>, res: Response) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
 
@@ -24,7 +24,7 @@ export async function handleGetProjectDict(req: Request, res: Response) {
   }
 }
 
-export async function handleAddProjectCode(req: Request, res: Response) {
+export async function handleAddProjectCode(req: Request<Record<string, string>>, res: Response) {
   const { code, label } = req.body;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -46,7 +46,7 @@ export async function handleAddProjectCode(req: Request, res: Response) {
   }
 }
 
-export async function handleRemoveProjectCode(req: Request, res: Response) {
+export async function handleRemoveProjectCode(req: Request<Record<string, string>>, res: Response) {
   const { code } = req.params;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');

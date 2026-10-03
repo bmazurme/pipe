@@ -134,6 +134,11 @@ export type SubscriptionConfigType = {
   dictionary: DictionaryEntryType[];
   commentTemplates: CommentTemplateType[];
   encryption: EncryptionSettingsType;
+  // When true, handlePushSubscriptionIssue aborts instead of just warning if
+  // its final leak scan (right before upload) finds something — the sync
+  // CLI's own --strict equivalent. Defaults to false/undefined (warn-only,
+  // today's behavior) for anyone who hasn't opted in.
+  leakScanStrict?: boolean;
 };
 
 // Everything a user configures by hand, bundled for moving to a new machine

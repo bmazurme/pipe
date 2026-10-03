@@ -85,6 +85,49 @@ describe('buildAndUploadIssueParcel', () => {
     rmSync(projectPath, { recursive: true, force: true });
   });
 
+  it('--strict aborts (and uploads nothing) when the leak scan finds something', async () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-strict-'));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'const contact = "oncall@acme-corp.example";');
+
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error('should not be called');
+    }) as typeof fetch;
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+
+    await assert.rejects(
+      buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token', { strict: true }),
+      /--strict/,
+    );
+    assert.equal(fetchCalled, false);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('without --strict, a leak finding only warns and the upload still proceeds', async () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-warn-'));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'const contact = "oncall@acme-corp.example";');
+
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response(
+        JSON.stringify({ id: 1, originalName: '173-628.subscription.zip', mimeType: 'application/zip', size: 1, createdAt: new Date().toISOString() }),
+        { status: 201 },
+      );
+    }) as typeof fetch;
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token');
+
+    assert.ok(result);
+    assert.equal(fetchCalled, true);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
   it('returns null and uploads nothing when no files match', async () => {
     const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-empty-'));
     mkdirSync(projectPath, { recursive: true });

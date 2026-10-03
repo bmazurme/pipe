@@ -1,3 +1,10 @@
+// No request here had an AbortSignal before — a hung connection on `claim`
+// in particular would freeze the whole poll loop forever, not just one
+// request (see index.ts's main loop, which calls claim every tick).
+// Transfers get a longer budget since a parcel/result can be a real file.
+const API_TIMEOUT_MS = 15_000;
+const TRANSFER_TIMEOUT_MS = 120_000;
+
 export type RemoteJobStatus = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed';
 
 export interface RemoteJob {
@@ -42,6 +49,7 @@ export class WorkerBridgeClient {
       method: 'POST',
       headers: this.authHeaders(true),
       body: JSON.stringify({ workerName }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -55,6 +63,7 @@ export class WorkerBridgeClient {
   async downloadParcel(jobId: number): Promise<Buffer> {
     const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/parcel`, {
       headers: this.authHeaders(),
+      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -73,6 +82,7 @@ export class WorkerBridgeClient {
       method: 'POST',
       headers: this.authHeaders(true),
       body: JSON.stringify({ status, errorMessage }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -88,6 +98,7 @@ export class WorkerBridgeClient {
       method: 'POST',
       headers: this.authHeaders(true),
       body: JSON.stringify({ chunk }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -103,6 +114,7 @@ export class WorkerBridgeClient {
       method: 'POST',
       headers: this.authHeaders(),
       body: form,
+      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
     });
 
     if (!response.ok) {

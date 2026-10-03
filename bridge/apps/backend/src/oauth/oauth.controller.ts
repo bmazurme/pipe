@@ -8,12 +8,16 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 
 import { OauthService } from './oauth.service';
 
+// Human-initiated login, never polled — same reasoning as AuthController's
+// own stricter throttle.
 @Controller('api/v1/oauth')
 @UseInterceptors(ClassSerializerInterceptor)
+@Throttle({ default: { limit: 20, ttl: 60_000 } })
 export class OauthController {
   constructor(private readonly oauthService: OauthService) {}
 

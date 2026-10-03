@@ -10,6 +10,9 @@
 #   CR_FRONTEND_IMAGE, SWARM_HOST, SWARM_USER, SWARM_SSH_KEY,
 #   SWARM_SSH_KNOWN_HOSTS, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER,
 #   POSTGRES_PASSWORD, POSTGRES_DB, JWT_SECRET, REFRESH_JWT_SECRET,
+#   CREDENTIALS_ENC_KEY (base64, 32 raw bytes — generate with
+#   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`;
+#   encrypts ClaudeCredential.token/VpnConnection.panelApiToken at rest),
 #   YANDEX_ID, YANDEX_SECRET, BRIDGE_YANDEX_REDIRECT, BRIDGE_TARGET_URL,
 #   COOKIE_DOMAIN, EMAILS, CORS_ORIGINS, TIME_EXPORT_API_KEY,
 #   TIME_EXPORT_USER_ID, VITE_API_URL, BACKEND_PUBLISHED_PORT,
@@ -268,6 +271,7 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           REFRESH_JWT_SECRET: ${{ secrets.REFRESH_JWT_SECRET }}
+          CREDENTIALS_ENC_KEY: ${{ secrets.CREDENTIALS_ENC_KEY }}
           YANDEX_ID: ${{ secrets.YANDEX_ID }}
           YANDEX_SECRET: ${{ secrets.YANDEX_SECRET }}
           BRIDGE_YANDEX_REDIRECT: ${{ secrets.BRIDGE_YANDEX_REDIRECT }}
@@ -351,7 +355,7 @@ jobs:
           ssh "$SWARM_USER@$SWARM_HOST" '
             set -e
             for i in $(seq 1 20); do
-              if curl -sf "http://127.0.0.1:'"$BACKEND_PORT"'/" > /dev/null \
+              if curl -sf "http://127.0.0.1:'"$BACKEND_PORT"'/api/v1/health" > /dev/null \
                  && curl -sf "http://127.0.0.1:'"$FRONTEND_PORT"'/" > /dev/null; then
                 echo "backend/frontend ports on the VM: ok"
                 exit 0

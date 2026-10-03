@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
+import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { User } from '../../users/entities/user.entity';
 
 // A named Claude Code OAuth token (the `claude setup-token` output —
@@ -24,6 +25,8 @@ export class ClaudeCredential extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'text' })
+  // Encrypted at rest (AES-256-GCM via encryptedColumn) — a DB dump or
+  // pgadmin access no longer hands over a usable Claude OAuth token.
+  @Column({ type: 'text', transformer: encryptedColumn })
   token: string;
 }

@@ -16,6 +16,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 
 import { ApiKeysService } from './api-keys.service';
@@ -30,8 +31,14 @@ import {
   RequestWithAuthSession,
 } from './guards/refresh-token.guard';
 
+// None of these routes are polled — every one is a human clicking something
+// (or a refresh-token rotation the frontend fires on a 401) — so a much
+// tighter limit than the app-wide default is safe here and bounds exactly
+// the thing the P0 rate-limiting gap called out: guessing/brute-forcing a
+// refresh token or hammering API-key creation.
 @Controller('api/v1/auth')
 @UseInterceptors(ClassSerializerInterceptor)
+@Throttle({ default: { limit: 20, ttl: 60_000 } })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

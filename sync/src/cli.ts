@@ -57,6 +57,7 @@ program
   .command('push <name>')
   .description('Transform (value->key) and upload a tracked project to bridge')
   .option('-f, --force', 'push even if content hash is unchanged')
+  .option('--strict', 'abort instead of just warning when the leak scan finds something')
   .action((name, options) => pushCommand(name, options));
 
 program
@@ -76,7 +77,8 @@ program
     'Transform and upload a tracked project as a parcel addressed to one GitLab issue ' +
       '(${projectId}-${iid}.subscription.zip), compatible with reports\' Subscription module',
   )
-  .action((name, projectId, iid) => pushIssueCommand(name, projectId, iid));
+  .option('--strict', 'abort instead of just warning when the leak scan finds something')
+  .action((name, projectId, iid, options) => pushIssueCommand(name, projectId, iid, options));
 
 program
   .command('pull-issue <name> <projectId> <iid>')
@@ -95,6 +97,7 @@ program
       'without having to type the issue id by hand',
   )
   .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
+  .option('--strict', 'skip (instead of just warning on) an issue whose leak scan finds something')
   .action((name, options) => gitlabWorkerCommand(name, options));
 
 program

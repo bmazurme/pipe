@@ -11,7 +11,9 @@
     "build": "tsc -b",
     "dev": "tsc -b -w",
     "start": "node dist/status.js",
-    "test": "tsc -b && node --test 'dist/**/*.test.js'"
+    "test": "tsc -b && node --test 'dist/**/*.test.js'",
+    "test:coverage": "tsc -b && node --test --experimental-test-coverage 'dist/**/*.test.js'",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

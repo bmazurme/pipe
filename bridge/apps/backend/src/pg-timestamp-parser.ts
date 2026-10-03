@@ -6,4 +6,4 @@ import { types } from 'pg';
 // whose TZ isn't UTC that silently shifts every timestamp by the host's
 // offset on the way out (e.g. a file uploaded seconds ago showing "3 hours
 // ago" on a UTC+3 machine). Parse it as UTC explicitly instead.
-types.setTypeParser(1114, (value) => new Date(`${value}Z`));
+types.setTypeParser(1114, (value: string) => new Date(`${value}Z`));

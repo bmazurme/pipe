@@ -7,6 +7,13 @@ import type { StoredFileResponse } from './types.js';
 // bridge's codebase.
 const REFRESH_COOKIE_NAME = 'bridgeRefreshToken';
 
+// Without this, a hung bridge/network connection blocks `push`/`pull`
+// forever — there was no AbortSignal anywhere on these requests before.
+// Transfers get a longer budget than plain API calls since a parcel upload/
+// download can be a real file, not just a JSON round trip.
+const API_TIMEOUT_MS = 20_000;
+const TRANSFER_TIMEOUT_MS = 120_000;
+
 function extractRotatedRefreshToken(response: Response): string | undefined {
   for (const cookie of response.headers.getSetCookie()) {
     const [nameValue] = cookie.split(';');
@@ -27,6 +34,7 @@ async function refreshAccessToken(apiUrl: string): Promise<string> {
   const response = await fetch(`${apiUrl}/api/v1/auth/refresh`, {
     method: 'POST',
     headers: { Cookie: `${REFRESH_COOKIE_NAME}=${refreshToken}` },
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -67,6 +75,7 @@ export class BridgeClient {
   async listFiles(): Promise<StoredFileResponse[]> {
     const response = await fetch(`${this.apiUrl}/api/v1/storage`, {
       headers: await this.authHeader(),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -84,6 +93,7 @@ export class BridgeClient {
       method: 'POST',
       headers: await this.authHeader(),
       body: form,
+      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -99,6 +109,7 @@ export class BridgeClient {
   async download(id: number): Promise<Buffer> {
     const response = await fetch(`${this.apiUrl}/api/v1/storage/${id}/download`, {
       headers: await this.authHeader(),
+      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
     });
 
     if (!response.ok) {

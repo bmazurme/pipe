@@ -9,5 +9,9 @@
   ],
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "eslint": "^10.12.0",
+    "typescript-eslint": "^8.71.0"
   }
 }

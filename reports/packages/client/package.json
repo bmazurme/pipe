@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "e2e": "cypress run",
     "e2e:open": "cypress open"
@@ -33,6 +34,7 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^4.1.8",
     "cypress": "^15.17.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",

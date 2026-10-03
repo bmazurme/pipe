@@ -21,6 +21,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Model output can arrive many times a second — one POST per chunk would
+// mean bridge fields a request storm for the duration of every job. Batched
+// into one append every LOG_FLUSH_INTERVAL_MS instead.
+const LOG_FLUSH_INTERVAL_MS = 1500;
+
 function resultFilename(job: RemoteJob): string {
   return `worker-result-${job.id}.zip`;
 }
@@ -34,15 +39,31 @@ function resultFilename(job: RemoteJob): string {
 export async function processJob(client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig): Promise<void> {
   mkdirSync(config.workDir, { recursive: true });
   const jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
-  let logBuffer = '';
+
+  // `flushed` chains each send onto the previous one, so appends stay
+  // strictly ordered and never overlap in flight — matters because
+  // WorkerService.appendLog does `job.logs += chunk`, which would scramble
+  // the log if an earlier chunk's request resolved after a later one's.
+  let pendingLog = '';
+  let flushed: Promise<void> = Promise.resolve();
+
+  const flushLog = () => {
+    if (!pendingLog) return;
+    const chunk = pendingLog;
+    pendingLog = '';
+    flushed = flushed.then(() =>
+      client.appendLog(job.id, chunk).catch((error) => {
+        console.warn(`[job ${job.id}] failed to forward a log chunk to bridge:`, error);
+      }),
+    );
+  };
 
   const log = (chunk: string) => {
-    logBuffer += chunk;
+    pendingLog += chunk;
     process.stdout.write(chunk);
-    client.appendLog(job.id, chunk).catch((error) => {
-      console.warn(`[job ${job.id}] failed to forward a log chunk to bridge:`, error);
-    });
   };
+
+  const flushInterval = setInterval(flushLog, LOG_FLUSH_INTERVAL_MS);
 
   try {
     await client.updateStatus(job.id, 'running');
@@ -104,6 +125,9 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
       console.error(`[job ${job.id}] additionally failed to report failure status:`, statusError);
     }
   } finally {
+    clearInterval(flushInterval);
+    flushLog();
+    await flushed;
     rmSync(jobDir, { recursive: true, force: true });
   }
 }

@@ -11,7 +11,6 @@ import type {
 } from '@reports/shared';
 import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 
-import { getSettings } from '../settings/props';
 import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
@@ -60,7 +59,7 @@ function requireTrackedProject(projectId: string) {
   return trackedProject;
 }
 
-export async function handleListSubscriptionIssues(req: Request, res: Response) {
+export async function handleListSubscriptionIssues(req: Request<Record<string, string>>, res: Response) {
   await withStream(res, 'List subscription issues', async () => {
     const issues = await listAssignedOpenIssues();
     const projectDict = getProjectDict();
@@ -110,7 +109,7 @@ export async function handleListSubscriptionIssues(req: Request, res: Response) 
   });
 }
 
-export async function handleInitSubscriptionIssue(req: Request, res: Response) {
+export async function handleInitSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Init subscription issue', async () => {
@@ -128,7 +127,7 @@ export async function handleInitSubscriptionIssue(req: Request, res: Response) {
 // push → pull → publish) as a real one, just seeded from typed text instead
 // of a GitLab fetch. The `m-` prefix can't collide with a real iid, which is
 // always numeric.
-export async function handleCreateManualSubscriptionIssue(req: Request, res: Response) {
+export async function handleCreateManualSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { gitlabProjectId, title, description } = req.body as CreateManualSubscriptionIssuePayload;
 
   await withStream(res, 'Create manual subscription issue', async () => {
@@ -157,7 +156,7 @@ export async function handleCreateManualSubscriptionIssue(req: Request, res: Res
 // itself stays listed (handleListSubscriptionIssues sources that from
 // GitLab). For a manual one, state is its only record anywhere, so this is
 // the only way it can be removed.
-export async function handleRemoveSubscriptionIssue(req: Request, res: Response) {
+export async function handleRemoveSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Remove subscription issue', async () => {
@@ -170,7 +169,7 @@ export async function handleRemoveSubscriptionIssue(req: Request, res: Response)
 // client shows/edits this, then push (below) takes the reviewed text back
 // verbatim instead of re-fetching/re-anonymizing the issue itself, so what
 // was actually reviewed is what actually gets sent.
-export async function handleGetSubscriptionDraft(req: Request, res: Response) {
+export async function handleGetSubscriptionDraft(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Get subscription draft', async () => {
@@ -199,7 +198,7 @@ export async function handleGetSubscriptionDraft(req: Request, res: Response) {
   });
 }
 
-export async function handlePushSubscriptionIssue(req: Request, res: Response) {
+export async function handlePushSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
   const { issueId, title: issueTitle, description: issueDescription } = req.body as SubscriptionPushPayload;
 
@@ -225,6 +224,12 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
     // GitLab-hosted markdown to scan at all.
     const images = state.manual ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '');
 
+    // Images never go through scanForLeaks (text-only) — this is the only
+    // signal the operator gets that they weren't checked, strict or not.
+    if (images.length > 0) {
+      console.warn(`[subscription ${projectId}:${iid}] ${images.length} image(s) were not leak-scanned.`);
+    }
+
     const leaks = scanForLeaks([
       ...files.map((f) => ({ source: f.relPath, content: f.content })),
       { source: 'issue title', content: issueTitle },
@@ -232,6 +237,13 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
     ]);
     if (leaks.length > 0) {
       console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
+
+      if (getSubscriptionConfig().leakScanStrict) {
+        throw new Error(
+          `leakScanStrict: ${leaks.length} possible leak(s) found — push aborted. ` +
+            'Disable "Строгая проверка на утечки" in Settings to push anyway.',
+        );
+      }
     }
 
     const archive = buildArchive(
@@ -266,7 +278,7 @@ export async function handlePushSubscriptionIssue(req: Request, res: Response) {
   });
 }
 
-export async function handlePullSubscriptionIssue(req: Request, res: Response) {
+export async function handlePullSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Pull subscription issue', async () => {
@@ -342,7 +354,7 @@ export async function handlePullSubscriptionIssue(req: Request, res: Response) {
   });
 }
 
-export async function handlePublishSubscriptionIssue(req: Request, res: Response) {
+export async function handlePublishSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
   const { templateId, comment, timeEstimate } = req.body as SubscriptionPublishPayload;
 
@@ -368,10 +380,10 @@ export async function handlePublishSubscriptionIssue(req: Request, res: Response
   });
 }
 
-export async function handleGetSubscriptionIssueTime(req: Request, res: Response) {
+export async function handleGetSubscriptionIssueTime(req: Request<Record<string, string>>, res: Response) {
   const { projectId, iid } = req.params;
 
-  await withStream(res, 'Get subscription issue time', () => {
+  await withStream(res, 'Get subscription issue time', async () => {
     const state = getIssueState(projectId, iid);
 
     return state?.manual ? { humanTimeEstimate: null } : getIssueTimeStats(projectId, iid);

@@ -4,6 +4,8 @@ import { extractMarkdownImageRefs } from '@pipe/protocol';
 import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings } from '../settings/props';
 
+const GITLAB_TIMEOUT_MS = 30_000;
+
 function authHeaders(privateToken: string) {
   return {
     'Private-Token': privateToken,
@@ -15,6 +17,7 @@ async function gitlabFetch(url: string, privateToken: string, init: RequestInit 
   const response = await fetch(url, {
     ...init,
     headers: { ...authHeaders(privateToken), ...(init.headers ?? {}) },
+    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);
   });

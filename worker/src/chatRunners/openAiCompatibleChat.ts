@@ -7,6 +7,11 @@ export interface OpenAiCompatibleChatOptions {
   model: string;
 }
 
+// Same reasoning as modelRunners/openAiCompatibleRunner.ts's own
+// COMPLETION_TIMEOUT_MS — generous since a real completion can take minutes,
+// but still bounded so a hung provider doesn't block the chat turn forever.
+const COMPLETION_TIMEOUT_MS = 300_000;
+
 // The chat counterpart to modelRunners/openAiCompatibleRunner.ts — same
 // OpenAI-compatible Chat Completions endpoint, but no `tools`/tool loop:
 // one request, one response, since chat has no files to read or write.
@@ -28,6 +33,7 @@ export async function openAiCompatibleChat(
     // `dispatcher` is a Node/undici-specific fetch extension not in the
     // standard RequestInit type — real at runtime, just untyped here.
     dispatcher: resolveDispatcher(proxyUrl),
+    signal: AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
   } as RequestInit);
 
   if (!response.ok) {

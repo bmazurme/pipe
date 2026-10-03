@@ -3,6 +3,8 @@ import type { BridgeReportEntry } from '@reports/shared';
 import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings } from '../settings/props';
 
+const BRIDGE_TIMEOUT_MS = 20_000;
+
 export async function pushReportToBridge(year: number, month: number, entries: BridgeReportEntry[]) {
   const { bridgeApiUrl, bridgeApiKey } = getSettings();
 
@@ -20,12 +22,13 @@ export async function pushReportToBridge(year: number, month: number, entries: B
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ year, month, entries }),
+    signal: AbortSignal.timeout(BRIDGE_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
+    const body = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
     const message = Array.isArray(body?.message) ? body.message.join('; ') : body?.message;
 
     throw new Error(`Bridge API вернул ошибку ${response.status}${message ? `: ${message}` : ''}`);

@@ -7,7 +7,10 @@ import { buildArchive, readAndTransform } from '../pack.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
 
-export async function pushCommand(name: string, options: { force?: boolean }): Promise<void> {
+export async function pushCommand(
+  name: string,
+  options: { force?: boolean; strict?: boolean },
+): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
   const dictionary = loadOptionalDictionary(project.dictionary);
@@ -23,6 +26,12 @@ export async function pushCommand(name: string, options: { force?: boolean }): P
   const leaks = scanForLeaks(files.map((f) => ({ source: f.relPath, content: f.content })));
   if (leaks.length > 0) {
     console.warn(formatLeakFindings(leaks));
+
+    if (options.strict) {
+      throw new Error(
+        `--strict: ${leaks.length} possible leak(s) found — aborting push. Re-run without --strict to push anyway.`,
+      );
+    }
   }
 
   const { buffer, manifest } = buildArchive(name, files);
