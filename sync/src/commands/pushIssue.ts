@@ -14,6 +14,7 @@ import { resolveFromRoot } from '../paths.js';
 import { readAndTransform } from '../pack.js';
 import type { ProjectConfig, SyncConfig } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
+import { log } from '../log.js';
 
 // Russian plural: 1 изображение, 2-4 изображения, 5+/11-14 изображений.
 function pluralizeImages(count: number): string {
@@ -55,7 +56,7 @@ export async function buildAndUploadIssueParcel(
 
   const relPaths = await walkProjectFiles(project.path, projectInclude(project), projectExclude(project));
   if (relPaths.length === 0) {
-    console.log(`No files matched include/exclude patterns under ${project.path}.`);
+    log.info(`No files matched include/exclude patterns under ${project.path}.`);
     return null;
   }
 
@@ -70,7 +71,7 @@ export async function buildAndUploadIssueParcel(
   // image bytes/EXIF — so this is the only signal the operator gets that
   // they weren't checked at all, regardless of --strict.
   if (images.length > 0) {
-    console.warn(`${images.length} ${pluralizeImages(images.length)} не проверялись на утечки.`);
+    log.warn(`${images.length} ${pluralizeImages(images.length)} не проверялись на утечки.`);
   }
 
   const leaks = scanForLeaks([
@@ -79,7 +80,7 @@ export async function buildAndUploadIssueParcel(
     { source: 'issue description', content: issueDescription },
   ]);
   if (leaks.length > 0) {
-    console.warn(formatLeakFindings(leaks));
+    log.warn(formatLeakFindings(leaks));
 
     if (options.strict) {
       throw new Error(
@@ -109,7 +110,11 @@ export async function buildAndUploadIssueParcel(
 
   const filename = issueParcelName(String(issue.project_id), String(issue.iid), shouldEncrypt);
   const client = new BridgeClient(config.bridge.apiUrl);
-  const stored = await client.upload(filename, buffer);
+  const stored = await client.upload(filename, buffer, {
+    channel: 'issue',
+    taskKey: `${issue.project_id}:${issue.iid}`,
+    direction: 'outbound',
+  });
 
   return {
     filename,
@@ -146,7 +151,7 @@ export async function pushIssueCommand(
   const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken, options);
   if (!result) return;
 
-  console.log(
+  log.info(
     `Pushed issue #${iid} (project ${projectId}) as "${result.filename}" (${result.fileCount} files, ` +
       `${result.storedSize} bytes, storage id ${result.storedId}, branch "${branch}"` +
       `${result.encrypted ? ', encrypted' : ''}).`,

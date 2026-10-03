@@ -1,0 +1,2514 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "AppController_getHealthStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/check": {
+      "get": {
+        "operationId": "AuthController_checkAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckAuthResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refreshToken",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "summary": "Logout user",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "User successfully logged out"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions": {
+      "get": {
+        "operationId": "AuthController_listSessions",
+        "summary": "List active sessions (devices) for current user",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions/{id}": {
+      "delete": {
+        "operationId": "AuthController_revokeSession",
+        "summary": "Revoke a session (remotely sign out a device)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/auth/api-keys": {
+      "post": {
+        "operationId": "AuthController_createApiKey",
+        "summary": "Create a personal API key (for machine callers like sync-cli, that cannot go through OAuth)",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKeyResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "AuthController_listApiKeys",
+        "summary": "List active API keys for current user",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/api-keys/{id}": {
+      "delete": {
+        "operationId": "AuthController_revokeApiKey",
+        "summary": "Revoke an API key",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/chats": {
+      "get": {
+        "operationId": "ChatController_listChats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ChatController_createChat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/chats/{id}": {
+      "patch": {
+        "operationId": "ChatController_renameChat",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameChatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ChatController_removeChat",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/chats/{id}/messages": {
+      "get": {
+        "operationId": "ChatController_listMessages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ChatController_sendMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/turns/claim": {
+      "post": {
+        "operationId": "ChatController_claim",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/turns/{messageId}/complete": {
+      "post": {
+        "operationId": "ChatController_completeTurn",
+        "parameters": [
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/turns/{messageId}/fail": {
+      "post": {
+        "operationId": "ChatController_failTurn",
+        "parameters": [
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/yandex": {
+      "get": {
+        "operationId": "OauthController_yandexLogin",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/yandex/redirect": {
+      "get": {
+        "operationId": "OauthController_yandexLoginRedirect",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "operationId": "UsersController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purge": {
+      "get": {
+        "operationId": "PurgeController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurgeEntryResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "PurgeController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePurgeEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurgeEntryResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purge/draft/text": {
+      "get": {
+        "operationId": "PurgeController_getDraft",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "PurgeController_saveDraft",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraftDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/purge/{id}": {
+      "patch": {
+        "operationId": "PurgeController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePurgeEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurgeEntryResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "PurgeController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "StorageController_list",
+        "parameters": [
+          {
+            "name": "channel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskKey",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "outbound",
+                "result"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoredFileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "StorageController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadFileMetaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredFileResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storage/{id}/download": {
+      "get": {
+        "operationId": "StorageController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/storage/{id}/peek": {
+      "get": {
+        "operationId": "StorageController_peek",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/time/day-offs": {
+      "get": {
+        "operationId": "TimeController_list",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DayOffResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "TimeController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDayOffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DayOffResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time/day-offs/{id}": {
+      "delete": {
+        "operationId": "TimeController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/time/reports": {
+      "get": {
+        "operationId": "TimeController_listReports",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeReportEntryResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "TimeController_deleteReports",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/time/reports/import": {
+      "post": {
+        "operationId": "TimeController_importReport",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTimeReportResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time/export/day-offs": {
+      "get": {
+        "operationId": "TimeExportController_exportDayOffs",
+        "parameters": [
+          {
+            "name": "year",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDayOffsResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time/import/reports": {
+      "post": {
+        "operationId": "TimeImportController_importReports",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportReportEntriesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTimeReportResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/status": {
+      "get": {
+        "operationId": "VpnController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/sync": {
+      "post": {
+        "operationId": "VpnController_sync",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/worker-secrets": {
+      "post": {
+        "operationId": "VpnController_setWorkerSecret",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorkerSecretDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/provision": {
+      "post": {
+        "operationId": "VpnController_provision",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionVpnServerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections": {
+      "get": {
+        "operationId": "VpnConnectionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VpnConnectionResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "VpnConnectionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVpnConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VpnConnectionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}": {
+      "delete": {
+        "operationId": "VpnConnectionsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/activate": {
+      "post": {
+        "operationId": "VpnConnectionsController_activate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/status": {
+      "get": {
+        "operationId": "VpnConnectionsController_getStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/connection-link": {
+      "get": {
+        "operationId": "VpnConnectionsController_getConnectionLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs": {
+      "get": {
+        "operationId": "WorkerController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "WorkerController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/claim": {
+      "post": {
+        "operationId": "WorkerController_claim",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}": {
+      "get": {
+        "operationId": "WorkerController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "WorkerController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/parcel": {
+      "get": {
+        "operationId": "WorkerController_downloadParcel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result/download": {
+      "get": {
+        "operationId": "WorkerController_downloadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/status": {
+      "post": {
+        "operationId": "WorkerController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJobStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/logs": {
+      "post": {
+        "operationId": "WorkerController_appendLog",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendJobLogDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result": {
+      "post": {
+        "operationId": "WorkerController_uploadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials": {
+      "get": {
+        "operationId": "ClaudeCredentialsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ClaudeCredentialsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClaudeCredentialDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials/{id}": {
+      "delete": {
+        "operationId": "ClaudeCredentialsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/status": {
+      "get": {
+        "operationId": "WorkerStatusController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerStatusResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "info": {
+    "title": "ntlstl",
+    "description": "ntlstl API description",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": ""
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CheckAuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "isAuthenticated": {
+            "type": "boolean"
+          },
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "isAuthenticated"
+        ]
+      },
+      "SessionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "userAgent": {
+            "type": "string",
+            "nullable": true
+          },
+          "ip": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "isCurrent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "userAgent",
+          "ip",
+          "createdAt",
+          "lastUsedAt",
+          "isCurrent"
+        ]
+      },
+      "CreateApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreatedApiKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "token",
+          "createdAt"
+        ]
+      },
+      "ApiKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "createdAt",
+          "lastUsedAt"
+        ]
+      },
+      "ChatResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "model": {
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "title",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateChatDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "RenameChatDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "ChatMessageResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "chatId": {
+            "type": "number"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "chatId",
+          "role",
+          "content",
+          "status",
+          "errorMessage",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SendMessageDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "CompleteTurnDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "FailTurnDto": {
+        "type": "object",
+        "properties": {
+          "errorMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "MeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "username": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "status"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "email": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "status"
+        ]
+      },
+      "PurgeEntryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "value",
+          "createdAt"
+        ]
+      },
+      "SaveDraftDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200000
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "CreatePurgeEntryDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      },
+      "UpdatePurgeEntryDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "StoredFileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "direction": {
+            "nullable": true,
+            "enum": [
+              "outbound",
+              "result"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "mimeType",
+          "size",
+          "createdAt",
+          "channel",
+          "taskKey",
+          "direction"
+        ]
+      },
+      "UploadFileMetaDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "taskKey": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "outbound",
+              "result"
+            ]
+          }
+        }
+      },
+      "DayOffResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "off",
+              "holiday",
+              "short",
+              "compensatory"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "date",
+          "type"
+        ]
+      },
+      "CreateDayOffDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "/^\\d{4}-\\d{2}-\\d{2}$/"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "off",
+              "holiday",
+              "short",
+              "compensatory"
+            ]
+          }
+        },
+        "required": [
+          "date"
+        ]
+      },
+      "TimeReportEntryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "year": {
+            "type": "number"
+          },
+          "month": {
+            "type": "number"
+          },
+          "taskName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "hours": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "year",
+          "month",
+          "taskName",
+          "status",
+          "hours"
+        ]
+      },
+      "ImportTimeReportResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number"
+          },
+          "month": {
+            "type": "number"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimeReportEntryResponseDto"
+            }
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "entries"
+        ]
+      },
+      "ExportDayOffsResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number"
+          },
+          "holidays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shortDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "offDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "badDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "year",
+          "holidays",
+          "shortDays",
+          "offDays",
+          "badDays"
+        ]
+      },
+      "ImportReportEntryDto": {
+        "type": "object",
+        "properties": {
+          "taskName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "hours": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "taskName",
+          "status",
+          "hours"
+        ]
+      },
+      "ImportReportEntriesDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "month": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportReportEntryDto"
+            }
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "entries"
+        ]
+      },
+      "ConfirmActionDto": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ]
+      },
+      "SetWorkerSecretDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "WORKER_OPENAI_API_KEY",
+              "WORKER_DEEPSEEK_API_KEY",
+              "WORKER_QWEN_API_KEY",
+              "WORKER_CLAUDE_CODE_OAUTH_TOKEN"
+            ]
+          },
+          "value": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "confirm"
+        ]
+      },
+      "ProvisionVpnServerDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "sshUser": {
+            "type": "string"
+          },
+          "sshPassword": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "host",
+          "sshUser",
+          "sshPassword",
+          "confirm"
+        ]
+      },
+      "VpnConnectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "serverAddress": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "serverAddress",
+          "isActive",
+          "createdAt"
+        ]
+      },
+      "CreateVpnConnectionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "panelUrl": {
+            "type": "string"
+          },
+          "panelApiToken": {
+            "type": "string"
+          },
+          "serverAddress": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "name",
+          "panelUrl",
+          "panelApiToken",
+          "serverAddress"
+        ]
+      },
+      "JobResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "sourceFileId": {
+            "type": "number"
+          },
+          "resultFileId": {
+            "type": "number",
+            "nullable": true
+          },
+          "model": {
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ],
+            "type": "string"
+          },
+          "claudeCredentialId": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "claimed",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "logs": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "workerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "claimedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceFileId",
+          "resultFileId",
+          "model",
+          "claudeCredentialId",
+          "status",
+          "logs",
+          "errorMessage",
+          "workerName",
+          "claimedAt",
+          "startedAt",
+          "finishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateJobDto": {
+        "type": "object",
+        "properties": {
+          "sourceFileId": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
+          },
+          "claudeCredentialId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sourceFileId",
+          "model"
+        ]
+      },
+      "ClaimJobDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      },
+      "UpdateJobStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "object"
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "AppendJobLogDto": {
+        "type": "object",
+        "properties": {
+          "chunk": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk"
+        ]
+      },
+      "ClaudeCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt"
+        ]
+      },
+      "CreateClaudeCredentialDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "token"
+        ]
+      },
+      "WorkerHeartbeatStatusDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isUp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "lastSeenAt",
+          "isUp"
+        ]
+      },
+      "WorkerStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "isUp": {
+            "type": "boolean"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkerHeartbeatStatusDto"
+            }
+          }
+        },
+        "required": [
+          "isUp",
+          "workers"
+        ]
+      }
+    }
+  }
+}

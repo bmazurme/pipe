@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { platform } from 'node:os';
+import { log } from './log.js';
 
 // Split out so it's testable without spawning a real notifier or firing an
 // actual OS notification during `npm test` (see notify.test.ts) — the
@@ -14,7 +15,7 @@ export function formatFallback(title: string, message: string): string {
 // can never be interpreted as shell syntax. Never throws — a failed
 // notification must not break the push/pull it's reporting on.
 export function notify(title: string, message: string): void {
-  const fallback = () => console.log(formatFallback(title, message));
+  const fallback = () => log.info(formatFallback(title, message));
 
   try {
     if (platform() === 'darwin') {

@@ -1,0 +1,57 @@
+# State files
+
+Part of [ECOSYSTEM.md](../ECOSYSTEM.md)'s cross-cutting detail — see that
+file for the full index.
+
+What's on disk, per product, and how tasks are keyed:
+
+| File | Repo | Keyed by | What it tracks |
+|---|---|---|---|
+| `.sync-state.json` | sync | project name | last content hash pushed/pulled, project mode |
+| `.sync-agent-state.json` | sync | `projectId:iid` | agent-runner's last-own-output dedup hash per GitLab issue (so it doesn't mistake its own push-back for a fresh incoming parcel) — not a progress record |
+| `.gitlab-worker-state.json` | sync | `projectId:iid` | which issues gitlab-worker has already turned into a pushed parcel, and when |
+| `packages/server/src/subscription/subscription-state.json` | reports | `projectId:iid` | Subscription module's step/branch/timestamps per GitLab issue |
+| — | bridge | — | none; bridge is the storage relay, it holds no task state of its own |
+
+All three task-state files already agree on the `projectId:iid` key (e.g.
+`"173:628"`), which is what makes `pipe-status` (in `harness/`) able to
+merge them into one view instead of requiring separate lookups.
+
+**worker's job state lives in bridge's own Postgres**, not a local file —
+the `jobs` table (`bridge/apps/backend/src/worker/entities/job.entity.ts`,
+migration `1790100000000-AddWorkerJobs`), one row per job: which
+`StoredFile` it reads from and writes to, the assigned model, its
+`queued → claimed → running → succeeded/failed` status, accumulated logs,
+and timestamps. Unlike everything else in this table, it isn't keyed by
+`projectId:iid` at all — a job is keyed to a specific bridge `StoredFile`
+id, since worker (unlike sync/reports) has no GitLab integration of its
+own and only ever acts on whatever's already sitting in storage. `harness`
+doesn't read it (it's DB-backed, not a local JSON file, and specific to
+one bridge account rather than one machine's checkout) — bridge's own
+Worker page is the only place this state is visible today. Encrypted
+(`.enc`) parcels are never eligible: worker has no access to the
+per-account private key that would decrypt them (see
+[auth.md](auth.md) for why that boundary exists). A `StoredFile` row can
+also carry optional `channel`/`taskKey`/`direction` addressing fields (see
+[parcel.md](parcel.md#multi-parcel-addressing)) — client-populated, not
+derived by bridge itself.
+
+**Chat's state is the same shape of idea, a separate pair of tables**:
+`chats` (`bridge/apps/backend/src/chat/entities/chat.entity.ts` — one row
+per conversation: model, optional title) and `chat_messages`
+(`chat-message.entity.ts` — one row per turn: role, content,
+`pending -> running -> complete`/`failed` status, cascade-deleted with
+their chat). Migration `1790200000000-AddChats`. Not keyed by
+`projectId:iid` either, for the same reason as `jobs` — no GitLab issue is
+involved. `ChatService.claim` uses the identical `FOR UPDATE SKIP LOCKED`
+pattern as `WorkerService.claim` to hand out at most one pending turn per
+poll.
+
+**worker's own liveness is a heartbeat, not a state file**: one row per
+`(userId, workerName)` in `worker_heartbeats`
+(`bridge/apps/backend/src/worker/entities/worker-heartbeat.entity.ts`),
+upserted on every single claim attempt regardless of whether a job was
+found — an idle worker polling an empty queue changes nothing on `jobs`,
+so this is the only actual proof-of-life signal. `GET /api/v1/worker/status`
+reports up/down from it (stale after 30s); the Worker page's own status
+block is built on that.

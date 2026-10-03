@@ -312,6 +312,7 @@ describe('VpnService', () => {
         host: '198.51.100.9',
         sshUser: 'root',
         sshPassword: 'hunter2',
+        confirm: true,
       });
 
       expect(calls).toContain(

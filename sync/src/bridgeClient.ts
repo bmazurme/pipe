@@ -85,9 +85,20 @@ export class BridgeClient {
     return (await response.json()) as StoredFileResponse[];
   }
 
-  async upload(filename: string, buffer: Buffer): Promise<StoredFileResponse> {
+  // meta is optional addressing metadata (see bridge's
+  // StoredFile.channel/taskKey/direction, IMPROVEMENTS_TECH.md 2.3) — lets a
+  // pull/list consumer filter by it server-side instead of guessing from
+  // the filename pattern, the same storage API every client already uses.
+  async upload(
+    filename: string,
+    buffer: Buffer,
+    meta: { channel?: string; taskKey?: string; direction?: 'outbound' | 'result' } = {},
+  ): Promise<StoredFileResponse> {
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(buffer)]), filename);
+    if (meta.channel) form.append('channel', meta.channel);
+    if (meta.taskKey) form.append('taskKey', meta.taskKey);
+    if (meta.direction) form.append('direction', meta.direction);
 
     const response = await fetch(`${this.apiUrl}/api/v1/storage`, {
       method: 'POST',

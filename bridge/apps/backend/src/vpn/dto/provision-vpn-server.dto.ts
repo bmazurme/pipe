@@ -1,4 +1,4 @@
-import { IsIP, IsNotEmpty, IsString } from 'class-validator';
+import { Equals, IsIP, IsNotEmpty, IsString } from 'class-validator';
 
 export class ProvisionVpnServerDto {
   @IsIP()
@@ -11,4 +11,8 @@ export class ProvisionVpnServerDto {
   @IsString()
   @IsNotEmpty()
   sshPassword: string;
+
+  // See ConfirmActionDto's own comment — same "are you sure" gate.
+  @Equals(true)
+  confirm: boolean;
 }

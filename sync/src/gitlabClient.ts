@@ -1,4 +1,5 @@
 import { extractMarkdownImageRefs } from '@pipe/protocol';
+import { log } from './log.js';
 
 // No request here had an AbortSignal before — a hung GitLab connection (or a
 // slow image host for getIssueImages below) would block push-issue/
@@ -95,19 +96,19 @@ export async function getIssueImages(
         signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
       });
     } catch (error) {
-      console.warn(`Could not download an image from the issue description (${absoluteUrl}):`, error);
+      log.warn(`Could not download an image from the issue description (${absoluteUrl}):`, error);
       continue;
     }
 
     if (!response.ok) {
-      console.warn(`Could not download an image from the issue description (${absoluteUrl}): HTTP ${response.status}`);
+      log.warn(`Could not download an image from the issue description (${absoluteUrl}): HTTP ${response.status}`);
       continue;
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
     totalBytes += bytes.length;
     if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
-      console.warn(`Issue images exceeded the ${MAX_TOTAL_IMAGE_BYTES}-byte limit — the rest were skipped.`);
+      log.warn(`Issue images exceeded the ${MAX_TOTAL_IMAGE_BYTES}-byte limit — the rest were skipped.`);
       break;
     }
 

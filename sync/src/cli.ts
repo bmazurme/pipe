@@ -12,6 +12,7 @@ import { pullCommand } from './commands/pull.js';
 import { pushIssueCommand } from './commands/pushIssue.js';
 import { pullIssueCommand } from './commands/pullIssue.js';
 import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
+import { log, setVerbose } from './log.js';
 import { setupProxy } from './setupProxy.js';
 
 setupProxy();
@@ -23,7 +24,11 @@ program
   .description(
     'Syncs a JS/TS project tree with another machine through bridge storage, ' +
       'swapping real values for dictionary keys on the way out and back on the way in.',
-  );
+  )
+  .option('-v, --verbose', 'show debug-level output')
+  .hook('preAction', (thisCommand) => {
+    setVerbose(Boolean(thisCommand.opts().verbose));
+  });
 
 program
   .command('login <refreshToken>')
@@ -138,6 +143,6 @@ function describeError(error: unknown): string {
 }
 
 program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(describeError(error));
+  log.error(describeError(error));
   process.exitCode = 1;
 });

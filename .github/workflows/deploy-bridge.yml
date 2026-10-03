@@ -252,6 +252,29 @@ jobs:
           # comment on the configs: block.
           echo "VPN_CLIENT_CONFIG_HASH=$(sha256sum "$RUNNER_TEMP/xray-client-config.json" | cut -c1-12)" >> "$GITHUB_ENV"
 
+      # Worker's own secrets now travel as Swarm secrets (encrypted at rest
+      # in the raft store, not visible in `docker service inspect`), not
+      # plain env — see bridge-stack.yml's own `secrets:` block and
+      # IMPROVEMENTS_TECH.md 1.6. Same immutable-object/content-hash-name
+      # pattern as the VPN client config above; OPENAI/DEEPSEEK/QWEN keys are
+      # optional, but still need a (possibly empty) file to exist.
+      - name: Write worker secrets
+        env:
+          WORKER_BRIDGE_API_KEY: ${{ secrets.WORKER_BRIDGE_API_KEY }}
+          WORKER_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.WORKER_CLAUDE_CODE_OAUTH_TOKEN }}
+          WORKER_OPENAI_API_KEY: ${{ secrets.WORKER_OPENAI_API_KEY }}
+          WORKER_DEEPSEEK_API_KEY: ${{ secrets.WORKER_DEEPSEEK_API_KEY }}
+          WORKER_QWEN_API_KEY: ${{ secrets.WORKER_QWEN_API_KEY }}
+        run: |
+          umask 077
+          for name in BRIDGE_API_KEY CLAUDE_CODE_OAUTH_TOKEN OPENAI_API_KEY DEEPSEEK_API_KEY QWEN_API_KEY; do
+            value_var="WORKER_${name}"
+            file_path="$RUNNER_TEMP/worker-${name,,}.secret"
+            printf '%s' "${!value_var}" > "$file_path"
+            echo "WORKER_${name}_FILE=${file_path}" >> "$GITHUB_ENV"
+            echo "WORKER_${name}_HASH=$(sha256sum "$file_path" | cut -c1-12)" >> "$GITHUB_ENV"
+          done
+
       # `docker stack deploy` ignores env_file, so every value is interpolated
       # here on the runner from GitHub secrets. Side effect: they are visible in
       # `docker service inspect` on the VM.
@@ -282,13 +305,11 @@ jobs:
           TIME_EXPORT_API_KEY: ${{ secrets.TIME_EXPORT_API_KEY }}
           TIME_EXPORT_USER_ID: ${{ secrets.TIME_EXPORT_USER_ID }}
           WORKER_BRIDGE_API_URL: ${{ secrets.WORKER_BRIDGE_API_URL }}
-          WORKER_BRIDGE_API_KEY: ${{ secrets.WORKER_BRIDGE_API_KEY }}
-          WORKER_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.WORKER_CLAUDE_CODE_OAUTH_TOKEN }}
-          WORKER_OPENAI_API_KEY: ${{ secrets.WORKER_OPENAI_API_KEY }}
-          WORKER_DEEPSEEK_API_KEY: ${{ secrets.WORKER_DEEPSEEK_API_KEY }}
-          WORKER_QWEN_API_KEY: ${{ secrets.WORKER_QWEN_API_KEY }}
           BRIDGE_GITHUB_TOKEN: ${{ secrets.BRIDGE_GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+        # WORKER_*_FILE/_HASH for the five worker secrets come from the
+        # "Write worker secrets" step above via $GITHUB_ENV — already in this
+        # step's environment, not redeclared here.
         run: |
           VPN_CLIENT_CONFIG_FILE="$RUNNER_TEMP/xray-client-config.json" \
           docker stack deploy \
@@ -297,9 +318,11 @@ jobs:
             --prune \
             "$STACK_NAME"
 
-      - name: Clean up the VPN client config file
+      - name: Clean up secret files
         if: always()
-        run: rm -f "$RUNNER_TEMP/xray-client-config.json"
+        run: |
+          rm -f "$RUNNER_TEMP/xray-client-config.json"
+          rm -f "$RUNNER_TEMP"/worker-*.secret
 
       - name: Wait for the rolling update to converge
         run: |

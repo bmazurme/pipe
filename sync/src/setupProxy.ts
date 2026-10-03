@@ -1,4 +1,5 @@
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { log } from './log.js';
 
 // Node's global `fetch` (undici) does not read HTTP_PROXY/HTTPS_PROXY on its
 // own — without this, calls to bridge silently try to connect directly and
@@ -15,5 +16,5 @@ export function setupProxy(): void {
   setGlobalDispatcher(new ProxyAgent(proxyUrl));
 
   const { protocol, host } = new URL(proxyUrl);
-  console.log(`🌐 Исходящие запросы идут через прокси ${protocol}//${host}`);
+  log.info(`🌐 Исходящие запросы идут через прокси ${protocol}//${host}`);
 }

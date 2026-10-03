@@ -171,7 +171,7 @@ describe('WorkerPage', () => {
     await user.click(within(openAiField).getByText('Сохранить'));
 
     await waitFor(() =>
-      expect(secretBody).toEqual({ name: 'WORKER_OPENAI_API_KEY', value: 'sk-test-key' }),
+      expect(secretBody).toEqual({ name: 'WORKER_OPENAI_API_KEY', value: 'sk-test-key', confirm: true }),
     );
   });
 

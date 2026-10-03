@@ -42,14 +42,18 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
       query: () => 'vpn/status',
       providesTags: ['VpnStatus'],
     }),
+    // These three carry a GitHub token server-side scoped to push Actions
+    // secrets + trigger a redeploy — `confirm: true` is a required "are you
+    // sure" gate the backend itself now validates (see
+    // vpn/dto/confirm-action.dto.ts's own comment), not just a UI nicety.
     syncVpnConfig: builder.mutation<void, void>({
-      query: () => ({ url: 'vpn/sync', method: 'POST' }),
+      query: () => ({ url: 'vpn/sync', method: 'POST', body: { confirm: true } }),
     }),
     setWorkerSecret: builder.mutation<void, { name: WorkerSecretName; value: string }>({
-      query: (body) => ({ url: 'vpn/worker-secrets', method: 'POST', body }),
+      query: (body) => ({ url: 'vpn/worker-secrets', method: 'POST', body: { ...body, confirm: true } }),
     }),
     provisionVpnServer: builder.mutation<void, ProvisionVpnServerBody>({
-      query: (body) => ({ url: 'vpn/provision', method: 'POST', body }),
+      query: (body) => ({ url: 'vpn/provision', method: 'POST', body: { ...body, confirm: true } }),
     }),
     listVpnConnections: builder.query<VpnConnection[], void>({
       query: () => 'vpn/connections',

@@ -4,8 +4,8 @@
 read directly off disk. No network calls, no auth, no bridge dependency —
 it only reads the state files those two tools already write.
 
-See [`ECOSYSTEM.md`](../ECOSYSTEM.md)'s "State files" section for what each
-file tracks and why they share a `projectId:iid` key.
+See [`docs/state.md`](../docs/state.md) for what each file tracks and why
+they share a `projectId:iid` key.
 
 ## What it reads
 

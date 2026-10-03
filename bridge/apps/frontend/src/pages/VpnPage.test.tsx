@@ -311,7 +311,12 @@ describe('VpnPage', () => {
     await user.click(screen.getByText('Создать'));
 
     await waitFor(() =>
-      expect(provisionBody).toEqual({ host: '198.51.100.9', sshUser: 'ubuntu', sshPassword: 'hunter2' }),
+      expect(provisionBody).toEqual({
+        host: '198.51.100.9',
+        sshUser: 'ubuntu',
+        sshPassword: 'hunter2',
+        confirm: true,
+      }),
     );
     expect(await screen.findByText(/Запущена настройка сервера/)).toBeTruthy();
   });

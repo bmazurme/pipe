@@ -76,11 +76,21 @@ cd /opt/pipe-worker-src/worker && npm install && npm run build
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek (задачи и чат) | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
 | `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen (задачи и чат) | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |
 | `WORKER_PROXY_URL` | нет | HTTP-прокси для обращений к AI-провайдерам, например `http://vpn-client:1080` — **не SOCKS5**: ни claude CLI (`HTTP_PROXY`/`HTTPS_PROXY`), ни undici `ProxyAgent` (используется для OpenAI-совместимых запросов) не поддерживают SOCKS5, только HTTP-прокси (`claude` явно падает с `UnsupportedProxyProtocol`, если указать `socks5://`). Намеренно не затрагивает обращения к самому bridge (тот должен быть доступен напрямую оттуда, где запущен worker) |
+| `LOG_LEVEL` | нет (по умолчанию `info`) | уровень для структурного JSON-логгера (`pino`, см. `worker/src/logger.ts`) — `debug`/`info`/`warn`/`error`. Каждая запись по задаче/реплике чата несёт `jobId`/`chatId` в контексте, удобно фильтровать под systemd (`journalctl -u pipe-worker -o cat \| jq`) или в Swarm (`docker service logs`) |
 
 Достаточно настроить ключи только для тех моделей, которые реально
 собираетесь использовать — worker стартует и без них, задача или реплика
 чата с неподключённой моделью просто завершится ошибкой с понятным
 сообщением вместо падения всего процесса.
+
+Любой из пяти секретов (`BRIDGE_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `QWEN_API_KEY`) можно вместо значения
+передать файлом — `<ИМЯ>_FILE=/путь/к/файлу` (`worker/src/secrets.ts`
+читает и `.trim()`-ит его в саму переменную при старте; если задана и
+переменная, и `_FILE`, переменная побеждает). Так в Swarm подключены
+`docker secret` (см. `bridge/deploy/swarm/bridge-stack.yml`'s `secrets:` —
+значения не передаются как обычный env сервиса и не видны в
+`docker service inspect`), но это общий механизм, не завязанный на Swarm.
 
 `WORKER_PROXY_URL` решает конкретную задачу: если worker запущен на
 площадке, откуда AI-провайдеры (Anthropic, OpenAI и т.д.) недоступны
@@ -100,14 +110,24 @@ AI-провайдерам — через VPN на отдельном серве�
 
 ## Запуск
 
-Разово, для проверки:
+**Основной, поддерживаемый способ — Docker/Swarm, через тот же пайплайн,
+что деплоит bridge.** `.github/workflows/deploy-bridge.yml` уже собирает
+`CR_WORKER_IMAGE` (версия — git SHA коммита, как и образы backend/frontend)
+и деплоит его вместе с остальным стеком через
+`bridge/deploy/swarm/bridge-stack.yml` (сервис `worker`, плюс `vpn-client`
+рядом — см. пример конфигурации чуть выше). Руками ничего собирать/копировать
+не нужно — обычный `задеплой` через `workflow_dispatch` уже обновляет worker.
+
+Разово, для проверки без Docker вообще:
 
 ```bash
 cd worker
 BRIDGE_API_URL=https://bridge.example.com BRIDGE_API_KEY=brk_xxx npm start
 ```
 
-Постоянно, через systemd (`systemd/pipe-worker.service`):
+Постоянно, но **вне Swarm-стека** (отдельная машина, не в составе
+основного деплоя) — через systemd (`systemd/pipe-worker.service`), запасной
+вариант, когда отдельный процесс нужен не в докере:
 
 ```bash
 sudo useradd --system --create-home --shell /usr/sbin/nologin pipe-worker
@@ -128,7 +148,13 @@ journalctl -u pipe-worker -f
 предупреждение, что уже стоит в `sync/src/claudeRunner.ts`: процесс не
 должен работать под общей/административной учётной записью ОС. Юнит
 `systemd/pipe-worker.service` уже запускает worker под отдельным
-непривилегированным пользователем `pipe-worker`.
+непривилегированным пользователем `pipe-worker`, с `ProtectSystem=strict`,
+`NoNewPrivileges`, `PrivateTmp`, `ProtectKernelTunables`/`Modules`,
+ограниченными `AF_INET`/`AF_INET6`/`AF_UNIX` и фильтром syscall'ов
+`@system-service`. `ReadWritePaths` сужен до `WORKER_WORK_DIR` — если этот
+путь переопределён в `.env`, юнит нужно поправить вручную (systemd не
+создаёт несуществующий путь). Полная изоляция (контейнер/VM на задачу) —
+открытый пункт, см. IMPROVEMENTS_TECH.md 1.3.
 
 Каждая задача выполняется в свежей временной директории (`WORKER_WORK_DIR`),
 которая удаляется после завершения независимо от результата. У worker нет

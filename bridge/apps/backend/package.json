@@ -17,7 +17,10 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts",
-    "migration:check": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts --check /tmp/migration-check"
+    "migration:check": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts --check /tmp/migration-check",
+    "openapi:generate": "node dist/generate-openapi.js",
+    "openapi:check": "node dist/generate-openapi.js && git diff --exit-code openapi.json",
+    "e2e:seed-user": "node dist/scripts/seed-e2e-user.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

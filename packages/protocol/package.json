@@ -7,22 +7,54 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./manifest": { "types": "./dist/manifest.d.ts", "default": "./dist/manifest.js" },
-    "./encryption": { "types": "./dist/encryption.d.ts", "default": "./dist/encryption.js" },
-    "./encryption-browser": { "types": "./dist/encryption-browser.d.ts", "default": "./dist/encryption-browser.js" },
-    "./dictionary": { "types": "./dist/dictionary.d.ts", "default": "./dist/dictionary.js" },
-    "./pack": { "types": "./dist/pack.d.ts", "default": "./dist/pack.js" },
-    "./walk": { "types": "./dist/walk.d.ts", "default": "./dist/walk.js" },
-    "./leakScan": { "types": "./dist/leakScan.d.ts", "default": "./dist/leakScan.js" },
-    "./markdownImages": { "types": "./dist/markdownImages.d.ts", "default": "./dist/markdownImages.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
+    },
+    "./encryption": {
+      "types": "./dist/encryption.d.ts",
+      "default": "./dist/encryption.js"
+    },
+    "./encryption-browser": {
+      "types": "./dist/encryption-browser.d.ts",
+      "default": "./dist/encryption-browser.js"
+    },
+    "./dictionary": {
+      "types": "./dist/dictionary.d.ts",
+      "default": "./dist/dictionary.js"
+    },
+    "./pack": {
+      "types": "./dist/pack.d.ts",
+      "default": "./dist/pack.js"
+    },
+    "./walk": {
+      "types": "./dist/walk.d.ts",
+      "default": "./dist/walk.js"
+    },
+    "./leakScan": {
+      "types": "./dist/leakScan.d.ts",
+      "default": "./dist/leakScan.js"
+    },
+    "./markdownImages": {
+      "types": "./dist/markdownImages.d.ts",
+      "default": "./dist/markdownImages.js"
+    },
+    "./bridge-api-types": {
+      "types": "./src/bridge-api-types.d.ts"
+    }
   },
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b -w",
     "test": "tsc -b && node --test 'dist/**/*.test.js'",
     "test:coverage": "tsc -b && node --test --experimental-test-coverage 'dist/**/*.test.js'",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "openapi:generate": "openapi-typescript ../../bridge/apps/backend/openapi.json -o src/bridge-api-types.d.ts",
+    "openapi:check": "npm run openapi:generate && git diff --exit-code src/bridge-api-types.d.ts"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -31,6 +63,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.10.2",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.7.2"
   },
   "engines": {

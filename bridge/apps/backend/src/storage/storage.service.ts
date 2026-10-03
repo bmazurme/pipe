@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { UPLOAD_DIR } from './config/multer.config';
+import { ListFilesQueryDto } from './dto/list-files-query.dto';
+import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
 import { StoredFile } from './entities/stored-file.entity';
 
 @Injectable()
@@ -16,19 +18,36 @@ export class StorageService {
     private readonly storedFileRepository: Repository<StoredFile>,
   ) {}
 
-  async create(userId: number, file: Express.Multer.File): Promise<StoredFile> {
+  async create(
+    userId: number,
+    file: Express.Multer.File,
+    meta: UploadFileMetaDto = {},
+  ): Promise<StoredFile> {
     return this.storedFileRepository.save({
       userId,
       originalName: file.originalname,
       storedName: file.filename,
       mimeType: file.mimetype,
       size: file.size,
+      channel: meta.channel ?? null,
+      taskKey: meta.taskKey ?? null,
+      direction: meta.direction ?? null,
     });
   }
 
-  async findAllByUser(userId: number): Promise<StoredFile[]> {
+  async findAllByUser(
+    userId: number,
+    filter: ListFilesQueryDto = {},
+  ): Promise<StoredFile[]> {
     return this.storedFileRepository.find({
-      where: { userId },
+      where: {
+        userId,
+        ...(filter.channel !== undefined ? { channel: filter.channel } : {}),
+        ...(filter.taskKey !== undefined ? { taskKey: filter.taskKey } : {}),
+        ...(filter.direction !== undefined
+          ? { direction: filter.direction }
+          : {}),
+      },
       order: { createdAt: 'DESC' },
     });
   }

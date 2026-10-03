@@ -10,6 +10,9 @@
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "e2e:cross-repo": "node scripts/e2e-cross-repo-pipeline.mjs"
+  },
   "devDependencies": {
     "eslint": "^10.12.0",
     "typescript-eslint": "^8.71.0"

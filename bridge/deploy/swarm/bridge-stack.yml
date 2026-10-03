@@ -210,11 +210,15 @@ services:
       - worker-net
     environment:
       BRIDGE_API_URL: ${WORKER_BRIDGE_API_URL:?WORKER_BRIDGE_API_URL is required}
-      BRIDGE_API_KEY: ${WORKER_BRIDGE_API_KEY:?WORKER_BRIDGE_API_KEY is required}
-      CLAUDE_CODE_OAUTH_TOKEN: ${WORKER_CLAUDE_CODE_OAUTH_TOKEN:?WORKER_CLAUDE_CODE_OAUTH_TOKEN is required}
-      OPENAI_API_KEY: ${WORKER_OPENAI_API_KEY:-}
-      DEEPSEEK_API_KEY: ${WORKER_DEEPSEEK_API_KEY:-}
-      QWEN_API_KEY: ${WORKER_QWEN_API_KEY:-}
+      # Values themselves are Swarm secrets (see secrets: below), not plain
+      # service env — worker/src/secrets.ts resolves each _FILE at startup
+      # into the plain var the rest of the codebase already reads, so no
+      # other file needed to change for this (see IMPROVEMENTS_TECH.md 1.6).
+      BRIDGE_API_KEY_FILE: /run/secrets/worker_bridge_api_key
+      CLAUDE_CODE_OAUTH_TOKEN_FILE: /run/secrets/worker_claude_code_oauth_token
+      OPENAI_API_KEY_FILE: /run/secrets/worker_openai_api_key
+      DEEPSEEK_API_KEY_FILE: /run/secrets/worker_deepseek_api_key
+      QWEN_API_KEY_FILE: /run/secrets/worker_qwen_api_key
       WORKER_NAME: swarm-worker
       # Scoped to AI-provider calls only (OpenAI-compatible fetches, and the
       # claude CLI's own env) — never bridge's own API, which is reachable
@@ -223,6 +227,12 @@ services:
       # own comment for why (the claude CLI and undici's ProxyAgent both only
       # understand HTTP-style proxies).
       WORKER_PROXY_URL: http://vpn-client:1080
+    secrets:
+      - worker_bridge_api_key
+      - worker_claude_code_oauth_token
+      - worker_openai_api_key
+      - worker_deepseek_api_key
+      - worker_qwen_api_key
     depends_on:
       - vpn-client
     logging:
@@ -259,6 +269,30 @@ configs:
   xray_client_config:
     file: ${VPN_CLIENT_CONFIG_FILE:?VPN_CLIENT_CONFIG_FILE is required}
     name: xray_client_config_${VPN_CLIENT_CONFIG_HASH:?VPN_CLIENT_CONFIG_HASH is required}
+
+secrets:
+  # Same immutable-object/content-hash-name pattern as the xray config above
+  # — these replace the plain-env values worker's secrets used to be passed
+  # as (see IMPROVEMENTS_TECH.md 1.6). Secrets are encrypted at rest in the
+  # Swarm raft store, unlike configs; `docker service inspect` no longer
+  # shows the raw value the way plain env did.
+  worker_bridge_api_key:
+    file: ${WORKER_BRIDGE_API_KEY_FILE:?WORKER_BRIDGE_API_KEY_FILE is required}
+    name: worker_bridge_api_key_${WORKER_BRIDGE_API_KEY_HASH:?WORKER_BRIDGE_API_KEY_HASH is required}
+  worker_claude_code_oauth_token:
+    file: ${WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE:?WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE is required}
+    name: worker_claude_code_oauth_token_${WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH:?WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH is required}
+  # Optional secrets still need a file to exist (even empty) — the deploy
+  # workflow always writes one, blank or not.
+  worker_openai_api_key:
+    file: ${WORKER_OPENAI_API_KEY_FILE:?WORKER_OPENAI_API_KEY_FILE is required}
+    name: worker_openai_api_key_${WORKER_OPENAI_API_KEY_HASH:?WORKER_OPENAI_API_KEY_HASH is required}
+  worker_deepseek_api_key:
+    file: ${WORKER_DEEPSEEK_API_KEY_FILE:?WORKER_DEEPSEEK_API_KEY_FILE is required}
+    name: worker_deepseek_api_key_${WORKER_DEEPSEEK_API_KEY_HASH:?WORKER_DEEPSEEK_API_KEY_HASH is required}
+  worker_qwen_api_key:
+    file: ${WORKER_QWEN_API_KEY_FILE:?WORKER_QWEN_API_KEY_FILE is required}
+    name: worker_qwen_api_key_${WORKER_QWEN_API_KEY_HASH:?WORKER_QWEN_API_KEY_HASH is required}
 
 networks:
   bridge:

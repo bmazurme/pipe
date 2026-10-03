@@ -14,6 +14,7 @@ import { reviewIssueBeforeDispatch } from '../reviewPrompt.js';
 import type { ProjectConfig, StoredFileResponse } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
 import { issueParcelName } from './pushIssue.js';
+import { log } from '../log.js';
 
 // iid is `\d+` for a real GitLab issue, but reports' manual parcels (no
 // GitLab issue behind them — see reports/howto.md) use `m-<base36>`
@@ -70,7 +71,7 @@ async function processCandidate(
   let buffer = downloaded;
   if (candidate.encrypted) {
     if (!project.privateKeyPath) {
-      console.error(`Skipping ${key}: "${candidate.file.originalName}" is encrypted, but no privateKeyPath is configured.`);
+      log.error(`Skipping ${key}: "${candidate.file.originalName}" is encrypted, but no privateKeyPath is configured.`);
       return;
     }
     buffer = decryptBuffer(downloaded, readFileSync(resolveFromRoot(project.privateKeyPath), 'utf-8'));
@@ -79,13 +80,13 @@ async function processCandidate(
   const { manifest, files: packedFiles, assets, legacyManifest } = extractIssueArchive(buffer);
 
   if (legacyManifest) {
-    console.error(`Skipping ${key}: parcel has no issue metadata (legacy manifest) — agent-runner needs a title/description to work from.`);
+    log.error(`Skipping ${key}: parcel has no issue metadata (legacy manifest) — agent-runner needs a title/description to work from.`);
     return;
   }
 
   const state = loadAgentState();
   if (state[key]?.lastOwnOutputHash === manifest.contentHash) {
-    console.log(`Skipping ${key}: this is agent-runner's own last result, not a new push.`);
+    log.info(`Skipping ${key}: this is agent-runner's own last result, not a new push.`);
     return;
   }
 
@@ -94,7 +95,7 @@ async function processCandidate(
 
   mkdirSync(AGENT_WORK_DIR, { recursive: true });
   if (existsSync(worktreeDir)) {
-    console.log(`Removing a leftover worktree from a previous run at ${worktreeDir} before starting.`);
+    log.info(`Removing a leftover worktree from a previous run at ${worktreeDir} before starting.`);
   }
   removeTaskWorktree(project.path, worktreeDir);
   rmSync(worktreeDir, { recursive: true, force: true });
@@ -127,7 +128,7 @@ async function processCandidate(
     const result = await reviewIssueBeforeDispatch({ title, description, imagePaths: issueFile.imagePaths });
 
     if (!result.proceed) {
-      console.log(`Skipping ${key}: declined at review — parcel left unclaimed for the next run.`);
+      log.info(`Skipping ${key}: declined at review — parcel left unclaimed for the next run.`);
       removeTaskWorktree(project.path, worktreeDir);
       rmSync(worktreeDir, { recursive: true, force: true });
       return;
@@ -147,7 +148,7 @@ async function processCandidate(
   // the fact — so "before" always matches what was really dispatched.
   commitAll(worktreeDir, `Task #${manifest.issueIid}: before (parcel ${candidate.file.id})`);
   pushBranch(worktreeDir, branch);
-  console.log(`Pushed "before" commit to origin/${branch}.`);
+  log.info(`Pushed "before" commit to origin/${branch}.`);
 
   const prompt = buildIssuePrompt(title, description);
   const { exitCode } = await runClaude(worktreeDir, prompt, model);
@@ -159,10 +160,10 @@ async function processCandidate(
       : `Task #${manifest.issueIid}: after (agent run failed, exit ${exitCode})`,
   );
   pushBranch(worktreeDir, branch);
-  console.log(`Pushed "after" commit to origin/${branch}.`);
+  log.info(`Pushed "after" commit to origin/${branch}.`);
 
   if (exitCode !== 0) {
-    console.error(`Claude exited with code ${exitCode} for ${key} — not pushing a result parcel back to bridge.`);
+    log.error(`Claude exited with code ${exitCode} for ${key} — not pushing a result parcel back to bridge.`);
     removeTaskWorktree(project.path, worktreeDir);
     return;
   }
@@ -187,10 +188,14 @@ async function processCandidate(
     : resultArchive;
 
   const filename = issueParcelName(candidate.projectId, candidate.iid, shouldEncrypt);
-  const stored = await client.upload(filename, resultBuffer);
+  const stored = await client.upload(filename, resultBuffer, {
+    channel: 'issue',
+    taskKey: key,
+    direction: 'result',
+  });
 
   recordOwnOutput(key, resultHash);
-  console.log(`Pushed result parcel "${filename}" back to bridge (storage id ${stored.id}) for ${key}.`);
+  log.info(`Pushed result parcel "${filename}" back to bridge (storage id ${stored.id}) for ${key}.`);
   removeTaskWorktree(project.path, worktreeDir);
 }
 
@@ -203,7 +208,7 @@ export async function runAgentOnce(name: string, review = false): Promise<void> 
   const candidates = findCandidates(files, project.gitlabProjectId);
 
   if (candidates.length === 0) {
-    console.log(`No pending parcels for "${name}".`);
+    log.info(`No pending parcels for "${name}".`);
     return;
   }
 
@@ -213,7 +218,7 @@ export async function runAgentOnce(name: string, review = false): Promise<void> 
       await processCandidate(candidate, project, client, review);
     } catch (error) {
       const worktreeDir = path.join(AGENT_WORK_DIR, `${candidate.projectId}-${candidate.iid}`);
-      console.error(
+      log.error(
         `Error processing ${key}: ${(error as Error).message}\n` +
           `The worktree was left in place for inspection: ${worktreeDir}\n` +
           `(the "before" commit may already be pushed to origin — check "git log" there before retrying).`,
@@ -241,10 +246,10 @@ export async function agentRunnerCommand(name: string, options: { watch?: string
     throw new Error(`--watch expects a positive number of seconds, got "${options.watch}".`);
   }
 
-  console.log(`Watching for parcels every ${intervalSec}s. Ctrl+C to stop.`);
+  log.info(`Watching for parcels every ${intervalSec}s. Ctrl+C to stop.`);
   for (;;) {
     await runAgentOnce(name).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : error);
+      log.error(error instanceof Error ? error.message : error);
     });
     await sleep(intervalSec * 1000);
   }

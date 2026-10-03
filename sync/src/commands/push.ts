@@ -6,6 +6,7 @@ import { loadOptionalDictionary, toRemote } from '../dictionary.js';
 import { buildArchive, readAndTransform } from '../pack.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
+import { log } from '../log.js';
 
 export async function pushCommand(
   name: string,
@@ -17,7 +18,7 @@ export async function pushCommand(
 
   const relPaths = await walkProjectFiles(project.path, projectInclude(project), projectExclude(project));
   if (relPaths.length === 0) {
-    console.log(`No files matched include/exclude patterns under ${project.path}.`);
+    log.info(`No files matched include/exclude patterns under ${project.path}.`);
     return;
   }
 
@@ -25,7 +26,7 @@ export async function pushCommand(
 
   const leaks = scanForLeaks(files.map((f) => ({ source: f.relPath, content: f.content })));
   if (leaks.length > 0) {
-    console.warn(formatLeakFindings(leaks));
+    log.warn(formatLeakFindings(leaks));
 
     if (options.strict) {
       throw new Error(
@@ -37,7 +38,7 @@ export async function pushCommand(
   const { buffer, manifest } = buildArchive(name, files);
 
   if (!options.force && manifest.contentHash === getLastHash(name)) {
-    console.log('Nothing changed since the last push.');
+    log.info('Nothing changed since the last push.');
     return;
   }
 
@@ -45,7 +46,7 @@ export async function pushCommand(
   const stored = await client.upload(`${name}.sync.zip`, buffer);
 
   setLastHash(name, manifest.contentHash);
-  console.log(
+  log.info(
     `Pushed "${name}" (${files.length} files, ${stored.size} bytes, storage id ${stored.id}). ` +
       'The other machine can now pull it.',
   );

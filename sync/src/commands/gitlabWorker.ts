@@ -5,6 +5,7 @@ import { listAssignedOpenIssues, type GitlabIssue } from '../gitlabClient.js';
 import { notify } from '../notify.js';
 import type { ProjectConfig, SyncConfig } from '../types.js';
 import { buildAndUploadIssueParcel } from './pushIssue.js';
+import { log } from '../log.js';
 
 // No git branch/worktree operation happens here on purpose: agent-runner
 // already creates the actual task branch itself, in its own worktree, from
@@ -34,7 +35,7 @@ async function processIssue(
   if (!result) return;
 
   recordPushed(key, result.filename);
-  console.log(
+  log.info(
     `Pushed issue #${issue.iid} (project ${issue.project_id}) as "${result.filename}" ` +
       `(${result.fileCount} files, branch "${branch}"${result.encrypted ? ', encrypted' : ''}).`,
   );
@@ -67,7 +68,7 @@ export async function runGitlabWorkerOnce(
   );
 
   if (newIssues.length === 0) {
-    console.log(`No new assigned open issues for "${name}".`);
+    log.info(`No new assigned open issues for "${name}".`);
     return;
   }
 
@@ -75,7 +76,7 @@ export async function runGitlabWorkerOnce(
     try {
       await processIssue(issue, project, config, gitlabToken, options);
     } catch (error) {
-      console.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${(error as Error).message}`);
+      log.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${(error as Error).message}`);
     }
   }
 }
@@ -98,10 +99,10 @@ export async function gitlabWorkerCommand(
     throw new Error(`--watch expects a positive number of seconds, got "${options.watch}".`);
   }
 
-  console.log(`Watching GitLab for new assigned issues every ${intervalSec}s. Ctrl+C to stop.`);
+  log.info(`Watching GitLab for new assigned issues every ${intervalSec}s. Ctrl+C to stop.`);
   for (;;) {
     await runGitlabWorkerOnce(name, options).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : error);
+      log.error(error instanceof Error ? error.message : error);
     });
     await sleep(intervalSec * 1000);
   }

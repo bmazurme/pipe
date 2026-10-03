@@ -4,6 +4,7 @@ import path from 'node:path';
 import { findProject, loadConfig } from '../config.js';
 import { generateKeyPair } from '../encryption.js';
 import { resolveFromRoot } from '../paths.js';
+import { log } from '../log.js';
 
 // Generates the RSA-4096 keypair push-issue/pull-issue expect at
 // publicKeyPath/privateKeyPath — reports' Settings → Encryption page has its
@@ -40,8 +41,8 @@ export function generateKeysCommand(name: string, options: { force?: boolean }):
   writeFileSync(publicPath, publicKey, { mode: 0o644 });
   writeFileSync(privatePath, privateKey, { mode: 0o600 });
 
-  console.log(`Wrote ${publicPath} and ${privatePath}.`);
-  console.log(
+  log.info(`Wrote ${publicPath} and ${privatePath}.`);
+  log.info(
     'To exchange encrypted parcels with reports\' Subscription module, paste both PEM contents into ' +
       'Settings → Шифрование there (or vice versa: generate in reports and put its output at these paths).',
   );

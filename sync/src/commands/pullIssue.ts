@@ -10,6 +10,7 @@ import { extractIssue, extractIssueArchive } from '../issuePack.js';
 import { notify } from '../notify.js';
 import { resolveFromRoot } from '../paths.js';
 import { issueParcelName } from './pushIssue.js';
+import { log } from '../log.js';
 
 // Returns true once a parcel was found and pulled, false when there's
 // nothing on bridge yet — the shape --watch below polls on.
@@ -40,7 +41,7 @@ async function tryPullOnce(
 
   const newest = candidates[0];
   if (!newest) {
-    console.log(`Nothing to pull for issue #${iid} (project ${projectId}) — no one has pushed it yet.`);
+    log.info(`Nothing to pull for issue #${iid} (project ${projectId}) — no one has pushed it yet.`);
     return false;
   }
 
@@ -67,19 +68,19 @@ async function tryPullOnce(
   }
 
   if (legacyManifest) {
-    console.log(
+    log.info(
       `Warning: "${newest.originalName}" used the legacy ${'__sync_manifest__.json'} format — ` +
         'no issue title/description/branch is available for it.',
     );
   } else {
     const issueFile = extractIssue(project.path, manifest, dictionary, newest.id);
-    console.log(`Issue #${manifest.issueIid}: ${issueFile.title}`);
-    if (issueFile.description) console.log(issueFile.description);
-    console.log(`Branch: ${manifest.branch}`);
-    console.log(`Issue text extracted to ${issueFile.path}`);
+    log.info(`Issue #${manifest.issueIid}: ${issueFile.title}`);
+    if (issueFile.description) log.info(issueFile.description);
+    log.info(`Branch: ${manifest.branch}`);
+    log.info(`Issue text extracted to ${issueFile.path}`);
   }
 
-  console.log(
+  log.info(
     `Pulled ${files.length} files into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
   );
 
@@ -106,7 +107,7 @@ export async function pullIssueCommand(
     throw new Error(`--watch expects a positive number of seconds, got "${options.watch}".`);
   }
 
-  console.log(`Watching for issue #${iid} (project ${projectId})'s result every ${intervalSec}s. Ctrl+C to stop.`);
+  log.info(`Watching for issue #${iid} (project ${projectId})'s result every ${intervalSec}s. Ctrl+C to stop.`);
   for (;;) {
     const found = await tryPullOnce(name, projectId, iid, options);
     if (found) {

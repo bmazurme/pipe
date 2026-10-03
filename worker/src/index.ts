@@ -14,8 +14,10 @@ import { loadConfig, type WorkerConfig } from './config.js';
 import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
+import { chatLogger, jobLogger, logger } from './logger.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
+import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,6 +41,9 @@ function resultFilename(job: RemoteJob): string {
 export async function processJob(client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig): Promise<void> {
   mkdirSync(config.workDir, { recursive: true });
   const jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
+  // Structured (pino) logger for this job's own lifecycle events — distinct
+  // from `log` below, which forwards the model's textual output to bridge.
+  const jlog = jobLogger(job.id);
 
   // `flushed` chains each send onto the previous one, so appends stay
   // strictly ordered and never overlap in flight — matters because
@@ -53,7 +58,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     pendingLog = '';
     flushed = flushed.then(() =>
       client.appendLog(job.id, chunk).catch((error) => {
-        console.warn(`[job ${job.id}] failed to forward a log chunk to bridge:`, error);
+        jlog.warn({ err: error }, 'failed to forward a log chunk to bridge');
       }),
     );
   };
@@ -113,16 +118,16 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     log(`Uploading result parcel (${resultFiles.length} files)...\n`);
     await client.uploadResult(job.id, resultFilename(job), resultBuffer);
 
-    console.log(`[job ${job.id}] succeeded`);
+    jlog.info('succeeded');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log(`Failed: ${message}\n`);
-    console.error(`[job ${job.id}] failed:`, error);
+    jlog.error({ err: error }, 'failed');
 
     try {
       await client.updateStatus(job.id, 'failed', message);
     } catch (statusError) {
-      console.error(`[job ${job.id}] additionally failed to report failure status:`, statusError);
+      jlog.error({ err: statusError }, 'additionally failed to report failure status');
     }
   } finally {
     clearInterval(flushInterval);
@@ -138,6 +143,8 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
 // requires a cwd, removed right after); gpt/deepseek/qwen share the exact
 // OpenAI-compatible provider config jobs use, nothing about execution.
 export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig): Promise<void> {
+  const clog = chatLogger(turn.messageId);
+
   try {
     const provider = resolveChatProvider(turn.model);
 
@@ -146,26 +153,28 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
       : await openAiCompatibleChat(turn.history, provider, config.proxyUrl);
 
     await client.complete(turn.messageId, reply);
-    console.log(`[chat turn ${turn.messageId}] succeeded`);
+    clog.info('succeeded');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[chat turn ${turn.messageId}] failed:`, error);
+    clog.error({ err: error }, 'failed');
 
     try {
       await client.fail(turn.messageId, message);
     } catch (failError) {
-      console.error(`[chat turn ${turn.messageId}] additionally failed to report failure status:`, failError);
+      clog.error({ err: failError }, 'additionally failed to report failure status');
     }
   }
 }
 
 async function main(): Promise<void> {
+  resolveFileSecrets(process.env, SECRET_ENV_KEYS);
   const config = loadConfig();
   const client = new WorkerBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
   const chatClient = new ChatBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
 
-  console.log(
-    `pipe-worker (${config.workerName}) polling ${config.bridgeApiUrl} every ${config.pollIntervalSec}s`,
+  logger.info(
+    { workerName: config.workerName, bridgeApiUrl: config.bridgeApiUrl, pollIntervalSec: config.pollIntervalSec },
+    'pipe-worker starting',
   );
 
   for (;;) {
@@ -174,7 +183,7 @@ async function main(): Promise<void> {
     try {
       job = await client.claim(config.workerName);
     } catch (error) {
-      console.error('Job poll failed:', error);
+      logger.error({ err: error }, 'job poll failed');
     }
 
     if (job) {
@@ -187,7 +196,7 @@ async function main(): Promise<void> {
     try {
       turn = await chatClient.claim();
     } catch (error) {
-      console.error('Chat poll failed:', error);
+      logger.error({ err: error }, 'chat poll failed');
     }
 
     if (turn) {

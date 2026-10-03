@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as readline from 'node:readline/promises';
+import { log } from './log.js';
 
 export interface ReviewInput {
   title: string;
@@ -39,7 +40,7 @@ function editText(title: string, description: string): { title: string; descript
   const [editorBin, ...editorArgs] = editorCommand().split(' ').filter(Boolean);
   const result = spawnSync(editorBin, [...editorArgs, file], { stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.error || (result.status ?? 0) !== 0) {
-    console.warn('Editor exited without saving cleanly — keeping the text as it was.');
+    log.warn('Editor exited without saving cleanly — keeping the text as it was.');
     rmSync(dir, { recursive: true, force: true });
     return { title, description };
   }

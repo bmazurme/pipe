@@ -17,10 +17,25 @@ Restart=on-failure
 RestartSec=5
 
 # Defense in depth on top of the dedicated user — worker has no legitimate
-# reason to write anywhere outside its own working directory.
+# reason to write anywhere outside its own job-scratch directory. Narrowed
+# from the whole /opt/pipe-worker (which used to also cover dist/ and .env —
+# a compromised model run could rewrite the worker's own code) down to just
+# WORKER_WORK_DIR's default. If WORKER_WORK_DIR is overridden in .env, update
+# this to match — systemd won't create a path that doesn't already exist.
 ProtectSystem=strict
-ReadWritePaths=/opt/pipe-worker
+ReadWritePaths=/opt/pipe-worker/.worker-work
 NoNewPrivileges=true
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# AF_UNIX is needed for Node's own internals (e.g. the SSH agent socket a
+# spawned git/claude process might use) — not for worker's own outbound
+# traffic, which is all AF_INET/AF_INET6 (bridge, AI providers, the
+# WORKER_PROXY_URL tunnel).
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { Equals, IsEnum, IsNotEmpty, IsString } from 'class-validator';
 
 // Deliberately not an arbitrary secret name — the request body choosing
 // which GitHub secret to overwrite would otherwise let this endpoint
@@ -18,4 +18,8 @@ export class SetWorkerSecretDto {
   @IsString()
   @IsNotEmpty()
   value: string;
+
+  // See ConfirmActionDto's own comment — same "are you sure" gate.
+  @Equals(true)
+  confirm: boolean;
 }

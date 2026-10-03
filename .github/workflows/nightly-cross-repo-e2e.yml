@@ -1,0 +1,66 @@
+# A genuine cross-repo E2E pipeline test (IMPROVEMENTS_TECH.md 4.1): runs
+# sync-shaped parcel → bridge Storage → a real worker job claim/execute
+# cycle (against a fake model server standing in for a real AI provider) →
+# bridge result download, all as real built artifacts talking over real
+# HTTP — see scripts/e2e-cross-repo-pipeline.mjs for the full flow. Nightly
+# rather than per-push, same reasoning as nightly-reports-e2e.yml: this
+# boots three separate processes and is slower/more failure-prone than the
+# unit suites that already run on every push in ci.yml.
+name: Nightly cross-repo E2E pipeline
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22.18.0'
+
+jobs:
+  pipeline:
+    name: sync-shaped parcel → bridge → worker → pull
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ntlstl-db-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+
+      - run: npm ci
+        working-directory: bridge
+      - name: Build bridge backend
+        run: npm run build -w backend
+        working-directory: bridge
+
+      - run: npm ci
+        working-directory: worker
+      - name: Build worker
+        run: npm run build
+        working-directory: worker
+
+      - name: Run the cross-repo pipeline test
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ntlstl-db-test
+        run: npm run e2e:cross-repo

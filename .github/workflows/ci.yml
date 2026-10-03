@@ -246,6 +246,36 @@ jobs:
           POSTGRES_DB: ntlstl-db-test
         run: npm run migration:check -w backend
 
+      # Catches a controller/DTO change that didn't regenerate the committed
+      # OpenAPI spec (see IMPROVEMENTS_TECH.md 2.2) — openapi:check
+      # regenerates openapi.json and fails if that produces a diff.
+      - name: Backend OpenAPI spec drift check
+        working-directory: bridge
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ntlstl-db-test
+          JWT_SECRET: ci-access-secret
+          REFRESH_JWT_SECRET: ci-refresh-secret
+          CREDENTIALS_ENC_KEY: 'lSEY5qf7avV5z3N5+QgTVnqxo9UNI4k2B4+nuLK0YZQ='
+          YANDEX_ID: ci-yandex-id
+          YANDEX_SECRET: ci-yandex-secret
+          BRIDGE_YANDEX_REDIRECT: http://localhost:3002/api/v1/oauth/yandex/redirect
+          BRIDGE_TARGET_URL: http://localhost:5173
+          COOKIE_DOMAIN: localhost
+          CORS_ORIGINS: http://localhost:5173
+        run: npm run openapi:check -w backend
+
+      # Regenerates packages/protocol's TS types from that same spec and
+      # fails if they've drifted — the one check here that doesn't need
+      # Postgres (pure text transform over the already-committed
+      # openapi.json), but lives in this job since it depends on the step
+      # above having just confirmed that file itself is current.
+      - name: protocol OpenAPI types drift check
+        run: npm run openapi:check --workspace=packages/protocol
+
       - name: Frontend ESLint
         run: npm run lint -w frontend
         working-directory: bridge

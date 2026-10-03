@@ -7,6 +7,7 @@ import { loadOptionalDictionary, toLocal } from '../dictionary.js';
 import { extractArchive } from '../pack.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { getLastHash, setLastHash } from '../state.js';
+import { log } from '../log.js';
 
 export async function pullCommand(name: string, options: { force?: boolean }): Promise<void> {
   const config = loadConfig();
@@ -28,7 +29,7 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (candidates.length === 0) {
-    console.log(`Nothing to pull for "${name}" — no one has pushed it yet.`);
+    log.info(`Nothing to pull for "${name}" — no one has pushed it yet.`);
     return;
   }
 
@@ -38,7 +39,7 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
   const { files, manifest } = extractArchive(buffer);
 
   if (!options.force && manifest.contentHash === getLastHash(name)) {
-    console.log('Already up to date.');
+    log.info('Already up to date.');
     return;
   }
 
@@ -49,5 +50,5 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
   }
 
   setLastHash(name, manifest.contentHash);
-  console.log(`Pulled "${name}" (${files.length} files) from ${manifest.machine}, applied at ${project.path}.`);
+  log.info(`Pulled "${name}" (${files.length} files) from ${manifest.machine}, applied at ${project.path}.`);
 }
