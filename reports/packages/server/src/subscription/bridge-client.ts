@@ -1,11 +1,8 @@
 import { describeFetchError } from '../utils/describe-fetch-error';
-import { getSettings, setSettings } from '../settings/props';
+import { getSettings } from '../settings/props';
 
-// No request here had an AbortSignal before. authorizedFetch is shared by
-// both small calls (listParcels) and real file transfers (upload/download
-// Parcel), so it gets the more generous of the two budgets rather than two
-// separate constants.
-const API_TIMEOUT_MS = 20_000;
+// authorizedFetch is shared by both small calls (listParcels) and real file
+// transfers (upload/download Parcel), so it gets the more generous budget.
 const TRANSFER_TIMEOUT_MS = 120_000;
 
 export type StoredFile = {
@@ -26,76 +23,23 @@ function getOrigin(): string {
   return new URL(bridgeApiUrl).origin;
 }
 
-function extractRotatedRefreshToken(response: Response): string | undefined {
-  const cookies = typeof response.headers.getSetCookie === 'function'
-    ? response.headers.getSetCookie()
-    : [response.headers.get('set-cookie') ?? ''];
-
-  for (const cookie of cookies) {
-    const match = /bridgeRefreshToken=([^;]+)/.exec(cookie);
-
-    if (match) {
-      return decodeURIComponent(match[1]);
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * bridge's storage API accepts either a personal API key (preferred —
- * see bridgeStorageApiKey in authorizedFetch below, minted from bridge's
- * Profile page, no browser session involved) or, for back-compat, a
- * replayed bridgeRefreshToken cookie: the user copies it once (after signing
- * in via Yandex in a browser) into Settings, and this mirrors ntlstl.sync's
- * bridgeClient.ts refresh flow to mint short-lived access tokens from it,
- * persisting any rotated refresh token back to settings.
- */
-async function refreshAccessToken(): Promise<string> {
-  const { bridgeRefreshToken } = getSettings();
-
-  if (!bridgeRefreshToken) {
-    throw new Error('Bridge Storage не настроен: вставьте bridgeRefreshToken на странице Settings');
-  }
-
-  const origin = getOrigin();
-  const url = `${origin}/api/v1/auth/refresh`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { Cookie: `bridgeRefreshToken=${bridgeRefreshToken}` },
-    signal: AbortSignal.timeout(API_TIMEOUT_MS),
-  }).catch((error) => {
-    throw describeFetchError(error, url);
-  });
-
-  if (!response.ok) {
-    throw new Error(`Не удалось обновить сессию bridge (HTTP ${response.status}) — переоформите bridgeRefreshToken в Settings`);
-  }
-
-  const rotated = extractRotatedRefreshToken(response);
-
-  if (rotated && rotated !== bridgeRefreshToken) {
-    setSettings({ ...getSettings(), bridgeRefreshToken: rotated });
-  }
-
-  const { accessToken } = await response.json() as { accessToken: string };
-
-  return accessToken;
-}
-
+// bridge Storage integration supports exactly one auth path: a personal API
+// key (Settings → "Bridge storage API key", minted from bridge's Profile
+// page) — a static credential, presented as-is until revoked, no browser
+// session or refresh-token replay involved.
 async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const origin = getOrigin();
-  // A personal API key (Settings → "Bridge storage API key", minted from
-  // bridge's Profile page) needs no refresh dance at all — it's a static
-  // credential, presented as-is until revoked. Falls back to the
-  // bridgeRefreshToken replay above when it isn't set.
   const { bridgeStorageApiKey } = getSettings();
-  const accessToken = bridgeStorageApiKey || (await refreshAccessToken());
+
+  if (!bridgeStorageApiKey) {
+    throw new Error('Интеграция с bridge storage не настроена: укажите Личный API-ключ на странице Settings');
+  }
+
   const url = `${origin}${path}`;
 
   const response = await fetch(url, {
     ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${accessToken}` },
+    headers: { ...init.headers, Authorization: `Bearer ${bridgeStorageApiKey}` },
     signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);

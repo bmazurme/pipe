@@ -47,7 +47,6 @@ describe('getSettings', () => {
       company: '',
       bridgeApiUrl: '',
       bridgeApiKey: '',
-      bridgeRefreshToken: '',
       bridgeStorageApiKey: '',
     });
   });
@@ -63,7 +62,6 @@ describe('setSettings', () => {
       company: 'Test Company',
       bridgeApiUrl: 'http://localhost:3002/api/v1/time/export/day-offs',
       bridgeApiKey: 'bridge-key-123',
-      bridgeRefreshToken: 'refresh-token-123',
       bridgeStorageApiKey: 'brk_abc123',
     };
 

@@ -22,7 +22,6 @@ function stubSettings(overrides: Partial<SettingsType> = {}) {
     company: '',
     bridgeApiUrl: '',
     bridgeApiKey: '',
-    bridgeRefreshToken: '',
     bridgeStorageApiKey: '',
     ...overrides,
   });

@@ -14,7 +14,6 @@ const defaultSettings: SettingsType = {
   company: '',
   bridgeApiUrl: '',
   bridgeApiKey: '',
-  bridgeRefreshToken: '',
   bridgeStorageApiKey: '',
 };
 
