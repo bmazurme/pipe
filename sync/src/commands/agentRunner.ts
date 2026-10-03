@@ -30,17 +30,41 @@ interface Candidate {
   encrypted: boolean;
 }
 
+// Prefers the file's own taskKey (IMPROVEMENTS_TECH.md 2.3 — stamped on
+// upload as `${projectId}:${iid}`) over parsing the filename, so a client
+// populating addressing metadata no longer needs its parcel named in this
+// exact pattern at all. Falls back to the filename regex for anything
+// uploaded before taskKey existed.
+function parseCandidate(file: StoredFileResponse): { projectId: string; iid: string; encrypted: boolean } | undefined {
+  if (file.taskKey) {
+    const separator = file.taskKey.indexOf(':');
+    if (separator !== -1) {
+      return {
+        projectId: file.taskKey.slice(0, separator),
+        iid: file.taskKey.slice(separator + 1),
+        encrypted: file.originalName.endsWith('.enc'),
+      };
+    }
+  }
+
+  const match = PARCEL_NAME_PATTERN.exec(file.originalName);
+  if (!match) return undefined;
+
+  const [, projectId, iid, encExt] = match;
+  return { projectId, iid, encrypted: Boolean(encExt) };
+}
+
 export function findCandidates(files: StoredFileResponse[], gitlabProjectId: string | undefined): Candidate[] {
   const matches: Candidate[] = [];
 
   for (const file of files) {
-    const match = PARCEL_NAME_PATTERN.exec(file.originalName);
-    if (!match) continue;
+    const parsed = parseCandidate(file);
+    if (!parsed) continue;
 
-    const [, projectId, iid, encExt] = match;
+    const { projectId, iid, encrypted } = parsed;
     if (gitlabProjectId && gitlabProjectId !== projectId) continue;
 
-    matches.push({ file, projectId, iid, encrypted: Boolean(encExt) });
+    matches.push({ file, projectId, iid, encrypted });
   }
 
   // One candidate per issue: the newest parcel wins if somehow more than one
@@ -204,6 +228,11 @@ export async function runAgentOnce(name: string, review = false): Promise<void> 
   const project = findProject(config, name);
   const client = new BridgeClient(config.bridge.apiUrl);
 
+  // Deliberately unfiltered: this is "discover whatever's pending", not a
+  // lookup by known key, and a server-side direction/channel filter would
+  // silently hide any parcel uploaded before taskKey/direction existed —
+  // parseCandidate()'s filename-regex fallback below is what actually
+  // handles those, so the discovery call itself has to still see them.
   const files = await client.listFiles();
   const candidates = findCandidates(files, project.gitlabProjectId);
 

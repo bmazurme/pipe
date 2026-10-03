@@ -72,8 +72,21 @@ export class BridgeClient {
     return { Authorization: `Bearer ${this.accessToken}` };
   }
 
-  async listFiles(): Promise<StoredFileResponse[]> {
-    const response = await fetch(`${this.apiUrl}/api/v1/storage`, {
+  // filter is the same addressing metadata upload() can attach (see its own
+  // comment) — passed straight through as query params so bridge filters
+  // server-side (storage.controller.ts's ListFilesQueryDto) instead of a
+  // caller listing everything and guessing which file is "the" one from its
+  // name.
+  async listFiles(
+    filter: { channel?: string; taskKey?: string; direction?: 'outbound' | 'result' } = {},
+  ): Promise<StoredFileResponse[]> {
+    const query = new URLSearchParams();
+    if (filter.channel) query.set('channel', filter.channel);
+    if (filter.taskKey) query.set('taskKey', filter.taskKey);
+    if (filter.direction) query.set('direction', filter.direction);
+    const queryString = query.toString();
+
+    const response = await fetch(`${this.apiUrl}/api/v1/storage${queryString ? `?${queryString}` : ''}`, {
       headers: await this.authHeader(),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });

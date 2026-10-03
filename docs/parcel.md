@@ -83,18 +83,42 @@ client-side, with bridge having no concept of addressing at all. With
 `gitlab-worker` producing several task parcels in a row (no longer
 human-paced), this was a real, not theoretical, gap.
 
-**Backend capability now exists** (IMPROVEMENTS_TECH.md 2.3): `StoredFile`
-carries optional `channel`/`taskKey`/`direction` columns (migration
+**Done** (IMPROVEMENTS_TECH.md 2.3): `StoredFile` carries optional
+`channel`/`taskKey`/`direction` columns (migration
 `1790800000000-AddStoredFileAddressing`), and `GET /api/v1/storage` accepts
 matching `?channel=&taskKey=&direction=` query filters — all additive,
 nothing required, a plain upload/list with no addressing metadata behaves
-exactly as before. sync's `pushIssueCommand` and `agentRunner.ts` already
-populate `taskKey` (`"${projectId}:${iid}"`) and `direction`
-(`outbound`/`result`) on upload
-([bridgeClient.ts](../sync/src/bridgeClient.ts)'s `upload()`).
+exactly as before.
 
-**Not yet done**: nothing on the *reading* side uses this — `pull-issue`,
-`gitlab-worker`'s own pull path, and reports' Subscription module all still
-match by filename pattern alone. Wiring them to filter via the new query
-params (instead of guessing from the name) is the natural next step, in the
-same shape as the upload-side change above.
+Both write and read sides now use it, on both products, under the same
+`channel: 'issue'` — deliberately shared, not split per product, so either
+tool can pull what the other one pushed:
+
+- **sync**: `pushIssueCommand`/`agentRunner.ts` upload with
+  `taskKey: "${projectId}:${iid}"` and `direction: 'outbound'`/`'result'`
+  ([bridgeClient.ts](../sync/src/bridgeClient.ts)'s `upload()`).
+  `pullIssueCommand` ([pullIssue.ts](../sync/src/commands/pullIssue.ts))
+  filters by `taskKey`+`direction: 'result'` instead of a precomputed
+  filename — the `.enc` suffix check for encrypted-vs-plain is now a plain
+  `.endsWith('.enc')` on whatever name comes back, not a name it expects in
+  advance. `agentRunner.ts`'s `findCandidates` (the "discover whatever's
+  pending" scan, not a lookup by known key) prefers a file's `taskKey` to
+  extract `projectId`/`iid` when present, but deliberately keeps the old
+  filename-regex as a fallback and does **not** filter the `listFiles()`
+  call itself by channel/direction — a server-side filter there would
+  silently hide any parcel uploaded before this metadata existed, which is
+  a materially worse failure mode for an unattended discovery loop than for
+  a single known-key pull.
+- **reports**: `handlePushSubscriptionIssue`/`handlePullSubscriptionIssue`
+  ([subscription/handler.ts](../reports/packages/server/src/subscription/handler.ts))
+  mirror sync exactly — same channel, same taskKey shape, same
+  `direction: 'outbound'`/`'result'` — via the same meta/filter params added
+  to [subscription/bridge-client.ts](../reports/packages/server/src/subscription/bridge-client.ts)'s
+  `uploadParcel()`/`listParcels()`.
+
+`gitlab-worker` has no pull-side logic of its own to migrate — confirmed
+push-only, `pull-issue` is the only pull command. Plain whole-project
+push/pull (`sync push`/`pull`, `__sync_manifest__.json`) is unaffected and
+deliberately out of scope here: one project has at most one pending parcel
+by construction, so there's no multi-parcel ambiguity to address in the
+first place.

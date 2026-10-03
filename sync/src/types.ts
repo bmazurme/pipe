@@ -58,6 +58,9 @@ export interface StoredFileResponse {
   mimeType: string;
   size: number;
   createdAt: string;
+  channel: string | null;
+  taskKey: string | null;
+  direction: 'outbound' | 'result' | null;
 }
 
 export interface SyncManifest extends BaseManifest {

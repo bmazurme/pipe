@@ -11,6 +11,9 @@ function file(overrides: Partial<StoredFileResponse> = {}): StoredFileResponse {
     mimeType: 'application/zip',
     size: 100,
     createdAt: '2026-09-30T00:00:00.000Z',
+    channel: null,
+    taskKey: null,
+    direction: null,
     ...overrides,
   };
 }
@@ -60,6 +63,33 @@ describe('findCandidates', () => {
 
   it('ignores files that are not subscription parcels', () => {
     assert.deepEqual(findCandidates([file({ originalName: 'random-file.zip' })], undefined), []);
+  });
+
+  // IMPROVEMENTS_TECH.md 2.3: taskKey is preferred over the filename once a
+  // file carries addressing metadata — proven here with a filename that
+  // would otherwise fail PARCEL_NAME_PATTERN entirely.
+  it('prefers taskKey over the filename when present', () => {
+    const candidates = findCandidates(
+      [file({ originalName: 'result.zip', taskKey: '402:6', direction: 'outbound' })],
+      undefined,
+    );
+
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0]?.projectId, '402');
+    assert.equal(candidates[0]?.iid, '6');
+  });
+
+  it('still filters by gitlabProjectId when matching came from taskKey', () => {
+    const candidates = findCandidates(
+      [
+        file({ originalName: 'a.zip', taskKey: '402:6' }),
+        file({ originalName: 'b.zip', taskKey: '173:6' }),
+      ],
+      '173',
+    );
+
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0]?.projectId, '173');
   });
 
   it('keeps only the newest parcel per issue when more than one is present', () => {

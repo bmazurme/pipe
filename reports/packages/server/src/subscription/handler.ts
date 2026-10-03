@@ -267,7 +267,14 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
     }
 
     const buffer = shouldEncrypt ? encryptBuffer(archive, encryption.publicKey) : archive;
-    const stored = await uploadParcel(buffer, parcelName(projectId, iid, shouldEncrypt));
+    // Same channel/taskKey convention sync's own push-issue/agent-runner use
+    // (IMPROVEMENTS_TECH.md 2.3) — deliberately not a different channel, so
+    // either tool can pull what the other one pushed.
+    const stored = await uploadParcel(buffer, parcelName(projectId, iid, shouldEncrypt), {
+      channel: 'issue',
+      taskKey: `${projectId}:${iid}`,
+      direction: 'outbound',
+    });
 
     return setIssueState(projectId, iid, {
       step: 'pushed',
@@ -283,11 +290,13 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
 
   await withStream(res, 'Pull subscription issue', async () => {
     const trackedProject = requireTrackedProject(projectId);
-    const plainName = parcelName(projectId, iid, false);
-    const encryptedName = parcelName(projectId, iid, true);
-    const parcels = (await listParcels())
-      .filter((parcel) => parcel.originalName === plainName || parcel.originalName === encryptedName)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Addressed by taskKey/direction (IMPROVEMENTS_TECH.md 2.3) rather than
+    // guessing from the filename.
+    const parcels = (await listParcels({
+      channel: 'issue',
+      taskKey: `${projectId}:${iid}`,
+      direction: 'result',
+    })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const newest = parcels[0];
 
@@ -295,7 +304,7 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
       throw new Error('На bridge нет посылки для этой задачи — сначала выполните push из другого окружения');
     }
 
-    const isEncrypted = newest.originalName === encryptedName;
+    const isEncrypted = newest.originalName.endsWith('.enc');
     const { dictionary, encryption } = getSubscriptionConfig();
 
     if (isEncrypted && !encryption.privateKey) {

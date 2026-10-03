@@ -14,6 +14,9 @@ export type StoredFile = {
   mimeType: string;
   size: number;
   createdAt: string;
+  channel: string | null;
+  taskKey: string | null;
+  direction: 'outbound' | 'result' | null;
 };
 
 function getOrigin(): string {
@@ -111,18 +114,38 @@ async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Re
   return response;
 }
 
-export async function uploadParcel(buffer: Buffer, filename: string): Promise<StoredFile> {
+// meta is optional addressing metadata (see bridge's
+// StoredFile.channel/taskKey/direction, IMPROVEMENTS_TECH.md 2.3) — mirrors
+// sync's own bridgeClient.ts upload(), so either side can filter by it
+// server-side on the way back out via listParcels() below instead of
+// guessing from the filename.
+export async function uploadParcel(
+  buffer: Buffer,
+  filename: string,
+  meta: { channel?: string; taskKey?: string; direction?: 'outbound' | 'result' } = {},
+): Promise<StoredFile> {
   const form = new FormData();
 
   form.append('file', new Blob([buffer]), filename);
+  if (meta.channel) form.append('channel', meta.channel);
+  if (meta.taskKey) form.append('taskKey', meta.taskKey);
+  if (meta.direction) form.append('direction', meta.direction);
 
   const response = await authorizedFetch('/api/v1/storage', { method: 'POST', body: form });
 
   return response.json() as Promise<StoredFile>;
 }
 
-export async function listParcels(): Promise<StoredFile[]> {
-  const response = await authorizedFetch('/api/v1/storage');
+export async function listParcels(
+  filter: { channel?: string; taskKey?: string; direction?: 'outbound' | 'result' } = {},
+): Promise<StoredFile[]> {
+  const query = new URLSearchParams();
+  if (filter.channel) query.set('channel', filter.channel);
+  if (filter.taskKey) query.set('taskKey', filter.taskKey);
+  if (filter.direction) query.set('direction', filter.direction);
+  const queryString = query.toString();
+
+  const response = await authorizedFetch(`/api/v1/storage${queryString ? `?${queryString}` : ''}`);
 
   return response.json() as Promise<StoredFile[]>;
 }
