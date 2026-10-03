@@ -158,6 +158,7 @@ describe('WorkerPage', () => {
     renderPage();
     await screen.findByText('Задача #1');
 
+    await user.click(screen.getByText('Настроить'));
     const input = screen.getByPlaceholderText('sk-proj-...');
     await user.type(input, 'sk-test-key');
 
@@ -269,6 +270,20 @@ describe('WorkerPage', () => {
     await waitFor(() =>
       expect(createJobBody).toEqual({ sourceFileId: 10, model: 'sonnet', claudeCredentialId: 1 }),
     );
+  });
+
+  it('keeps worker secret fields collapsed until "Настроить" is clicked', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('Задача #1');
+
+    expect(screen.queryByPlaceholderText('sk-proj-...')).toBeNull();
+
+    await user.click(screen.getByText('Настроить'));
+    expect(screen.getByPlaceholderText('sk-proj-...')).toBeTruthy();
+
+    await user.click(screen.getByText('Скрыть'));
+    expect(screen.queryByPlaceholderText('sk-proj-...')).toBeNull();
   });
 
   it('lists jobs with their model and status', async () => {

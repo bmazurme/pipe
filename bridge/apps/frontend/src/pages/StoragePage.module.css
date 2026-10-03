@@ -127,6 +127,42 @@
   flex: 1;
 }
 
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--ntlstl-card-padding, 20px);
+}
+
+.keyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.keyForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.decryptField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .leakList {
   display: flex;
   flex-direction: column;

@@ -3,11 +3,13 @@ import {
   File,
   FileText,
   FileZipper,
+  LockOpen,
   Picture,
 } from '@gravity-ui/icons';
 import { ActionTooltip, Button, Icon, IconData, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
+import { isEncryptedFile } from '../../shared/lib/parcelCrypto';
 import { StoredFileMeta } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
@@ -32,6 +34,7 @@ interface StorageFileListProps {
   isMobile: boolean;
   downloadingId: number | null;
   onDownload: (file: StoredFileMeta) => void;
+  onOpenEncrypted: (file: StoredFileMeta) => void;
 }
 
 export function StorageFileList({
@@ -40,6 +43,7 @@ export function StorageFileList({
   isMobile,
   downloadingId,
   onDownload,
+  onOpenEncrypted,
 }: StorageFileListProps) {
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
@@ -91,6 +95,22 @@ export function StorageFileList({
                   {formatSize(file.size)} · {formatRelativeTime(file.createdAt)}
                 </Text>
               </div>
+
+              {isEncryptedFile(file.originalName) && (
+                <ActionTooltip
+                  title="Открыть"
+                  description="Расшифровать и скачать — исходный файл остаётся в Storage"
+                >
+                  <Button
+                    view="flat"
+                    aria-label={`Открыть ${file.originalName}`}
+                    onClick={() => onOpenEncrypted(file)}
+                  >
+                    <Icon data={LockOpen} size={16} />
+                    {!isMobile && 'Открыть'}
+                  </Button>
+                </ActionTooltip>
+              )}
 
               <ActionTooltip
                 title="Скачать"

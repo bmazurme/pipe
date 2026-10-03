@@ -38,11 +38,13 @@ import {
   useSetWorkerSecretMutation,
   WorkerSecretName,
 } from '../store/api';
+import { decryptParcel, encryptParcel, isEncryptedFile, stripEncryptedSuffix, triggerBlobDownload } from '../shared/lib/parcelCrypto';
+import { useParcelKeys } from '../shared/lib/parcelKeys';
 import { useAppSelector } from '../store/hooks';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
+import { ParcelKeyPicker } from '../widgets/ParcelKeyPicker';
 import { SectionHeader } from '../widgets/SectionHeader';
-import { decryptParcel, encryptParcel, isEncryptedFile, stripEncryptedSuffix, triggerBlobDownload } from './worker/parcelCrypto';
 import { uploadWithProgress } from './storage/uploadWithProgress';
 import styles from './WorkerPage.module.css';
 
@@ -170,18 +172,37 @@ function WorkerSecretField({ name, label, placeholder }: { name: WorkerSecretNam
   );
 }
 
+// Collapsed by default: a write-blind, set-once-and-forget action (the
+// comment below explains why) that would otherwise push the actually
+// recurring task — "Новая задача" — further down the page every time it's
+// opened. Same collapse-behind-a-toggle pattern as VpnPage's add-connection
+// form.
 function WorkerSecretsCard() {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
     <Card view="outlined" className={styles.card}>
-      <SectionHeader title="Ключи worker" />
-      <Text color="secondary" variant="caption-2">
-        Ключи передаются один раз и не хранятся здесь для отображения — как и в GitHub Secrets,
-        это запись «вслепую». Сохранение запускает передеплой worker (~15 минут).
-      </Text>
+      <SectionHeader
+        title="Ключи worker"
+        actions={
+          <Button view="flat" size="s" onClick={() => setIsExpanded((value) => !value)}>
+            {isExpanded ? 'Скрыть' : 'Настроить'}
+          </Button>
+        }
+      />
 
-      {WORKER_SECRET_FIELDS.map((field) => (
-        <WorkerSecretField key={field.name} {...field} />
-      ))}
+      {isExpanded && (
+        <>
+          <Text color="secondary" variant="caption-2">
+            Ключи передаются один раз и не хранятся здесь для отображения — как и в GitHub
+            Secrets, это запись «вслепую». Сохранение запускает передеплой worker (~15 минут).
+          </Text>
+
+          {WORKER_SECRET_FIELDS.map((field) => (
+            <WorkerSecretField key={field.name} {...field} />
+          ))}
+        </>
+      )}
     </Card>
   );
 }
@@ -282,6 +303,7 @@ function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const { data: job } = useGetJobQuery(jobId, {
     pollingInterval: JOB_POLL_INTERVAL_MS,
   });
+  const { keys: parcelKeys } = useParcelKeys();
   const [deleteJob, { isLoading: isDeleting }] = useDeleteJobMutation();
   const [downloadResult, { isLoading: isDownloading }] = useDownloadJobResultMutation();
   const [peekJobResult] = usePeekJobResultMutation();
@@ -347,6 +369,7 @@ function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
             <Text variant="body-2" color="secondary">
               Публичный ключ получателя — чтобы скачать результат зашифрованным, а не в открытом виде
             </Text>
+            <ParcelKeyPicker keys={parcelKeys} onPick={setEncryptKey} />
             <div className={styles.encryptRow}>
               <TextArea value={encryptKey} onUpdate={setEncryptKey} rows={2} placeholder="-----BEGIN PUBLIC KEY-----" />
               <Button
@@ -401,6 +424,7 @@ export function WorkerPage() {
   const [model, setModel] = useState<WorkerJobModel | undefined>(undefined);
   const [claudeCredentialId, setClaudeCredentialId] = useState<number | undefined>(undefined);
   const [decryptKey, setDecryptKey] = useState('');
+  const { keys: parcelKeys } = useParcelKeys();
   const [createError, setCreateError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
   // Separate from isCreating (the createJob mutation itself): this covers
@@ -481,12 +505,6 @@ export function WorkerPage() {
         description="Запуск ИИ-агента над посылкой из Storage — Claude, GPT, DeepSeek или Qwen."
       />
 
-      <VpnConnectionSelector />
-
-      <WorkerSecretsCard />
-
-      <ClaudeCredentialsCard />
-
       <Card view="outlined" className={styles.card}>
         <SectionHeader title="Новая задача" />
 
@@ -545,6 +563,7 @@ export function WorkerPage() {
                   <Icon data={LockOpen} size={14} /> Эта посылка зашифрована — приватный ключ для расшифровки
                   (используется только в браузере, на сервер не отправляется)
                 </Text>
+                <ParcelKeyPicker keys={parcelKeys} onPick={setDecryptKey} />
                 <TextArea value={decryptKey} onUpdate={setDecryptKey} rows={2} placeholder="-----BEGIN PRIVATE KEY-----" />
               </label>
             )}
@@ -587,6 +606,12 @@ export function WorkerPage() {
           </ul>
         )}
       </Card>
+
+      <VpnConnectionSelector />
+
+      <ClaudeCredentialsCard />
+
+      <WorkerSecretsCard />
 
       {openJobId !== null && (
         <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />

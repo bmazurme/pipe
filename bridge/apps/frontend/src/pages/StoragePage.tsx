@@ -12,6 +12,8 @@ import { storageApiEndpoints } from '../store/api/storage-api/endpoints';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { purgeEntriesSelector, storageFilesSelector } from '../store/slices';
 import { PageHeader } from '../widgets/PageHeader';
+import { OpenEncryptedFileDialog } from './storage/OpenEncryptedFileDialog';
+import { ParcelKeysCard } from './storage/ParcelKeysCard';
 import { FileLeakFindings, scanFilesForLeaks } from './storage/scanFileForLeaks';
 import { StorageDropzone, UploadProgress } from './storage/StorageDropzone';
 import { StorageFileList } from './storage/StorageFileList';
@@ -35,6 +37,7 @@ export function StoragePage() {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadProgress | null>(null);
+  const [openEncryptedFile, setOpenEncryptedFile] = useState<StoredFileMeta | null>(null);
   const isMobile = useIsMobile();
 
   // Only the "upload a project folder" path already applies the Purge
@@ -125,6 +128,8 @@ export function StoragePage() {
 
       <StorageProjectUpload onError={setError} />
 
+      <ParcelKeysCard />
+
       {error && (
         <Alert
           theme="danger"
@@ -142,8 +147,13 @@ export function StoragePage() {
           isMobile={isMobile}
           downloadingId={downloadingId}
           onDownload={(file) => void handleDownload(file)}
+          onOpenEncrypted={setOpenEncryptedFile}
         />
       </Card>
+
+      {openEncryptedFile && (
+        <OpenEncryptedFileDialog file={openEncryptedFile} onClose={() => setOpenEncryptedFile(null)} />
+      )}
 
       <Dialog
         open={pendingUpload !== null}
