@@ -36,6 +36,9 @@ Each product's own README has the full detail; this file only covers what
 spans all three — split by topic into `docs/`, since the single-file
 version of this had grown past the point of being easy to navigate:
 
+- **[docs/architecture.md](docs/architecture.md)** — one diagram of how
+  every component above talks to every other (parcel flow, Worker Jobs,
+  Chat, harness's `--live`, auth, VPN), with a short reading guide per flow.
 - **[docs/auth.md](docs/auth.md)** — unified machine auth (personal API
   keys alongside bridge's OAuth flow) and rate limiting.
 - **[docs/parcel.md](docs/parcel.md)** — manifest schema versioning, the
