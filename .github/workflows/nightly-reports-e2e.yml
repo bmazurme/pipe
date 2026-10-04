@@ -41,20 +41,23 @@ jobs:
           working-directory: reports/packages/client
           # cypress-io/github-action runs every `start` command from
           # `working-directory` above — reports/packages/client — via a
-          # direct spawn, no shell (confirmed: a bare `cd ../.. && ...` here
-          # fails with "Unable to locate executable file: cd", since cd is a
-          # shell builtin, not a binary on PATH). The server command still
-          # needs to land in reports/ (the actual npm workspace root for
-          # `--workspace=packages/server`) rather than `--prefix ../..`:
-          # reports/ sits nested inside this repo's own outer workspace
-          # (packages/protocol, harness, ...), and npm's workspace discovery
-          # walks up from cwd regardless of --prefix, so `--prefix ../..
-          # --workspace=packages/server` run from inside reports/packages/client
-          # resolves against the *outer* repo root instead and fails with
-          # "No workspaces found: --workspace=packages/server" — reproduced
-          # locally, not just a CI quirk. `sh -c "..."` gets both a real,
-          # spawnable executable (sh) and shell semantics (cd, &&) for its
-          # argument.
-          start: sh -c "cd ../.. && npm run dev --workspace=packages/server", npm run dev
+          # direct spawn, no shell, using its own naive whitespace tokenizer
+          # that doesn't strip quote characters from a quoted argument
+          # (confirmed in CI, twice: a bare `cd ../.. && ...` fails with
+          # "Unable to locate executable file: cd", since cd is a shell
+          # builtin, not a binary on PATH; wrapping it as `sh -c "..."`
+          # fails too, with the literal quotes surviving into sh's argv and
+          # sh trying to run one "command" whose name is the entire quoted
+          # string). The server command needs to land in reports/ (the
+          # actual npm workspace root for `--workspace=packages/server`)
+          # rather than `--prefix ../..`: reports/ sits nested inside this
+          # repo's own outer workspace (packages/protocol, harness, ...),
+          # and npm's workspace discovery walks up from cwd regardless of
+          # --prefix, so `--prefix ../.. --workspace=packages/server` run
+          # from inside reports/packages/client resolves against the
+          # *outer* repo root instead and fails with "No workspaces found".
+          # A real script file sidesteps the tokenizer entirely — one bare
+          # path, nothing with embedded spaces/quotes to mis-parse.
+          start: ../../scripts/start-server-for-e2e.sh, npm run dev
           wait-on: 'http://localhost:4000, http://localhost:5174'
           wait-on-timeout: 60
