@@ -8,7 +8,7 @@
 
 - **Не начато:** 2.1, 2.5, 2.6, 2.7, 5.6 (языковой вопрос — решение пользователя, не техническое).
 - **Запланировано, не выполнено:** 5.1 (единый workspace) — план написан (см. обсуждение в сессии), не начато: трогает установку/сборку/CI всех продуктов одновременно, осознанно вынесено в отдельный заход.
-- **Частично:** 1.4 (confirm-гейт/throttle/аудит — не закрывает компрометацию самого backend-процесса), 2.3 (адресация есть на бэкенде и при загрузке, читающая сторона ещё матчит по имени файла), 3.7 (undici/react выровнены, React Router v6-vs-v7 сознательно отложен), 4.3 (нет тестов на reports `subscription/handler.ts`), 4.4 (coverage-тулинг есть и работает, CI-гейт на регрессию не подключён — нужен сохраняемый baseline).
+- **Частично:** 1.4 (confirm-гейт/throttle/аудит — не закрывает компрометацию самого backend-процесса), 3.7 (undici/react выровнены, React Router v6-vs-v7 сознательно отложен), 4.3 (нет тестов на reports `subscription/handler.ts`), 4.4 (coverage-тулинг есть и работает, CI-гейт на регрессию не подключён — нужен сохраняемый baseline).
 - **Отменено (сознательно, после попытки):** 3.8 (апгрейд NestJS 10→11 — конфликт резолюции зависимостей, откачено целиком).
 
 ---
@@ -30,7 +30,7 @@
 |---|---|---|---|---|
 | 2.1 | P1 | Не начато | Три независимых HTTP-клиента bridge + два GitLab. | — |
 | 2.2 | P1 | ✅ Готово | Нет общего контракта API. | `@nestjs/swagger`'s CLI-плагин + `generate-openapi.ts` → `bridge/apps/backend/openapi.json` (51 путь), закоммичен, проверка дрейфа в CI (`openapi:check`, жёсткий гейт). `openapi-typescript` генерирует `packages/protocol/src/bridge-api-types.d.ts` из этого же файла (тоже с CI-проверкой дрейфа) — пока не подключён ни одним потребителем. |
-| 2.3 | P1 | Частично | Мульти-адресация посылок. | `StoredFile` получил опциональные `channel`/`taskKey`/`direction`-колонки + `GET /api/v1/storage` фильтрует по ним; sync's `pushIssueCommand`/`agentRunner.ts` их заполняют при загрузке. **Не сделано:** читающая сторона (`pull-issue`, `gitlab-worker`, reports' Subscription) всё ещё матчит по имени файла, не по этим полям — см. [docs/parcel.md](../parcel.md#multi-parcel-addressing). |
+| 2.3 | P1 | ✅ Готово | Мульти-адресация посылок. | `StoredFile` получил опциональные `channel`/`taskKey`/`direction`-колонки + `GET /api/v1/storage` фильтрует по ним; sync's `pushIssueCommand`/`agentRunner.ts`/`pull-issue` и reports' push/pull-хендлеры все читают/пишут эти поля (`channel: 'issue'`, `taskKey: "${projectId}:${iid}"`, `direction: 'outbound'|'result'`) вместо матчинга по имени файла — подробности и что сознательно не тронуто (agent-runner's `findCandidates`, у него свой content-hash guard) см. [docs/parcel.md](../parcel.md#multi-parcel-addressing). Новые юнит-тесты на query-building в `sync/src/bridgeClient.test.ts` и `reports/.../bridge-client.test.ts`; build/lint/test зелёные в sync (49) и reports server (89). |
 | 2.4 | P1 | ✅ Готово | Worker слал один `POST` на каждый чанк лога. | Батчинг раз в ~1.5с, отправки выстроены в цепочку (`flushed = flushed.then(...)`), чтобы не улетали параллельно и не перемешивали порядок на бэкенде. Финальный флуш в `finally`, даже при ошибке. |
 | 2.5 | P2 | Не начато | Состояние задачи разбросано по 4 файлам + Postgres. | — |
 | 2.6 | P2 | Не начато | Запись JSON без атомарности. | — |

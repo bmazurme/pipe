@@ -72,8 +72,20 @@ export class BridgeClient {
     return { Authorization: `Bearer ${this.accessToken}` };
   }
 
-  async listFiles(): Promise<StoredFileResponse[]> {
-    const response = await fetch(`${this.apiUrl}/api/v1/storage`, {
+  // filter mirrors bridge's own ListFilesQueryDto (channel/taskKey/direction)
+  // — all optional, an empty filter lists everything, same as before this
+  // existed. Lets a caller match a parcel by its addressing metadata
+  // instead of guessing from its filename (IMPROVEMENTS_TECH.md 2.3).
+  async listFiles(
+    filter: { channel?: string; taskKey?: string; direction?: 'outbound' | 'result' } = {},
+  ): Promise<StoredFileResponse[]> {
+    const query = new URLSearchParams();
+    if (filter.channel) query.set('channel', filter.channel);
+    if (filter.taskKey) query.set('taskKey', filter.taskKey);
+    if (filter.direction) query.set('direction', filter.direction);
+    const qs = query.size > 0 ? `?${query.toString()}` : '';
+
+    const response = await fetch(`${this.apiUrl}/api/v1/storage${qs}`, {
       headers: await this.authHeader(),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });

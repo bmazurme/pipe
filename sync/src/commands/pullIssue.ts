@@ -9,7 +9,6 @@ import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
 import { notify } from '../notify.js';
 import { resolveFromRoot } from '../paths.js';
-import { issueParcelName } from './pushIssue.js';
 import { log } from '../log.js';
 
 // Returns true once a parcel was found and pulled, false when there's
@@ -33,10 +32,12 @@ async function tryPullOnce(
   const dictionary = loadOptionalDictionary(project.dictionary);
   const client = new BridgeClient(config.bridge.apiUrl);
 
-  const plainName = issueParcelName(projectId, iid, false);
-  const encryptedName = issueParcelName(projectId, iid, true);
-  const candidates = (await client.listFiles())
-    .filter((f) => f.originalName === plainName || f.originalName === encryptedName)
+  // Matched by addressing metadata (IMPROVEMENTS_TECH.md 2.3), not by
+  // filename — a filename-only match couldn't tell this task's *result*
+  // apart from its own outbound parcel (agent-runner uploads both under
+  // the exact same issueParcelName()), if the outbound one were ever still
+  // sitting in storage (e.g. never downloaded) when the result arrives.
+  const candidates = (await client.listFiles({ channel: 'issue', taskKey: `${projectId}:${iid}`, direction: 'result' }))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const newest = candidates[0];
@@ -45,7 +46,7 @@ async function tryPullOnce(
     return false;
   }
 
-  const isEncrypted = newest.originalName === encryptedName;
+  const isEncrypted = newest.originalName.endsWith('.enc');
   const downloaded = await client.download(newest.id);
 
   let buffer = downloaded;

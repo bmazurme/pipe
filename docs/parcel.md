@@ -83,18 +83,40 @@ client-side, with bridge having no concept of addressing at all. With
 `gitlab-worker` producing several task parcels in a row (no longer
 human-paced), this was a real, not theoretical, gap.
 
-**Backend capability now exists** (IMPROVEMENTS_TECH.md 2.3): `StoredFile`
-carries optional `channel`/`taskKey`/`direction` columns (migration
-`1790800000000-AddStoredFileAddressing`), and `GET /api/v1/storage` accepts
-matching `?channel=&taskKey=&direction=` query filters — all additive,
-nothing required, a plain upload/list with no addressing metadata behaves
-exactly as before. sync's `pushIssueCommand` and `agentRunner.ts` already
-populate `taskKey` (`"${projectId}:${iid}"`) and `direction`
-(`outbound`/`result`) on upload
-([bridgeClient.ts](../sync/src/bridgeClient.ts)'s `upload()`).
+**Done** ([IMPROVEMENTS_TECH.md 2.3](improvements/IMPROVEMENTS_TECH.md)):
+`StoredFile` carries optional `channel`/`taskKey`/`direction` columns
+(migration `1790800000000-AddStoredFileAddressing`), and `GET /api/v1/storage`
+accepts matching `?channel=&taskKey=&direction=` query filters — all
+additive, nothing required, a plain upload/list with no addressing metadata
+behaves exactly as before. Both the writing and the reading side now use it:
 
-**Not yet done**: nothing on the *reading* side uses this — `pull-issue`,
-`gitlab-worker`'s own pull path, and reports' Subscription module all still
-match by filename pattern alone. Wiring them to filter via the new query
-params (instead of guessing from the name) is the natural next step, in the
-same shape as the upload-side change above.
+- **Writing**: sync's `pushIssueCommand`/`gitlab-worker` upload with
+  `direction: 'outbound'`, `agentRunner.ts` uploads its result with
+  `direction: 'result'` ([bridgeClient.ts](../sync/src/bridgeClient.ts)'s
+  `upload()`); reports' `handlePushSubscriptionIssue` does the same
+  (`direction: 'outbound'`,
+  [bridge-client.ts](../reports/packages/server/src/subscription/bridge-client.ts)'s
+  `uploadParcel()`). All four set `channel: 'issue'` and
+  `taskKey: "${projectId}:${iid}"`.
+- **Reading**: sync's `pull-issue` and reports' `handlePullSubscriptionIssue`
+  both now call `listFiles()`/`listParcels()` with
+  `{channel: 'issue', taskKey: "${projectId}:${iid}", direction: 'result'}`
+  instead of matching `originalName` against a precomputed filename — which
+  couldn't otherwise tell a task's *result* apart from its own outbound
+  parcel (both are uploaded under the exact same filename pattern,
+  `issueParcelName()`/`parcelName()`), if the outbound one were ever still
+  sitting in storage when the result arrives. `gitlab-worker` has no pull
+  logic of its own — `pull-issue` closing its loop was already covered by
+  the fix above. Encrypted-vs-plain detection moved from an exact filename
+  comparison to `originalName.endsWith('.enc')`, since there's now exactly
+  one relevant candidate (the filter already excludes everything else) to
+  check.
+
+**Deliberately not touched**: `agentRunner.ts`'s own *incoming*-candidate
+matching (`findCandidates`, matching by filename regex to recover
+`projectId`/`iid`/`encrypted` from the name) still doesn't filter by
+`direction: 'outbound'` server-side. It already has a separate, narrower
+safety net for the adjacent risk (reprocessing its own prior result) — a
+content-hash check against `agentState.ts`'s `lastOwnOutputHash` — and
+widening it to use addressing too was out of this item's stated scope
+(`pull-issue`/`gitlab-worker`/reports' Subscription specifically).

@@ -11,6 +11,9 @@ function file(overrides: Partial<StoredFileResponse> = {}): StoredFileResponse {
     mimeType: 'application/zip',
     size: 100,
     createdAt: '2026-09-30T00:00:00.000Z',
+    channel: null,
+    taskKey: null,
+    direction: null,
     ...overrides,
   };
 }
