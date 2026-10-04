@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import type { SubscriptionStateEntryType } from '@reports/shared';
+import { parseState, subscriptionStateSchema } from '@pipe/protocol/state';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const statePath = join(__dirname, 'subscription-state.json');
@@ -15,7 +16,11 @@ const readState = (): SubscriptionState => {
     return {};
   }
 
-  return JSON.parse(readFileSync(statePath, 'utf-8'));
+  const result = parseState(subscriptionStateSchema, JSON.parse(readFileSync(statePath, 'utf-8')));
+  if ('error' in result) {
+    throw new Error(`${statePath} is malformed: ${result.error}`);
+  }
+  return result.value;
 };
 
 const writeState = (state: SubscriptionState): SubscriptionState => {

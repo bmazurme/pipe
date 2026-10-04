@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
+import { parseState, syncStateSchema } from '@pipe/protocol/state';
+
 import { STATE_PATH } from './paths.js';
 import type { SyncState } from './types.js';
 
@@ -8,7 +10,11 @@ export function loadState(): SyncState {
     return {};
   }
 
-  return JSON.parse(readFileSync(STATE_PATH, 'utf-8')) as SyncState;
+  const result = parseState(syncStateSchema, JSON.parse(readFileSync(STATE_PATH, 'utf-8')));
+  if ('error' in result) {
+    throw new Error(`${STATE_PATH} is malformed: ${result.error}`);
+  }
+  return result.value;
 }
 
 export function saveState(state: SyncState): void {

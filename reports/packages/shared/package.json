@@ -9,6 +9,9 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
+  "dependencies": {
+    "@pipe/protocol": "file:../../../packages/protocol"
+  },
   "devDependencies": {
     "typescript": "^5.7.2"
   }

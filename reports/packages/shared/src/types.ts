@@ -156,27 +156,14 @@ export type SettingsBundleType = {
   offDaysByYear: Record<string, string[]>;
 };
 
-export type SubscriptionStepType = 'init' | 'pushed' | 'pulled' | 'published';
-
-export type SubscriptionStateEntryType = {
-  step: SubscriptionStepType;
-  branch?: string;
-  parcelId?: number;
-  pushedAt?: string;
-  pulledAt?: string;
-  publishedAt?: string;
-  encrypted?: boolean;
-  // Set only for a parcel created by hand (no real GitLab issue backing
-  // it) — title/description live here instead of being fetched from
-  // GitLab, and projectId is stored since there's no live issue to read it
-  // off of. handleListSubscriptionIssues synthesizes a row for these;
-  // handlePushSubscriptionIssue/handlePublishSubscriptionIssue skip the
-  // GitLab-only parts (image scraping, posting a comment) for them.
-  manual?: boolean;
-  title?: string;
-  description?: string;
-  projectId?: number;
-};
+// Re-exported from @pipe/protocol/state (IMPROVEMENTS_HARNESS.md 6.1) — the
+// one authoritative shape, shared with sync's and harness's own readers of
+// the same state-file family, instead of a hand-copied type that could
+// silently drift from what's actually written. Safe to import here (client
+// included): @pipe/protocol/state only pulls in zod, nothing Node-specific
+// like the bare @pipe/protocol barrel's encryption.ts does.
+import type { SubscriptionStep as SubscriptionStepType, SubscriptionStateEntry as SubscriptionStateEntryType } from '@pipe/protocol/state';
+export type { SubscriptionStepType, SubscriptionStateEntryType };
 
 export type SubscriptionIssueType = {
   id: string;

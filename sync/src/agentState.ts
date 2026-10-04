@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
+import { agentRunnerStateSchema, parseState } from '@pipe/protocol/state';
+
 import { AGENT_STATE_PATH } from './paths.js';
 import type { AgentRunnerState } from './types.js';
 
@@ -9,7 +11,12 @@ export function loadAgentState(): AgentRunnerState {
   if (!existsSync(AGENT_STATE_PATH)) {
     return {};
   }
-  return JSON.parse(readFileSync(AGENT_STATE_PATH, 'utf-8')) as AgentRunnerState;
+
+  const result = parseState(agentRunnerStateSchema, JSON.parse(readFileSync(AGENT_STATE_PATH, 'utf-8')));
+  if ('error' in result) {
+    throw new Error(`${AGENT_STATE_PATH} is malformed: ${result.error}`);
+  }
+  return result.value;
 }
 
 export function recordOwnOutput(key: string, contentHash: string): void {

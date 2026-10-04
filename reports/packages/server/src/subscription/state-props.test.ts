@@ -46,3 +46,21 @@ describe('removeIssueState', () => {
     expect(getAllIssueStates()).toEqual({});
   });
 });
+
+// IMPROVEMENTS_HARNESS.md 6.1: reads now validate against the shared
+// @pipe/protocol/state schema, not just "is this valid JSON" — a malformed
+// shape (not just malformed syntax) now throws a clear error instead of
+// silently handing back data that doesn't match SubscriptionStateEntryType.
+describe('readState validation', () => {
+  it('throws a clear error for a well-formed-JSON-but-wrong-shape file', () => {
+    writeFileSync(statePath, JSON.stringify({ '173:42': { step: 'not-a-real-step' } }));
+
+    expect(() => getAllIssueStates()).toThrow(/is malformed/);
+  });
+
+  it('throws when an entry is missing its required step field', () => {
+    writeFileSync(statePath, JSON.stringify({ '173:42': { branch: 'user-42' } }));
+
+    expect(() => getAllIssueStates()).toThrow(/is malformed/);
+  });
+});

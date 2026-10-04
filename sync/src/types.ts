@@ -46,11 +46,11 @@ export interface Credentials {
   apiKey?: string;
 }
 
-export interface SyncState {
-  [projectName: string]: {
-    lastHash: string;
-  };
-}
+// Re-exported from @pipe/protocol/state (IMPROVEMENTS_HARNESS.md 6.1) —
+// the one authoritative shape, shared with reports' and harness's own
+// readers/writers of the same state-file family, instead of a hand-copied
+// interface that could silently drift from what's actually written.
+export type { SyncState } from '@pipe/protocol/state';
 
 export interface StoredFileResponse {
   id: number;
@@ -71,8 +71,5 @@ export interface SyncManifest extends BaseManifest {
 // fresh incoming parcel on the next poll (agent-runner both consumes and
 // produces parcels under the same `${projectId}-${iid}.subscription.zip`
 // name, since that name is reports' contract and can't change per side).
-export interface AgentRunnerState {
-  [issueKey: string]: {
-    lastOwnOutputHash: string;
-  };
-}
+// Re-exported from @pipe/protocol/state — see SyncState's own comment above.
+export type { AgentRunnerState } from '@pipe/protocol/state';

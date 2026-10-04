@@ -1,6 +1,19 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { z } from 'zod';
+
+import {
+  agentRunnerStateSchema,
+  gitlabWorkerStateSchema,
+  parseState,
+  subscriptionStateSchema,
+  syncStateSchema,
+  type AgentRunnerStateEntry,
+  type GitlabWorkerStateEntry,
+  type SubscriptionStateEntry,
+  type SyncState,
+} from '@pipe/protocol/state';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -27,37 +40,15 @@ export const DEFAULT_PATHS: StatusPaths = {
   ),
 };
 
-export interface SyncState {
-  [projectName: string]: { lastHash: string };
-}
-
-// Mirrors sync/src/types.ts's AgentRunnerState exactly: a dedup marker so
-// agent-runner doesn't mistake its own push-back for a fresh incoming
-// parcel, not a progress record — there is no richer "pending" state on
-// this side to show.
-export interface SyncAgentEntry {
-  lastOwnOutputHash: string;
-}
-
-// Mirrors sync/src/gitlabWorkerState.ts's GitlabWorkerState — the one
-// sync-side file with real per-issue data: which issues gitlab-worker has
-// already turned into a pushed parcel, and when.
-export interface GitlabWorkerEntry {
-  pushedAt: string;
-  filename: string;
-}
-
-export interface SubscriptionEntry {
-  step: string;
-  branch?: string;
-  parcelId?: number;
-  pushedAt?: string;
-  pulledAt?: string;
-  publishedAt?: string;
-  encrypted?: boolean;
-  manual?: boolean;
-  title?: string;
-}
+// Shared with sync's and reports' own readers/writers of the same files
+// (@pipe/protocol/state, IMPROVEMENTS_HARNESS.md 6.1) — previously each of
+// these was a hand-copied interface here ("Mirrors sync/src/types.ts's
+// AgentRunnerState exactly", a comment, not an enforced guarantee) that
+// could silently drift from what a writer actually produces.
+export type { SyncState };
+export type SyncAgentEntry = AgentRunnerStateEntry;
+export type GitlabWorkerEntry = GitlabWorkerStateEntry;
+export type SubscriptionEntry = SubscriptionStateEntry;
 
 export interface TaskEntry {
   key: string;
@@ -77,17 +68,31 @@ interface ReadResult<T> {
   error?: string;
 }
 
-// Returns the parse error as data (instead of logging it directly) so
-// collectReportData can fold it into the report — keeping this function
-// pure and unit-testable without mocking console.
-export function readJson<T>(filePath: string): ReadResult<T> {
+// Reads a JSON state file and validates it against the given schema in one
+// pass — a missing file is fine (nothing pushed/pulled yet), but malformed
+// JSON *or* well-formed JSON in the wrong shape (a writer's own schema
+// drifting from what this file actually expects) both come back as data
+// (instead of logging/throwing directly), so collectReportData can fold
+// either into the report. Keeps this pure and unit-testable without mocking
+// console.
+function readValidatedJson<T extends z.ZodTypeAny>(
+  filePath: string,
+  schema: T,
+): ReadResult<z.infer<T>> {
   if (!existsSync(filePath)) return { value: undefined };
 
+  let raw: unknown;
   try {
-    return { value: JSON.parse(readFileSync(filePath, 'utf-8')) as T };
+    raw = JSON.parse(readFileSync(filePath, 'utf-8'));
   } catch (error) {
     return { value: undefined, error: `state file at ${filePath} is malformed: ${(error as Error).message}` };
   }
+
+  const result = parseState(schema, raw);
+  if ('error' in result) {
+    return { value: undefined, error: `state file at ${filePath} is malformed: ${result.error}` };
+  }
+  return { value: result.value };
 }
 
 // Splits "projectId:iid" and compares both segments numerically when
@@ -115,10 +120,10 @@ export function compareIssueKeys(a: string, b: string): number {
 // single source of truth both the text formatter and --json mode render
 // from, so they can never drift apart.
 export function collectReportData(paths: StatusPaths): ReportData {
-  const syncState = readJson<SyncState>(paths.syncState);
-  const syncAgentState = readJson<Record<string, SyncAgentEntry>>(paths.syncAgentState);
-  const gitlabWorkerState = readJson<Record<string, GitlabWorkerEntry>>(paths.gitlabWorkerState);
-  const subscriptionState = readJson<Record<string, SubscriptionEntry>>(paths.reportsState);
+  const syncState = readValidatedJson(paths.syncState, syncStateSchema);
+  const syncAgentState = readValidatedJson(paths.syncAgentState, agentRunnerStateSchema);
+  const gitlabWorkerState = readValidatedJson(paths.gitlabWorkerState, gitlabWorkerStateSchema);
+  const subscriptionState = readValidatedJson(paths.reportsState, subscriptionStateSchema);
 
   const errors = [syncState.error, syncAgentState.error, gitlabWorkerState.error, subscriptionState.error]
     .filter((error): error is string => Boolean(error));

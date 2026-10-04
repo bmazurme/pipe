@@ -45,6 +45,10 @@
     },
     "./bridge-api-types": {
       "types": "./src/bridge-api-types.d.ts"
+    },
+    "./state": {
+      "types": "./dist/state.d.ts",
+      "default": "./dist/state.js"
     }
   },
   "scripts": {
@@ -58,7 +62,8 @@
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
-    "fast-glob": "^3.3.3"
+    "fast-glob": "^3.3.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

@@ -15,6 +15,10 @@
     "test:coverage": "tsc -b && node --test --experimental-test-coverage 'dist/**/*.test.js'",
     "lint": "eslint ."
   },
+  "dependencies": {
+    "@pipe/protocol": "*",
+    "zod": "^4.6.5"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
