@@ -35,7 +35,7 @@ function resultFilename(job: RemoteJob): string {
 // One job at a time, in a fresh temp directory that's always removed after
 // (success or failure) — worker has no persistent git clone/origin of
 // anything, it only ever round-trips a single parcel's own file set. Per
-// docs/roadmap.md's isolation requirement, this process itself should run
+// sync's ROADMAP.md's isolation requirement, this process itself should run
 // as a dedicated unprivileged OS user with no access to real secrets — see
 // worker/README.md and systemd/pipe-worker.service.
 export async function processJob(client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig): Promise<void> {

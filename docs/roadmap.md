@@ -44,7 +44,7 @@ and no memory of prior issues on the same project.
 
 That's not an oversight — each task runs in its own throwaway git worktree
 with `--dangerously-skip-permissions` (`claudeRunner.ts`'s header comment,
-`docs/roadmap.md` section 3.6 in the standalone `sync` repo), a deliberate
+`sync/ROADMAP.md` section 3.6), a deliberate
 isolation boundary meant to keep one task's mistakes from compounding into
 the next. An auto-accumulating "memory" of prior agent runs on a project
 would cut against that goal directly, so it isn't recommended.
@@ -58,11 +58,13 @@ free and get stitched into `buildIssuePrompt`/the archive manifest, giving
 every issue on a project the same baseline notes (stack, gotchas,
 conventions) without the risk of silently-growing, agent-written state.
 
-## Everything in IMPROVEMENTS_TECH.md / IMPROVEMENTS_HARNESS.md
+## Everything in docs/improvements/
 
-Two longer-form technical-debt/feature analyses live at the repo root
-rather than here — `IMPROVEMENTS_TECH.md` (security/architecture/tests/DX
-across every product, with a status column tracking what's since been
-built) and `IMPROVEMENTS_HARNESS.md` (turning `harness` from a read-only
-report into an actual assistant). Check those for anything not covered
-above.
+Two longer-form technical-debt/feature analyses live in
+[docs/improvements/](improvements/) rather than here —
+[IMPROVEMENTS_TECH.md](improvements/IMPROVEMENTS_TECH.md)
+(security/architecture/tests/DX across every product, with a status column
+tracking what's since been built) and
+[IMPROVEMENTS_HARNESS.md](improvements/IMPROVEMENTS_HARNESS.md) (turning
+`harness` from a read-only report into an actual assistant). Check those
+for anything not covered above.

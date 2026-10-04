@@ -138,7 +138,7 @@ leak scan and bridge's own Purge page, not by sync/reports/worker.
   the three dashed edges into bridge: it reuses `sync`'s own stored API key
   (no separate login) to turn a locally-inferred guess ("likely ready to
   pull") into a bridge-confirmed fact. See `harness/README.md` and
-  [IMPROVEMENTS_HARNESS.md](../IMPROVEMENTS_HARNESS.md) item 1.1.
+  [IMPROVEMENTS_HARNESS.md](improvements/IMPROVEMENTS_HARNESS.md) item 1.1.
 - **Auth**: every machine-to-bridge edge above (`sync`, `reports`,
   `worker`, `harness --live`) authenticates the same way — a personal API
   key through `JwtOrApiKeyGuard`, sync/reports also tolerating a

@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 //
 // That flag is exactly as dangerous as it sounds outside a throwaway
 // sandbox: agent-runner MUST run each task in an isolated environment (a
-// container/VM with no access to real secrets, per docs/roadmap.md section
+// container/VM with no access to real secrets, per ROADMAP.md section
 // 3 point 6) — the git-worktree isolation this module runs inside handles
 // disk state, but nothing here sandboxes network or process access. Do not
 // point this at a shared server user account.

@@ -5,20 +5,20 @@
 `sync-cli` — CLI-утилита (Node ≥22, TS, `commander`), которая синхронизирует
 дерево исходников JS/TS-проекта между двумя машинами через существующее
 хранилище `bridge` (`POST/GET /api/v1/storage`). Подробная механика описана в
-[README.md](../README.md), кратко по коду:
+[README.md](README.md), кратко по коду:
 
-- [src/cli.ts](../src/cli.ts) — точка входа, регистрирует команды
+- [src/cli.ts](src/cli.ts) — точка входа, регистрирует команды
   `login`, `add`/`remove`/`list`, `push`, `pull`. Интерфейс **только
   консольный**, других способов взаимодействия нет.
-- [src/pack.ts](../src/pack.ts) — упаковка/распаковка zip-архива с файлами
+- [src/pack.ts](src/pack.ts) — упаковка/распаковка zip-архива с файлами
   проекта и манифестом `__sync_manifest__.json`
-  ([SyncManifest](../src/types.ts)).
-- [src/dictionary.ts](../src/dictionary.ts) — подстановка
+  ([SyncManifest](src/types.ts)).
+- [src/dictionary.ts](src/dictionary.ts) — подстановка
   реальное-значение↔плейсхолдер при push/pull.
-- [src/bridgeClient.ts](../src/bridgeClient.ts) — HTTP-клиент к bridge
+- [src/bridgeClient.ts](src/bridgeClient.ts) — HTTP-клиент к bridge
   (access/refresh токены, upload/download/list).
-- [src/commands/push.ts](../src/commands/push.ts) /
-  [src/commands/pull.ts](../src/commands/pull.ts) — сценарии отправки и
+- [src/commands/push.ts](src/commands/push.ts) /
+  [src/commands/pull.ts](src/commands/pull.ts) — сценарии отправки и
   получения кодовой базы.
 
 Интеграции с GitLab и любого графического/веб-интерфейса в проекте сейчас
@@ -36,23 +36,23 @@
 - Новый модуль `src/gitlab.ts` — клиент GitLab REST API:
   `GET /api/v4/issues?scope=assigned_to_me&state=opened` (при необходимости
   с фильтром по `project_id`/`group_id` из конфига), заголовок
-  `PRIVATE-TOKEN`. По аналогии с [BridgeClient](../src/bridgeClient.ts).
+  `PRIVATE-TOKEN`. По аналогии с [BridgeClient](src/bridgeClient.ts).
 - Токен GitLab — по аналогии с
-  [src/credentials.ts](../src/credentials.ts)/`login`: отдельная команда
+  [src/credentials.ts](src/credentials.ts)/`login`: отдельная команда
   `sync-cli login-gitlab <token>` (или расширение `Credentials` полем
   `gitlabToken`), плюс URL инстанса GitLab и id проекта — в
-  `sync.config.json` на уровне `ProjectConfig` ([src/types.ts](../src/types.ts)),
+  `sync.config.json` на уровне `ProjectConfig` ([src/types.ts](src/types.ts)),
   т.к. у разных tracked-проектов могут быть разные GitLab-проекты.
-- В [pack.ts](../src/pack.ts) добавить в архив рядом с
+- В [pack.ts](src/pack.ts) добавить в архив рядом с
   `__sync_manifest__.json` файл вида `__sync_tasks__.json` со списком задач
   (id, title, description, url, labels, updated_at).
 - Текст задач может содержать реальные имена/значения — прогонять через тот
-  же словарь ([toRemote](../src/dictionary.ts)/`toLocal`), что и обычные
+  же словарь ([toRemote](src/dictionary.ts)/`toLocal`), что и обычные
   файлы, чтобы не ломать анонимизацию.
-- В [push.ts](../src/commands/push.ts) — получать список задач перед сборкой
+- В [push.ts](src/commands/push.ts) — получать список задач перед сборкой
   архива, за флагом `--with-tasks` или конфиг-опцией (по умолчанию
   выключено, т.к. требует GitLab-токен и сетевой вызов).
-- В [pull.ts](../src/commands/pull.ts) — при наличии `__sync_tasks__.json` в
+- В [pull.ts](src/commands/pull.ts) — при наличии `__sync_tasks__.json` в
   архиве не мержить его в файлы проекта, а сохранять отдельно (например,
   `.sync-tasks.json` рядом с `.sync-state.json`) и печатать краткую сводку в
   консоль.
@@ -70,11 +70,11 @@ tracked-проектов (когда был последний push/pull, чис
 
 **Что должен показывать UI (минимум):**
 
-- Список tracked-проектов ([config.ts](../src/config.ts) `SyncConfig.projects`)
-  с путём, словарём, последним hash ([state.ts](../src/state.ts)).
+- Список tracked-проектов ([config.ts](src/config.ts) `SyncConfig.projects`)
+  с путём, словарём, последним hash ([state.ts](src/state.ts)).
 - Состояние git-дерева каждого проекта
-  ([gitStatus.ts](../src/gitStatus.ts)) — предупреждать перед pull так же,
-  как сейчас делает [pull.ts](../src/commands/pull.ts).
+  ([gitStatus.ts](src/gitStatus.ts)) — предупреждать перед pull так же,
+  как сейчас делает [pull.ts](src/commands/pull.ts).
 - Кнопки/действия push и pull с выводом лога (сейчас — `console.log` в
   командах).
 - Если реализован пункт 1 — список подтянутых GitLab-задач по проекту.
@@ -108,9 +108,9 @@ tracked-проектов (когда был последний push/pull, чис
 5. результат агента собирается в посылку и возвращается в исходный канал;
 6. пользователь делает ревью и вливает в ветку.
 
-Это надстройка над существующим push/pull ([src/commands/push.ts](../src/commands/push.ts),
-[src/commands/pull.ts](../src/commands/pull.ts)) и упаковкой
-([src/pack.ts](../src/pack.ts)): каждая «посылка» — это тот же
+Это надстройка над существующим push/pull ([src/commands/push.ts](src/commands/push.ts),
+[src/commands/pull.ts](src/commands/pull.ts)) и упаковкой
+([src/pack.ts](src/pack.ts)): каждая «посылка» — это тот же
 zip-архив-с-манифестом, но теперь привязанный не к проекту в целом, а к
 одной задаче и одной ветке, и путешествующий по кругу: инициатор → bridge →
 среда с агентами → bridge → инициатор.
@@ -121,16 +121,16 @@ zip-архив-с-манифестом, но теперь привязанный
   открытых задач, назначенных на пользователя). Здесь дополнительно нужен
   учёт «какие задачи уже отправлены», иначе при каждом запуске будут
   пересоздаваться посылки на одни и те же issue — расширение
-  [src/state.ts](../src/state.ts) (`SyncState`) полем вида
+  [src/state.ts](src/state.ts) (`SyncState`) полем вида
   `processedTasks: { [issueId]: { branch, sentAt } }`.
 - **Шаг 2**: создание ветки — новая git-операция, которой в проекте пока нет
   (`git checkout -b task/<issue-id>-<slug> origin/main`); нужно требовать
   чистое дерево на базовой ветке (переиспользовать
-  [src/gitStatus.ts](../src/gitStatus.ts)) до создания ветки, аналогично
+  [src/gitStatus.ts](src/gitStatus.ts)) до создания ветки, аналогично
   тому, как `pull.ts` уже проверяет чистоту перед перезаписью. Обезличивание
   и упаковка — существующий путь `readAndTransform` + `toRemote` +
-  `buildArchive` ([src/pack.ts](../src/pack.ts),
-  [src/dictionary.ts](../src/dictionary.ts)); задача прикладывается тем же
+  `buildArchive` ([src/pack.ts](src/pack.ts),
+  [src/dictionary.ts](src/dictionary.ts)); задача прикладывается тем же
   способом, что описан в п.1 (`__sync_tasks__.json`, но теперь с одной
   задачей, а не со всем списком).
 - **Шаг 3**: подтверждение — в `push.ts` сейчас нет ни одного интерактивного
@@ -140,7 +140,7 @@ zip-архив-с-манифестом, но теперь привязанный
   `--yes` для неинтерактивных сценариев).
 - **Шаг 4**: сейчас у `bridge` нет понятия «получателя»-агента — это новый
   компонент (условно «agent-runner»), который вызывает `client.download(...)`
-  ([src/bridgeClient.ts](../src/bridgeClient.ts)), затем на основе задачи и
+  ([src/bridgeClient.ts](src/bridgeClient.ts)), затем на основе задачи и
   конфигурации маршрутизации выбирает агента и запускает его над
   распакованными файлами.
 - **Шаг 5**: результат агента — новый архив с тем же манифестом плюс
@@ -156,21 +156,21 @@ zip-архив-с-манифестом, но теперь привязанный
    фиксирует ограничение текущей версии: при двух `push` подряд без `pull`
    между ними на бридже копится несколько версий, а `pull` заберёт только
    самую свежую (см. «Ограничения текущей версии» в
-   [README.md](../README.md)). В пайплайне с задачами это перестаёт быть
+   [README.md](README.md)). В пайплайне с задачами это перестаёт быть
    краевым случаем и становится нормой — несколько задач будут в полёте
    одновременно. Нужно с самого начала адресовать посылки по задаче/ветке
    (`${project}.task-<id>.zip` вместо `${project}.sync.zip`), а не полагаться
    на «только один непрочитанный архив».
 2. **Явная граница доверия: агенты никогда не должны видеть
    де-анонимизированный код.** Смысл словаря — не пускать реальные значения
-   дальше bridge ([README.md](../README.md), раздел «Идея»). Как только в
+   дальше bridge ([README.md](README.md), раздел «Идея»). Как только в
    пайплайн добавляются внешние LLM-провайдеры (OpenAI, Ollama-хост и т.д.),
    это становится требованием безопасности, а не просто гигиеной. Нужно
    явно зафиксировать: agent-runner работает **только** с плейсхолдерами;
    `toLocal` (де-анонимизация) вызывается один раз — на шаге 6, на исходной
    доверенной машине пользователя, и нигде больше.
 3. **Версионирование словаря в манифесте.** Сейчас `SyncManifest`
-   ([src/types.ts](../src/types.ts)) не хранит ничего о словаре. Если
+   ([src/types.ts](src/types.ts)) не хранит ничего о словаре. Если
    словарь на исходной машине изменится между отправкой и возвратом посылки
    (добавили/поменяли пары), де-анонимизация результата на шаге 6 даст
    неверный текст без каких-либо предупреждений. Стоит класть в манифест
@@ -203,14 +203,14 @@ zip-архив-с-манифестом, но теперь привязанный
    6 упирается в тупик при неудачном результате.
 9. **Уведомление о готовности результата.** Транспорт bridge — «почтовый
    ящик», без пушей: доставка требует активного `pull`
-   ([src/bridgeClient.ts](../src/bridgeClient.ts), `download`). Для
+   ([src/bridgeClient.ts](src/bridgeClient.ts), `download`). Для
    асинхронного пайплайна (отправил задачу — ушёл — агент работает в
    фоне) нужен способ узнать, что результат готов, не опрашивая бридж
    вручную: либо периодический поллинг с уведомлением в UI/ОС, либо
    лёгкий вебхук/сообщение (например, в мессенджер) от agent-runner при
    завершении.
 10. **Ветка как единица состояния, не проект.** Текущий `SyncState`
-    ([src/state.ts](../src/state.ts)) и `pull.ts` привязывают
+    ([src/state.ts](src/state.ts)) и `pull.ts` привязывают
     «последний хэш» к имени проекта в целом. В пайплайне с задачами
     состояние (отправлено / в работе у агента / результат готов / ревью
     пройдено / влито) естественно привязывать к паре

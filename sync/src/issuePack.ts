@@ -131,7 +131,7 @@ function buildIssueFileBody(
 // file inside the pulled project — pull-issue used to only print these to
 // the console, which is easy to lose (scrollback, a non-interactive runner)
 // and unusable by whatever picks up the branch next (a human, or an agent
-// per docs/roadmap.md's task->agent->review pipeline, which needs the task
+// per ROADMAP.md's task->agent->review pipeline, which needs the task
 // text sitting next to the code, not in a terminal that already closed).
 //
 // Assets (images pulled from the issue description) are written to disk

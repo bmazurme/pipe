@@ -104,7 +104,7 @@ function branchExists(repoPath: string, branch: string): boolean {
 // never in project.path itself — agent-runner has no human watching it, so
 // it must not fight the user's own checkout for a branch or clobber
 // uncommitted work if it runs while someone happens to be using the same
-// repo (see docs/roadmap.md section 4, "Создание ветки: git worktree").
+// repo (see ROADMAP.md section 4, "Создание ветки: git worktree").
 export function addTaskWorktree(
   repoPath: string,
   worktreeDir: string,
