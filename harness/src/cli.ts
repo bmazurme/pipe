@@ -1,3 +1,4 @@
+import { fetchLiveStatus } from './bridgeLive.js';
 import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
 import { formatReportText } from './render.js';
@@ -8,6 +9,7 @@ export interface CliOptions {
   filter?: string;
   watchSeconds?: number;
   staleHours?: number;
+  live: boolean;
   help: boolean;
 }
 
@@ -25,6 +27,11 @@ Usage: pipe-status [options]
 Options:
   --json                     print the merged report as JSON instead of text
   --filter <projectId[:iid]> scope the report to one project or one issue
+  --live                     check bridge for the worker's heartbeat, each
+                              task's storage result, and its worker job
+                              status, using sync-cli's own bridge API key
+                              (falls back to the offline report if absent
+                              or unreachable)
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path
   --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -43,6 +50,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let filter: string | undefined;
   let watchSeconds: number | undefined;
   let staleHours: number | undefined;
+  let live = false;
   let help = false;
 
   for (let i = 0; i < argv.length; i++) {
@@ -50,6 +58,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--json') {
       json = true;
+      continue;
+    }
+
+    if (arg === '--live') {
+      live = true;
       continue;
     }
 
@@ -102,19 +115,36 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, help };
 }
 
-function renderOnce(paths: StatusPaths, options: CliOptions): number {
+async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
   const filtered = filterReportData(collectReportData(paths), options.filter);
+  const liveResult = options.live ? await fetchLiveStatus() : undefined;
+  const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
+
   const data: AnnotatedReportData = {
     ...filtered,
-    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS),
+    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, Date.now(), liveTasks),
   };
 
-  console.log(options.json ? JSON.stringify(data, null, 2) : formatReportText(data));
+  if (options.json) {
+    console.log(JSON.stringify({ ...data, live: liveResult }, replaceMaps, 2));
+  } else {
+    const liveWorker = liveResult?.available ? liveResult.data.worker : undefined;
+    const liveError = liveResult && !liveResult.available ? liveResult.reason : undefined;
+    console.log(formatReportText(data, liveWorker, liveError));
+  }
 
   return exitCodeFor(data);
+}
+
+// JSON.stringify can't serialize a Map directly (used internally for
+// liveTasks) — this only ever shows up nested inside `live.data.tasks` when
+// --live --json are combined, so convert it to a plain object there instead
+// of silently printing "{}".
+function replaceMaps(_key: string, value: unknown): unknown {
+  return value instanceof Map ? Object.fromEntries(value) : value;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -132,7 +162,7 @@ export async function main(): Promise<void> {
   const paths: StatusPaths = { ...DEFAULT_PATHS, ...options.paths };
 
   if (!options.watchSeconds) {
-    process.exitCode = renderOnce(paths, options);
+    process.exitCode = await renderOnce(paths, options);
     return;
   }
 
@@ -145,7 +175,7 @@ export async function main(): Promise<void> {
     // ever set by the one-shot path above), so Ctrl+C'ing out of --watch
     // still leaves a meaningful exit code behind for the latest report.
     console.clear();
-    process.exitCode = renderOnce(paths, options);
+    process.exitCode = await renderOnce(paths, options);
     await sleep(options.watchSeconds * 1000);
   }
 }

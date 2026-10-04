@@ -89,6 +89,11 @@ describe('parseArgs', () => {
     assert.throws(() => parseArgs(['--watch', '0']), /positive number of seconds/);
     assert.throws(() => parseArgs(['--watch', 'soon']), /positive number of seconds/);
   });
+
+  it('parses --live, defaulting to false', () => {
+    assert.equal(parseArgs(['--live']).live, true);
+    assert.equal(parseArgs([]).live, false);
+  });
 });
 
 describe('buildReport', () => {
@@ -281,6 +286,38 @@ describe('deriveStatus', () => {
 
   it('reports "no local state" when nothing is present at all', () => {
     assert.deepEqual(deriveStatus({ key }, 24, NOW), { label: 'no local state', stale: false });
+  });
+
+  // IMPROVEMENTS_HARNESS.md 1.1: with live data, "likely ready to pull"
+  // becomes a fact one way or the other instead of a guess.
+  it('upgrades "likely ready to pull" into a fact when live data is supplied', () => {
+    const readyToPull: TaskEntry = {
+      key,
+      gitlabWorker: { pushedAt: new Date(NOW - 48 * HOUR).toISOString(), filename: 'x.zip' },
+      syncAgent: { lastOwnOutputHash: 'abc123' },
+    };
+
+    const confirmed = deriveStatus(readyToPull, 24, NOW, { hasResultInStorage: true });
+    assert.match(confirmed.label, /confirmed in bridge storage/);
+
+    const notYet = deriveStatus(readyToPull, 24, NOW, { hasResultInStorage: false });
+    assert.match(notYet.label, /no result yet/);
+  });
+
+  it('attaches the worker job status as liveNote regardless of which branch matched', () => {
+    const task: TaskEntry = { key, subscription: { step: 'pushed', pushedAt: new Date(NOW - 1 * HOUR).toISOString() } };
+    const live = {
+      hasResultInStorage: false,
+      job: { id: 42, status: 'running', model: 'gpt', errorMessage: null, createdAt: '', finishedAt: null },
+    };
+
+    const status = deriveStatus(task, 24, NOW, live);
+    assert.match(status.liveNote ?? '', /worker job #42 \(gpt\): running/);
+  });
+
+  it('omits liveNote entirely (not just leaves it undefined) when there is no live job', () => {
+    const task: TaskEntry = { key, subscription: { step: 'published' } };
+    assert.deepEqual(deriveStatus(task, 24, NOW), { label: 'published — done', stale: false });
   });
 });
 

@@ -1,3 +1,4 @@
+import type { LiveWorkerInfo } from './bridgeLive.js';
 import { collectReportData, type StatusPaths, type SyncState } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, type AnnotatedReportData, type AnnotatedTaskEntry } from './deriveStatus.js';
 
@@ -27,6 +28,7 @@ function formatTaskSection(tasks: AnnotatedTaskEntry[]): string[] {
 
   for (const task of tasks) {
     lines.push(`  ${task.key}: ${task.status.label}${task.status.stale ? ' [stale]' : ''}`);
+    if (task.status.liveNote) lines.push(`    bridge (live): ${task.status.liveNote}`);
 
     if (task.gitlabWorker) {
       lines.push(`    gitlab-worker: pushed ${task.gitlabWorker.pushedAt} as ${task.gitlabWorker.filename}`);
@@ -57,13 +59,35 @@ function formatTaskSection(tasks: AnnotatedTaskEntry[]): string[] {
   return lines;
 }
 
-export function formatReportText(data: AnnotatedReportData): string {
+function formatBridgeSection(liveWorker: LiveWorkerInfo | undefined, liveError: string | undefined): string[] {
+  if (liveWorker) {
+    const lines = [`== bridge (live) ==`, `  worker: ${liveWorker.isUp ? 'up' : 'down'}`];
+    for (const worker of liveWorker.workers) {
+      lines.push(`    ${worker.name}: ${worker.isUp ? 'up' : 'down'}, last seen ${worker.lastSeenAt}`);
+    }
+    return lines;
+  }
+
+  if (liveError) {
+    return ['== bridge (live) ==', `  ${liveError}`];
+  }
+
+  return ['== bridge ==', '  no local task state (storage relay only — see bridge/README.md)'];
+}
+
+// liveWorker/liveError come from --live (IMPROVEMENTS_HARNESS.md 1.1,
+// bridgeLive.ts's fetchLiveStatus) — both omitted in the default, offline
+// mode, which keeps printing the same static line as before this existed.
+export function formatReportText(
+  data: AnnotatedReportData,
+  liveWorker?: LiveWorkerInfo,
+  liveError?: string,
+): string {
   const lines = [
     ...data.errors,
     ...formatProjectSyncSection(data.syncState),
     ...formatTaskSection(data.tasks),
-    '== bridge ==',
-    '  no local task state (storage relay only — see bridge/README.md)',
+    ...formatBridgeSection(liveWorker, liveError),
   ];
 
   return lines.join('\n');

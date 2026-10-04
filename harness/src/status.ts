@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { main } from './cli.js';
 
+export * from './bridgeLive.js';
 export * from './collect.js';
 export * from './deriveStatus.js';
 export * from './render.js';

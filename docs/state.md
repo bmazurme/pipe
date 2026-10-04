@@ -36,6 +36,17 @@ also carry optional `channel`/`taskKey`/`direction` addressing fields (see
 [parcel.md](parcel.md#multi-parcel-addressing)) — client-populated, not
 derived by bridge itself.
 
+`harness` doesn't read the `jobs` table directly (no local file, no DB
+access of its own) — bridge's own Worker page remains the only place to
+browse it in full. But its optional `--live` flag (reusing sync-cli's own
+bridge API key, no separate login) calls `GET /worker/jobs` and `GET
+/storage`, and rebuilds the `projectId:iid` key client-side by joining a
+job's `sourceFileId`/`resultFileId` back to the `taskKey` on its addressed
+`StoredFile` row — the same addressing fields mentioned above. This is
+read-only and additive: without `--live` (or without a configured API key,
+or bridge unreachable), `pipe-status` falls back to the plain local-files
+report unchanged.
+
 **Chat's state is the same shape of idea, a separate pair of tables**:
 `chats` (`bridge/apps/backend/src/chat/entities/chat.entity.ts` — one row
 per conversation: model, optional title) and `chat_messages`

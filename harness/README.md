@@ -1,8 +1,9 @@
 # harness
 
 `pipe-status` — one merged view of sync's and reports' local task state,
-read directly off disk. No network calls, no auth, no bridge dependency —
-it only reads the state files those two tools already write.
+read directly off disk. No network calls, no auth, no bridge dependency by
+default — it only reads the state files those two tools already write.
+An optional `--live` flag (below) adds a real bridge check on top of that.
 
 See [`docs/state.md`](../docs/state.md) for what each file tracks and why
 they share a `projectId:iid` key.
@@ -35,6 +36,11 @@ node dist/status.js [options]
 ```
 --json                     print the merged report as JSON instead of text
 --filter <projectId[:iid]> scope the report to one project or one issue
+--live                     check bridge for the worker's heartbeat, each
+                            task's storage result, and its worker job
+                            status, using sync-cli's own bridge API key
+                            (falls back to the offline report if absent
+                            or unreachable)
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -73,9 +79,36 @@ are present for that key, rather than just listing each side's raw fields:
 reports' own `step` is used when it's there (the fullest single-file record
 of an issue's lifecycle); gitlab-worker's `pushedAt` + agent-runner's dedup
 hash are the fallback when reports has no local state for that key at all.
-All of this is inferred from local files only — no bridge query — so
-"ready to pull" means "the last thing recorded locally suggests that,"
-not a live check of what bridge still has.
+By default this is inferred from local files only — no bridge query — so
+"ready to pull" means "the last thing recorded locally suggests that," not
+a live check of what bridge still has.
+
+### `--live`
+
+With `--live`, `pipe-status` additionally reads sync's own
+`.sync-credentials.json` (its `apiKey`) and `sync.config.json` (its
+`bridge.apiUrl`) — the same account sync-cli and worker already use, not a
+separate login — and calls `GET /worker/status`, `GET /storage`, and
+`GET /worker/jobs`. That upgrades "likely ready to pull" into a fact
+("confirmed in bridge storage" or "no result yet"), and attaches the
+matching worker job's own status (`worker job #42 (gpt): running`) to any
+task bridge has addressing metadata for. A missing API key or an
+unreachable bridge doesn't fail the command — it falls back to the same
+offline report as without the flag, with one extra line explaining why
+live data isn't shown.
+
+```
+== bridge (live) ==
+  worker: up
+    worker-1: up, last seen 2026-10-04T09:58:12.000Z
+```
+
+or, per task:
+
+```
+  402:6: agent-runner pushed a result — confirmed in bridge storage, ready to pull
+    bridge (live): worker job #42 (gpt): succeeded
+```
 
 A task whose derived status has had no further movement for longer than
 `--stale-after`'s threshold (default 24h) gets a trailing `[stale]` marker
