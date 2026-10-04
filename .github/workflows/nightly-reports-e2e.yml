@@ -31,32 +31,6 @@ jobs:
       - run: npm ci
         working-directory: reports
 
-      # Temporary diagnostic for a failure not reproducible locally (macOS,
-      # twice, nested and non-nested) — Cypress's own run showed
-      # "Cannot find package 'express'" from reports/packages/server/src/index.ts
-      # right after an apparently-clean `npm ci`. Remove once root-caused.
-      - name: Debug express resolution
-        working-directory: reports
-        run: |
-          echo "--- node/npm versions ---"
-          node --version
-          npm --version
-          echo "--- reports/node_modules/express ---"
-          ls -la node_modules/express/package.json 2>&1 || echo "MISSING at reports/node_modules/express"
-          echo "--- reports/packages/server/node_modules/express ---"
-          ls -la packages/server/node_modules/express/package.json 2>&1 || echo "MISSING at packages/server/node_modules/express"
-          echo "--- node resolution from within packages/server ---"
-          cd packages/server && node -e "import('express').then(m => console.log('resolved OK from packages/server:', typeof m.default)).catch(e => console.error('FAILED from packages/server:', e.message))"
-          echo "--- which tsx does npx pick? ---"
-          npx --no-install which tsx 2>&1 || echo "npx --no-install could not find a local tsx"
-          echo "--- npx tsx's own resolution (the actual failing invocation path) ---"
-          npx tsx -e "import('express').then(m => console.log('tsx resolved OK:', typeof m.default)).catch(e => console.error('tsx FAILED:', e.message))" 2>&1 || true
-          echo "--- back at reports/, same check via --workspace ---"
-          cd ../.. && npm exec --workspace=packages/server -- tsx -e "import('express').then(m => console.log('npm exec tsx resolved OK:', typeof m.default)).catch(e => console.error('npm exec tsx FAILED:', e.message))" 2>&1 || true
-          echo "--- the REAL command: --watch loading the actual file (timeout 8s, SIGTERM after) ---"
-          touch packages/server/.env
-          cd packages/server && (npx tsx --env-file=.env --watch src/index.ts & pid=$!; sleep 8; kill $pid 2>/dev/null; wait $pid 2>/dev/null; true)
-
       - name: Build shared
         run: npm run build --workspace=packages/shared
         working-directory: reports
@@ -105,3 +79,25 @@ jobs:
           start: ${{ github.workspace }}/reports/scripts/start-server-for-e2e.sh, npm run dev
           wait-on: 'http://localhost:4000, http://localhost:5174'
           wait-on-timeout: 60
+
+      # KNOWN ISSUE, isolated but not yet fixed: as of this comment, the
+      # server command above still fails inside this action specifically
+      # with "Cannot find package 'express'" from
+      # reports/packages/server/src/index.ts, even though every other way
+      # of running the exact same command succeeds — confirmed by direct
+      # testing in CI (now removed): npm ci installs express correctly;
+      # plain `node -e`, `npx tsx -e`, and `npm exec --workspace=... -- tsx -e`
+      # all resolve it fine; most tellingly, the literal real command
+      # (`npx tsx --env-file=.env --watch src/index.ts`) run standalone as a
+      # plain `run:` step — same cwd, same env, same everything this job
+      # already has — starts the server cleanly with no error at all. The
+      # one thing that differs is cypress-io/github-action's own internal
+      # process-spawning for "start" commands (no shell, its own tokenizer
+      # — see the comment above for two other quirks already found in it).
+      # Not pursued further: this workflow is nightly and non-blocking, and
+      # root-causing a third-party action's internal spawning mechanism is
+      # a bigger, separately-scoped investigation. A different approach
+      # (starting the server/client as plain background `run:` steps and
+      # invoking `cypress run` directly, bypassing this action's "start"
+      # feature entirely) would likely sidestep it — worth trying before
+      # digging into the action's own internals, if this is picked up again.
