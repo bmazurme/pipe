@@ -60,8 +60,11 @@ describe('parseArgs', () => {
     });
   });
 
-  it('ignores unknown flags and leaves unspecified paths out of the result', () => {
-    assert.deepEqual(parseArgs(['--unknown', 'x', '--reports-state', '/d.json']).paths, { reportsState: '/d.json' });
+  // Regression: an unknown flag (a typo, e.g. "--jsno") used to be silently
+  // ignored, printing a plain-text report for what looked like a --json
+  // request with no indication anything was wrong.
+  it('rejects an unknown flag instead of silently ignoring it', () => {
+    assert.throws(() => parseArgs(['--unknown', 'x', '--reports-state', '/d.json']), /Unknown option: --unknown/);
   });
 
   it('throws when a known flag is missing its path argument', () => {
