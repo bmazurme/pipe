@@ -53,6 +53,8 @@ jobs:
           npx tsx -e "import('express').then(m => console.log('tsx resolved OK:', typeof m.default)).catch(e => console.error('tsx FAILED:', e.message))" 2>&1 || true
           echo "--- back at reports/, same check via --workspace ---"
           cd ../.. && npm exec --workspace=packages/server -- tsx -e "import('express').then(m => console.log('npm exec tsx resolved OK:', typeof m.default)).catch(e => console.error('npm exec tsx FAILED:', e.message))" 2>&1 || true
+          echo "--- the REAL command: --watch loading the actual file (timeout 8s, SIGTERM after) ---"
+          cd packages/server && (npx tsx --env-file=.env --watch src/index.ts & pid=$!; sleep 8; kill $pid 2>/dev/null; wait $pid 2>/dev/null; true)
 
       - name: Build shared
         run: npm run build --workspace=packages/shared
