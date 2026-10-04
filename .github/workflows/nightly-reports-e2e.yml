@@ -31,6 +31,23 @@ jobs:
       - run: npm ci
         working-directory: reports
 
+      # Temporary diagnostic for a failure not reproducible locally (macOS,
+      # twice, nested and non-nested) — Cypress's own run showed
+      # "Cannot find package 'express'" from reports/packages/server/src/index.ts
+      # right after an apparently-clean `npm ci`. Remove once root-caused.
+      - name: Debug express resolution
+        working-directory: reports
+        run: |
+          echo "--- node/npm versions ---"
+          node --version
+          npm --version
+          echo "--- reports/node_modules/express ---"
+          ls -la node_modules/express/package.json 2>&1 || echo "MISSING at reports/node_modules/express"
+          echo "--- reports/packages/server/node_modules/express ---"
+          ls -la packages/server/node_modules/express/package.json 2>&1 || echo "MISSING at packages/server/node_modules/express"
+          echo "--- node resolution from within packages/server ---"
+          cd packages/server && node -e "import('express').then(m => console.log('resolved OK from packages/server:', typeof m.default)).catch(e => console.error('FAILED from packages/server:', e.message))"
+
       - name: Build shared
         run: npm run build --workspace=packages/shared
         working-directory: reports
