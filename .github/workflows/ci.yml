@@ -41,6 +41,7 @@ jobs:
   harness:
     name: harness (build, tests)
     runs-on: ubuntu-latest
+    needs: protocol
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -49,6 +50,11 @@ jobs:
           cache: npm
 
       - run: npm ci
+      # harness now depends on @pipe/protocol/state (IMPROVEMENTS_HARNESS.md
+      # 6.1) — previously it had no dependency on packages/protocol at all,
+      # so this job never needed this step the other per-product jobs
+      # already have.
+      - run: npm run build --workspace=packages/protocol
 
       - name: Lint
         working-directory: harness
