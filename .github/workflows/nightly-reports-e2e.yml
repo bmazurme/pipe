@@ -35,6 +35,15 @@ jobs:
         run: npm run build --workspace=packages/shared
         working-directory: reports
 
+      # .env is gitignored (a local dev convention — an empty file is all
+      # that's actually required, settings/secrets live in settings.json,
+      # which getSettings() falls back to defaults for if missing) — a
+      # fresh CI checkout never has one, and tsx's own --env-file flag
+      # hard-errors ("node: .env: not found") rather than tolerating a
+      # missing file, confirmed in CI.
+      - name: Create an empty .env for reports' server
+        run: touch reports/packages/server/.env
+
       - name: Run Cypress against the real dev server pair
         uses: cypress-io/github-action@v6
         with:
