@@ -57,7 +57,16 @@ jobs:
           # from inside reports/packages/client resolves against the
           # *outer* repo root instead and fails with "No workspaces found".
           # A real script file sidesteps the tokenizer entirely — one bare
-          # path, nothing with embedded spaces/quotes to mis-parse.
-          start: ../../scripts/start-server-for-e2e.sh, npm run dev
+          # path, nothing with embedded spaces/quotes to mis-parse. Needs to
+          # be an absolute path, not relative: the action's own existence
+          # check for a "start" command (@actions/io's `which()`) resolves a
+          # path-like string against *its own* process cwd, not against
+          # `working-directory` above — a relative `../../scripts/...` here
+          # failed with "Unable to locate executable file", confirmed in CI,
+          # even though the identical relative path worked when run by hand
+          # from reports/packages/client. ${{ github.workspace }} is always
+          # the checkout root, so this resolves the same regardless of which
+          # cwd the action's internal check uses.
+          start: ${{ github.workspace }}/reports/scripts/start-server-for-e2e.sh, npm run dev
           wait-on: 'http://localhost:4000, http://localhost:5174'
           wait-on-timeout: 60
