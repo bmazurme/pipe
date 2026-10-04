@@ -47,6 +47,12 @@ jobs:
           ls -la packages/server/node_modules/express/package.json 2>&1 || echo "MISSING at packages/server/node_modules/express"
           echo "--- node resolution from within packages/server ---"
           cd packages/server && node -e "import('express').then(m => console.log('resolved OK from packages/server:', typeof m.default)).catch(e => console.error('FAILED from packages/server:', e.message))"
+          echo "--- which tsx does npx pick? ---"
+          npx --no-install which tsx 2>&1 || echo "npx --no-install could not find a local tsx"
+          echo "--- npx tsx's own resolution (the actual failing invocation path) ---"
+          npx tsx -e "import('express').then(m => console.log('tsx resolved OK:', typeof m.default)).catch(e => console.error('tsx FAILED:', e.message))" 2>&1 || true
+          echo "--- back at reports/, same check via --workspace ---"
+          cd ../.. && npm exec --workspace=packages/server -- tsx -e "import('express').then(m => console.log('npm exec tsx resolved OK:', typeof m.default)).catch(e => console.error('npm exec tsx FAILED:', e.message))" 2>&1 || true
 
       - name: Build shared
         run: npm run build --workspace=packages/shared
