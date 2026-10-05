@@ -44,60 +44,50 @@ jobs:
       - name: Create an empty .env for reports' server
         run: touch reports/packages/server/.env
 
+      # cypress-io/github-action's own "start" feature is deliberately not
+      # used here (see git history on this file for the full saga) — its
+      # internal process-spawning for "start" commands (no shell, its own
+      # whitespace tokenizer, @actions/io's own cwd-independent `which()`)
+      # had three confirmed quirks, the last of which was never actually
+      # solved: the real server command, run exactly the same way, failed
+      # with "Cannot find package 'express'" only when this action spawned
+      # it — every other way of running the identical command (plain `run:`
+      # step, `node -e`, `npx tsx -e`, `npm exec --workspace=...`) resolved
+      # it fine. Starting both processes ourselves as plain `run:` steps
+      # sidesteps the action's spawning mechanism entirely, so it's never in
+      # a position to hit that bug again — this action is now used only for
+      # its Cypress binary install/cache and the actual `cypress run`.
+      - name: Start reports' server (background)
+        run: ${{ github.workspace }}/reports/scripts/start-server-for-e2e.sh > /tmp/reports-server.log 2>&1 &
+
+      - name: Start reports' client (background)
+        working-directory: reports
+        # --prefix instead of working-directory here would hit the exact
+        # same "npm's workspace discovery walks up from cwd regardless of
+        # --prefix" bug this file already spent a whole debugging session
+        # on (see git history) — working-directory actually changes the
+        # shell's cwd before npm runs, so workspace discovery finds
+        # reports/package.json on its own, no flag needed.
+        run: npm run dev --workspace=packages/client > /tmp/reports-client.log 2>&1 &
+
+      - name: Wait for server + client to be ready
+        run: |
+          for i in $(seq 1 60); do
+            server_up=0; client_up=0
+            curl -s -o /dev/null http://localhost:4000 && server_up=1
+            curl -s -o /dev/null http://localhost:5174 && client_up=1
+            if [ "$server_up" = "1" ] && [ "$client_up" = "1" ]; then
+              echo "server + client both responding"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::timed out waiting for reports' server/client to come up"
+          echo "--- server log ---"; cat /tmp/reports-server.log || true
+          echo "--- client log ---"; cat /tmp/reports-client.log || true
+          exit 1
+
       - name: Run Cypress against the real dev server pair
         uses: cypress-io/github-action@v6
         with:
           working-directory: reports/packages/client
-          # cypress-io/github-action runs every `start` command from
-          # `working-directory` above — reports/packages/client — via a
-          # direct spawn, no shell, using its own naive whitespace tokenizer
-          # that doesn't strip quote characters from a quoted argument
-          # (confirmed in CI, twice: a bare `cd ../.. && ...` fails with
-          # "Unable to locate executable file: cd", since cd is a shell
-          # builtin, not a binary on PATH; wrapping it as `sh -c "..."`
-          # fails too, with the literal quotes surviving into sh's argv and
-          # sh trying to run one "command" whose name is the entire quoted
-          # string). The server command needs to land in reports/ (the
-          # actual npm workspace root for `--workspace=packages/server`)
-          # rather than `--prefix ../..`: reports/ sits nested inside this
-          # repo's own outer workspace (packages/protocol, harness, ...),
-          # and npm's workspace discovery walks up from cwd regardless of
-          # --prefix, so `--prefix ../.. --workspace=packages/server` run
-          # from inside reports/packages/client resolves against the
-          # *outer* repo root instead and fails with "No workspaces found".
-          # A real script file sidesteps the tokenizer entirely — one bare
-          # path, nothing with embedded spaces/quotes to mis-parse. Needs to
-          # be an absolute path, not relative: the action's own existence
-          # check for a "start" command (@actions/io's `which()`) resolves a
-          # path-like string against *its own* process cwd, not against
-          # `working-directory` above — a relative `../../scripts/...` here
-          # failed with "Unable to locate executable file", confirmed in CI,
-          # even though the identical relative path worked when run by hand
-          # from reports/packages/client. ${{ github.workspace }} is always
-          # the checkout root, so this resolves the same regardless of which
-          # cwd the action's internal check uses.
-          start: ${{ github.workspace }}/reports/scripts/start-server-for-e2e.sh, npm run dev
-          wait-on: 'http://localhost:4000, http://localhost:5174'
-          wait-on-timeout: 60
-
-      # KNOWN ISSUE, isolated but not yet fixed: as of this comment, the
-      # server command above still fails inside this action specifically
-      # with "Cannot find package 'express'" from
-      # reports/packages/server/src/index.ts, even though every other way
-      # of running the exact same command succeeds — confirmed by direct
-      # testing in CI (now removed): npm ci installs express correctly;
-      # plain `node -e`, `npx tsx -e`, and `npm exec --workspace=... -- tsx -e`
-      # all resolve it fine; most tellingly, the literal real command
-      # (`npx tsx --env-file=.env --watch src/index.ts`) run standalone as a
-      # plain `run:` step — same cwd, same env, same everything this job
-      # already has — starts the server cleanly with no error at all. The
-      # one thing that differs is cypress-io/github-action's own internal
-      # process-spawning for "start" commands (no shell, its own tokenizer
-      # — see the comment above for two other quirks already found in it).
-      # Not pursued further: this workflow is nightly and non-blocking, and
-      # root-causing a third-party action's internal spawning mechanism is
-      # a bigger, separately-scoped investigation. A different approach
-      # (starting the server/client as plain background `run:` steps and
-      # invoking `cypress run` directly, bypassing this action's "start"
-      # feature entirely) would likely sidestep it — worth trying before
-      # digging into the action's own internals, if this is picked up again.
