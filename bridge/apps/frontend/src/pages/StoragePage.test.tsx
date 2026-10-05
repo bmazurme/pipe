@@ -209,45 +209,52 @@ describe('StoragePage — delete without downloading', () => {
     createdAt: '2026-10-03T21:00:00.000Z',
   };
 
+  // Tracks whether the delete actually *succeeded*, not merely whether it
+  // was attempted — StoragePage polls /storage every 4s
+  // (FILES_POLL_INTERVAL_MS), so a slow test run can easily let a real poll
+  // tick land mid-test. Gating the mocked list on "was DELETE called at
+  // all" (regardless of its status) made that poll return an empty list
+  // even for a failed delete — a real flake this caught in CI, not a
+  // hypothetical one.
   function stubFetchWithDeleteOutcome(deleteStatus: number) {
-    let deleteCalled = false;
+    let deleteSucceeded = false;
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
         const url = input instanceof Request ? input.url : input.toString();
         const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
         if (url.includes('/storage/9') && method === 'DELETE') {
-          deleteCalled = true;
+          if (deleteStatus >= 200 && deleteStatus < 300) deleteSucceeded = true;
           return Promise.resolve(new Response(null, { status: deleteStatus }));
         }
-        if (url.includes('/storage')) return Promise.resolve(jsonResponse(deleteCalled ? [] : [file]));
+        if (url.includes('/storage')) return Promise.resolve(jsonResponse(deleteSucceeded ? [] : [file]));
         if (url.includes('/purge')) return Promise.resolve(jsonResponse([]));
         return Promise.resolve(jsonResponse([]));
       }),
     );
-    return () => deleteCalled;
+    return () => deleteSucceeded;
   }
 
   it('never calls delete until the confirmation dialog is approved', async () => {
     const user = userEvent.setup();
-    const wasDeleteCalled = stubFetchWithDeleteOutcome(204);
+    const deleteSucceeded = stubFetchWithDeleteOutcome(204);
 
     renderPage();
     await screen.findByText(file.originalName);
 
     await user.click(screen.getByLabelText(`Удалить ${file.originalName}`));
     expect(await screen.findByText('Удалить файл без скачивания?')).toBeTruthy();
-    expect(wasDeleteCalled()).toBe(false);
+    expect(deleteSucceeded()).toBe(false);
 
     await user.click(screen.getByText('Отмена'));
     await waitFor(() => expect(screen.queryByText('Удалить файл без скачивания?')).toBeNull());
-    expect(wasDeleteCalled()).toBe(false);
+    expect(deleteSucceeded()).toBe(false);
     expect(screen.getByText(file.originalName)).toBeTruthy();
   });
 
   it('deletes the file and removes it from the list once confirmed', async () => {
     const user = userEvent.setup();
-    const wasDeleteCalled = stubFetchWithDeleteOutcome(204);
+    const deleteSucceeded = stubFetchWithDeleteOutcome(204);
 
     renderPage();
     await screen.findByText(file.originalName);
@@ -255,7 +262,7 @@ describe('StoragePage — delete without downloading', () => {
     await user.click(screen.getByLabelText(`Удалить ${file.originalName}`));
     await user.click(await screen.findByRole('button', { name: 'Удалить' }));
 
-    await waitFor(() => expect(wasDeleteCalled()).toBe(true));
+    await waitFor(() => expect(deleteSucceeded()).toBe(true));
     await waitFor(() => expect(screen.queryByText(file.originalName)).toBeNull());
   });
 
