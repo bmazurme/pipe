@@ -79,12 +79,15 @@ function gitlabPipelineFailed(info: LiveGitlabTaskInfo | undefined): boolean {
   return status === 'failed' || status === 'canceled';
 }
 
-function pullIssueAction(key: string, label = 'pull the result'): NextAction {
+// Exported for next.ts (IMPROVEMENTS_HARNESS.md 2.2) — the "incoming"
+// bucket needs the exact same push-issue command for a task that isn't in
+// AnnotatedTaskEntry form at all yet (an IncomingIssue, not a TaskEntry).
+export function pullIssueAction(key: string, label = 'pull the result'): NextAction {
   const [projectId, iid] = key.split(':');
   return { label, command: `sync-cli pull-issue <name> ${projectId} ${iid}` };
 }
 
-function pushIssueAction(key: string): NextAction {
+export function pushIssueAction(key: string): NextAction {
   const [projectId, iid] = key.split(':');
   return { label: 'push the issue to start the pipeline', command: `sync-cli push-issue <name> ${projectId} ${iid}` };
 }

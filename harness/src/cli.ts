@@ -4,6 +4,7 @@ import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } 
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
 import { recordTransitions, readTaskEvents } from './events.js';
 import { fetchGitlabLiveStatus } from './gitlabLive.js';
+import { pickNextTask } from './next.js';
 import { notifyTransitions } from './notifyTransitions.js';
 import { formatReportText } from './render.js';
 
@@ -16,6 +17,7 @@ export interface CliOptions {
   live: boolean;
   logKey?: string;
   notify: boolean;
+  next: boolean;
   action?: { kind: ActionKind; key: string };
   yes: boolean;
   dryRun: boolean;
@@ -56,6 +58,11 @@ Options:
                               the report as usual) — meant for a scheduled
                               one-shot run or a long --watch with nobody
                               reading the terminal; see harness/README.md
+  --next                     print the single most important task right now
+                              and what to do about it, then exit (combine
+                              with --live to also weigh confirmed-ready
+                              results and newly assigned issues, not just
+                              local state)
   --pull <projectId:iid>     run sync-cli pull-issue for this task, then exit
   --retry <projectId:iid>    re-run sync-cli push-issue for this task (a
                               fresh parcel for agent-runner to pick up again),
@@ -94,6 +101,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let live = false;
   let logKey: string | undefined;
   let notify = false;
+  let next = false;
   let action: { kind: ActionKind; key: string } | undefined;
   let yes = false;
   let dryRun = false;
@@ -122,6 +130,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--notify') {
       notify = true;
+      continue;
+    }
+
+    if (arg === '--next') {
+      next = true;
       continue;
     }
 
@@ -218,7 +231,7 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, action, yes, dryRun, project, reportsUrl, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, next, action, yes, dryRun, project, reportsUrl, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
@@ -260,6 +273,44 @@ async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<numb
   }
 
   return exitCodeFor(data);
+}
+
+// IMPROVEMENTS_HARNESS.md 2.2 — a standalone one-shot mode, same as --log
+// and --pull/--retry/--publish, not folded into the full report. Shares
+// renderOnce's own live-fetch shape above, since pickNextTask needs the
+// same liveTasks/gitlabLiveTasks/incoming inputs to weigh a confirmed-ready
+// result or a newly assigned issue, not just local state.
+async function runNext(paths: StatusPaths, options: CliOptions): Promise<number> {
+  const collected = collectReportData(paths);
+  const filtered = filterReportData(collected, options.filter);
+
+  const [liveResult, gitlabLiveResult] = options.live
+    ? await Promise.all([fetchLiveStatus(), fetchGitlabLiveStatus(filtered.tasks)])
+    : [undefined, undefined];
+  const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
+  const gitlabLiveTasks = gitlabLiveResult?.available ? gitlabLiveResult.data.tasks : undefined;
+  const incoming = gitlabLiveResult?.available ? gitlabLiveResult.data.incoming : [];
+
+  const now = Date.now();
+  const annotated = annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, now, liveTasks, gitlabLiveTasks);
+  const picked = pickNextTask(annotated, incoming, liveTasks);
+
+  if (options.json) {
+    console.log(JSON.stringify(picked ?? null, null, 2));
+  } else if (!picked) {
+    console.log('Nothing urgent — all clear.');
+  } else {
+    console.log(`${picked.key} [${picked.bucket}]: ${picked.label}`);
+    if (picked.nextAction) {
+      console.log(`  next: ${picked.nextAction.label}${picked.nextAction.command ? ` → ${picked.nextAction.command}` : ''}`);
+    }
+  }
+
+  // Same convention as exitCodeFor: non-zero only for the one bucket that's
+  // actually alarm-worthy on its own — a confirmed-ready/incoming/
+  // in-progress task is normal, expected backlog, not something cron/CI
+  // should flag.
+  return picked?.bucket === 'stale' ? 1 : 0;
 }
 
 // JSON.stringify can't serialize a Map directly (used internally for
@@ -306,6 +357,11 @@ export async function main(): Promise<void> {
   }
 
   const paths: StatusPaths = { ...DEFAULT_PATHS, ...options.paths };
+
+  if (options.next) {
+    process.exitCode = await runNext(paths, options);
+    return;
+  }
 
   if (!options.watchSeconds) {
     process.exitCode = await renderOnce(paths, options);

@@ -53,6 +53,9 @@ node dist/status.js [options]
 --notify                   fire an OS notification for each new transition
                             this run finds, on top of the usual report (see
                             "Notifications" below)
+--next                     print the single most important task right now
+                            and what to do about it, then exit (see "What's
+                            next" below)
 --pull/--retry/--publish <projectId:iid>
                             run a next action against one task, then exit
                             (see "Running actions" below)
@@ -223,6 +226,49 @@ behind it — see `reports/howto.md`) also gets `[вручную] "<title>"` app
 to its `reports (subscription):` line, since there's no GitLab issue to
 cross-reference for it.
 
+### What's next (`--next`)
+
+The full report lists every task; `--next` picks the single most important
+one and exits (IMPROVEMENTS_HARNESS.md 2.2) — no new data source, just a
+scoring pass over what the rest of `pipe-status` already collects:
+
+1. **stale** — anything `deriveStatus` already flagged as stuck past
+   `--stale-after`, or a published task whose pipeline actually failed.
+2. **ready** — a *confirmed* ready result: reports' own `pulled` step
+   (publishing is the only thing left, no `--live` needed to know that), or
+   a `gitlab-worker`+`agent-runner` task `--live` has confirmed has a
+   result sitting in bridge storage. The unconfirmed "likely ready to pull"
+   guess stays out of this bucket on purpose — it's either confirmed or it
+   goes stale, not promoted on a guess.
+3. **incoming** — a GitLab issue assigned to you that no local state file
+   has picked up at all yet (1.3's own section) — only visible under
+   `--live`.
+4. **other** — anything else with a next action at all (a task `deriveStatus`
+   gave no `nextAction` to — a done `published` task, or no local state —
+   is never a candidate; there's nothing to recommend doing about it).
+
+```
+$ pipe-status --next
+123:m-muswwu2i [other]: pushed — waiting to be pulled
+  next: pull the result once it is ready → sync-cli pull-issue <name> 123 m-muswwu2i
+```
+
+or, with nothing outstanding: `Nothing urgent — all clear.` `--json` prints
+the same `{key, bucket, label, nextAction}` shape (or `null`) instead.
+Combine with `--live` to let buckets 2/3 see confirmed-ready results and
+newly assigned issues — without it, only local state is considered, same
+as the rest of the report.
+
+**Not done here**, despite the original item's own text mentioning it:
+weighting by GitLab due date or priority labels — `gitlabLive.ts`'s GitLab
+calls (1.2/1.3) don't fetch either field today, and adding them means
+extending `@pipe/protocol/gitlabClient`'s `GitlabIssue` shape and its API
+calls, a separate follow-up.
+
+Exit code: `1` only when the pick is `stale` (the one bucket actually
+alarm-worthy on its own); `0` for `ready`/`incoming`/`other` and for
+"nothing urgent" — those are normal backlog, not a cron/CI-worthy signal.
+
 ### Running actions (`--pull`/`--retry`/`--publish`)
 
 Section 2.1's `next:` line prints a command; `--pull`/`--retry`/`--publish`
@@ -295,4 +341,7 @@ subprocess/HTTP/confirm-prompt collaborators as injectable dependencies
 (`ActionDeps`) specifically so its tests never spawn a real `sync-cli`
 process, never call a real reports server, and never block on real stdin —
 only `resolveProjectName`'s resolution logic and the confirmation/dry-run
-control flow are exercised against fakes.
+control flow are exercised against fakes. `pickNextTask` (`--next`) is
+tested as a pure function over plain `TaskEntry`/`IncomingIssue` fixtures —
+bucket ordering, the confirmed-vs-guessed distinction for a `gitlab-worker`
+task, and tie-breaking within a bucket.

@@ -109,6 +109,11 @@ describe('parseArgs', () => {
     assert.equal(parseArgs([]).notify, false);
   });
 
+  it('parses --next', () => {
+    assert.equal(parseArgs(['--next']).next, true);
+    assert.equal(parseArgs([]).next, false);
+  });
+
   it('parses --pull/--retry/--publish into one action, plus --yes/--dry-run/--project/--reports-url', () => {
     assert.deepEqual(parseArgs(['--pull', '402:6']).action, { kind: 'pull', key: '402:6' });
     assert.deepEqual(parseArgs(['--retry', '402:6']).action, { kind: 'retry', key: '402:6' });
