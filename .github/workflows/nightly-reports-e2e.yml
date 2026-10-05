@@ -91,6 +91,17 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           working-directory: reports/packages/client
+          # This action runs its own npm ci + has its own separate
+          # node_modules cache (keyed by its own hash) by default — on top
+          # of, not instead of, the npm ci this job already did correctly
+          # in an earlier step. That second, redundant install is the
+          # actual root cause of the "Cannot find module '../encodings'"
+          # (iconv-lite) crash the server hit on its first real request:
+          # reproducing the identical POST locally against the repo's own
+          # normal npm ci'd install didn't crash at all, pointing squarely
+          # at whatever this action's own install/cache path produces
+          # instead. No reason for it to install anything at all here.
+          install: false
 
       # Cypress captures these on any failure by default (screenshotOnRunFailure,
       # and video recording) — they just weren't going anywhere before. Needed
