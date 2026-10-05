@@ -1,3 +1,4 @@
+import { type ActionKind, runAction } from './actions.js';
 import { fetchLiveStatus } from './bridgeLive.js';
 import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
@@ -15,6 +16,11 @@ export interface CliOptions {
   live: boolean;
   logKey?: string;
   notify: boolean;
+  action?: { kind: ActionKind; key: string };
+  yes: boolean;
+  dryRun: boolean;
+  project?: string;
+  reportsUrl?: string;
   help: boolean;
 }
 
@@ -50,6 +56,23 @@ Options:
                               the report as usual) — meant for a scheduled
                               one-shot run or a long --watch with nobody
                               reading the terminal; see harness/README.md
+  --pull <projectId:iid>     run sync-cli pull-issue for this task, then exit
+  --retry <projectId:iid>    re-run sync-cli push-issue for this task (a
+                              fresh parcel for agent-runner to pick up again),
+                              then exit
+  --publish <projectId:iid>  call reports' publish endpoint for this task,
+                              then exit
+  --yes                      skip the interactive confirmation prompt before
+                              --pull/--retry/--publish (for scripts) — refused
+                              outright instead of hanging when stdin isn't a
+                              terminal and this isn't given
+  --dry-run                  with --pull/--retry/--publish, print what would
+                              run/be called instead of doing it
+  --project <name>           override the local project name
+                              --pull/--retry resolve from sync.config.json —
+                              needed when that resolution is ambiguous
+  --reports-url <url>        override reports' base URL for --publish
+                              (default: http://127.0.0.1:4000)
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path
   --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -71,7 +94,18 @@ export function parseArgs(argv: string[]): CliOptions {
   let live = false;
   let logKey: string | undefined;
   let notify = false;
+  let action: { kind: ActionKind; key: string } | undefined;
+  let yes = false;
+  let dryRun = false;
+  let project: string | undefined;
+  let reportsUrl: string | undefined;
   let help = false;
+
+  const ACTION_FLAG_TO_KIND: Record<string, ActionKind> = {
+    '--pull': 'pull',
+    '--retry': 'retry',
+    '--publish': 'publish',
+  };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -88,6 +122,42 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--notify') {
       notify = true;
+      continue;
+    }
+
+    const actionKind = ACTION_FLAG_TO_KIND[arg];
+    if (actionKind) {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error(`${arg} expects a task key (projectId:iid)`);
+      if (action) throw new Error('only one of --pull/--retry/--publish can be given at a time');
+      action = { kind: actionKind, key: value };
+      i++;
+      continue;
+    }
+
+    if (arg === '--yes') {
+      yes = true;
+      continue;
+    }
+
+    if (arg === '--dry-run') {
+      dryRun = true;
+      continue;
+    }
+
+    if (arg === '--project') {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error('--project expects a name');
+      project = value;
+      i++;
+      continue;
+    }
+
+    if (arg === '--reports-url') {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error('--reports-url expects a URL');
+      reportsUrl = value;
+      i++;
       continue;
     }
 
@@ -148,7 +218,7 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, action, yes, dryRun, project, reportsUrl, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
@@ -222,6 +292,16 @@ export async function main(): Promise<void> {
         console.log(`  ${event.ts}  ${event.source.padEnd(22)}  ${event.from} → ${event.to}`);
       }
     }
+    return;
+  }
+
+  if (options.action) {
+    process.exitCode = await runAction(options.action.kind, options.action.key, {
+      yes: options.yes,
+      dryRun: options.dryRun,
+      project: options.project,
+      reportsBaseUrl: options.reportsUrl,
+    });
     return;
   }
 

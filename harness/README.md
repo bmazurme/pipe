@@ -3,7 +3,9 @@
 `pipe-status` — one merged view of sync's and reports' local task state,
 read directly off disk. No network calls, no auth, no bridge dependency by
 default — it only reads the state files those two tools already write.
-An optional `--live` flag (below) adds a real bridge check on top of that.
+An optional `--live` flag (below) adds a real bridge check on top of that,
+and `--pull`/`--retry`/`--publish` (below) let it act on a task instead of
+only reporting on it.
 
 See [`docs/state.md`](../docs/state.md) for what each file tracks and why
 they share a `projectId:iid` key.
@@ -51,6 +53,13 @@ node dist/status.js [options]
 --notify                   fire an OS notification for each new transition
                             this run finds, on top of the usual report (see
                             "Notifications" below)
+--pull/--retry/--publish <projectId:iid>
+                            run a next action against one task, then exit
+                            (see "Running actions" below)
+--yes                      skip the confirmation prompt before an action
+--dry-run                  print what an action would do instead of doing it
+--project <name>           override project-name resolution for --pull/--retry
+--reports-url <url>        override reports' base URL for --publish
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -214,6 +223,51 @@ behind it — see `reports/howto.md`) also gets `[вручную] "<title>"` app
 to its `reports (subscription):` line, since there's no GitLab issue to
 cross-reference for it.
 
+### Running actions (`--pull`/`--retry`/`--publish`)
+
+Section 2.1's `next:` line prints a command; `--pull`/`--retry`/`--publish`
+run it, instead of you copy-pasting it into another terminal
+(IMPROVEMENTS_HARNESS.md 2.3). Each is a thin wrapper, not a new business
+layer — neither sync-cli's commands nor reports' publish route are
+re-validated beyond what they already enforce themselves:
+
+- `--pull <projectId:iid>` — runs `sync-cli pull-issue <name> <projectId> <iid>`.
+- `--retry <projectId:iid>` — runs `sync-cli push-issue <name> <projectId> <iid>`
+  (a fresh parcel for agent-runner to pick up again — `push-issue` has no
+  dedup/hash-skip guard, so re-running it for the same task is already safe
+  and idempotent; no separate "retry" endpoint needed).
+- `--publish <projectId:iid>` — calls reports' own
+  `POST /api/subscription/issues/:projectId/:iid/publish` directly (no CLI
+  entry point exists for this one — HTTP is the only way in, and that route
+  needs no auth at all).
+
+`--pull`/`--retry` need the project's **local alias** (sync.config.json's
+own `name`), which no task-state file carries — resolved here from
+`sync.config.json`'s `gitlabProjectId` when exactly one tracked project
+declares it, or by falling back to the single tracked project when there's
+only one and it declares none at all (the same "no gitlabProjectId = claims
+anything" rule `gitlab-worker` itself uses). Anything more ambiguous than
+that refuses to guess — pass `--project <name>` instead of risking a wrong
+one.
+
+Every one of these three **requires confirmation** before doing anything:
+interactively, a `[y/N]` prompt; non-interactively (no TTY on stdin,
+e.g. a script or CI), it refuses outright rather than hanging — pass
+`--yes` there. `--dry-run` shows exactly what would run/be called, without
+running or calling it, and still surfaces a project-name resolution failure
+(that's part of "what would happen" too):
+
+```
+$ pipe-status --pull 402:6 --dry-run
+Would run "sync-cli pull-issue bff 402 6".
+
+$ pipe-status --retry 173:628 --yes
+# (confirmation skipped; sync-cli's own push-issue output follows, inherited directly)
+```
+
+None of these three ever touches a GitLab merge request — the project's own
+"auto-merge, never" rule holds by construction, not because of a check here.
+
 ### Exit code
 
 `0` normally; `1` if any of the four state files failed to parse, or if any
@@ -236,4 +290,9 @@ tests touch this machine's real sync/reports state, or its real
 `~/.local/state/pipe/`. `notifyTransitions`'s own OS dispatch is not
 exercised for the same reason `@pipe/protocol/notify`'s own test suite
 doesn't exercise `notify()` directly — only `formatTransitionNotification`,
-the pure part, is.
+the pure part, is. `runAction` (`--pull`/`--retry`/`--publish`) takes its
+subprocess/HTTP/confirm-prompt collaborators as injectable dependencies
+(`ActionDeps`) specifically so its tests never spawn a real `sync-cli`
+process, never call a real reports server, and never block on real stdin —
+only `resolveProjectName`'s resolution logic and the confirmation/dry-run
+control flow are exercised against fakes.

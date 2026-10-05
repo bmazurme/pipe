@@ -108,6 +108,27 @@ describe('parseArgs', () => {
     assert.equal(parseArgs(['--notify']).notify, true);
     assert.equal(parseArgs([]).notify, false);
   });
+
+  it('parses --pull/--retry/--publish into one action, plus --yes/--dry-run/--project/--reports-url', () => {
+    assert.deepEqual(parseArgs(['--pull', '402:6']).action, { kind: 'pull', key: '402:6' });
+    assert.deepEqual(parseArgs(['--retry', '402:6']).action, { kind: 'retry', key: '402:6' });
+    assert.deepEqual(parseArgs(['--publish', '402:6']).action, { kind: 'publish', key: '402:6' });
+    assert.equal(parseArgs([]).action, undefined);
+
+    const options = parseArgs(['--pull', '402:6', '--yes', '--dry-run', '--project', 'bff', '--reports-url', 'http://x']);
+    assert.equal(options.yes, true);
+    assert.equal(options.dryRun, true);
+    assert.equal(options.project, 'bff');
+    assert.equal(options.reportsUrl, 'http://x');
+  });
+
+  it('rejects combining two action flags in the same invocation', () => {
+    assert.throws(() => parseArgs(['--pull', '402:6', '--retry', '402:7']), /only one of --pull\/--retry\/--publish/);
+  });
+
+  it('throws when an action flag is missing its task key', () => {
+    assert.throws(() => parseArgs(['--pull']), /expects a task key/);
+  });
 });
 
 describe('buildReport', () => {
