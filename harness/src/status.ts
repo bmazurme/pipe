@@ -7,6 +7,7 @@ import { main } from './cli.js';
 export * from './bridgeLive.js';
 export * from './collect.js';
 export * from './deriveStatus.js';
+export * from './events.js';
 export * from './gitlabLive.js';
 export * from './render.js';
 export * from './cli.js';

@@ -1,6 +1,7 @@
 import { fetchLiveStatus } from './bridgeLive.js';
 import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
+import { recordTransitions, readTaskEvents } from './events.js';
 import { fetchGitlabLiveStatus } from './gitlabLive.js';
 import { formatReportText } from './render.js';
 
@@ -11,6 +12,7 @@ export interface CliOptions {
   watchSeconds?: number;
   staleHours?: number;
   live: boolean;
+  logKey?: string;
   help: boolean;
 }
 
@@ -36,6 +38,11 @@ Options:
                               (sync-cli's GitLab token) — each independently
                               falls back to the offline report if its own
                               credential is absent or it's unreachable
+  --log <projectId:iid>      print the recorded transition timeline for one
+                              task and exit — every run (watched or
+                              one-shot) records any task's local-state
+                              transition since the last run to
+                              ~/.local/state/pipe/events.jsonl
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path
   --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -55,6 +62,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let watchSeconds: number | undefined;
   let staleHours: number | undefined;
   let live = false;
+  let logKey: string | undefined;
   let help = false;
 
   for (let i = 0; i < argv.length; i++) {
@@ -72,6 +80,14 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '-h' || arg === '--help') {
       help = true;
+      continue;
+    }
+
+    if (arg === '--log') {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error('--log expects a task key (projectId:iid)');
+      logKey = value;
+      i++;
       continue;
     }
 
@@ -119,11 +135,16 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
-  const filtered = filterReportData(collectReportData(paths), options.filter);
+  const collected = collectReportData(paths);
+  // Recorded against the full, unfiltered task list — a --filter scoping
+  // the printed report to one project shouldn't make tasks outside it look
+  // like they vanished (IMPROVEMENTS_HARNESS.md 4.1).
+  recordTransitions(collected.tasks);
+  const filtered = filterReportData(collected, options.filter);
 
   // Independent of each other — a machine can have sync's bridge API key
   // configured without its GitLab token, or vice versa (IMPROVEMENTS_HARNESS.md
@@ -170,6 +191,19 @@ export async function main(): Promise<void> {
 
   if (options.help) {
     console.log(HELP_TEXT);
+    return;
+  }
+
+  if (options.logKey) {
+    const events = readTaskEvents(options.logKey);
+    if (events.length === 0) {
+      console.log(`No recorded transitions for ${options.logKey} yet.`);
+    } else {
+      console.log(`Timeline for ${options.logKey}:`);
+      for (const event of events) {
+        console.log(`  ${event.ts}  ${event.source.padEnd(22)}  ${event.from} → ${event.to}`);
+      }
+    }
     return;
   }
 

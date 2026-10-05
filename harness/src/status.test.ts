@@ -85,6 +85,15 @@ describe('parseArgs', () => {
     assert.equal(parseArgs([]).help, false);
   });
 
+  it('parses --log <key>', () => {
+    assert.equal(parseArgs(['--log', '402:6']).logKey, '402:6');
+    assert.equal(parseArgs([]).logKey, undefined);
+  });
+
+  it('throws when --log is missing its key argument', () => {
+    assert.throws(() => parseArgs(['--log']), /expects a task key/);
+  });
+
   it('rejects a non-positive --watch value', () => {
     assert.throws(() => parseArgs(['--watch', '0']), /positive number of seconds/);
     assert.throws(() => parseArgs(['--watch', 'soon']), /positive number of seconds/);

@@ -47,6 +47,18 @@ read-only and additive: without `--live` (or without a configured API key,
 or bridge unreachable), `pipe-status` falls back to the plain local-files
 report unchanged.
 
+**`harness` also writes its own state, outside any product's repo**:
+`~/.local/state/pipe/events.jsonl` (append-only, `{ts, key, source, from,
+to}` per line) and `last-snapshot.json` (the per-key signature it diffs
+each run against, to know what counts as a transition) — a record of what
+*this machine's user* has observed happen, not something sync/reports
+themselves produce or read (IMPROVEMENTS_HARNESS.md 4.1). Written on every
+`pipe-status` run, one-shot or `--watch` alike; `--log <projectId:iid>`
+reads it back. See `harness/README.md`'s own "Remembering transitions"
+section for what counts as a change (the underlying signal, deliberately
+not the rendered label — time-driven staleness wording isn't a real
+transition).
+
 **Chat's state is the same shape of idea, a separate pair of tables**:
 `chats` (`bridge/apps/backend/src/chat/entities/chat.entity.ts` — one row
 per conversation: model, optional title) and `chat_messages`

@@ -44,6 +44,10 @@ node dist/status.js [options]
                             GitLab token) — each independently falls back to
                             the offline report if its own credential is
                             absent or it's unreachable
+--log <projectId:iid>      print the recorded transition timeline for one
+                            task and exit (see "Remembering transitions"
+                            below) — every run, watched or one-shot,
+                            records them regardless of this flag
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -133,6 +137,42 @@ both, or neither can be configured on a given machine.
     gitlab (live): issue opened, MR !42 (opened), pipeline failed
 ```
 
+### Remembering transitions (`--log`)
+
+Every run — one-shot or `--watch`, with or without `--live` — compares
+each task's local state against what it saw last time (persisted to
+`~/.local/state/pipe/last-snapshot.json`, outside the repo checkout since
+it's a record of what *this machine* has observed, not something
+sync/reports themselves write) and appends one line per genuine change to
+`~/.local/state/pipe/events.jsonl`:
+
+```json
+{"ts":"2026-10-05T14:34:12.663Z","key":"123:m-abc","source":"reports (subscription)","from":"subscription:pushed","to":"subscription:pulled"}
+```
+
+What counts as "changed" is the underlying signal (reports' own `step`, or
+which of gitlab-worker/agent-runner have a record at all) — deliberately
+*not* the rendered label text, which can change purely from the passage of
+time (the `[stale]` wording) without anything real having happened. The
+very first time a task is ever observed, nothing is logged for it (there's
+nothing to diff against yet) — so running this against an
+already-populated checkout for the first time doesn't dump every existing
+task into the log as a fake "just happened" burst. Task removals aren't
+logged either; this is a record of forward progress, not a full audit
+trail.
+
+`--log <projectId:iid>` prints that task's recorded timeline and exits:
+
+```
+Timeline for 123:m-abc:
+  2026-10-05T14:34:12.663Z  reports (subscription)  subscription:pushed → subscription:pulled
+```
+
+(IMPROVEMENTS_HARNESS.md 4.1 — its own example is `pipe log <key>`, a
+subcommand on a renamed `pipe` binary with verbs; item 6.5, the binary
+rename, doesn't exist yet, so this is a flag on the current `pipe-status`
+instead.)
+
 A task whose derived status has had no further movement for longer than
 `--stale-after`'s threshold (default 24h) gets a trailing `[stale]` marker
 — e.g. `pushed 2026-09-26T10:00:00.000Z — no pull since [stale]`.
@@ -157,6 +197,7 @@ npm test   # tsc -b && node --test 'dist/**/*.test.js'
 
 All of `status.ts`'s logic (`compareIssueKeys`, `parseArgs`,
 `collectReportData`, `filterReportData`, `deriveStatus`, `annotateTasks`,
-`exitCodeFor`, `formatReportText`) is exported and exercised directly
-against fixture files in a temp directory — none of the tests touch this
-machine's real sync/reports state.
+`exitCodeFor`, `formatReportText`, `recordTransitions`, `readTaskEvents`) is
+exported and exercised directly against fixture files in a temp directory —
+none of the tests touch this machine's real sync/reports state, or its real
+`~/.local/state/pipe/`.
