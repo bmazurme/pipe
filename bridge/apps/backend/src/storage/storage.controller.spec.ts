@@ -74,3 +74,35 @@ describe('StorageController.download', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 });
+
+describe('StorageController.remove', () => {
+  const file = {
+    id: 1,
+    storedName: 'abc.zip',
+    originalName: 'a.zip',
+  } as StoredFile;
+
+  function makeService(): jest.Mocked<StorageService> {
+    return {
+      findOwned: jest.fn().mockResolvedValue(file),
+      delete: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<StorageService>;
+  }
+
+  it('deletes a file the caller owns, without downloading it', async () => {
+    const service = makeService();
+
+    await new StorageController(service).remove(1, { id: 7 });
+
+    expect(service.findOwned).toHaveBeenCalledWith(1, 7);
+    expect(service.delete).toHaveBeenCalledWith(file);
+  });
+
+  it('propagates findOwned\'s NotFoundException for a file the caller does not own, without calling delete', async () => {
+    const service = makeService();
+    service.findOwned.mockRejectedValue(new Error('File not found'));
+
+    await expect(new StorageController(service).remove(1, { id: 7 })).rejects.toThrow('File not found');
+    expect(service.delete).not.toHaveBeenCalled();
+  });
+});

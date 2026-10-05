@@ -25,6 +25,9 @@ const storageSlice = createSlice({
       // refetches listFiles — there's no upload action to match on.
       .addMatcher(storageApiEndpoints.endpoints.downloadFile.matchFulfilled, (state, action) => {
         state.files = state.files.filter((file) => file.id !== action.payload);
+      })
+      .addMatcher(storageApiEndpoints.endpoints.deleteFile.matchFulfilled, (state, action) => {
+        state.files = state.files.filter((file) => file.id !== action.payload);
       });
   },
 });

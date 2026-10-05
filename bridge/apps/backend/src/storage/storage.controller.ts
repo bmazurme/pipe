@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Logger,
   Param,
   ParseIntPipe,
@@ -96,7 +99,21 @@ export class StorageController {
     });
   }
 
-  // Deliberately not delete-after-download like the route above — this
+  // Manual delete — no download involved. Frontend gates this behind a
+  // confirmation dialog (StoragePage.tsx); findOwned already enforces that
+  // the caller actually owns this file before storageService.delete()
+  // touches it, same guard as the download/peek routes above.
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    const file = await this.storageService.findOwned(id, currentUser.id);
+    await this.storageService.delete(file);
+  }
+
+  // Deliberately not delete-after-download like the /download route — this
   // backs the Worker page's client-side decrypt-before-job-creation flow
   // (see packages/protocol/encryption-browser), which needs to read an
   // encrypted file's bytes while leaving it in place: the user is about to

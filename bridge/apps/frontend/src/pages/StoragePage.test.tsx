@@ -200,6 +200,81 @@ describe('StoragePage — download failures', () => {
   });
 });
 
+describe('StoragePage — delete without downloading', () => {
+  const file = {
+    id: 9,
+    originalName: 'draft.zip',
+    mimeType: 'application/zip',
+    size: 20,
+    createdAt: '2026-10-03T21:00:00.000Z',
+  };
+
+  function stubFetchWithDeleteOutcome(deleteStatus: number) {
+    let deleteCalled = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+        if (url.includes('/storage/9') && method === 'DELETE') {
+          deleteCalled = true;
+          return Promise.resolve(new Response(null, { status: deleteStatus }));
+        }
+        if (url.includes('/storage')) return Promise.resolve(jsonResponse(deleteCalled ? [] : [file]));
+        if (url.includes('/purge')) return Promise.resolve(jsonResponse([]));
+        return Promise.resolve(jsonResponse([]));
+      }),
+    );
+    return () => deleteCalled;
+  }
+
+  it('never calls delete until the confirmation dialog is approved', async () => {
+    const user = userEvent.setup();
+    const wasDeleteCalled = stubFetchWithDeleteOutcome(204);
+
+    renderPage();
+    await screen.findByText(file.originalName);
+
+    await user.click(screen.getByLabelText(`Удалить ${file.originalName}`));
+    expect(await screen.findByText('Удалить файл без скачивания?')).toBeTruthy();
+    expect(wasDeleteCalled()).toBe(false);
+
+    await user.click(screen.getByText('Отмена'));
+    await waitFor(() => expect(screen.queryByText('Удалить файл без скачивания?')).toBeNull());
+    expect(wasDeleteCalled()).toBe(false);
+    expect(screen.getByText(file.originalName)).toBeTruthy();
+  });
+
+  it('deletes the file and removes it from the list once confirmed', async () => {
+    const user = userEvent.setup();
+    const wasDeleteCalled = stubFetchWithDeleteOutcome(204);
+
+    renderPage();
+    await screen.findByText(file.originalName);
+
+    await user.click(screen.getByLabelText(`Удалить ${file.originalName}`));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(wasDeleteCalled()).toBe(true));
+    await waitFor(() => expect(screen.queryByText(file.originalName)).toBeNull());
+  });
+
+  it('shows an error and keeps the dialog reachable again when delete fails', async () => {
+    const user = userEvent.setup();
+    stubFetchWithDeleteOutcome(500);
+
+    renderPage();
+    await screen.findByText(file.originalName);
+
+    await user.click(screen.getByLabelText(`Удалить ${file.originalName}`));
+    await user.click(screen.getByRole('button', { name: 'Удалить' }));
+
+    expect(await screen.findByText(`Не удалось удалить «${file.originalName}»`)).toBeTruthy();
+    // File stays listed — the failed delete never removed it.
+    await waitFor(() => expect(screen.getByText(file.originalName)).toBeTruthy());
+  });
+});
+
 describe('StoragePage — opening an encrypted parcel', () => {
   // RSA-4096 keygen + a real Web Crypto RSA-OAEP decrypt genuinely takes a
   // few seconds — see the matching comment on WorkerPage's own decrypt test.

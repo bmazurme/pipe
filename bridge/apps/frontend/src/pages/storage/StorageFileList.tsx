@@ -5,6 +5,7 @@ import {
   FileZipper,
   LockOpen,
   Picture,
+  TrashBin,
 } from '@gravity-ui/icons';
 import { ActionTooltip, Button, Icon, IconData, Skeleton, Text } from '@gravity-ui/uikit';
 
@@ -35,6 +36,7 @@ interface StorageFileListProps {
   downloadingId: number | null;
   onDownload: (file: StoredFileMeta) => void;
   onOpenEncrypted: (file: StoredFileMeta) => void;
+  onDeleteRequest: (file: StoredFileMeta) => void;
 }
 
 export function StorageFileList({
@@ -44,6 +46,7 @@ export function StorageFileList({
   downloadingId,
   onDownload,
   onOpenEncrypted,
+  onDeleteRequest,
 }: StorageFileListProps) {
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
@@ -124,6 +127,17 @@ export function StorageFileList({
                 >
                   <Icon data={ArrowDownToLine} size={16} />
                   {!isMobile && 'Скачать'}
+                </Button>
+              </ActionTooltip>
+
+              <ActionTooltip title="Удалить" description="Удалить без скачивания — с подтверждением">
+                <Button
+                  view="flat-danger"
+                  aria-label={`Удалить ${file.originalName}`}
+                  onClick={() => onDeleteRequest(file)}
+                >
+                  <Icon data={TrashBin} size={16} />
+                  {!isMobile && 'Удалить'}
                 </Button>
               </ActionTooltip>
             </li>

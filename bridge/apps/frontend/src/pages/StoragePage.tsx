@@ -4,6 +4,7 @@ import { Alert, Card, Dialog, Text } from '@gravity-ui/uikit';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {
   StoredFileMeta,
+  useDeleteFileMutation,
   useDownloadFileMutation,
   useListEntriesQuery,
   useListFilesQuery,
@@ -34,10 +35,12 @@ export function StoragePage() {
   const files = useAppSelector(storageFilesSelector);
   const accessToken = useAppSelector((state) => state.auth.accessToken);
   const [downloadFile] = useDownloadFileMutation();
+  const [deleteFile, { isLoading: isDeleting }] = useDeleteFileMutation();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadProgress | null>(null);
   const [openEncryptedFile, setOpenEncryptedFile] = useState<StoredFileMeta | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<StoredFileMeta | null>(null);
   const isMobile = useIsMobile();
 
   // Only the "upload a project folder" path already applies the Purge
@@ -122,6 +125,23 @@ export function StoragePage() {
     }
   };
 
+  // Separate from handleDownload — this never downloads anything, and is
+  // only ever reached after the confirmation dialog below. Mirrors
+  // DayOffsTab's own remove-confirm flow: the dialog stays open (and its
+  // Apply button shows a loading state) until the request resolves, and
+  // only closes on success — a failure leaves it open with the page-level
+  // Alert explaining why, so the user can retry or cancel.
+  const handleConfirmDelete = async () => {
+    if (!fileToDelete) return;
+    setError(null);
+    try {
+      await deleteFile(fileToDelete.id).unwrap();
+      setFileToDelete(null);
+    } catch {
+      setError(`Не удалось удалить «${fileToDelete.originalName}»`);
+    }
+  };
+
   return (
     <div className={styles.page}>
       <PageHeader
@@ -153,6 +173,7 @@ export function StoragePage() {
           downloadingId={downloadingId}
           onDownload={(file) => void handleDownload(file)}
           onOpenEncrypted={setOpenEncryptedFile}
+          onDeleteRequest={setFileToDelete}
         />
       </Card>
 
@@ -199,6 +220,26 @@ export function StoragePage() {
             setPendingUpload(null);
             void startUpload(selected);
           }}
+        />
+      </Dialog>
+
+      <Dialog open={fileToDelete !== null} onClose={() => setFileToDelete(null)} maxWidth="s">
+        <Dialog.Header caption="Удалить файл без скачивания?" />
+        <Dialog.Body>
+          {fileToDelete && (
+            <Text color="secondary">
+              «{fileToDelete.originalName}» будет удалён из Storage без возможности восстановить.
+              Это не то же самое, что скачивание — файл не попадёт на это устройство.
+            </Text>
+          )}
+        </Dialog.Body>
+        <Dialog.Footer
+          preset="danger"
+          loading={isDeleting}
+          textButtonApply="Удалить"
+          textButtonCancel="Отмена"
+          onClickButtonCancel={() => setFileToDelete(null)}
+          onClickButtonApply={() => void handleConfirmDelete()}
         />
       </Dialog>
     </div>

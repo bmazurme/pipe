@@ -56,8 +56,25 @@ const storageApiEndpoints = storageApi.injectEndpoints({
       },
       invalidatesTags: ['Storage'],
     }),
+
+    // No download involved — gated behind a confirmation dialog on the
+    // frontend (StoragePage.tsx), not here. Resolves to the deleted id for
+    // the same instant-removal reason downloadFile above does.
+    deleteFile: builder.mutation<number, number>({
+      query: (id) => ({
+        url: `storage/${id}`,
+        method: 'DELETE',
+      }),
+      transformResponse: (_body, _meta, id) => id,
+      invalidatesTags: ['Storage'],
+    }),
   }),
 });
 
-export const { useListFilesQuery, usePeekFileMutation, useDownloadFileMutation } = storageApiEndpoints;
+export const {
+  useListFilesQuery,
+  usePeekFileMutation,
+  useDownloadFileMutation,
+  useDeleteFileMutation,
+} = storageApiEndpoints;
 export { storageApiEndpoints };
