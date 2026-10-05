@@ -53,6 +53,10 @@
     "./gitlabClient": {
       "types": "./dist/gitlabClient.d.ts",
       "default": "./dist/gitlabClient.js"
+    },
+    "./atomicWrite": {
+      "types": "./dist/atomicWrite.d.ts",
+      "default": "./dist/atomicWrite.js"
     }
   },
   "scripts": {

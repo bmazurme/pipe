@@ -1,4 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+
+import { writeJsonFileSync } from '@pipe/protocol';
 
 import { CONFIG_PATH } from './paths.js';
 import type { ProjectConfig, SyncConfig } from './types.js';
@@ -27,7 +29,7 @@ export function loadConfig(): SyncConfig {
 }
 
 export function saveConfig(config: SyncConfig): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+  writeJsonFileSync(CONFIG_PATH, config);
 }
 
 export function findProject(config: SyncConfig, name: string): ProjectConfig {

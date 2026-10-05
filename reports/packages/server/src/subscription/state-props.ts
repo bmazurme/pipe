@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import type { SubscriptionStateEntryType } from '@reports/shared';
+import { writeJsonFileSync } from '@pipe/protocol';
 import { parseState, subscriptionStateSchema } from '@pipe/protocol/state';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,7 @@ const readState = (): SubscriptionState => {
 };
 
 const writeState = (state: SubscriptionState): SubscriptionState => {
-  writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n');
+  writeJsonFileSync(statePath, state);
 
   return state;
 };

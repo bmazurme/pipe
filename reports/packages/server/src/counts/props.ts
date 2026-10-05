@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { writeJsonFileSync } from '@pipe/protocol';
 
 export type YearProps = {
   holidays: string[];
@@ -38,7 +39,7 @@ export const addOffDays = (year: number | string | string[], dates: string[]): Y
 
   if (newDates.length > 0) {
     yearProps.offDays.push(...newDates);
-    writeFileSync(propsPath, JSON.stringify(props, null, 2) + '\n');
+    writeJsonFileSync(propsPath, props);
   }
 
   return yearProps;
@@ -59,7 +60,7 @@ export const importDayOffs = (year: number | string | string[], imported: YearPr
   };
 
   props[key] = yearProps;
-  writeFileSync(propsPath, JSON.stringify(props, null, 2) + '\n');
+  writeJsonFileSync(propsPath, props);
 
   return yearProps;
 };
@@ -71,7 +72,7 @@ export const removeOffDay = (year: number | string | string[], date: string | st
 
   if (yearProps.offDays.includes(dateStr)) {
     yearProps.offDays = yearProps.offDays.filter((d) => d !== dateStr);
-    writeFileSync(propsPath, JSON.stringify(props, null, 2) + '\n');
+    writeJsonFileSync(propsPath, props);
   }
 
   return yearProps;

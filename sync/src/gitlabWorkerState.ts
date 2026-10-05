@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
+import { writeJsonFileSync } from '@pipe/protocol';
 import { gitlabWorkerStateSchema, parseState, type GitlabWorkerState } from '@pipe/protocol/state';
 
 import { GITLAB_WORKER_STATE_PATH } from './paths.js';
@@ -30,5 +31,5 @@ export function loadGitlabWorkerState(): GitlabWorkerState {
 export function recordPushed(key: string, filename: string): void {
   const state = loadGitlabWorkerState();
   state[key] = { pushedAt: new Date().toISOString(), filename };
-  writeFileSync(GITLAB_WORKER_STATE_PATH, JSON.stringify(state, null, 2) + '\n');
+  writeJsonFileSync(GITLAB_WORKER_STATE_PATH, state);
 }

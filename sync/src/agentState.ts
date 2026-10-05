@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
+import { writeJsonFileSync } from '@pipe/protocol';
 import { agentRunnerStateSchema, parseState } from '@pipe/protocol/state';
 
 import { AGENT_STATE_PATH } from './paths.js';
@@ -22,5 +23,5 @@ export function loadAgentState(): AgentRunnerState {
 export function recordOwnOutput(key: string, contentHash: string): void {
   const state = loadAgentState();
   state[key] = { lastOwnOutputHash: contentHash };
-  writeFileSync(AGENT_STATE_PATH, JSON.stringify(state, null, 2) + '\n');
+  writeJsonFileSync(AGENT_STATE_PATH, state);
 }

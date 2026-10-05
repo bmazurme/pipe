@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { writeJsonFileSync } from '@pipe/protocol';
 import type { ProjectDictType } from '@reports/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,7 +13,7 @@ export const getProjectDict = (): ProjectDictType => {
 
 // Full replace, for restoring a settings-transfer bundle.
 export const setProjectDict = (projectDict: ProjectDictType): ProjectDictType => {
-  writeFileSync(projectDictPath, JSON.stringify(projectDict, null, 2) + '\n');
+  writeJsonFileSync(projectDictPath, projectDict);
 
   return projectDict;
 };
@@ -21,7 +22,7 @@ export const addProjectCode = (code: string, label: string): ProjectDictType => 
   const projectDict = getProjectDict();
 
   projectDict[code] = label;
-  writeFileSync(projectDictPath, JSON.stringify(projectDict, null, 2) + '\n');
+  writeJsonFileSync(projectDictPath, projectDict);
 
   return projectDict;
 };
@@ -31,7 +32,7 @@ export const removeProjectCode = (code: string): ProjectDictType => {
 
   if (code in projectDict) {
     delete projectDict[code];
-    writeFileSync(projectDictPath, JSON.stringify(projectDict, null, 2) + '\n');
+    writeJsonFileSync(projectDictPath, projectDict);
   }
 
   return projectDict;

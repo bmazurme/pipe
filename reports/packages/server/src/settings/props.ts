@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { writeJsonFileSync } from '@pipe/protocol';
 import type { SettingsType } from '@reports/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,7 +27,7 @@ export const getSettings = (): SettingsType => {
 };
 
 export const setSettings = (settings: SettingsType): SettingsType => {
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+  writeJsonFileSync(settingsPath, settings);
 
   return settings;
 };

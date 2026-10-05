@@ -1,4 +1,6 @@
-import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+
+import { writeJsonFileSync } from '@pipe/protocol';
 
 import { CREDENTIALS_PATH } from './paths.js';
 import type { Credentials } from './types.js';
@@ -35,10 +37,8 @@ export function saveApiKey(apiKey: string): void {
 }
 
 export function saveCredentials(credentials: Credentials): void {
-  writeFileSync(CREDENTIALS_PATH, JSON.stringify(credentials, null, 2) + '\n', {
-    mode: 0o600,
-  });
-  // writeFileSync only applies `mode` when creating the file; make sure an
-  // existing file (e.g. from a rotated refresh token) stays owner-only too.
-  chmodSync(CREDENTIALS_PATH, 0o600);
+  // Owner-only, and atomic (IMPROVEMENTS_TECH.md 2.6) — writeJsonFileSync
+  // applies the mode to the temp file at creation (never briefly
+  // world-readable) and chmods the final path too, defensively.
+  writeJsonFileSync(CREDENTIALS_PATH, credentials, { mode: 0o600 });
 }

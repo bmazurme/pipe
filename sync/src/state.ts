@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
+import { writeJsonFileSync } from '@pipe/protocol';
 import { parseState, syncStateSchema } from '@pipe/protocol/state';
 
 import { STATE_PATH } from './paths.js';
@@ -18,7 +19,7 @@ export function loadState(): SyncState {
 }
 
 export function saveState(state: SyncState): void {
-  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + '\n');
+  writeJsonFileSync(STATE_PATH, state);
 }
 
 export function getLastHash(projectName: string): string | undefined {

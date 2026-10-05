@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { writeJsonFileSync } from '@pipe/protocol';
 import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, SubscriptionConfigType, TrackedProjectType } from '@reports/shared';
 
 import { generateKeyPair } from './encryption';
@@ -16,7 +17,7 @@ const defaultConfig: SubscriptionConfigType = {
 };
 
 const save = (config: SubscriptionConfigType): SubscriptionConfigType => {
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+  writeJsonFileSync(configPath, config);
 
   return config;
 };

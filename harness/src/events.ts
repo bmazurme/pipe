@@ -1,6 +1,8 @@
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { writeJsonFileSync } from '@pipe/protocol';
 
 import type { TaskEntry } from './collect.js';
 
@@ -76,8 +78,7 @@ function loadSnapshot(snapshotPath: string): Record<string, string> {
 }
 
 function saveSnapshot(snapshotPath: string, snapshot: Record<string, string>): void {
-  mkdirSync(path.dirname(snapshotPath), { recursive: true });
-  writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2) + '\n');
+  writeJsonFileSync(snapshotPath, snapshot);
 }
 
 function appendEvents(logPath: string, events: TaskEvent[]): void {
