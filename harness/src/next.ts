@@ -80,3 +80,15 @@ export function pickNextTask(
 
   return undefined;
 }
+
+// Shared between cli.ts's --next and the MCP server's `next` tool
+// (IMPROVEMENTS_HARNESS.md 5.1) — one text rendering, not two copies.
+export function formatNextRecommendation(picked: NextRecommendation | undefined): string {
+  if (!picked) return 'Nothing urgent — all clear.';
+
+  const lines = [`${picked.key} [${picked.bucket}]: ${picked.label}`];
+  if (picked.nextAction) {
+    lines.push(`  next: ${picked.nextAction.label}${picked.nextAction.command ? ` → ${picked.nextAction.command}` : ''}`);
+  }
+  return lines.join('\n');
+}

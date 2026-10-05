@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveProjectName, runAction, type ActionDeps } from './actions.js';
+import { resolveProjectName, runAction, type ActionDeps, type ActionResult } from './actions.js';
 
 describe('resolveProjectName', () => {
   it('uses the override when given, without consulting the config at all', () => {
@@ -40,7 +40,7 @@ function makeDeps(overrides: Partial<ActionDeps> = {}): ActionDeps {
     loadSyncConfig: () => ({ projects: [{ name: 'bff', gitlabProjectId: '402' }] }),
     runSyncCli: async (args, cliPath) => {
       calls.runSyncCli.push([args, cliPath]);
-      return 0;
+      return { code: 0, output: '' };
     },
     callPublish: async (baseUrl, projectId, iid) => {
       calls.callPublish.push([baseUrl, projectId, iid]);
@@ -55,30 +55,24 @@ function makeDeps(overrides: Partial<ActionDeps> = {}): ActionDeps {
 describe('runAction', () => {
   it('rejects a malformed task key without touching any dependency', async () => {
     const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
-    const code = await runAction('pull', 'not-a-key', { yes: true, dryRun: false }, deps);
+    const result = await runAction('pull', 'not-a-key', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 1);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /Invalid task key/);
     assert.equal(deps.calls.runSyncCli.length, 0);
   });
 
-  it('dry-run prints the resolved sync-cli command and runs nothing', async () => {
+  it('dry-run returns the resolved sync-cli command and runs nothing', async () => {
     const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
-    const code = await runAction('pull', '402:6', { yes: false, dryRun: true }, deps);
+    const result = await runAction('pull', '402:6', { yes: false, dryRun: true }, deps);
 
-    assert.equal(code, 0);
+    assert.equal(result.code, 0);
     assert.equal(deps.calls.runSyncCli.length, 0);
   });
 
   it('dry-run for retry describes push-issue, not pull-issue', async () => {
-    const logs: string[] = [];
-    const originalLog = console.log;
-    console.log = (msg: string) => logs.push(msg);
-    try {
-      await runAction('retry', '402:6', { yes: false, dryRun: true }, makeDeps());
-    } finally {
-      console.log = originalLog;
-    }
-    assert.match(logs.join('\n'), /push-issue bff 402 6/);
+    const result = await runAction('retry', '402:6', { yes: false, dryRun: true }, makeDeps());
+    assert.match(result.output, /push-issue bff 402 6/);
   });
 
   it('dry-run for publish describes the HTTP call and never needs sync config', async () => {
@@ -87,29 +81,26 @@ describe('runAction', () => {
         throw new Error('should not be called for publish');
       },
     });
-    const logs: string[] = [];
-    const originalLog = console.log;
-    console.log = (msg: string) => logs.push(msg);
-    try {
-      const code = await runAction('publish', '402:6', { yes: false, dryRun: true }, deps);
-      assert.equal(code, 0);
-    } finally {
-      console.log = originalLog;
-    }
-    assert.match(logs.join('\n'), /POST http:\/\/127\.0\.0\.1:4000\/api\/subscription\/issues\/402\/6\/publish/);
+
+    const result = await runAction('publish', '402:6', { yes: false, dryRun: true }, deps);
+
+    assert.equal(result.code, 0);
+    assert.match(result.output, /POST http:\/\/127\.0\.0\.1:4000\/api\/subscription\/issues\/402\/6\/publish/);
   });
 
   it('surfaces a project-resolution failure even under --dry-run', async () => {
     const deps = makeDeps({ loadSyncConfig: () => ({ projects: [{ name: 'a' }, { name: 'b' }] }) });
-    const code = await runAction('pull', '402:6', { yes: false, dryRun: true }, deps);
-    assert.equal(code, 1);
+    const result = await runAction('pull', '402:6', { yes: false, dryRun: true }, deps);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /can't tell which tracked project/);
   });
 
   it('refuses to proceed non-interactively without --yes', async () => {
     const deps = makeDeps({ isInteractive: false }) as ActionDeps & { calls: { runSyncCli: unknown[] } };
-    const code = await runAction('pull', '402:6', { yes: false, dryRun: false }, deps);
+    const result = await runAction('pull', '402:6', { yes: false, dryRun: false }, deps);
 
-    assert.equal(code, 1);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /without confirmation/);
     assert.equal(deps.calls.runSyncCli.length, 0);
   });
 
@@ -120,25 +111,26 @@ describe('runAction', () => {
       },
     }) as ActionDeps & { calls: { runSyncCli: [string[], string][] } };
 
-    const code = await runAction('pull', '402:6', { yes: true, dryRun: false }, deps);
+    const result = await runAction('pull', '402:6', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 0);
+    assert.equal(result.code, 0);
     assert.deepEqual(deps.calls.runSyncCli[0][0], ['pull-issue', 'bff', '402', '6']);
   });
 
   it('aborts when the interactive confirmation is declined', async () => {
     const deps = makeDeps({ confirm: async () => false }) as ActionDeps & { calls: { runSyncCli: unknown[] } };
-    const code = await runAction('retry', '402:6', { yes: false, dryRun: false }, deps);
+    const result = await runAction('retry', '402:6', { yes: false, dryRun: false }, deps);
 
-    assert.equal(code, 1);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /Aborted/);
     assert.equal(deps.calls.runSyncCli.length, 0);
   });
 
   it('runs push-issue (not pull-issue) for a confirmed retry', async () => {
     const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: [string[], string][] } };
-    const code = await runAction('retry', '402:6', { yes: true, dryRun: false }, deps);
+    const result = await runAction('retry', '402:6', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 0);
+    assert.equal(result.code, 0);
     assert.deepEqual(deps.calls.runSyncCli[0][0], ['push-issue', 'bff', '402', '6']);
   });
 
@@ -149,9 +141,10 @@ describe('runAction', () => {
       },
     }) as ActionDeps & { calls: { callPublish: [string, string, string][] } };
 
-    const code = await runAction('publish', '402:6', { yes: true, dryRun: false }, deps);
+    const result = await runAction('publish', '402:6', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 0);
+    assert.equal(result.code, 0);
+    assert.match(result.output, /Published 402:6/);
     assert.deepEqual(deps.calls.callPublish[0], ['http://127.0.0.1:4000', '402', '6']);
   });
 
@@ -162,16 +155,17 @@ describe('runAction', () => {
       },
     });
 
-    const code = await runAction('publish', '402:6', { yes: true, dryRun: false }, deps);
+    const result = await runAction('publish', '402:6', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 1);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /publish failed \(500\): boom/);
   });
 
-  it('propagates sync-cli\'s own exit code for pull/retry', async () => {
-    const deps = makeDeps({ runSyncCli: async () => 3 });
-    const code = await runAction('pull', '402:6', { yes: true, dryRun: false }, deps);
+  it('propagates sync-cli\'s own exit code and output for pull/retry', async () => {
+    const deps = makeDeps({ runSyncCli: async () => ({ code: 3, output: 'some captured output' }) });
+    const result = await runAction('pull', '402:6', { yes: true, dryRun: false }, deps);
 
-    assert.equal(code, 3);
+    assert.deepEqual(result, { code: 3, output: 'some captured output' } satisfies ActionResult);
   });
 
   it('honors --project as an override even when the config would otherwise resolve unambiguously', async () => {

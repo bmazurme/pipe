@@ -1,12 +1,10 @@
 import { type ActionKind, runAction } from './actions.js';
-import { fetchLiveStatus } from './bridgeLive.js';
-import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } from './collect.js';
-import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
+import { DEFAULT_PATHS, type StatusPaths } from './collect.js';
+import { DEFAULT_STALE_HOURS, exitCodeFor } from './deriveStatus.js';
 import { recordTransitions, readTaskEvents } from './events.js';
-import { fetchGitlabLiveStatus } from './gitlabLive.js';
-import { pickNextTask } from './next.js';
+import { formatNextRecommendation, pickNextTask } from './next.js';
 import { notifyTransitions } from './notifyTransitions.js';
-import { formatReportText } from './render.js';
+import { buildReportData, formatBuiltReport } from './reportBuilder.js';
 
 export interface CliOptions {
   paths: Partial<StatusPaths>;
@@ -235,75 +233,50 @@ export function parseArgs(argv: string[]): CliOptions {
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
-  const collected = collectReportData(paths);
+  const built = await buildReportData({
+    paths,
+    filter: options.filter,
+    live: options.live,
+    staleHours: options.staleHours,
+  });
+
   // Recorded against the full, unfiltered task list — a --filter scoping
   // the printed report to one project shouldn't make tasks outside it look
   // like they vanished (IMPROVEMENTS_HARNESS.md 4.1). Same reasoning for
   // --notify below: a transition outside the --filter'd scope still fires
   // its notification.
-  const events = recordTransitions(collected.tasks);
+  const events = recordTransitions(built.collected.tasks);
   if (options.notify) notifyTransitions(events);
-  const filtered = filterReportData(collected, options.filter);
-
-  // Independent of each other — a machine can have sync's bridge API key
-  // configured without its GitLab token, or vice versa (IMPROVEMENTS_HARNESS.md
-  // 1.1 vs 1.2/1.3) — each falls back to "unavailable" on its own rather
-  // than one missing credential taking out both.
-  const [liveResult, gitlabLiveResult] = options.live
-    ? await Promise.all([fetchLiveStatus(), fetchGitlabLiveStatus(filtered.tasks)])
-    : [undefined, undefined];
-  const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
-  const gitlabLiveTasks = gitlabLiveResult?.available ? gitlabLiveResult.data.tasks : undefined;
-
-  const now = Date.now();
-  const data: AnnotatedReportData = {
-    ...filtered,
-    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, now, liveTasks, gitlabLiveTasks),
-  };
 
   if (options.json) {
-    console.log(JSON.stringify({ ...data, live: liveResult, gitlabLive: gitlabLiveResult }, replaceMaps, 2));
+    console.log(JSON.stringify({ ...built.data, live: built.liveResult, gitlabLive: built.gitlabLiveResult }, replaceMaps, 2));
   } else {
-    const liveWorker = liveResult?.available ? liveResult.data.worker : undefined;
-    const liveError = liveResult && !liveResult.available ? liveResult.reason : undefined;
-    const claudeCredentials = liveResult?.available ? liveResult.data.claudeCredentials : undefined;
-    const incoming = gitlabLiveResult?.available ? gitlabLiveResult.data.incoming : undefined;
-    const gitlabError = gitlabLiveResult && !gitlabLiveResult.available ? gitlabLiveResult.reason : undefined;
-    console.log(formatReportText(data, liveWorker, liveError, claudeCredentials, incoming, gitlabError, now));
+    console.log(formatBuiltReport(built));
   }
 
-  return exitCodeFor(data);
+  return exitCodeFor(built.data);
 }
 
 // IMPROVEMENTS_HARNESS.md 2.2 — a standalone one-shot mode, same as --log
 // and --pull/--retry/--publish, not folded into the full report. Shares
-// renderOnce's own live-fetch shape above, since pickNextTask needs the
-// same liveTasks/gitlabLiveTasks/incoming inputs to weigh a confirmed-ready
-// result or a newly assigned issue, not just local state.
+// buildReportData's own live-fetch shape above, since pickNextTask needs
+// the same liveTasks/gitlabLiveTasks/incoming inputs to weigh a
+// confirmed-ready result or a newly assigned issue, not just local state.
 async function runNext(paths: StatusPaths, options: CliOptions): Promise<number> {
-  const collected = collectReportData(paths);
-  const filtered = filterReportData(collected, options.filter);
-
-  const [liveResult, gitlabLiveResult] = options.live
-    ? await Promise.all([fetchLiveStatus(), fetchGitlabLiveStatus(filtered.tasks)])
-    : [undefined, undefined];
-  const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
-  const gitlabLiveTasks = gitlabLiveResult?.available ? gitlabLiveResult.data.tasks : undefined;
-  const incoming = gitlabLiveResult?.available ? gitlabLiveResult.data.incoming : [];
-
-  const now = Date.now();
-  const annotated = annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, now, liveTasks, gitlabLiveTasks);
-  const picked = pickNextTask(annotated, incoming, liveTasks);
+  const built = await buildReportData({
+    paths,
+    filter: options.filter,
+    live: options.live,
+    staleHours: options.staleHours,
+  });
+  const liveTasks = built.liveResult?.available ? built.liveResult.data.tasks : undefined;
+  const incoming = built.gitlabLiveResult?.available ? built.gitlabLiveResult.data.incoming : [];
+  const picked = pickNextTask(built.data.tasks, incoming, liveTasks);
 
   if (options.json) {
     console.log(JSON.stringify(picked ?? null, null, 2));
-  } else if (!picked) {
-    console.log('Nothing urgent — all clear.');
   } else {
-    console.log(`${picked.key} [${picked.bucket}]: ${picked.label}`);
-    if (picked.nextAction) {
-      console.log(`  next: ${picked.nextAction.label}${picked.nextAction.command ? ` → ${picked.nextAction.command}` : ''}`);
-    }
+    console.log(formatNextRecommendation(picked));
   }
 
   // Same convention as exitCodeFor: non-zero only for the one bucket that's
@@ -347,12 +320,20 @@ export async function main(): Promise<void> {
   }
 
   if (options.action) {
-    process.exitCode = await runAction(options.action.kind, options.action.key, {
+    const result = await runAction(options.action.kind, options.action.key, {
       yes: options.yes,
       dryRun: options.dryRun,
       project: options.project,
       reportsBaseUrl: options.reportsUrl,
     });
+    // Empty for pull/retry's inherited-stdio path (defaultRunSyncCli) —
+    // the terminal already saw sync-cli's own output live, nothing left to
+    // print here. Non-empty for every other outcome (dry-run, refused,
+    // aborted, publish success/failure) — see actions.ts's own ActionResult
+    // comment for why this is returned instead of printed directly inside
+    // runAction itself.
+    if (result.output) console.log(result.output);
+    process.exitCode = result.code;
     return;
   }
 

@@ -117,6 +117,7 @@ npm run lint    # flat-config ESLint, shared base in the repo root's eslint.conf
 cd harness
 npm run build
 npm start   # node dist/status.js
+node dist/mcp.js   # pipe-mcp — an MCP stdio server, not meant to be run directly in a terminal; an MCP client spawns it
 npm test    # tsc -b && node --test 'dist/**/*.test.js'
 npm run lint    # flat-config ESLint, shared base in the repo root's eslint.config.base.mjs
 ```
@@ -149,4 +150,4 @@ Commands live one-per-file under `src/commands/`. `agentRunner.ts` is the most i
 A three-package npm workspace (`client`/`server`/`shared`), no database — all server-side state (`settings.json`, `props.json`, `project-dict.json`, `subscription-state.json`) is flat JSON written under `packages/server/src/**`, gitignored. Client and server exchange data as newline-delimited JSON (`StreamEvent`, typed in `packages/shared`). The `Subscription` module (`packages/server/src/subscription/`) is reports' side of the same push/pull-issue flow sync implements independently — it shares the parcel format via `@pipe/protocol` but keeps its own state file and its own archive-extraction code path.
 
 ### harness
-A single file, `harness/src/status.ts`, reads sync's `.sync-agent-state.json` and reports' `subscription-state.json` directly off disk and merges them by their shared `projectId:iid` key into one status view. No network calls.
+`harness/src/status.ts` (`pipe-status`) reads sync's and reports' local state files directly off disk and merges them by their shared `projectId:iid` key into one status view — no network calls by default. An optional `--live` flag adds real bridge (`bridgeLive.ts`) and GitLab (`gitlabLive.ts`) checks on top; `--pull`/`--retry`/`--publish` (`actions.ts`) can act on a task instead of only reporting on it, always behind confirmation. `harness/src/mcp.ts` (`pipe-mcp`) wraps the same functions as MCP tools for Claude Code instead of a human running `pipe-status` in a terminal — see `harness/README.md`'s own "pipe-mcp" section for why that needed `actions.ts` to return `{code, output}` instead of printing directly (an MCP stdio server's stdout is the JSON-RPC channel itself, not just cosmetic terminal output).

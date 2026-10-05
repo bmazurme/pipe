@@ -74,24 +74,40 @@ export interface ActionOptions {
   reportsBaseUrl?: string;
 }
 
+// output accumulates whatever would otherwise have been printed directly —
+// not a side channel, the actual result. This exists specifically so
+// runAction has no opinion on WHERE its messages end up: pipe-status's own
+// CLI prints `output` to the terminal (see cli.ts's main()), while the MCP
+// server (IMPROVEMENTS_HARNESS.md 5.1) returns it as a tool result instead.
+// That distinction matters a lot more than it looks: an MCP stdio server's
+// stdout IS the JSON-RPC channel back to the client — a stray console.log
+// (or a spawned child's inherited stdout) would corrupt the protocol
+// stream, not just look messy.
+export interface ActionResult {
+  code: number;
+  output: string;
+}
+
 export interface ActionDeps {
   loadSyncConfig: (configPath: string) => MinimalSyncConfig;
-  runSyncCli: (args: string[], cliPath: string) => Promise<number>;
+  runSyncCli: (args: string[], cliPath: string) => Promise<ActionResult>;
   callPublish: (baseUrl: string, projectId: string, iid: string) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   isInteractive: boolean;
 }
 
-// Inherits stdio so the user sees sync-cli's own output directly (push/pull
-// progress, leak-scan warnings, errors) — not captured and re-printed,
-// which would risk silently losing or reordering it.
-function defaultRunSyncCli(args: string[], cliPath: string): Promise<number> {
+// Inherits stdio so a terminal user sees sync-cli's own output live
+// (push/pull progress, leak-scan warnings, errors), same as before this
+// module returned structured results instead of printing directly —
+// `output` is empty here on purpose, since inherited stdio means nothing
+// was ever captured to return. Only safe for a real CLI process; the MCP
+// server (mcp.ts) uses its own capturing ActionDeps instead, never this one.
+function defaultRunSyncCli(args: string[], cliPath: string): Promise<ActionResult> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cliPath, ...args], { stdio: 'inherit' });
-    child.on('exit', (code) => resolve(code ?? 1));
+    child.on('exit', (code) => resolve({ code: code ?? 1, output: '' }));
     child.on('error', (error) => {
-      console.error(`Failed to run sync-cli: ${(error as Error).message}`);
-      resolve(1);
+      resolve({ code: 1, output: `Failed to run sync-cli: ${(error as Error).message}` });
     });
   });
 }
@@ -163,11 +179,10 @@ export async function runAction(
   key: string,
   options: ActionOptions,
   deps: ActionDeps = DEFAULT_ACTION_DEPS,
-): Promise<number> {
+): Promise<ActionResult> {
   const [projectId, iid] = key.split(':');
   if (!projectId || !iid) {
-    console.error(`Invalid task key "${key}" — expected "projectId:iid"`);
-    return 1;
+    return { code: 1, output: `Invalid task key "${key}" — expected "projectId:iid"` };
   }
 
   const reportsBaseUrl = options.reportsBaseUrl ?? DEFAULT_REPORTS_BASE_URL;
@@ -178,38 +193,32 @@ export async function runAction(
     try {
       name = resolveProjectName(config, projectId, options.project);
     } catch (error) {
-      console.error((error as Error).message);
-      return 1;
+      return { code: 1, output: (error as Error).message };
     }
   }
 
   const description = describeAction(kind, projectId, iid, name, reportsBaseUrl);
 
   if (options.dryRun) {
-    console.log(`Would ${description}.`);
-    return 0;
+    return { code: 0, output: `Would ${description}.` };
   }
 
   if (!options.yes) {
     if (!deps.isInteractive) {
-      console.error(`Refusing to ${description} without confirmation in a non-interactive session — pass --yes.`);
-      return 1;
+      return { code: 1, output: `Refusing to ${description} without confirmation in a non-interactive session — pass --yes.` };
     }
     const proceed = await deps.confirm(`About to ${description}. Proceed?`);
     if (!proceed) {
-      console.error('Aborted.');
-      return 1;
+      return { code: 1, output: 'Aborted.' };
     }
   }
 
   if (kind === 'publish') {
     try {
       await deps.callPublish(reportsBaseUrl, projectId, iid);
-      console.log(`Published ${projectId}:${iid}.`);
-      return 0;
+      return { code: 0, output: `Published ${projectId}:${iid}.` };
     } catch (error) {
-      console.error((error as Error).message);
-      return 1;
+      return { code: 1, output: (error as Error).message };
     }
   }
 

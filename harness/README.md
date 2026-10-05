@@ -321,6 +321,67 @@ task's derived status came back stale (both are also shown inline either
 way — the exit code just makes `pipe-status` usable as a cron/CI check, not
 only something you have to read).
 
+## pipe-mcp
+
+An MCP server (IMPROVEMENTS_HARNESS.md 5.1) wrapping everything above as
+tools for Claude Code (or any other MCP client — bridge's own Chat, once it
+grows tool use) instead of a human having to run `pipe-status` in a
+terminal and paste the output in: `status`, `next`, `task_log`, `pull`,
+`retry`, `publish` — same underlying functions, same behavior, just called
+over MCP instead of argv.
+
+```bash
+npm run build   # from harness/, or via the repo root workspace
+node dist/mcp.js   # runs as a stdio server — not meant to be run directly
+                     # in a terminal; an MCP client spawns it
+```
+
+Register it with Claude Code:
+
+```bash
+claude mcp add pipe-mcp -- node /absolute/path/to/pipe/harness/dist/mcp.js
+```
+
+### Tools
+
+- **`status`**/**`next`** — same `filter`/`live`/`staleHours` inputs as the
+  CLI's own flags, same output text `pipe-status`/`pipe-status --next`
+  would print.
+- **`task_log`** — `{ key }`, same output as `pipe-status --log <key>`.
+- **`pull`**/**`retry`**/**`publish`** — the same three actions as
+  `--pull`/`--retry`/`--publish` (see "Running actions" above for what each
+  one actually does and why no new bridge/reports endpoint was needed for
+  any of them). `{ key, yes, dryRun?, project?, reportsUrl? }` — `yes` is
+  **required**, not defaulted: the calling model has to explicitly decide,
+  which also means a host's own tool-call approval UI shows it to the
+  human before anything runs. Passing `yes: false` (or omitting it) always
+  refuses, exactly like running `pipe-status --pull` outside a terminal
+  without `--yes` — there's no interactive prompt inside an MCP server
+  (nothing to prompt against: stdin is the JSON-RPC channel itself), so
+  this explicit-argument-plus-host-approval pairing *is* the confirmation
+  layer here, not a second copy of the CLI's `readline` prompt.
+
+### Why this needed more than just registering the existing functions as tools
+
+`actions.ts`'s `runAction` used to print directly (`console.log`) and, for
+`--pull`/`--retry`, spawn `sync-cli` with `stdio: 'inherit'` — both fine for
+a real terminal, both would silently corrupt an MCP stdio server's own
+stdout, which *is* the JSON-RPC channel back to the client (not just cosmetic
+output). Fixed by having `runAction` return `{ code, output }` instead of
+printing, and giving the MCP server its own `ActionDeps.runSyncCli` that
+captures a spawned sync-cli's stdout+stderr into that `output` instead of
+inheriting the parent's file descriptors. `pipe-status`'s own CLI behavior
+didn't change — `cli.ts`'s `main()` just prints `result.output` itself now,
+and the inherited-stdio path still used there returns an empty `output`
+(nothing was captured, the terminal already saw it live).
+
+Manually verified end-to-end over the real protocol (a real
+`@modelcontextprotocol/sdk` `Client` + `StdioClientTransport` spawning
+`node dist/mcp.js`, not just unit tests of the handlers) — tool listing,
+`status`/`next`/`task_log`, and all three write actions' refuse/dry-run/
+success paths, confirming nothing on stdout was corrupted by a spawned
+child's output.
+
 ## Tests
 
 ```bash
@@ -344,4 +405,10 @@ only `resolveProjectName`'s resolution logic and the confirmation/dry-run
 control flow are exercised against fakes. `pickNextTask` (`--next`) is
 tested as a pure function over plain `TaskEntry`/`IncomingIssue` fixtures —
 bucket ordering, the confirmed-vs-guessed distinction for a `gitlab-worker`
-task, and tie-breaking within a bucket.
+task, and tie-breaking within a bucket. `pipe-mcp`'s own tests
+(`mcp.test.ts`) connect a real `@modelcontextprotocol/sdk` `Client` to
+`createPipeMcpServer()` over `InMemoryTransport.createLinkedPair()` — a
+real protocol round-trip (tool listing, schema validation, the actual
+JSON-RPC shape a client sees), just without a subprocess — with injectable
+`paths`/`eventsPaths`/`actionDeps` pointing at fixtures instead of this
+machine's real state/`sync-cli`/reports.
