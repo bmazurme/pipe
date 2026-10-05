@@ -1,5 +1,6 @@
 import type { LiveTaskInfo } from './bridgeLive.js';
 import type { TaskEntry, ReportData } from './collect.js';
+import type { LiveGitlabTaskInfo } from './gitlabLive.js';
 
 export interface DerivedStatus {
   label: string;
@@ -9,6 +10,10 @@ export interface DerivedStatus {
   // undefined so the offline-only shape (and the tests asserting it via
   // deepEqual) stays unchanged when live data wasn't requested.
   liveNote?: string;
+  // Same reasoning, for GitLab's own live state instead of bridge's
+  // (IMPROVEMENTS_HARNESS.md 1.2) — issue open/closed, and the newest MR
+  // for this task's branch with its pipeline status.
+  gitlabNote?: string;
 }
 
 export interface AnnotatedTaskEntry extends TaskEntry {
@@ -34,26 +39,67 @@ function liveNoteFor(live: LiveTaskInfo | undefined): string | undefined {
   return parts.join(', ');
 }
 
+function gitlabNoteFor(info: LiveGitlabTaskInfo | undefined): string | undefined {
+  if (!info) return undefined;
+
+  const parts: string[] = [];
+  if (info.issueState) parts.push(`issue ${info.issueState}`);
+  parts.push(
+    info.mergeRequest
+      ? `MR !${info.mergeRequest.iid} (${info.mergeRequest.state}), pipeline ${info.mergeRequest.pipelineStatus ?? 'none yet'}`
+      : 'no MR for this branch yet',
+  );
+  return parts.join(', ');
+}
+
+// 'failed'/'canceled' specifically — 'running'/'pending'/'success'/'skipped'
+// are all either fine or still in progress, not something to flag.
+function gitlabPipelineFailed(info: LiveGitlabTaskInfo | undefined): boolean {
+  const status = info?.mergeRequest?.pipelineStatus;
+  return status === 'failed' || status === 'canceled';
+}
+
 // Synthesizes one combined label per task from whichever signals are
 // present — this is the actual "merged view," versus just listing each
 // side's raw fields next to each other. Reports' own `step` is the fullest
 // single-file record of an issue's lifecycle when it's there; gitlab-worker
 // + agent-runner's dedup hash are the best available signal when it isn't
-// (e.g. this machine only runs sync-cli, not reports). Without `live`
-// (IMPROVEMENTS_HARNESS.md 1.1's --live), this is all local-only — no bridge
-// query, so "ready to pull" is an inference from what was last pushed
-// locally, not a fact about what's still on bridge; `live`, when supplied,
-// both upgrades that one guess into a fact and attaches the worker job's
-// own status as `liveNote` regardless of which branch below matched.
-export function deriveStatus(task: TaskEntry, staleHours: number, now: number, live?: LiveTaskInfo): DerivedStatus {
+// (e.g. this machine only runs sync-cli, not reports). Without --live
+// (IMPROVEMENTS_HARNESS.md 1.1/1.2), this is all local-only — "ready to
+// pull" is an inference from what was last pushed locally, not a fact about
+// what's still on bridge, and a published task's pipeline is simply
+// unknown. `live` (bridge) and `gitlabLive` (GitLab) are independent of
+// each other — either, both, or neither may be configured on a given
+// machine — and each attaches its own note (`liveNote`/`gitlabNote`)
+// regardless of which branch below matched; `live` additionally upgrades
+// one specific guess into a fact, and `gitlabLive` can override the
+// 'published' label entirely when the pipeline behind it failed.
+export function deriveStatus(
+  task: TaskEntry,
+  staleHours: number,
+  now: number,
+  live?: LiveTaskInfo,
+  gitlabLive?: LiveGitlabTaskInfo,
+): DerivedStatus {
   const s = task.subscription;
   const liveNote = liveNoteFor(live);
-  const withLiveNote = (status: DerivedStatus): DerivedStatus => (liveNote ? { ...status, liveNote } : status);
+  const gitlabNote = gitlabNoteFor(gitlabLive);
+  const withLiveNote = (status: DerivedStatus): DerivedStatus => ({
+    ...status,
+    ...(liveNote ? { liveNote } : {}),
+    ...(gitlabNote ? { gitlabNote } : {}),
+  });
 
   if (s) {
     switch (s.step) {
       case 'published':
-        return withLiveNote({ label: 'published — done', stale: false });
+        // The one case this item exists for: "published — done" was a
+        // label harness could print with zero way to know it might be
+        // wrong — a merged/open MR with a failed pipeline behind it is
+        // exactly the gap (IMPROVEMENTS_HARNESS.md 1.2).
+        return gitlabPipelineFailed(gitlabLive)
+          ? withLiveNote({ label: `published — but pipeline failed (MR !${gitlabLive!.mergeRequest!.iid})`, stale: true })
+          : withLiveNote({ label: 'published — done', stale: false });
       case 'pulled': {
         const stale = Boolean(s.pulledAt) && hoursSince(s.pulledAt!, now) > staleHours;
         return withLiveNote({
@@ -68,8 +114,19 @@ export function deriveStatus(task: TaskEntry, staleHours: number, now: number, l
           stale,
         });
       }
-      default:
-        return withLiveNote({ label: `${s.step} — not yet pushed`, stale: false });
+      default: {
+        // 'init' is the only step left here — unlike pushed/pulled/
+        // published, it has no step-specific timestamp of its own, so
+        // staleness falls back to updatedAt (IMPROVEMENTS_HARNESS.md 6.3).
+        // Absent on an entry written before this field existed, or one a
+        // writer hasn't touched since — same "no signal, not stale" default
+        // every other branch here already uses for a missing timestamp.
+        const stale = Boolean(s.updatedAt) && hoursSince(s.updatedAt!, now) > staleHours;
+        return withLiveNote({
+          label: stale ? `${s.step} ${s.updatedAt} — not yet pushed` : `${s.step} — not yet pushed`,
+          stale,
+        });
+      }
     }
   }
 
@@ -87,7 +144,7 @@ export function deriveStatus(task: TaskEntry, staleHours: number, now: number, l
               },
         );
       }
-      return { label: 'agent-runner already pushed a result back — likely ready to pull', stale: false };
+      return withLiveNote({ label: 'agent-runner already pushed a result back — likely ready to pull', stale: false });
     }
 
     return withLiveNote({
@@ -110,8 +167,12 @@ export function annotateTasks(
   staleHours: number,
   now: number = Date.now(),
   liveTasks?: Map<string, LiveTaskInfo>,
+  gitlabLiveTasks?: Map<string, LiveGitlabTaskInfo>,
 ): AnnotatedTaskEntry[] {
-  return tasks.map((task) => ({ ...task, status: deriveStatus(task, staleHours, now, liveTasks?.get(task.key)) }));
+  return tasks.map((task) => ({
+    ...task,
+    status: deriveStatus(task, staleHours, now, liveTasks?.get(task.key), gitlabLiveTasks?.get(task.key)),
+  }));
 }
 
 // Non-zero when there's something actionable to see: a malformed state

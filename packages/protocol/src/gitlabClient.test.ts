@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GitlabApiError, gitlabFetch, getIssue, listAssignedOpenIssues } from './gitlabClient.js';
+import { GitlabApiError, gitlabFetch, getIssue, listAssignedOpenIssues, listMergeRequestsForBranch } from './gitlabClient.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -90,5 +90,21 @@ describe('listAssignedOpenIssues', () => {
     await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok', { assigneeId: 42 });
 
     assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?assignee_id=42&scope=all&state=opened');
+  });
+});
+
+describe('listMergeRequestsForBranch', () => {
+  it('queries by source_branch, with no state filter', async () => {
+    let capturedUrl: string | undefined;
+    globalThis.fetch = (async (url: string) => {
+      capturedUrl = url;
+      return Response.json([{ iid: 42, title: 't', state: 'opened', web_url: 'https://gitlab.example.com/x/-/merge_requests/42', pipeline: { status: 'failed' } }]);
+    }) as typeof fetch;
+
+    const mrs = await listMergeRequestsForBranch('https://gitlab.example.com/api/v4', 'tok', 173, 'task/173-6');
+
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/merge_requests?source_branch=task%2F173-6&order_by=updated_at');
+    assert.equal(mrs[0].iid, 42);
+    assert.equal(mrs[0].pipeline?.status, 'failed');
   });
 });

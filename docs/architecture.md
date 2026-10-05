@@ -83,6 +83,7 @@ flowchart LR
   Harness -->|"reads local JSON\n(default, no network)"| Subscription
   Harness -.->|"--live: GET /worker/status,\n/storage, /worker/jobs"| BWorkerMod
   Harness -.->|--live| BStorage
+  Harness -.->|"--live: sync's own\nGitLab token, independent\nof the bridge checks above"| GitLab
 
   BAuth --- BDB
   BStorage --- BDB
@@ -135,10 +136,15 @@ leak scan and bridge's own Purge page, not by sync/reports/worker.
   files (dashed `Harness --> Sync/Reports` edges are actually local
   filesystem reads, not network calls — drawn as edges here only to show
   *which* components it's reading from). The optional `--live` flag adds
-  the three dashed edges into bridge: it reuses `sync`'s own stored API key
-  (no separate login) to turn a locally-inferred guess ("likely ready to
-  pull") into a bridge-confirmed fact. See `harness/README.md` and
-  [IMPROVEMENTS_HARNESS.md](improvements/IMPROVEMENTS_HARNESS.md) item 1.1.
+  the dashed edges into bridge *and* GitLab, independently of each other —
+  either, both, or neither credential can be configured on a given machine.
+  The bridge edges reuse `sync`'s own stored API key to turn a
+  locally-inferred guess ("likely ready to pull") into a bridge-confirmed
+  fact; the GitLab edge reuses `sync`'s own stored GitLab token to attach
+  each task's issue/MR/pipeline state and list newly assigned issues no
+  local state file knows about yet ("Incoming"). See `harness/README.md` and
+  [IMPROVEMENTS_HARNESS.md](improvements/IMPROVEMENTS_HARNESS.md) items
+  1.1–1.3.
 - **Auth**: every machine-to-bridge edge above (`sync`, `reports`,
   `worker`, `harness --live`) authenticates the same way — a personal API
   key through `JwtOrApiKeyGuard`, sync/reports also tolerating a

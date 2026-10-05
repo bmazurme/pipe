@@ -266,6 +266,27 @@ describe('deriveStatus', () => {
     assert.match(status.label, /not yet published/);
   });
 
+  // IMPROVEMENTS_HARNESS.md 6.3: 'init' has no step-specific timestamp of
+  // its own (unlike pushed/pulled/published), so staleness falls back to
+  // the entry's updatedAt — stamped by reports' setIssueState on every
+  // write (state-props.ts).
+  it('marks an init subscription stale once past the threshold, using updatedAt', () => {
+    const fresh: TaskEntry = { key, subscription: { step: 'init', branch: 'b', updatedAt: new Date(NOW - 1 * HOUR).toISOString() } };
+    const freshStatus = deriveStatus(fresh, 24, NOW);
+    assert.equal(freshStatus.stale, false);
+    assert.match(freshStatus.label, /not yet pushed/);
+
+    const stale: TaskEntry = { key, subscription: { step: 'init', branch: 'b', updatedAt: new Date(NOW - 48 * HOUR).toISOString() } };
+    const staleStatus = deriveStatus(stale, 24, NOW);
+    assert.equal(staleStatus.stale, true);
+    assert.match(staleStatus.label, /not yet pushed/);
+  });
+
+  it('never marks an init subscription stale when updatedAt is absent (an entry written before this field existed)', () => {
+    const task: TaskEntry = { key, subscription: { step: 'init', branch: 'b' } };
+    assert.equal(deriveStatus(task, 24, NOW).stale, false);
+  });
+
   it('falls back to gitlab-worker + sync-agent signals when there is no reports state', () => {
     const waiting: TaskEntry = { key, gitlabWorker: { pushedAt: new Date(NOW - 1 * HOUR).toISOString(), filename: 'x.zip' } };
     assert.match(deriveStatus(waiting, 24, NOW).label, /waiting on agent-runner/);
@@ -318,6 +339,56 @@ describe('deriveStatus', () => {
   it('omits liveNote entirely (not just leaves it undefined) when there is no live job', () => {
     const task: TaskEntry = { key, subscription: { step: 'published' } };
     assert.deepEqual(deriveStatus(task, 24, NOW), { label: 'published — done', stale: false });
+  });
+
+  // IMPROVEMENTS_HARNESS.md 1.2: the one case this item exists for — a
+  // "published — done" task whose MR's pipeline actually failed.
+  describe('gitlabLive', () => {
+    it('flags a published task as stale when its MR pipeline failed, instead of trusting "done"', () => {
+      const task: TaskEntry = { key, subscription: { step: 'published' } };
+      const status = deriveStatus(task, 24, NOW, undefined, {
+        issueState: 'opened',
+        mergeRequest: { iid: 42, state: 'opened', pipelineStatus: 'failed' },
+      });
+
+      assert.equal(status.stale, true);
+      assert.match(status.label, /pipeline failed/);
+      assert.match(status.label, /MR !42/);
+    });
+
+    it('leaves a published task alone when its pipeline succeeded', () => {
+      const task: TaskEntry = { key, subscription: { step: 'published' } };
+      const status = deriveStatus(task, 24, NOW, undefined, {
+        issueState: 'closed',
+        mergeRequest: { iid: 42, state: 'merged', pipelineStatus: 'success' },
+      });
+
+      assert.equal(status.stale, false);
+      assert.equal(status.label, 'published — done');
+    });
+
+    it('attaches gitlabNote regardless of which branch matched, independent of bridge live data', () => {
+      const task: TaskEntry = { key, subscription: { step: 'pushed', pushedAt: new Date(NOW - 1 * HOUR).toISOString() } };
+      const status = deriveStatus(task, 24, NOW, undefined, {
+        issueState: 'opened',
+        mergeRequest: { iid: 7, state: 'opened', pipelineStatus: 'running' },
+      });
+
+      assert.match(status.gitlabNote ?? '', /issue opened/);
+      assert.match(status.gitlabNote ?? '', /MR !7 \(opened\), pipeline running/);
+    });
+
+    it('notes "no MR for this branch yet" when the issue is known but has no MR', () => {
+      const task: TaskEntry = { key, subscription: { step: 'pushed', pushedAt: new Date(NOW - 1 * HOUR).toISOString() } };
+      const status = deriveStatus(task, 24, NOW, undefined, { issueState: 'opened' });
+
+      assert.match(status.gitlabNote ?? '', /no MR for this branch yet/);
+    });
+
+    it('omits gitlabNote entirely when no GitLab live data was supplied', () => {
+      const task: TaskEntry = { key, subscription: { step: 'published' } };
+      assert.deepEqual(deriveStatus(task, 24, NOW), { label: 'published — done', stale: false });
+    });
   });
 });
 

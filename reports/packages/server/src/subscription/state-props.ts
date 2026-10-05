@@ -47,6 +47,11 @@ export const setIssueState = (
     ...existing,
     ...patch,
     step: patch.step ?? existing?.step ?? 'init',
+    // Stamped on every write regardless of what the patch touched — the
+    // one timestamp the 'init' step itself has, since pushedAt/pulledAt/
+    // publishedAt only exist once a task reaches that specific step
+    // (IMPROVEMENTS_HARNESS.md 6.3).
+    updatedAt: new Date().toISOString(),
   };
 
   state[key] = next;

@@ -44,17 +44,24 @@ export async function gitlabFetch(
   return response;
 }
 
-// Deliberately the minimal shape both products actually read (id/iid/
-// project_id/title/description) — reports' own ResType is a richer,
+// Deliberately just the fields an actual consumer reads so far (id/iid/
+// project_id/title/description from sync/reports' original clients;
+// state/user_notes_count added for harness's own live check,
+// IMPROVEMENTS_HARNESS.md 1.2) — reports' own ResType is a richer,
 // independently-typed superset for its own UI needs; this isn't meant to
-// replace it, only to be the common wire shape this module's own two fetch
-// functions return.
+// replace it, only to be the common wire shape this module's own fetch
+// functions return. state/user_notes_count are optional even though
+// GitLab's real API always sends them, so a literal object in an existing
+// test fixture that predates this field (e.g. pushIssue.test.ts's own
+// `issue: GitlabIssue = {...}`) doesn't have to grow one to keep compiling.
 export interface GitlabIssue {
   id: number;
   iid: number;
   project_id: number;
   title: string;
   description: string | null;
+  state?: string;
+  user_notes_count?: number;
 }
 
 export async function getIssue(
@@ -94,4 +101,32 @@ export async function listAssignedOpenIssues(
   const response = await gitlabFetch(url, privateToken);
 
   return (await response.json()) as GitlabIssue[];
+}
+
+// GitLab's standard MR list entity carries a `pipeline` summary field
+// (status, among others) inline — no second call needed to know the HEAD
+// pipeline's state for each MR returned here. No `state` filter is sent, so
+// this returns opened/closed/merged alike (GitLab's own default for this
+// endpoint when the param is omitted) — a merged MR with a failed pipeline
+// is exactly the "published — done, but actually broken" case
+// IMPROVEMENTS_HARNESS.md 1.2 exists to catch.
+export interface GitlabMergeRequest {
+  iid: number;
+  title: string;
+  state: string;
+  web_url: string;
+  pipeline: { status: string } | null;
+}
+
+export async function listMergeRequestsForBranch(
+  apiUrl: string,
+  privateToken: string,
+  projectId: string | number,
+  sourceBranch: string,
+): Promise<GitlabMergeRequest[]> {
+  const params = new URLSearchParams({ source_branch: sourceBranch, order_by: 'updated_at' });
+  const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/merge_requests?${params.toString()}`;
+  const response = await gitlabFetch(url, privateToken);
+
+  return (await response.json()) as GitlabMergeRequest[];
 }

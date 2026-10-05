@@ -44,6 +44,13 @@ export const subscriptionStateEntrySchema = z.object({
   pushedAt: z.string().optional(),
   pulledAt: z.string().optional(),
   publishedAt: z.string().optional(),
+  // Stamped by reports' setIssueState() on every write, regardless of step
+  // — unlike pushedAt/pulledAt/publishedAt, which only exist once a task
+  // has reached that specific step, this is the one timestamp the 'init'
+  // step itself has, letting harness detect a task stuck at 'init' as
+  // stale (IMPROVEMENTS_HARNESS.md 6.3). Optional since entries written
+  // before this field existed won't have it.
+  updatedAt: z.string().optional(),
   encrypted: z.boolean().optional(),
   manual: z.boolean().optional(),
   title: z.string().optional(),

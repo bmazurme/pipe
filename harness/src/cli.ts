@@ -1,6 +1,7 @@
 import { fetchLiveStatus } from './bridgeLive.js';
 import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
+import { fetchGitlabLiveStatus } from './gitlabLive.js';
 import { formatReportText } from './render.js';
 
 export interface CliOptions {
@@ -29,9 +30,12 @@ Options:
   --filter <projectId[:iid]> scope the report to one project or one issue
   --live                     check bridge for the worker's heartbeat, each
                               task's storage result, and its worker job
-                              status, using sync-cli's own bridge API key
-                              (falls back to the offline report if absent
-                              or unreachable)
+                              status (sync-cli's bridge API key), and GitLab
+                              for each task's issue/MR/pipeline state plus
+                              newly assigned issues not yet pushed
+                              (sync-cli's GitLab token) — each independently
+                              falls back to the offline report if its own
+                              credential is absent or it's unreachable
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path
   --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -120,20 +124,30 @@ export function parseArgs(argv: string[]): CliOptions {
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
   const filtered = filterReportData(collectReportData(paths), options.filter);
-  const liveResult = options.live ? await fetchLiveStatus() : undefined;
+
+  // Independent of each other — a machine can have sync's bridge API key
+  // configured without its GitLab token, or vice versa (IMPROVEMENTS_HARNESS.md
+  // 1.1 vs 1.2/1.3) — each falls back to "unavailable" on its own rather
+  // than one missing credential taking out both.
+  const [liveResult, gitlabLiveResult] = options.live
+    ? await Promise.all([fetchLiveStatus(), fetchGitlabLiveStatus(filtered.tasks)])
+    : [undefined, undefined];
   const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
+  const gitlabLiveTasks = gitlabLiveResult?.available ? gitlabLiveResult.data.tasks : undefined;
 
   const data: AnnotatedReportData = {
     ...filtered,
-    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, Date.now(), liveTasks),
+    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, Date.now(), liveTasks, gitlabLiveTasks),
   };
 
   if (options.json) {
-    console.log(JSON.stringify({ ...data, live: liveResult }, replaceMaps, 2));
+    console.log(JSON.stringify({ ...data, live: liveResult, gitlabLive: gitlabLiveResult }, replaceMaps, 2));
   } else {
     const liveWorker = liveResult?.available ? liveResult.data.worker : undefined;
     const liveError = liveResult && !liveResult.available ? liveResult.reason : undefined;
-    console.log(formatReportText(data, liveWorker, liveError));
+    const incoming = gitlabLiveResult?.available ? gitlabLiveResult.data.incoming : undefined;
+    const gitlabError = gitlabLiveResult && !gitlabLiveResult.available ? gitlabLiveResult.reason : undefined;
+    console.log(formatReportText(data, liveWorker, liveError, incoming, gitlabError));
   }
 
   return exitCodeFor(data);

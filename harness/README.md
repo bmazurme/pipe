@@ -38,9 +38,12 @@ node dist/status.js [options]
 --filter <projectId[:iid]> scope the report to one project or one issue
 --live                     check bridge for the worker's heartbeat, each
                             task's storage result, and its worker job
-                            status, using sync-cli's own bridge API key
-                            (falls back to the offline report if absent
-                            or unreachable)
+                            status (sync-cli's bridge API key), and GitLab
+                            for each task's issue/MR/pipeline state plus
+                            newly assigned issues not yet pushed (sync-cli's
+                            GitLab token) — each independently falls back to
+                            the offline report if its own credential is
+                            absent or it's unreachable
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -108,6 +111,26 @@ or, per task:
 ```
   402:6: agent-runner pushed a result — confirmed in bridge storage, ready to pull
     bridge (live): worker job #42 (gpt): succeeded
+```
+
+Independently, `--live` also reads sync's own `.sync-credentials.json`
+(`gitlabToken`) and `sync.config.json` (`gitlab.apiUrl`) and calls GitLab
+directly for two things (IMPROVEMENTS_HARNESS.md 1.2/1.3): for any task with
+a resolvable branch (reports' own `subscription.branch`, or
+`task/<projectId>-<iid>` for one `gitlab-worker` pushed without reports
+involved), the issue's current open/closed state plus the newest merge
+request for that branch and its pipeline status; and, separately, any
+GitLab issue assigned to this account that isn't tracked by *any* local
+state file yet — one gitlab-worker hasn't picked up, or simply missed. A
+missing GitLab token doesn't affect the bridge check or vice versa — either,
+both, or neither can be configured on a given machine.
+
+```
+== incoming (assigned, not yet pushed) ==
+  402:9: Fix the login redirect loop
+
+  402:6: published — but pipeline failed (MR !42)
+    gitlab (live): issue opened, MR !42 (opened), pipeline failed
 ```
 
 A task whose derived status has had no further movement for longer than
