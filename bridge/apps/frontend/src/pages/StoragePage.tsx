@@ -110,8 +110,13 @@ export function StoragePage() {
     setDownloadingId(file.id);
     try {
       await downloadFile(file).unwrap();
-    } catch {
-      setError('Не удалось скачать файл');
+    } catch (err) {
+      // 404 specifically now means "the record exists but the file is
+      // gone from disk" (storage.controller.ts's download route used to
+      // leave this case as a hung request with no response at all — see
+      // its own comment) — worth telling apart from a generic failure.
+      const status = (err as { status?: unknown } | undefined)?.status;
+      setError(status === 404 ? 'Файл отсутствует в хранилище — запись устарела' : 'Не удалось скачать файл');
     } finally {
       setDownloadingId(null);
     }

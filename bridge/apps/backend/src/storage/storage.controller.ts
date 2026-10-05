@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Post,
@@ -28,6 +29,8 @@ import { StorageService } from './storage.service';
 @Controller('api/v1/storage')
 @UseGuards(JwtOrApiKeyGuard)
 export class StorageController {
+  private readonly logger = new Logger(StorageController.name);
+
   constructor(private readonly storageService: StorageService) {}
 
   // ?channel=&taskKey=&direction= — all optional; omitting all three lists
@@ -70,9 +73,25 @@ export class StorageController {
   ): Promise<void> {
     const file = await this.storageService.findOwned(id, currentUser.id);
 
+    // res.download()'s own callback is the only place an error (e.g. the
+    // row exists in Postgres but the file is gone from disk — uploads/
+    // doesn't survive a redeploy without a persistent volume) ever
+    // surfaces; previously this did nothing on !err's else branch, so
+    // Express never got a response to send and the request just hung
+    // instead of failing with a clear status. headersSent is checked
+    // because sendFile can fail mid-stream, after a 200 and partial body
+    // already went out — nothing valid to send at that point.
     res.download(this.storageService.path(file), file.originalName, (err) => {
       if (!err) {
         void this.storageService.delete(file);
+        return;
+      }
+
+      this.logger.warn(
+        `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
+      );
+      if (!res.headersSent) {
+        res.status(404).json({ message: 'File is missing on disk' });
       }
     });
   }

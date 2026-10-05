@@ -159,6 +159,47 @@ describe('StoragePage — imported decryption keys', () => {
   });
 });
 
+describe('StoragePage — download failures', () => {
+  // storage.controller.ts's download route used to leave a missing-on-disk
+  // file (DB row survives a backend redeploy, uploads/ doesn't — see its
+  // own comment) as a hung request with no response at all; it now sends
+  // a 404, and this is the message that should surface for it specifically
+  // rather than the generic failure text.
+  it('shows a specific message for a 404 (file gone from disk), not the generic one', async () => {
+    const user = userEvent.setup();
+    const file = {
+      id: 5,
+      originalName: 'orphaned.zip',
+      mimeType: 'application/zip',
+      size: 10,
+      createdAt: '2026-10-03T21:00:00.000Z',
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.includes('/storage/5')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ message: 'File is missing on disk' }), { status: 404 }),
+          );
+        }
+        if (url.includes('/storage')) return Promise.resolve(jsonResponse([file]));
+        if (url.includes('/purge')) return Promise.resolve(jsonResponse([]));
+        return Promise.resolve(jsonResponse([]));
+      }),
+    );
+
+    renderPage();
+    await screen.findByText(file.originalName);
+
+    await user.click(screen.getByLabelText(`Скачать ${file.originalName}`));
+
+    expect(await screen.findByText('Файл отсутствует в хранилище — запись устарела')).toBeTruthy();
+    expect(screen.queryByText('Не удалось скачать файл')).toBeNull();
+  });
+});
+
 describe('StoragePage — opening an encrypted parcel', () => {
   // RSA-4096 keygen + a real Web Crypto RSA-OAEP decrypt genuinely takes a
   // few seconds — see the matching comment on WorkerPage's own decrypt test.
