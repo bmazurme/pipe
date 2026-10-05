@@ -1,17 +1,33 @@
-import type { LiveWorkerInfo } from './bridgeLive.js';
+import type { LiveClaudeCredential, LiveWorkerInfo } from './bridgeLive.js';
 import { collectReportData, type StatusPaths, type SyncState } from './collect.js';
 import { annotateTasks, DEFAULT_STALE_HOURS, type AnnotatedReportData, type AnnotatedTaskEntry } from './deriveStatus.js';
 import type { IncomingIssue } from './gitlabLive.js';
+import type { SyncStateEntry } from '@pipe/protocol/state';
 
-function formatProjectSyncSection(state: SyncState): string[] {
+function formatHoursAgo(hours: number): string {
+  if (hours < 1) return `${Math.max(0, Math.round(hours * 60))}m ago`;
+  return `${Math.round(hours)}h ago`;
+}
+
+// A hash tells the user nothing they can act on — "last synced N ago" does
+// (IMPROVEMENTS_HARNESS.md 6.4). Falls back to the hash for an entry
+// written before setLastHash() started stamping lastSyncedAt — same
+// "no signal, say so plainly" convention deriveStatus.ts already uses for
+// a missing timestamp, rather than pretending to know an age it doesn't.
+function describeSyncEntry(entry: SyncStateEntry, now: number): string {
+  if (!entry.lastSyncedAt) return `lastHash ${entry.lastHash.slice(0, 12)}… (synced before timestamps were recorded)`;
+  return `last synced ${formatHoursAgo((now - Date.parse(entry.lastSyncedAt)) / (60 * 60 * 1000))}`;
+}
+
+function formatProjectSyncSection(state: SyncState, now: number): string[] {
   const lines = ['== sync: project push/pull state (.sync-state.json) =='];
   const entries = Object.entries(state);
 
   if (entries.length === 0) {
     lines.push('  no state yet');
   } else {
-    for (const [project, { lastHash }] of entries) {
-      lines.push(`  ${project}: lastHash ${lastHash.slice(0, 12)}…`);
+    for (const [project, entry] of entries) {
+      lines.push(`  ${project}: ${describeSyncEntry(entry, now)}`);
     }
   }
 
@@ -31,6 +47,10 @@ function formatTaskSection(tasks: AnnotatedTaskEntry[]): string[] {
     lines.push(`  ${task.key}: ${task.status.label}${task.status.stale ? ' [stale]' : ''}`);
     if (task.status.liveNote) lines.push(`    bridge (live): ${task.status.liveNote}`);
     if (task.status.gitlabNote) lines.push(`    gitlab (live): ${task.status.gitlabNote}`);
+    if (task.status.nextAction) {
+      const { label, command } = task.status.nextAction;
+      lines.push(`    next: ${label}${command ? ` → ${command}` : ''}`);
+    }
 
     if (task.gitlabWorker) {
       lines.push(`    gitlab-worker: pushed ${task.gitlabWorker.pushedAt} as ${task.gitlabWorker.filename}`);
@@ -77,6 +97,29 @@ function formatBridgeSection(liveWorker: LiveWorkerInfo | undefined, liveError: 
   return ['== bridge ==', '  no local task state (storage relay only — see bridge/README.md)'];
 }
 
+// IMPROVEMENTS_HARNESS.md 1.5 ("assistant resources") — only the Claude
+// credential names configured on this account, under --live, from the
+// same bridgeLive.ts call already made for the worker/task sections
+// above. VPN panel status is deliberately NOT here: /api/v1/vpn/* is
+// JwtGuard-only (browser session), not reachable with sync-cli's bridge
+// API key the way worker/storage/jobs are — see bridgeLive.ts's own
+// LiveData.claudeCredentials comment for why widening that guard wasn't
+// the right call just for a status display. Worker up/down is already in
+// formatBridgeSection above, so isn't repeated here.
+function formatEnvironmentSection(claudeCredentials: LiveClaudeCredential[] | undefined): string[] {
+  if (!claudeCredentials) return [];
+
+  const lines = ['', '== environment (live) =='];
+  if (claudeCredentials.length === 0) {
+    lines.push('  no Claude credentials configured (see bridge → Worker page)');
+  } else {
+    for (const credential of claudeCredentials) {
+      lines.push(`  claude credential: ${credential.name} (added ${credential.createdAt})`);
+    }
+  }
+  return lines;
+}
+
 // Only printed at all under --live with a working GitLab token — an empty
 // offline report has no way to know about an issue nobody has pushed yet
 // (IMPROVEMENTS_HARNESS.md 1.3), so there's no static fallback line the way
@@ -109,21 +152,33 @@ export function formatReportText(
   data: AnnotatedReportData,
   liveWorker?: LiveWorkerInfo,
   liveError?: string,
+  claudeCredentials?: LiveClaudeCredential[],
   incoming?: IncomingIssue[],
   gitlabError?: string,
+  now: number = Date.now(),
 ): string {
   const lines = [
     ...data.errors,
-    ...formatProjectSyncSection(data.syncState),
+    ...formatProjectSyncSection(data.syncState, now),
     ...formatIncomingSection(incoming, gitlabError),
     ...formatTaskSection(data.tasks),
     ...formatBridgeSection(liveWorker, liveError),
+    ...formatEnvironmentSection(claudeCredentials),
   ];
 
   return lines.join('\n');
 }
 
 export function buildReport(paths: StatusPaths, staleHours: number = DEFAULT_STALE_HOURS): string {
+  const now = Date.now();
   const data = collectReportData(paths);
-  return formatReportText({ ...data, tasks: annotateTasks(data.tasks, staleHours) });
+  return formatReportText(
+    { ...data, tasks: annotateTasks(data.tasks, staleHours, now) },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    now,
+  );
 }

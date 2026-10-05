@@ -156,9 +156,10 @@ async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<numb
   const liveTasks = liveResult?.available ? liveResult.data.tasks : undefined;
   const gitlabLiveTasks = gitlabLiveResult?.available ? gitlabLiveResult.data.tasks : undefined;
 
+  const now = Date.now();
   const data: AnnotatedReportData = {
     ...filtered,
-    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, Date.now(), liveTasks, gitlabLiveTasks),
+    tasks: annotateTasks(filtered.tasks, options.staleHours ?? DEFAULT_STALE_HOURS, now, liveTasks, gitlabLiveTasks),
   };
 
   if (options.json) {
@@ -166,9 +167,10 @@ async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<numb
   } else {
     const liveWorker = liveResult?.available ? liveResult.data.worker : undefined;
     const liveError = liveResult && !liveResult.available ? liveResult.reason : undefined;
+    const claudeCredentials = liveResult?.available ? liveResult.data.claudeCredentials : undefined;
     const incoming = gitlabLiveResult?.available ? gitlabLiveResult.data.incoming : undefined;
     const gitlabError = gitlabLiveResult && !gitlabLiveResult.available ? gitlabLiveResult.reason : undefined;
-    console.log(formatReportText(data, liveWorker, liveError, incoming, gitlabError));
+    console.log(formatReportText(data, liveWorker, liveError, claudeCredentials, incoming, gitlabError, now));
   }
 
   return exitCodeFor(data);

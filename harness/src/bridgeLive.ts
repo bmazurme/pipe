@@ -78,6 +78,14 @@ interface JobWire {
   finishedAt: string | null;
 }
 
+// Never carries the token value — ClaudeCredentialResponseDto on the
+// bridge side doesn't either (IMPROVEMENTS_HARNESS.md 1.5).
+interface ClaudeCredentialWire {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
 // A thin, read-only client — deliberately not sync's own BridgeClient
 // (which also handles upload/download/refresh-token rotation this never
 // needs). If IMPROVEMENTS_TECH.md 2.1 (a shared bridge HTTP client) lands
@@ -110,6 +118,10 @@ class BridgeLiveClient {
   listJobs(): Promise<JobWire[]> {
     return this.getJson('/api/v1/worker/jobs');
   }
+
+  listClaudeCredentials(): Promise<ClaudeCredentialWire[]> {
+    return this.getJson('/api/v1/worker/claude-credentials');
+  }
 }
 
 export interface LiveWorkerInfo {
@@ -131,9 +143,23 @@ export interface LiveTaskInfo {
   job?: LiveJobInfo;
 }
 
+export interface LiveClaudeCredential {
+  name: string;
+  createdAt: string;
+}
+
 export interface LiveData {
   worker: LiveWorkerInfo;
   tasks: Map<string, LiveTaskInfo>;
+  // IMPROVEMENTS_HARNESS.md 1.5 ("assistant resources"), VPN-half only:
+  // just the configured Claude credentials, not VPN panel status — the VPN
+  // endpoints (/api/v1/vpn/*) are deliberately JwtGuard-only (browser
+  // session, not JwtOrApiKeyGuard), the same provisioning-credential
+  // exposure reasoning as IMPROVEMENTS_TECH.md 1.4 — sync-cli's bridge API
+  // key this file already uses for worker/storage/jobs has no business
+  // reaching them, and widening that guard just for a status display isn't
+  // a call to make here.
+  claudeCredentials: LiveClaudeCredential[];
 }
 
 export type LiveStatusResult = { available: true; data: LiveData } | { available: false; reason: string };
@@ -145,7 +171,12 @@ export type LiveStatusResult = { available: true; data: LiveData } | { available
 // Mirrors the propagation WorkerService.setResult already does server-side
 // (a result file inherits its source file's taskKey), so a job claimed
 // against an addressed source file always resolves to a task key here too.
-function buildLiveData(workerStatus: WorkerStatusWire, files: StoredFileWire[], jobs: JobWire[]): LiveData {
+function buildLiveData(
+  workerStatus: WorkerStatusWire,
+  files: StoredFileWire[],
+  jobs: JobWire[],
+  claudeCredentials: ClaudeCredentialWire[],
+): LiveData {
   const taskKeyByFileId = new Map<number, string>();
   const hasResultByTaskKey = new Map<string, boolean>();
   // Every addressed file's taskKey counts as "known to bridge," not just
@@ -194,7 +225,11 @@ function buildLiveData(workerStatus: WorkerStatusWire, files: StoredFileWire[], 
     });
   }
 
-  return { worker: workerStatus, tasks };
+  return {
+    worker: workerStatus,
+    tasks,
+    claudeCredentials: claudeCredentials.map((credential) => ({ name: credential.name, createdAt: credential.createdAt })),
+  };
 }
 
 // Never throws — a live check failing (no credentials, bridge unreachable,
@@ -216,13 +251,14 @@ export async function fetchLiveStatus(
   const client = new BridgeLiveClient(config);
 
   try {
-    const [workerStatus, files, jobs] = await Promise.all([
+    const [workerStatus, files, jobs, claudeCredentials] = await Promise.all([
       client.getWorkerStatus(),
       client.listStorageFiles(),
       client.listJobs(),
+      client.listClaudeCredentials(),
     ]);
 
-    return { available: true, data: buildLiveData(workerStatus, files, jobs) };
+    return { available: true, data: buildLiveData(workerStatus, files, jobs, claudeCredentials) };
   } catch (error) {
     return { available: false, reason: `bridge live check failed: ${(error as Error).message}` };
   }

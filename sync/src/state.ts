@@ -28,6 +28,6 @@ export function getLastHash(projectName: string): string | undefined {
 
 export function setLastHash(projectName: string, hash: string): void {
   const state = loadState();
-  state[projectName] = { lastHash: hash };
+  state[projectName] = { lastHash: hash, lastSyncedAt: new Date().toISOString() };
   saveState(state);
 }

@@ -19,6 +19,16 @@ describe('syncStateSchema', () => {
     const result = parseState(syncStateSchema, { foo: {} });
     assert.ok('error' in result);
   });
+
+  // IMPROVEMENTS_HARNESS.md 6.4 — optional so an entry written before this
+  // field existed still parses.
+  it('accepts an entry with lastSyncedAt, and one without it', () => {
+    const withTimestamp = parseState(syncStateSchema, { foo: { lastHash: 'abc123', lastSyncedAt: '2026-10-05T00:00:00.000Z' } });
+    assert.ok('value' in withTimestamp);
+
+    const withoutTimestamp = parseState(syncStateSchema, { foo: { lastHash: 'abc123' } });
+    assert.ok('value' in withoutTimestamp);
+  });
 });
 
 describe('agentRunnerStateSchema', () => {

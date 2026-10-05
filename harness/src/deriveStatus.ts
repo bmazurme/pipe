@@ -2,6 +2,23 @@ import type { LiveTaskInfo } from './bridgeLive.js';
 import type { TaskEntry, ReportData } from './collect.js';
 import type { LiveGitlabTaskInfo } from './gitlabLive.js';
 
+// IMPROVEMENTS_HARNESS.md 2.1 — "pulled — ready to publish" tells the user
+// a fact, not what to do about it. `command` is only filled in for an
+// action sync-cli can run by itself (push-issue/pull-issue); it's omitted
+// when the actual next step is a UI action (reports' Publish button) or
+// there's nothing to do yet (waiting on another machine's agent-runner).
+// `<name>` is a deliberate placeholder, not a resolved value: sync-cli's
+// local project alias isn't recorded in any of the state files harness
+// reads (only sync's own sync.config.json has it, and that file's
+// `gitlabProjectId` is itself optional — agent-runner-only setups often
+// leave it unset), so harness can't always resolve it correctly. Spelling
+// out the placeholder is more honest than guessing a name that might be
+// wrong.
+export interface NextAction {
+  label: string;
+  command?: string;
+}
+
 export interface DerivedStatus {
   label: string;
   stale: boolean;
@@ -14,6 +31,9 @@ export interface DerivedStatus {
   // (IMPROVEMENTS_HARNESS.md 1.2) — issue open/closed, and the newest MR
   // for this task's branch with its pipeline status.
   gitlabNote?: string;
+  // Omitted (not left undefined) when there's genuinely nothing to do yet
+  // — same "absent means no signal" convention as liveNote/gitlabNote.
+  nextAction?: NextAction;
 }
 
 export interface AnnotatedTaskEntry extends TaskEntry {
@@ -59,6 +79,16 @@ function gitlabPipelineFailed(info: LiveGitlabTaskInfo | undefined): boolean {
   return status === 'failed' || status === 'canceled';
 }
 
+function pullIssueAction(key: string, label = 'pull the result'): NextAction {
+  const [projectId, iid] = key.split(':');
+  return { label, command: `sync-cli pull-issue <name> ${projectId} ${iid}` };
+}
+
+function pushIssueAction(key: string): NextAction {
+  const [projectId, iid] = key.split(':');
+  return { label: 'push the issue to start the pipeline', command: `sync-cli push-issue <name> ${projectId} ${iid}` };
+}
+
 // Synthesizes one combined label per task from whichever signals are
 // present — this is the actual "merged view," versus just listing each
 // side's raw fields next to each other. Reports' own `step` is the fullest
@@ -84,10 +114,11 @@ export function deriveStatus(
   const s = task.subscription;
   const liveNote = liveNoteFor(live);
   const gitlabNote = gitlabNoteFor(gitlabLive);
-  const withLiveNote = (status: DerivedStatus): DerivedStatus => ({
+  const withLiveNote = (status: DerivedStatus, nextAction?: NextAction): DerivedStatus => ({
     ...status,
     ...(liveNote ? { liveNote } : {}),
     ...(gitlabNote ? { gitlabNote } : {}),
+    ...(nextAction ? { nextAction } : {}),
   });
 
   if (s) {
@@ -98,21 +129,30 @@ export function deriveStatus(
         // wrong — a merged/open MR with a failed pipeline behind it is
         // exactly the gap (IMPROVEMENTS_HARNESS.md 1.2).
         return gitlabPipelineFailed(gitlabLive)
-          ? withLiveNote({ label: `published — but pipeline failed (MR !${gitlabLive!.mergeRequest!.iid})`, stale: true })
+          ? withLiveNote(
+              { label: `published — but pipeline failed (MR !${gitlabLive!.mergeRequest!.iid})`, stale: true },
+              { label: `investigate the failing pipeline for MR !${gitlabLive!.mergeRequest!.iid}` },
+            )
           : withLiveNote({ label: 'published — done', stale: false });
       case 'pulled': {
         const stale = Boolean(s.pulledAt) && hoursSince(s.pulledAt!, now) > staleHours;
-        return withLiveNote({
-          label: stale ? `pulled ${s.pulledAt} — not yet published` : 'pulled — ready to publish',
-          stale,
-        });
+        return withLiveNote(
+          {
+            label: stale ? `pulled ${s.pulledAt} — not yet published` : 'pulled — ready to publish',
+            stale,
+          },
+          { label: 'publish the result (reports → Subscription → Publish)' },
+        );
       }
       case 'pushed': {
         const stale = Boolean(s.pushedAt) && hoursSince(s.pushedAt!, now) > staleHours;
-        return withLiveNote({
-          label: stale ? `pushed ${s.pushedAt} — no pull since` : 'pushed — waiting to be pulled',
-          stale,
-        });
+        return withLiveNote(
+          {
+            label: stale ? `pushed ${s.pushedAt} — no pull since` : 'pushed — waiting to be pulled',
+            stale,
+          },
+          pullIssueAction(task.key, 'pull the result once it is ready'),
+        );
       }
       default: {
         // 'init' is the only step left here — unlike pushed/pulled/
@@ -122,10 +162,13 @@ export function deriveStatus(
         // writer hasn't touched since — same "no signal, not stale" default
         // every other branch here already uses for a missing timestamp.
         const stale = Boolean(s.updatedAt) && hoursSince(s.updatedAt!, now) > staleHours;
-        return withLiveNote({
-          label: stale ? `${s.step} ${s.updatedAt} — not yet pushed` : `${s.step} — not yet pushed`,
-          stale,
-        });
+        return withLiveNote(
+          {
+            label: stale ? `${s.step} ${s.updatedAt} — not yet pushed` : `${s.step} — not yet pushed`,
+            stale,
+          },
+          pushIssueAction(task.key),
+        );
       }
     }
   }
@@ -135,16 +178,20 @@ export function deriveStatus(
 
     if (task.syncAgent) {
       if (live) {
-        return withLiveNote(
-          live.hasResultInStorage
-            ? { label: 'agent-runner pushed a result — confirmed in bridge storage, ready to pull', stale: false }
-            : {
-                label: 'agent-runner pushed a result locally, but bridge storage has no result yet',
-                stale: false,
-              },
-        );
+        return live.hasResultInStorage
+          ? withLiveNote(
+              { label: 'agent-runner pushed a result — confirmed in bridge storage, ready to pull', stale: false },
+              pullIssueAction(task.key),
+            )
+          : withLiveNote({
+              label: 'agent-runner pushed a result locally, but bridge storage has no result yet',
+              stale: false,
+            });
       }
-      return withLiveNote({ label: 'agent-runner already pushed a result back — likely ready to pull', stale: false });
+      return withLiveNote(
+        { label: 'agent-runner already pushed a result back — likely ready to pull', stale: false },
+        pullIssueAction(task.key, 'likely ready to pull — confirm with --live, or just try'),
+      );
     }
 
     return withLiveNote({
@@ -156,7 +203,10 @@ export function deriveStatus(
   }
 
   if (task.syncAgent) {
-    return withLiveNote({ label: 'agent-runner has pushed at least one result (no gitlab-worker record for it)', stale: false });
+    return withLiveNote(
+      { label: 'agent-runner has pushed at least one result (no gitlab-worker record for it)', stale: false },
+      pullIssueAction(task.key),
+    );
   }
 
   return withLiveNote({ label: 'no local state', stale: false });

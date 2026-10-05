@@ -108,6 +108,9 @@ describe('fetchLiveStatus', () => {
           },
         ]);
       }
+      if (url.endsWith('/api/v1/worker/claude-credentials')) {
+        return Response.json([{ id: 1, name: 'sonnet-key', createdAt: '2026-10-01T00:00:00.000Z' }]);
+      }
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
 
@@ -116,6 +119,7 @@ describe('fetchLiveStatus', () => {
     assert.equal(result.available, true);
     if (!result.available) throw new Error('unreachable');
     assert.equal(result.data.worker.isUp, true);
+    assert.deepEqual(result.data.claudeCredentials, [{ name: 'sonnet-key', createdAt: '2026-10-01T00:00:00.000Z' }]);
 
     const task = result.data.tasks.get('402:6');
     assert.ok(task);
@@ -141,6 +145,9 @@ describe('fetchLiveStatus', () => {
       if (url.endsWith('/api/v1/worker/jobs')) {
         return Response.json([]);
       }
+      if (url.endsWith('/api/v1/worker/claude-credentials')) {
+        return Response.json([]);
+      }
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
 
@@ -150,5 +157,29 @@ describe('fetchLiveStatus', () => {
     if (!result.available) throw new Error('unreachable');
     assert.equal(result.data.tasks.get('402:7')?.hasResultInStorage, false);
     assert.equal(result.data.tasks.get('402:7')?.job, undefined);
+  });
+
+  it('exposes configured Claude credential names without their token values', async () => {
+    globalThis.fetch = (async (url: string) => {
+      if (url.endsWith('/api/v1/worker/status')) return Response.json({ isUp: true, workers: [] });
+      if (url.endsWith('/api/v1/storage')) return Response.json([]);
+      if (url.endsWith('/api/v1/worker/jobs')) return Response.json([]);
+      if (url.endsWith('/api/v1/worker/claude-credentials')) {
+        return Response.json([
+          { id: 1, name: 'personal', createdAt: '2026-09-01T00:00:00.000Z' },
+          { id: 2, name: 'work', createdAt: '2026-09-15T00:00:00.000Z' },
+        ]);
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const result = await fetchLiveStatus(paths);
+
+    assert.equal(result.available, true);
+    if (!result.available) throw new Error('unreachable');
+    assert.deepEqual(result.data.claudeCredentials, [
+      { name: 'personal', createdAt: '2026-09-01T00:00:00.000Z' },
+      { name: 'work', createdAt: '2026-09-15T00:00:00.000Z' },
+    ]);
   });
 });

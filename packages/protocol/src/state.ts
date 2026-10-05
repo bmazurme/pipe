@@ -14,6 +14,11 @@ import { z } from 'zod';
 
 export const syncStateEntrySchema = z.object({
   lastHash: z.string(),
+  // Stamped by setLastHash() on every successful push/pull (IMPROVEMENTS_HARNESS.md
+  // 6.4) — lets harness show "last synced N hours ago" instead of a hash
+  // nobody can act on. Optional since entries written before this field
+  // existed won't have it.
+  lastSyncedAt: z.string().optional(),
 });
 export const syncStateSchema = z.record(z.string(), syncStateEntrySchema);
 export type SyncStateEntry = z.infer<typeof syncStateEntrySchema>;

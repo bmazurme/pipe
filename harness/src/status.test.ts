@@ -182,6 +182,58 @@ describe('buildReport', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // IMPROVEMENTS_HARNESS.md 2.1 — a concrete next step, not just a label.
+  it('prints a concrete next action for a task waiting to be published', () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'harness-status-'));
+    try {
+      const paths = makeFixturePaths(dir);
+      writeFileSync(paths.reportsState, JSON.stringify({
+        '402:6': { step: 'pulled', pulledAt: '2026-09-28T09:00:00.000Z' },
+      }));
+
+      const report = buildReport(paths);
+
+      assert.match(report, /next: publish the result \(reports → Subscription → Publish\)/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints a runnable pull-issue command for a task pushed and waiting', () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'harness-status-'));
+    try {
+      const paths = makeFixturePaths(dir);
+      writeFileSync(paths.reportsState, JSON.stringify({
+        '402:6': { step: 'pushed', pushedAt: '2026-09-28T09:00:00.000Z' },
+      }));
+
+      const report = buildReport(paths);
+
+      assert.match(report, /next: pull the result once it is ready → sync-cli pull-issue <name> 402 6/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // IMPROVEMENTS_HARNESS.md 6.4 — "N ago" instead of an unactionable hash.
+  it('shows "last synced N ago" instead of a raw hash once lastSyncedAt exists', () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'harness-status-'));
+    try {
+      const paths = makeFixturePaths(dir);
+      writeFileSync(paths.syncState, JSON.stringify({
+        bridge: { lastHash: 'abc123def456', lastSyncedAt: new Date(Date.now() - 3 * HOUR).toISOString() },
+        legacy: { lastHash: 'deadbeefcafe' },
+      }));
+
+      const report = buildReport(paths);
+
+      assert.match(report, /bridge: last synced 3h ago/);
+      assert.match(report, /legacy: lastHash deadbeefcafe… \(synced before timestamps were recorded\)/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('filterReportData', () => {
@@ -316,6 +368,76 @@ describe('deriveStatus', () => {
 
   it('reports "no local state" when nothing is present at all', () => {
     assert.deepEqual(deriveStatus({ key }, 24, NOW), { label: 'no local state', stale: false });
+  });
+
+  // IMPROVEMENTS_HARNESS.md 2.1 — a concrete command where sync-cli can run
+  // one by itself, no command where the real next step is a UI action
+  // (reports' Publish) or there's simply nothing to do yet.
+  describe('nextAction', () => {
+    it('gives a pull-issue command for a pushed subscription', () => {
+      const task: TaskEntry = { key, subscription: { step: 'pushed' } };
+      assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
+        label: 'pull the result once it is ready',
+        command: 'sync-cli pull-issue <name> 402 6',
+      });
+    });
+
+    it('gives a push-issue command for an init subscription', () => {
+      const task: TaskEntry = { key, subscription: { step: 'init' } };
+      assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
+        label: 'push the issue to start the pipeline',
+        command: 'sync-cli push-issue <name> 402 6',
+      });
+    });
+
+    it('points at reports\' Publish action for a pulled subscription, with no command', () => {
+      const task: TaskEntry = { key, subscription: { step: 'pulled' } };
+      assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
+        label: 'publish the result (reports → Subscription → Publish)',
+      });
+    });
+
+    it('omits nextAction for a done, non-failing published subscription', () => {
+      const task: TaskEntry = { key, subscription: { step: 'published' } };
+      assert.equal(deriveStatus(task, 24, NOW).nextAction, undefined);
+    });
+
+    it('points at the failing pipeline for a published subscription whose pipeline failed, with no command', () => {
+      const task: TaskEntry = { key, subscription: { step: 'published' } };
+      const status = deriveStatus(task, 24, NOW, undefined, {
+        mergeRequest: { iid: 42, state: 'opened', pipelineStatus: 'failed' },
+      });
+      assert.deepEqual(status.nextAction, { label: 'investigate the failing pipeline for MR !42' });
+    });
+
+    it('gives a pull-issue command once bridge storage confirms a result', () => {
+      const task: TaskEntry = {
+        key,
+        gitlabWorker: { pushedAt: new Date(NOW - 1 * HOUR).toISOString(), filename: 'x.zip' },
+        syncAgent: { lastOwnOutputHash: 'abc123' },
+      };
+      const status = deriveStatus(task, 24, NOW, { hasResultInStorage: true });
+      assert.deepEqual(status.nextAction, { label: 'pull the result', command: 'sync-cli pull-issue <name> 402 6' });
+    });
+
+    it('omits nextAction while bridge storage has no confirmed result yet', () => {
+      const task: TaskEntry = {
+        key,
+        gitlabWorker: { pushedAt: new Date(NOW - 1 * HOUR).toISOString(), filename: 'x.zip' },
+        syncAgent: { lastOwnOutputHash: 'abc123' },
+      };
+      const status = deriveStatus(task, 24, NOW, { hasResultInStorage: false });
+      assert.equal(status.nextAction, undefined);
+    });
+
+    it('omits nextAction while only gitlab-worker has pushed (still waiting on another machine)', () => {
+      const task: TaskEntry = { key, gitlabWorker: { pushedAt: new Date(NOW - 1 * HOUR).toISOString(), filename: 'x.zip' } };
+      assert.equal(deriveStatus(task, 24, NOW).nextAction, undefined);
+    });
+
+    it('omits nextAction when there is no local state at all', () => {
+      assert.equal(deriveStatus({ key }, 24, NOW).nextAction, undefined);
+    });
   });
 
   // IMPROVEMENTS_HARNESS.md 1.1: with live data, "likely ready to pull"
