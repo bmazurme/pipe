@@ -4,7 +4,7 @@ import type { SettingsType } from '@reports/shared';
 const getSettingsMock = vi.fn<() => SettingsType>();
 vi.mock('../settings/props', () => ({ getSettings: () => getSettingsMock() }));
 
-const { uploadParcel, listParcels } = await import('./bridge-client');
+const { uploadParcel, listParcels, peekParcel, deleteParcel } = await import('./bridge-client');
 
 function stubSettings(overrides: Partial<SettingsType> = {}) {
   getSettingsMock.mockReturnValue({
@@ -101,5 +101,36 @@ describe('uploadParcel', () => {
     expect(form.get('channel')).toBe('issue');
     expect(form.get('taskKey')).toBe('402:6');
     expect(form.get('direction')).toBe('outbound');
+  });
+});
+
+// IMPROVEMENTS_HARNESS/TECH-adjacent fix: handlePullSubscriptionIssue used
+// to call bridge's destructive /download before everything that could
+// still fail locally (decrypt, extract, git checkout/write/commit/push),
+// losing the parcel for good on any later failure. peekParcel/deleteParcel
+// split "read the bytes" from "consume it" so the caller can defer the
+// latter until it's actually safe to.
+describe('peekParcel', () => {
+  it('hits the non-destructive /peek route, not /download', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const bytes = await peekParcel(42);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://bridge.example.com/api/v1/storage/42/peek', expect.anything());
+    expect(Buffer.from(bytes)).toEqual(Buffer.from([1, 2, 3]));
+  });
+});
+
+describe('deleteParcel', () => {
+  it('sends a DELETE to the file-specific route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deleteParcel(42);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://bridge.example.com/api/v1/storage/42');
+    expect(init.method).toBe('DELETE');
   });
 });

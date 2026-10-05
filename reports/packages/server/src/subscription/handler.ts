@@ -20,7 +20,7 @@ import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, p
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
 import { buildArchive, extractArchive } from './pack';
-import { uploadParcel, listParcels, downloadParcel } from './bridge-client';
+import { uploadParcel, listParcels, peekParcel, deleteParcel } from './bridge-client';
 import { encryptBuffer, decryptBuffer } from './encryption';
 
 function sender(res: Response) {
@@ -308,7 +308,15 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
       throw new Error('Посылка зашифрована, но приватный ключ не задан — вставьте его в Settings → Шифрование');
     }
 
-    const downloaded = await downloadParcel(newest.id);
+    // peekParcel, not downloadParcel: everything from here down (decrypt,
+    // extract, git checkout/write/commit/push) can still fail, and bridge's
+    // /download route deletes server-side on success — doing that before
+    // this risky work is what used to lose a parcel for good the moment
+    // any later step failed (e.g. checkoutTaskBranch's dirty-tree guard
+    // below), since nothing here persists the bytes anywhere else.
+    // deleteParcel() only runs once every step below has actually
+    // succeeded (see its own call further down).
+    const downloaded = await peekParcel(newest.id);
     const buffer = isEncrypted ? decryptBuffer(downloaded, encryption.privateKey) : downloaded;
     const { manifest, files, assets } = extractArchive(buffer);
     const projectRoot = resolve(trackedProject.path);
@@ -321,6 +329,9 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
     // Guarantees the write+commit below lands on the task branch, not
     // whatever the repo happened to be on (it can drift away from the task
     // branch between init and pull) — see checkoutTaskBranch's own comment.
+    // Runs before the parcel is ever consumed from bridge (see above) — a
+    // dirty tree now fails loudly with the parcel still safely pullable,
+    // instead of silently losing it.
     await checkoutTaskBranch(trackedProject.path, state.branch);
 
     for (const file of files) {
@@ -355,6 +366,18 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
     const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
     await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
     await pushBranch(trackedProject.path, state.branch);
+
+    // Only reached once the content is actually safely committed and
+    // pushed locally — this is the one call allowed to consume the parcel
+    // from bridge. A failure here is deliberately non-fatal: the pull
+    // itself already fully succeeded, so leaving a now-redundant copy
+    // sitting in storage is harmless clutter, not a reason to report the
+    // whole pull as failed.
+    try {
+      await deleteParcel(newest.id);
+    } catch (error) {
+      console.warn(`Failed to delete consumed parcel ${newest.id} from bridge storage:`, error);
+    }
 
     return setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });
   });

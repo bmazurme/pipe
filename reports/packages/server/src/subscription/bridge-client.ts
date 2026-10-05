@@ -96,9 +96,21 @@ export async function listParcels(filter: StoredFileMeta = {}): Promise<StoredFi
   return response.json() as Promise<StoredFile[]>;
 }
 
-export async function downloadParcel(id: number): Promise<Buffer> {
-  const response = await authorizedFetch(`/api/v1/storage/${id}/download`);
+// Deliberately NOT /download — that route deletes the file server-side on
+// success (bridge's "single-recipient mailbox" semantics), and pull does a
+// lot of locally-risky work after fetching the bytes (decrypt, extract,
+// git checkout/write/commit/push) that can still fail. Using the
+// non-destructive /peek here and calling deleteParcel() explicitly only
+// once every one of those steps has actually succeeded means a mid-pull
+// failure leaves the parcel sitting on bridge, re-pullable, instead of
+// gone forever with nothing ever written locally.
+export async function peekParcel(id: number): Promise<Buffer> {
+  const response = await authorizedFetch(`/api/v1/storage/${id}/peek`);
   const arrayBuffer = await response.arrayBuffer();
 
   return Buffer.from(arrayBuffer);
+}
+
+export async function deleteParcel(id: number): Promise<void> {
+  await authorizedFetch(`/api/v1/storage/${id}`, { method: 'DELETE' });
 }

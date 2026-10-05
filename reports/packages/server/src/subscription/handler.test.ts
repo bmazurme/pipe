@@ -298,14 +298,19 @@ describe('handlePullSubscriptionIssue', () => {
     git(dir, ['push', '-u', 'origin', 'task/173-6']);
 
     const parcel = buildResultParcel();
-    globalThis.fetch = (async (url: string) => {
+    let deleteCalled = false;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
       if (url.includes('/api/v1/storage?')) {
         expect(url).toContain('taskKey=173%3A6');
         expect(url).toContain('direction=result');
         return Response.json([{ id: 99, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
       }
-      if (url.includes('/api/v1/storage/99/download')) {
+      if (url.includes('/api/v1/storage/99/peek')) {
         return new Response(parcel, { status: 200 });
+      }
+      if (url.endsWith('/api/v1/storage/99') && init?.method === 'DELETE') {
+        deleteCalled = true;
+        return new Response(null, { status: 204 });
       }
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
@@ -319,6 +324,51 @@ describe('handlePullSubscriptionIssue', () => {
 
     const remoteLog = git(remote, ['log', '-1', '--format=%s', 'task/173-6']);
     expect(remoteLog).toContain('Pull issue #6');
+    // The parcel is only consumed from bridge once the pull has fully
+    // succeeded (committed and pushed) — see handler.ts's own comment on
+    // why this uses peek + an explicit delete instead of bridge's
+    // download-then-delete route.
+    expect(deleteCalled).toBe(true);
+  });
+
+  // IMPROVEMENTS_TECH.md-adjacent regression: previously used bridge's
+  // destructive /download route *before* checkoutTaskBranch's dirty-tree
+  // guard, so a dirty tree (or any failure between download and the final
+  // commit/push) permanently lost the parcel — it was already gone from
+  // bridge, and nothing locally ever persisted it. peekParcel is
+  // non-destructive, so a failure here must leave the parcel still listed
+  // on bridge, re-pullable.
+  it('does not consume the parcel from bridge when checkoutTaskBranch fails on a dirty tree', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+    // An untracked file is enough to fail isTreeClean's `git status --porcelain` check.
+    writeFileSync(path.join(dir, 'untracked.txt'), 'oops');
+
+    const parcel = buildResultParcel();
+    let deleteCalled = false;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage?')) {
+        return Response.json([{ id: 99, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
+      }
+      if (url.includes('/api/v1/storage/99/peek')) {
+        return new Response(parcel, { status: 200 });
+      }
+      if (url.endsWith('/api/v1/storage/99') && init?.method === 'DELETE') {
+        deleteCalled = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/незакоммиченные изменения/);
+    expect(getIssueState('173', '6')?.step).toBe('pushed');
+    expect(deleteCalled).toBe(false);
   });
 
   it('reports a clear error when nothing has been pushed yet', async () => {
@@ -336,13 +386,13 @@ describe('handlePullSubscriptionIssue', () => {
   });
 
   it('refuses to pull before init has created a branch', async () => {
-    // The branch check only happens after a successful download+decrypt
+    // The branch check only happens after a successful peek+decrypt
     // (handler.ts's own order), so this needs a real, extractable parcel —
     // not just a plausible-looking storage listing — to reach that check.
     initTrackedProject('173');
     const parcel = buildResultParcel();
     globalThis.fetch = (async (url: string) => {
-      if (url.includes('/download')) return new Response(parcel, { status: 200 });
+      if (url.includes('/peek')) return new Response(parcel, { status: 200 });
       return Response.json([{ id: 1, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
     }) as typeof fetch;
 
@@ -370,12 +420,15 @@ describe('handlePullSubscriptionIssue', () => {
     const { encryptBuffer } = await import('./encryption');
     const parcel = encryptBuffer(buildResultParcel(), publicKey);
 
-    globalThis.fetch = (async (url: string) => {
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
       if (url.includes('/api/v1/storage?')) {
         return Response.json([{ id: 1, originalName: '173-6.subscription.zip.enc', mimeType: 'application/octet-stream', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
       }
-      if (url.includes('/download')) {
+      if (url.includes('/peek')) {
         return new Response(parcel, { status: 200 });
+      }
+      if (url.endsWith('/api/v1/storage/1') && init?.method === 'DELETE') {
+        return new Response(null, { status: 204 });
       }
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
