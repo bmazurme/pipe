@@ -1,34 +1,38 @@
 import type { ResType } from '@reports/shared';
-import { extractMarkdownImageRefs } from '@pipe/protocol';
+import {
+  extractMarkdownImageRefs,
+  GitlabApiError,
+  gitlabFetch as sharedGitlabFetch,
+  getIssue as sharedGetIssue,
+  listAssignedOpenIssues as sharedListAssignedOpenIssues,
+} from '@pipe/protocol';
 
 import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings } from '../settings/props';
 
-const GITLAB_TIMEOUT_MS = 30_000;
-
-function authHeaders(privateToken: string) {
-  return {
-    'Private-Token': privateToken,
-    'Content-Type': 'application/json',
-  };
+// Translates the shared module's errors into reports' own localized shape —
+// a GitlabApiError (bad HTTP status) becomes a Russian message built from
+// its status/body, anything else (a network failure) goes through
+// describeFetchError the same as every other reports HTTP client.
+function translateGitlabError(error: unknown, url: string): Error {
+  if (error instanceof GitlabApiError) {
+    return new Error(`GitLab API вернул ошибку ${error.status}${error.body ? `: ${error.body}` : ''}`);
+  }
+  return describeFetchError(error, url);
 }
 
-async function gitlabFetch(url: string, privateToken: string, init: RequestInit = {}) {
-  const response = await fetch(url, {
+// Built on the shared GitLab fetch helper (IMPROVEMENTS_TECH.md 2.1) — this
+// wrapper exists because reports reads apiUrl/token from a global Settings
+// singleton instead of taking them as explicit params (sync's shape), and
+// localizes its error messages into Russian for the Subscription UI's
+// stream, neither of which the shared module does on its own.
+async function gitlabFetch(url: string, privateToken: string, init: RequestInit = {}): Promise<Response> {
+  return sharedGitlabFetch(url, privateToken, {
     ...init,
-    headers: { ...authHeaders(privateToken), ...(init.headers ?? {}) },
-    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
+    headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
   }).catch((error) => {
-    throw describeFetchError(error, url);
+    throw translateGitlabError(error, url);
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-
-    throw new Error(`GitLab API вернул ошибку ${response.status}${body ? `: ${body}` : ''}`);
-  }
-
-  return response;
 }
 
 export async function listAssignedOpenIssues(): Promise<ResType[]> {
@@ -38,10 +42,11 @@ export async function listAssignedOpenIssues(): Promise<ResType[]> {
     return [];
   }
 
-  const url = `${gitlabUrl}/issues?assignee_id=${userId}&scope=all&state=opened`;
-  const response = await gitlabFetch(url, privateToken);
+  const issues = await sharedListAssignedOpenIssues(gitlabUrl, privateToken, { assigneeId: userId }).catch((error) => {
+    throw translateGitlabError(error, gitlabUrl);
+  });
 
-  return response.json() as Promise<ResType[]>;
+  return issues as unknown as ResType[];
 }
 
 let cachedUsername: string | undefined;
@@ -74,10 +79,12 @@ export async function addIssueNote(projectId: number | string, iid: number | str
 
 export async function getIssue(projectId: number | string, iid: number | string): Promise<ResType> {
   const { gitlabUrl, privateToken } = getSettings();
-  const url = `${gitlabUrl}/projects/${projectId}/issues/${iid}`;
-  const response = await gitlabFetch(url, privateToken);
 
-  return response.json() as Promise<ResType>;
+  const issue = await sharedGetIssue(gitlabUrl, privateToken, projectId, iid).catch((error) => {
+    throw translateGitlabError(error, gitlabUrl);
+  });
+
+  return issue as unknown as ResType;
 }
 
 export async function getIssueTimeStats(projectId: number | string, iid: number | string): Promise<{ humanTimeEstimate: string | null }> {

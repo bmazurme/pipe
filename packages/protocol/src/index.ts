@@ -5,3 +5,4 @@ export * from './pack.js';
 export * from './walk.js';
 export * from './leakScan.js';
 export * from './markdownImages.js';
+export * from './gitlabClient.js';

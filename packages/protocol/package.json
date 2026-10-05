@@ -49,6 +49,10 @@
     "./state": {
       "types": "./dist/state.d.ts",
       "default": "./dist/state.js"
+    },
+    "./gitlabClient": {
+      "types": "./dist/gitlabClient.d.ts",
+      "default": "./dist/gitlabClient.js"
     }
   },
   "scripts": {

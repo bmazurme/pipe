@@ -1,70 +1,33 @@
-import { extractMarkdownImageRefs } from '@pipe/protocol';
+import {
+  extractMarkdownImageRefs,
+  GitlabApiError,
+  gitlabFetch,
+  getIssue,
+  listAssignedOpenIssues,
+  type GitlabIssue,
+} from '@pipe/protocol';
 import { log } from './log.js';
 
-// No request here had an AbortSignal before — a hung GitLab connection (or a
-// slow image host for getIssueImages below) would block push-issue/
-// gitlab-worker indefinitely.
-const GITLAB_TIMEOUT_MS = 30_000;
-
-export interface GitlabIssue {
-  id: number;
-  iid: number;
-  project_id: number;
-  title: string;
-  description: string | null;
-}
-
-// apiUrl is expected to already include the API prefix, e.g.
-// "https://gitlab.example.com/api/v4" (mirrors reports' subscription/gitlab-client.ts).
-export async function getIssue(
-  apiUrl: string,
-  privateToken: string,
-  projectId: string | number,
-  iid: string | number,
-): Promise<GitlabIssue> {
-  const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}`;
-  const response = await fetch(url, {
-    headers: { 'Private-Token': privateToken },
-    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`GitLab API returned ${response.status} for ${url}${body ? `: ${body}` : ''}`);
-  }
-
-  return (await response.json()) as GitlabIssue;
-}
-
-// scope=assigned_to_me needs no user id — GitLab resolves "me" from the
-// token itself. Mirrors reports' subscription/gitlab-client.ts
-// listAssignedOpenIssues, minus its assignee_id (reports stores a userId in
-// Settings for that; sync has no equivalent, and doesn't need one).
-export async function listAssignedOpenIssues(apiUrl: string, privateToken: string): Promise<GitlabIssue[]> {
-  const url = `${apiUrl}/issues?scope=assigned_to_me&state=opened`;
-  const response = await fetch(url, {
-    headers: { 'Private-Token': privateToken },
-    signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`GitLab API returned ${response.status} for ${url}${body ? `: ${body}` : ''}`);
-  }
-
-  return (await response.json()) as GitlabIssue[];
-}
+// getIssue/listAssignedOpenIssues/gitlabFetch/GitlabIssue are re-exported
+// as-is (IMPROVEMENTS_TECH.md 2.1) — their signatures already matched the
+// shared module exactly (explicit apiUrl/token params, no config of sync's
+// own to thread through), so there's nothing sync-specific left to wrap
+// around them. getIssueImages stays local: its own two distinct warning
+// messages (network failure vs. a bad HTTP status) aren't worth forcing
+// through a shared callback API for ~50 lines of control flow, so it's
+// still implemented here, just built on the shared gitlabFetch instead of
+// a raw fetch() call.
+export { getIssue, listAssignedOpenIssues, type GitlabIssue };
 
 export interface IssueImage {
   relPath: string;
   base64: string;
 }
 
-// Mirrors reports' subscription/gitlab-client.ts getIssueImages — GitLab
-// stores uploaded issue images under /uploads/<hash>/<filename> relative to
-// the instance root, not the API base (apiUrl is ".../api/v4"). Only
-// relative refs or ones already on this same instance are fetched; a link
-// to some third-party host in the description is left alone.
+// GitLab stores uploaded issue images under /uploads/<hash>/<filename>
+// relative to the instance root, not the API base (apiUrl is ".../api/v4").
+// Only relative refs or ones already on this same instance are fetched; a
+// link to some third-party host in the description is left alone.
 const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export async function getIssueImages(
@@ -91,17 +54,13 @@ export async function getIssueImages(
 
     let response: Response;
     try {
-      response = await fetch(absoluteUrl, {
-        headers: { 'Private-Token': privateToken },
-        signal: AbortSignal.timeout(GITLAB_TIMEOUT_MS),
-      });
+      response = await gitlabFetch(absoluteUrl, privateToken);
     } catch (error) {
-      log.warn(`Could not download an image from the issue description (${absoluteUrl}):`, error);
-      continue;
-    }
-
-    if (!response.ok) {
-      log.warn(`Could not download an image from the issue description (${absoluteUrl}): HTTP ${response.status}`);
+      if (error instanceof GitlabApiError) {
+        log.warn(`Could not download an image from the issue description (${absoluteUrl}): HTTP ${error.status}`);
+      } else {
+        log.warn(`Could not download an image from the issue description (${absoluteUrl}):`, error);
+      }
       continue;
     }
 
