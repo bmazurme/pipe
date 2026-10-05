@@ -3,6 +3,7 @@ import { collectReportData, DEFAULT_PATHS, filterReportData, type StatusPaths } 
 import { annotateTasks, DEFAULT_STALE_HOURS, exitCodeFor, type AnnotatedReportData } from './deriveStatus.js';
 import { recordTransitions, readTaskEvents } from './events.js';
 import { fetchGitlabLiveStatus } from './gitlabLive.js';
+import { notifyTransitions } from './notifyTransitions.js';
 import { formatReportText } from './render.js';
 
 export interface CliOptions {
@@ -13,6 +14,7 @@ export interface CliOptions {
   staleHours?: number;
   live: boolean;
   logKey?: string;
+  notify: boolean;
   help: boolean;
 }
 
@@ -43,6 +45,11 @@ Options:
                               one-shot) records any task's local-state
                               transition since the last run to
                               ~/.local/state/pipe/events.jsonl
+  --notify                   fire an OS notification for each new local-state
+                              transition this run finds (on top of printing
+                              the report as usual) — meant for a scheduled
+                              one-shot run or a long --watch with nobody
+                              reading the terminal; see harness/README.md
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path
   --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -63,6 +70,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let staleHours: number | undefined;
   let live = false;
   let logKey: string | undefined;
+  let notify = false;
   let help = false;
 
   for (let i = 0; i < argv.length; i++) {
@@ -75,6 +83,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--live') {
       live = true;
+      continue;
+    }
+
+    if (arg === '--notify') {
+      notify = true;
       continue;
     }
 
@@ -135,15 +148,18 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
   const collected = collectReportData(paths);
   // Recorded against the full, unfiltered task list — a --filter scoping
   // the printed report to one project shouldn't make tasks outside it look
-  // like they vanished (IMPROVEMENTS_HARNESS.md 4.1).
-  recordTransitions(collected.tasks);
+  // like they vanished (IMPROVEMENTS_HARNESS.md 4.1). Same reasoning for
+  // --notify below: a transition outside the --filter'd scope still fires
+  // its notification.
+  const events = recordTransitions(collected.tasks);
+  if (options.notify) notifyTransitions(events);
   const filtered = filterReportData(collected, options.filter);
 
   // Independent of each other — a machine can have sync's bridge API key

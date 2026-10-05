@@ -1,0 +1,7 @@
+[Unit]
+Description=pipe-status --notify — one merged check of sync's and reports' task state
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/pipe/harness
+ExecStart=/usr/bin/node dist/status.js --notify

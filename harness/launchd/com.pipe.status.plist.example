@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  IMPROVEMENTS_HARNESS.md 3.1 — runs `pipe-status --notify` every 5 minutes
+  so a task transition fires an OS notification even with no terminal open.
+  Each run is a plain one-shot (StartInterval), not a long-running process —
+  `--notify` works the same with or without `--watch`.
+
+  Install (replace <you> and the two /path/to/pipe paths below):
+    cp com.pipe.status.plist.example ~/Library/LaunchAgents/com.pipe.status.plist
+    launchctl load ~/Library/LaunchAgents/com.pipe.status.plist
+
+  Logs land at StandardOutPath/StandardErrorPath below. To stop:
+    launchctl unload ~/Library/LaunchAgents/com.pipe.status.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.pipe.status</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/path/to/pipe/harness/dist/status.js</string>
+    <string>--notify</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/pipe-status.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/pipe-status.err.log</string>
+</dict>
+</plist>

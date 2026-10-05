@@ -103,6 +103,11 @@ describe('parseArgs', () => {
     assert.equal(parseArgs(['--live']).live, true);
     assert.equal(parseArgs([]).live, false);
   });
+
+  it('parses --notify', () => {
+    assert.equal(parseArgs(['--notify']).notify, true);
+    assert.equal(parseArgs([]).notify, false);
+  });
 });
 
 describe('buildReport', () => {

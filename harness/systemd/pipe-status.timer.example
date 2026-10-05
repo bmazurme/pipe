@@ -1,0 +1,23 @@
+# IMPROVEMENTS_HARNESS.md 3.1 — pairs with pipe-status.service.example to
+# run `pipe-status --notify` every 5 minutes as a user unit (no root
+# needed — this is a read-only personal CLI, not worker's privileged
+# unattended-code-execution case, so it doesn't need worker/systemd's
+# hardening).
+#
+# Install (replace /path/to/pipe above in the .service first):
+#   mkdir -p ~/.config/systemd/user
+#   cp pipe-status.service.example ~/.config/systemd/user/pipe-status.service
+#   cp pipe-status.timer.example ~/.config/systemd/user/pipe-status.timer
+#   systemctl --user enable --now pipe-status.timer
+#
+# Logs: journalctl --user -u pipe-status.service
+
+[Unit]
+Description=Run pipe-status --notify every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

@@ -48,6 +48,9 @@ node dist/status.js [options]
                             task and exit (see "Remembering transitions"
                             below) — every run, watched or one-shot,
                             records them regardless of this flag
+--notify                   fire an OS notification for each new transition
+                            this run finds, on top of the usual report (see
+                            "Notifications" below)
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -173,6 +176,35 @@ subcommand on a renamed `pipe` binary with verbs; item 6.5, the binary
 rename, doesn't exist yet, so this is a flag on the current `pipe-status`
 instead.)
 
+### Notifications (`--notify`)
+
+`--watch` on its own only re-prints the full report — nothing tells you
+*what* changed, or fires anything if you aren't actively reading the
+terminal. `--notify` fires one OS notification (macOS `osascript`, Linux
+`notify-send`, a plain stdout line as the fallback on anything else) per
+new transition that a run's `recordTransitions` call finds — the same
+mechanism `--log`/`events.jsonl` already use (IMPROVEMENTS_HARNESS.md 4.1),
+just reported live instead of only readable later:
+
+```
+🔔 123:m-abc: reports: pushed → reports: pulled
+```
+
+(shown here as the fallback text form — the real notification is a native
+OS banner). `--notify` works with or without `--watch`: combine it with
+`--watch <seconds>` for a long-running terminal session, or run `pipe-status
+--notify` as a one-shot from a scheduler for a true background daemon with
+no terminal involved at all — see `harness/launchd/` (macOS) and
+`harness/systemd/` (Linux, user units) for ready-to-copy examples of the
+latter. Firing `notify()` itself never throws or blocks the rest of the
+run — a failed OS dispatch just falls back to the stdout line above.
+
+Only genuine local-state transitions fire a notification (the same ones
+`--log` records) — a task crossing the `--stale-after` threshold, or the
+worker going offline under `--live`, do not; those are live/derived facts
+the underlying diff doesn't track (see `events.ts`'s own comment on why its
+signature is deliberately not `deriveStatus()`'s label).
+
 A task whose derived status has had no further movement for longer than
 `--stale-after`'s threshold (default 24h) gets a trailing `[stale]` marker
 — e.g. `pushed 2026-09-26T10:00:00.000Z — no pull since [stale]`.
@@ -197,7 +229,11 @@ npm test   # tsc -b && node --test 'dist/**/*.test.js'
 
 All of `status.ts`'s logic (`compareIssueKeys`, `parseArgs`,
 `collectReportData`, `filterReportData`, `deriveStatus`, `annotateTasks`,
-`exitCodeFor`, `formatReportText`, `recordTransitions`, `readTaskEvents`) is
-exported and exercised directly against fixture files in a temp directory —
-none of the tests touch this machine's real sync/reports state, or its real
-`~/.local/state/pipe/`.
+`exitCodeFor`, `formatReportText`, `recordTransitions`, `readTaskEvents`,
+`describeSignature`, `formatTransitionNotification`) is exported and
+exercised directly against fixture files in a temp directory — none of the
+tests touch this machine's real sync/reports state, or its real
+`~/.local/state/pipe/`. `notifyTransitions`'s own OS dispatch is not
+exercised for the same reason `@pipe/protocol/notify`'s own test suite
+doesn't exercise `notify()` directly — only `formatTransitionNotification`,
+the pure part, is.

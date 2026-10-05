@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { notify } from '@pipe/protocol/notify';
+
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
 import { loadOptionalDictionary, toLocal } from '../dictionary.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
-import { notify } from '../notify.js';
 import { resolveFromRoot } from '../paths.js';
 import { log } from '../log.js';
 

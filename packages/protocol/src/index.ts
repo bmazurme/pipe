@@ -7,3 +7,4 @@ export * from './leakScan.js';
 export * from './markdownImages.js';
 export * from './gitlabClient.js';
 export * from './atomicWrite.js';
+export * from './notify.js';

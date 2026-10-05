@@ -1,8 +1,9 @@
+import { notify } from '@pipe/protocol/notify';
+
 import { findProject, loadConfig } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
 import { issueKey, loadGitlabWorkerState, recordPushed } from '../gitlabWorkerState.js';
 import { listAssignedOpenIssues, type GitlabIssue } from '../gitlabClient.js';
-import { notify } from '../notify.js';
 import type { ProjectConfig, SyncConfig } from '../types.js';
 import { buildAndUploadIssueParcel } from './pushIssue.js';
 import { log } from '../log.js';

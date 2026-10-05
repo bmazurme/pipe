@@ -30,9 +30,12 @@ adds the front and back:
   ([commands/pullIssue.ts](../sync/src/commands/pullIssue.ts)) — polls until a
   result parcel appears, then pulls it and fires a notification, instead of
   the human re-running `pull-issue` by hand to check.
-- **[notify.ts](../sync/src/notify.ts)**: best-effort OS notification (macOS
-  `osascript`, Linux `notify-send`, console fallback everywhere else) used
-  by both of the above. Never blocks or fails the actual push/pull.
+- **[notify.ts](../packages/protocol/src/notify.ts)** (`@pipe/protocol/notify`):
+  best-effort OS notification (macOS `osascript`, Linux `notify-send`,
+  console fallback everywhere else) used by both of the above. Never blocks
+  or fails the actual push/pull. Moved here from sync's own `src/notify.ts`
+  when harness's `--notify` (IMPROVEMENTS_HARNESS.md 3.1) needed the same
+  dispatch logic — a shared module, not a second copy.
 
 **Deliberately not touched**: `agent-runner`'s own "result ready"
 notification (i.e. notifying *from* the machine that ran the agent, in
