@@ -91,3 +91,27 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           working-directory: reports/packages/client
+
+      # Cypress captures these on any failure by default (screenshotOnRunFailure,
+      # and video recording) — they just weren't going anywhere before. Needed
+      # to actually see what a failing test's page looked like instead of
+      # guessing from the text assertion alone.
+      - name: Upload Cypress screenshots/videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-failure-artifacts
+          path: |
+            reports/packages/client/cypress/screenshots
+            reports/packages/client/cypress/videos
+          retention-days: 5
+
+      - name: Upload server/client logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-dev-server-logs
+          path: |
+            /tmp/reports-server.log
+            /tmp/reports-client.log
+          retention-days: 5
