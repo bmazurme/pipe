@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "dev": "npx tsx --env-file=.env --watch src/index.ts"
+    "dev": "npx tsx --env-file=.env --watch src/index.ts",
+    "start:once": "npx tsx --env-file=.env src/index.ts"
   },
   "keywords": [],
   "author": "",

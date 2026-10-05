@@ -13,4 +13,11 @@
 # action runs it with cwd=reports/packages/client, two levels below reports/
 # (the actual npm workspace root `--workspace=packages/server` needs).
 cd "$(dirname "$0")/.." || exit 1
-exec npm run dev --workspace=packages/server
+# start:once (no --watch), not dev: e2e tests write to the server's own
+# gitignored JSON state files (settings.json, subscription-state.json, ...)
+# as a normal side effect of using the app — tsx's --watch mode treats that
+# write as a source change and restarts, and that restart itself crashes
+# ("Cannot find module 'esbuild'", confirmed in CI) in this npm-install
+# layout. Nothing is being edited live during an e2e run, so watch mode
+# buys nothing here anyway.
+exec npm run start:once --workspace=packages/server
