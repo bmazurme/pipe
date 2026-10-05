@@ -98,11 +98,13 @@ describe('StorageController.remove', () => {
     expect(service.delete).toHaveBeenCalledWith(file);
   });
 
-  it('propagates findOwned\'s NotFoundException for a file the caller does not own, without calling delete', async () => {
+  it("propagates findOwned's NotFoundException for a file the caller does not own, without calling delete", async () => {
     const service = makeService();
     service.findOwned.mockRejectedValue(new Error('File not found'));
 
-    await expect(new StorageController(service).remove(1, { id: 7 })).rejects.toThrow('File not found');
+    await expect(
+      new StorageController(service).remove(1, { id: 7 }),
+    ).rejects.toThrow('File not found');
     expect(service.delete).not.toHaveBeenCalled();
   });
 });
