@@ -65,6 +65,24 @@ services:
         published: ${BACKEND_PUBLISHED_PORT:-3300}
         protocol: tcp
         mode: ingress
+    volumes:
+      # storage.service.ts writes every uploaded file under $PWD/uploads
+      # (/app/uploads at this image's WORKDIR) — without this, that
+      # directory lived only in the container's own writable layer, so
+      # every redeploy (update_config: start-first below spins up a brand
+      # new container) or restart_policy-triggered restart silently wiped
+      # every file on disk while its row in Postgres (a separate, actually
+      # persistent service) survived untouched. The next download attempt
+      # then hit storage.controller.ts's res.download() with a now-missing
+      # path, which used to fail with no HTTP response ever sent at all
+      # (see that file's own comment) — surfacing as a hung request, not a
+      # clear error; reports' pull had a worse version of the same root
+      # cause (see subscription/bridge-client.ts's own comment). A named
+      # volume, not a bind mount: `placement.constraints: node.role ==
+      # manager` below already pins this service to one node, so there's
+      # no multi-node consistency concern a local volume would otherwise
+      # have.
+      - bridge_uploads:/app/uploads
     healthcheck:
       # /api/v1/health is readiness, not just liveness — it round-trips
       # Postgres and checks for a migration that failed to apply on boot
@@ -293,6 +311,10 @@ secrets:
   worker_qwen_api_key:
     file: ${WORKER_QWEN_API_KEY_FILE:?WORKER_QWEN_API_KEY_FILE is required}
     name: worker_qwen_api_key_${WORKER_QWEN_API_KEY_HASH:?WORKER_QWEN_API_KEY_HASH is required}
+
+volumes:
+  # See backend's own volumes: entry above for why this exists.
+  bridge_uploads:
 
 networks:
   bridge:
