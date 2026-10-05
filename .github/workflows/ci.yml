@@ -79,11 +79,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      # sync is a real root workspace member (IMPROVEMENTS_TECH.md 5.1) —
+      # the one root `npm ci` below already installs its dependencies, no
+      # separate `working-directory: sync` install needed.
       - run: npm ci
       - run: npm run build --workspace=packages/protocol
 
-      - run: npm ci
-        working-directory: sync
       - name: Lint
         working-directory: sync
         run: npm run lint
@@ -103,11 +104,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      # worker is a real root workspace member (IMPROVEMENTS_TECH.md 5.1) —
+      # the one root `npm ci` below already installs its dependencies, no
+      # separate `working-directory: worker` install needed.
       - run: npm ci
       - run: npm run build --workspace=packages/protocol
 
-      - run: npm ci
-        working-directory: worker
       - name: Lint
         working-directory: worker
         run: npm run lint

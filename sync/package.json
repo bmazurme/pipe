@@ -15,7 +15,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@pipe/protocol": "file:../packages/protocol",
+    "@pipe/protocol": "*",
     "adm-zip": "^0.6.0",
     "commander": "^12.1.0",
     "undici": "^7.30.0"

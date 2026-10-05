@@ -53,13 +53,18 @@
 
 ```bash
 git clone <этот репозиторий> /opt/pipe-worker-src
-cd /opt/pipe-worker-src/packages/protocol && npm install && npm run build
-cd /opt/pipe-worker-src/worker && npm install && npm run build
+cd /opt/pipe-worker-src && npm install
+npm run build --workspace=packages/protocol
+npm run build --workspace=worker
 ```
 
-`worker/package.json` подключает `@pipe/protocol` через `file:../packages/protocol`
-(как и `sync`/`reports`/`bridge`) — пакет должен быть собран (`npm run build`)
-до сборки `worker`.
+`worker` — настоящий root npm workspace member (см. CLAUDE.md, «Repository
+layout & install model»), один `npm install` в корне репозитория ставит
+зависимости и для `worker`, и для `packages/protocol`, и для `sync`/`harness`
+разом. Сборка всё равно остаётся двумя отдельными шагами — у `tsc -b` нет
+автоматического порядка между воркспейсами, `packages/protocol` нужно
+собрать (`npm run build --workspace=packages/protocol`) до сборки `worker`,
+чтобы его `dist/` уже существовал.
 
 ## Настройка
 
@@ -131,7 +136,17 @@ BRIDGE_API_URL=https://bridge.example.com BRIDGE_API_KEY=brk_xxx npm start
 
 ```bash
 sudo useradd --system --create-home --shell /usr/sbin/nologin pipe-worker
-sudo cp -r /opt/pipe-worker-src/worker/* /opt/pipe-worker/
+sudo mkdir -p /opt/pipe-worker
+
+# node_modules теперь общий на весь workspace, лежит в корне чекаута — не
+# самодостаточен внутри worker/, как было при file:-зависимости, так что
+# нужны обе директории, а символическую ссылку @pipe/protocol (ведёт наружу
+# worker/, на packages/protocol чекаута) нужно заменить на настоящую копию,
+# иначе она станет битой после удаления /opt/pipe-worker-src.
+sudo cp -r /opt/pipe-worker-src/worker/dist /opt/pipe-worker-src/worker/package.json /opt/pipe-worker-src/worker/systemd /opt/pipe-worker/
+sudo cp -r /opt/pipe-worker-src/node_modules /opt/pipe-worker/
+sudo rm -rf /opt/pipe-worker/node_modules/@pipe/protocol
+sudo cp -r /opt/pipe-worker-src/packages/protocol /opt/pipe-worker/node_modules/@pipe/protocol
 sudo cp /opt/pipe-worker-src/worker/systemd/pipe-worker.service /etc/systemd/system/
 echo 'BRIDGE_API_URL=https://bridge.example.com' | sudo tee /opt/pipe-worker/.env
 echo 'BRIDGE_API_KEY=brk_xxx' | sudo tee -a /opt/pipe-worker/.env

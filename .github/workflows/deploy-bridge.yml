@@ -150,10 +150,10 @@ jobs:
           CR_IMAGE: ${{ secrets.CR_WORKER_IMAGE }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Context is this repo's root, not worker/ — worker depends on
-          # @pipe/protocol via "file:../packages/protocol", which resolves
-          # outside a context scoped to worker/ alone (see the Dockerfile's
-          # own header comment).
+          # Context is this repo's root, not worker/ — worker is a real root
+          # npm workspace member (IMPROVEMENTS_TECH.md 5.1), so its build
+          # needs the other workspace manifests and packages/protocol's
+          # source available too (see the Dockerfile's own header comment).
           docker build -f worker/Dockerfile \
             -t "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" .
           docker tag "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:$IMAGE_TAG" "$CR_HOST/$CR_REGISTRY/$CR_IMAGE:latest"
