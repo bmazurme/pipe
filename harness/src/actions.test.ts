@@ -62,6 +62,28 @@ describe('runAction', () => {
     assert.equal(deps.calls.runSyncCli.length, 0);
   });
 
+  for (const badKey of ['1:2:3', '1:../x', 'a b:1', '1:', ':1', '1:2\n', '']) {
+    for (const kind of ['pull', 'publish'] as const) {
+      it(`rejects key ${JSON.stringify(badKey)} for ${kind} without calling callPublish or runSyncCli`, async () => {
+        const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[]; callPublish: unknown[] } };
+        const result = await runAction(kind, badKey, { yes: true, dryRun: false }, deps);
+
+        assert.equal(result.code, 1);
+        assert.match(result.output, /Invalid task key/);
+        assert.equal(deps.calls.runSyncCli.length, 0);
+        assert.equal(deps.calls.callPublish.length, 0);
+      });
+    }
+  }
+
+  it('accepts a valid numeric key', async () => {
+    const deps = makeDeps() as ActionDeps & { calls: { callPublish: unknown[] } };
+    const result = await runAction('publish', '12:34', { yes: true, dryRun: false }, deps);
+
+    assert.equal(result.code, 0);
+    assert.equal(deps.calls.callPublish.length, 1);
+  });
+
   it('dry-run returns the resolved sync-cli command and runs nothing', async () => {
     const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
     const result = await runAction('pull', '402:6', { yes: false, dryRun: true }, deps);

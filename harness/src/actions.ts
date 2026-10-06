@@ -120,7 +120,7 @@ function defaultRunSyncCli(args: string[], cliPath: string): Promise<ActionResul
 // that actually works. No auth — confirmed reports' server has none
 // (CLAUDE.md's own "no database, no auth system" for reports).
 async function defaultCallPublish(baseUrl: string, projectId: string, iid: string): Promise<void> {
-  const response = await fetch(`${baseUrl}/api/subscription/issues/${projectId}/${iid}/publish`, {
+  const response = await fetch(`${baseUrl}/api/subscription/issues/${encodeURIComponent(projectId)}/${encodeURIComponent(iid)}/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
@@ -154,7 +154,7 @@ export const DEFAULT_ACTION_DEPS: ActionDeps = {
 };
 
 function describeAction(kind: ActionKind, projectId: string, iid: string, name: string | undefined, reportsBaseUrl: string): string {
-  if (kind === 'publish') return `publish ${projectId}:${iid} (POST ${reportsBaseUrl}/api/subscription/issues/${projectId}/${iid}/publish)`;
+  if (kind === 'publish') return `publish ${projectId}:${iid} (POST ${reportsBaseUrl}/api/subscription/issues/${encodeURIComponent(projectId)}/${encodeURIComponent(iid)}/publish)`;
   const command = kind === 'pull' ? 'pull-issue' : 'push-issue';
   return `run "sync-cli ${command} ${name} ${projectId} ${iid}"`;
 }
@@ -183,6 +183,11 @@ export async function runAction(
   options: ActionOptions,
   deps: ActionDeps = DEFAULT_ACTION_DEPS,
 ): Promise<ActionResult> {
+  // Keys can come from model-generated MCP tool arguments, so reject anything
+  // that isn't exactly digits:digits before it reaches a URL or subprocess args.
+  if (!/^\d+:\d+$/.test(key)) {
+    return { code: 1, output: `Invalid task key "${key}" — expected "projectId:iid"` };
+  }
   const [projectId, iid] = key.split(':');
   if (!projectId || !iid) {
     return { code: 1, output: `Invalid task key "${key}" — expected "projectId:iid"` };
