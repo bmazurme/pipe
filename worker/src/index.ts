@@ -94,7 +94,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
     const result = provider.tool === 'claude'
-      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken)
+      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, config.jobTimeoutSec * 1000)
       : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl);
 
     if (result.exitCode !== 0) {
