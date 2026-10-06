@@ -130,3 +130,23 @@ export async function listMergeRequestsForBranch(
 
   return (await response.json()) as GitlabMergeRequest[];
 }
+
+// IMPROVEMENTS_HARNESS.md 4.2 — logs actual time spent (GitLab's own
+// `/spend` quick action, same REST endpoint), deliberately NOT
+// time_estimate (reports' own setIssueTimeEstimate, a different field for
+// a different purpose — how long something is expected to take, not how
+// long it took). `duration` is GitLab's own syntax (e.g. "2h30m", "1d").
+// Writing here instead of only estimating matters: reports' own monthly
+// report (reports/src/reports/handler.ts) already reads issues' time_stats
+// from GitLab — logging spent time through this makes it show up there
+// automatically, no new reports-side code needed at all.
+export async function addSpentTime(
+  apiUrl: string,
+  privateToken: string,
+  projectId: string | number,
+  iid: string | number,
+  duration: string,
+): Promise<void> {
+  const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}/add_spent_time?duration=${encodeURIComponent(duration)}`;
+  await gitlabFetch(url, privateToken, { method: 'POST' });
+}

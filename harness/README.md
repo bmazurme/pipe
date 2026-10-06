@@ -376,6 +376,54 @@ $ pipe-status --retry 173:628 --yes
 None of these three ever touches a GitLab merge request — the project's own
 "auto-merge, never" rule holds by construction, not because of a check here.
 
+### Logging time spent (`--log-time`)
+
+IMPROVEMENTS_HARNESS.md 4.2 — `--log-time <projectId:iid>` proposes and logs
+actual time spent on a task to GitLab's own time tracking (the same
+`add_spent_time` endpoint GitLab's `/spend` quick action uses), based on the
+last completed push→pull cycle for that task:
+
+```
+$ pipe-status --log-time 402:6 --dry-run
+Would log 2h30m spent on 402:6 to GitLab (pushed 2026-10-05T10:00:00.000Z, pulled 2026-10-05T12:30:00.000Z).
+```
+
+This reads `pushedAt`/`pulledAt` directly from reports' own
+`subscription-state.json` — not a reconstruction from `events.jsonl`'s diff
+log, which was tried first and turned out wrong: `events.ts` deliberately
+never logs a key's very first observation (nothing to diff against yet), so
+a task's *first* push→pull cycle has its pull logged but never its matching
+push. reports' own state file carries both timestamps unconditionally, so
+it's the only reliable source. Scoped to subscription-based tasks (reports)
+only — a gitlab-worker-only flow pulls via sync-cli's `pull-issue`, which
+writes no local record of a pull at all, so there's nothing to propose for
+it either way.
+
+If `pulledAt` predates `pushedAt` (a second push happened since the last
+recorded pull — reports' state only overwrites the field its current step
+touches, so an old `pulledAt` from an earlier finished cycle otherwise
+lingers on the entry), this correctly reports nothing to propose rather than
+logging a stale or negative duration:
+
+```
+$ pipe-status --log-time 123:45
+No completed push→pull cycle on record for 123:45 (reports' own subscription-state.json) — nothing to propose.
+```
+
+Duration is rounded to the nearest minute and formatted in GitLab's own
+syntax (`"2h30m"`, `"45m"`, never `"0m"` — GitLab rejects a zero duration).
+Same confirmation rules as `--pull`/`--retry`/`--publish`: interactive
+`[y/N]` prompt unless `--yes`, outright refusal (never hanging) when
+non-interactive without `--yes`, and `--dry-run` short-circuits before
+either. Logging itself needs sync-cli's GitLab token (`sync-cli
+login-gitlab <token>`, see `sync/README.md`) — this doesn't need its own
+separate credential.
+
+Verified against this repo's real `subscription-state.json` (both the
+"nothing to propose" and non-interactive-refusal paths) and, for the
+success path, a synthetic fixture (the real local data at verification time
+had no cycle with `pulledAt` after `pushedAt` to exercise it against).
+
 ### Exit code
 
 `0` normally; `1` if any of the four state files failed to parse, or if any

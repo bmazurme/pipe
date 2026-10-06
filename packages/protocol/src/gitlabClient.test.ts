@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GitlabApiError, gitlabFetch, getIssue, listAssignedOpenIssues, listMergeRequestsForBranch } from './gitlabClient.js';
+import { GitlabApiError, gitlabFetch, getIssue, listAssignedOpenIssues, listMergeRequestsForBranch, addSpentTime } from './gitlabClient.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -106,5 +106,22 @@ describe('listMergeRequestsForBranch', () => {
     assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/merge_requests?source_branch=task%2F173-6&order_by=updated_at');
     assert.equal(mrs[0].iid, 42);
     assert.equal(mrs[0].pipeline?.status, 'failed');
+  });
+});
+
+describe('addSpentTime', () => {
+  it('posts to add_spent_time with the duration as a query param, not time_estimate', async () => {
+    let capturedUrl: string | undefined;
+    let capturedMethod: string | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedMethod = init?.method;
+      return new Response('', { status: 200 });
+    }) as typeof fetch;
+
+    await addSpentTime('https://gitlab.example.com/api/v4', 'tok', 173, 628, '2h30m');
+
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/issues/628/add_spent_time?duration=2h30m');
+    assert.equal(capturedMethod, 'POST');
   });
 });

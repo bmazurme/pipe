@@ -8,6 +8,7 @@ import { recordTransitions, readTaskEvents } from './events.js';
 import { formatNextRecommendation, pickNextTask } from './next.js';
 import { notifyTransitions } from './notifyTransitions.js';
 import { buildReportData, formatBuiltReport } from './reportBuilder.js';
+import { logTime } from './timeTracking.js';
 
 export interface CliOptions {
   paths: Partial<StatusPaths>;
@@ -17,6 +18,7 @@ export interface CliOptions {
   staleHours?: number;
   live: boolean;
   logKey?: string;
+  logTimeKey?: string;
   notify: boolean;
   next: boolean;
   brief: boolean;
@@ -82,12 +84,20 @@ Options:
                               then exit
   --publish <projectId:iid>  call reports' publish endpoint for this task,
                               then exit
+  --log-time <projectId:iid> propose and log actual time spent (GitLab's
+                              own time tracking, from the last completed
+                              push→pull cycle in reports' own
+                              subscription-state.json) for this task, then
+                              exit — see "Logging time spent" in
+                              harness/README.md
   --yes                      skip the interactive confirmation prompt before
-                              --pull/--retry/--publish (for scripts) — refused
-                              outright instead of hanging when stdin isn't a
-                              terminal and this isn't given
-  --dry-run                  with --pull/--retry/--publish, print what would
-                              run/be called instead of doing it
+                              --pull/--retry/--publish/--log-time (for
+                              scripts) — refused outright instead of
+                              hanging when stdin isn't a terminal and this
+                              isn't given
+  --dry-run                  with --pull/--retry/--publish/--log-time,
+                              print what would run/be called instead of
+                              doing it
   --project <name>           override the local project name
                               --pull/--retry resolve from sync.config.json —
                               needed when that resolution is ambiguous
@@ -113,6 +123,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let staleHours: number | undefined;
   let live = false;
   let logKey: string | undefined;
+  let logTimeKey: string | undefined;
   let notify = false;
   let next = false;
   let brief = false;
@@ -219,6 +230,14 @@ export function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--log-time') {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error('--log-time expects a task key (projectId:iid)');
+      logTimeKey = value;
+      i++;
+      continue;
+    }
+
     if (arg === '--filter') {
       const value = argv[i + 1];
       if (value === undefined) throw new Error('--filter expects a value');
@@ -263,7 +282,7 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, next, brief, recentHours, action, yes, dryRun, project, reportsUrl, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, logTimeKey, notify, next, brief, recentHours, action, yes, dryRun, project, reportsUrl, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
@@ -403,6 +422,13 @@ export async function main(): Promise<void> {
     // aborted, publish success/failure) — see actions.ts's own ActionResult
     // comment for why this is returned instead of printed directly inside
     // runAction itself.
+    if (result.output) console.log(result.output);
+    process.exitCode = result.code;
+    return;
+  }
+
+  if (options.logTimeKey) {
+    const result = await logTime(options.logTimeKey, { yes: options.yes, dryRun: options.dryRun, paths: options.paths });
     if (result.output) console.log(result.output);
     process.exitCode = result.code;
     return;

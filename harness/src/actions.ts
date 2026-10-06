@@ -132,7 +132,10 @@ async function defaultCallPublish(baseUrl: string, projectId: string, iid: strin
   }
 }
 
-async function defaultConfirm(message: string): Promise<boolean> {
+// Exported for timeTracking.ts (IMPROVEMENTS_HARNESS.md 4.2) — the exact
+// same interactive-confirm-or-refuse-non-interactively shape applies
+// there too, no reason for a second readline-based implementation.
+export async function defaultConfirm(message: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const answer = await rl.question(`${message} [y/N] `);
