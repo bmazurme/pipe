@@ -28,3 +28,7 @@ coverage/
 .env
 /packages/tmp
 /packages/server/src/settings/settings.json
+# Subscription runtime state/config: holds the encryption private key, the
+# anonymization dictionary and per-task progress — never commit.
+/packages/server/src/subscription/subscription-config.json
+/packages/server/src/subscription/subscription-state.json
