@@ -63,6 +63,11 @@ below.
 --next                     print the single most important task right now
                             and what to do about it, then exit (see "What's
                             next" below)
+--brief                    print a digest (incoming, ready, stale, moved
+                            recently, worker), then exit (see "Morning
+                            brief" below)
+--recent-hours <hours>     with --brief, how far back "moved recently"
+                            looks (default: 24)
 --pull/--retry/--publish <projectId:iid>
                             run a next action against one task, then exit
                             (see "Running actions" below)
@@ -276,6 +281,56 @@ Exit code: `1` only when the pick is `stale` (the one bucket actually
 alarm-worthy on its own); `0` for `ready`/`incoming`/`other` and for
 "nothing urgent" — those are normal backlog, not a cron/CI-worthy signal.
 
+### Morning brief (`--brief`)
+
+Five sections in one digest (IMPROVEMENTS_HARNESS.md 3.2), built entirely
+from pieces that already exist — no new data source:
+
+- **Incoming** / **Ready to review** / **Stale** — `--next`'s own 3
+  highest-priority buckets (2.2's `rankTasks`), shown in full rather than
+  just the single winner.
+- **Moved in the last N hours** (`--recent-hours`, default 24) — every
+  task's transitions from `events.jsonl` (4.1), not just one key's (unlike
+  `--log`), rendered with the same `from → to` text `--notify` already uses.
+- **Worker** — up/down, from the same bridge check `--live` makes.
+
+Unlike the plain report, `--brief` always checks bridge + GitLab
+internally, with or without `--live` — a scheduled brief with nothing live
+checked would mostly be an empty shell. "VPN" from the original item's own
+text isn't here, same reason `1.5`'s own environment section already
+leaves it out — see that section above.
+
+```
+$ pipe-status --brief
+== brief ==
+
+Incoming (assigned, not yet pushed):
+  none
+
+Ready to review:
+  none
+
+Stale:
+  none
+
+Moved in the last 24h:
+  123:m-muswwu2i: reports: pushed → reports: pulled
+
+Worker:
+  up
+```
+
+Pair with `--notify` for a scheduled run (`launchd`/`systemd --user`, same
+examples as "Notifications" above) to get one short OS notification
+("2 incoming, 1 ready, 0 stale, 3 moved recently, worker up") instead of
+text nobody's reading in a terminal — the full digest above still prints
+to stdout either way. Delivering that notification over Telegram/web-push
+instead of (or alongside) an OS notification is a separate item (3.3, not
+started), not something `--brief` does itself.
+
+Exit code: `1` when anything is stale, `0` otherwise — same convention as
+the rest of the report.
+
 ### Running actions (`--pull`/`--retry`/`--publish`)
 
 Section 2.1's `next:` line prints a command; `--pull`/`--retry`/`--publish`
@@ -468,4 +523,12 @@ around real `@clack/prompts` prompts. `pipe-mcp`'s own tests
 real protocol round-trip (tool listing, schema validation, the actual
 JSON-RPC shape a client sees), just without a subprocess — with injectable
 `paths`/`eventsPaths`/`actionDeps` pointing at fixtures instead of this
-machine's real state/`sync-cli`/reports.
+machine's real state/`sync-cli`/reports. `readRecentEvents` (`--brief`'s
+"moved recently" section) is tested the same fixture-directory way
+`readTaskEvents` already is. `formatBrief`/`summarizeBrief` are tested as
+pure functions over a constructed `BriefSections` — `buildBrief` itself is
+deliberately not: it always requests live data internally (see its own
+comment), and this machine's real `sync-cli` credentials would turn that
+into a genuine call against production bridge/GitLab during `npm test`;
+verified manually against this machine's real state instead (see
+"Morning brief" above).

@@ -133,16 +133,31 @@ export function recordTransitions(
   return events;
 }
 
+function readAllEvents(logPath: string): TaskEvent[] {
+  if (!existsSync(logPath)) return [];
+
+  return readFileSync(logPath, 'utf-8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as TaskEvent);
+}
+
 // `pipe-status --log <key>` — this item's own `pipe log <key>` example
 // assumes the subcommand restructuring item 6.5 would eventually bring
 // (`pipe` with verbs); adapted here to a flag on the existing
 // flag-based `pipe-status` binary instead, since 6.5 isn't in scope.
 export function readTaskEvents(key: string, paths: EventsPaths = DEFAULT_EVENTS_PATHS): TaskEvent[] {
-  if (!existsSync(paths.log)) return [];
+  return readAllEvents(paths.log).filter((event) => event.key === key);
+}
 
-  return readFileSync(paths.log, 'utf-8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as TaskEvent)
-    .filter((event) => event.key === key);
+// IMPROVEMENTS_HARNESS.md 3.2 — the brief's own "what moved in the last
+// N hours" section needs every task's events, not one key's — the one
+// thing readTaskEvents' per-key filter doesn't give it.
+export function readRecentEvents(
+  sinceHours: number,
+  now: number = Date.now(),
+  paths: EventsPaths = DEFAULT_EVENTS_PATHS,
+): TaskEvent[] {
+  const cutoff = now - sinceHours * 60 * 60 * 1000;
+  return readAllEvents(paths.log).filter((event) => Date.parse(event.ts) >= cutoff);
 }

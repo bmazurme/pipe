@@ -1,4 +1,7 @@
+import { notify } from '@pipe/protocol/notify';
+
 import { type ActionKind, runAction } from './actions.js';
+import { buildBrief, formatBrief, summarizeBrief, DEFAULT_RECENT_HOURS } from './brief.js';
 import { DEFAULT_PATHS, type StatusPaths } from './collect.js';
 import { DEFAULT_STALE_HOURS, exitCodeFor } from './deriveStatus.js';
 import { recordTransitions, readTaskEvents } from './events.js';
@@ -16,6 +19,8 @@ export interface CliOptions {
   logKey?: string;
   notify: boolean;
   next: boolean;
+  brief: boolean;
+  recentHours?: number;
   action?: { kind: ActionKind; key: string };
   yes: boolean;
   dryRun: boolean;
@@ -61,6 +66,16 @@ Options:
                               with --live to also weigh confirmed-ready
                               results and newly assigned issues, not just
                               local state)
+  --brief                    print a digest (incoming, ready to review,
+                              stale, what moved recently, worker status),
+                              then exit — always checks bridge/GitLab
+                              (like --live) regardless of whether --live
+                              was also given; combine with --notify for a
+                              short one-line OS notification instead of/
+                              alongside the full text, meant for a
+                              scheduled run (see harness/README.md)
+  --recent-hours <hours>     with --brief, how far back "moved recently"
+                              looks (default: ${DEFAULT_RECENT_HOURS})
   --pull <projectId:iid>     run sync-cli pull-issue for this task, then exit
   --retry <projectId:iid>    re-run sync-cli push-issue for this task (a
                               fresh parcel for agent-runner to pick up again),
@@ -100,6 +115,8 @@ export function parseArgs(argv: string[]): CliOptions {
   let logKey: string | undefined;
   let notify = false;
   let next = false;
+  let brief = false;
+  let recentHours: number | undefined;
   let action: { kind: ActionKind; key: string } | undefined;
   let yes = false;
   let dryRun = false;
@@ -133,6 +150,23 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--next') {
       next = true;
+      continue;
+    }
+
+    if (arg === '--brief') {
+      brief = true;
+      continue;
+    }
+
+    if (arg === '--recent-hours') {
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error('--recent-hours expects a number of hours');
+      const hours = Number(value);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        throw new Error(`--recent-hours expects a positive number of hours, got "${value}"`);
+      }
+      recentHours = hours;
+      i++;
       continue;
     }
 
@@ -229,7 +263,7 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, next, action, yes, dryRun, project, reportsUrl, help };
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, notify, next, brief, recentHours, action, yes, dryRun, project, reportsUrl, help };
 }
 
 async function renderOnce(paths: StatusPaths, options: CliOptions): Promise<number> {
@@ -284,6 +318,27 @@ async function runNext(paths: StatusPaths, options: CliOptions): Promise<number>
   // in-progress task is normal, expected backlog, not something cron/CI
   // should flag.
   return picked?.bucket === 'stale' ? 1 : 0;
+}
+
+// IMPROVEMENTS_HARNESS.md 3.2 — another standalone one-shot mode. Always
+// requests live data regardless of --live (buildBrief's own job, not
+// repeated here) — a scheduled brief run is pointless without bridge/
+// GitLab checked, same reasoning the interactive list (2.4) already uses
+// for always living live. --notify here fires one short digest
+// notification (summarizeBrief) instead of notifyTransitions' per-task
+// ones — a morning brief is one notification, not N.
+async function runBrief(paths: StatusPaths, options: CliOptions): Promise<number> {
+  const sections = await buildBrief({ paths, staleHours: options.staleHours, recentHours: options.recentHours });
+
+  if (options.notify) notify('pipe-status brief', summarizeBrief(sections));
+
+  if (options.json) {
+    console.log(JSON.stringify(sections, replaceMaps, 2));
+  } else {
+    console.log(formatBrief(sections, options.recentHours ?? DEFAULT_RECENT_HOURS));
+  }
+
+  return sections.stale.length > 0 ? 1 : 0;
 }
 
 // JSON.stringify can't serialize a Map directly (used internally for
@@ -357,6 +412,11 @@ export async function main(): Promise<void> {
 
   if (options.next) {
     process.exitCode = await runNext(paths, options);
+    return;
+  }
+
+  if (options.brief) {
+    process.exitCode = await runBrief(paths, options);
     return;
   }
 

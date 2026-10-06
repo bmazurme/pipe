@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { recordTransitions, readTaskEvents, type EventsPaths } from './events.js';
+import { recordTransitions, readRecentEvents, readTaskEvents, type EventsPaths } from './events.js';
 import type { TaskEntry } from './collect.js';
 
 let dir: string;
@@ -114,5 +114,33 @@ describe('readTaskEvents', () => {
 
     assert.equal(events.length, 2);
     assert.deepEqual(events.map((e) => e.to), ['subscription:pushed', 'subscription:pulled']);
+  });
+});
+
+// IMPROVEMENTS_HARNESS.md 3.2 — the brief's own "moved recently" section.
+describe('readRecentEvents', () => {
+  const HOUR = 60 * 60 * 1000;
+  const REF_NOW = Date.parse('2026-10-05T12:00:00.000Z');
+
+  it('returns events from every key, not just one, within the window', () => {
+    recordTransitions([{ key: '1:1', subscription: { step: 'init' } }], paths, () => new Date(REF_NOW - 48 * HOUR).toISOString());
+    recordTransitions([{ key: '1:1', subscription: { step: 'pushed', pushedAt: NOW() } }], paths, () => new Date(REF_NOW - 1 * HOUR).toISOString());
+    recordTransitions([{ key: '1:2', subscription: { step: 'init' } }], paths, () => new Date(REF_NOW - 48 * HOUR).toISOString());
+    recordTransitions([{ key: '1:2', subscription: { step: 'pushed', pushedAt: NOW() } }], paths, () => new Date(REF_NOW - 2 * HOUR).toISOString());
+
+    const events = readRecentEvents(24, REF_NOW, paths);
+
+    assert.deepEqual(events.map((e) => e.key), ['1:1', '1:2']);
+  });
+
+  it('excludes events older than the window', () => {
+    recordTransitions([{ key: '1:1', subscription: { step: 'init' } }], paths, () => new Date(REF_NOW - 48 * HOUR).toISOString());
+    recordTransitions([{ key: '1:1', subscription: { step: 'pushed', pushedAt: NOW() } }], paths, () => new Date(REF_NOW - 30 * HOUR).toISOString());
+
+    assert.deepEqual(readRecentEvents(24, REF_NOW, paths), []);
+  });
+
+  it('returns an empty array when nothing has ever been logged', () => {
+    assert.deepEqual(readRecentEvents(24, REF_NOW, paths), []);
   });
 });

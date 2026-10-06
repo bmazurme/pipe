@@ -114,6 +114,18 @@ describe('parseArgs', () => {
     assert.equal(parseArgs([]).next, false);
   });
 
+  it('parses --brief and --recent-hours', () => {
+    assert.equal(parseArgs(['--brief']).brief, true);
+    assert.equal(parseArgs([]).brief, false);
+    assert.equal(parseArgs(['--brief', '--recent-hours', '48']).recentHours, 48);
+    assert.equal(parseArgs([]).recentHours, undefined);
+  });
+
+  it('rejects a non-positive --recent-hours value', () => {
+    assert.throws(() => parseArgs(['--recent-hours', '0']), /positive number of hours/);
+    assert.throws(() => parseArgs(['--recent-hours', 'soon']), /positive number of hours/);
+  });
+
   it('parses --pull/--retry/--publish into one action, plus --yes/--dry-run/--project/--reports-url', () => {
     assert.deepEqual(parseArgs(['--pull', '402:6']).action, { kind: 'pull', key: '402:6' });
     assert.deepEqual(parseArgs(['--retry', '402:6']).action, { kind: 'retry', key: '402:6' });
