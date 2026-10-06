@@ -68,6 +68,7 @@
     "dev": "tsc -b -w",
     "test": "tsc -b && node --test 'dist/**/*.test.js'",
     "test:coverage": "tsc -b && node --test --experimental-test-coverage 'dist/**/*.test.js'",
+    "coverage:check": "tsc -b && node scripts/check-coverage.mjs",
     "lint": "eslint .",
     "openapi:generate": "openapi-typescript ../../bridge/apps/backend/openapi.json -o src/bridge-api-types.d.ts",
     "openapi:check": "npm run openapi:generate && git diff --exit-code src/bridge-api-types.d.ts"

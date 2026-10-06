@@ -38,6 +38,15 @@ jobs:
         working-directory: packages/protocol
         run: node --test 'dist/**/*.test.js'
 
+      # IMPROVEMENTS_TECH.md 4.4 — a real gate (not informational), but
+      # scoped to this one package for now: Jest's/Vitest's coverage
+      # reporters are a different format from Node's own
+      # --experimental-test-coverage table this script parses, so the other
+      # 6 packages aren't covered by this yet.
+      - name: Coverage regression check
+        working-directory: packages/protocol
+        run: node scripts/check-coverage.mjs
+
   harness:
     name: harness (build, tests)
     runs-on: ubuntu-latest
