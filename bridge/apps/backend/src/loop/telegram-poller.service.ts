@@ -63,7 +63,7 @@ export class TelegramPollerService
       {
         offset: this.offset,
         timeout: LONG_POLL_SECONDS,
-        allowed_updates: ['message'],
+        allowed_updates: ['message', 'callback_query'],
       },
       POLL_REQUEST_TIMEOUT_MS,
     );

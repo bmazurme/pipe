@@ -17,6 +17,7 @@ import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
+import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
 import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
 import { walkProjectFiles } from './walk';
@@ -478,6 +479,13 @@ export async function handlePublishSubscriptionIssue(req: Request<Record<string,
     // A manual entry has no issue to comment on or estimate — publish
     // still just marks local pipeline state, for bookkeeping symmetry.
     const github = githubProjectFor(projectId);
+
+    // GitHub task: make sure the PR exists (the autopilot normally opened it
+    // at pull time — this covers a manual Pull, or one that failed). A no-op
+    // when it is already open; never merges.
+    if (github && !state?.manual) {
+      await openPullRequestForTask(projectId, iid);
+    }
 
     if (!state?.manual) {
       if (body.trim()) {

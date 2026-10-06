@@ -145,3 +145,17 @@ export async function showFile(path: string, ref: string, file: string): Promise
   }
 }
 
+// Files the task branch changes relative to its base — what a PR would show.
+// Three-dot: changes on the branch since it forked, not the base's own
+// progress. Prefers origin/<base> (init fetched it) over a possibly stale
+// local copy.
+export async function changedFiles(path: string, base: string, branch: string): Promise<string[]> {
+  const baseRef = (await git(path, ['rev-parse', '--verify', '--quiet', `origin/${base}`]).then(
+    () => `origin/${base}`,
+    () => base,
+  ));
+  const output = await git(path, ['diff', '--name-only', '--no-renames', `${baseRef}...${branch}`]);
+
+  return output.split('\n').filter(Boolean);
+}
+

@@ -73,6 +73,11 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       GITHUB_WEBHOOK_SECRET: ${LOOP_GITHUB_WEBHOOK_SECRET:-}
+      # Lets the owner merge a green loop PR from Telegram (MergeService).
+      # Fine-grained token, THIS repo only: Pull requests RW, Contents RW
+      # (merge), Checks R. Empty = no merge button is ever offered. Distinct
+      # from GITHUB_TOKEN above, which only has the VPN page's scopes.
+      LOOP_GITHUB_TOKEN: ${LOOP_GITHUB_TOKEN:-}
     ports:
       - target: 3000
         published: ${BACKEND_PUBLISHED_PORT:-3300}

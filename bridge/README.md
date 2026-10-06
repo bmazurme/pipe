@@ -109,6 +109,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |
 | `GITHUB_CI_WORKFLOW`, `GITHUB_DEPLOY_WORKFLOW` | имена workflow (`name:`), на которые реагирует цикл; по умолчанию `CI` и `Deploy bridge` |
+| `LOOP_GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_BASE_BRANCH` | merge «по кнопке» в Telegram: когда CI зелёный на PR с меткой `loop`, бот присылает сообщение с кнопкой «✅ Merge». `LOOP_GITHUB_TOKEN` — fine-grained токен **только на этот репозиторий** (Pull requests RW, Contents RW, Checks R); пусто = кнопка не предлагается никогда. Все проверки повторяются в момент нажатия: PR открыт, не draft, метка `loop`, база = `GITHUB_BASE_BRANCH` (по умолчанию `main`), `head` не изменился с момента сообщения, CI зелёный, **ни один изменённый файл не в защищённых путях** (`.github/`, `bridge/deploy/`, `loop/`, `telegram/`, `autopilot.ts`, `SELF_IMPROVEMENT_PLAN.md`) — такие PR мержатся только вручную на GitHub. Squash, привязан к проверенному sha |
 
 **Сборка frontend:**
 

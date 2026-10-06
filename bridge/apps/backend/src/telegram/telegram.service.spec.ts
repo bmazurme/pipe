@@ -92,4 +92,40 @@ describe('TelegramService', () => {
       (fetchSpy.mock.calls[1][1] as { dispatcher?: unknown }).dispatcher,
     ).toBeDefined();
   });
+
+  it('sends an inline keyboard with the message', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(telegramOk({}));
+    const service = make({ TELEGRAM_BOT_TOKEN: 'T', TELEGRAM_CHAT_ID: '42' });
+
+    await service.sendWithButtons('merge?', [
+      [{ text: 'Go', callback_data: 'merge:1:abc1234' }],
+    ]);
+
+    const body = JSON.parse(
+      (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
+    );
+
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [[{ text: 'Go', callback_data: 'merge:1:abc1234' }]],
+    });
+    expect(body.chat_id).toBe('42');
+  });
+
+  it('answers a callback query', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(telegramOk(true));
+
+    await make({ TELEGRAM_BOT_TOKEN: 'T' }).answerCallback('cb1', 'ok');
+
+    expect(fetchSpy.mock.calls[0][0]).toContain('/answerCallbackQuery');
+    expect(
+      JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string),
+    ).toEqual({
+      callback_query_id: 'cb1',
+      text: 'ok',
+    });
+  });
 });

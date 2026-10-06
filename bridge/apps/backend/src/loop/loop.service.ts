@@ -12,6 +12,7 @@ import {
   TERMINAL_LOOP_STAGES,
 } from './entities/loop-run.entity';
 import { interpretGithubEvent } from './github-events';
+import { MergeService } from './merge.service';
 
 const STATUS_RUN_COUNT = 5;
 
@@ -27,6 +28,7 @@ export class LoopService {
     private readonly telegram: TelegramService,
     private readonly configService: ConfigService,
     private readonly clients: ClientHeartbeatService,
+    private readonly merges: MergeService,
   ) {}
 
   startRun(title: string): Promise<LoopRun> {
@@ -50,7 +52,21 @@ export class LoopService {
       return false;
     }
 
-    const run = await this.findRun(interpretation);
+    let run = await this.findRun(interpretation);
+
+    // A loop PR no run knows about (reports opens PRs from its own branch
+    // names) becomes a run, so it shows in /status and its CI/merge/deploy
+    // events have somewhere to land.
+    if (!run && interpretation.adopt && interpretation.prNumber) {
+      run = await this.runs.save(
+        this.runs.create({
+          title: interpretation.adopt.title.slice(0, 255),
+          stage: LoopStage.PrOpen,
+          prNumber: interpretation.prNumber,
+          branch: interpretation.branch ?? null,
+        }),
+      );
+    }
 
     if (run) {
       // A finished run never regresses (a late CI webhook for an already
@@ -77,7 +93,11 @@ export class LoopService {
       }),
     );
 
-    if (run || interpretation.notifyUnmatched) {
+    // Green CI on a tracked PR: not a plain notice but the merge offer, which
+    // re-checks the PR itself (see MergeService).
+    if (run && interpretation.offerMerge && run.prNumber) {
+      await this.merges.offer(run.prNumber);
+    } else if (run || interpretation.notifyUnmatched) {
       const prefix = run ? `[run #${run.id}] ` : '';
 
       await this.telegram.send(`${prefix}${interpretation.message}`);

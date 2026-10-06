@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { getAllIssueStates } from './state-props';
 import { listParcels, sendClientEvent, sendHeartbeat } from './bridge-client';
 import { pullSubscriptionIssue } from './handler';
+import { openPullRequestForTask } from './pull-request';
 import { getSettings } from '../settings/props';
 import { getSubscriptionConfig } from './config-props';
 
@@ -21,6 +22,8 @@ export type AutopilotDeps = {
   pushedKeys: () => string[];
   resultReady: (taskKey: string) => Promise<boolean>;
   pull: (projectId: string, iid: string) => Promise<{ branch?: string }>;
+  // After a successful pull: open the PR for a GitHub task (no-op elsewhere).
+  afterPull: (projectId: string, iid: string) => Promise<unknown>;
   now: () => number;
 };
 
@@ -38,6 +41,7 @@ const defaultDeps: AutopilotDeps = {
       .map(([key]) => key),
   resultReady: async (taskKey) => (await listParcels({ channel: 'issue', taskKey, direction: 'result' })).length > 0,
   pull: pullSubscriptionIssue,
+  afterPull: openPullRequestForTask,
   now: Date.now,
 };
 
@@ -81,6 +85,16 @@ export function createAutopilot(deps: AutopilotDeps = defaultDeps, name = hostna
 
           failedAt.delete(key);
           await deps.event(name, { type: 'pulled', taskKey: key, branch: state.branch }).catch(() => undefined);
+
+          // The pull itself is done and recorded — a failed PR must not look
+          // like a failed pull (nor be retried as one), so it is reported on
+          // its own and the step stays `pulled`; Publish can open it later.
+          await deps.afterPull(projectId, iid).catch(async (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+
+            console.warn(`Autopilot: PR for ${key} failed:`, message);
+            await deps.event(name, { type: 'pull_failed', taskKey: key, error: `PR не создан: ${message}`.slice(0, 300) }).catch(() => undefined);
+          });
         } catch (error) {
           failedAt.set(key, deps.now());
 

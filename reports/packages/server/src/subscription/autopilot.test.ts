@@ -10,6 +10,7 @@ function deps(overrides: Partial<AutopilotDeps> = {}): AutopilotDeps {
     pushedKeys: () => ['173:6'],
     resultReady: vi.fn().mockResolvedValue(true),
     pull: vi.fn().mockResolvedValue({ branch: 'task/173-6' }),
+    afterPull: vi.fn().mockResolvedValue(null),
     now: () => 1_000_000,
     ...overrides,
   };
@@ -81,4 +82,36 @@ describe('autopilot', () => {
 
     expect(d.pull).toHaveBeenCalledTimes(1);
   });
+
+  it('opens the PR after a successful pull', async () => {
+    const d = deps();
+
+    await createAutopilot(d, 'ctr').pullReady();
+
+    expect(d.afterPull).toHaveBeenCalledWith('173', '6');
+  });
+
+  it('does not open a PR for a pull that failed', async () => {
+    const d = deps({ pull: vi.fn().mockRejectedValue(new Error('dirty tree')) });
+
+    await createAutopilot(d, 'ctr').pullReady();
+
+    expect(d.afterPull).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed PR on its own without treating the pull as failed or retrying it', async () => {
+    let now = 1_000_000;
+    const d = deps({ afterPull: vi.fn().mockRejectedValue(new Error('GitHub 403')), now: () => now });
+    const autopilot = createAutopilot(d, 'ctr');
+
+    await autopilot.pullReady();
+
+    expect(d.event).toHaveBeenCalledWith('ctr', { type: 'pulled', taskKey: '173:6', branch: 'task/173-6' });
+    expect(d.event).toHaveBeenCalledWith('ctr', expect.objectContaining({ type: 'pull_failed', error: expect.stringContaining('PR не создан: GitHub 403') }));
+    // The pull is recorded as done, so a later pass starts from `pulled`, not here.
+    now += 30_000;
+    await autopilot.pullReady();
+    expect(d.pull).toHaveBeenCalledTimes(2);
+  });
 });
+

@@ -75,3 +75,15 @@ Delete the task in the UI, remove the tracked project and dictionary entry,
 4. Tick items → «Создать issues». GitHub issues appear with labels `loop` + `risk:<level>`; Telegram: `📝 Из анализа … создано задач в GitHub: N`.
 5. Check the branch only contains `loop-backlog.json` (`git diff main <branch> --stat`). Delete the analysis branch afterwards — it is a throwaway artifact, never to be merged.
 
+## Variant: PR → CI → merge from Telegram (stage 5)
+
+Needs `LOOP_GITHUB_TOKEN` deployed (see bridge/README.md) and the GitHub webhook receiving **Pull requests** and **Workflow runs**.
+
+1. Run a GitHub-issue task through (Push → worker → autopilot pull). The autopilot opens the PR and labels it `loop`; Telegram: `🔀 PR #N … открыт`.
+2. CI runs on the PR. When green, Telegram sends `🟢 CI зелёный: PR #N` with **✅ Merge** and **🔎 Открыть PR**.
+3. Press ✅ Merge → `✅ PR #N влит в main (squash)`; the issue closes by itself (`Closes #N`).
+4. Negative checks worth doing once:
+   - a PR touching `.github/…` gets **no** button, only the reason and the link;
+   - push another commit to the PR after the message, then press the old button → `PR изменился после запроса подтверждения`;
+   - press Merge twice → the second says `PR уже влит`.
+

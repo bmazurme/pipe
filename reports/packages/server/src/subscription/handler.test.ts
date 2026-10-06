@@ -741,14 +741,17 @@ describe('GitHub-backed tracked project', () => {
     const { dir } = initTrackedProject('173');
     trackGithub(dir);
     setIssueState(repoId, '12', { step: 'pulled', branch: 'octo-12' });
-    const calls = githubFetch({ '/repos/owner/repo/issues/12/comments': {} });
+    // The PR is already open (as the autopilot leaves it), so Publish only comments.
+    const calls = githubFetch({ '/pulls?': [{ number: 5, html_url: 'u', state: 'open' }], '/repos/owner/repo/issues/12/comments': {} });
 
     const { res, events } = makeRes();
     await handlePublishSubscriptionIssue(makeReq({ projectId: repoId, iid: '12' }, { comment: 'Done in {{branch}}', timeEstimate: '2h' }), res);
 
     expect(events()[0]).toMatchObject({ type: 'message' });
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0].init!.body as string)).toEqual({ body: 'Done in octo-12' });
+    const comment = calls.find((call) => call.url.includes('/comments'))!;
+
+    expect(calls.some((call) => call.init?.method === 'POST' && !call.url.includes('/comments'))).toBe(false);
+    expect(JSON.parse(comment.init!.body as string)).toEqual({ body: 'Done in octo-12' });
     expect(getIssueState(repoId, '12')?.step).toBe('published');
   });
 });

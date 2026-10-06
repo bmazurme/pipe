@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { ProxyAgent, type Dispatcher } from 'undici';
 
 const TELEGRAM_TIMEOUT_MS = 10_000;
+
+export type InlineButton =
+  { text: string; callback_data: string } | { text: string; url: string };
 // Telegram rejects a message over 4096 characters outright.
 const TELEGRAM_MAX_TEXT = 4000;
 
@@ -41,6 +44,37 @@ export class TelegramService {
     });
 
     return result !== null;
+  }
+
+  // A message with an inline keyboard. A button either carries
+  // `callback_data` (the press comes back as a callback_query update — max 64
+  // bytes) or a `url` (just opens a link).
+  async sendWithButtons(
+    text: string,
+    buttons: InlineButton[][],
+  ): Promise<boolean> {
+    const chatId = this.chatId();
+
+    if (!chatId) {
+      return false;
+    }
+
+    return (
+      (await this.api('sendMessage', {
+        chat_id: chatId,
+        text: text.slice(0, TELEGRAM_MAX_TEXT),
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: buttons },
+      })) !== null
+    );
+  }
+
+  // Stops the button's spinner; `text` shows as a brief toast.
+  async answerCallback(callbackQueryId: string, text?: string): Promise<void> {
+    await this.api('answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      ...(text ? { text: text.slice(0, 200) } : {}),
+    });
   }
 
   // Raw Bot API call. Returns the `result` field, or null on any failure

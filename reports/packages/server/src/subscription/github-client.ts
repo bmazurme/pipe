@@ -106,3 +106,28 @@ export async function getLogin(): Promise<string> {
 
   return cachedLogin;
 }
+
+export type GithubPull = { number: number; html_url: string; state: string };
+
+// An open PR from this branch, if one exists — makes PR creation idempotent
+// (a re-run, the autopilot after a restart, and Publish all converge on one).
+export async function findOpenPull(githubRepo: string, branch: string): Promise<GithubPull | null> {
+  const owner = githubRepo.split('/')[0];
+  const query = new URLSearchParams({ head: `${owner}:${branch}`, state: 'open' });
+  const pulls = (await (await githubFetch(`/repos/${githubRepo}/pulls?${query}`)).json()) as GithubPull[];
+
+  return pulls[0] ?? null;
+}
+
+export async function createPull(
+  githubRepo: string,
+  pull: { title: string; head: string; base: string; body: string },
+): Promise<GithubPull> {
+  return (await (await githubFetch(`/repos/${githubRepo}/pulls`, { method: 'POST', body: JSON.stringify(pull) })).json()) as GithubPull;
+}
+
+// PRs share the issues' label endpoint.
+export async function addLabels(githubRepo: string, number: number, labels: string[]): Promise<void> {
+  await githubFetch(`/repos/${githubRepo}/issues/${number}/labels`, { method: 'POST', body: JSON.stringify({ labels }) });
+}
+

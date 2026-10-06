@@ -116,3 +116,10 @@ export function markDuplicates(items: BacklogItemType[], existing: { number: num
     return duplicateOf === undefined ? item : { ...item, duplicateOf };
   });
 }
+
+// Same matching rule bridge enforces at merge time (MergeService). Used here
+// only to warn early and to label the PR for a human — bridge is the boundary.
+export function findProtectedPaths(files: string[]): string[] {
+  return files.filter((file) => PROTECTED_PATHS.some((path) => (path.endsWith('/') ? file.startsWith(path) : file === path)));
+}
+

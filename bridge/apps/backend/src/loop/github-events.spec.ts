@@ -135,4 +135,99 @@ describe('interpretGithubEvent', () => {
       ),
     ).toBeNull();
   });
+
+  describe('loop PRs identified by label', () => {
+    const labeledPr = (action: string, extra: object = {}) => ({
+      action,
+      ...extra,
+      pull_request: {
+        number: 9,
+        title: 'Fix docs',
+        merged: false,
+        head: { ref: 'me-06.10.2026-9' },
+        labels: [{ name: 'loop' }],
+      },
+    });
+
+    it('treats the first `loop` label on an unlabeled PR as it opening', () => {
+      const result = interpretGithubEvent(
+        'pull_request',
+        {
+          action: 'labeled',
+          label: { name: 'loop' },
+          pull_request: {
+            number: 9,
+            title: 'T',
+            head: { ref: 'x' },
+            labels: [],
+          },
+        },
+        workflows,
+      );
+
+      expect(result).toMatchObject({
+        stage: LoopStage.PrOpen,
+        prNumber: 9,
+        adopt: { title: 'T' },
+      });
+    });
+
+    it('ignores other labels being added to an unrelated PR', () => {
+      expect(
+        interpretGithubEvent(
+          'pull_request',
+          {
+            action: 'labeled',
+            label: { name: 'bug' },
+            pull_request: {
+              number: 9,
+              head: { ref: 'x' },
+              labels: [{ name: 'bug' }],
+            },
+          },
+          workflows,
+        ),
+      ).toBeNull();
+    });
+
+    it('follows a labeled PR through merge and close', () => {
+      expect(
+        interpretGithubEvent(
+          'pull_request',
+          labeledPr('closed', {}),
+          workflows,
+        ),
+      ).toMatchObject({ stage: LoopStage.Failed });
+      expect(
+        interpretGithubEvent(
+          'pull_request',
+          {
+            ...labeledPr('closed'),
+            pull_request: { ...labeledPr('closed').pull_request, merged: true },
+          },
+          workflows,
+        ),
+      ).toMatchObject({ stage: LoopStage.Deploying });
+    });
+  });
+
+  it('marks green CI for a merge offer, and red CI not', () => {
+    const ci = (conclusion: string) =>
+      interpretGithubEvent(
+        'workflow_run',
+        {
+          action: 'completed',
+          workflow_run: {
+            name: 'CI',
+            conclusion,
+            head_branch: 'x',
+            pull_requests: [{ number: 5 }],
+          },
+        },
+        workflows,
+      );
+
+    expect(ci('success')).toMatchObject({ offerMerge: true, prNumber: 5 });
+    expect(ci('failure')?.offerMerge).toBe(false);
+  });
 });

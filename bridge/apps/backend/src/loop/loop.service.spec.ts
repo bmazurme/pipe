@@ -13,15 +13,17 @@ function setup(existingRun: Record<string, unknown> | null) {
   const events = { save: jest.fn(async (e) => e), create: jest.fn((e) => e) };
   const telegram = { send: jest.fn().mockResolvedValue(true) };
   const config = { get: jest.fn() } as unknown as ConfigService;
+  const merges = { offer: jest.fn().mockResolvedValue(undefined) };
   const service = new LoopService(
     runs as never,
     events as never,
     telegram as never,
     config,
     { statusLines: jest.fn().mockResolvedValue([]) } as never,
+    merges as never,
   );
 
-  return { service, runs, events, telegram };
+  return { service, runs, events, telegram, merges };
 }
 
 const mergedPr = {
@@ -103,5 +105,114 @@ describe('LoopService.handleGithubEvent', () => {
 
     await expect(service.handleGithubEvent('push', {})).resolves.toBe(false);
     expect(events.save).not.toHaveBeenCalled();
+  });
+
+  describe('loop PRs opened by reports (label, not branch)', () => {
+    const labeled = {
+      action: 'labeled',
+      label: { name: 'loop' },
+      pull_request: {
+        number: 9,
+        title: 'Fix docs',
+        head: { ref: 'me-06.10.2026-9' },
+        labels: [{ name: 'loop' }],
+      },
+    };
+
+    it('adopts an unknown PR as a new run', async () => {
+      const { service, runs, telegram } = setup(null);
+
+      await service.handleGithubEvent('pull_request', labeled);
+
+      expect(runs.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Fix docs',
+          prNumber: 9,
+          stage: LoopStage.PrOpen,
+        }),
+      );
+      expect(telegram.send).toHaveBeenCalledWith(
+        expect.stringContaining('PR #9'),
+      );
+    });
+
+    it('does not adopt a second run for a PR it already tracks', async () => {
+      const { service, runs } = setup({
+        id: 4,
+        stage: LoopStage.PrOpen,
+        prNumber: 9,
+        branch: null,
+        error: null,
+      });
+
+      await service.handleGithubEvent('pull_request', labeled);
+
+      expect(runs.create).not.toHaveBeenCalled();
+    });
+
+    it('ignores a PR that is neither on a loop branch nor labeled', async () => {
+      const { service, runs } = setup(null);
+
+      await expect(
+        service.handleGithubEvent('pull_request', {
+          action: 'opened',
+          pull_request: { number: 3, head: { ref: 'feature/x' }, labels: [] },
+        }),
+      ).resolves.toBe(false);
+      expect(runs.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('green CI', () => {
+    const ci = {
+      action: 'completed',
+      workflow_run: {
+        name: 'CI',
+        conclusion: 'success',
+        head_branch: 'me-06.10.2026-9',
+        pull_requests: [{ number: 9 }],
+      },
+    };
+
+    it('offers the merge instead of a plain notice for a tracked PR', async () => {
+      const { service, merges, telegram } = setup({
+        id: 4,
+        stage: LoopStage.PrOpen,
+        prNumber: 9,
+        branch: null,
+        error: null,
+      });
+
+      await service.handleGithubEvent('workflow_run', ci);
+
+      expect(merges.offer).toHaveBeenCalledWith(9);
+      expect(telegram.send).not.toHaveBeenCalled();
+    });
+
+    it('says nothing about CI on a PR it does not track', async () => {
+      const { service, merges, telegram } = setup(null);
+
+      await service.handleGithubEvent('workflow_run', ci);
+
+      expect(merges.offer).not.toHaveBeenCalled();
+      expect(telegram.send).not.toHaveBeenCalled();
+    });
+
+    it('does not offer a merge on a red CI', async () => {
+      const { service, merges } = setup({
+        id: 4,
+        stage: LoopStage.PrOpen,
+        prNumber: 9,
+        branch: null,
+        error: null,
+      });
+
+      await service.handleGithubEvent('workflow_run', {
+        ...ci,
+        workflow_run: { ...ci.workflow_run, conclusion: 'failure' },
+      });
+
+      expect(merges.offer).not.toHaveBeenCalled();
+    });
   });
 });

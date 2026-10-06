@@ -21,7 +21,9 @@
 # Optional, for the self-improvement loop (SELF_IMPROVEMENT_PLAN.md):
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET,
 #   LOOP_GITHUB_WEBHOOK_SECRET (becomes GITHUB_WEBHOOK_SECRET in the backend —
-#   GitHub rejects secret names starting with GITHUB_)
+#   GitHub rejects secret names starting with GITHUB_), LOOP_GITHUB_TOKEN
+#   (fine-grained, this repo: Pull requests RW, Contents RW, Checks R — merge
+#   from Telegram)
 #
 # New for worker + its VPN sidecar (see worker/README.md and
 # deploy/swarm/xray-client-config.example.json for the shape these feed):
@@ -328,6 +330,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           LOOP_GITHUB_WEBHOOK_SECRET: ${{ secrets.LOOP_GITHUB_WEBHOOK_SECRET }}
+          LOOP_GITHUB_TOKEN: ${{ secrets.LOOP_GITHUB_TOKEN }}
         # WORKER_*_FILE/_HASH for the five worker secrets come from the
         # "Write worker secrets" step above via $GITHUB_ENV — already in this
         # step's environment, not redeclared here.

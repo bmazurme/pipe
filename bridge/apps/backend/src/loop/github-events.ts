@@ -20,7 +20,17 @@ export interface GithubInterpretation {
   // Notify even when no run matched (a deploy is worth hearing about no
   // matter who triggered it; a CI run on some unrelated branch is not).
   notifyUnmatched: boolean;
+  // A loop PR that no run knows about yet (reports opens PRs from its own
+  // branch names, so the branch can't carry a run id) becomes a run of its own.
+  adopt?: { title: string };
+  // CI went green on a PR: instead of a plain notification, check it and
+  // offer the owner a merge button (see MergeService.offer).
+  offerMerge?: boolean;
 }
+
+// A PR is the loop's business when it sits on a loop branch OR carries this
+// label — reports opens PRs from the task branch it created, then labels them.
+export const LOOP_PR_LABEL = 'loop';
 
 export interface GithubWorkflowNames {
   ci: string;
@@ -29,11 +39,13 @@ export interface GithubWorkflowNames {
 
 interface PullRequestPayload {
   action?: string;
+  label?: { name?: string };
   pull_request?: {
     number?: number;
     title?: string;
     merged?: boolean;
     head?: { ref?: string };
+    labels?: Array<{ name?: string }>;
   };
 }
 
@@ -82,9 +94,22 @@ function interpretPullRequest(
   const pr = payload.pull_request;
   const branch = pr?.head?.ref;
 
-  // Only PRs on a loop branch are the loop's business.
-  if (!pr?.number || !branch?.startsWith(LOOP_BRANCH_PREFIX)) {
-    return null;
+  const hasLoopLabel = pr?.labels?.some((l) => l.name === LOOP_PR_LABEL);
+
+  if (
+    !pr?.number ||
+    !(branch?.startsWith(LOOP_BRANCH_PREFIX) || hasLoopLabel)
+  ) {
+    // `labeled` is how a PR that was opened without labels (the usual case
+    // for reports) first becomes visible to the loop: the payload's own label
+    // list is read from the PR, but be explicit about the label just added.
+    if (!(
+      pr?.number &&
+      payload.action === 'labeled' &&
+      payload.label?.name === LOOP_PR_LABEL
+    )) {
+      return null;
+    }
   }
 
   const base = {
@@ -95,9 +120,16 @@ function interpretPullRequest(
   };
   const label = `PR #${pr.number}${pr.title ? ` «${pr.title}»` : ''}`;
 
-  if (payload.action === 'opened' || payload.action === 'reopened') {
+  if (
+    payload.action === 'opened' ||
+    payload.action === 'reopened' ||
+    payload.action === 'labeled'
+  ) {
     return {
       ...base,
+      // Only an opening PR can start a run — a merged/closed one with no run
+      // behind it is just history, not something to start tracking.
+      adopt: { title: pr.title ?? `PR #${pr.number}` },
       type: `pull_request.${payload.action}`,
       stage: LoopStage.PrOpen,
       error: null,
@@ -147,6 +179,7 @@ function interpretWorkflowRun(
       runId: parseRunIdFromBranch(run.head_branch),
       prNumber: run.pull_requests?.[0]?.number,
       stage: LoopStage.Ci,
+      offerMerge: ok,
       error: ok ? null : `CI ${run.conclusion ?? 'unknown'}`,
       message: ok
         ? `🟢 CI зелёный на ${run.head_branch} — можно мержить${link}`
