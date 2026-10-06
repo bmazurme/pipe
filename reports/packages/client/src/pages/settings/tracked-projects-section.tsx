@@ -14,7 +14,7 @@ import { describeError } from '../../utils/describe-error';
 
 import style from './settings.module.css';
 
-const emptyForm = { gitlabProjectId: '', path: '', baseBranch: '', include: '', exclude: '' };
+const emptyForm = { gitlabProjectId: '', githubRepo: '', githubLabel: '', path: '', baseBranch: '', include: '', exclude: '' };
 
 function splitList(value: string): string[] | undefined {
   const items = value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -32,16 +32,22 @@ function TrackedProjectsSection() {
   const [toRemove, setToRemove] = useState<TrackedProjectType | null>(null);
 
   const trackedProjects = config?.trackedProjects ?? [];
-  const isDuplicate = Boolean(form.gitlabProjectId)
-    && trackedProjects.some((project) => project.gitlabProjectId === form.gitlabProjectId);
+  // A GitHub repo replaces the GitLab id: the server resolves the repo's
+  // numeric id from 'owner/name' when it is added.
+  const isGithub = Boolean(form.githubRepo.trim());
+  const isDuplicate = isGithub
+    ? trackedProjects.some((project) => project.githubRepo?.toLowerCase() === form.githubRepo.trim().toLowerCase())
+    : Boolean(form.gitlabProjectId) && trackedProjects.some((project) => project.gitlabProjectId === form.gitlabProjectId);
+  const isValid = (isGithub || Boolean(form.gitlabProjectId)) && Boolean(form.path) && !isDuplicate;
 
   const handleAdd = async () => {
-    if (!form.gitlabProjectId || !form.path || isDuplicate) {
+    if (!isValid) {
       return;
     }
 
     const project: TrackedProjectType = {
-      gitlabProjectId: form.gitlabProjectId,
+      gitlabProjectId: isGithub ? '' : form.gitlabProjectId,
+      ...(isGithub ? { provider: 'github' as const, githubRepo: form.githubRepo.trim(), githubLabel: form.githubLabel.trim() || undefined } : {}),
       path: form.path,
       baseBranch: form.baseBranch || undefined,
       include: splitList(form.include),
@@ -103,7 +109,7 @@ function TrackedProjectsSection() {
           <ul className={style.codesList}>
             {trackedProjects.map((project) => (
               <li key={project.gitlabProjectId} className={style.codesItem}>
-                <span className={style.codesCode}>{project.gitlabProjectId}</span>
+                <span className={style.codesCode}>{project.provider === 'github' ? project.githubRepo : project.gitlabProjectId}</span>
                 <span className={style.codesLabel}>
                   {project.path}{project.baseBranch ? ` · ${project.baseBranch}` : ''}
                 </span>
@@ -135,9 +141,24 @@ function TrackedProjectsSection() {
               placeholder="ID проекта, как в «Коды проектов»"
               value={form.gitlabProjectId}
               onUpdate={(gitlabProjectId) => setForm((prev) => ({ ...prev, gitlabProjectId }))}
+              disabled={isGithub}
               validationState={isDuplicate ? 'invalid' : undefined}
               errorMessage={isDuplicate ? 'Такой репозиторий уже отслеживается' : undefined}
             />
+            <TextInput
+              label="или GitHub репозиторий"
+              placeholder="owner/name — задачи берутся из issues"
+              value={form.githubRepo}
+              onUpdate={(githubRepo) => setForm((prev) => ({ ...prev, githubRepo }))}
+            />
+            {isGithub && (
+              <TextInput
+                label="Метка GitHub issues"
+                placeholder="loop"
+                value={form.githubLabel}
+                onUpdate={(githubLabel) => setForm((prev) => ({ ...prev, githubLabel }))}
+              />
+            )}
             <TextInput
               label="Локальный путь"
               placeholder="/Users/you/Projects/my-repo"
@@ -169,7 +190,7 @@ function TrackedProjectsSection() {
           onClickButtonApply={handleAdd}
           textButtonApply="Добавить"
           textButtonCancel="Отмена"
-          propsButtonApply={{ disabled: !form.gitlabProjectId || !form.path || isDuplicate }}
+          propsButtonApply={{ disabled: !isValid }}
         />
       </Dialog>
 

@@ -17,6 +17,7 @@ import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
+import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
 import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
@@ -48,6 +49,19 @@ async function withStream(res: Response, label: string, run: () => Promise<unkno
 
 function parcelName(projectId: string, iid: string, encrypted: boolean): string {
   return `${projectId}-${iid}.subscription.zip${encrypted ? '.enc' : ''}`;
+}
+
+// GitHub-backed tracked project (see TrackedProjectType.provider) — its
+// issues come from the GitHub API instead of GitLab, everything after that
+// (init → draft → push → pull → publish) is the same local pipeline.
+function githubProjectFor(projectId: string | number) {
+  const project = findTrackedProject(projectId);
+
+  return project?.provider === 'github' && project.githubRepo ? { ...project, githubRepo: project.githubRepo } : undefined;
+}
+
+async function branchUsername(projectId: string | number): Promise<string> {
+  return githubProjectFor(projectId) ? getGithubLogin() : getCurrentUsername();
 }
 
 function requireTrackedProject(projectId: string) {
@@ -82,6 +96,30 @@ export async function handleListSubscriptionIssues(req: Request<Record<string, s
       subscription: states[issueKey(issue.project_id, issue.iid)],
     }));
 
+    for (const project of config.trackedProjects) {
+      const github = githubProjectFor(project.gitlabProjectId);
+
+      if (!github) continue;
+
+      for (const issue of await listGithubIssues(github.githubRepo, github.githubLabel)) {
+        result.push({
+          id: String(issue.id),
+          iid: String(issue.number),
+          projectId: Number(github.gitlabProjectId),
+          projectName: github.githubRepo,
+          title: issue.title,
+          description: issue.body ?? '',
+          webUrl: issue.html_url,
+          timeEstimate: '',
+          state: 'opened',
+          status: statusDict.opened ?? 'opened',
+          tracked: true,
+          source: 'github',
+          subscription: states[issueKey(github.gitlabProjectId, issue.number)],
+        });
+      }
+    }
+
     // Manual parcels have no GitLab issue behind them, so they never appear
     // in `issues` above — synthesize a row for each from its own stored
     // state instead of a GitLab fetch.
@@ -115,7 +153,7 @@ export async function handleInitSubscriptionIssue(req: Request<Record<string, st
 
   await withStream(res, 'Init subscription issue', async () => {
     const trackedProject = requireTrackedProject(projectId);
-    const username = await getCurrentUsername();
+    const username = await branchUsername(projectId);
     const branch = buildBranchName(username, iid);
 
     await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
@@ -137,7 +175,7 @@ export async function handleCreateManualSubscriptionIssue(req: Request<Record<st
     // Unlike a real init, this shouldn't hard-require GitLab credentials
     // just to prefix a branch name — falls back the same way git.ts's own
     // sanitizeUsername does.
-    const username = await getCurrentUsername().catch(() => 'user');
+    const username = await branchUsername(gitlabProjectId).catch(() => 'user');
     const branch = buildBranchName(username, iid);
 
     await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
@@ -179,7 +217,9 @@ export async function handleGetSubscriptionDraft(req: Request<Record<string, str
 
     const [rawTitle, rawDescription, issueId, draftProjectId] = state?.manual
       ? [state.title ?? '', state.description ?? '', iid, state.projectId ?? Number(projectId)]
-      : await getIssue(projectId, iid).then((issue) => [issue.title, issue.description ?? '', issue.id, issue.project_id]);
+      : githubProjectFor(projectId)
+        ? await getGithubIssue(githubProjectFor(projectId)!.githubRepo, iid).then((issue) => [issue.title, issue.body ?? '', issue.id, Number(projectId)])
+        : await getIssue(projectId, iid).then((issue) => [issue.title, issue.description ?? '', issue.id, issue.project_id]);
 
     const title = applyDictionary(String(rawTitle), dictionary, 'toRemote');
     const description = applyDictionary(String(rawDescription), dictionary, 'toRemote');
@@ -223,7 +263,9 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
     // (a substitution could alter an /uploads/... path), so this still
     // needs its own live fetch for a real issue. A manual parcel has no
     // GitLab-hosted markdown to scan at all.
-    const images = state.manual ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '');
+    // (GitHub issues: no image fetch either — their attachments sit behind
+    // a different, signed-URL mechanism this doesn't handle.)
+    const images = state.manual || githubProjectFor(projectId) ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '');
 
     // Images never go through scanForLeaks (text-only) — this is the only
     // signal the operator gets that they weren't checked, strict or not.
@@ -409,14 +451,17 @@ export async function handlePublishSubscriptionIssue(req: Request<Record<string,
     const template = templateId ? commentTemplates.find((item) => item.id === templateId) : undefined;
     const body = (template?.body ?? comment ?? '').replace(/{{\s*branch\s*}}/g, state?.branch ?? '');
 
-    // A manual entry has no GitLab issue to comment on or estimate — publish
+    // A manual entry has no issue to comment on or estimate — publish
     // still just marks local pipeline state, for bookkeeping symmetry.
+    const github = githubProjectFor(projectId);
+
     if (!state?.manual) {
       if (body.trim()) {
-        await addIssueNote(projectId, iid, body);
+        await (github ? addGithubComment(github.githubRepo, iid, body) : addIssueNote(projectId, iid, body));
       }
 
-      if (timeEstimate?.trim()) {
+      // GitHub has no time-estimate concept.
+      if (!github && timeEstimate?.trim()) {
         await setIssueTimeEstimate(projectId, iid, timeEstimate.trim());
       }
     }
@@ -431,6 +476,6 @@ export async function handleGetSubscriptionIssueTime(req: Request<Record<string,
   await withStream(res, 'Get subscription issue time', async () => {
     const state = getIssueState(projectId, iid);
 
-    return state?.manual ? { humanTimeEstimate: null } : getIssueTimeStats(projectId, iid);
+    return state?.manual || githubProjectFor(projectId) ? { humanTimeEstimate: null } : getIssueTimeStats(projectId, iid);
   });
 }

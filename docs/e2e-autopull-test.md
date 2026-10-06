@@ -58,3 +58,12 @@ Stop reports. After ~1–1.5 min: `🔴 reports «<hostname>» оффлайн`. 
 
 Delete the task in the UI, remove the tracked project and dictionary entry,
 `rm -rf ~/pipe-e2e-sandbox`.
+
+## Variant: task from a GitHub issue (stage 3)
+
+1. `reports/packages/server/.env`: `GITHUB_TOKEN=…` (e.g. `$(gh auth token)` for a local check), restart reports.
+2. Settings → Отслеживаемые репозитории → add: «или GitHub репозиторий» = `bmazurme/pipe`, local path = the sandbox repo (the code the task is run against), base branch `main`.
+3. Create a task: `gh issue create -R bmazurme/pipe -l loop -t "E2E: add farewell()" -b "Add an exported farewell(name) function next to greet() in src/hello.ts."`
+4. Subscription page: the issue appears with its repo name. Init → Push (draft anonymized) → worker → autopilot pulls → Publish leaves a comment on the issue.
+5. Close the issue and remove the tracked repo afterwards.
+

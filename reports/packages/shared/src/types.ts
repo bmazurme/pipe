@@ -105,7 +105,17 @@ export type ResultType = {
 }
 
 export type TrackedProjectType = {
+  // For a GitLab project, its project id. For a GitHub repo (`provider:
+  // 'github'`), GitHub's numeric repository id — resolved from `githubRepo`
+  // when the project is added — so state keys (`<id>:<iid>`), the parcel
+  // manifest's projectId and the autopilot's key parsing stay unchanged.
   gitlabProjectId: string;
+  provider?: 'gitlab' | 'github';
+  // 'owner/name'; required when provider is 'github'.
+  githubRepo?: string;
+  // Only issues carrying this label are offered for the pipeline. Defaults
+  // to 'loop'.
+  githubLabel?: string;
   path: string;
   baseBranch?: string;
   include?: string[];
@@ -177,6 +187,7 @@ export type SubscriptionIssueType = {
   state: string;
   status: string;
   tracked: boolean;
+  source?: 'gitlab' | 'github';
   subscription?: SubscriptionStateEntryType;
 };
 

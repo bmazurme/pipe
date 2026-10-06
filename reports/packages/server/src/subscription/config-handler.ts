@@ -15,6 +15,7 @@ import {
   generateAndSaveKeyPair,
   setLeakScanStrict,
 } from './config-props';
+import { getRepo } from './github-client';
 
 function sender(res: Response) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -42,8 +43,34 @@ export function handleGetSubscriptionConfig(req: Request<Record<string, string>>
   withSync(res, 'Get subscription config', () => getSubscriptionConfig());
 }
 
-export function handleAddTrackedProject(req: Request<Record<string, string>>, res: Response) {
-  withSync(res, 'Add tracked project', () => addTrackedProject(req.body as TrackedProjectType));
+// A GitHub repo is entered as 'owner/name'; the numeric repository id that
+// becomes the project's key is resolved here, once, instead of asking the
+// user to look it up.
+export async function resolveTrackedProject(input: TrackedProjectType): Promise<TrackedProjectType> {
+  if (input.provider !== 'github' && !input.githubRepo) {
+    return input;
+  }
+
+  if (!input.githubRepo || !/^[\w.-]+\/[\w.-]+$/.test(input.githubRepo)) {
+    throw new Error("Укажите GitHub-репозиторий в формате 'owner/name'");
+  }
+
+  const repo = await getRepo(input.githubRepo);
+
+  return { ...input, provider: 'github', githubRepo: repo.fullName, gitlabProjectId: String(repo.id) };
+}
+
+export async function handleAddTrackedProject(req: Request<Record<string, string>>, res: Response) {
+  const sendEvent = sender(res);
+
+  try {
+    sendEvent({ type: 'message', data: addTrackedProject(await resolveTrackedProject(req.body as TrackedProjectType)) });
+  } catch (error) {
+    console.error('Add tracked project error:', error);
+    sendEvent({ type: 'error', data: error instanceof Error ? error.message : 'Unknown error' });
+  } finally {
+    res.end();
+  }
 }
 
 export function handleRemoveTrackedProject(req: Request<Record<string, string>>, res: Response) {

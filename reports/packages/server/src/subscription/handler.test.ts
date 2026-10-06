@@ -577,3 +577,111 @@ describe('handleGetSubscriptionIssueTime', () => {
     expect(events()[0].data).toEqual({ humanTimeEstimate: '2h' });
   });
 });
+
+describe('GitHub-backed tracked project', () => {
+  const repoId = '555';
+
+  function trackGithub(dir: string) {
+    addTrackedProject({ gitlabProjectId: repoId, provider: 'github', githubRepo: 'owner/repo', githubLabel: 'loop', path: dir, baseBranch: 'master', include: ['**/*.ts'] });
+  }
+
+  beforeEach(() => {
+    process.env.GITHUB_TOKEN = 'ghp_test';
+  });
+
+  afterEach(() => {
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  function githubFetch(routes: Record<string, unknown>) {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      const key = Object.keys(routes).find((route) => url.includes(route));
+
+      return key ? Response.json(routes[key]) : Response.json({ message: 'unexpected' }, { status: 500 });
+    }) as typeof fetch;
+
+    return calls;
+  }
+
+  it('lists labelled GitHub issues keyed by repo id and issue number, alongside GitLab ones', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    stubSettings({ gitlabUrl: '', privateToken: '' });
+    githubFetch({ '/repos/owner/repo/issues': [{ id: 9001, number: 12, title: 'Improve X', body: 'details', state: 'open', html_url: 'https://github.com/owner/repo/issues/12' }] });
+
+    const { res, events } = makeRes();
+    await handleListSubscriptionIssues(makeReq({}), res);
+
+    expect(events()[0].data).toEqual([
+      expect.objectContaining({ iid: '12', projectId: 555, projectName: 'owner/repo', title: 'Improve X', description: 'details', source: 'github', tracked: true }),
+    ]);
+  });
+
+  it('attaches existing pipeline state to a listed GitHub issue', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    stubSettings({ gitlabUrl: '', privateToken: '' });
+    setIssueState(repoId, '12', { step: 'pushed', branch: 'b' });
+    githubFetch({ '/repos/owner/repo/issues': [{ id: 1, number: 12, title: 't', body: null, state: 'open', html_url: 'u' }] });
+
+    const { res, events } = makeRes();
+    await handleListSubscriptionIssues(makeReq({}), res);
+
+    expect((events()[0].data as Array<{ subscription?: { step: string } }>)[0].subscription?.step).toBe('pushed');
+  });
+
+  it('surfaces a missing GITHUB_TOKEN as an error instead of an empty list', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    stubSettings({ gitlabUrl: '', privateToken: '' });
+    delete process.env.GITHUB_TOKEN;
+
+    const { res, events } = makeRes();
+    await handleListSubscriptionIssues(makeReq({}), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/GITHUB_TOKEN/);
+  });
+
+  it('inits with the GitHub login in the branch name, not a GitLab one', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    githubFetch({ '/user': { login: 'octo-cat' } });
+
+    const { res, events } = makeRes();
+    await handleInitSubscriptionIssue(makeReq({ projectId: repoId, iid: '12' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'message' });
+    expect(getIssueState(repoId, '12')?.branch).toMatch(/^octo-cat-/);
+  });
+
+  it('builds the draft from the GitHub issue, anonymized', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    setSubscriptionConfig({ ...defaultConfig, trackedProjects: (stores.config as SubscriptionConfigType).trackedProjects, dictionary: [{ key: 'Acme', value: 'COMPANY_X' }] });
+    githubFetch({ '/repos/owner/repo/issues/12': { id: 9001, number: 12, title: 'Fix Acme login', body: 'Acme users', state: 'open', html_url: 'u' } });
+
+    const { res, events } = makeRes();
+    await handleGetSubscriptionDraft(makeReq({ projectId: repoId, iid: '12' }), res);
+
+    expect(events()[0].data).toMatchObject({ projectId: 555, title: 'Fix COMPANY_X login', description: 'COMPANY_X users' });
+  });
+
+  it('publishes as a GitHub comment and never sends a time estimate', async () => {
+    const { dir } = initTrackedProject('173');
+    trackGithub(dir);
+    setIssueState(repoId, '12', { step: 'pulled', branch: 'octo-12' });
+    const calls = githubFetch({ '/repos/owner/repo/issues/12/comments': {} });
+
+    const { res, events } = makeRes();
+    await handlePublishSubscriptionIssue(makeReq({ projectId: repoId, iid: '12' }, { comment: 'Done in {{branch}}', timeEstimate: '2h' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'message' });
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init!.body as string)).toEqual({ body: 'Done in octo-12' });
+    expect(getIssueState(repoId, '12')?.step).toBe('published');
+  });
+});
