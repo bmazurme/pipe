@@ -77,4 +77,7 @@
 
 ## Статус
 
-- Этап 1 (фундамент): реализован в bridge — модули `telegram` и `loop` (LoopRun/LoopEvent, GitHub-вебхук, Telegram-вебхук с `/status`), миграция `AddLoopRuns`.
+- Этап 1 (фундамент): **завершён и проверен в production** (2026-10-06). Модули `telegram` и `loop` в bridge (LoopRun/LoopEvent, GitHub-вебхук, команда `/status`), миграция `AddLoopRuns`. Проверено: GitHub-вебхук доставляет события (уведомление о деплое пришло в Telegram), `/status` отвечает.
+  - Backend живёт на `https://api.bridge.ntlstl.dev`, GitHub-вебхук настроен на него.
+  - Сервер не достаёт Telegram напрямую и Telegram не достаёт сервер, поэтому бот ходит через `vpn-client` (`TELEGRAM_PROXY_URL`) и принимает команды long polling'ом (`TELEGRAM_POLLING=true`); backend подключён к отдельной сети `telegram-proxy-net`, не к `worker-net`.
+  - Открыто: перевыпустить токен бота (светился в чате); branch protection недоступна на бесплатном тарифе для приватного репо.
