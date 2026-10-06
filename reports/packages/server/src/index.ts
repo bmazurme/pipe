@@ -110,6 +110,10 @@ if (isProductionMode) {
 function startServer(port: number, attemptsLeft: number) {
   const server = app.listen(port, host, () => {
     console.log(`🚀 Сервер запущен: http://${host}:${port}`);
+    // Only once this instance actually owns the port: a second copy that
+    // loses it must not run its own autopilot first (two of them pull the
+    // same result twice — one commit each — before the loser exits).
+    startAutopilot();
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
@@ -129,4 +133,3 @@ function startServer(port: number, attemptsLeft: number) {
 }
 
 startServer(startPort, 20);
-startAutopilot();
