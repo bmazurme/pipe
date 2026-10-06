@@ -24,6 +24,15 @@ describe('loadConfig', () => {
     assert.ok(config.workDir.endsWith('.worker-work'));
   });
 
+  for (const bad of ['abc', '10s', '0', '-3', '']) {
+    it(`rejects POLL_INTERVAL_SEC=${JSON.stringify(bad)}`, () => {
+      assert.throws(
+        () => loadConfig({ BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: 'k', POLL_INTERVAL_SEC: bad }),
+        /POLL_INTERVAL_SEC must be a positive number/,
+      );
+    });
+  }
+
   it('honors overrides for the optional settings', () => {
     const config = loadConfig({
       BRIDGE_API_URL: 'http://x',
