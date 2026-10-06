@@ -343,9 +343,12 @@ describe('handlePullSubscriptionIssue', () => {
     git(dir, ['push', '-u', 'origin', 'task/173-6']);
 
     const unchanged = path.join(dir, 'a.ts');
-    const before = statSync(unchanged);
-    const old = new Date(before.mtimeMs - 60_000);
+    const old = new Date(statSync(unchanged).mtimeMs - 60_000);
     utimesSync(unchanged, old, old);
+    // Read back what the filesystem actually stored: mtimeMs is a float and
+    // some filesystems (Linux CI) round-trip it as 1791310458681.999, so
+    // comparing against the Date we computed is flaky.
+    const mtimeBefore = statSync(unchanged).mtimeMs;
 
     const parcel = buildArchive(
       [
@@ -364,7 +367,7 @@ describe('handlePullSubscriptionIssue', () => {
     const { res } = makeRes();
     await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
 
-    expect(statSync(unchanged).mtimeMs).toBe(old.getTime());
+    expect(statSync(unchanged).mtimeMs).toBe(mtimeBefore);
     expect(readFileSync(path.join(dir, 'pulled.txt'), 'utf-8')).toBe('new');
   });
 
