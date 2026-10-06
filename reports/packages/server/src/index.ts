@@ -36,6 +36,7 @@ import {
   handleSetLeakScanStrict,
 } from './subscription/config-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
+import { startAutopilot } from './subscription/autopilot';
 import { setupProxy } from './utils/setup-proxy';
 
 setupProxy();
@@ -128,3 +129,4 @@ function startServer(port: number, attemptsLeft: number) {
 }
 
 startServer(startPort, 20);
+startAutopilot();

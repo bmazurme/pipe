@@ -436,6 +436,48 @@
         }
       }
     },
+    "/api/v1/clients/heartbeat": {
+      "post": {
+        "operationId": "ClientsController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientHeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/clients/events": {
+      "post": {
+        "operationId": "ClientsController_event",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/oauth/yandex": {
       "get": {
         "operationId": "OauthController_yandexLogin",
@@ -1957,6 +1999,61 @@
             "type": "string"
           }
         }
+      },
+      "ClientHeartbeatDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reports"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ]
+      },
+      "ClientEventDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "pulled",
+              "pull_failed"
+            ]
+          },
+          "taskKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "branch": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "taskKey"
+        ]
       },
       "MeResponseDto": {
         "type": "object",

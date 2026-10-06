@@ -18,6 +18,7 @@ function setup(existingRun: Record<string, unknown> | null) {
     events as never,
     telegram as never,
     config,
+    { statusLines: jest.fn().mockResolvedValue([]) } as never,
   );
 
   return { service, runs, events, telegram };

@@ -250,6 +250,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clients/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ClientsController_heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clients/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ClientsController_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/yandex": {
         parameters: {
             query?: never;
@@ -968,6 +1000,19 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        ClientHeartbeatDto: {
+            name: string;
+            /** @enum {string} */
+            kind: "reports";
+        };
+        ClientEventDto: {
+            name: string;
+            /** @enum {string} */
+            type: "pulled" | "pull_failed";
+            taskKey: string;
+            branch?: string;
+            error?: string;
+        };
         MeResponseDto: {
             id: number;
             username: string;
@@ -1552,6 +1597,48 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ChatMessageResponseDto"];
                 };
+            };
+        };
+    };
+    ClientsController_heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientHeartbeatDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ClientsController_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientEventDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

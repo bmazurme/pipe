@@ -114,3 +114,27 @@ export async function peekParcel(id: number): Promise<Buffer> {
 export async function deleteParcel(id: number): Promise<void> {
   await authorizedFetch(`/api/v1/storage/${id}`, { method: 'DELETE' });
 }
+
+// Liveness ping — bridge turns a silence into a Telegram "offline" alert, so
+// reports (which only otherwise talks to bridge on demand) is visible while
+// idle.
+export async function sendHeartbeat(name: string): Promise<void> {
+  await authorizedFetch('/api/v1/clients/heartbeat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, kind: 'reports' }),
+  });
+}
+
+export type ClientEvent =
+  | { type: 'pulled'; taskKey: string; branch?: string }
+  | { type: 'pull_failed'; taskKey: string; error?: string };
+
+// Structured on purpose — bridge owns the Telegram message text.
+export async function sendClientEvent(name: string, event: ClientEvent): Promise<void> {
+  await authorizedFetch('/api/v1/clients/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, ...event }),
+  });
+}

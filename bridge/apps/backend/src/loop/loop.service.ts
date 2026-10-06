@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { TelegramService } from '../telegram/telegram.service';
+import { ClientHeartbeatService } from './client-heartbeat.service';
 import { LoopEvent } from './entities/loop-event.entity';
 import {
   LoopRun,
@@ -25,6 +26,7 @@ export class LoopService {
     private readonly events: Repository<LoopEvent>,
     private readonly telegram: TelegramService,
     private readonly configService: ConfigService,
+    private readonly clients: ClientHeartbeatService,
   ) {}
 
   startRun(title: string): Promise<LoopRun> {
@@ -85,23 +87,25 @@ export class LoopService {
   }
 
   async statusText(): Promise<string> {
-    const runs = await this.runs.find({
-      order: { id: 'DESC' },
-      take: STATUS_RUN_COUNT,
-    });
+    const [runs, clientLines] = await Promise.all([
+      this.runs.find({ order: { id: 'DESC' }, take: STATUS_RUN_COUNT }),
+      this.clients.statusLines(),
+    ]);
 
-    if (runs.length === 0) {
-      return 'Циклов пока не было.';
-    }
+    const runLines =
+      runs.length === 0
+        ? ['Циклов пока не было.']
+        : runs.map((run) => {
+            const pr = run.prNumber ? ` · PR #${run.prNumber}` : '';
+            const error = run.error ? ` · ⚠ ${run.error}` : '';
 
-    return runs
-      .map((run) => {
-        const pr = run.prNumber ? ` · PR #${run.prNumber}` : '';
-        const error = run.error ? ` · ⚠ ${run.error}` : '';
+            return `#${run.id} [${run.stage}] ${run.title}${pr}${error}`;
+          });
 
-        return `#${run.id} [${run.stage}] ${run.title}${pr}${error}`;
-      })
-      .join('\n');
+    return [
+      ...runLines,
+      ...(clientLines.length ? ['', ...clientLines] : []),
+    ].join('\n');
   }
 
   private async findRun(interpretation: {
