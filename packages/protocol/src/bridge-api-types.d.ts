@@ -362,6 +362,54 @@ export interface paths {
         patch: operations["PurgeController_update"];
         trace?: never;
     };
+    "/api/v1/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SecretsController_list"];
+        put?: never;
+        post: operations["SecretsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/secrets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["SecretsController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["SecretsController_update"];
+        trace?: never;
+    };
+    "/api/v1/secrets/{id}/value": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SecretsController_reveal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/storage": {
         parameters: {
             query?: never;
@@ -948,6 +996,21 @@ export interface components {
             value: string;
         };
         UpdatePurgeEntryDto: Record<string, never>;
+        SecretResponseDto: {
+            id: number;
+            name: string;
+            description: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateSecretDto: {
+            name: string;
+            value: string;
+            description?: string;
+        };
+        UpdateSecretDto: Record<string, never>;
         StoredFileResponseDto: {
             id: number;
             originalName: string;
@@ -1691,6 +1754,111 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PurgeEntryResponseDto"];
                 };
+            };
+        };
+    };
+    SecretsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretResponseDto"][];
+                };
+            };
+        };
+    };
+    SecretsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSecretDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretResponseDto"];
+                };
+            };
+        };
+    };
+    SecretsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SecretsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSecretDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretResponseDto"];
+                };
+            };
+        };
+    };
+    SecretsController_reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
