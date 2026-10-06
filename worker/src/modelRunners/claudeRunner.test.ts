@@ -21,7 +21,10 @@ function writeFakeClaude(dir: string): void {
       "console.log(`TOKEN:${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ''}`);",
       "console.log(`PROXY:${process.env.HTTP_PROXY ?? ''}`);",
       "if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);",
-      "process.exit(Number(process.env.FAKE_EXIT_CODE ?? '0'));",
+      "if (process.env.FAKE_HANG) {",
+      "  if (process.env.FAKE_IGNORE_SIGTERM) process.on('SIGTERM', () => {});",
+      "  setInterval(() => {}, 1000);",
+      "} else process.exit(Number(process.env.FAKE_EXIT_CODE ?? '0'));",
       '',
     ].join('\n'),
   );
@@ -42,6 +45,8 @@ afterEach(() => {
   process.env.PATH = originalPath;
   if (originalExitCode === undefined) delete process.env.FAKE_EXIT_CODE;
   else process.env.FAKE_EXIT_CODE = originalExitCode;
+  delete process.env.FAKE_HANG;
+  delete process.env.FAKE_IGNORE_SIGTERM;
   if (originalStderr === undefined) delete process.env.FAKE_STDERR;
   else process.env.FAKE_STDERR = originalStderr;
 });
@@ -86,6 +91,24 @@ describe('runClaude', () => {
     process.env.FAKE_EXIT_CODE = '3';
     const result = await runClaude('/tmp', 'p', 'opus', () => {});
     assert.equal(result.exitCode, 3);
+  });
+
+  it('kills a hung claude after timeoutMs and rejects with "timed out"', async () => {
+    process.env.FAKE_HANG = '1';
+    const started = Date.now();
+    await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 300), /timed out/);
+    assert.ok(Date.now() - started < 5000);
+  });
+
+  it('escalates to SIGKILL when claude ignores SIGTERM', async () => {
+    process.env.FAKE_HANG = '1';
+    process.env.FAKE_IGNORE_SIGTERM = '1';
+    await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 300, 200), /timed out/);
+  });
+
+  it('is unaffected by a timeout when the run finishes in time', async () => {
+    const result = await runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 60_000);
+    assert.equal(result.exitCode, 0);
   });
 
   it('rejects with a clear message when the claude binary is not on PATH', async () => {

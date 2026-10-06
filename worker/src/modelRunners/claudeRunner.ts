@@ -5,6 +5,9 @@ export interface RunResult {
   output: string;
 }
 
+const MAX_OUTPUT_CHARS = 1024 * 1024;
+const DEFAULT_KILL_GRACE_MS = 5000;
+
 // Unattended, non-interactive run: `-p` (print mode) makes Claude Code do one
 // turn and exit instead of opening its REPL, and
 // `--dangerously-skip-permissions` is required for that turn to actually
@@ -22,6 +25,8 @@ export function runClaude(
   onOutput: (chunk: string) => void,
   proxyUrl?: string,
   claudeToken?: string | null,
+  timeoutMs?: number,
+  killGraceMs = DEFAULT_KILL_GRACE_MS,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel];
@@ -44,13 +49,31 @@ export function runClaude(
     child.stdout?.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf-8');
       output += text;
+      // Keep only the tail — a runaway CLI must not grow this without bound.
+      if (output.length > MAX_OUTPUT_CHARS) output = output.slice(-MAX_OUTPUT_CHARS);
       onOutput(text);
     });
     child.stderr?.on('data', (chunk: Buffer) => {
       onOutput(chunk.toString('utf-8'));
     });
 
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | undefined;
+    const timeoutTimer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            child.kill('SIGTERM');
+            killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs);
+          }, timeoutMs)
+        : undefined;
+    const clearTimers = () => {
+      clearTimeout(timeoutTimer);
+      clearTimeout(killTimer);
+    };
+
     child.on('error', (error) => {
+      clearTimers();
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         reject(new Error('"claude" binary not found on PATH — install Claude Code on this server first.'));
         return;
@@ -59,6 +82,11 @@ export function runClaude(
     });
 
     child.on('close', (code) => {
+      clearTimers();
+      if (timedOut) {
+        reject(new Error(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`));
+        return;
+      }
       resolve({ exitCode: code ?? 1, output });
     });
   });

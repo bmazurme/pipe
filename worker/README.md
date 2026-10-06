@@ -77,6 +77,7 @@ layout & install model»), один `npm install` в корне репозито
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
 | `WORKER_WORK_DIR` | нет (по умолчанию `./.worker-work`) | где создаются временные рабочие директории для задач |
 | `WORKER_NAME` | нет (по умолчанию hostname) | как этот процесс будет подписываться в списке задач bridge |
+| `WORKER_JOB_TIMEOUT_SEC` | нет (по умолчанию `1800`, 30 минут) | максимальное время выполнения задачи через `claude` CLI. По истечении процессу отправляется `SIGTERM`, через 5 секунд — `SIGKILL`, задача помечается как failed с ошибкой `timed out`. Должно быть положительным числом, иначе worker не стартует |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | ключ обязателен для GPT (задачи и чат) | по умолчанию `https://api.openai.com/v1`, модель `gpt-4o` |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | ключ обязателен для DeepSeek (задачи и чат) | по умолчанию `https://api.deepseek.com/v1`, модель `deepseek-chat` |
 | `QWEN_API_KEY` / `QWEN_BASE_URL` / `QWEN_MODEL` | ключ обязателен для Qwen (задачи и чат) | по умолчанию OpenAI-совместимый эндпоинт DashScope, модель `qwen-plus` |

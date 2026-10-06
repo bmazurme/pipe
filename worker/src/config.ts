@@ -13,12 +13,25 @@ export interface WorkerConfig {
   // directly from wherever worker runs, so routing that through the proxy
   // too would just add an unnecessary hop.
   proxyUrl?: string;
+  // Max wall-clock seconds a claude CLI job may run before it's killed.
+  jobTimeoutSec: number;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
   if (!value) {
     throw new Error(`${key} is not set — see worker/README.md for setup`);
+  }
+  return value;
+}
+
+const DEFAULT_JOB_TIMEOUT_SEC = 30 * 60;
+
+function parseJobTimeoutSec(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_JOB_TIMEOUT_SEC;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`WORKER_JOB_TIMEOUT_SEC must be a positive number of seconds, got "${raw}"`);
   }
   return value;
 }
@@ -42,5 +55,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     // without extra configuration.
     workerName: env.WORKER_NAME ?? hostname(),
     proxyUrl: env.WORKER_PROXY_URL,
+    jobTimeoutSec: parseJobTimeoutSec(env.WORKER_JOB_TIMEOUT_SEC),
   };
 }

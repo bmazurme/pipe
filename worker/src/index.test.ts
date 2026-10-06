@@ -48,6 +48,7 @@ function fakeConfig(workDir: string): WorkerConfig {
     pollIntervalSec: 10,
     workDir,
     workerName: 'test-worker',
+    jobTimeoutSec: 1800,
   };
 }
 

@@ -33,6 +33,21 @@ describe('loadConfig', () => {
     });
   }
 
+  it('defaults WORKER_JOB_TIMEOUT_SEC to 30 minutes and honors an override', () => {
+    const base = { BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: 'k' };
+    assert.equal(loadConfig(base).jobTimeoutSec, 1800);
+    assert.equal(loadConfig({ ...base, WORKER_JOB_TIMEOUT_SEC: '60' }).jobTimeoutSec, 60);
+  });
+
+  for (const bad of ['abc', '0', '-5']) {
+    it(`rejects WORKER_JOB_TIMEOUT_SEC=${JSON.stringify(bad)}`, () => {
+      assert.throws(
+        () => loadConfig({ BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: 'k', WORKER_JOB_TIMEOUT_SEC: bad }),
+        /WORKER_JOB_TIMEOUT_SEC must be a positive number/,
+      );
+    });
+  }
+
   it('honors overrides for the optional settings', () => {
     const config = loadConfig({
       BRIDGE_API_URL: 'http://x',
