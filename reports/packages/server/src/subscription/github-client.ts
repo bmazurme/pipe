@@ -67,6 +67,28 @@ export async function listIssues(githubRepo: string, label = DEFAULT_GITHUB_LABE
   return items.filter((item) => !item.pull_request);
 }
 
+// Every issue carrying the label, open or closed — what the analyzer must not
+// propose again. Paged (100 per page, capped) so a long history can't turn
+// one call into an unbounded crawl.
+export async function listAllIssues(githubRepo: string, label = DEFAULT_GITHUB_LABEL, maxPages = 5): Promise<GithubIssue[]> {
+  const all: GithubIssue[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const query = new URLSearchParams({ state: 'all', labels: label, per_page: '100', page: String(page) });
+    const items = (await (await githubFetch(`/repos/${githubRepo}/issues?${query}`)).json()) as Array<GithubIssue & { pull_request?: unknown }>;
+
+    all.push(...items.filter((item) => !item.pull_request));
+
+    if (items.length < 100) break;
+  }
+
+  return all;
+}
+
+export async function createIssue(githubRepo: string, issue: { title: string; body: string; labels: string[] }): Promise<GithubIssue> {
+  return (await (await githubFetch(`/repos/${githubRepo}/issues`, { method: 'POST', body: JSON.stringify(issue) })).json()) as GithubIssue;
+}
+
 export async function getIssue(githubRepo: string, number: number | string): Promise<GithubIssue> {
   return (await (await githubFetch(`/repos/${githubRepo}/issues/${number}`)).json()) as GithubIssue;
 }

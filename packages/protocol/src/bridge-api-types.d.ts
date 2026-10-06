@@ -1008,10 +1008,11 @@ export interface components {
         ClientEventDto: {
             name: string;
             /** @enum {string} */
-            type: "pulled" | "pull_failed";
+            type: "pulled" | "pull_failed" | "issues_created";
             taskKey: string;
             branch?: string;
             error?: string;
+            count?: number;
         };
         MeResponseDto: {
             id: number;

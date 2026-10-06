@@ -36,11 +36,20 @@ export class ClientsController {
   @Post('events')
   @HttpCode(HttpStatus.NO_CONTENT)
   async event(@Body() dto: ClientEventDto): Promise<void> {
-    const message =
-      dto.type === 'pulled'
-        ? `⬇️ Результат по ${dto.taskKey} загружен${dto.branch ? ` в ветку ${dto.branch}` : ''} (${dto.name})`
-        : `⚠️ Не удалось загрузить результат по ${dto.taskKey} (${dto.name})${dto.error ? `: ${dto.error}` : ''}`;
+    const message = this.eventMessage(dto);
 
     await this.telegram.send(message);
+  }
+
+  private eventMessage(dto: ClientEventDto): string {
+    if (dto.type === 'pulled') {
+      return `⬇️ Результат по ${dto.taskKey} загружен${dto.branch ? ` в ветку ${dto.branch}` : ''} (${dto.name})`;
+    }
+
+    if (dto.type === 'issues_created') {
+      return `📝 Из анализа ${dto.taskKey} создано задач в GitHub: ${dto.count ?? 0} (${dto.name})`;
+    }
+
+    return `⚠️ Не удалось загрузить результат по ${dto.taskKey} (${dto.name})${dto.error ? `: ${dto.error}` : ''}`;
   }
 }

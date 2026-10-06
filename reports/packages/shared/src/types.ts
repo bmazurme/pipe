@@ -247,3 +247,38 @@ export type PurgeApplyResultType = {
   count: number;
   leaks: LeakFindingType[];
 };
+
+// Analysis (SELF_IMPROVEMENT_PLAN.md stage 4): the backlog a worker run
+// proposes, read back from the analysis task's branch for review.
+export type BacklogRiskType = 'low' | 'medium' | 'high';
+
+export type BacklogItemType = {
+  title: string;
+  body: string;
+  risk: BacklogRiskType;
+  // Set when an existing issue (open or closed) already has this title.
+  duplicateOf?: number;
+};
+
+export type BacklogType = {
+  items: BacklogItemType[];
+  branch: string;
+};
+
+export type CreateBacklogIssuesPayload = {
+  // Indices into BacklogType.items the user ticked.
+  indices: number[];
+};
+
+export type CreatedIssueType = { number: number; url: string; title: string };
+
+export type CreateBacklogIssuesResult = {
+  created: CreatedIssueType[];
+  skipped: { title: string; reason: string }[];
+};
+
+export type StartAnalysisPayload = {
+  // Tracked GitHub project (its gitlabProjectId / numeric repo id).
+  projectId: string;
+};
+

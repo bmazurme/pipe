@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
-import { ArrowsRotateLeft, Plus, TrashBin, Tray } from '@gravity-ui/icons';
+import { ArrowsRotateLeft, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
 import type { SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
@@ -12,9 +12,12 @@ import {
   useGetSubscriptionConfigQuery,
   useGetSubscriptionIssuesQuery,
   useRemoveSubscriptionIssueMutation,
+  useStartAnalysisMutation,
 } from '../../store/api';
 import { useDocumentTitle } from '../../hooks/use-document-title';
 import { describeError } from '../../utils/describe-error';
+import { isAnalysisIssue } from './analysis';
+import BacklogPanel from './components/backlog-panel';
 import IssueStepper from './components/issue-stepper';
 
 import style from './subscription.module.css';
@@ -36,11 +39,13 @@ function Subscription() {
   const { data: config } = useGetSubscriptionConfigQuery();
   const [createManual] = useCreateManualSubscriptionIssueMutation();
   const [removeIssue] = useRemoveSubscriptionIssueMutation();
+  const [startAnalysis, { isLoading: isStartingAnalysis }] = useStartAnalysisMutation();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
   const [manualForm, setManualForm] = useState(emptyManualForm);
   const [toRemove, setToRemove] = useState<SubscriptionIssueType | null>(null);
 
+  const githubProjects = (config?.trackedProjects ?? []).filter((project) => project.provider === 'github');
   const issues = data ?? [];
   const openIssue = issues.find((issue) => `${issue.projectId}-${issue.iid}` === openKey) ?? null;
 
@@ -60,6 +65,23 @@ function Subscription() {
         theme: 'danger',
         title: 'Не удалось создать посылку',
         content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+
+  // Creates an ordinary task whose description is the analysis prompt; the
+  // usual Init → Push → worker → Pull pipeline then carries it.
+  const handleStartAnalysis = async (projectId: string) => {
+    try {
+      await startAnalysis({ projectId }).unwrap();
+      toaster.add({ name: 'analysis-started', theme: 'success', title: 'Задача анализа создана — отправьте её (Push)', autoHiding: 5000 });
+    } catch (analysisError) {
+      toaster.add({
+        name: 'analysis-start-error',
+        theme: 'danger',
+        title: 'Не удалось запустить анализ',
+        content: describeError(analysisError),
         isClosable: true,
       });
     }
@@ -107,6 +129,18 @@ function Subscription() {
         description="Открытые задачи GitLab и пайплайн init → push → pull → publish"
         actions={(
           <>
+            {githubProjects.length > 0 && (
+              <Button
+                view="outlined"
+                size="m"
+                loading={isStartingAnalysis}
+                onClick={() => handleStartAnalysis(githubProjects[0].gitlabProjectId)}
+                title={`Анализ репозитория ${githubProjects[0].githubRepo}`}
+              >
+                <Icon data={Magnifier} size={16} />
+                Запустить анализ
+              </Button>
+            )}
             <Button view="outlined" size="m" onClick={() => setIsManualDialogOpen(true)}>
               <Icon data={Plus} size={16} />
               Добавить вручную
@@ -175,6 +209,7 @@ function Subscription() {
         <DialogHeader caption={openIssue ? `${openIssue.iid} ${openIssue.title}` : ''} />
         <DialogBody>
           {openIssue && <IssueStepper issue={openIssue} />}
+          {openIssue && isAnalysisIssue(openIssue) && <BacklogPanel issue={openIssue} />}
         </DialogBody>
       </Dialog>
 

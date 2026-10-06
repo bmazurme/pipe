@@ -2032,7 +2032,8 @@
             "type": "string",
             "enum": [
               "pulled",
-              "pull_failed"
+              "pull_failed",
+              "issues_created"
             ]
           },
           "taskKey": {
@@ -2047,6 +2048,11 @@
           "error": {
             "type": "string",
             "maxLength": 300
+          },
+          "count": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
           }
         },
         "required": [

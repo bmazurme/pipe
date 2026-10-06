@@ -67,3 +67,11 @@ Delete the task in the UI, remove the tracked project and dictionary entry,
 4. Subscription page: the issue appears with its repo name. Init → Push (draft anonymized) → worker → autopilot pulls → Publish leaves a comment on the issue.
 5. Close the issue and remove the tracked repo afterwards.
 
+## Variant: analysis → backlog → issues (stage 4)
+
+1. Subscription → «Запустить анализ». A task `Analysis <date>` appears (branch already created).
+2. Open it → Push → worker job (Worker page) → the autopilot pulls the result.
+3. Open the task again: «Предложения анализа» lists what Claude proposed. Duplicates of existing `loop` issues are marked and can't be ticked.
+4. Tick items → «Создать issues». GitHub issues appear with labels `loop` + `risk:<level>`; Telegram: `📝 Из анализа … создано задач в GitHub: N`.
+5. Check the branch only contains `loop-backlog.json` (`git diff main <branch> --stat`). Delete the analysis branch afterwards — it is a throwaway artifact, never to be merged.
+

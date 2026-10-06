@@ -34,7 +34,7 @@ function sender(res: Response) {
   };
 }
 
-async function withStream(res: Response, label: string, run: () => Promise<unknown>) {
+export async function withStream(res: Response, label: string, run: () => Promise<unknown>) {
   const sendEvent = sender(res);
 
   try {
@@ -166,29 +166,37 @@ export async function handleInitSubscriptionIssue(req: Request<Record<string, st
 // push → pull → publish) as a real one, just seeded from typed text instead
 // of a GitLab fetch. The `m-` prefix can't collide with a real iid, which is
 // always numeric.
+export async function createManualSubscriptionIssue(
+  gitlabProjectId: string,
+  title: string,
+  description: string,
+): Promise<{ iid: string; state: SubscriptionStateEntryType }> {
+  const trackedProject = requireTrackedProject(gitlabProjectId);
+  const iid = `m-${Date.now().toString(36)}`;
+  // Unlike a real init, this shouldn't hard-require GitLab credentials
+  // just to prefix a branch name — falls back the same way git.ts's own
+  // sanitizeUsername does.
+  const username = await branchUsername(gitlabProjectId).catch(() => 'user');
+  const branch = buildBranchName(username, iid);
+
+  await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
+
+  const state = setIssueState(gitlabProjectId, iid, {
+    step: 'init',
+    branch,
+    manual: true,
+    title,
+    description,
+    projectId: Number(gitlabProjectId),
+  });
+
+  return { iid, state };
+}
+
 export async function handleCreateManualSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   const { gitlabProjectId, title, description } = req.body as CreateManualSubscriptionIssuePayload;
 
-  await withStream(res, 'Create manual subscription issue', async () => {
-    const trackedProject = requireTrackedProject(gitlabProjectId);
-    const iid = `m-${Date.now().toString(36)}`;
-    // Unlike a real init, this shouldn't hard-require GitLab credentials
-    // just to prefix a branch name — falls back the same way git.ts's own
-    // sanitizeUsername does.
-    const username = await branchUsername(gitlabProjectId).catch(() => 'user');
-    const branch = buildBranchName(username, iid);
-
-    await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
-
-    return setIssueState(gitlabProjectId, iid, {
-      step: 'init',
-      branch,
-      manual: true,
-      title,
-      description,
-      projectId: Number(gitlabProjectId),
-    });
-  });
+  await withStream(res, 'Create manual subscription issue', async () => (await createManualSubscriptionIssue(gitlabProjectId, title, description)).state);
 }
 
 // For a GitLab-backed issue this only resets local progress — the issue

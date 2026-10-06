@@ -1,6 +1,9 @@
 import { createApi, retry } from '@reduxjs/toolkit/query/react';
 import type {
   CommentTemplateType,
+  BacklogType,
+  CreateBacklogIssuesPayload,
+  CreateBacklogIssuesResult,
   CreateManualSubscriptionIssuePayload,
   DateType,
   DictionaryEntryType,
@@ -15,6 +18,7 @@ import type {
   StreamEvent,
   SubscriptionConfigType,
   SubscriptionDraftType,
+  StartAnalysisPayload,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
   SubscriptionPushPayload,
@@ -139,6 +143,23 @@ const reportsApi = createApi({
       query: () => 'subscription/issues',
       transformResponse: unwrap<SubscriptionIssueType[]>('Не удалось загрузить список задач'),
       providesTags: ['SubscriptionIssues'],
+    }),
+    startAnalysis: builder.mutation<{ iid: string; state: SubscriptionStateEntryType }, StartAnalysisPayload>({
+      query: (payload) => ({ url: 'subscription/analysis', method: 'POST', body: payload }),
+      transformResponse: unwrap<{ iid: string; state: SubscriptionStateEntryType }>('Не удалось запустить анализ'),
+      invalidatesTags: ['SubscriptionIssues'],
+    }),
+    // Re-read on every open: the backlog lives on a git branch and the
+    // duplicate marks depend on GitHub's current issue list.
+    getBacklog: builder.query<BacklogType, { projectId: number; iid: string }>({
+      query: ({ projectId, iid }) => `subscription/analysis/${projectId}/${iid}/backlog`,
+      transformResponse: unwrap<BacklogType>('Не удалось загрузить бэклог'),
+      keepUnusedDataFor: 0,
+    }),
+    createBacklogIssues: builder.mutation<CreateBacklogIssuesResult, { projectId: number; iid: string; payload: CreateBacklogIssuesPayload }>({
+      query: ({ projectId, iid, payload }) => ({ url: `subscription/analysis/${projectId}/${iid}/issues`, method: 'POST', body: payload }),
+      transformResponse: unwrap<CreateBacklogIssuesResult>('Не удалось создать задачи'),
+      invalidatesTags: ['SubscriptionIssues'],
     }),
     getSubscriptionIssueTime: builder.query<{ humanTimeEstimate: string | null }, { projectId: number; iid: string }>({
       query: ({ projectId, iid }) => `subscription/issues/${projectId}/${iid}/time`,
@@ -267,6 +288,9 @@ export const {
   useAddProjectCodeMutation,
   useRemoveProjectCodeMutation,
   useGetSubscriptionIssuesQuery,
+  useStartAnalysisMutation,
+  useGetBacklogQuery,
+  useCreateBacklogIssuesMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
   useLazyGetSubscriptionDraftQuery,

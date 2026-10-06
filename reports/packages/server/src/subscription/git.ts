@@ -133,3 +133,15 @@ export async function commitPulledFiles(path: string, relPaths: string[], messag
 export async function pushBranch(path: string, branch: string): Promise<void> {
   await git(path, ['push', '-u', 'origin', branch]);
 }
+
+// Reads one file as it is on a branch without checking the branch out — the
+// working tree (often the developer's own, possibly on another branch) is
+// never touched. Null when the branch or the file doesn't exist.
+export async function showFile(path: string, ref: string, file: string): Promise<string | null> {
+  try {
+    return await git(path, ['show', `${ref}:${file}`]);
+  } catch {
+    return null;
+  }
+}
+

@@ -128,7 +128,8 @@ export async function sendHeartbeat(name: string): Promise<void> {
 
 export type ClientEvent =
   | { type: 'pulled'; taskKey: string; branch?: string }
-  | { type: 'pull_failed'; taskKey: string; error?: string };
+  | { type: 'pull_failed'; taskKey: string; error?: string }
+  | { type: 'issues_created'; taskKey: string; count: number };
 
 // Structured on purpose — bridge owns the Telegram message text.
 export async function sendClientEvent(name: string, event: ClientEvent): Promise<void> {
