@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "title": "Reject path-traversing parcel entries when worker writes job files to disk",
+      "risk": "medium",
+      "body": "## Problem\n`worker/src/index.ts:80-89` (`processJob`) writes every parcel file and asset to `path.join(jobDir, file.relPath)` with no check that the result stays inside `jobDir`. `relPath` comes straight from the zip entry name (`packages/protocol/src/pack.ts` extractArchive). An entry like `../../home/worker/.bashrc` or an absolute path escapes the job directory. The parcel is untrusted (GitLab issue content / bridge upload) and worker then runs `claude --dangerously-skip-permissions`. `worker/src/modelRunners/openAiCompatibleRunner.ts` (`resolveInWorkDir`, ~lines 75-83) already has a containment guard that `processJob` does not use.\n\n## Proposed change\nExtract a small `resolveInDir(root, relPath)` helper (rejects absolute paths and `..` escapes, but allows names like `..foo`), use it in both write loops in `processJob`, and reuse it from `resolveInWorkDir`. A bad entry fails the job via the existing error path.\n\n## Acceptance criteria\n- [ ] A parcel containing `../escape.txt` makes the job end `failed` and writes nothing outside `jobDir`.\n- [ ] Absolute-path entries are rejected too.\n- [ ] Unit tests for the helper: `a/../../b`, `/etc/x`, a legitimate `..foo` file name, and a normal nested path.\n- [ ] `npm test` and `npm run lint` pass in `worker/`."
+    },
+    {
+      "title": "Add a timeout to the claude CLI spawn so a hung job cannot freeze the worker",
+      "risk": "medium",
+      "body": "## Problem\n`worker/src/modelRunners/claudeRunner.ts:41-64` spawns `claude` and only resolves on `close`. There is no timeout and no kill path. The worker's poll loop is serial (`await processJob(...)` in `worker/src/index.ts`), so a CLI that stalls (network hang, login prompt) blocks all later jobs and chat turns, and the job stays `running` forever. CLAUDE.md states every outbound call carries a timeout, and the OpenAI-compatible runner has one, but the CLI path does not. `output` is also accumulated unbounded (line 43-48).\n\n## Proposed change\nAdd an optional `timeoutMs` (env `WORKER_JOB_TIMEOUT_SEC`, default e.g. 30 min, parsed/validated in `config.ts`). On expiry send SIGTERM, then SIGKILL after a short grace period, and resolve/reject with a clear 'timed out' error so `processJob` marks the job failed. Cap the retained `output` size.\n\n## Acceptance criteria\n- [ ] A hanging fake `claude` is killed after `timeoutMs` and the job reports failure containing 'timed out'.\n- [ ] A normal run is unaffected and the timer is cleared on close.\n- [ ] New test in the existing claudeRunner test file using a fake binary that sleeps.\n- [ ] Env var documented in `worker/README.md`."
+    },
+    {
+      "title": "Validate POLL_INTERVAL_SEC in worker config instead of passing NaN/0 to the poll loop",
+      "risk": "low",
+      "body": "## Problem\n`worker/src/config.ts:30` does `pollIntervalSec: Number(env.POLL_INTERVAL_SEC ?? '10')`. A typo such as `10s` yields `NaN`, and `0` or an empty string yields `0`. The sleep then becomes `setTimeout(..., NaN|0)` (~1 ms), so the worker hammers bridge's job and chat claim endpoints in a hot loop and trips the global throttler. `config.test.ts` only covers a valid value and the default.\n\n## Proposed change\nParse the value, and throw `POLL_INTERVAL_SEC must be a positive number` (same style as `required()` errors) when it is not finite or is <= 0.\n\n## Acceptance criteria\n- [ ] `loadConfig` throws for `'abc'`, `'0'`, `'-3'` and `''`.\n- [ ] Default `10` and valid values like `'5'` still work.\n- [ ] Tests added in worker's config test file; `npm test` passes."
+    },
+    {
+      "title": "Validate task key format in harness runAction before building URLs and sync-cli args",
+      "risk": "low",
+      "body": "## Problem\n`harness/src/actions.ts:186-189` splits the key with `key.split(':')` and only checks both parts are truthy. `\"1:2:3\"` silently becomes project 1 / iid 2, and a key like `1:../../settings` is interpolated unencoded into the POST URL at line 123 (and 157) and passed to sync-cli as arguments. `pipe-mcp` feeds these keys from model-generated tool arguments, so malformed input reaches network calls and subprocess args.\n\n## Proposed change\nValidate `key` against `/^\\d+:\\d+$/` at the top of `runAction` (returning the existing `Invalid task key` result with code 1), and wrap URL path parts in `encodeURIComponent` as defence in depth.\n\n## Acceptance criteria\n- [ ] `\"1:2:3\"`, `\"1:../x\"`, `\"a b:1\"` return code 1 and call neither `callPublish` nor `runSyncCli`.\n- [ ] A valid `\"12:34\"` key behaves as before.\n- [ ] Tests added to harness's actions tests; `npm test` and `npm run lint` pass in `harness/`."
+    }
+  ]
+}
