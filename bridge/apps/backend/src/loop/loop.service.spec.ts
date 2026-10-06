@@ -28,7 +28,13 @@ function setup(existingRun: Record<string, unknown> | null) {
 
 const mergedPr = {
   action: 'closed',
-  pull_request: { number: 5, merged: true, head: { ref: 'loop/run-3-x' } },
+  pull_request: {
+    number: 5,
+    merged: true,
+    head: { ref: 'loop/run-3-x', repo: { full_name: 'o/r' } },
+    base: { repo: { full_name: 'o/r' } },
+    author_association: 'OWNER',
+  },
 };
 
 describe('LoopService.handleGithubEvent', () => {
@@ -114,7 +120,9 @@ describe('LoopService.handleGithubEvent', () => {
       pull_request: {
         number: 9,
         title: 'Fix docs',
-        head: { ref: 'me-06.10.2026-9' },
+        head: { ref: 'me-06.10.2026-9', repo: { full_name: 'o/r' } },
+        base: { repo: { full_name: 'o/r' } },
+        author_association: 'OWNER',
         labels: [{ name: 'loop' }],
       },
     };
@@ -166,10 +174,12 @@ describe('LoopService.handleGithubEvent', () => {
   describe('green CI', () => {
     const ci = {
       action: 'completed',
+      repository: { full_name: 'o/r' },
       workflow_run: {
         name: 'CI',
         conclusion: 'success',
         head_branch: 'me-06.10.2026-9',
+        head_repository: { full_name: 'o/r' },
         pull_requests: [{ number: 9 }],
       },
     };
