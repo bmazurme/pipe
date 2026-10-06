@@ -8,6 +8,13 @@ function make(values: Record<string, string>) {
   } as unknown as ConfigService);
 }
 
+function telegramOk(result: unknown): Response {
+  return {
+    ok: true,
+    json: async () => ({ ok: true, result }),
+  } as Response;
+}
+
 describe('TelegramService', () => {
   afterEach(() => jest.restoreAllMocks());
 
@@ -21,7 +28,7 @@ describe('TelegramService', () => {
   it('posts to the bot API with the owner chat id', async () => {
     const fetchSpy = jest
       .spyOn(global, 'fetch')
-      .mockResolvedValue({ ok: true } as Response);
+      .mockResolvedValue(telegramOk({ message_id: 1 }));
     const service = make({ TELEGRAM_BOT_TOKEN: 'T', TELEGRAM_CHAT_ID: '42' });
 
     await expect(service.send('hello')).resolves.toBe(true);
@@ -44,5 +51,45 @@ describe('TelegramService', () => {
       .spyOn(global, 'fetch')
       .mockResolvedValueOnce({ ok: false, status: 500 } as Response);
     await expect(service.send('x')).resolves.toBe(false);
+  });
+
+  it('returns the result field from api()', async () => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(telegramOk([{ update_id: 1 }]));
+    const service = make({ TELEGRAM_BOT_TOKEN: 'T' });
+
+    await expect(service.api('getUpdates', {})).resolves.toEqual([
+      { update_id: 1 },
+    ]);
+  });
+
+  it('treats ok:false as a failure', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, description: 'Conflict' }),
+    } as Response);
+    const service = make({ TELEGRAM_BOT_TOKEN: 'T' });
+
+    await expect(service.api('getUpdates', {})).resolves.toBeNull();
+  });
+
+  it('routes through the proxy only when TELEGRAM_PROXY_URL is set', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(telegramOk(true));
+
+    await make({ TELEGRAM_BOT_TOKEN: 'T' }).api('getMe', {});
+    expect(
+      (fetchSpy.mock.calls[0][1] as { dispatcher?: unknown }).dispatcher,
+    ).toBeUndefined();
+
+    await make({
+      TELEGRAM_BOT_TOKEN: 'T',
+      TELEGRAM_PROXY_URL: 'http://vpn-client:1080',
+    }).api('getMe', {});
+    expect(
+      (fetchSpy.mock.calls[1][1] as { dispatcher?: unknown }).dispatcher,
+    ).toBeDefined();
   });
 });

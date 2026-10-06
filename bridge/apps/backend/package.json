@@ -48,7 +48,8 @@
     "pg": "^8.21.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "undici": "^7.30.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

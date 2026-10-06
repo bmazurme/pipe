@@ -27,6 +27,7 @@ services:
     image: ${CR_HOST:?CR_HOST is required}/${CR_REGISTRY:?CR_REGISTRY is required}/${CR_BACKEND_IMAGE:?CR_BACKEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}
     networks:
       - bridge
+      - telegram-proxy-net
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -63,6 +64,11 @@ services:
       # Self-improvement loop (SELF_IMPROVEMENT_PLAN.md): Telegram bot +
       # GitHub webhook receivers. All optional — empty leaves the matching
       # endpoint answering 503 and notifications off.
+      # The host can't reach api.telegram.org directly (and Telegram can't
+      # reach the host), so the bot goes out through the vpn-client sidecar
+      # and receives updates by long polling instead of a webhook.
+      TELEGRAM_PROXY_URL: http://vpn-client:1080
+      TELEGRAM_POLLING: 'true'
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
@@ -187,7 +193,8 @@ services:
 
   # The Xray client tunneling worker's AI-provider traffic out through the
   # ihor VPN server (see worker/README.md) — a plain SOCKS5 proxy on the
-  # worker-net network, not reachable from bridge's own backend/frontend.
+  # worker-net network, not reachable from bridge's own backend/frontend
+  # (except backend, over the separate telegram-proxy-net below).
   # Config is a Swarm "config" object built at deploy time from the
   # VPN_CLIENT_CONFIG secret (see deploy/swarm/xray-client-config.example.json
   # for its shape) — never committed, since it embeds a real client UUID and
@@ -196,6 +203,7 @@ services:
     image: ghcr.io/xtls/xray-core:latest
     networks:
       - worker-net
+      - telegram-proxy-net
     configs:
       - source: xray_client_config
         target: /usr/local/etc/xray/config.json
@@ -330,3 +338,8 @@ networks:
   worker-net:
     driver: overlay
     attachable: true
+  # backend <-> vpn-client only, for Telegram. Deliberately NOT worker-net:
+  # joining backend to it would give worker (arbitrary code execution, see
+  # its own comment) a network path to backend and, through it, Postgres.
+  telegram-proxy-net:
+    driver: overlay
