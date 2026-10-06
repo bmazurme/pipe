@@ -6,7 +6,14 @@ const workflows = { ci: 'CI', deploy: 'Deploy bridge' };
 function pr(action: string, merged = false, ref = 'loop/run-12-fix-x') {
   return {
     action,
-    pull_request: { number: 5, title: 'Fix x', merged, head: { ref } },
+    pull_request: {
+      number: 5,
+      title: 'Fix x',
+      merged,
+      head: { ref, repo: { full_name: 'o/r' } },
+      base: { repo: { full_name: 'o/r' } },
+      author_association: 'OWNER',
+    },
   };
 }
 
@@ -20,6 +27,46 @@ describe('parseRunIdFromBranch', () => {
     expect(parseRunIdFromBranch('main')).toBeUndefined();
     expect(parseRunIdFromBranch('loop/run-abc')).toBeUndefined();
     expect(parseRunIdFromBranch(undefined)).toBeUndefined();
+  });
+});
+
+describe('interpretGithubEvent — untrusted pull requests', () => {
+  it('ignores a PR from a fork even on a loop branch', () => {
+    const payload = pr('opened');
+    payload.pull_request.head.repo = { full_name: 'evil/r' };
+
+    expect(interpretGithubEvent('pull_request', payload, workflows)).toBeNull();
+  });
+
+  it('ignores a PR by an author without write standing', () => {
+    const payload = pr('opened');
+    payload.pull_request.author_association = 'NONE';
+
+    expect(interpretGithubEvent('pull_request', payload, workflows)).toBeNull();
+  });
+
+  it('fails closed when the trust fields are missing', () => {
+    const payload = {
+      action: 'opened',
+      pull_request: { number: 5, head: { ref: 'loop/run-12-x' } },
+    };
+
+    expect(interpretGithubEvent('pull_request', payload, workflows)).toBeNull();
+  });
+
+  it('ignores a CI run that came from a fork', () => {
+    const payload = {
+      action: 'completed',
+      repository: { full_name: 'o/r' },
+      workflow_run: {
+        name: 'CI',
+        conclusion: 'success',
+        head_branch: 'loop/run-12-x',
+        head_repository: { full_name: 'evil/r' },
+      },
+    };
+
+    expect(interpretGithubEvent('workflow_run', payload, workflows)).toBeNull();
   });
 });
 
@@ -71,10 +118,12 @@ describe('interpretGithubEvent', () => {
     head_branch = 'loop/run-12-a',
   ) => ({
     action: 'completed',
+    repository: { full_name: 'o/r' },
     workflow_run: {
       name,
       conclusion,
       head_branch,
+      head_repository: { full_name: 'o/r' },
       pull_requests: [{ number: 5 }],
     },
   });
@@ -144,7 +193,9 @@ describe('interpretGithubEvent', () => {
         number: 9,
         title: 'Fix docs',
         merged: false,
-        head: { ref: 'me-06.10.2026-9' },
+        head: { ref: 'me-06.10.2026-9', repo: { full_name: 'o/r' } },
+        base: { repo: { full_name: 'o/r' } },
+        author_association: 'OWNER',
         labels: [{ name: 'loop' }],
       },
     });
@@ -158,7 +209,9 @@ describe('interpretGithubEvent', () => {
           pull_request: {
             number: 9,
             title: 'T',
-            head: { ref: 'x' },
+            head: { ref: 'x', repo: { full_name: 'o/r' } },
+            base: { repo: { full_name: 'o/r' } },
+            author_association: 'OWNER',
             labels: [],
           },
         },
@@ -217,10 +270,12 @@ describe('interpretGithubEvent', () => {
         'workflow_run',
         {
           action: 'completed',
+          repository: { full_name: 'o/r' },
           workflow_run: {
             name: 'CI',
             conclusion,
             head_branch: 'x',
+            head_repository: { full_name: 'o/r' },
             pull_requests: [{ number: 5 }],
           },
         },

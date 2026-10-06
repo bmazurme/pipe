@@ -1,6 +1,7 @@
 {
   "name": "@pipe/harness",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "description": "pipe-status: reads sync's and reports' local state files and prints one merged summary of in-flight tasks. pipe-mcp: the same logic as MCP tools for Claude Code.",
   "type": "module",
