@@ -98,7 +98,7 @@ concurrency:
 jobs:
   build:
     name: Build & push images
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
 
     steps:
       - name: Checkout repository
@@ -176,7 +176,7 @@ jobs:
     # stack. Re-add `|| github.event_name == 'release'` if the release
     # trigger above gets uncommented too.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     # Safety net: nothing here should ever legitimately run this long. Without
     # this, a hung step (e.g. `docker service logs` waiting on a task that
     # never stabilizes) blocks the deploy-bridge concurrency group for up to

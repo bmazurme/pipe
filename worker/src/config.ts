@@ -23,11 +23,19 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return value;
 }
 
+function pollInterval(env: NodeJS.ProcessEnv): number {
+  const value = Number(env.POLL_INTERVAL_SEC ?? '10');
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error('POLL_INTERVAL_SEC must be a positive number');
+  }
+  return value;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   return {
     bridgeApiUrl: required(env, 'BRIDGE_API_URL').replace(/\/$/, ''),
     bridgeApiKey: required(env, 'BRIDGE_API_KEY'),
-    pollIntervalSec: Number(env.POLL_INTERVAL_SEC ?? '10'),
+    pollIntervalSec: pollInterval(env),
     workDir: env.WORKER_WORK_DIR ?? path.join(process.cwd(), '.worker-work'),
     // Purely informational (shown in bridge's job list) — falls back to the
     // machine's own hostname so multiple worker instances are distinguishable

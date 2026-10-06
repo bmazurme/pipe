@@ -44,17 +44,46 @@ interface PullRequestPayload {
     number?: number;
     title?: string;
     merged?: boolean;
-    head?: { ref?: string };
+    head?: { ref?: string; repo?: { full_name?: string } | null };
+    base?: { repo?: { full_name?: string } | null };
+    author_association?: string;
     labels?: Array<{ name?: string }>;
   };
 }
 
+// The repository is public, so anyone can open a PR (or one from a fork) with
+// a `loop/` branch or the `loop` label. Only PRs from this repository's own
+// branches, authored by someone with write-level standing, may enter the loop
+// — everything else is ignored as if the webhook never fired. Missing fields
+// fail closed: GitHub always sends them, so their absence means a forged or
+// malformed payload.
+const TRUSTED_AUTHOR_ASSOCIATIONS = new Set([
+  'OWNER',
+  'MEMBER',
+  'COLLABORATOR',
+]);
+
+function isTrustedPullRequest(
+  pr: NonNullable<PullRequestPayload['pull_request']>,
+) {
+  const head = pr.head?.repo?.full_name;
+  const base = pr.base?.repo?.full_name;
+
+  return (
+    !!head &&
+    head === base &&
+    TRUSTED_AUTHOR_ASSOCIATIONS.has(pr.author_association ?? '')
+  );
+}
+
 interface WorkflowRunPayload {
   action?: string;
+  repository?: { full_name?: string } | null;
   workflow_run?: {
     name?: string;
     conclusion?: string | null;
     head_branch?: string;
+    head_repository?: { full_name?: string } | null;
     html_url?: string;
     pull_requests?: Array<{ number?: number }>;
   };
@@ -93,6 +122,10 @@ function interpretPullRequest(
 ): GithubInterpretation | null {
   const pr = payload.pull_request;
   const branch = pr?.head?.ref;
+
+  if (!pr || !isTrustedPullRequest(pr)) {
+    return null;
+  }
 
   const hasLoopLabel = pr?.labels?.some((l) => l.name === LOOP_PR_LABEL);
 
@@ -174,6 +207,14 @@ function interpretWorkflowRun(
   const ok = run.conclusion === 'success';
 
   if (run.name === workflows.ci) {
+    // A CI run triggered by a fork's PR is not the loop's business (and must
+    // never produce a merge offer) — same rule as isTrustedPullRequest.
+    const repo = payload.repository?.full_name;
+
+    if (!repo || run.head_repository?.full_name !== repo) {
+      return null;
+    }
+
     return {
       type: `workflow_run.ci.${run.conclusion ?? 'unknown'}`,
       runId: parseRunIdFromBranch(run.head_branch),

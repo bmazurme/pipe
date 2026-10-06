@@ -1,6 +1,7 @@
 {
   "name": "sync-cli",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Syncs JS/TS project source trees between machines through bridge's storage API, substituting values<->keys per a local dictionary.",
   "type": "module",
   "bin": {

@@ -1,6 +1,7 @@
 {
   "name": "@pipe/protocol",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "description": "Shared parcel protocol (dictionary substitution, zip pack/manifest, hybrid encryption, project walk) for sync/reports/bridge.",
   "type": "module",
