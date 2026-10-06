@@ -17,6 +17,7 @@ import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
+import { resolveInDir } from './resolveInDir.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
 
 function sleep(ms: number): Promise<void> {
@@ -78,12 +79,12 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     const parcel = extractParcel(parcelBuffer);
 
     for (const file of parcel.files) {
-      const destination = path.join(jobDir, file.relPath);
+      const destination = resolveInDir(jobDir, file.relPath);
       mkdirSync(path.dirname(destination), { recursive: true });
       writeFileSync(destination, file.content, 'utf-8');
     }
     for (const asset of parcel.assets) {
-      const destination = path.join(jobDir, asset.relPath);
+      const destination = resolveInDir(jobDir, asset.relPath);
       mkdirSync(path.dirname(destination), { recursive: true });
       writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
     }

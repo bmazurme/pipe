@@ -1,8 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { dirname } from 'node:path';
 
 import { listFilesRecursively } from '../fsWalk.js';
 import { resolveDispatcher } from '../proxyAgent.js';
+import { resolveInDir } from '../resolveInDir.js';
 import type { RunResult } from './claudeRunner.js';
 
 const MAX_TURNS = 20;
@@ -69,18 +70,7 @@ interface ChatMessage {
   tool_call_id?: string;
 }
 
-// Resolves a tool-provided relative path against cwd, refusing anything that
-// escapes it — same traversal guard reports' own subscription pull handler
-// uses for archive-extracted paths.
-function resolveInWorkDir(cwd: string, relPath: string): string {
-  const destination = resolve(cwd, relPath);
-
-  if (destination !== cwd && relative(cwd, destination).startsWith('..')) {
-    throw new Error(`Path escapes the working directory: ${relPath}`);
-  }
-
-  return destination;
-}
+const resolveInWorkDir = resolveInDir;
 
 function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
   switch (name) {
