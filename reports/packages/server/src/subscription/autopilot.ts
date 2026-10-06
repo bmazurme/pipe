@@ -1,9 +1,12 @@
 import { hostname } from 'os';
+import { resolve, sep } from 'path';
+import { fileURLToPath } from 'url';
 
 import { getAllIssueStates } from './state-props';
 import { listParcels, sendClientEvent, sendHeartbeat } from './bridge-client';
 import { pullSubscriptionIssue } from './handler';
 import { getSettings } from '../settings/props';
+import { getSubscriptionConfig } from './config-props';
 
 const HEARTBEAT_EVERY_MS = 15_000;
 const PULL_EVERY_MS = 30_000;
@@ -95,8 +98,29 @@ export function createAutopilot(deps: AutopilotDeps = defaultDeps, name = hostna
   return { beat, pullReady };
 }
 
+// A tracked repo that contains this very server is a trap under `--watch`: a
+// pull that touches the server's sources restarts it mid-flight. Not an
+// error (it is exactly what self-improvement of pipe means) — but the
+// contour should run without --watch (`npm run start:once`) or from a
+// separate checkout.
+function warnIfTrackingOwnSources(): void {
+  const own = fileURLToPath(new URL('..', import.meta.url));
+
+  for (const project of getSubscriptionConfig().trackedProjects) {
+    if (own.startsWith(resolve(project.path) + sep)) {
+      console.warn(
+        `Autopilot: tracked repo ${project.path} contains this server's own sources. ` +
+          'Run reports without --watch (npm run start:once) or from a separate checkout, ' +
+          'or a pull that changes server code will restart it mid-pull.',
+      );
+    }
+  }
+}
+
 export function startAutopilot(): void {
   if (process.env.REPORTS_AUTOPILOT !== 'true') return;
+
+  warnIfTrackingOwnSources();
 
   const autopilot = createAutopilot();
 

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, relative, resolve } from 'path';
 import type { Request, Response } from 'express';
 import type {
@@ -325,6 +325,19 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
   });
 }
 
+// A result parcel carries the whole tracked tree, almost all of it unchanged.
+// Rewriting an identical file still bumps its mtime, which is not harmless:
+// when the tracked repo is the one reports itself runs from, `tsx --watch`
+// sees its own sources "change" and restarts the server in the middle of the
+// pull — before the step is recorded — and the autopilot then pulls the same
+// result again, forever. Only genuinely different files are written.
+function writeIfChanged(destination: string, content: string): void {
+  if (existsSync(destination) && readFileSync(destination, 'utf-8') === content) return;
+
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, content, 'utf-8');
+}
+
 // Pulls the newest result parcel for one task into its local branch. Shared
 // by the UI's Pull button and the background autopilot — both need exactly
 // the same sequence (and the same keep-the-parcel-until-it-fully-worked
@@ -394,8 +407,7 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
       throw new Error(`Посылка содержит путь вне репозитория: ${file.relPath}`);
     }
 
-    mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, applyDictionary(file.content, dictionary, 'toLocal'), 'utf-8');
+    writeIfChanged(destination, applyDictionary(file.content, dictionary, 'toLocal'));
   }
 
   // Images extracted from the issue description — written next to the code
@@ -420,19 +432,23 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
   await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
   await pushBranch(trackedProject.path, state.branch);
 
-  // Only reached once the content is actually safely committed and
-  // pushed locally — this is the one call allowed to consume the parcel
-  // from bridge. A failure here is deliberately non-fatal: the pull
-  // itself already fully succeeded, so leaving a now-redundant copy
-  // sitting in storage is harmless clutter, not a reason to report the
-  // whole pull as failed.
+  // The step is recorded the moment the content is safely committed and
+  // pushed — before the parcel is touched. If the process dies (or is
+  // restarted by a file watcher) anywhere after this point, the task is
+  // already `pulled` and the autopilot won't pull the same result again.
+  const pulledState = setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });
+
+  // This is the one call allowed to consume the parcel from bridge. A
+  // failure here is deliberately non-fatal: the pull itself already fully
+  // succeeded, so leaving a now-redundant copy sitting in storage is
+  // harmless clutter, not a reason to report the whole pull as failed.
   try {
     await deleteParcel(newest.id);
   } catch (error) {
     console.warn(`Failed to delete consumed parcel ${newest.id} from bridge storage:`, error);
   }
 
-  return setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });
+  return pulledState;
 }
 
 export async function handlePullSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {

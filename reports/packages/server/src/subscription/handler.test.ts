@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { Request, Response } from 'express';
@@ -329,6 +329,70 @@ describe('handlePullSubscriptionIssue', () => {
     // why this uses peek + an explicit delete instead of bridge's
     // download-then-delete route.
     expect(deleteCalled).toBe(true);
+  });
+
+  // Regression: a pull used to rewrite every file in the parcel even when
+  // identical, bumping mtimes. With the tracked repo being reports' own
+  // checkout under `tsx --watch`, that restarted the server mid-pull, before
+  // the step was recorded, and the autopilot then pulled the same result
+  // again in an endless loop of empty commits.
+  it('does not rewrite files whose content is unchanged', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+
+    const unchanged = path.join(dir, 'a.ts');
+    const before = statSync(unchanged);
+    const old = new Date(before.mtimeMs - 60_000);
+    utimesSync(unchanged, old, old);
+
+    const parcel = buildArchive(
+      [
+        { relPath: 'a.ts', content: readFileSync(unchanged, 'utf-8') },
+        { relPath: 'pulled.txt', content: 'new' },
+      ],
+      { issueId: '1', issueIid: '6', issueTitle: 'Fix it', issueDescription: 'd', projectId: 173, branch: 'task/173-6', createdAt: new Date().toISOString() } as never,
+    );
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage?')) return Response.json([{ id: 99, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
+      if (url.includes('/peek')) return new Response(parcel, { status: 200 });
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(statSync(unchanged).mtimeMs).toBe(old.getTime());
+    expect(readFileSync(path.join(dir, 'pulled.txt'), 'utf-8')).toBe('new');
+  });
+
+  // Regression, same loop: if the process dies after the commit/push but
+  // before the step is recorded, the result is still on bridge and gets
+  // pulled again. The step must be written before the parcel is touched.
+  it('records the pulled step before it deletes the parcel from bridge', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+
+    const parcel = buildResultParcel();
+    let stepWhenDeleted: string | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage?')) return Response.json([{ id: 99, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
+      if (url.includes('/peek')) return new Response(parcel, { status: 200 });
+      if (init?.method === 'DELETE') {
+        stepWhenDeleted = getIssueState('173', '6')?.step;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(stepWhenDeleted).toBe('pulled');
   });
 
   // IMPROVEMENTS_TECH.md-adjacent regression: previously used bridge's
