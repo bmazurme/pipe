@@ -410,6 +410,7 @@ describe('deriveStatus', () => {
       assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
         label: 'pull the result once it is ready',
         command: 'sync-cli pull-issue <name> 402 6',
+        actionKind: 'pull',
       });
     });
 
@@ -418,6 +419,7 @@ describe('deriveStatus', () => {
       assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
         label: 'push the issue to start the pipeline',
         command: 'sync-cli push-issue <name> 402 6',
+        actionKind: 'retry',
       });
     });
 
@@ -425,6 +427,7 @@ describe('deriveStatus', () => {
       const task: TaskEntry = { key, subscription: { step: 'pulled' } };
       assert.deepEqual(deriveStatus(task, 24, NOW).nextAction, {
         label: 'publish the result (reports → Subscription → Publish)',
+        actionKind: 'publish',
       });
     });
 
@@ -448,7 +451,7 @@ describe('deriveStatus', () => {
         syncAgent: { lastOwnOutputHash: 'abc123' },
       };
       const status = deriveStatus(task, 24, NOW, { hasResultInStorage: true });
-      assert.deepEqual(status.nextAction, { label: 'pull the result', command: 'sync-cli pull-issue <name> 402 6' });
+      assert.deepEqual(status.nextAction, { label: 'pull the result', command: 'sync-cli pull-issue <name> 402 6', actionKind: 'pull' });
     });
 
     it('omits nextAction while bridge storage has no confirmed result yet', () => {

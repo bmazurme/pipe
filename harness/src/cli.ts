@@ -299,7 +299,23 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+
+  // IMPROVEMENTS_HARNESS.md 2.4 — "pipe без аргументов" launches the
+  // interactive list instead of the static report; ANY flag at all (or no
+  // real terminal — a script, a pipe, CI) keeps today's plain-text
+  // behavior completely unchanged. Checked on raw argv, not parsed
+  // options, specifically so this can never accidentally fire for an
+  // explicit invocation that merely happens to match every flag's
+  // default. Dynamic import: no reason to load @clack/prompts at all for
+  // the overwhelmingly more common flag-driven/scripted invocations.
+  if (argv.length === 0 && process.stdout.isTTY) {
+    const { runTui } = await import('./tui.js');
+    process.exitCode = await runTui();
+    return;
+  }
+
+  const options = parseArgs(argv);
 
   if (options.help) {
     console.log(HELP_TEXT);

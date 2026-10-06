@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { TaskEntry } from './collect.js';
 import { annotateTasks } from './deriveStatus.js';
-import { pickNextTask } from './next.js';
+import { pickNextTask, rankTasks } from './next.js';
 
 const NOW = Date.parse('2026-10-05T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -31,7 +31,7 @@ describe('pickNextTask', () => {
     const picked = pickNextTask(annotated, [{ key: '1:0', projectId: 1, iid: 0, title: 'New issue' }]);
     assert.equal(picked?.key, '1:1');
     assert.equal(picked?.bucket, 'ready');
-    assert.deepEqual(picked?.nextAction, { label: 'publish the result (reports → Subscription → Publish)' });
+    assert.deepEqual(picked?.nextAction, { label: 'publish the result (reports → Subscription → Publish)', actionKind: 'publish' });
   });
 
   it('treats a gitlab-worker+agent-runner task as confirmed-ready only once --live confirms it', () => {
@@ -90,5 +90,46 @@ describe('pickNextTask', () => {
     const annotated = annotateTasks(tasks, 24, NOW);
 
     assert.equal(pickNextTask(annotated)?.key, '2:1');
+  });
+});
+
+describe('rankTasks', () => {
+  it('lists every task once, in bucket-priority order', () => {
+    const tasks: TaskEntry[] = [
+      { key: '1:1', subscription: { step: 'pushed', pushedAt: new Date(NOW - 48 * HOUR).toISOString() } }, // stale
+      { key: '1:2', subscription: { step: 'pulled' } }, // ready
+      { key: '1:3', subscription: { step: 'init' } }, // other
+    ];
+    const annotated = annotateTasks(tasks, 24, NOW);
+
+    const ranked = rankTasks(annotated, [{ key: '1:0', projectId: 1, iid: 0, title: 'New issue' }]);
+
+    assert.deepEqual(
+      ranked.map((item) => [item.key, item.bucket]),
+      [
+        ['1:1', 'stale'],
+        ['1:2', 'ready'],
+        ['1:0', 'incoming'],
+        ['1:3', 'other'],
+      ],
+    );
+  });
+
+  it('places a task that is both stale and confirmed-ready under stale only, not twice', () => {
+    const tasks: TaskEntry[] = [
+      { key: '1:1', subscription: { step: 'pulled', pulledAt: new Date(NOW - 48 * HOUR).toISOString() } },
+    ];
+    const annotated = annotateTasks(tasks, 24, NOW);
+
+    const ranked = rankTasks(annotated);
+    assert.equal(ranked.length, 1);
+    assert.equal(ranked[0].bucket, 'stale');
+  });
+
+  it('omits a task with no next action at all from the ranking entirely', () => {
+    const tasks: TaskEntry[] = [{ key: '1:1', subscription: { step: 'published' } }];
+    const annotated = annotateTasks(tasks, 24, NOW);
+
+    assert.deepEqual(rankTasks(annotated), []);
   });
 });

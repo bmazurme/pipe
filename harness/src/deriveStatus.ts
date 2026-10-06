@@ -1,3 +1,4 @@
+import type { ActionKind } from './actions.js';
 import type { LiveTaskInfo } from './bridgeLive.js';
 import type { TaskEntry, ReportData } from './collect.js';
 import type { LiveGitlabTaskInfo } from './gitlabLive.js';
@@ -17,6 +18,15 @@ import type { LiveGitlabTaskInfo } from './gitlabLive.js';
 export interface NextAction {
   label: string;
   command?: string;
+  // IMPROVEMENTS_HARNESS.md 2.4 — the TUI needs to map a recommendation
+  // back to a real runAction() call (2.3) without parsing `command`'s text
+  // (fragile: "sync-cli push-issue" means 'retry' no matter which branch
+  // produced it, and 'publish' has no command at all to parse in the first
+  // place). Omitted — not a fourth union member — when there's genuinely
+  // nothing runAction can do (e.g. "investigate the failing pipeline"):
+  // that's real, this field staying undefined there is the signal the TUI
+  // uses to show it as informational-only, no "run" option.
+  actionKind?: ActionKind;
 }
 
 export interface DerivedStatus {
@@ -84,12 +94,16 @@ function gitlabPipelineFailed(info: LiveGitlabTaskInfo | undefined): boolean {
 // AnnotatedTaskEntry form at all yet (an IncomingIssue, not a TaskEntry).
 export function pullIssueAction(key: string, label = 'pull the result'): NextAction {
   const [projectId, iid] = key.split(':');
-  return { label, command: `sync-cli pull-issue <name> ${projectId} ${iid}` };
+  return { label, command: `sync-cli pull-issue <name> ${projectId} ${iid}`, actionKind: 'pull' };
 }
 
 export function pushIssueAction(key: string): NextAction {
   const [projectId, iid] = key.split(':');
-  return { label: 'push the issue to start the pipeline', command: `sync-cli push-issue <name> ${projectId} ${iid}` };
+  return {
+    label: 'push the issue to start the pipeline',
+    command: `sync-cli push-issue <name> ${projectId} ${iid}`,
+    actionKind: 'retry',
+  };
 }
 
 // Synthesizes one combined label per task from whichever signals are
@@ -144,7 +158,7 @@ export function deriveStatus(
             label: stale ? `pulled ${s.pulledAt} — not yet published` : 'pulled — ready to publish',
             stale,
           },
-          { label: 'publish the result (reports → Subscription → Publish)' },
+          { label: 'publish the result (reports → Subscription → Publish)', actionKind: 'publish' },
         );
       }
       case 'pushed': {

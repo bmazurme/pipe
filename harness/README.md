@@ -33,6 +33,13 @@ npm start        # runs pipe-status once, human-readable text
 node dist/status.js [options]
 ```
 
+Run it with **no options, in a real terminal**, and it launches an
+interactive list instead (IMPROVEMENTS_HARNESS.md 2.4) — see "Interactive
+mode" below. Any flag at all, or stdout not being a TTY (piped, redirected,
+CI), keeps the plain-text report above completely unchanged — that
+distinction is checked once, up front, not threaded through every flag
+below.
+
 ### Options
 
 ```
@@ -321,6 +328,51 @@ task's derived status came back stale (both are also shown inline either
 way — the exit code just makes `pipe-status` usable as a cron/CI check, not
 only something you have to read).
 
+## Interactive mode
+
+```bash
+node dist/status.js   # no options, in a real terminal
+```
+
+A navigable list (IMPROVEMENTS_HARNESS.md 2.4) instead of a wall of text —
+built on [`@clack/prompts`](https://www.npmjs.com/package/@clack/prompts)
+(the doc's own suggestion, over `ink`), since its `select()` is already
+exactly "list + arrows + Enter" with no custom rendering to write. Every
+task gets ranked the same way `--next` ranks its single pick (2.2's 4
+buckets: stale → confirmed-ready → incoming → everything else with a next
+action) — here as the *whole* list, not just the winner. Unlike the plain
+report, this always checks `--live` internally (bridge + GitLab) — a bare
+interactive invocation already means "give me the full picture," and the
+one thing worth a moment's extra wait here is not missing a confirmed-ready
+result or a newly assigned issue.
+
+Pick a task, and:
+
+- If it has a runnable next action (`pull`/`retry`/`publish` — the exact
+  same `runAction` from 2.3, same confirmation requirement, just asked
+  through a nicer prompt instead of `readline`), you're asked to confirm
+  and it runs.
+- If it has a next action that isn't runnable on your behalf (e.g.
+  "investigate the failing pipeline for MR !42"), that's just shown as
+  text — no confirm, nothing to run.
+- If it's listed purely for being stale with nothing else to say (e.g.
+  "pushed to bridge — still waiting on agent-runner" — nothing local to do,
+  it's waiting on another machine), same: shown as text.
+
+After each pick, the list re-fetches and re-ranks from scratch before
+showing again — running an action changes state, so the next screen
+should reflect that, not a stale snapshot from before it. `Esc`/Ctrl+C or
+picking "Exit" leaves cleanly at any point.
+
+Manually verified the real rendering and the list→confirm transition
+against this machine's actual task state (a real `@clack/prompts` prompt,
+not a mock); the full keystroke-by-keystroke interaction loop (arrow
+navigation, declining/confirming, looping back) could not be driven
+end-to-end in this environment — there's no real TTY available to script
+against, and `@clack/prompts`' raw-mode key reading doesn't simulate
+cleanly over a plain piped stdin. Try it directly in a real terminal to
+confirm the rest.
+
 ## pipe-mcp
 
 An MCP server (IMPROVEMENTS_HARNESS.md 5.1) wrapping everything above as
@@ -402,10 +454,15 @@ subprocess/HTTP/confirm-prompt collaborators as injectable dependencies
 (`ActionDeps`) specifically so its tests never spawn a real `sync-cli`
 process, never call a real reports server, and never block on real stdin —
 only `resolveProjectName`'s resolution logic and the confirmation/dry-run
-control flow are exercised against fakes. `pickNextTask` (`--next`) is
-tested as a pure function over plain `TaskEntry`/`IncomingIssue` fixtures —
+control flow are exercised against fakes. `pickNextTask`/`rankTasks` (`--next`/the interactive list) are
+tested as pure functions over plain `TaskEntry`/`IncomingIssue` fixtures —
 bucket ordering, the confirmed-vs-guessed distinction for a `gitlab-worker`
-task, and tie-breaking within a bucket. `pipe-mcp`'s own tests
+task, tie-breaking within a bucket, and (`rankTasks` specifically) a task
+that's both stale and confirmed-ready landing under `stale` once, not
+twice. The interactive list's own `buildTaskChoices` (the one pure part of
+`tui.ts` — see "Interactive mode" above for what wasn't mechanically
+testable) is covered directly; everything else in that file is thin glue
+around real `@clack/prompts` prompts. `pipe-mcp`'s own tests
 (`mcp.test.ts`) connect a real `@modelcontextprotocol/sdk` `Client` to
 `createPipeMcpServer()` over `InMemoryTransport.createLinkedPair()` — a
 real protocol round-trip (tool listing, schema validation, the actual
