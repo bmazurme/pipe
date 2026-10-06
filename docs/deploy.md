@@ -108,3 +108,28 @@ only, never bridge's own API). Any of worker's five secrets above can
 alternatively be supplied as `<NAME>_FILE=/path/to/file` instead of a plain
 value (`worker/src/secrets.ts`) — what Docker/Swarm secrets use under the
 hood, but a plain mechanism usable outside Swarm too.
+
+### Self-improvement loop
+
+Variables added for the self-improvement loop (see
+[SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); meanings are
+carried over from `bridge/README.md` and `reports/README.md`.
+
+**bridge backend** (`bridge/apps/backend/.env`, production values as GitHub
+Actions secrets):
+- `TELEGRAM_BOT_TOKEN` — token of the bot that sends the loop's notifications; optional.
+- `TELEGRAM_CHAT_ID` — the only chat the bot talks to and accepts commands from; optional.
+- `TELEGRAM_WEBHOOK_SECRET` — the `secret_token` passed to `setWebhook` for `POST /api/v1/telegram/webhook` (`/status`, `/help`); empty means the endpoint answers 503.
+- `TELEGRAM_PROXY_URL` — proxy (`vpn-client`) the bot's outbound Telegram calls go through, since the server can't reach Telegram directly.
+- `TELEGRAM_POLLING` — set to `true` to receive commands by long polling instead of a webhook, since Telegram can't reach the server either.
+- `GITHUB_WEBHOOK_SECRET` — secret of the repo's GitHub webhook for `POST /api/v1/github/webhook` (Pull requests + Workflow runs events, HMAC over the raw body); empty means 503.
+- `GITHUB_CI_WORKFLOW` — name (`name:`) of the CI workflow the loop reacts to; optional, defaults to `CI`.
+- `GITHUB_DEPLOY_WORKFLOW` — name (`name:`) of the deploy workflow the loop reacts to; optional, defaults to `Deploy bridge`.
+
+**reports server** (`reports/packages/server/.env`, not committed; all optional):
+- `REPORTS_AUTOPILOT` — `true` enables autopilot for an unattended reports: a heartbeat to bridge every 15 s and an automatic pull (task branch only) every 30 s when a result is ready for a `pushed` task; needs bridge URL and personal API key set in Settings.
+- `GITHUB_TOKEN` — GitHub token for tracked repositories with the GitHub provider (open issues labelled `loop`); a fine-grained token with Issues: read & write on that repo is enough. Kept in `.env`, not Settings, so the settings export bundle never carries it.
+
+**GitHub Actions secret naming:** GitHub rejects secret names starting
+with `GITHUB_`, so the Actions secret `LOOP_GITHUB_WEBHOOK_SECRET` is what
+feeds the backend's `GITHUB_WEBHOOK_SECRET`.
