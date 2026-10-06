@@ -4,8 +4,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 
 import { AppModule } from '../src/app.module';
-import { ClaudeCredential } from '../src/worker/entities/claude-credential.entity';
+import { Secret } from '../src/secrets/entities/secret.entity';
 import { User } from '../src/users/entities/user.entity';
+import { ClaudeCredential } from '../src/worker/entities/claude-credential.entity';
 
 // Same ntlstl-db-test database as app.e2e-spec.ts — see its own comment.
 // Proves the transformer (src/crypto/encrypted-column.transformer.ts) is
@@ -64,6 +65,36 @@ describe('Encrypted columns (e2e)', () => {
     expect(reloaded.token).toBe(plaintextToken);
 
     await credentialRepo.delete(saved.id);
+    await userRepo.delete(user.id);
+  });
+
+  it('stores Secret.value encrypted at rest, and decrypts it correctly on read', async () => {
+    const userRepo = dataSource.getRepository(User);
+    const secretRepo = dataSource.getRepository(Secret);
+
+    const user = await userRepo.save({
+      email: `e2e-enc-secret-${Date.now()}@ntlstl.test`,
+    });
+    const plaintextValue = 'super-secret-api-key-value';
+
+    const saved = await secretRepo.save({
+      userId: user.id,
+      name: 'e2e test secret',
+      value: plaintextValue,
+    });
+
+    const [raw] = await dataSource.query(
+      'SELECT value FROM secrets WHERE id = $1',
+      [saved.id],
+    );
+    expect(raw.value).not.toBe(plaintextValue);
+    expect(raw.value).not.toContain(plaintextValue);
+    expect(raw.value.split(':')).toHaveLength(4); // "<keyId>:<iv>:<authTag>:<ciphertext>"
+
+    const reloaded = await secretRepo.findOneByOrFail({ id: saved.id });
+    expect(reloaded.value).toBe(plaintextValue);
+
+    await secretRepo.delete(saved.id);
     await userRepo.delete(user.id);
   });
 });

@@ -33,8 +33,8 @@ exact backend host, not a shared parent domain — the cookie is named
 sibling apps on the same parent domain caused a name collision before),
 `EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
 (optional ntlstl.time integration), `CREDENTIALS_ENC_KEY` (base64, 32 raw
-bytes — AES-256-GCM key encrypting `ClaudeCredential.token` and
-`VpnConnection.panelApiToken` at rest, see
+bytes — AES-256-GCM key encrypting `ClaudeCredential.token`,
+`VpnConnection.panelApiToken` and `Secret.value` at rest, see
 `src/crypto/encrypted-column.transformer.ts`; required, no dev fallback,
 same as `JWT_SECRET`). `/api/v1/vpn/*` (browser-session only —
 the only part of bridge's backend that calls out to third-party APIs):

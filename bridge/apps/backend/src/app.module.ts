@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { ChatModule } from './chat/chat.module';
 import { OauthModule } from './oauth/oauth.module';
 import { PurgeModule } from './purge/purge.module';
+import { SecretsModule } from './secrets/secrets.module';
 import { StorageModule } from './storage/storage.module';
 import { TimeModule } from './time/time.module';
 import { UsersModule } from './users/users.module';
@@ -40,6 +41,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     ChatModule,
     OauthModule,
     PurgeModule,
+    SecretsModule,
     StorageModule,
     TimeModule,
     UsersModule,

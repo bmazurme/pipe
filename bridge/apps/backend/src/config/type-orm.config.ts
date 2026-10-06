@@ -8,6 +8,7 @@ import { Session } from '../auth/entities/session.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
+import { Secret } from '../secrets/entities/secret.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
@@ -41,6 +42,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         ClaudeCredential,
         VpnConnection,
         WorkerHeartbeat,
+        Secret,
       ],
       // Dev used to run on synchronize: true (schema auto-matched to
       // entities, no migration files involved at all) — real migrations now
