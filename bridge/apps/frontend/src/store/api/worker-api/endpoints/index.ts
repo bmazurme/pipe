@@ -19,7 +19,7 @@ export const ACTIVE_JOB_STATUSES: WorkerJobStatus[] = [
 
 export interface WorkerJob {
   id: number;
-  sourceFileId: number;
+  sourceFileId: number | null;
   resultFileId: number | null;
   model: WorkerJobModel;
   claudeCredentialId: number | null;

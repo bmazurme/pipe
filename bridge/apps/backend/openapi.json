@@ -2587,7 +2587,8 @@
             "type": "number"
           },
           "sourceFileId": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "resultFileId": {
             "type": "number",

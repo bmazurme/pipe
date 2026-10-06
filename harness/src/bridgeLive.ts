@@ -69,7 +69,7 @@ interface StoredFileWire {
 
 interface JobWire {
   id: number;
-  sourceFileId: number;
+  sourceFileId: number | null;
   resultFileId: number | null;
   model: string;
   status: string;
@@ -195,7 +195,7 @@ function buildLiveData(
 
   const latestJobByTaskKey = new Map<string, JobWire>();
   for (const job of jobs) {
-    const taskKey = taskKeyByFileId.get(job.sourceFileId) ?? (job.resultFileId !== null ? taskKeyByFileId.get(job.resultFileId) : undefined);
+    const taskKey = (job.sourceFileId !== null ? taskKeyByFileId.get(job.sourceFileId) : undefined) ?? (job.resultFileId !== null ? taskKeyByFileId.get(job.resultFileId) : undefined);
     if (!taskKey) continue;
 
     const existing = latestJobByTaskKey.get(taskKey);

@@ -371,7 +371,7 @@ describe('handlePullSubscriptionIssue', () => {
     expect(deleteCalled).toBe(false);
   });
 
-  it('reports a clear error when nothing has been pushed yet', async () => {
+  it('reports a clear error when no result has arrived on bridge yet', async () => {
     const { dir } = initTrackedProject('173');
     setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
     git(dir, ['checkout', '-b', 'task/173-6']);
@@ -382,7 +382,27 @@ describe('handlePullSubscriptionIssue', () => {
     await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
 
     expect(events()[0]).toMatchObject({ type: 'error' });
-    expect(String(events()[0].data)).toMatch(/нет посылки для этой задачи/);
+    expect(String(events()[0].data)).toMatch(/нет результата для этой задачи/);
+  });
+
+  // The autopilot (or an earlier click) already consumed the result from
+  // bridge — a second Pull must say so, not send the user back to push.
+  it('says the result was already pulled instead of asking to push again', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', {
+      step: 'pulled',
+      branch: 'task/173-6',
+      pulledAt: '2026-10-06T16:45:13.137Z',
+    });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+
+    globalThis.fetch = (async () => Response.json([])) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/Результат уже загружен \(2026-10-06T16:45:13.137Z\)/);
   });
 
   it('refuses to pull before init has created a branch', async () => {

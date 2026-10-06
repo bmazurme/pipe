@@ -300,7 +300,16 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
   const newest = parcels[0];
 
   if (!newest) {
-    throw new Error('На bridge нет посылки для этой задачи — сначала выполните push из другого окружения');
+    // Pull consumes the result from bridge, so a second Pull (or the UI's
+    // button after the autopilot already pulled) finds nothing — say that
+    // instead of sending the user off to push again.
+    const done = getIssueState(projectId, iid);
+
+    if (done?.pulledAt) {
+      throw new Error(`Результат уже загружен (${done.pulledAt}) — повторно получать нечего`);
+    }
+
+    throw new Error('На bridge нет результата для этой задачи — дождитесь, пока worker его отправит');
   }
 
   const isEncrypted = newest.originalName.endsWith('.enc');

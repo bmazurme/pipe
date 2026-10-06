@@ -347,5 +347,72 @@ describe('WorkerService', () => {
         direction: 'result',
       });
     });
+
+    describe('consuming the source parcel', () => {
+      function setup(sourceFile: Record<string, unknown>) {
+        const job = {
+          id: 1,
+          sourceFileId: 5,
+          resultFileId: null,
+          status: JobStatus.Running,
+        } as Job;
+        repository.findOne!.mockResolvedValue(job);
+        storageService.findOwned!.mockResolvedValue(sourceFile);
+        storageService.create!.mockResolvedValue({ id: 99 });
+        storageService.delete = jest.fn().mockResolvedValue(undefined);
+        repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+        return job;
+      }
+
+      const file = { originalname: 'result.zip' } as Express.Multer.File;
+
+      it('deletes a pipeline parcel (one with a taskKey) and unlinks it from the job', async () => {
+        const source = { id: 5, channel: 'issue', taskKey: '402:6' };
+        setup(source);
+
+        const result = await service.setResult(1, 7, file);
+
+        expect(result.sourceFileId).toBeNull();
+        expect(storageService.delete).toHaveBeenCalledWith(source);
+      });
+
+      it('saves the job before deleting, so the delete cannot orphan the link', async () => {
+        setup({ id: 5, channel: 'issue', taskKey: '402:6' });
+        const order: string[] = [];
+        repository.save!.mockImplementation((j) => {
+          order.push('save');
+          return Promise.resolve(j);
+        });
+        (storageService.delete as jest.Mock).mockImplementation(async () => {
+          order.push('delete');
+        });
+
+        await service.setResult(1, 7, file);
+
+        expect(order).toEqual(['save', 'delete']);
+      });
+
+      it('leaves a hand-uploaded file (no taskKey) alone', async () => {
+        setup({ id: 5, channel: null, taskKey: null });
+
+        const result = await service.setResult(1, 7, file);
+
+        expect(result.sourceFileId).toBe(5);
+        expect(storageService.delete).not.toHaveBeenCalled();
+      });
+
+      it('still succeeds when the delete itself fails', async () => {
+        setup({ id: 5, channel: 'issue', taskKey: '402:6' });
+        (storageService.delete as jest.Mock).mockRejectedValue(
+          new Error('disk'),
+        );
+
+        const result = await service.setResult(1, 7, file);
+
+        expect(result.status).toBe(JobStatus.Succeeded);
+        expect(result.resultFileId).toBe(99);
+      });
+    });
   });
 });

@@ -2,7 +2,7 @@ import { Job, JobModel, JobStatus } from '../entities/job.entity';
 
 export class JobResponseDto {
   id: number;
-  sourceFileId: number;
+  sourceFileId: number | null;
   resultFileId: number | null;
   model: JobModel;
   claudeCredentialId: number | null;

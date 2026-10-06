@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,6 +22,8 @@ const ENCRYPTED_SUFFIX = '.enc';
 
 @Injectable()
 export class WorkerService {
+  private readonly logger = new Logger(WorkerService.name);
+
   constructor(
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
@@ -125,6 +128,11 @@ export class WorkerService {
 
   async getSourceFile(id: number, userId: number): Promise<StoredFile> {
     const job = await this.findOwned(id, userId);
+
+    if (job.sourceFileId === null) {
+      throw new NotFoundException('The source parcel was already consumed');
+    }
+
     return this.storageService.findOwned(job.sourceFileId, userId);
   }
 
@@ -180,10 +188,13 @@ export class WorkerService {
     file: Express.Multer.File,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
-    const sourceFile = await this.storageService.findOwned(
-      job.sourceFileId,
-      userId,
-    );
+    // Null only if a result is reported twice for a job whose pipeline
+    // parcel the first report already consumed — the result is then simply
+    // stored unaddressed rather than failing the report.
+    const sourceFile =
+      job.sourceFileId === null
+        ? null
+        : await this.storageService.findOwned(job.sourceFileId, userId);
 
     // Propagates the source parcel's own addressing (IMPROVEMENTS_TECH.md
     // 2.3) onto the result, when it had any — lets sync's pull-issue and
@@ -195,7 +206,7 @@ export class WorkerService {
     const stored = await this.storageService.create(
       userId,
       file,
-      sourceFile.taskKey
+      sourceFile?.taskKey
         ? {
             channel: sourceFile.channel ?? undefined,
             taskKey: sourceFile.taskKey,
@@ -208,6 +219,29 @@ export class WorkerService {
     job.status = JobStatus.Succeeded;
     job.finishedAt = new Date();
 
-    return this.jobRepository.save(job);
+    // A pipeline parcel (addressed by taskKey) is single-use: once its job
+    // has succeeded it has been taken and acted on, so it must not linger in
+    // the mailbox. A plain file the user uploaded by hand has no taskKey and
+    // is left alone — they may well run it again. Saved first and deleted
+    // best-effort after: a failed delete costs some clutter, never a result.
+    const consumed = sourceFile?.taskKey ? sourceFile : null;
+
+    if (consumed) {
+      job.sourceFileId = null;
+    }
+
+    const saved = await this.jobRepository.save(job);
+
+    if (consumed) {
+      try {
+        await this.storageService.delete(consumed);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete consumed source parcel ${consumed.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return saved;
   }
 }

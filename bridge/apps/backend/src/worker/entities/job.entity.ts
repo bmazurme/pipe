@@ -33,8 +33,10 @@ export class Job extends BaseEntity {
   // WorkerService.create): the private key needed to decrypt a `.enc`
   // parcel never leaves the account owner's own machines today, and
   // handing it to a shared, bridge-hosted process is out of scope.
-  @Column({ type: 'int', unsigned: true, nullable: false })
-  sourceFileId: number;
+  // Null once the job has succeeded and a pipeline parcel (one carrying a
+  // taskKey) was consumed — see WorkerService.setResult.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  sourceFileId: number | null;
 
   // The result parcel's StoredFile.id, set once the job succeeds.
   @Column({ type: 'int', unsigned: true, nullable: true })

@@ -1146,7 +1146,7 @@ export interface components {
         };
         JobResponseDto: {
             id: number;
-            sourceFileId: number;
+            sourceFileId: number | null;
             resultFileId: number | null;
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
