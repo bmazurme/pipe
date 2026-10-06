@@ -60,6 +60,13 @@ services:
       # from the VPN page's "Доступные VPN" form.
       GITHUB_TOKEN: ${BRIDGE_GITHUB_TOKEN:?BRIDGE_GITHUB_TOKEN is required}
       GITHUB_REPO: ${GITHUB_REPO:?GITHUB_REPO is required}
+      # Self-improvement loop (SELF_IMPROVEMENT_PLAN.md): Telegram bot +
+      # GitHub webhook receivers. All optional — empty leaves the matching
+      # endpoint answering 503 and notifications off.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      GITHUB_WEBHOOK_SECRET: ${LOOP_GITHUB_WEBHOOK_SECRET:-}
     ports:
       - target: 3000
         published: ${BACKEND_PUBLISHED_PORT:-3300}

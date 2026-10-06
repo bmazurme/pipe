@@ -18,6 +18,11 @@
 #   TIME_EXPORT_USER_ID, VITE_API_URL, BACKEND_PUBLISHED_PORT,
 #   FRONTEND_PUBLISHED_PORT, HOST
 #
+# Optional, for the self-improvement loop (SELF_IMPROVEMENT_PLAN.md):
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET,
+#   LOOP_GITHUB_WEBHOOK_SECRET (becomes GITHUB_WEBHOOK_SECRET in the backend —
+#   GitHub rejects secret names starting with GITHUB_)
+#
 # New for worker + its VPN sidecar (see worker/README.md and
 # deploy/swarm/xray-client-config.example.json for the shape these feed):
 #
@@ -319,6 +324,10 @@ jobs:
           WORKER_BRIDGE_API_URL: ${{ secrets.WORKER_BRIDGE_API_URL }}
           BRIDGE_GITHUB_TOKEN: ${{ secrets.BRIDGE_GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          LOOP_GITHUB_WEBHOOK_SECRET: ${{ secrets.LOOP_GITHUB_WEBHOOK_SECRET }}
         # WORKER_*_FILE/_HASH for the five worker secrets come from the
         # "Write worker secrets" step above via $GITHUB_ENV — already in this
         # step's environment, not redeclared here.

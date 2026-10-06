@@ -7,6 +7,8 @@ import { ApiKey } from './auth/entities/api-key.entity';
 import { Session } from './auth/entities/session.entity';
 import { Chat } from './chat/entities/chat.entity';
 import { ChatMessage } from './chat/entities/chat-message.entity';
+import { LoopEvent } from './loop/entities/loop-event.entity';
+import { LoopRun } from './loop/entities/loop-run.entity';
 import { PurgeEntry } from './purge/entities/purge-entry.entity';
 import { Secret } from './secrets/entities/secret.entity';
 import { StoredFile } from './storage/entities/stored-file.entity';
@@ -42,6 +44,8 @@ export const AppDataSource = new DataSource({
     VpnConnection,
     WorkerHeartbeat,
     Secret,
+    LoopRun,
+    LoopEvent,
   ],
   migrations: ['src/migrations/*.ts'],
 });

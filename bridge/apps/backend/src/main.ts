@@ -14,7 +14,11 @@ import { swaggerConfig } from './config/swagger.config';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // GitHub's webhook signature is an HMAC over the exact bytes it sent —
+    // GithubWebhookController can't verify it from the re-serialized JSON body.
+    rawBody: true,
+  });
 
   // Production always sits behind a reverse proxy on the same host (see
   // deploy-bridge.yml's smoke-test comment: "proxy_pass must use 127.0.0.1,
