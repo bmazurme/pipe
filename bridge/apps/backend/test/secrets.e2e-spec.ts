@@ -67,9 +67,11 @@ describe('Secrets API (e2e)', () => {
       const { accessToken } = await authenticatedUser();
 
       const created = await authed(
-        request(app.getHttpServer())
-          .post('/api/v1/secrets')
-          .send({ name: 'e2e-secret', value: 'e2e-value', description: 'for the e2e suite' }),
+        request(app.getHttpServer()).post('/api/v1/secrets').send({
+          name: 'e2e-secret',
+          value: 'e2e-value',
+          description: 'for the e2e suite',
+        }),
         accessToken,
       ).expect(201);
       expect(created.body).toMatchObject({
@@ -84,7 +86,11 @@ describe('Secrets API (e2e)', () => {
         accessToken,
       ).expect(200);
       expect(list.body).toContainEqual(created.body);
-      expect(list.body.every((entry: Record<string, unknown>) => entry.value === undefined)).toBe(true);
+      expect(
+        list.body.every(
+          (entry: Record<string, unknown>) => entry.value === undefined,
+        ),
+      ).toBe(true);
 
       const revealed = await authed(
         request(app.getHttpServer()).get(`/api/v1/secrets/${id}/value`),
