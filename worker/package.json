@@ -1,6 +1,7 @@
 {
   "name": "pipe-worker",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Standalone service (installs on an Ubuntu server): polls bridge for worker jobs, runs the assigned AI model (Claude via the claude CLI, or GPT/DeepSeek/Qwen via a minimal OpenAI-compatible tool-calling loop) against the job's parcel, and reports status/logs/result back to bridge.",
   "type": "module",
   "bin": {

@@ -2,6 +2,7 @@
   "name": "pipe",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Monorepo for the sync/reports/bridge ecosystem: shared protocol package and cross-tool status harness.",
   "workspaces": [
     "packages/protocol",

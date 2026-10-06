@@ -19,7 +19,7 @@ env:
 jobs:
   pipeline:
     name: sync-shaped parcel → bridge → worker → pull
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     services:
       postgres:
         image: postgres:16-alpine

@@ -35,3 +35,11 @@ covers what spans them: ports, secrets, state files, and the roadmap.
   production Docker Swarm stack. Currently `workflow_dispatch`-only (run
   manually from the Actions tab); see the workflow file's header comment
   for the full secrets checklist before running it on a fresh setup.
+
+Both workflows (and the nightly ones) run on `ubuntu-latest` by default. To run
+them on your own machine instead — no GitHub-hosted minutes, so no billing
+dependency — set up a self-hosted runner with
+[`bridge/deploy/runner/setup.sh`](bridge/deploy/runner/setup.sh) (Linux + Docker)
+and set the repo variable `RUNNER_LABEL` to its label (`pipe-runner`). Unset the
+variable to go back to GitHub-hosted. A self-hosted runner executes PR code on
+that machine, so keep the repo private or require approval for fork PRs.
