@@ -906,6 +906,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/{id}/status": {
         parameters: {
             query?: never;
@@ -1249,7 +1265,7 @@ export interface components {
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId: number | null;
             /** @enum {string} */
-            status: "queued" | "claimed" | "running" | "succeeded" | "failed";
+            status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
             errorMessage: string | null;
             workerName: string | null;
@@ -1259,6 +1275,8 @@ export interface components {
             startedAt: string | null;
             /** Format: date-time */
             finishedAt: string | null;
+            /** Format: date-time */
+            cancelRequestedAt: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1276,9 +1294,12 @@ export interface components {
         HeartbeatDto: {
             workerName: string;
         };
+        CancelJobDto: {
+            force?: boolean;
+        };
         UpdateJobStatusDto: {
             /** @enum {string} */
-            status: "running" | "succeeded" | "failed";
+            status: "running" | "succeeded" | "failed" | "cancelled";
             errorMessage?: string;
         };
         AppendJobLogDto: {
@@ -2790,6 +2811,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    WorkerController_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelJobDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponseDto"];
+                };
             };
         };
     };

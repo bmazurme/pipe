@@ -216,12 +216,64 @@ export class WorkerService {
     return this.storageService.path(file);
   }
 
+  // Stops a job. A queued job (no worker has it) is cancelled outright. One a
+  // worker holds only gets a cancel *request*: the worker polls for it, kills its
+  // run and confirms with status 'cancelled' — until then the job is "stopping".
+  // `force` skips that wait for a worker that is gone and would never confirm.
+  async cancel(id: number, userId: number, force = false): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (job.status === JobStatus.Cancelled) {
+      return job;
+    }
+
+    if (job.status === JobStatus.Succeeded || job.status === JobStatus.Failed) {
+      throw new ConflictException(
+        `Job already ${job.status} — there is nothing to stop`,
+      );
+    }
+
+    const now = new Date();
+
+    if (job.status === JobStatus.Queued || force) {
+      job.status = JobStatus.Cancelled;
+      job.finishedAt = now;
+      job.cancelRequestedAt = job.cancelRequestedAt ?? now;
+      job.logs += `\n[stopped by the owner${force && job.workerName ? ' (forced)' : ''}]\n`;
+      this.logJobCancelled(await this.jobRepository.save(job), force);
+
+      return job;
+    }
+
+    // Claimed or running: ask the worker. Idempotent — a second click keeps the
+    // original request time.
+    job.cancelRequestedAt = job.cancelRequestedAt ?? now;
+
+    return this.jobRepository.save(job);
+  }
+
+  private logJobCancelled(job: Job, forced: boolean): void {
+    void this.appLogs?.record({
+      level: 'warn',
+      source: 'job',
+      event: 'job.cancelled',
+      message: `Job ${job.id} was stopped by the owner`,
+      meta: { jobId: job.id, model: job.model, forced },
+    });
+  }
+
   async updateStatus(
     id: number,
     userId: number,
     dto: UpdateJobStatusDto,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
+
+    // A cancelled job is final: a worker that was still winding down must not
+    // bring it back to running or turn it into a failure.
+    if (job.status === JobStatus.Cancelled) {
+      return job;
+    }
 
     // A finished job is final — a late or duplicated report must not
     // overwrite its outcome.
@@ -242,10 +294,18 @@ export class WorkerService {
       job.finishedAt = new Date();
     }
 
+    if (dto.status === JobStatus.Cancelled) {
+      job.finishedAt = new Date();
+    }
+
     const saved = await this.jobRepository.save(job);
 
     if (dto.status === JobStatus.Failed) {
       this.logJobOutcome(saved);
+    }
+
+    if (dto.status === JobStatus.Cancelled) {
+      this.logJobCancelled(saved, false);
     }
 
     return saved;
@@ -285,6 +345,13 @@ export class WorkerService {
     file: Express.Multer.File,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
+
+    if (job.status === JobStatus.Cancelled) {
+      throw new ConflictException(
+        'Job was stopped — its result is not accepted',
+      );
+    }
+
     // Null only if a result is reported twice for a job whose pipeline
     // parcel the first report already consumed — the result is then simply
     // stored unaddressed rather than failing the report.

@@ -455,6 +455,134 @@ describe('WorkerService', () => {
     );
   });
 
+  describe('cancel', () => {
+    const saveEcho = () =>
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+    it('cancels a queued job outright', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 4,
+        model: JobModel.Gpt,
+        status: JobStatus.Queued,
+        logs: '',
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(4, 7);
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.finishedAt).toBeInstanceOf(Date);
+      expect(result.logs).toContain('stopped by the owner');
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.cancelled', level: 'warn' }),
+      );
+    });
+
+    it('only requests a stop for a job a worker holds, keeping its status', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        status: JobStatus.Running,
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(5, 7);
+
+      expect(result.status).toBe(JobStatus.Running);
+      expect(result.cancelRequestedAt).toBeInstanceOf(Date);
+      expect(appLogs.record).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first request time when asked twice', async () => {
+      const first = new Date('2026-10-08T10:00:00Z');
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        status: JobStatus.Claimed,
+        cancelRequestedAt: first,
+      } as Job);
+      saveEcho();
+
+      expect((await service.cancel(5, 7)).cancelRequestedAt).toBe(first);
+    });
+
+    it('force-cancels a held job without waiting for the worker', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 6,
+        model: JobModel.Sonnet,
+        status: JobStatus.Running,
+        workerName: 'gone-worker',
+        logs: 'x',
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(6, 7, true);
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.logs).toContain('(forced)');
+    });
+
+    it('is a no-op for an already cancelled job and refuses a finished one', async () => {
+      repository.findOne!.mockResolvedValueOnce({
+        id: 1,
+        status: JobStatus.Cancelled,
+      } as Job);
+      await expect(service.cancel(1, 7)).resolves.toMatchObject({
+        status: JobStatus.Cancelled,
+      });
+      expect(repository.save).not.toHaveBeenCalled();
+
+      repository.findOne!.mockResolvedValueOnce({
+        id: 2,
+        status: JobStatus.Succeeded,
+      } as Job);
+      await expect(service.cancel(2, 7)).rejects.toThrow(ConflictException);
+    });
+
+    it('never lets a winding-down worker revive or fail a cancelled job', async () => {
+      const job = { id: 8, status: JobStatus.Cancelled } as Job;
+      repository.findOne!.mockResolvedValue(job);
+
+      await service.updateStatus(8, 7, { status: JobStatus.Running });
+      await service.updateStatus(8, 7, {
+        status: JobStatus.Failed,
+        errorMessage: 'killed',
+      });
+
+      expect(job.status).toBe(JobStatus.Cancelled);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it("records the worker's confirmation as cancelled with a finish time", async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 9,
+        model: JobModel.Opus,
+        status: JobStatus.Running,
+        finishedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.updateStatus(9, 7, {
+        status: JobStatus.Cancelled,
+      });
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.finishedAt).toBeInstanceOf(Date);
+    });
+
+    it('rejects a result uploaded for a cancelled job', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 3,
+        status: JobStatus.Cancelled,
+      } as Job);
+
+      await expect(
+        service.setResult(3, 7, {} as Express.Multer.File),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
   describe('appendLog', () => {
     it('appends the chunk to existing logs', async () => {
       const job: Job = { id: 1, logs: 'line 1\n' } as Job;

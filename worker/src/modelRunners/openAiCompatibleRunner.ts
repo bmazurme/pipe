@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { CancelledError } from '../cancelled.js';
 import { listFilesRecursively } from '../fsWalk.js';
 import { resolveDispatcher } from '../proxyAgent.js';
 import { resolveInDir } from '../resolveInDir.js';
@@ -133,6 +134,7 @@ export async function runOpenAiCompatible(
   onOutput: (chunk: string) => void,
   proxyUrl?: string,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<RunResult> {
   const timeoutError = () => new Error(`${options.model} job timed out after ${(timeoutMs ?? 0) / 1000}s`);
   const deadlineSignal = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
@@ -145,6 +147,7 @@ export async function runOpenAiCompatible(
   let output = '';
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    if (signal?.aborted) throw new CancelledError();
     if (deadlineSignal?.aborted) throw timeoutError();
 
     const completionSignal = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
@@ -165,7 +168,7 @@ export async function runOpenAiCompatible(
         // `dispatcher` is a Node/undici-specific fetch extension not in the
         // standard RequestInit type — real at runtime, just untyped here.
         dispatcher: resolveDispatcher(proxyUrl),
-        signal: deadlineSignal ? AbortSignal.any([completionSignal, deadlineSignal]) : completionSignal,
+        signal: AbortSignal.any([completionSignal, ...(deadlineSignal ? [deadlineSignal] : []), ...(signal ? [signal] : [])]),
       } as RequestInit);
 
       if (!response.ok) {
@@ -174,7 +177,9 @@ export async function runOpenAiCompatible(
 
       data = (await response.json()) as { choices?: { message?: ChatMessage }[] };
     } catch (error) {
-      // Only the job deadline is rewritten; a per-request timeout keeps its own message.
+      // The owner's stop wins over everything else; then only the job deadline is
+      // rewritten — a per-request timeout keeps its own message.
+      if (signal?.aborted) throw new CancelledError();
       if (deadlineSignal?.aborted) throw timeoutError();
       throw error;
     }
