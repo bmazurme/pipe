@@ -614,3 +614,83 @@ describe('WorkerPage — long job history and form hints', () => {
     expect(await screen.findByText('в работе: 1')).toBeTruthy();
   });
 });
+
+describe('WorkerPage — stopping a job', () => {
+  function stubJobs(jobs: unknown[], onCancel?: (body: unknown) => void) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/worker/jobs/1/cancel') && request.method === 'POST') {
+          onCancel?.(await request.json());
+          return jsonResponse({ ...JOBS[0], cancelRequestedAt: new Date().toISOString() });
+        }
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: true, workers: [] });
+        if (url.includes('/worker/jobs')) return jsonResponse(jobs);
+        return jsonResponse([]);
+      }),
+    );
+  }
+
+  it('asks for confirmation, then sends the stop request for a running job', async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    stubJobs([JOBS[0]], (sent) => {
+      body = sent;
+    });
+    renderPage();
+
+    await screen.findByText('Задача #1');
+    await user.click(screen.getByRole('button', { name: 'Остановить: задача #1' }));
+
+    expect(await screen.findByText('Остановить задачу #1?')).toBeTruthy();
+    expect(body).toBeUndefined(); // nothing sent before confirming
+
+    await user.click(screen.getByRole('button', { name: 'Остановить' }));
+
+    await waitFor(() => expect(body).toEqual({ force: false }));
+  });
+
+  it('does not stop anything when the confirmation is declined', async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    stubJobs([JOBS[0]], (sent) => {
+      body = sent;
+    });
+    renderPage();
+
+    await screen.findByText('Задача #1');
+    await user.click(screen.getByRole('button', { name: 'Остановить: задача #1' }));
+    await user.click(await screen.findByRole('button', { name: 'Не останавливать' }));
+
+    expect(body).toBeUndefined();
+  });
+
+  it('shows "stopping" for a requested stop and withholds force for the first 30 seconds', async () => {
+    stubJobs([{ ...JOBS[0], cancelRequestedAt: new Date().toISOString() }]);
+    renderPage();
+
+    expect(await screen.findByText('Останавливается…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Останавливается…: задача #1' })).toBeDisabled();
+  });
+
+  it('offers a forced stop once the worker has not confirmed for over 30 seconds', async () => {
+    stubJobs([{ ...JOBS[0], cancelRequestedAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderPage();
+
+    const button = await screen.findByRole('button', { name: 'Остановить принудительно: задача #1' });
+
+    expect(button).toBeEnabled();
+  });
+
+  it('offers no stop button for a finished job and labels a cancelled one', async () => {
+    stubJobs([{ ...JOBS[0], status: 'cancelled', finishedAt: '2026-09-30T10:05:00.000Z' }]);
+    renderPage();
+
+    expect(await screen.findByText('Остановлена')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Остановить/ })).toBeNull();
+    // A stopped job leaves the worker free.
+    expect(screen.getByText('Свободен')).toBeTruthy();
+  });
+});
+

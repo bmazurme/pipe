@@ -6,7 +6,8 @@ export type WorkerJobStatus =
   | 'claimed'
   | 'running'
   | 'succeeded'
-  | 'failed';
+  | 'failed'
+  | 'cancelled';
 
 // A job's status keeps moving on its own (the worker process updates it
 // server-side) as long as it isn't in a terminal state — used to decide
@@ -30,6 +31,8 @@ export interface WorkerJob {
   claimedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Set once the owner asked to stop a job a worker holds; cleared by nothing — the job ends 'cancelled'. */
+  cancelRequestedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +77,16 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         const message = (response.data as { message?: string } | undefined)
           ?.message;
         return message ?? 'Не удалось создать задачу';
+      },
+    }),
+    // Asks the worker to stop a job (or cancels a queued one outright). `force`
+    // marks it cancelled on bridge without waiting for a worker that is gone.
+    cancelJob: builder.mutation<WorkerJob, { id: number; force?: boolean }>({
+      query: ({ id, force }) => ({ url: `worker/jobs/${id}/cancel`, method: 'POST', body: { force: force === true } }),
+      invalidatesTags: ['WorkerJob'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        return message ?? 'Не удалось остановить задачу';
       },
     }),
     deleteJob: builder.mutation<void, number>({
@@ -141,6 +154,7 @@ export const {
   useGetJobQuery,
   useGetWorkerStatusQuery,
   useCreateJobMutation,
+  useCancelJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   usePeekJobResultMutation,

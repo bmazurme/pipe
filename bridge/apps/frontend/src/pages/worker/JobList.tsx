@@ -8,8 +8,10 @@ import { WorkerJob } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
+import { CancelJobButton } from './CancelJobButton';
 import {
   isActive,
+  isStopping,
   MODEL_OPTIONS,
   STATUS_LABEL,
   STATUS_THEME,
@@ -49,7 +51,7 @@ export function JobList({ jobs, isLoading, onOpenJob }: JobListProps) {
             const duration = jobDuration(job);
 
             return (
-              <li key={job.id}>
+              <li key={job.id} className={styles.jobItem}>
                 <button
                   type="button"
                   className={styles.jobRow}
@@ -76,14 +78,16 @@ export function JobList({ jobs, isLoading, onOpenJob }: JobListProps) {
                     )}
                   </div>
                   {isActive(job.status) && <Loader size="s" />}
-                  <Label theme={STATUS_THEME[job.status]}>
-                    {STATUS_LABEL[job.status]}
+                  <Label theme={isStopping(job) ? 'warning' : STATUS_THEME[job.status]}>
+                    {isStopping(job) ? 'Останавливается' : STATUS_LABEL[job.status]}
                     {isActive(job.status) ? '…' : ''}
                   </Label>
                   {job.status === 'succeeded' && (
                     <Icon data={ArrowDownToLine} size={16} />
                   )}
                 </button>
+                {/* A sibling, not a child: a button cannot be nested in the row button. */}
+                <CancelJobButton job={job} compact />
               </li>
             );
           })}

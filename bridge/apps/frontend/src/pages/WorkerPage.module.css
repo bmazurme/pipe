@@ -59,6 +59,17 @@
   list-style: none;
 }
 
+.jobItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jobItem > .jobRow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .jobRow {
   display: flex;
   align-items: center;

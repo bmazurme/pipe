@@ -1755,6 +1755,43 @@
         }
       }
     },
+    "/api/v1/worker/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "WorkerController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}/status": {
       "post": {
         "operationId": "WorkerController_updateStatus",
@@ -2906,7 +2943,8 @@
               "claimed",
               "running",
               "succeeded",
-              "failed"
+              "failed",
+              "cancelled"
             ],
             "type": "string"
           },
@@ -2936,6 +2974,11 @@
             "type": "string",
             "nullable": true
           },
+          "cancelRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -2958,6 +3001,7 @@
           "claimedAt",
           "startedAt",
           "finishedAt",
+          "cancelRequestedAt",
           "createdAt",
           "updatedAt"
         ]
@@ -2996,11 +3040,25 @@
           }
         }
       },
+      "CancelJobDto": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
       "UpdateJobStatusDto": {
         "type": "object",
         "properties": {
           "status": {
-            "type": "object"
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
           },
           "errorMessage": {
             "type": "string"

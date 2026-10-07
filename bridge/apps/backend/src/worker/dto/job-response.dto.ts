@@ -13,6 +13,7 @@ export class JobResponseDto {
   claimedAt: Date | null;
   startedAt: Date | null;
   finishedAt: Date | null;
+  cancelRequestedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -30,6 +31,7 @@ export class JobResponseDto {
       claimedAt: job.claimedAt,
       startedAt: job.startedAt,
       finishedAt: job.finishedAt,
+      cancelRequestedAt: job.cancelRequestedAt,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

@@ -78,6 +78,7 @@ function fakeClient(downloadParcelResult: Buffer): FakeClient & Record<string, u
       },
       { calls: appendLogCalls },
     ),
+    isCancelRequested: async () => false,
     downloadParcel: async () => downloadParcelResult,
     uploadResult: Object.assign(
       async (...args: unknown[]) => {
@@ -241,3 +242,37 @@ describe('processJob', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob stop requests', () => {
+  it('reports "cancelled" (not "failed"), uploads nothing and cleans up when the owner stops a running job', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-cancel-'));
+    // The model "hangs" until the worker aborts the request.
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    let asked = 0;
+    client.isCancelRequested = async () => ++asked >= 2; // not yet on the first poll
+    const job: RemoteJob = { id: 21, sourceFileId: 30, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const keepAlive = setTimeout(() => {}, 10_000);
+
+    try {
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 30 });
+    } finally {
+      clearTimeout(keepAlive);
+    }
+
+    assert.deepEqual(
+      client.updateStatus.calls.map((call) => call[1]),
+      ['running', 'cancelled'],
+    );
+    assert.equal(client.uploadResult.calls.length, 0);
+    assert.deepEqual(readdirSync(workDir), []);
+    assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Stopped by the owner')));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
