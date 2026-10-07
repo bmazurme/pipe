@@ -26,6 +26,7 @@ import { multerConfig } from './config/multer.config';
 import { ListFilesQueryDto } from './dto/list-files-query.dto';
 import { StoredFileResponseDto } from './dto/stored-file-response.dto';
 import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
+import { StoredFile } from './entities/stored-file.entity';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
 import { StorageService } from './storage.service';
 
@@ -90,12 +91,7 @@ export class StorageController {
         return;
       }
 
-      this.logger.warn(
-        `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
-      );
-      if (!res.headersSent) {
-        res.status(404).json({ message: 'File is missing on disk' });
-      }
+      this.respondDownloadError(res, file, err);
     });
   }
 
@@ -127,6 +123,25 @@ export class StorageController {
   ): Promise<void> {
     const file = await this.storageService.findOwned(id, currentUser.id);
 
-    res.download(this.storageService.path(file), file.originalName);
+    res.download(
+      this.storageService.path(file),
+      file.originalName,
+      (err) => {
+        if (err) this.respondDownloadError(res, file, err);
+      },
+    );
+  }
+
+  private respondDownloadError(
+    res: Response,
+    file: StoredFile,
+    err: Error,
+  ): void {
+    this.logger.warn(
+      `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
+    );
+    if (!res.headersSent) {
+      res.status(404).json({ message: 'File is missing on disk' });
+    }
   }
 }
