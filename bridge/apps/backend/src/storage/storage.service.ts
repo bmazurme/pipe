@@ -23,16 +23,28 @@ export class StorageService {
     file: Express.Multer.File,
     meta: UploadFileMetaDto = {},
   ): Promise<StoredFile> {
-    return this.storedFileRepository.save({
-      userId,
-      originalName: file.originalname,
-      storedName: file.filename,
-      mimeType: file.mimetype,
-      size: file.size,
-      channel: meta.channel ?? null,
-      taskKey: meta.taskKey ?? null,
-      direction: meta.direction ?? null,
-    });
+    try {
+      return await this.storedFileRepository.save({
+        userId,
+        originalName: file.originalname,
+        storedName: file.filename,
+        mimeType: file.mimetype,
+        size: file.size,
+        channel: meta.channel ?? null,
+        taskKey: meta.taskKey ?? null,
+        direction: meta.direction ?? null,
+      });
+    } catch (error) {
+      // Multer already wrote the file; don't leave it orphaned on disk.
+      try {
+        await unlink(join(UPLOAD_DIR, file.filename));
+      } catch (unlinkError) {
+        this.logger.warn(
+          `Failed to remove orphaned upload ${file.filename}: ${unlinkError}`,
+        );
+      }
+      throw error;
+    }
   }
 
   async findAllByUser(
