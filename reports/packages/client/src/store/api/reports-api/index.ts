@@ -18,6 +18,7 @@ import type {
   StreamEvent,
   SubscriptionConfigType,
   SubscriptionDraftType,
+  AnalysisModulesType,
   StartAnalysisPayload,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
@@ -148,6 +149,10 @@ const reportsApi = createApi({
       query: (payload) => ({ url: 'subscription/analysis', method: 'POST', body: payload }),
       transformResponse: unwrap<{ iid: string; state: SubscriptionStateEntryType }>('Не удалось запустить анализ'),
       invalidatesTags: ['SubscriptionIssues'],
+    }),
+    getAnalysisModules: builder.query<AnalysisModulesType, string>({
+      query: (projectId) => `subscription/analysis/modules/${projectId}`,
+      transformResponse: unwrap<AnalysisModulesType>('Не удалось загрузить список модулей'),
     }),
     // Re-read on every open: the backlog lives on a git branch and the
     // duplicate marks depend on GitHub's current issue list.
@@ -289,6 +294,7 @@ export const {
   useRemoveProjectCodeMutation,
   useGetSubscriptionIssuesQuery,
   useStartAnalysisMutation,
+  useGetAnalysisModulesQuery,
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
   useGetSubscriptionIssueTimeQuery,

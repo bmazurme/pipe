@@ -3,7 +3,7 @@ import {
   Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
 import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
-import type { SubscriptionIssueType } from '@reports/shared';
+import type { AnalysisKindType, SubscriptionIssueType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
 import { EmptyState, ErrorState, PageSkeleton } from '../../components/state';
@@ -20,6 +20,7 @@ import { isAnalysisIssue } from './analysis';
 import {
   STEP_BADGE_THEME, STEP_TITLES, countByGroup, filterIssues, groupByProject, type StatusFilter,
 } from './status';
+import AnalysisDialog from './components/analysis-dialog';
 import BacklogPanel from './components/backlog-panel';
 import IssueStepper from './components/issue-stepper';
 
@@ -40,6 +41,7 @@ function Subscription() {
   const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
   const [manualForm, setManualForm] = useState(emptyManualForm);
   const [toRemove, setToRemove] = useState<SubscriptionIssueType | null>(null);
+  const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
 
@@ -73,9 +75,10 @@ function Subscription() {
 
   // Creates an ordinary task whose description is the analysis prompt; the
   // usual Init → Push → worker → Pull pipeline then carries it.
-  const handleStartAnalysis = async (projectId: string) => {
+  const handleStartAnalysis = async (payload: { projectId: string; kind: AnalysisKindType; module?: string }) => {
     try {
-      await startAnalysis({ projectId }).unwrap();
+      await startAnalysis(payload).unwrap();
+      setIsAnalysisDialogOpen(false);
       toaster.add({ name: 'analysis-started', theme: 'success', title: 'Задача анализа создана — отправьте её (Push)', autoHiding: 5000 });
     } catch (analysisError) {
       toaster.add({
@@ -134,9 +137,8 @@ function Subscription() {
               <Button
                 view="outlined"
                 size="m"
-                loading={isStartingAnalysis}
-                onClick={() => handleStartAnalysis(githubProjects[0].gitlabProjectId)}
-                title={`Анализ репозитория ${githubProjects[0].githubRepo}`}
+                onClick={() => setIsAnalysisDialogOpen(true)}
+                title="Выбрать тип анализа и модуль"
               >
                 <Icon data={Magnifier} size={16} />
                 Запустить анализ
@@ -259,6 +261,14 @@ function Subscription() {
           )}
         </>
       )}
+
+      <AnalysisDialog
+        open={isAnalysisDialogOpen}
+        projects={githubProjects}
+        loading={isStartingAnalysis}
+        onClose={() => setIsAnalysisDialogOpen(false)}
+        onStart={handleStartAnalysis}
+      />
 
       <Dialog open={!!openIssue} onClose={() => setOpenKey(null)} size="m">
         <DialogHeader caption={openIssue ? `#${openIssue.iid} ${openIssue.title}` : ''} />

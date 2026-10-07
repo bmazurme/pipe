@@ -133,7 +133,7 @@ export async function handleListSubscriptionIssues(req: Request<Record<string, s
         id: manualIid,
         iid: manualIid,
         projectId: state.projectId ?? Number(manualProjectId),
-        projectName: projectDict[manualProjectId] || manualProjectId,
+        projectName: githubProjectFor(manualProjectId)?.githubRepo || projectDict[manualProjectId] || manualProjectId,
         title: state.title ?? '',
         description: state.description ?? '',
         webUrl: '',

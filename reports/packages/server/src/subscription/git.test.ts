@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, pushBranch } from './git';
+import { buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -267,5 +267,21 @@ describe('pushBranch', () => {
     // pushed real content, not just an empty ref.
     const remoteLog = git(remote, ['log', '-1', '--format=%s', 'mazur-28.09.2026-1']);
     expect(remoteLog.trim()).toBe('Pull issue #1');
+  });
+});
+
+describe('listModules', () => {
+  it('lists committed directories up to two levels deep, skipping hidden ones', async () => {
+    const dir = initRepo();
+
+    for (const file of ['a/x.txt', 'a/b/y.txt', 'a/b/c/z.txt', '.github/w.yml', 'a/.hidden/q.txt', 'docs/r.md']) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), 'x');
+    }
+
+    git(dir, ['add', '-A']);
+    git(dir, ['commit', '--quiet', '-m', 'init']);
+
+    expect(await listModules(dir)).toEqual(['a', 'a/b', 'docs']);
   });
 });
