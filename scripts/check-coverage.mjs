@@ -1,22 +1,23 @@
 #!/usr/bin/env node
-// IMPROVEMENTS_TECH.md 4.4 — first slice of the coverage-regression gate:
-// just this package. `test:coverage` already worked everywhere, but
-// nothing failed a run just because coverage dropped; this adds that,
-// scoped to packages/protocol only for now. Picked first because it's the
-// smallest package and its coverage is run through Node's own
-// `--experimental-test-coverage`, which is the one coverage format in this
-// monorepo with no separate npm dependency to parse (Jest's/Vitest's own
-// reporters are a different exercise, deliberately not attempted here).
+// IMPROVEMENTS_TECH.md 4.4 — coverage-regression gate for every package whose
+// tests run on Node's own `--test` runner (protocol, sync, worker, harness): it
+// fails a run when coverage drops below that package's committed baseline.
+// Jest/Vitest packages (bridge, reports) report in another format and are a
+// separate exercise.
 //
-// Run via `npm run coverage:check` (which does `tsc -b` first) — this
-// script assumes dist/ is already built.
+// Usage (from the package directory, after `npm run build`):
+//   node ../scripts/check-coverage.mjs [<packageDir>] [-- <extra node --test args>]
+// e.g. sync passes `-- --test-concurrency=1`. The baseline is
+// <packageDir>/coverage-baseline.json; update it deliberately when a drop is
+// accepted (or to ratchet it up when coverage improved).
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+const separator = process.argv.indexOf('--');
+const ownArgs = process.argv.slice(2, separator === -1 ? undefined : separator);
+const extraNodeArgs = separator === -1 ? [] : process.argv.slice(separator + 1);
+const ROOT = path.resolve(ownArgs[0] ?? process.cwd());
 const BASELINE_PATH = path.join(ROOT, 'coverage-baseline.json');
 
 // Node's coverage numbers are deterministic for deterministic code, so this
@@ -26,7 +27,7 @@ const METRICS = ['lines', 'branches', 'functions'];
 
 const result = spawnSync(
   process.execPath,
-  ['--test', '--experimental-test-coverage', 'dist/**/*.test.js'],
+  ['--test', '--experimental-test-coverage', ...extraNodeArgs, 'dist/**/*.test.js'],
   { cwd: ROOT, encoding: 'utf8' },
 );
 const output = `${result.stdout}${result.stderr}`;
@@ -38,7 +39,7 @@ if (result.status !== 0) {
 }
 
 const match = output.match(
-  /^#\s*all files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/m,
+  /^(?:#|ℹ)\s*all files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/m,
 );
 
 if (!match) {
