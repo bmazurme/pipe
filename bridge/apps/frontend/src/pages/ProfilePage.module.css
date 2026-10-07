@@ -2,30 +2,26 @@
   display: flex;
   flex-direction: column;
   gap: var(--ntlstl-page-gap);
-  /* Two columns above 1100px, so this page earns the wider shell. */
   max-width: var(--ntlstl-page-max-wide);
 }
 
-/* One column by default. The breakpoint is set by content, not by device:
-   below it the devices card would be squeezed to an unreadable width. */
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-@media (min-width: 1100px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  }
-}
-
-.column {
+/* The tabs keep each panel short, so a single readable column is enough — the
+   old two-column grid mostly produced one tall column next to a short one. */
+.panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-width: 0;
+  max-width: 760px;
+  padding-top: 16px;
+}
+
+.statusForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--g-color-line-generic);
 }
 
 .card {

@@ -6,9 +6,8 @@ import { IsNull, Repository } from 'typeorm';
 
 import { ApiKey } from './entities/api-key.entity';
 
-// Distinct from anything else in the system (bridge's OAuth JWTs, the static
-// TIME_EXPORT_API_KEY shared secret) so a guard can tell at a glance "this
-// looks like one of ours" before doing a DB lookup.
+// Distinct from anything else in the system (bridge's OAuth JWTs) so a guard can
+// tell at a glance "this looks like one of ours" before doing a DB lookup.
 export const API_KEY_PREFIX = 'brk_';
 const TOKEN_BYTES = 24;
 const PREFIX_DISPLAY_LENGTH = 12;
