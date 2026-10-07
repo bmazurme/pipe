@@ -205,6 +205,25 @@ describe('processJob', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
+  it('reports a failed job instead of throwing when the work dir cannot be created', async () => {
+    const parent = mkdtempSync(path.join(tmpdir(), 'worker-index-test-nodir-'));
+    const blocker = path.join(parent, 'not-a-dir');
+    writeFileSync(blocker, 'regular file');
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 6, sourceFileId: 15, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(path.join(blocker, 'work')));
+
+    const failed = client.updateStatus.calls.filter((call) => call[1] === 'failed');
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0][0], 6);
+    assert.equal(typeof failed[0][2], 'string');
+    assert.equal(client.uploadResult.calls.length, 0);
+
+    rmSync(parent, { recursive: true, force: true });
+  });
+
   it('flushes batched logs to bridge even on failure, in one or a few calls rather than per character', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-logs-'));
     globalThis.fetch = (async () => new Response('server error', { status: 500 })) as typeof fetch;

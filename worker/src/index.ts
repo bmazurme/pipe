@@ -11,6 +11,7 @@ import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
+import { buildExitFailureMessage } from './failureMessage.js';
 import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
@@ -54,8 +55,7 @@ function resultFilename(job: RemoteJob): string {
 // as a dedicated unprivileged OS user with no access to real secrets — see
 // worker/README.md and systemd/pipe-worker.service.
 export async function processJob(client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig): Promise<void> {
-  mkdirSync(config.workDir, { recursive: true });
-  const jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
+  let jobDir: string | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
   // from `log` below, which forwards the model's textual output to bridge.
   const jlog = jobLogger(job.id);
@@ -86,6 +86,9 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
   const flushInterval = setInterval(flushLog, LOG_FLUSH_INTERVAL_MS);
 
   try {
+    mkdirSync(config.workDir, { recursive: true });
+    jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
+
     await client.updateStatus(job.id, 'running');
     log(`Claimed job ${job.id} (model: ${job.model})\n`);
 
@@ -113,7 +116,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
       : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, config.jobTimeoutSec * 1000);
 
     if (result.exitCode !== 0) {
-      throw new Error(`Model run exited with code ${result.exitCode}`);
+      throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
 
     // Re-reads every file currently on disk (covers edits AND new files the
@@ -153,7 +156,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     clearInterval(flushInterval);
     flushLog();
     await flushed;
-    rmSync(jobDir, { recursive: true, force: true });
+    if (jobDir) rmSync(jobDir, { recursive: true, force: true });
   }
 }
 

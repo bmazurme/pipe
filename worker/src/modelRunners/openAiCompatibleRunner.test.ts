@@ -1,12 +1,46 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { afterEach, beforeEach, describe, it } from 'node:test';
+import path, { join } from 'node:path';
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
-import { runOpenAiCompatible } from './openAiCompatibleRunner.js';
+import { executeTool, MAX_TOOL_RESULT_CHARS, runOpenAiCompatible } from './openAiCompatibleRunner.js';
 
-const options = { baseUrl: 'http://stub.invalid', apiKey: 'k', model: 'gpt-test' };
+describe('executeTool read_file', () => {
+  let dir: string;
+
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'read-file-test-'));
+  });
+
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('returns a file at the cap unchanged', () => {
+    const content = 'a'.repeat(MAX_TOOL_RESULT_CHARS);
+    writeFileSync(join(dir, 'small.txt'), content);
+    assert.equal(executeTool(dir, 'read_file', { path: 'small.txt' }), content);
+  });
+
+  it('truncates a larger file with a notice including the total size', () => {
+    const total = MAX_TOOL_RESULT_CHARS + 123;
+    writeFileSync(join(dir, 'big.txt'), 'b'.repeat(total));
+    const result = executeTool(dir, 'read_file', { path: 'big.txt' });
+    assert.ok(result.startsWith('b'.repeat(MAX_TOOL_RESULT_CHARS)));
+    assert.ok(result.includes(`[truncated: file has ${total} chars; ${MAX_TOOL_RESULT_CHARS} shown`));
+    assert.ok(result.length < total);
+  });
+
+  it('reads the remainder with offset', () => {
+    const total = MAX_TOOL_RESULT_CHARS + 10;
+    writeFileSync(join(dir, 'big2.txt'), 'c'.repeat(total));
+    const result = executeTool(dir, 'read_file', { path: 'big2.txt', offset: MAX_TOOL_RESULT_CHARS });
+    assert.equal(result, 'c'.repeat(10));
+  });
+});
+
+const deadlineOptions = { baseUrl: 'http://stub.invalid', apiKey: 'k', model: 'gpt-test' };
 
 describe('runOpenAiCompatible job deadline', () => {
   const realFetch = globalThis.fetch;
@@ -28,15 +62,20 @@ describe('runOpenAiCompatible job deadline', () => {
       })) as typeof fetch;
 
     await assert.rejects(
-      runOpenAiCompatible(dir, 'task', options, () => {}, undefined, 50),
+      runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, 50),
       /gpt-test job timed out after 0\.05s/,
     );
   });
 
-  it('rejects between turns once the deadline has passed', async () => {
+  it('rejects on the next turn once the deadline has passed', async () => {
     let calls = 0;
-    globalThis.fetch = (async () => {
+    // Like a real fetch: yields to the event loop (so the deadline timer can fire)
+    // and rejects with the abort reason when its signal is already aborted.
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
       calls++;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      if (init?.signal?.aborted) throw init.signal.reason;
+
       return new Response(JSON.stringify({
         choices: [{ message: { role: 'assistant', content: null, tool_calls: [
           { id: 'c1', function: { name: 'list_files', arguments: '{}' } },
@@ -51,17 +90,17 @@ describe('runOpenAiCompatible job deadline', () => {
     };
 
     await assert.rejects(
-      runOpenAiCompatible(dir, 'task', options, onOutput, undefined, 40),
+      runOpenAiCompatible(dir, 'task', deadlineOptions, onOutput, undefined, 40),
       /gpt-test job timed out/,
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
   });
 
   it('keeps running without a timeout', async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }] }))) as typeof fetch;
 
-    const result = await runOpenAiCompatible(dir, 'task', options, () => {});
+    const result = await runOpenAiCompatible(dir, 'task', deadlineOptions, () => {});
     assert.equal(result.exitCode, 0);
   });
 });

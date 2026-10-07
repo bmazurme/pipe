@@ -87,6 +87,15 @@ describe('runClaude', () => {
     assert.ok(chunks.join('').includes('a warning from the CLI'));
   });
 
+  it('includes stderr in the result output alongside stdout, even on a failing run', async () => {
+    process.env.FAKE_STDERR = 'Invalid API key';
+    process.env.FAKE_EXIT_CODE = '1';
+    const result = await runClaude('/tmp', 'p', 'opus', () => {});
+    assert.equal(result.exitCode, 1);
+    assert.match(result.output, /ARG0:-p/);
+    assert.ok(result.output.endsWith('Invalid API key'));
+  });
+
   it('resolves with the child process exit code', async () => {
     process.env.FAKE_EXIT_CODE = '3';
     const result = await runClaude('/tmp', 'p', 'opus', () => {});

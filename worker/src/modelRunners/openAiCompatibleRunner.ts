@@ -13,6 +13,10 @@ const MAX_TURNS = 20;
 // timeout at all, a provider that just hangs would block the job forever.
 const COMPLETION_TIMEOUT_MS = 300_000;
 
+// A read_file result is pushed into `messages` and re-sent on every later
+// turn, so one huge file (e.g. a lockfile) could overflow the context window.
+export const MAX_TOOL_RESULT_CHARS = 50_000;
+
 const SYSTEM_PROMPT = [
   'You are a coding agent working in a plain directory (not a git repository).',
   'Use the read_file/list_files/write_file tools to inspect and edit files as needed.',
@@ -33,10 +37,13 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read a file\'s full contents as UTF-8 text.',
+      description: `Read a file as UTF-8 text. Output is capped at ${MAX_TOOL_RESULT_CHARS} characters; use offset to read further.`,
       parameters: {
         type: 'object',
-        properties: { path: { type: 'string', description: 'Path relative to the working directory' } },
+        properties: {
+          path: { type: 'string', description: 'Path relative to the working directory' },
+          offset: { type: 'integer', description: 'Character offset to start reading from (default 0)' },
+        },
         required: ['path'],
       },
     },
@@ -78,14 +85,23 @@ function truncate(text: string, max = 200): string {
   return text.length > max ? `${text.slice(0, max)}…(+${text.length - max} chars)` : text;
 }
 
-function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
+export function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
   switch (name) {
     case 'list_files': {
       return listFilesRecursively(cwd).join('\n');
     }
     case 'read_file': {
       const path = resolveInWorkDir(cwd, String(args.path ?? ''));
-      return readFileSync(path, 'utf-8');
+      const content = readFileSync(path, 'utf-8');
+      const offset = Math.max(0, Math.floor(Number(args.offset ?? 0)) || 0);
+      const slice = content.slice(offset, offset + MAX_TOOL_RESULT_CHARS);
+      if (offset === 0 && content.length <= MAX_TOOL_RESULT_CHARS) {
+        return content;
+      }
+      if (offset + slice.length >= content.length) {
+        return slice;
+      }
+      return `${slice}\n[truncated: file has ${content.length} chars; ${slice.length} shown from offset ${offset}. Pass offset=${offset + slice.length} to read more]`;
     }
     case 'write_file': {
       const path = resolveInWorkDir(cwd, String(args.path ?? ''));
