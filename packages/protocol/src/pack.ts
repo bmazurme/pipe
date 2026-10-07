@@ -33,21 +33,34 @@ function byRelPath(a: { relPath: string }, b: { relPath: string }): number {
   return a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0;
 }
 
-export function contentHash(files: PackedFile[], assets: PackedAsset[] = []): string {
+function hashEntries(files: PackedFile[], assets: PackedAsset[], compare: typeof byRelPath): string {
   const hash = createHash('sha256');
-  for (const file of [...files].sort(byRelPath)) {
+  for (const file of [...files].sort(compare)) {
     hash.update(file.relPath);
     hash.update('\0');
     hash.update(file.content);
     hash.update('\0');
   }
-  for (const asset of [...assets].sort(byRelPath)) {
+  for (const asset of [...assets].sort(compare)) {
     hash.update(asset.relPath);
     hash.update('\0');
     hash.update(asset.base64);
     hash.update('\0');
   }
   return hash.digest('hex');
+}
+
+export function contentHash(files: PackedFile[], assets: PackedAsset[] = []): string {
+  return hashEntries(files, assets, byRelPath);
+}
+
+// Parcels built before the comparator became code-unit order (< #34) sorted with
+// localeCompare. A sender still running that build (a reports server that was not
+// restarted, an older sync-cli) produces a hash a current reader would reject as
+// tampered, though nothing is wrong with the parcel. Accept it on the read side
+// only; drop once every sender is known to be past the switch.
+function legacyContentHash(files: PackedFile[], assets: PackedAsset[]): string {
+  return hashEntries(files, assets, (a, b) => a.relPath.localeCompare(b.relPath));
 }
 
 // Generic over the manifest shape so sync's project-mode manifest
@@ -113,7 +126,11 @@ export function extractArchive<M extends BaseManifest>(
   assertSchemaVersion(manifest, entryName);
 
   // Pre-hash parcels carry no contentHash — skip silently rather than reject them.
-  if (typeof manifest.contentHash === 'string' && manifest.contentHash !== contentHash(files, assets)) {
+  if (
+    typeof manifest.contentHash === 'string' &&
+    manifest.contentHash !== contentHash(files, assets) &&
+    manifest.contentHash !== legacyContentHash(files, assets)
+  ) {
     throw new Error(`Parcel ${entryName} failed integrity check: contentHash mismatch`);
   }
 

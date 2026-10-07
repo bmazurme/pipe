@@ -190,6 +190,66 @@ describe('buildArchive / extractArchive', () => {
     );
   });
 
+  describe('parcels hashed with the legacy localeCompare order', () => {
+    // Code-unit order puts 'B.txt' before 'a.txt'; localeCompare the other way round.
+    const mixed: PackedFile[] = [
+      { relPath: 'B.txt', content: 'b' },
+      { relPath: 'a.txt', content: 'a' },
+    ];
+
+    function legacyArchive(entries: PackedFile[]): Buffer {
+      const legacy = createHash('sha256');
+      for (const file of [...mixed].sort((x, y) => x.relPath.localeCompare(y.relPath))) {
+        legacy.update(file.relPath);
+        legacy.update('\0');
+        legacy.update(file.content);
+        legacy.update('\0');
+      }
+      const zip = new AdmZip();
+      for (const file of entries) zip.addFile(file.relPath, Buffer.from(file.content, 'utf-8'));
+      zip.addFile(
+        ENTRY,
+        Buffer.from(
+          JSON.stringify({
+            project: 'demo',
+            createdAt: '2026-09-14T10:00:00.000Z',
+            schemaVersion: PROTOCOL_SCHEMA_VERSION,
+            contentHash: legacy.digest('hex'),
+          }),
+          'utf-8',
+        ),
+      );
+
+      return zip.toBuffer();
+    }
+
+    it('the two orders really differ for this fixture', () => {
+      assert.notEqual(
+        contentHash(mixed),
+        createHash('sha256')
+          .update('a.txt\0a\0B.txt\0b\0')
+          .digest('hex'),
+      );
+    });
+
+    it('are still accepted, so a sender that was not upgraded is not rejected as tampered', () => {
+      const { files: extracted } = extractArchive<TestManifest>(legacyArchive(mixed), ENTRY);
+
+      assert.equal(extracted.length, 2);
+    });
+
+    it('are still rejected when their content was altered', () => {
+      assert.throws(
+        () =>
+          extractArchive<TestManifest>(
+            legacyArchive([mixed[0], { relPath: 'a.txt', content: 'tampered' }]),
+            ENTRY,
+          ),
+        /failed integrity check: contentHash mismatch/,
+      );
+    });
+  });
+
   it('still extracts a manifest that has no contentHash', () => {
     const { buffer, manifest } = buildArchive<TestManifest>(ENTRY, files, {
       project: 'demo',
