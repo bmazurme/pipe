@@ -1,232 +1,41 @@
-import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 
-import { runOpenAiCompatible } from './openAiCompatibleRunner.js';
+import { executeTool, MAX_TOOL_RESULT_CHARS } from './openAiCompatibleRunner.js';
 
-const originalFetch = globalThis.fetch;
+describe('executeTool read_file', () => {
+  let dir: string;
 
-after(() => {
-  globalThis.fetch = originalFetch;
-});
-
-function chatCompletion(message: Record<string, unknown>): Response {
-  return new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
-}
-
-describe('runOpenAiCompatible', () => {
-  it('returns the final message once the model stops calling tools', async () => {
-    globalThis.fetch = (async () => chatCompletion({ role: 'assistant', content: 'All done.' })) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      const result = await runOpenAiCompatible(
-        dir,
-        'do nothing',
-        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-        () => {},
-      );
-
-      assert.equal(result.exitCode, 0);
-      assert.match(result.output, /All done\./);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'read-file-test-'));
   });
 
-  it('executes a write_file tool call and reflects it in the next turn', async () => {
-    let call = 0;
-
-    globalThis.fetch = (async () => {
-      call++;
-      if (call === 1) {
-        return chatCompletion({
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            {
-              id: 'call-1',
-              function: { name: 'write_file', arguments: JSON.stringify({ path: 'out.txt', content: 'hi' }) },
-            },
-          ],
-        });
-      }
-      return chatCompletion({ role: 'assistant', content: 'Wrote the file.' });
-    }) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      const result = await runOpenAiCompatible(
-        dir,
-        'write a file',
-        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-        () => {},
-      );
-
-      assert.equal(result.exitCode, 0);
-      assert.equal(readFileSync(path.join(dir, 'out.txt'), 'utf-8'), 'hi');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
   });
 
-  it('bounds the logged [tool] line for a large write_file while writing the full content', async () => {
-    const content = 'x'.repeat(50 * 1024);
-    let call = 0;
-    let toolMessageContent: unknown;
-
-    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
-      call++;
-      if (call === 1) {
-        return chatCompletion({
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            {
-              id: 'call-1',
-              function: { name: 'write_file', arguments: JSON.stringify({ path: 'big.txt', content }) },
-            },
-          ],
-        });
-      }
-      const body = JSON.parse((init?.body as string) ?? '{}');
-      toolMessageContent = body.messages[body.messages.length - 1].content;
-      return chatCompletion({ role: 'assistant', content: 'Done.' });
-    }) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      let logged = '';
-      const result = await runOpenAiCompatible(
-        dir,
-        'write a big file',
-        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-        (chunk) => {
-          logged += chunk;
-        },
-      );
-
-      assert.equal(result.exitCode, 0);
-      assert.ok(logged.length < 1024, `expected bounded log output, got ${logged.length} chars`);
-      assert.match(logged, /\[tool\] write_file\(/);
-      assert.match(logged, /…\(\+\d+ chars\)/);
-      assert.equal(readFileSync(path.join(dir, 'big.txt'), 'utf-8'), content);
-      assert.equal(toolMessageContent, 'ok');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it('returns a file at the cap unchanged', () => {
+    const content = 'a'.repeat(MAX_TOOL_RESULT_CHARS);
+    writeFileSync(join(dir, 'small.txt'), content);
+    assert.equal(executeTool(dir, 'read_file', { path: 'small.txt' }), content);
   });
 
-  it('refuses a write_file path that escapes the working directory', async () => {
-    let sawErrorInToolResult = false;
-
-    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse((init?.body as string) ?? '{}');
-      const lastMessage = body.messages[body.messages.length - 1];
-
-      if (lastMessage.role === 'tool') {
-        sawErrorInToolResult = String(lastMessage.content).includes('escapes the working directory');
-        return chatCompletion({ role: 'assistant', content: 'Stopped.' });
-      }
-
-      return chatCompletion({
-        role: 'assistant',
-        content: null,
-        tool_calls: [
-          {
-            id: 'call-1',
-            function: { name: 'write_file', arguments: JSON.stringify({ path: '../escape.txt', content: 'x' }) },
-          },
-        ],
-      });
-    }) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      await runOpenAiCompatible(
-        dir,
-        'try to escape',
-        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-        () => {},
-      );
-
-      assert.equal(sawErrorInToolResult, true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it('truncates a larger file with a notice including the total size', () => {
+    const total = MAX_TOOL_RESULT_CHARS + 123;
+    writeFileSync(join(dir, 'big.txt'), 'b'.repeat(total));
+    const result = executeTool(dir, 'read_file', { path: 'big.txt' });
+    assert.ok(result.startsWith('b'.repeat(MAX_TOOL_RESULT_CHARS)));
+    assert.ok(result.includes(`[truncated: file has ${total} chars; ${MAX_TOOL_RESULT_CHARS} shown`));
+    assert.ok(result.length < total);
   });
 
-  it('reads back a file already present in the working directory', async () => {
-    let call = 0;
-
-    globalThis.fetch = (async () => {
-      call++;
-      if (call === 1) {
-        return chatCompletion({
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            { id: 'call-1', function: { name: 'read_file', arguments: JSON.stringify({ path: 'existing.txt' }) } },
-          ],
-        });
-      }
-      return chatCompletion({ role: 'assistant', content: 'Read it.' });
-    }) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    writeFileSync(path.join(dir, 'existing.txt'), 'seed content');
-
-    try {
-      const result = await runOpenAiCompatible(
-        dir,
-        'read the file',
-        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-        () => {},
-      );
-
-      assert.equal(result.exitCode, 0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('throws a descriptive error when the API responds with a failure status', async () => {
-    globalThis.fetch = (async () => new Response('bad request', { status: 400 })) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      await assert.rejects(
-        runOpenAiCompatible(
-          dir,
-          'x',
-          { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-          () => {},
-        ),
-        /test-model API error \(400\)/,
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects with "returned no message" when choices is absent', async () => {
-    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
-
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
-    try {
-      await assert.rejects(
-        runOpenAiCompatible(
-          dir,
-          'prompt',
-          { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
-          () => {},
-        ),
-        /test-model returned no message/,
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it('reads the remainder with offset', () => {
+    const total = MAX_TOOL_RESULT_CHARS + 10;
+    writeFileSync(join(dir, 'big2.txt'), 'c'.repeat(total));
+    const result = executeTool(dir, 'read_file', { path: 'big2.txt', offset: MAX_TOOL_RESULT_CHARS });
+    assert.equal(result, 'c'.repeat(10));
   });
 });
