@@ -31,7 +31,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const logsRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   const jobIsActive = job ? isActive(job.status) : true;
-  const logsLength = job?.logs.length ?? 0;
+  const logsLength = job?.logs?.length ?? 0;
 
   // A finished job never changes again — stop polling it instead of hitting
   // the API every few seconds for as long as the dialog stays open.
