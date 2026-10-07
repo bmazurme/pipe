@@ -3000,7 +3000,12 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "object"
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ]
           },
           "errorMessage": {
             "type": "string"
