@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
@@ -324,6 +328,46 @@ describe('WorkerService', () => {
 
       expect(appLogs.record).not.toHaveBeenCalled();
     });
+
+    it.each([
+      [JobStatus.Claimed, JobStatus.Running],
+      [JobStatus.Running, JobStatus.Succeeded],
+      [JobStatus.Running, JobStatus.Failed],
+    ])('allows %s -> %s', async (from, to) => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        status: from,
+        startedAt: null,
+      } as Job);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      const result = await service.updateStatus(1, 7, {
+        status: to as JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed,
+      });
+
+      expect(result.status).toBe(to);
+    });
+
+    it.each([JobStatus.Succeeded, JobStatus.Failed])(
+      'rejects any update to a %s job with ConflictException',
+      async (terminal) => {
+        for (const next of [
+          JobStatus.Running,
+          JobStatus.Succeeded,
+          JobStatus.Failed,
+        ] as const) {
+          const job = { id: 1, status: terminal } as Job;
+          repository.findOne!.mockResolvedValue(job);
+
+          await expect(
+            service.updateStatus(1, 7, { status: next }),
+          ).rejects.toThrow(ConflictException);
+          expect(job.status).toBe(terminal);
+        }
+        expect(repository.save).not.toHaveBeenCalled();
+        expect(appLogs.record).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('appendLog', () => {

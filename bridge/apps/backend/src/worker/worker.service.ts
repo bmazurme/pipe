@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -162,6 +163,14 @@ export class WorkerService {
     dto: UpdateJobStatusDto,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
+
+    // A finished job is final — a late or duplicated report must not
+    // overwrite its outcome.
+    if (job.status === JobStatus.Succeeded || job.status === JobStatus.Failed) {
+      throw new ConflictException(
+        `Job is already ${job.status} — its status can no longer change`,
+      );
+    }
 
     job.status = dto.status;
 
