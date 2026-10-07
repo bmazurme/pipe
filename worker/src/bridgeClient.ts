@@ -60,6 +60,21 @@ export class WorkerBridgeClient {
     return text ? (JSON.parse(text) as RemoteJob | null) : null;
   }
 
+  // Claim-less liveness ping for while a long job is running (claim is the
+  // only other thing that records one, and the main loop doesn't poll then).
+  async heartbeat(workerName: string): Promise<void> {
+    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/heartbeat`, {
+      method: 'POST',
+      headers: this.authHeaders(true),
+      body: JSON.stringify({ workerName }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Heartbeat failed (${response.status})`);
+    }
+  }
+
   async downloadParcel(jobId: number): Promise<Buffer> {
     const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/parcel`, {
       headers: this.authHeaders(),
