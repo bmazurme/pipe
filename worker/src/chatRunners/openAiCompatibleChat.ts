@@ -41,8 +41,13 @@ export async function openAiCompatibleChat(
   }
 
   const data = (await response.json()) as {
-    choices: { message: { content?: string | null } }[];
+    choices?: { message?: { content?: string | null } }[];
   };
 
-  return data.choices[0]?.message.content ?? '';
+  const content = data.choices?.[0]?.message?.content;
+  if (!content || !content.trim()) {
+    throw new Error(`${options.model} returned an empty reply`);
+  }
+
+  return content;
 }
