@@ -72,6 +72,15 @@ describe('WorkerService', () => {
     service = module.get(WorkerService);
   });
 
+  describe('recordHeartbeat', () => {
+    it('records a heartbeat without touching any job row', async () => {
+      await service.recordHeartbeat(7, 'worker-a');
+
+      expect(heartbeatService.record).toHaveBeenCalledWith(7, 'worker-a');
+      expect(repository.query).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     it('rejects a source file the user does not own', async () => {
       storageService.findOwned!.mockRejectedValue(
