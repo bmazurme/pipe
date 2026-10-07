@@ -18,6 +18,7 @@ import style from '../subscription.module.css';
 
 const STEP_ORDER: SubscriptionStepType[] = ['init', 'pushed', 'pulled', 'published'];
 const STEP_LABELS = ['Init', 'Push', 'Pull', 'Publish'];
+const STEP_HINTS = ['Ветка', 'Отправка', 'Результат', 'GitLab'];
 
 function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
   const toaster = useToaster();
@@ -120,16 +121,19 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
     <div className={style.stepper}>
       <div className={style.steps}>
         {STEP_LABELS.map((label, i) => (
-          <div className={style.step} key={label}>
+          <div className={`${style.step} ${i === STEP_LABELS.length - 1 ? style.stepLast : ''}`} key={label}>
             <div className={style.stepRow}>
               <span
+                aria-current={i === nextIndex ? 'step' : undefined}
                 className={`${style.stepDot} ${i <= currentIndex ? style.stepDotDone : ''} ${i === nextIndex ? style.stepDotActive : ''}`}
               >
                 {i <= currentIndex ? <Icon data={Check} size={14} /> : i + 1}
               </span>
               {i < STEP_LABELS.length - 1 && <span className={`${style.stepLine} ${i < currentIndex ? style.stepLineDone : ''}`} />}
             </div>
-            <Text variant="caption-2" color="secondary" className={style.stepLabel}>{label}</Text>
+            <Text variant="caption-2" color={i === nextIndex ? 'primary' : 'secondary'} className={style.stepLabel}>
+              {label} · {STEP_HINTS[i]}
+            </Text>
           </div>
         ))}
       </div>
