@@ -38,3 +38,13 @@ window.IntersectionObserver =
     unobserve() {}
     disconnect() {}
   } as unknown as typeof IntersectionObserver);
+
+// jsdom doesn't implement ResizeObserver, which Gravity UI's Select (with a
+// label) and TextArea measure their content with.
+globalThis.ResizeObserver =
+  globalThis.ResizeObserver ??
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };

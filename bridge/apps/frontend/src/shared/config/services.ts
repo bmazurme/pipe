@@ -5,6 +5,7 @@ import {
   FaceRobot,
   House,
   Key,
+  Lock,
   MagicWand,
   ShieldKeyhole,
   TrashBin,
@@ -67,6 +68,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Статус туннеля worker → AI-провайдеры, его настройка и ключи worker.',
     icon: ShieldKeyhole,
     path: '/vpn',
+  },
+  {
+    id: 'keys',
+    title: 'Keys',
+    description: 'Пары RSA-ключей для шифрования посылок: генерация в браузере, приватный ключ остаётся у вас.',
+    icon: Lock,
+    path: '/keys',
   },
   {
     id: 'secrets',

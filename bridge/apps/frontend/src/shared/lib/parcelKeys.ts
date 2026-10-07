@@ -16,6 +16,8 @@ const STORAGE_KEY = 'pipe.parcelKeys';
 export function useParcelKeys(): {
   keys: StoredParcelKey[];
   addKey: (name: string, pem: string) => void;
+  /** Adds several keys in one write (two addKey calls in a row would each start from the same snapshot). */
+  addKeys: (entries: { name: string; pem: string }[]) => void;
   removeKey: (id: string) => void;
 } {
   const [keys, setKeys] = useLocalStorage<StoredParcelKey[]>(STORAGE_KEY, []);
@@ -24,9 +26,13 @@ export function useParcelKeys(): {
     setKeys([...keys, { id: crypto.randomUUID(), name, pem }]);
   };
 
+  const addKeys = (entries: { name: string; pem: string }[]) => {
+    setKeys([...keys, ...entries.map((entry) => ({ id: crypto.randomUUID(), ...entry }))]);
+  };
+
   const removeKey = (id: string) => {
     setKeys(keys.filter((key) => key.id !== id));
   };
 
-  return { keys, addKey, removeKey };
+  return { keys, addKey, addKeys, removeKey };
 }
