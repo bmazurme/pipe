@@ -31,7 +31,14 @@ describe('buildArchive / extractArchive', () => {
     assert.deepEqual(extractedFiles, files);
   });
 
-  it('throws when the manifest entry is missing', () => {
+  it('throws when the manifest entry is missing from an otherwise valid zip', () => {
+    const zip = new AdmZip();
+    zip.addFile('src/a.ts', Buffer.from('export const a = 1;', 'utf-8'));
+
+    assert.throws(() => extractArchive(zip.toBuffer(), ENTRY), /Archive is missing __test_manifest__\.json/);
+  });
+
+  it('throws on input that is not a zip at all', () => {
     assert.throws(() => extractArchive(Buffer.from('not a zip'), ENTRY));
   });
 
