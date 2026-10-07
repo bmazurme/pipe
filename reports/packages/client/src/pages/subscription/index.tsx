@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import {
-  Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
+  Alert, Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
 import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
-import type { AnalysisKindType, SubscriptionIssueType } from '@reports/shared';
+import type { AnalysisKindType, SubscriptionIssueType, WorkerModelType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
 import { EmptyState, ErrorState, PageSkeleton } from '../../components/state';
 import {
   useCreateManualSubscriptionIssueMutation,
+  useGetServerCodeStatusQuery,
   useGetSubscriptionConfigQuery,
   useGetSubscriptionIssuesQuery,
   useRemoveSubscriptionIssueMutation,
+  useSetAutoStartWorkerModelMutation,
   useStartAnalysisMutation,
 } from '../../store/api';
 import { useDocumentTitle } from '../../hooks/use-document-title';
@@ -26,6 +28,15 @@ import IssueStepper from './components/issue-stepper';
 
 import style from './subscription.module.css';
 
+const AUTO_START_OPTIONS: { value: WorkerModelType | 'off'; content: string }[] = [
+  { value: 'off', content: 'Вручную' },
+  { value: 'sonnet', content: 'Claude Sonnet' },
+  { value: 'opus', content: 'Claude Opus' },
+  { value: 'gpt', content: 'GPT' },
+  { value: 'deepseek', content: 'DeepSeek' },
+  { value: 'qwen', content: 'Qwen' },
+];
+
 const emptyManualForm = { gitlabProjectId: '', title: '', description: '' };
 
 function Subscription() {
@@ -34,6 +45,8 @@ function Subscription() {
   const toaster = useToaster();
   const { data, isLoading, error, refetch, isFetching } = useGetSubscriptionIssuesQuery();
   const { data: config } = useGetSubscriptionConfigQuery();
+  const { data: codeStatus } = useGetServerCodeStatusQuery(undefined, { pollingInterval: 60_000 });
+  const [setAutoStart] = useSetAutoStartWorkerModelMutation();
   const [createManual] = useCreateManualSubscriptionIssueMutation();
   const [removeIssue] = useRemoveSubscriptionIssueMutation();
   const [startAnalysis, { isLoading: isStartingAnalysis }] = useStartAnalysisMutation();
@@ -86,6 +99,20 @@ function Subscription() {
         theme: 'danger',
         title: 'Не удалось запустить анализ',
         content: describeError(analysisError),
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleAutoStartChange = async (value: WorkerModelType | 'off') => {
+    try {
+      await setAutoStart({ model: value === 'off' ? null : value }).unwrap();
+    } catch (autoStartError) {
+      toaster.add({
+        name: 'auto-start-error',
+        theme: 'danger',
+        title: 'Не удалось сохранить настройку',
+        content: describeError(autoStartError),
         isClosable: true,
       });
     }
@@ -156,6 +183,16 @@ function Subscription() {
         )}
       />
 
+      {codeStatus?.stale && (
+        <Alert
+          className={style.staleBanner}
+          theme="warning"
+          view="filled"
+          title="Сервер reports работает на устаревшем коде"
+          message="Файлы изменились после его запуска (например, после pull ветки). Автопилот и отправка посылок могут вести себя по-старому — перезапустите сервер."
+        />
+      )}
+
       {issues.length === 0 ? (
         <EmptyState
           icon={<Icon data={Tray} size={28} />}
@@ -182,6 +219,14 @@ function Subscription() {
               <SegmentedRadioGroup.Option value="active">В работе · {counts.active}</SegmentedRadioGroup.Option>
               <SegmentedRadioGroup.Option value="done">Готово · {counts.done}</SegmentedRadioGroup.Option>
             </SegmentedRadioGroup>
+            <Select
+              size="m"
+              label="Worker:"
+              value={[config?.autoStartWorkerModel ?? 'off']}
+              onUpdate={([value]) => void handleAutoStartChange(value as WorkerModelType | 'off')}
+              options={AUTO_START_OPTIONS}
+              title="Какую модель запускать на worker сразу после отправки посылки"
+            />
             <TextInput
               className={style.search}
               size="m"

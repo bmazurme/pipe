@@ -306,3 +306,7 @@
   white-space: pre-wrap;
   font-size: 13px;
 }
+
+.staleBanner {
+  margin-top: var(--app-page-gap);
+}

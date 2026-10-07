@@ -20,6 +20,7 @@ import type {
   SubscriptionDraftType,
   AnalysisModulesType,
   StartAnalysisPayload,
+  WorkerModelType,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
   SubscriptionPushPayload,
@@ -35,6 +36,8 @@ export const baseQueryWithRetry = retry(baseQuery, { maxRetries: 0 });
  * The API answers with HTTP 200 even for failures, marking them via `type: 'error'`.
  * Throwing here turns them into regular RTK Query errors so the UI can show them.
  */
+export type ServerCodeStatus = { startedAt: string; newestChangeAt: string | null; stale: boolean };
+
 const unwrap = <T>(fallbackMessage: string) => (response: StreamEvent): T => {
   if (response?.type === 'error') {
     throw new Error(typeof response.data === 'string' ? response.data : fallbackMessage);
@@ -165,6 +168,18 @@ const reportsApi = createApi({
       query: ({ projectId, iid, payload }) => ({ url: `subscription/analysis/${projectId}/${iid}/issues`, method: 'POST', body: payload }),
       transformResponse: unwrap<CreateBacklogIssuesResult>('Не удалось создать задачи'),
       invalidatesTags: ['SubscriptionIssues'],
+    }),
+    // Whether the server process is older than the code on disk (see the
+    // server's utils/stale-code.ts) — polled, since staleness appears the moment
+    // someone pulls a branch, not on any request of ours.
+    getServerCodeStatus: builder.query<ServerCodeStatus, void>({
+      query: () => 'version',
+      transformResponse: unwrap<ServerCodeStatus>('Не удалось проверить версию сервера'),
+    }),
+    setAutoStartWorkerModel: builder.mutation<SubscriptionConfigType, { model: WorkerModelType | null }>({
+      query: (body) => ({ url: 'subscription/config/auto-start-worker', method: 'PUT', body }),
+      transformResponse: unwrap<SubscriptionConfigType>('Не удалось сохранить настройку'),
+      invalidatesTags: ['SubscriptionConfig'],
     }),
     getSubscriptionIssueTime: builder.query<{ humanTimeEstimate: string | null }, { projectId: number; iid: string }>({
       query: ({ projectId, iid }) => `subscription/issues/${projectId}/${iid}/time`,
@@ -297,6 +312,8 @@ export const {
   useGetAnalysisModulesQuery,
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
+  useGetServerCodeStatusQuery,
+  useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
   useLazyGetSubscriptionDraftQuery,

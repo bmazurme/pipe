@@ -235,6 +235,77 @@ describe('handlePushSubscriptionIssue', () => {
     expect(state?.encrypted).toBe(false);
   });
 
+  describe('auto-start of the worker after push', () => {
+    function setup(autoStartWorkerModel?: 'sonnet' | 'gpt', encryption = { enabled: false, publicKey: '', privateKey: '' }) {
+      const { dir } = initTrackedProject('173');
+      setSubscriptionConfig({
+        trackedProjects: [{ gitlabProjectId: '173', path: dir, include: ['**/*.ts'] }],
+        dictionary: [],
+        commentTemplates: [],
+        encryption,
+        ...(autoStartWorkerModel ? { autoStartWorkerModel } : {}),
+      });
+      setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
+      git(dir, ['checkout', '-b', 'task/173-6']);
+    }
+
+    function stubBridge(jobResponse: () => globalThis.Response) {
+      const jobs: Array<{ url: string; body: unknown }> = [];
+      globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        if (url.includes('/issues/6')) return Response.json({ id: 1, iid: 6, project_id: 173, title: 't', description: '' });
+        if (url.includes('/api/v1/storage')) {
+          return Response.json({ id: 42, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString() }, { status: 201 });
+        }
+        if (url.includes('/api/v1/worker/jobs')) {
+          jobs.push({ url, body: JSON.parse(init!.body as string) });
+          return jobResponse();
+        }
+        throw new Error(`unexpected URL: ${url}`);
+      }) as typeof fetch;
+
+      return jobs;
+    }
+
+    const pushBody = { issueId: '1', title: 'Fix it', description: 'desc' };
+
+    it('starts a worker job for the uploaded parcel with the configured model', async () => {
+      setup('sonnet');
+      const jobs = stubBridge(() => Response.json({ id: 7, status: 'queued' }, { status: 201 }));
+
+      const { res, events } = makeRes();
+      await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, pushBody), res);
+
+      expect(events()[0].type).toBe('message');
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0].body).toEqual({ sourceFileId: 42, model: 'sonnet' });
+      expect(getIssueState('173', '6')?.step).toBe('pushed');
+    });
+
+    it('does nothing extra when the setting is off', async () => {
+      setup();
+      const jobs = stubBridge(() => Response.json({ id: 7, status: 'queued' }));
+
+      const { res } = makeRes();
+      await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, pushBody), res);
+
+      expect(jobs).toHaveLength(0);
+    });
+
+    it('keeps the push but says so when the job could not be started', async () => {
+      setup('gpt');
+      stubBridge(() => Response.json({ message: 'Worker only accepts unencrypted parcels' }, { status: 400 }));
+
+      const { res, events } = makeRes();
+      await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, pushBody), res);
+
+      expect(events()[0]).toMatchObject({ type: 'error' });
+      expect(String(events()[0].data)).toMatch(/Посылка отправлена, но задачу на worker запустить не удалось/);
+      // The parcel did go out — the step is recorded regardless.
+      expect(getIssueState('173', '6')?.step).toBe('pushed');
+      expect(getIssueState('173', '6')?.parcelId).toBe(42);
+    });
+  });
+
   it('refuses to push before init has created a branch', async () => {
     initTrackedProject('173');
     globalThis.fetch = vi.fn() as unknown as typeof fetch;

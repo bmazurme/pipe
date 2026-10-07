@@ -18,6 +18,8 @@ export {
   useGetAnalysisModulesQuery,
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
+  useGetServerCodeStatusQuery,
+  useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
   useLazyGetSubscriptionDraftQuery,
