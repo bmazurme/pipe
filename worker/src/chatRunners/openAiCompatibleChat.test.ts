@@ -75,4 +75,30 @@ describe('openAiCompatibleChat', () => {
       /deepseek-chat API error \(500\)/,
     );
   });
+
+  describe('malformed or empty replies', () => {
+    const emptyOptions = { baseUrl: 'http://provider.test', apiKey: 'key', model: 'test-model' };
+    const history = [{ role: 'user' as const, content: 'hi' }];
+    const stubFetch = (body: unknown): void => {
+      globalThis.fetch = (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch;
+    };
+
+    it('returns a normal reply unchanged', async () => {
+      stubFetch({ choices: [{ message: { content: 'hello there' } }] });
+      assert.equal(await openAiCompatibleChat(history, emptyOptions), 'hello there');
+    });
+
+    for (const [name, body] of [
+      ['choices is empty', { choices: [] }],
+      ['choices is missing', {}],
+      ['message is missing', { choices: [{}] }],
+      ['content is null', { choices: [{ message: { content: null } }] }],
+      ['content is whitespace only', { choices: [{ message: { content: '  \n ' } }] }],
+    ] as const) {
+      it(`rejects when ${name}`, async () => {
+        stubFetch(body);
+        await assert.rejects(openAiCompatibleChat(history, emptyOptions), /test-model returned an empty reply/);
+      });
+    }
+  });
 });

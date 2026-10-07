@@ -27,15 +27,21 @@ export interface PackedAsset {
 // asset entries.
 export const ASSET_PREFIX = '__issue_assets__/';
 
+// Code-unit order, not localeCompare: the latter depends on the runtime's
+// ICU/locale data, so the same files could hash differently across machines.
+function byRelPath(a: { relPath: string }, b: { relPath: string }): number {
+  return a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0;
+}
+
 export function contentHash(files: PackedFile[], assets: PackedAsset[] = []): string {
   const hash = createHash('sha256');
-  for (const file of [...files].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
+  for (const file of [...files].sort(byRelPath)) {
     hash.update(file.relPath);
     hash.update('\0');
     hash.update(file.content);
     hash.update('\0');
   }
-  for (const asset of [...assets].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
+  for (const asset of [...assets].sort(byRelPath)) {
     hash.update(asset.relPath);
     hash.update('\0');
     hash.update(asset.base64);

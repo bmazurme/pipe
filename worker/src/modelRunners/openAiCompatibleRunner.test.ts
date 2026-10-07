@@ -210,4 +210,23 @@ describe('runOpenAiCompatible', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('rejects with "returned no message" when choices is absent', async () => {
+    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
+    try {
+      await assert.rejects(
+        runOpenAiCompatible(
+          dir,
+          'prompt',
+          { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
+          () => {},
+        ),
+        /test-model returned no message/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
