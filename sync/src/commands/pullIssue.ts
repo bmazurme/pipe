@@ -110,12 +110,34 @@ export async function pullIssueCommand(
   }
 
   log.info(`Watching for issue #${iid} (project ${projectId})'s result every ${intervalSec}s. Ctrl+C to stop.`);
+  await watchForResult(intervalSec, {
+    pullOnce: () => tryPullOnce(name, projectId, iid, options),
+    onFound: () =>
+      notify('Result ready', `Issue #${iid} (project ${projectId}) pulled into ${findProject(loadConfig(), name).path}.`),
+  });
+}
+
+// Polls until pullOnce reports a pull. A thrown error (network blip, bridge
+// 5xx, dirty tree) is logged and retried on the next tick — this mode exists
+// to wait unattended, so it must not exit on a transient failure.
+export async function watchForResult(
+  intervalSec: number,
+  deps: {
+    pullOnce: () => Promise<boolean>;
+    onFound: () => void;
+    sleep?: (ms: number) => Promise<void>;
+  },
+): Promise<void> {
+  const wait = deps.sleep ?? sleep;
   for (;;) {
-    const found = await tryPullOnce(name, projectId, iid, options);
-    if (found) {
-      notify('Result ready', `Issue #${iid} (project ${projectId}) pulled into ${findProject(loadConfig(), name).path}.`);
-      return;
+    try {
+      if (await deps.pullOnce()) {
+        deps.onFound();
+        return;
+      }
+    } catch (error: unknown) {
+      log.error(error instanceof Error ? error.message : error);
     }
-    await sleep(intervalSec * 1000);
+    await wait(intervalSec * 1000);
   }
 }
