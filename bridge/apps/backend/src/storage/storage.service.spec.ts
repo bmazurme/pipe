@@ -101,9 +101,7 @@ describe('StorageService', () => {
 
       await expect(service.create(7, file)).rejects.toBe(error);
 
-      expect(mockUnlink).toHaveBeenCalledWith(
-        join(UPLOAD_DIR, 'stored-a.zip'),
-      );
+      expect(mockUnlink).toHaveBeenCalledWith(join(UPLOAD_DIR, 'stored-a.zip'));
     });
 
     it('still rethrows the original error when the cleanup unlink fails', async () => {
