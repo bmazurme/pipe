@@ -23,7 +23,7 @@ import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, p
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
 import { buildArchive, extractArchive } from './pack';
-import { uploadParcel, listParcels, peekParcel, deleteParcel } from './bridge-client';
+import { uploadParcel, listParcels, peekParcel, deleteParcel, createWorkerJob } from './bridge-client';
 import { encryptBuffer, decryptBuffer } from './encryption';
 
 function sender(res: Response) {
@@ -325,13 +325,43 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
       direction: 'outbound',
     });
 
-    return setIssueState(projectId, iid, {
+    const pushed = setIssueState(projectId, iid, {
       step: 'pushed',
       parcelId: stored.id,
       pushedAt: new Date().toISOString(),
       encrypted: shouldEncrypt,
     });
+
+    await startWorkerIfConfigured(projectId, iid, stored.id, shouldEncrypt);
+
+    return pushed;
   });
+}
+
+// Optional automatic hand-off to the worker (config.autoStartWorkerModel). The
+// push itself is already recorded and valid, so a failure here must not look like
+// a failed push — but it must not be silent either (a task that never starts is
+// exactly the manual step this exists to remove): it is rethrown with a message
+// that says the parcel did go out.
+async function startWorkerIfConfigured(projectId: string, iid: string, parcelId: number, encrypted: boolean): Promise<void> {
+  const { autoStartWorkerModel } = getSubscriptionConfig();
+
+  if (!autoStartWorkerModel) return;
+
+  if (encrypted) {
+    console.warn(`[subscription ${projectId}:${iid}] auto-start skipped: worker only accepts unencrypted parcels.`);
+    return;
+  }
+
+  try {
+    const job = await createWorkerJob(parcelId, autoStartWorkerModel);
+
+    console.log(`[subscription ${projectId}:${iid}] worker job ${job.id} started (${autoStartWorkerModel}).`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+
+    throw new Error(`Посылка отправлена, но задачу на worker запустить не удалось: ${reason}`);
+  }
 }
 
 // A result parcel carries the whole tracked tree, almost all of it unchanged.

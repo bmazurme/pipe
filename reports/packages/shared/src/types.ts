@@ -150,7 +150,15 @@ export type SubscriptionConfigType = {
   // CLI's own --strict equivalent. Defaults to false/undefined (warn-only,
   // today's behavior) for anyone who hasn't opted in.
   leakScanStrict?: boolean;
+  // Worker model to start automatically for a task right after its parcel is
+  // pushed (bridge's POST /worker/jobs). Absent = off: today's behavior, where
+  // the job has to be created by hand on bridge's Worker page.
+  autoStartWorkerModel?: WorkerModelType;
 };
+
+// Mirrors bridge's JobModel; @reports/shared holds types only, so the runtime
+// list lives next to its users (server/subscription/config-handler.ts, the client).
+export type WorkerModelType = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 
 // Everything a user configures by hand, bundled for moving to a new machine
 // in one file — the calendar's holidays/shortDays/badDays are deliberately
