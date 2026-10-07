@@ -101,4 +101,91 @@ describe('openAiCompatibleChat', () => {
       });
     }
   });
+
+  describe('with a toolset', () => {
+    const options = { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'gpt-test' };
+    const history = [{ role: 'user' as const, content: 'what is job 3 doing?' }];
+
+    function sequence(responses: unknown[]): { bodies: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown }> } {
+      const bodies: Array<{ messages: Array<Record<string, unknown>>; tools?: unknown }> = [];
+      let i = 0;
+
+      globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(init?.body as string));
+
+        return new Response(JSON.stringify({ choices: [{ message: responses[Math.min(i++, responses.length - 1)] }] }), { status: 200 });
+      }) as typeof fetch;
+
+      return { bodies };
+    }
+
+    const toolCall = (name: string, args: object) => ({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call-1', type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+    });
+
+    it('runs the tool the model asks for and feeds the result back before the final answer', async () => {
+      const { bodies } = sequence([toolCall('get_job', { id: 3 }), { role: 'assistant', content: 'Job 3 is running.' }]);
+      const executed: Array<[string, Record<string, unknown>]> = [];
+      const toolset = {
+        definitions: [{ type: 'function' as const, function: { name: 'get_job', description: 'd', parameters: {} } }],
+        execute: async (name: string, args: Record<string, unknown>) => {
+          executed.push([name, args]);
+          return '{"id":3,"status":"running"}';
+        },
+      };
+
+      const reply = await openAiCompatibleChat(history, options, undefined, toolset);
+
+      assert.equal(reply, 'Job 3 is running.');
+      assert.deepEqual(executed, [['get_job', { id: 3 }]]);
+      assert.equal(bodies.length, 2);
+      assert.equal(bodies[0].messages[0].role, 'system');
+      assert.ok(bodies[0].tools);
+      const last = bodies[1].messages[bodies[1].messages.length - 1];
+      assert.deepEqual(last, { role: 'tool', tool_call_id: 'call-1', content: '{"id":3,"status":"running"}' });
+    });
+
+    it('withholds the tools after the allowed rounds so a looping model must answer', async () => {
+      const { bodies } = sequence([toolCall('get_job', { id: 1 })]);
+      const toolset = {
+        definitions: [{ type: 'function' as const, function: { name: 'get_job', description: 'd', parameters: {} } }],
+        execute: async () => 'ok',
+      };
+
+      // The stub always asks for another tool call; after MAX rounds the request carries no tools and
+      // the (still tool-calling) reply has no content, which is reported rather than looped on.
+      await assert.rejects(openAiCompatibleChat(history, options, undefined, toolset), /returned an empty reply/);
+      assert.ok(bodies.length >= 2);
+      assert.equal(bodies[bodies.length - 1].tools, undefined);
+    });
+
+    it('tolerates malformed tool arguments by passing an empty object', async () => {
+      sequence([
+        { role: 'assistant', content: null, tool_calls: [{ id: 'c', type: 'function', function: { name: 'list_jobs', arguments: '{oops' } }] },
+        { role: 'assistant', content: 'done' },
+      ]);
+      let seen: Record<string, unknown> | undefined;
+      const toolset = {
+        definitions: [],
+        execute: async (_name: string, args: Record<string, unknown>) => {
+          seen = args;
+          return '[]';
+        },
+      };
+
+      assert.equal(await openAiCompatibleChat(history, options, undefined, toolset), 'done');
+      assert.deepEqual(seen, {});
+    });
+
+    it('sends no tools and no system prompt when there is no toolset', async () => {
+      const { bodies } = sequence([{ role: 'assistant', content: 'hi' }]);
+
+      await openAiCompatibleChat(history, options);
+
+      assert.equal(bodies[0].tools, undefined);
+      assert.equal(bodies[0].messages[0].role, 'user');
+    });
+  });
 });

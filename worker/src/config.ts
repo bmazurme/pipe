@@ -1,6 +1,8 @@
 import { hostname } from 'node:os';
 import path from 'node:path';
 
+import { parseChatToolsMode, type ChatToolsMode } from './chatTools.js';
+
 export interface WorkerConfig {
   bridgeApiUrl: string;
   bridgeApiKey: string;
@@ -15,6 +17,9 @@ export interface WorkerConfig {
   proxyUrl?: string;
   // Max wall-clock seconds a claude CLI job may run before it's killed.
   jobTimeoutSec: number;
+  // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): off by
+  // default; `read` looks at jobs/files/worker status, `write` may also start jobs.
+  chatTools: ChatToolsMode;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -56,5 +61,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     workerName: env.WORKER_NAME ?? hostname(),
     proxyUrl: env.WORKER_PROXY_URL,
     jobTimeoutSec: parseJobTimeoutSec(env.WORKER_JOB_TIMEOUT_SEC),
+    chatTools: parseChatToolsMode(env.WORKER_CHAT_TOOLS),
   };
 }
