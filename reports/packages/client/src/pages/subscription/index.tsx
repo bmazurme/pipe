@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, Select, Text, TextInput, useToaster,
+  Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
-import { ArrowsRotateLeft, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
-import type { SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
+import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
+import type { SubscriptionIssueType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
 import { EmptyState, ErrorState, PageSkeleton } from '../../components/state';
@@ -17,19 +17,15 @@ import {
 import { useDocumentTitle } from '../../hooks/use-document-title';
 import { describeError } from '../../utils/describe-error';
 import { isAnalysisIssue } from './analysis';
+import {
+  STEP_BADGE_THEME, STEP_TITLES, countByGroup, filterIssues, groupByProject, type StatusFilter,
+} from './status';
 import BacklogPanel from './components/backlog-panel';
 import IssueStepper from './components/issue-stepper';
 
 import style from './subscription.module.css';
 
 const emptyManualForm = { gitlabProjectId: '', title: '', description: '' };
-
-const STEP_TITLES: Record<SubscriptionStepType, string> = {
-  init: 'Ветка создана',
-  pushed: 'Отправлено в bridge',
-  pulled: 'Получено из bridge',
-  published: 'Опубликовано',
-};
 
 function Subscription() {
   useDocumentTitle('Подписка');
@@ -44,9 +40,14 @@ function Subscription() {
   const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
   const [manualForm, setManualForm] = useState(emptyManualForm);
   const [toRemove, setToRemove] = useState<SubscriptionIssueType | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [query, setQuery] = useState('');
 
   const githubProjects = (config?.trackedProjects ?? []).filter((project) => project.provider === 'github');
   const issues = data ?? [];
+  const counts = countByGroup(issues);
+  const visibleIssues = filterIssues(issues, filter, query);
+  const groups = groupByProject(visibleIssues);
   const openIssue = issues.find((issue) => `${issue.projectId}-${issue.iid}` === openKey) ?? null;
 
   const handleCreateManual = async () => {
@@ -166,48 +167,119 @@ function Subscription() {
           )}
         />
       ) : (
-        <div className={style.list}>
-          {issues.map((issue) => (
-            <div key={`${issue.projectId}-${issue.iid}`} className={style.row}>
-              <button
-                type="button"
-                className={style.rowClickable}
-                onClick={() => setOpenKey(`${issue.projectId}-${issue.iid}`)}
-              >
-                <div className={style.rowMain}>
-                  <Text variant="body-2" className={style.rowTitle}>{issue.iid} {issue.title}</Text>
-                  <div className={style.rowMeta}>
-                    <Text variant="caption-2" color="secondary">{issue.projectName}</Text>
-                    {issue.timeEstimate && (
-                      <Text variant="caption-2" color="secondary">· {issue.timeEstimate}</Text>
-                    )}
+        <>
+          <div className={style.toolbar}>
+            <SegmentedRadioGroup
+              size="m"
+              value={filter}
+              onUpdate={(value) => setFilter(value as StatusFilter)}
+              aria-label="Фильтр по статусу"
+            >
+              <SegmentedRadioGroup.Option value="all">Все · {counts.all}</SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="new">Не начато · {counts.new}</SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="active">В работе · {counts.active}</SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="done">Готово · {counts.done}</SegmentedRadioGroup.Option>
+            </SegmentedRadioGroup>
+            <TextInput
+              className={style.search}
+              size="m"
+              placeholder="Поиск по номеру, названию, репозиторию"
+              value={query}
+              onUpdate={setQuery}
+              hasClear
+              controlProps={{ 'aria-label': 'Поиск задач' }}
+            />
+          </div>
+
+          {visibleIssues.length === 0 ? (
+            <EmptyState
+              icon={<Icon data={Magnifier} size={28} />}
+              title="Ничего не найдено"
+              description="Измените запрос или выберите другой статус."
+              action={(
+                <Button view="outlined" size="m" onClick={() => { setFilter('all'); setQuery(''); }}>
+                  Сбросить фильтры
+                </Button>
+              )}
+            />
+          ) : (
+            <div className={style.groups}>
+              {groups.map((group) => (
+                <section key={group.projectName} className={style.group}>
+                  {groups.length > 1 && (
+                    <div className={style.groupHeader}>
+                      <Text variant="subheader-2">{group.projectName}</Text>
+                      <Label size="s" theme="normal">{group.issues.length}</Label>
+                    </div>
+                  )}
+                  <div className={style.list}>
+                    {group.issues.map((issue) => (
+                      <div key={`${issue.projectId}-${issue.iid}`} className={style.row}>
+                        <button
+                          type="button"
+                          className={style.rowClickable}
+                          onClick={() => setOpenKey(`${issue.projectId}-${issue.iid}`)}
+                        >
+                          <span className={style.rowIid}>#{issue.iid}</span>
+                          <div className={style.rowMain}>
+                            <Text variant="body-2" className={style.rowTitle} title={issue.title}>{issue.title}</Text>
+                            <div className={style.rowMeta}>
+                              {groups.length === 1 && (
+                                <Text variant="caption-2" color="secondary">{issue.projectName}</Text>
+                              )}
+                              {issue.timeEstimate && (
+                                <Text variant="caption-2" color="secondary">{groups.length === 1 ? '· ' : ''}{issue.timeEstimate}</Text>
+                              )}
+                            </div>
+                          </div>
+                          <div className={style.rowBadges}>
+                            {issue.state === 'manual' && <Label theme="utility">Вручную</Label>}
+                            {!issue.tracked && <Label theme="warning">Не отслеживается</Label>}
+                            <Label theme={issue.subscription ? STEP_BADGE_THEME[issue.subscription.step] : 'normal'}>
+                              {issue.subscription ? STEP_TITLES[issue.subscription.step] : 'Не начато'}
+                            </Label>
+                          </div>
+                        </button>
+                        <Button
+                          view="flat-secondary"
+                          size="s"
+                          onClick={() => setToRemove(issue)}
+                          aria-label={`Удалить ${issue.iid}`}
+                          title="Удалить запись"
+                          className={style.rowRemove}
+                        >
+                          <Icon data={TrashBin} size={16} />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <div className={style.rowBadges}>
-                  {issue.state === 'manual' && <Label theme="utility">Вручную</Label>}
-                  {!issue.tracked && <Label theme="warning">Не отслеживается</Label>}
-                  <Label theme={issue.subscription ? 'info' : 'normal'}>
-                    {issue.subscription ? STEP_TITLES[issue.subscription.step] : 'Не начато'}
-                  </Label>
-                </div>
-              </button>
-              <Button
-                view="flat"
-                size="s"
-                onClick={() => setToRemove(issue)}
-                aria-label={`Удалить ${issue.iid}`}
-                className={style.rowRemove}
-              >
-                <Icon data={TrashBin} size={16} />
-              </Button>
+                </section>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       <Dialog open={!!openIssue} onClose={() => setOpenKey(null)} size="m">
-        <DialogHeader caption={openIssue ? `${openIssue.iid} ${openIssue.title}` : ''} />
+        <DialogHeader caption={openIssue ? `#${openIssue.iid} ${openIssue.title}` : ''} />
         <DialogBody>
+          {openIssue && (
+            <div className={style.issueMeta}>
+              <Text variant="body-2" color="secondary">{openIssue.projectName}</Text>
+              {openIssue.webUrl && (
+                <a className={style.issueLink} href={openIssue.webUrl} target="_blank" rel="noreferrer noopener">
+                  Открыть задачу
+                  <Icon data={ArrowUpRightFromSquare} size={14} />
+                </a>
+              )}
+            </div>
+          )}
+          {openIssue?.description && (
+            <details className={style.issueDescription}>
+              <summary>Описание задачи</summary>
+              <pre>{openIssue.description}</pre>
+            </details>
+          )}
           {openIssue && <IssueStepper issue={openIssue} />}
           {openIssue && isAnalysisIssue(openIssue) && <BacklogPanel issue={openIssue} />}
         </DialogBody>
