@@ -81,6 +81,14 @@ function jsonResponse(body: unknown): Response {
 }
 
 beforeEach(() => {
+  // The form remembers the last chosen model in localStorage — without
+  // clearing it, a test that picks a model would pre-select it for the next.
+  try {
+    localStorage.removeItem('worker.lastModel');
+  } catch {
+    // Storage unavailable — nothing was remembered either.
+  }
+
   // RTK Query caches per store instance — without resetting it, a later
   // test mounting the same query (listFiles/listJobs) would just see
   // whatever an earlier test already cached instead of hitting its own
@@ -538,5 +546,21 @@ describe('WorkerPage', () => {
 
     await user.click(screen.getByText('Задача #2'));
     expect(await screen.findByRole('button', { name: /Удалить/ })).toBeTruthy();
+  });
+});
+
+describe('WorkerPage — remembered model', () => {
+  it('pre-selects the model chosen for the previous job', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => (key === 'worker.lastModel' ? 'qwen' : null),
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    renderPage();
+
+    await screen.findByText('Задача #1');
+
+    expect(screen.queryByText('Модель')).toBeNull();
+    expect(screen.getAllByText('Qwen').length).toBeGreaterThan(0);
   });
 });
