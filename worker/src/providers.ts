@@ -47,6 +47,10 @@ export const OPENAI_COMPATIBLE_DEFAULTS: Record<OpenAiCompatibleModel, OpenAiCom
 
 export type OpenAiCompatibleConfig = { tool: 'openai-compatible'; baseUrl: string; apiKey: string; model: string };
 
+// An env var set to '' (docker-compose `${VAR:-}` passthrough, a blank line in
+// an env file) or whitespace counts as unset.
+const nonEmpty = (v?: string) => v?.trim() || undefined;
+
 // Shared by resolveProvider (jobs) and chatProviders.ts's resolveChatProvider
 // (chat turns) — gpt/deepseek/qwen need identical setup for both.
 export function resolveOpenAiCompatibleConfig(
@@ -54,7 +58,7 @@ export function resolveOpenAiCompatibleConfig(
   env: NodeJS.ProcessEnv,
 ): OpenAiCompatibleConfig {
   const defaults = OPENAI_COMPATIBLE_DEFAULTS[model];
-  const apiKey = env[defaults.apiKeyEnv];
+  const apiKey = nonEmpty(env[defaults.apiKeyEnv]);
 
   if (!apiKey) {
     throw new Error(`${defaults.apiKeyEnv} is not set — required to use the "${model}" model`);
@@ -62,9 +66,9 @@ export function resolveOpenAiCompatibleConfig(
 
   return {
     tool: 'openai-compatible',
-    baseUrl: env[defaults.baseUrlEnv] ?? defaults.defaultBaseUrl,
+    baseUrl: nonEmpty(env[defaults.baseUrlEnv]) ?? defaults.defaultBaseUrl,
     apiKey,
-    model: env[defaults.modelEnv] ?? defaults.defaultModel,
+    model: nonEmpty(env[defaults.modelEnv]) ?? defaults.defaultModel,
   };
 }
 
