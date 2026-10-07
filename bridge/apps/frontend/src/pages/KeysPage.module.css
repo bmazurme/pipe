@@ -1,0 +1,99 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+  max-width: var(--ntlstl-page-max);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: var(--ntlstl-card-padding);
+  min-width: 0;
+}
+
+.generateRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.generateRow > :first-child {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pem {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-generic-ultralight);
+  color: var(--g-color-text-primary);
+  font-family: var(--g-font-family-monospace, monospace);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.pemHidden {
+  filter: blur(5px);
+  user-select: none;
+}
+
+.fieldHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fieldActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.keyList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.keyInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fingerprint {
+  font-family: var(--g-font-family-monospace, monospace);
+}
+
+.importForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
