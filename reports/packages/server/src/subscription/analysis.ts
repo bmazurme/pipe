@@ -1,4 +1,4 @@
-import type { BacklogItemType, BacklogRiskType } from '@reports/shared';
+import type { AnalysisKindType, BacklogItemType, BacklogRiskType } from '@reports/shared';
 
 // Analysis tasks are ordinary manual Subscription tasks (same init → push →
 // worker → pull pipeline); this prefix is what tells them apart, so no new
@@ -22,21 +22,79 @@ const MAX_ITEMS = 5;
 const MAX_TITLE = 120;
 const MAX_BODY = 4000;
 
-export function analysisTitle(date = new Date()): string {
-  return `${ANALYSIS_TITLE_PREFIX}${date.toISOString().slice(0, 10)}`;
+export const ANALYSIS_KINDS: Record<AnalysisKindType, { label: string; guidance: string }> = {
+  general: { label: 'общий', guidance: '' },
+  uiux: {
+    label: 'UI/UX',
+    guidance:
+      'Focus on UI/UX: confusing or missing states (loading, empty, error), unclear copy, accessibility (labels, keyboard, focus, contrast), responsiveness, inconsistent patterns between screens, needless clicks. Evidence must come from the actual components/styles.',
+  },
+  security: {
+    label: 'безопасность',
+    guidance:
+      'Focus on security: input validation, authN/authZ gaps, secrets handling, injection, unsafe file/path handling, over-broad permissions, dependency or config risks.',
+  },
+  tests: {
+    label: 'тесты',
+    guidance: 'Focus on test coverage: important behavior with no test, brittle or misleading tests, untested error paths.',
+  },
+  performance: {
+    label: 'производительность',
+    guidance: 'Focus on performance: needless re-renders/requests/polling, quadratic work, large synchronous operations, missing caching or pagination.',
+  },
+  docs: { label: 'документация', guidance: 'Focus on documentation: README/docs that are missing, wrong or out of date relative to the code.' },
+  reliability: {
+    label: 'надёжность',
+    guidance: 'Focus on reliability: missing timeouts/retries, unhandled errors, race conditions, resource leaks, bad failure modes.',
+  },
+};
+
+// The module string ends up inside a prompt and a task title, so it is
+// validated rather than trusted: a plain repo-relative path, nothing else.
+const MODULE_PATTERN = /^[\w@.\-/]+$/;
+
+export function normalizeModule(raw: string | undefined): string | undefined {
+  const value = raw?.trim().replace(/^\.\//, '').replace(/\/+$/, '');
+
+  if (!value) return undefined;
+
+  if (value.length > 200 || !MODULE_PATTERN.test(value) || value.startsWith('/') || value.split('/').includes('..')) {
+    throw new Error(`Некорректный путь модуля: ${raw}`);
+  }
+
+  return value;
+}
+
+export interface AnalysisOptions {
+  kind?: AnalysisKindType;
+  module?: string;
+}
+
+export function analysisTitle(date = new Date(), { kind = 'general', module }: AnalysisOptions = {}): string {
+  const parts = [`${ANALYSIS_TITLE_PREFIX}${date.toISOString().slice(0, 10)}`];
+
+  if (kind !== 'general') parts.push(ANALYSIS_KINDS[kind].label);
+  if (module) parts.push(module);
+
+  return parts.join(' · ');
 }
 
 export function isAnalysisTitle(title: string | undefined): boolean {
   return Boolean(title?.startsWith(ANALYSIS_TITLE_PREFIX));
 }
 
-export function buildAnalysisPrompt(existingTitles: string[]): string {
+export function buildAnalysisPrompt(existingTitles: string[], { kind = 'general', module }: AnalysisOptions = {}): string {
   const existing = existingTitles.length
     ? existingTitles.map((title) => `- ${title}`).join('\n')
     : '- (none yet)';
 
-  return `Review this repository and propose up to ${MAX_ITEMS} small, concrete improvements to it.
+  const scope = module
+    ? `\nScope: review ONLY \`${module}\` (read other parts only as needed to understand it). Every proposal must change files under \`${module}\` (tests and docs for it are fine).\n`
+    : '';
+  const focus = ANALYSIS_KINDS[kind]?.guidance ? `\n${ANALYSIS_KINDS[kind].guidance}\n` : '';
 
+  return `Review this repository and propose up to ${MAX_ITEMS} small, concrete improvements to it.
+${scope}${focus}
 Read CLAUDE.md first (what the project is and how it is built/tested), then the code, tests and docs. Do NOT change any existing file. The only thing you produce is one new file, \`${BACKLOG_FILE}\`, at the repository root.
 
 Rules for every proposal:

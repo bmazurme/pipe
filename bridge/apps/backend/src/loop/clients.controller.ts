@@ -9,7 +9,7 @@ import {
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { TelegramService } from '../telegram/telegram.service';
+import { NotifyService } from '../telegram/notify.service';
 import { ClientHeartbeatService } from './client-heartbeat.service';
 import { ClientEventDto } from './dto/client-event.dto';
 import { ClientHeartbeatDto } from './dto/client-heartbeat.dto';
@@ -21,7 +21,7 @@ import { ClientHeartbeatDto } from './dto/client-heartbeat.dto';
 export class ClientsController {
   constructor(
     private readonly heartbeats: ClientHeartbeatService,
-    private readonly telegram: TelegramService,
+    private readonly telegram: NotifyService,
   ) {}
 
   @Post('heartbeat')

@@ -20,6 +20,28 @@ import { uploadWithProgress } from '../storage/uploadWithProgress';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS } from './constants';
 
+const LAST_MODEL_KEY = 'worker.lastModel';
+
+// A per-viewer convenience only — storage can be blocked or throw, and the
+// form must work identically without it.
+function readLastModel(): WorkerJobModel | undefined {
+  try {
+    const value = localStorage.getItem(LAST_MODEL_KEY);
+
+    return MODEL_OPTIONS.some((option) => option.value === value) ? (value as WorkerJobModel) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberModel(model: WorkerJobModel): void {
+  try {
+    localStorage.setItem(LAST_MODEL_KEY, model);
+  } catch {
+    // Not remembering the choice is fine.
+  }
+}
+
 interface NewJobFormProps {
   onCreated: (jobId: number) => void;
 }
@@ -34,7 +56,7 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
   const files = filesData ?? [];
 
   const [sourceFileId, setSourceFileId] = useState<number | undefined>(undefined);
-  const [model, setModel] = useState<WorkerJobModel | undefined>(undefined);
+  const [model, setModel] = useState<WorkerJobModel | undefined>(readLastModel);
   const [claudeCredentialId, setClaudeCredentialId] = useState<number | undefined>(undefined);
   const [decryptKey, setDecryptKey] = useState('');
   const { keys: parcelKeys } = useParcelKeys();
@@ -94,8 +116,8 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
         model,
         ...(isClaudeModel && claudeCredentialId ? { claudeCredentialId } : {}),
       }).unwrap();
+      rememberModel(model);
       setSourceFileId(undefined);
-      setModel(undefined);
       setDecryptKey('');
       onCreated(job.id);
     } catch (err) {
@@ -162,6 +184,16 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
               Запустить
             </Button>
           </div>
+
+          {(!sourceFileId || !model) && (
+            <Text variant="caption-2" color="secondary">
+              {!sourceFileId && !model
+                ? 'Выберите посылку и модель, чтобы запустить задачу.'
+                : !sourceFileId
+                  ? 'Выберите посылку.'
+                  : 'Выберите модель.'}
+            </Text>
+          )}
 
           {needsDecryptKey && (
             <label className={styles.decryptField}>

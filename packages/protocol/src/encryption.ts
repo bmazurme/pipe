@@ -54,7 +54,21 @@ export function encryptBuffer(data: Buffer, publicKeyPem: string): Buffer {
 }
 
 export function decryptBuffer(envelope: Buffer, privateKeyPem: string): Buffer {
+  if (envelope.length < 4) {
+    throw new Error(
+      `Malformed encrypted parcel envelope: expected at least 4 bytes for the header, found ${envelope.length}`,
+    );
+  }
+
   const keyLength = envelope.readUInt32BE(0);
+  const minLength = 4 + keyLength + IV_LENGTH + AUTH_TAG_LENGTH;
+
+  if (envelope.length < minLength) {
+    throw new Error(
+      `Malformed encrypted parcel envelope: expected at least ${minLength} bytes (header declares a ${keyLength}-byte key), found ${envelope.length}`,
+    );
+  }
+
   let offset = 4;
 
   const encryptedKey = envelope.subarray(offset, offset + keyLength);

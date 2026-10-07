@@ -15,6 +15,7 @@ export {
   useRemoveProjectCodeMutation,
   useGetSubscriptionIssuesQuery,
   useStartAnalysisMutation,
+  useGetAnalysisModulesQuery,
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
   useGetSubscriptionIssueTimeQuery,

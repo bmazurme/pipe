@@ -12,6 +12,7 @@ import { LoopEvent } from '../loop/entities/loop-event.entity';
 import { LoopRun } from '../loop/entities/loop-run.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { Secret } from '../secrets/entities/secret.entity';
+import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
@@ -49,6 +50,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         LoopRun,
         LoopEvent,
         ClientHeartbeat,
+        TelegramOutbox,
       ],
       // Dev used to run on synchronize: true (schema auto-matched to
       // entities, no migration files involved at all) — real migrations now
