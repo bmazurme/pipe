@@ -66,6 +66,25 @@
   background: var(--g-color-base-simple-hover);
 }
 
+.jobRow:focus-visible {
+  outline: 2px solid var(--g-color-line-brand);
+  outline-offset: -2px;
+}
+
+.jobRowError {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .jobRowMain {
   display: flex;
   flex-direction: column;
@@ -86,7 +105,7 @@
 }
 
 .logsTitle {
-  margin-bottom: 6px;
+  margin: 0;
 }
 
 .logs {

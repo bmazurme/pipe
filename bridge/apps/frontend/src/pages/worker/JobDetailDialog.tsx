@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { TrashBin } from '@gravity-ui/icons';
+import { useEffect, useRef, useState } from 'react';
+import { Copy, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Dialog, Icon, Label, Text, TextArea } from '@gravity-ui/uikit';
 
 import {
@@ -8,11 +8,12 @@ import {
   useGetJobQuery,
   usePeekJobResultMutation,
 } from '../../store/api';
+import { jobDuration } from '../../shared/lib/formatDuration';
 import { encryptParcel, triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
-import { JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
+import { isActive, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
 interface JobDetailDialogProps {
   jobId: number;
@@ -22,9 +23,30 @@ interface JobDetailDialogProps {
 export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   // Keeps polling while the job is still moving on its own — the worker
   // process updates status/logs server-side, nothing here pushes to us.
+  const [pollingInterval, setPollingInterval] = useState(JOB_POLL_INTERVAL_MS);
   const { data: job } = useGetJobQuery(jobId, {
-    pollingInterval: JOB_POLL_INTERVAL_MS,
+    pollingInterval,
+    skipPollingIfUnfocused: true,
   });
+  const logsRef = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  const jobIsActive = job ? isActive(job.status) : true;
+  const logsLength = job?.logs.length ?? 0;
+
+  // A finished job never changes again — stop polling it instead of hitting
+  // the API every few seconds for as long as the dialog stays open.
+  useEffect(() => {
+    setPollingInterval(jobIsActive ? JOB_POLL_INTERVAL_MS : 0);
+  }, [jobIsActive]);
+
+  // Follow the tail while the job is running, like a terminal would.
+  useEffect(() => {
+    const element = logsRef.current;
+
+    if (element && jobIsActive) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [logsLength, jobIsActive]);
   const { keys: parcelKeys } = useParcelKeys();
   const [deleteJob, { isLoading: isDeleting }] = useDeleteJobMutation();
   const [downloadResult, { isLoading: isDownloading }] = useDownloadJobResultMutation();
@@ -36,6 +58,18 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const [encryptError, setEncryptError] = useState<string | null>(null);
 
   if (!job) return null;
+
+  const duration = jobDuration(job);
+
+  const handleCopyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(job.logs);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const canDelete = job.status !== 'claimed' && job.status !== 'running';
 
@@ -77,14 +111,23 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
             {MODEL_OPTIONS.find((m) => m.value === job.model)?.content ?? job.model}
           </Text>
           {job.workerName && <Text color="secondary">· {job.workerName}</Text>}
+          {duration && <Text color="secondary">· {duration}</Text>}
         </div>
 
         {job.errorMessage && (
           <Alert theme="danger" view="filled" message={job.errorMessage} className={styles.detailError} />
         )}
 
-        <Text variant="subheader-1" className={styles.logsTitle}>Логи</Text>
-        <pre className={styles.logs}>{job.logs || '(пока пусто)'}</pre>
+        <div className={styles.logsHeader}>
+          <Text variant="subheader-1" className={styles.logsTitle}>Логи</Text>
+          {job.logs && (
+            <Button view="flat-secondary" size="s" onClick={() => void handleCopyLogs()}>
+              <Icon data={Copy} size={14} />
+              {copied ? 'Скопировано' : 'Копировать'}
+            </Button>
+          )}
+        </div>
+        <pre ref={logsRef} className={styles.logs}>{job.logs || '(пока пусто)'}</pre>
 
         {job.status === 'succeeded' && (
           <div className={styles.encryptSection}>

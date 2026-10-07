@@ -1,6 +1,9 @@
 import { ACTIVE_JOB_STATUSES, WorkerJob, WorkerJobModel, WorkerJobStatus } from '../../store/api';
 
 export const JOB_POLL_INTERVAL_MS = 3000;
+// With nothing queued or running there is nothing to watch move — a slow
+// refresh is enough to notice a job created from another tab or device.
+export const JOB_IDLE_POLL_INTERVAL_MS = 15000;
 // Comfortably below the backend's own 30s staleness window
 // (WorkerHeartbeatService's STALE_AFTER_MS) so an actually-down worker
 // reads as "down" within one or two polls, not half a minute late.
