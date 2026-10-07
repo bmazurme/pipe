@@ -12,6 +12,18 @@
   padding: var(--ntlstl-card-padding, 20px);
 }
 
+.statusStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 28px;
+  padding: 12px 20px;
+}
+
+.settingsHeading {
+  margin-top: 12px;
+}
+
 .statusRow {
   display: flex;
   align-items: center;

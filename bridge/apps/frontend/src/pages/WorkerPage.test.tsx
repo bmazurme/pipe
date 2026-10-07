@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
@@ -550,6 +550,11 @@ describe('WorkerPage', () => {
 });
 
 describe('WorkerPage — remembered model', () => {
+  // The test below stubs localStorage globally — undo it so later tests see the real one.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('pre-selects the model chosen for the previous job', async () => {
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => (key === 'worker.lastModel' ? 'qwen' : null),
@@ -562,5 +567,50 @@ describe('WorkerPage — remembered model', () => {
 
     expect(screen.queryByText('Модель')).toBeNull();
     expect(screen.getAllByText('Qwen').length).toBeGreaterThan(0);
+  });
+});
+
+describe('WorkerPage — long job history and form hints', () => {
+  it('shows the 8 newest jobs and reveals the rest on demand', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 11 }, (_, i) => ({
+      ...JOBS[0],
+      id: 100 - i,
+      status: 'succeeded',
+    }));
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: true, workers: [] });
+        if (url.includes('/worker/jobs')) return jsonResponse(many);
+        return jsonResponse([]);
+      }),
+    );
+    renderPage();
+
+    await screen.findByText('Задача #100');
+    expect(screen.getAllByText(/^Задача #\d+$/)).toHaveLength(8);
+    expect(screen.queryByText('Задача #90')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Показать ещё 3' }));
+
+    expect(screen.getAllByText(/^Задача #\d+$/)).toHaveLength(11);
+    expect(screen.queryByRole('button', { name: /Показать ещё/ })).toBeNull();
+  });
+
+  it('tells the user what is still missing before a job can be started', async () => {
+    renderPage();
+
+    await screen.findByText('Задача #1');
+
+    expect(screen.getByText('Выберите посылку и модель, чтобы запустить задачу.')).toBeTruthy();
+  });
+
+  it('summarises active jobs in the status strip', async () => {
+    renderPage();
+
+    expect(await screen.findByText('в работе: 1')).toBeTruthy();
   });
 });

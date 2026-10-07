@@ -185,6 +185,16 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
             </Button>
           </div>
 
+          {(!sourceFileId || !model) && (
+            <Text variant="caption-2" color="secondary">
+              {!sourceFileId && !model
+                ? 'Выберите посылку и модель, чтобы запустить задачу.'
+                : !sourceFileId
+                  ? 'Выберите посылку.'
+                  : 'Выберите модель.'}
+            </Text>
+          )}
+
           {needsDecryptKey && (
             <label className={styles.decryptField}>
               <Text variant="body-2" color="secondary">
