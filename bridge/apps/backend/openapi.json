@@ -436,6 +436,203 @@
         }
       }
     },
+    "/api/v1/logs": {
+      "get": {
+        "operationId": "LogsController_list",
+        "parameters": [
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "http",
+                "job",
+                "loop",
+                "integration",
+                "system"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 90,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AppLog"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/logs/summary": {
+      "get": {
+        "operationId": "LogsController_summary",
+        "parameters": [
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "http",
+                "job",
+                "loop",
+                "integration",
+                "system"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 90,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/logs/export": {
+      "get": {
+        "operationId": "LogsController_export",
+        "parameters": [
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "http",
+                "job",
+                "loop",
+                "integration",
+                "system"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 90,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/clients/heartbeat": {
       "post": {
         "operationId": "ClientsController_heartbeat",
@@ -473,6 +670,36 @@
         },
         "responses": {
           "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/notification-settings": {
+      "get": {
+        "operationId": "NotificationSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "NotificationSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -2000,6 +2227,48 @@
           }
         }
       },
+      "AppLog": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "object"
+          },
+          "source": {
+            "type": "object"
+          },
+          "event": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "meta": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "source",
+          "event",
+          "message",
+          "meta",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "ClientHeartbeatDto": {
         "type": "object",
         "properties": {
@@ -2059,6 +2328,23 @@
           "name",
           "type",
           "taskKey"
+        ]
+      },
+      "UpdateNotificationSettingsDto": {
+        "type": "object",
+        "properties": {
+          "quietHours": {
+            "type": "string",
+            "pattern": "/^(off|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})$/i"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "quietHours",
+          "timezone"
         ]
       },
       "MeResponseDto": {

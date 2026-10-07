@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProxyAgent, type Dispatcher } from 'undici';
+
+import { AppLogService } from '../logs/app-log.service';
 
 const TELEGRAM_TIMEOUT_MS = 10_000;
 
@@ -19,7 +21,31 @@ export class TelegramService {
   private readonly logger = new Logger(TelegramService.name);
   private proxy: { url: string; agent: Dispatcher } | undefined;
 
-  constructor(private readonly configService: ConfigService) {}
+  // One stored log per method per window: the poller retries a dead network
+  // every few seconds, which must not turn into thousands of identical rows.
+  private lastLoggedFailure = new Map<string, number>();
+
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional() private readonly appLogs?: AppLogService,
+  ) {}
+
+  private logFailure(method: string, reason: string): void {
+    const now = Date.now();
+
+    if (now - (this.lastLoggedFailure.get(method) ?? 0) < 5 * 60_000) {
+      return;
+    }
+
+    this.lastLoggedFailure.set(method, now);
+    void this.appLogs?.record({
+      level: 'warn',
+      source: 'integration',
+      event: 'telegram.api_failed',
+      message: `Telegram ${method} failed: ${reason}`,
+      meta: { method },
+    });
+  }
 
   isConfigured(): boolean {
     return Boolean(this.botToken() && this.chatId());
@@ -107,6 +133,7 @@ export class TelegramService {
 
       if (!response.ok) {
         this.logger.warn(`Telegram ${method} failed: HTTP ${response.status}`);
+        this.logFailure(method, `HTTP ${response.status}`);
         return null;
       }
 
@@ -119,9 +146,10 @@ export class TelegramService {
       // treated as success with an empty result.
       return data.ok === false ? null : (data.result ?? (true as T));
     } catch (error) {
-      this.logger.warn(
-        `Telegram ${method} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const reason = error instanceof Error ? error.message : String(error);
+
+      this.logger.warn(`Telegram ${method} failed: ${reason}`);
+      this.logFailure(method, reason);
       return null;
     }
   }

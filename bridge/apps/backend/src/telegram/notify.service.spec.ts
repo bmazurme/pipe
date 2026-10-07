@@ -1,3 +1,4 @@
+import { NotificationSettingsService } from './notification-settings.service';
 import { NotifyService } from './notify.service';
 
 const MSK_NIGHT = new Date('2026-10-07T22:30:00Z'); // 01:30 Moscow
@@ -32,9 +33,13 @@ function setup(config: Record<string, string> = {}, now = MSK_NIGHT) {
       }
     }),
   };
+  const settings = new NotificationSettingsService(
+    { findOne: jest.fn().mockResolvedValue(null) } as never,
+    { get: (key: string) => config[key] } as never,
+  );
   const service = new NotifyService(
     telegram as never,
-    { get: (key: string) => config[key] } as never,
+    settings as never,
     outbox as never,
   );
 

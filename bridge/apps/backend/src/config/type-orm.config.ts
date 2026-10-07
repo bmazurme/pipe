@@ -7,11 +7,13 @@ import { ApiKey } from '../auth/entities/api-key.entity';
 import { Session } from '../auth/entities/session.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
+import { AppLog } from '../logs/entities/app-log.entity';
 import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
 import { LoopEvent } from '../loop/entities/loop-event.entity';
 import { LoopRun } from '../loop/entities/loop-run.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { Secret } from '../secrets/entities/secret.entity';
+import { NotificationSettings } from '../telegram/entities/notification-settings.entity';
 import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
@@ -51,6 +53,8 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
         LoopEvent,
         ClientHeartbeat,
         TelegramOutbox,
+        NotificationSettings,
+        AppLog,
       ],
       // Dev used to run on synchronize: true (schema auto-matched to
       // entities, no migration files involved at all) — real migrations now
