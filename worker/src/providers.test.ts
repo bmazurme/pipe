@@ -54,4 +54,41 @@ describe('resolveProvider', () => {
     assert.equal(config.tool === 'openai-compatible' && config.baseUrl, 'https://proxy.example.com/v1');
     assert.equal(config.tool === 'openai-compatible' && config.model, 'gpt-4o-mini');
   });
+
+  it('treats empty/whitespace base URL and model as unset for every provider', () => {
+    const cases = [
+      ['gpt', 'OPENAI', 'https://api.openai.com/v1', 'gpt-4o'],
+      ['deepseek', 'DEEPSEEK', 'https://api.deepseek.com/v1', 'deepseek-chat'],
+      ['qwen', 'QWEN', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen-plus'],
+    ] as const;
+    for (const [model, prefix, baseUrl, defaultModel] of cases) {
+      for (const blank of ['', '   ']) {
+        const config = resolveProvider(model, {
+          [`${prefix}_API_KEY`]: 'k',
+          [`${prefix}_BASE_URL`]: blank,
+          [`${prefix}_MODEL`]: blank,
+        });
+        assert.deepEqual(config, { tool: 'openai-compatible', baseUrl, apiKey: 'k', model: defaultModel });
+      }
+    }
+  });
+
+  it('treats an empty or whitespace-only API key as unset', () => {
+    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '' }), /OPENAI_API_KEY is not set/);
+    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '   ' }), /OPENAI_API_KEY is not set/);
+  });
+
+  it('trims explicit values', () => {
+    const config = resolveProvider('gpt', {
+      OPENAI_API_KEY: '  sk-x\n',
+      OPENAI_BASE_URL: ' https://proxy.example.com/v1 ',
+      OPENAI_MODEL: ' gpt-4o-mini ',
+    });
+    assert.deepEqual(config, {
+      tool: 'openai-compatible',
+      baseUrl: 'https://proxy.example.com/v1',
+      apiKey: 'sk-x',
+      model: 'gpt-4o-mini',
+    });
+  });
 });

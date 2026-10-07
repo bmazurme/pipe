@@ -15,7 +15,18 @@ export function resolveFileSecrets(env: NodeJS.ProcessEnv, keys: string[]): void
     const filePath = env[`${key}_FILE`];
     if (!filePath) continue;
 
-    env[key] = readFileSync(filePath, 'utf-8').trim();
+    let content: string;
+    try {
+      content = readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Cannot read ${key}_FILE (${filePath}): ${message}`);
+    }
+
+    const value = content.trim();
+    if (!value) throw new Error(`${key}_FILE (${filePath}) is empty`);
+
+    env[key] = value;
   }
 }
 

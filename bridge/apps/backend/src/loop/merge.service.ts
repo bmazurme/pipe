@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { TelegramService } from '../telegram/telegram.service';
+import { NotifyService } from '../telegram/notify.service';
 import { GithubApiService, PullInfo } from './github-api.service';
 import { LOOP_PR_LABEL } from './github-events';
 import { findProtected } from './protected-paths';
@@ -22,7 +22,7 @@ export class MergeService {
 
   constructor(
     private readonly github: GithubApiService,
-    private readonly telegram: TelegramService,
+    private readonly telegram: NotifyService,
     private readonly configService: ConfigService,
   ) {}
 
