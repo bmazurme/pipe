@@ -19,6 +19,8 @@ import { PageHeader } from '../widgets/PageHeader';
 import { API_URL, getErrorMessage, useUpdateUserMutation } from '../store/api';
 import { ApiKeysSection } from './profile/ApiKeysSection';
 import { DevicesSection } from './profile/DevicesSection';
+import { LogsSection } from './profile/LogsSection';
+import { NotificationsSection } from './profile/NotificationsSection';
 import styles from './ProfilePage.module.css';
 
 const DAY_OFFS_EXPORT_URL = `${API_URL}/api/v1/time/export/day-offs?year=${new Date().getFullYear()}`;
@@ -200,8 +202,10 @@ export function ProfilePage() {
         </div>
 
         <div className={styles.column}>
+          <NotificationsSection />
           <DevicesSection />
           <ApiKeysSection />
+          <LogsSection />
         </div>
       </div>
     </div>

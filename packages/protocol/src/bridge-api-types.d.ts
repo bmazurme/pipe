@@ -250,6 +250,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LogsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LogsController_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LogsController_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clients/heartbeat": {
         parameters: {
             query?: never;
@@ -276,6 +324,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["ClientsController_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["NotificationSettingsController_get"];
+        put: operations["NotificationSettingsController_update"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1000,6 +1064,18 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        AppLog: {
+            level: Record<string, never>;
+            source: Record<string, never>;
+            event: string;
+            message: string;
+            meta: string | null;
+            id: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         ClientHeartbeatDto: {
             name: string;
             /** @enum {string} */
@@ -1013,6 +1089,10 @@ export interface components {
             branch?: string;
             error?: string;
             count?: number;
+        };
+        UpdateNotificationSettingsDto: {
+            quietHours: string;
+            timezone: string;
         };
         MeResponseDto: {
             id: number;
@@ -1601,6 +1681,76 @@ export interface operations {
             };
         };
     };
+    LogsController_list: {
+        parameters: {
+            query?: {
+                level?: "info" | "warn" | "error";
+                source?: "http" | "job" | "loop" | "integration" | "system";
+                days?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppLog"][];
+                };
+            };
+        };
+    };
+    LogsController_summary: {
+        parameters: {
+            query?: {
+                level?: "info" | "warn" | "error";
+                source?: "http" | "job" | "loop" | "integration" | "system";
+                days?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LogsController_export: {
+        parameters: {
+            query?: {
+                level?: "info" | "warn" | "error";
+                source?: "http" | "job" | "loop" | "integration" | "system";
+                days?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ClientsController_heartbeat: {
         parameters: {
             query?: never;
@@ -1636,6 +1786,44 @@ export interface operations {
         };
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    NotificationSettingsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    NotificationSettingsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

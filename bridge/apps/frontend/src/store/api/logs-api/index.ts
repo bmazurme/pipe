@@ -2,11 +2,11 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 
 import baseQuery from '../../base-query-with-reauth';
 
-const usersApi = createApi({
-  reducerPath: 'usersApi',
+const logsApi = createApi({
+  reducerPath: 'logsApi',
   baseQuery,
-  tagTypes: ['Users', 'NotificationSettings'],
+  tagTypes: ['AppLogs'],
   endpoints: () => ({}),
 });
 
-export default usersApi;
+export default logsApi;

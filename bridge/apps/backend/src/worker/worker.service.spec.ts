@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
+import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
@@ -32,6 +33,7 @@ describe('WorkerService', () => {
   let heartbeatService: Partial<
     Record<keyof WorkerHeartbeatService, jest.Mock>
   >;
+  let appLogs: { record: jest.Mock };
 
   beforeEach(async () => {
     repository = createMockRepository();
@@ -46,6 +48,7 @@ describe('WorkerService', () => {
     heartbeatService = {
       record: jest.fn(),
     };
+    appLogs = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +60,7 @@ describe('WorkerService', () => {
           useValue: claudeCredentialsService,
         },
         { provide: WorkerHeartbeatService, useValue: heartbeatService },
+        { provide: AppLogService, useValue: appLogs },
       ],
     }).compile();
 
@@ -273,6 +277,52 @@ describe('WorkerService', () => {
       expect(result.status).toBe(JobStatus.Failed);
       expect(result.finishedAt).toBeInstanceOf(Date);
       expect(result.errorMessage).toBe('boom');
+    });
+
+    it('records a job.failed log with the model and duration', async () => {
+      const job = {
+        id: 9,
+        model: JobModel.Sonnet,
+        status: JobStatus.Running,
+        startedAt: new Date(Date.now() - 5000),
+        finishedAt: null,
+        errorMessage: null,
+      } as Job;
+      repository.findOne!.mockResolvedValue(job);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      await service.updateStatus(9, 7, {
+        status: JobStatus.Failed,
+        errorMessage: 'timed out',
+      });
+
+      expect(appLogs.record).toHaveBeenCalledTimes(1);
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'error',
+          source: 'job',
+          event: 'job.failed',
+          message: 'Job 9 failed: timed out',
+          meta: expect.objectContaining({ jobId: 9, model: JobModel.Sonnet }),
+        }),
+      );
+      expect(
+        (appLogs.record.mock.calls[0][0] as { meta: { durationMs: number } })
+          .meta.durationMs,
+      ).toBeGreaterThanOrEqual(5000);
+    });
+
+    it('does not log a job that is merely running', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        status: JobStatus.Claimed,
+        startedAt: null,
+      } as Job);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      await service.updateStatus(1, 7, { status: JobStatus.Running });
+
+      expect(appLogs.record).not.toHaveBeenCalled();
     });
   });
 

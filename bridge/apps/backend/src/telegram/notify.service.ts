@@ -1,16 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { TelegramOutbox } from './entities/telegram-outbox.entity';
-import {
-  buildDigests,
-  DEFAULT_QUIET_TIMEZONE,
-  isQuietNow,
-  parseQuietHours,
-} from './quiet-hours';
+import { NotificationSettingsService } from './notification-settings.service';
+import { buildDigests, isQuietNow } from './quiet-hours';
 import { InlineButton, TelegramService } from './telegram.service';
 
 const FLUSH_EVERY_MS = 60_000;
@@ -19,10 +14,10 @@ const FLUSH_EVERY_MS = 60_000;
 // through here; replies to something the owner just typed or pressed keep
 // using TelegramService directly and are never delayed. The method names
 // mirror TelegramService on purpose — a call site only swaps which one it
-// holds. During quiet hours (NOTIFY_QUIET_HOURS, default 23:00-08:00 in
-// NOTIFY_TIMEZONE, default Europe/Moscow; "off" disables) a notification is
-// stored instead of sent, and the first flush after the window ends delivers
-// them as one digest.
+// holds. During quiet hours (edited on the profile page; until saved there:
+// NOTIFY_QUIET_HOURS / NOTIFY_TIMEZONE, default 23:00-08:00 Europe/Moscow, "off"
+// disables) a notification is stored instead of sent, and the first flush after
+// the window ends delivers them as one digest.
 @Injectable()
 export class NotifyService {
   private readonly logger = new Logger(NotifyService.name);
@@ -30,13 +25,13 @@ export class NotifyService {
 
   constructor(
     private readonly telegram: TelegramService,
-    private readonly configService: ConfigService,
+    private readonly settings: NotificationSettingsService,
     @InjectRepository(TelegramOutbox)
     private readonly outbox: Repository<TelegramOutbox>,
   ) {}
 
   async send(text: string): Promise<boolean> {
-    if (this.isQuiet()) {
+    if (await this.isQuiet()) {
       return this.enqueue(text, null);
     }
 
@@ -47,7 +42,7 @@ export class NotifyService {
     text: string,
     buttons: InlineButton[][],
   ): Promise<boolean> {
-    if (this.isQuiet()) {
+    if (await this.isQuiet()) {
       return this.enqueue(text, buttons);
     }
 
@@ -56,7 +51,11 @@ export class NotifyService {
 
   @Interval(FLUSH_EVERY_MS)
   async flush(): Promise<void> {
-    if (this.flushing || this.isQuiet() || !this.telegram.isConfigured()) {
+    if (
+      this.flushing ||
+      !this.telegram.isConfigured() ||
+      (await this.isQuiet())
+    ) {
       return;
     }
 
@@ -74,7 +73,10 @@ export class NotifyService {
 
       // Rows are deleted only after Telegram accepted them, so an outage
       // leaves the queue intact for the next tick instead of losing it.
-      const digests = buildDigests(plain, this.timeZone());
+      const digests = buildDigests(
+        plain,
+        (await this.settings.effective()).timezone,
+      );
       let delivered = true;
 
       for (const digest of digests) {
@@ -128,17 +130,18 @@ export class NotifyService {
     }
   }
 
-  private isQuiet(): boolean {
-    return isQuietNow(
-      parseQuietHours(this.configService.get<string>('NOTIFY_QUIET_HOURS')),
-      this.timeZone(),
-    );
-  }
+  private async isQuiet(): Promise<boolean> {
+    try {
+      const { window, timezone } = await this.settings.effective();
 
-  private timeZone(): string {
-    return (
-      this.configService.get<string>('NOTIFY_TIMEZONE') ||
-      DEFAULT_QUIET_TIMEZONE
-    );
+      return isQuietNow(window, timezone);
+    } catch (error) {
+      // A broken setting must never swallow notifications — fail open.
+      this.logger.warn(
+        `Quiet-hours settings unreadable, sending normally: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return false;
+    }
   }
 }

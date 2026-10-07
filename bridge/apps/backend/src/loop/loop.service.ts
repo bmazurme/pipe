@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AppLogService } from '../logs/app-log.service';
 import { NotifyService } from '../telegram/notify.service';
 import { ClientHeartbeatService } from './client-heartbeat.service';
 import { LoopEvent } from './entities/loop-event.entity';
@@ -29,6 +30,7 @@ export class LoopService {
     private readonly configService: ConfigService,
     private readonly clients: ClientHeartbeatService,
     private readonly merges: MergeService,
+    @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
   startRun(title: string): Promise<LoopRun> {
@@ -92,6 +94,14 @@ export class LoopService {
         summary: interpretation.message.slice(0, 500),
       }),
     );
+
+    void this.appLogs?.record({
+      level: interpretation.error ? 'warn' : 'info',
+      source: 'loop',
+      event: interpretation.type,
+      message: interpretation.message,
+      meta: { runId: run?.id, prNumber: interpretation.prNumber },
+    });
 
     // Green CI on a tracked PR: not a plain notice but the merge offer, which
     // re-checks the PR itself (see MergeService).

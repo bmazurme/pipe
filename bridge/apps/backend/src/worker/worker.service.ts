@@ -3,10 +3,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import {
   StoredFile,
@@ -30,6 +32,7 @@ export class WorkerService {
     private readonly storageService: StorageService,
     private readonly claudeCredentialsService: ClaudeCredentialsService,
     private readonly heartbeatService: WorkerHeartbeatService,
+    @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
   async create(userId: number, dto: CreateJobDto): Promise<Job> {
@@ -171,7 +174,33 @@ export class WorkerService {
       job.finishedAt = new Date();
     }
 
-    return this.jobRepository.save(job);
+    const saved = await this.jobRepository.save(job);
+
+    if (dto.status === JobStatus.Failed) {
+      this.logJobOutcome(saved);
+    }
+
+    return saved;
+  }
+
+  // One row per finished job — the raw material for success rate, durations
+  // and the most common failure reasons. Never awaited for its result.
+  private logJobOutcome(job: Job): void {
+    const failed = job.status === JobStatus.Failed;
+    const durationMs =
+      job.startedAt && job.finishedAt
+        ? job.finishedAt.getTime() - job.startedAt.getTime()
+        : undefined;
+
+    void this.appLogs?.record({
+      level: failed ? 'error' : 'info',
+      source: 'job',
+      event: failed ? 'job.failed' : 'job.succeeded',
+      message: failed
+        ? `Job ${job.id} failed: ${job.errorMessage ?? 'no error message'}`
+        : `Job ${job.id} succeeded`,
+      meta: { jobId: job.id, model: job.model, durationMs },
+    });
   }
 
   async appendLog(id: number, userId: number, chunk: string): Promise<void> {
@@ -231,6 +260,8 @@ export class WorkerService {
     }
 
     const saved = await this.jobRepository.save(job);
+
+    this.logJobOutcome(saved);
 
     if (consumed) {
       try {

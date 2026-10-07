@@ -11,6 +11,7 @@ export { default as timeApi } from './time-api';
 export { default as workerApi } from './worker-api';
 export { default as chatApi } from './chat-api';
 export { default as vpnApi } from './vpn-api';
+export { default as logsApi } from './logs-api';
 
 export * from './auth-api/endpoints';
 export * from './users-api/endpoints';
@@ -23,3 +24,4 @@ export * from './time-api/endpoints';
 export * from './worker-api/endpoints';
 export * from './chat-api/endpoints';
 export * from './vpn-api/endpoints';
+export * from './logs-api/endpoints';
