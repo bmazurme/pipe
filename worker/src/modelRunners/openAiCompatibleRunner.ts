@@ -142,9 +142,9 @@ export async function runOpenAiCompatible(
     }
 
     const data = (await response.json()) as {
-      choices: { message: ChatMessage }[];
+      choices?: { message?: ChatMessage }[];
     };
-    const message = data.choices[0]?.message;
+    const message = data.choices?.[0]?.message;
 
     if (!message) {
       throw new Error(`${options.model} returned no message`);
