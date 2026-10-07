@@ -49,7 +49,10 @@ async function refreshAccessToken(apiUrl: string): Promise<string> {
     saveCredentials({ refreshToken: rotated });
   }
 
-  const body = (await response.json()) as { accessToken: string };
+  const body = (await response.json()) as { accessToken?: unknown };
+  if (typeof body?.accessToken !== 'string' || body.accessToken === '') {
+    throw new Error('Bridge login refresh response did not include a string "accessToken".');
+  }
   return body.accessToken;
 }
 
@@ -72,6 +75,32 @@ export class BridgeClient {
     return { Authorization: `Bearer ${this.accessToken}` };
   }
 
+  // Access tokens are short-lived, so a long-running client (agentRunner,
+  // gitlabWorker, pull polling) will eventually see a 401 from a stale cached
+  // token. On refresh-token login, drop the cache and retry exactly once; a
+  // second 401 is returned as-is for the caller to report. API-key login has
+  // nothing to refresh.
+  private async request(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const send = async () =>
+      fetch(url, {
+        ...init,
+        headers: await this.authHeader(),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+    const response = await send();
+    if (response.status !== 401 || loadCredentials().apiKey) {
+      return response;
+    }
+
+    this.accessToken = undefined;
+    return send();
+  }
+
   // filter mirrors bridge's own ListFilesQueryDto (channel/taskKey/direction)
   // — all optional, an empty filter lists everything, same as before this
   // existed. Lets a caller match a parcel by its addressing metadata
@@ -85,10 +114,7 @@ export class BridgeClient {
     if (filter.direction) query.set('direction', filter.direction);
     const qs = query.size > 0 ? `?${query.toString()}` : '';
 
-    const response = await fetch(`${this.apiUrl}/api/v1/storage${qs}`, {
-      headers: await this.authHeader(),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
+    const response = await this.request(`${this.apiUrl}/api/v1/storage${qs}`, {}, API_TIMEOUT_MS);
 
     if (!response.ok) {
       throw new Error(`Failed to list storage files (${response.status})`);
@@ -112,12 +138,11 @@ export class BridgeClient {
     if (meta.taskKey) form.append('taskKey', meta.taskKey);
     if (meta.direction) form.append('direction', meta.direction);
 
-    const response = await fetch(`${this.apiUrl}/api/v1/storage`, {
-      method: 'POST',
-      headers: await this.authHeader(),
-      body: form,
-      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
-    });
+    const response = await this.request(
+      `${this.apiUrl}/api/v1/storage`,
+      { method: 'POST', body: form },
+      TRANSFER_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       throw new Error(`Upload failed (${response.status}): ${await response.text()}`);
@@ -130,10 +155,11 @@ export class BridgeClient {
   // succeeds (mailbox semantics — see storage.controller.ts) so this can
   // only be consumed once.
   async download(id: number): Promise<Buffer> {
-    const response = await fetch(`${this.apiUrl}/api/v1/storage/${id}/download`, {
-      headers: await this.authHeader(),
-      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
-    });
+    const response = await this.request(
+      `${this.apiUrl}/api/v1/storage/${id}/download`,
+      {},
+      TRANSFER_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       throw new Error(`Download failed (${response.status})`);

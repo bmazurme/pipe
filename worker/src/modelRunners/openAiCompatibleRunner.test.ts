@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
+import { CancelledError } from '../cancelled.js';
 import { executeTool, MAX_TOOL_RESULT_CHARS, runOpenAiCompatible } from './openAiCompatibleRunner.js';
 
 describe('executeTool read_file', () => {
@@ -112,3 +113,53 @@ describe('runOpenAiCompatible job deadline', () => {
     assert.equal(result.exitCode, 0);
   });
 });
+
+describe('runOpenAiCompatible stop requests', () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'oai-runner-stop-'));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const pendingUntilAborted = (() =>
+    new Promise((_resolve, reject) => {
+      // never answers; only an abort ends it
+      setTimeout(() => reject(new Error('test would hang')), 10_000).unref();
+    })) as unknown as typeof fetch;
+
+  it('stops a request that is in flight when the owner asks', async () => {
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+    const stop = new AbortController();
+    const keepAlive = setTimeout(() => {}, 5000); // AbortSignal.timeout timers are unref'd
+    setTimeout(() => stop.abort(), 50);
+
+    try {
+      await assert.rejects(runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, undefined, stop.signal), CancelledError);
+    } finally {
+      clearTimeout(keepAlive);
+    }
+  });
+
+  it('does not call the model at all when already stopped, and a stop wins over the deadline', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return pendingUntilAborted;
+    }) as unknown as typeof fetch;
+    const stop = new AbortController();
+    stop.abort();
+
+    await assert.rejects(runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, 1, stop.signal), CancelledError);
+    assert.equal(calls, 0);
+  });
+});
+

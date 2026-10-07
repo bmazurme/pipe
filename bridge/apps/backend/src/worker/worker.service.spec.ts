@@ -52,6 +52,7 @@ describe('WorkerService', () => {
     heartbeatService = {
       record: jest.fn(),
     };
+    repository.find!.mockResolvedValue([]);
     appLogs = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -69,6 +70,15 @@ describe('WorkerService', () => {
     }).compile();
 
     service = module.get(WorkerService);
+  });
+
+  describe('recordHeartbeat', () => {
+    it('records a heartbeat without touching any job row', async () => {
+      await service.recordHeartbeat(7, 'worker-a');
+
+      expect(heartbeatService.record).toHaveBeenCalledWith(7, 'worker-a');
+      expect(repository.query).not.toHaveBeenCalled();
+    });
   });
 
   describe('create', () => {
@@ -202,6 +212,80 @@ describe('WorkerService', () => {
       });
       await service.remove(1, 7);
       expect(repository.delete).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('lost jobs', () => {
+    const stale = (over: Partial<Job> = {}) =>
+      ({
+        id: 45,
+        status: JobStatus.Running,
+        model: JobModel.Sonnet,
+        workerName: 'swarm-worker',
+        logs: 'Running claude...',
+        errorMessage: null,
+        finishedAt: null,
+        startedAt: new Date(Date.now() - 40 * 60_000),
+        ...over,
+      }) as Job;
+
+    it('fails the jobs a worker still holds when it comes back asking for work', async () => {
+      const lost = stale();
+      repository.find!.mockResolvedValue([lost]);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7, 'swarm-worker');
+
+      expect(lost.status).toBe(JobStatus.Failed);
+      expect(lost.errorMessage).toMatch(/restarted or lost/);
+      expect(lost.finishedAt).toBeInstanceOf(Date);
+      expect(lost.logs).toContain('restarted or lost');
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.failed' }),
+      );
+    });
+
+    it("only looks at this worker's own silent jobs", async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7, 'swarm-worker');
+
+      const where = (
+        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
+      ).where;
+      expect(where).toMatchObject({ userId: 7, workerName: 'swarm-worker' });
+      // 10 minutes of silence, expressed as an updatedAt cutoff — a job that logged
+      // a minute ago (a live sibling replica) does not match.
+      expect(where.updatedAt).toBeDefined();
+    });
+
+    it('does nothing without a worker name', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7);
+
+      expect(repository.find).not.toHaveBeenCalled();
+    });
+
+    it('sweeps jobs silent for hours, whichever worker held them', async () => {
+      const lost = stale({ workerName: 'gone-worker' });
+      repository.find!.mockResolvedValue([lost]);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      await service.sweepLostJobs();
+
+      const where = (
+        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
+      ).where;
+      expect(where).not.toHaveProperty('workerName');
+      expect(lost.status).toBe(JobStatus.Failed);
+    });
+
+    it('swallows a failing sweep instead of crashing the scheduler', async () => {
+      repository.find!.mockRejectedValue(new Error('db down'));
+
+      await expect(service.sweepLostJobs()).resolves.toBeUndefined();
     });
   });
 
@@ -369,6 +453,134 @@ describe('WorkerService', () => {
         expect(appLogs.record).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('cancel', () => {
+    const saveEcho = () =>
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+    it('cancels a queued job outright', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 4,
+        model: JobModel.Gpt,
+        status: JobStatus.Queued,
+        logs: '',
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(4, 7);
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.finishedAt).toBeInstanceOf(Date);
+      expect(result.logs).toContain('stopped by the owner');
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.cancelled', level: 'warn' }),
+      );
+    });
+
+    it('only requests a stop for a job a worker holds, keeping its status', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        status: JobStatus.Running,
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(5, 7);
+
+      expect(result.status).toBe(JobStatus.Running);
+      expect(result.cancelRequestedAt).toBeInstanceOf(Date);
+      expect(appLogs.record).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first request time when asked twice', async () => {
+      const first = new Date('2026-10-08T10:00:00Z');
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        status: JobStatus.Claimed,
+        cancelRequestedAt: first,
+      } as Job);
+      saveEcho();
+
+      expect((await service.cancel(5, 7)).cancelRequestedAt).toBe(first);
+    });
+
+    it('force-cancels a held job without waiting for the worker', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 6,
+        model: JobModel.Sonnet,
+        status: JobStatus.Running,
+        workerName: 'gone-worker',
+        logs: 'x',
+        cancelRequestedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.cancel(6, 7, true);
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.logs).toContain('(forced)');
+    });
+
+    it('is a no-op for an already cancelled job and refuses a finished one', async () => {
+      repository.findOne!.mockResolvedValueOnce({
+        id: 1,
+        status: JobStatus.Cancelled,
+      } as Job);
+      await expect(service.cancel(1, 7)).resolves.toMatchObject({
+        status: JobStatus.Cancelled,
+      });
+      expect(repository.save).not.toHaveBeenCalled();
+
+      repository.findOne!.mockResolvedValueOnce({
+        id: 2,
+        status: JobStatus.Succeeded,
+      } as Job);
+      await expect(service.cancel(2, 7)).rejects.toThrow(ConflictException);
+    });
+
+    it('never lets a winding-down worker revive or fail a cancelled job', async () => {
+      const job = { id: 8, status: JobStatus.Cancelled } as Job;
+      repository.findOne!.mockResolvedValue(job);
+
+      await service.updateStatus(8, 7, { status: JobStatus.Running });
+      await service.updateStatus(8, 7, {
+        status: JobStatus.Failed,
+        errorMessage: 'killed',
+      });
+
+      expect(job.status).toBe(JobStatus.Cancelled);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it("records the worker's confirmation as cancelled with a finish time", async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 9,
+        model: JobModel.Opus,
+        status: JobStatus.Running,
+        finishedAt: null,
+      } as Job);
+      saveEcho();
+
+      const result = await service.updateStatus(9, 7, {
+        status: JobStatus.Cancelled,
+      });
+
+      expect(result.status).toBe(JobStatus.Cancelled);
+      expect(result.finishedAt).toBeInstanceOf(Date);
+    });
+
+    it('rejects a result uploaded for a cancelled job', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 3,
+        status: JobStatus.Cancelled,
+      } as Job);
+
+      await expect(
+        service.setResult(3, 7, {} as Express.Multer.File),
+      ).rejects.toThrow(ConflictException);
+    });
   });
 
   describe('appendLog', () => {

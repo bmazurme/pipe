@@ -23,14 +23,16 @@ export const STATUS_LABEL: Record<WorkerJobStatus, string> = {
   running: 'Выполняется',
   succeeded: 'Готово',
   failed: 'Ошибка',
+  cancelled: 'Остановлена',
 };
 
-export const STATUS_THEME: Record<WorkerJobStatus, 'normal' | 'info' | 'success' | 'danger'> = {
+export const STATUS_THEME: Record<WorkerJobStatus, 'normal' | 'info' | 'success' | 'danger' | 'warning'> = {
   queued: 'normal',
   claimed: 'info',
   running: 'info',
   succeeded: 'success',
   failed: 'danger',
+  cancelled: 'warning',
 };
 
 export function isActive(status: WorkerJobStatus): boolean {
@@ -65,5 +67,15 @@ export function deriveTaskState(jobs: WorkerJob[]): TaskState {
   if (!latest) return 'idle';
   if (isActive(latest.status)) return 'running';
   if (latest.status === 'failed') return 'error';
+  // A stopped job leaves the worker free, it is neither a success nor an error.
+  if (latest.status === 'cancelled') return 'idle';
   return 'done';
 }
+
+// A job the owner asked to stop but the worker has not yet confirmed.
+export function isStopping(job: Pick<WorkerJob, 'status' | 'cancelRequestedAt'>): boolean {
+  return Boolean(job.cancelRequestedAt) && isActive(job.status);
+}
+
+/** After this long without the worker confirming, the owner may force the stop. */
+export const FORCE_STOP_AFTER_MS = 30_000;

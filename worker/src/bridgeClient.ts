@@ -5,7 +5,7 @@
 const API_TIMEOUT_MS = 15_000;
 const TRANSFER_TIMEOUT_MS = 120_000;
 
-export type RemoteJobStatus = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed';
+export type RemoteJobStatus = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface RemoteJob {
   id: number;
@@ -60,6 +60,21 @@ export class WorkerBridgeClient {
     return text ? (JSON.parse(text) as RemoteJob | null) : null;
   }
 
+  // Claim-less liveness ping for while a long job is running (claim is the
+  // only other thing that records one, and the main loop doesn't poll then).
+  async heartbeat(workerName: string): Promise<void> {
+    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/heartbeat`, {
+      method: 'POST',
+      headers: this.authHeaders(true),
+      body: JSON.stringify({ workerName }),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Heartbeat failed (${response.status})`);
+    }
+  }
+
   async downloadParcel(jobId: number): Promise<Buffer> {
     const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/parcel`, {
       headers: this.authHeaders(),
@@ -75,7 +90,7 @@ export class WorkerBridgeClient {
 
   async updateStatus(
     jobId: number,
-    status: 'running' | 'succeeded' | 'failed',
+    status: 'running' | 'succeeded' | 'failed' | 'cancelled',
     errorMessage?: string,
   ): Promise<void> {
     const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/status`, {
@@ -88,6 +103,24 @@ export class WorkerBridgeClient {
     if (!response.ok) {
       throw new Error(`Updating status for job ${jobId} failed (${response.status})`);
     }
+  }
+
+  // Whether the owner asked to stop this job (or bridge already cancelled it).
+  // Polled while a job runs — a CLI that prints nothing for minutes sends no log
+  // chunks to piggyback the answer on, so it needs a request of its own.
+  async isCancelRequested(jobId: number): Promise<boolean> {
+    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}`, {
+      headers: this.authHeaders(),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Checking job ${jobId} failed (${response.status})`);
+    }
+
+    const job = (await response.json()) as { status?: string; cancelRequestedAt?: string | null };
+
+    return job.status === 'cancelled' || Boolean(job.cancelRequestedAt);
   }
 
   // Best-effort by design: a log line that fails to reach bridge shouldn't

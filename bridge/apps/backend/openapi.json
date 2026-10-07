@@ -1670,6 +1670,27 @@
         }
       }
     },
+    "/api/v1/worker/jobs/heartbeat": {
+      "post": {
+        "operationId": "WorkerController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}": {
       "get": {
         "operationId": "WorkerController_get",
@@ -1751,6 +1772,43 @@
         "responses": {
           "200": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "WorkerController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
           }
         }
       }
@@ -2906,7 +2964,8 @@
               "claimed",
               "running",
               "succeeded",
-              "failed"
+              "failed",
+              "cancelled"
             ],
             "type": "string"
           },
@@ -2936,6 +2995,11 @@
             "type": "string",
             "nullable": true
           },
+          "cancelRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -2958,6 +3022,7 @@
           "claimedAt",
           "startedAt",
           "finishedAt",
+          "cancelRequestedAt",
           "createdAt",
           "updatedAt"
         ]
@@ -2996,6 +3061,26 @@
           }
         }
       },
+      "HeartbeatDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "workerName"
+        ]
+      },
+      "CancelJobDto": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
       "UpdateJobStatusDto": {
         "type": "object",
         "properties": {
@@ -3004,7 +3089,8 @@
             "enum": [
               "running",
               "succeeded",
-              "failed"
+              "failed",
+              "cancelled"
             ]
           },
           "errorMessage": {

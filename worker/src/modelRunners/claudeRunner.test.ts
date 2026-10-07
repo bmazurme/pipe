@@ -4,6 +4,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { CancelledError } from '../cancelled.js';
 import { runClaude } from './claudeRunner.js';
 
 // A fake `claude` prepended onto PATH instead of mocking node:child_process
@@ -118,6 +119,40 @@ describe('runClaude', () => {
   it('is unaffected by a timeout when the run finishes in time', async () => {
     const result = await runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 60_000);
     assert.equal(result.exitCode, 0);
+  });
+
+  it('kills a hung claude when the owner stops the job and rejects with CancelledError', async () => {
+    process.env.FAKE_HANG = '1';
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 150);
+    const started = Date.now();
+
+    await assert.rejects(
+      runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, undefined, 200, stop.signal),
+      CancelledError,
+    );
+    assert.ok(Date.now() - started < 5000);
+  });
+
+  it('escalates to SIGKILL when claude ignores SIGTERM on a stop', async () => {
+    process.env.FAKE_HANG = '1';
+    process.env.FAKE_IGNORE_SIGTERM = '1';
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 100);
+
+    await assert.rejects(
+      runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, undefined, 200, stop.signal),
+      CancelledError,
+    );
+  });
+
+  it('does not even spawn when the stop was already requested', async () => {
+    const stop = new AbortController();
+    stop.abort();
+    const chunks: string[] = [];
+
+    await assert.rejects(runClaude('/tmp', 'p', 'opus', (chunk) => chunks.push(chunk), undefined, null, undefined, 200, stop.signal), CancelledError);
+    assert.deepEqual(chunks, []);
   });
 
   it('rejects with a clear message when the claude binary is not on PATH', async () => {

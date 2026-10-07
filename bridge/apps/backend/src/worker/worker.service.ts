@@ -6,8 +6,9 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
@@ -22,6 +23,19 @@ import { Job, JobStatus } from './entities/job.entity';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
+
+// A worker handles one job at a time and only asks for the next one when it is
+// idle. So when it claims, any job still marked claimed/running under its name is
+// a run that no longer exists (the process was restarted or killed mid-job) — but
+// only once it has been silent this long, so a sibling replica that happens to
+// share the name and is genuinely working (it logs and heartbeats) is left alone.
+const ORPHAN_SILENCE_MS = 10 * 60_000;
+// Backstop for a worker that never comes back: nothing legitimate stays this
+// silent (the worker's own job deadline is 30 minutes by default).
+const LOST_JOB_SILENCE_MS = 3 * 60 * 60_000;
+const SWEEP_EVERY_MS = 5 * 60_000;
+const LOST_MESSAGE =
+  'Worker was restarted or lost while this job was running — the run did not finish';
 
 @Injectable()
 export class WorkerService {
@@ -96,16 +110,61 @@ export class WorkerService {
     await this.jobRepository.delete(job.id);
   }
 
+  // Claim-less liveness ping — a worker busy running one long job never
+  // reaches claim() again, so without this it would look down after
+  // STALE_AFTER_MS (see WorkerHeartbeatService).
+  async recordHeartbeat(userId: number, workerName: string): Promise<void> {
+    await this.heartbeatService.record(userId, workerName);
+  }
+
   // Atomically takes the oldest queued job for this account — the subquery's
   // FOR UPDATE SKIP LOCKED is what makes this safe against two worker
   // processes polling the same account at once (each gets a different row,
   // or nothing, never the same one).
+  // Marks held-but-dead jobs failed so they stop showing as "running" forever.
+  private async failLostJobs(
+    where: { userId?: number; workerName?: string },
+    silenceMs: number,
+  ): Promise<number> {
+    const stale = await this.jobRepository.find({
+      where: {
+        ...where,
+        status: In([JobStatus.Claimed, JobStatus.Running]),
+        updatedAt: LessThan(new Date(Date.now() - silenceMs)),
+      },
+    });
+
+    for (const job of stale) {
+      job.status = JobStatus.Failed;
+      job.errorMessage = LOST_MESSAGE;
+      job.finishedAt = new Date();
+      job.logs += `\n[${LOST_MESSAGE}]\n`;
+      this.logJobOutcome(await this.jobRepository.save(job));
+    }
+
+    return stale.length;
+  }
+
+  // Backstop for jobs whose worker never returned.
+  @Interval(SWEEP_EVERY_MS)
+  async sweepLostJobs(): Promise<void> {
+    try {
+      await this.failLostJobs({}, LOST_JOB_SILENCE_MS);
+    } catch (error) {
+      this.logger.warn(
+        `Lost-job sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   async claim(userId: number, workerName?: string): Promise<Job | null> {
     // Recorded unconditionally — this is the actual liveness signal (see
     // WorkerHeartbeatService): a worker polling an empty queue still proves
     // it's alive here even though nothing below changes a single Job row.
     if (workerName) {
       await this.heartbeatService.record(userId, workerName);
+      // It is asking for work, so it is idle: whatever it still "holds" is lost.
+      await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
     }
 
     // node-postgres's driver (via TypeORM's Repository.query) returns
@@ -157,12 +216,64 @@ export class WorkerService {
     return this.storageService.path(file);
   }
 
+  // Stops a job. A queued job (no worker has it) is cancelled outright. One a
+  // worker holds only gets a cancel *request*: the worker polls for it, kills its
+  // run and confirms with status 'cancelled' — until then the job is "stopping".
+  // `force` skips that wait for a worker that is gone and would never confirm.
+  async cancel(id: number, userId: number, force = false): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (job.status === JobStatus.Cancelled) {
+      return job;
+    }
+
+    if (job.status === JobStatus.Succeeded || job.status === JobStatus.Failed) {
+      throw new ConflictException(
+        `Job already ${job.status} — there is nothing to stop`,
+      );
+    }
+
+    const now = new Date();
+
+    if (job.status === JobStatus.Queued || force) {
+      job.status = JobStatus.Cancelled;
+      job.finishedAt = now;
+      job.cancelRequestedAt = job.cancelRequestedAt ?? now;
+      job.logs += `\n[stopped by the owner${force && job.workerName ? ' (forced)' : ''}]\n`;
+      this.logJobCancelled(await this.jobRepository.save(job), force);
+
+      return job;
+    }
+
+    // Claimed or running: ask the worker. Idempotent — a second click keeps the
+    // original request time.
+    job.cancelRequestedAt = job.cancelRequestedAt ?? now;
+
+    return this.jobRepository.save(job);
+  }
+
+  private logJobCancelled(job: Job, forced: boolean): void {
+    void this.appLogs?.record({
+      level: 'warn',
+      source: 'job',
+      event: 'job.cancelled',
+      message: `Job ${job.id} was stopped by the owner`,
+      meta: { jobId: job.id, model: job.model, forced },
+    });
+  }
+
   async updateStatus(
     id: number,
     userId: number,
     dto: UpdateJobStatusDto,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
+
+    // A cancelled job is final: a worker that was still winding down must not
+    // bring it back to running or turn it into a failure.
+    if (job.status === JobStatus.Cancelled) {
+      return job;
+    }
 
     // A finished job is final — a late or duplicated report must not
     // overwrite its outcome.
@@ -183,10 +294,18 @@ export class WorkerService {
       job.finishedAt = new Date();
     }
 
+    if (dto.status === JobStatus.Cancelled) {
+      job.finishedAt = new Date();
+    }
+
     const saved = await this.jobRepository.save(job);
 
     if (dto.status === JobStatus.Failed) {
       this.logJobOutcome(saved);
+    }
+
+    if (dto.status === JobStatus.Cancelled) {
+      this.logJobCancelled(saved, false);
     }
 
     return saved;
@@ -226,6 +345,13 @@ export class WorkerService {
     file: Express.Multer.File,
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
+
+    if (job.status === JobStatus.Cancelled) {
+      throw new ConflictException(
+        'Job was stopped — its result is not accepted',
+      );
+    }
+
     // Null only if a result is reported twice for a job whose pipeline
     // parcel the first report already consumed — the result is then simply
     // stored unaddressed rather than failing the report.

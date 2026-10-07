@@ -78,6 +78,7 @@ function fakeClient(downloadParcelResult: Buffer): FakeClient & Record<string, u
       },
       { calls: appendLogCalls },
     ),
+    isCancelRequested: async () => false,
     downloadParcel: async () => downloadParcelResult,
     uploadResult: Object.assign(
       async (...args: unknown[]) => {
@@ -155,6 +156,78 @@ describe('processJob result parcel', () => {
     assert.ok(names.includes('kept.txt'));
     assert.ok(names.includes('a.ts'));
     assert.ok(!names.some((n) => n.includes('.claude') || n.includes('node_modules')), names.join(', '));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
+describe('processJob heartbeat', () => {
+  function heartbeatClient(heartbeat: (name: string) => Promise<void>, downloadParcel: () => Promise<Buffer>) {
+    return {
+      updateStatus: async () => {},
+      appendLog: async () => {},
+      uploadResult: async () => {},
+      isCancelRequested: async () => false,
+      downloadParcel,
+      heartbeat,
+    };
+  }
+
+  it('pings bridge every 10s while a long job runs, and stops once it finishes', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-hb-'));
+    const names: string[] = [];
+    let release!: (buffer: Buffer) => void;
+    const download = new Promise<Buffer>((resolve) => {
+      release = resolve;
+    });
+    stubOpenAiCompletion('done');
+
+    const client = heartbeatClient(async (name) => {
+      names.push(name);
+    }, () => download);
+    const job: RemoteJob = { id: 8, sourceFileId: 16, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const running = processJob(client as never, job, fakeConfig(workDir));
+
+    // Let processJob reach the (blocked) parcel download.
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(35_000);
+    assert.deepEqual(names, ['test-worker', 'test-worker', 'test-worker']);
+
+    release(fakeParcel());
+    await running;
+
+    t.mock.timers.tick(60_000);
+    assert.equal(names.length, 3, 'interval should be cleared after the job ends');
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('keeps the job going when a heartbeat fails, and clears the interval after a failed job', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-hbfail-'));
+    let pings = 0;
+    let fail!: (error: Error) => void;
+    const download = new Promise<Buffer>((_, reject) => {
+      fail = reject;
+    });
+
+    const client = heartbeatClient(async () => {
+      pings += 1;
+      throw new Error('bridge unreachable');
+    }, () => download);
+    const job: RemoteJob = { id: 9, sourceFileId: 17, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const running = processJob(client as never, job, fakeConfig(workDir));
+
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(10_000);
+    assert.equal(pings, 1);
+
+    fail(new Error('download broke'));
+    await running;
+
+    t.mock.timers.tick(60_000);
+    assert.equal(pings, 1);
 
     rmSync(workDir, { recursive: true, force: true });
   });
@@ -241,3 +314,37 @@ describe('processJob', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob stop requests', () => {
+  it('reports "cancelled" (not "failed"), uploads nothing and cleans up when the owner stops a running job', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-cancel-'));
+    // The model "hangs" until the worker aborts the request.
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    let asked = 0;
+    client.isCancelRequested = async () => ++asked >= 2; // not yet on the first poll
+    const job: RemoteJob = { id: 21, sourceFileId: 30, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const keepAlive = setTimeout(() => {}, 10_000);
+
+    try {
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 30 });
+    } finally {
+      clearTimeout(keepAlive);
+    }
+
+    assert.deepEqual(
+      client.updateStatus.calls.map((call) => call[1]),
+      ['running', 'cancelled'],
+    );
+    assert.equal(client.uploadResult.calls.length, 0);
+    assert.deepEqual(readdirSync(workDir), []);
+    assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Stopped by the owner')));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+

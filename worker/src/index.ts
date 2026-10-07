@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { PackedAsset, PackedFile } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
+import { CancelledError } from './cancelled.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
@@ -31,6 +32,13 @@ function sleep(ms: number): Promise<void> {
 // into one append every LOG_FLUSH_INTERVAL_MS instead.
 const LOG_FLUSH_INTERVAL_MS = 1500;
 
+// How often a running job asks bridge whether its owner pressed "stop".
+const CANCEL_POLL_INTERVAL_MS = 3000;
+
+// Bridge treats a worker as down after 30s without a heartbeat, and the main
+// loop doesn't poll (so doesn't claim) while a job runs — ping well inside that.
+export const HEARTBEAT_INTERVAL_MS = 10_000;
+
 const EXCLUDED_RESULT_DIRS = new Set(['.claude', 'node_modules']);
 
 function isExcludedResultPath(relPath: string): boolean {
@@ -55,7 +63,12 @@ function resultFilename(job: RemoteJob): string {
 // sync's ROADMAP.md's isolation requirement, this process itself should run
 // as a dedicated unprivileged OS user with no access to real secrets — see
 // worker/README.md and systemd/pipe-worker.service.
-export async function processJob(client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig): Promise<void> {
+export async function processJob(
+  client: WorkerBridgeClient,
+  job: RemoteJob,
+  config: WorkerConfig,
+  options: { cancelPollMs?: number } = {},
+): Promise<void> {
   let jobDir: string | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
   // from `log` below, which forwards the model's textual output to bridge.
@@ -86,6 +99,34 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
 
   const flushInterval = setInterval(flushLog, LOG_FLUSH_INTERVAL_MS);
 
+  // The owner's "stop": polled on its own timer (a CLI printing nothing sends no log
+  // chunks to piggyback on), never overlapping, and a failed poll just tries again.
+  const cancel = new AbortController();
+  let polling = false;
+  const cancelPoll = setInterval(() => {
+    if (polling || cancel.signal.aborted) return;
+    polling = true;
+    client
+      .isCancelRequested(job.id)
+      .then((requested) => {
+        if (requested) {
+          log('Stop requested — stopping the run...\n');
+          cancel.abort();
+        }
+      })
+      .catch((error) => jlog.warn({ err: error }, 'could not check for a stop request'))
+      .finally(() => {
+        polling = false;
+      });
+  }, options.cancelPollMs ?? CANCEL_POLL_INTERVAL_MS);
+
+  // Best-effort, like log forwarding: a missed ping must never fail the job.
+  const heartbeatInterval = setInterval(() => {
+    void (async () => client.heartbeat(config.workerName))().catch((error) => {
+      jlog.warn({ err: error }, 'failed to send heartbeat to bridge');
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+
   try {
     mkdirSync(config.workDir, { recursive: true });
     jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
@@ -113,8 +154,8 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
     const result = provider.tool === 'claude'
-      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, config.jobTimeoutSec * 1000)
-      : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, config.jobTimeoutSec * 1000);
+      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, config.jobTimeoutSec * 1000, undefined, cancel.signal)
+      : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, config.jobTimeoutSec * 1000, cancel.signal);
 
     if (result.exitCode !== 0) {
       throw new Error(buildExitFailureMessage(result.exitCode, result.output));
@@ -137,6 +178,8 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
       else resultFiles.push({ relPath, content: text });
     }
 
+    if (cancel.signal.aborted) throw new CancelledError();
+
     const resultBuffer = buildResultParcel(parcel, resultFiles, resultAssets);
 
     log(`Uploading result parcel (${resultFiles.length} files, ${resultAssets.length} binary assets)...\n`);
@@ -144,17 +187,31 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
 
     jlog.info('succeeded');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log(`Failed: ${message}\n`);
-    jlog.error({ err: error }, 'failed');
+    if (error instanceof CancelledError) {
+      log('Stopped by the owner.\n');
+      jlog.info('cancelled');
 
-    try {
-      await client.updateStatus(job.id, 'failed', message);
-    } catch (statusError) {
-      jlog.error({ err: statusError }, 'additionally failed to report failure status');
+      try {
+        await client.updateStatus(job.id, 'cancelled');
+      } catch (statusError) {
+        jlog.error({ err: statusError }, 'could not confirm the stop to bridge');
+      }
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Failed: ${message}\n`);
+      jlog.error({ err: error }, 'failed');
+
+      try {
+        await client.updateStatus(job.id, 'failed', message);
+      } catch (statusError) {
+        jlog.error({ err: statusError }, 'additionally failed to report failure status');
+      }
     }
   } finally {
     clearInterval(flushInterval);
+    clearInterval(cancelPoll);
+
+    clearInterval(heartbeatInterval);
     flushLog();
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });

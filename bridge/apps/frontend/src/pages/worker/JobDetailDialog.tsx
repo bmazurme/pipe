@@ -13,7 +13,8 @@ import { encryptParcel, triggerBlobDownload } from '../../shared/lib/parcelCrypt
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
-import { isActive, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
+import { CancelJobButton } from './CancelJobButton';
+import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
 interface JobDetailDialogProps {
   jobId: number;
@@ -106,7 +107,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
       <Dialog.Header caption={`Задача #${job.id}`} id="job-detail-title" />
       <Dialog.Body>
         <div className={styles.detailMeta}>
-          <Label theme={STATUS_THEME[job.status]}>{STATUS_LABEL[job.status]}</Label>
+          <Label theme={isStopping(job) ? 'warning' : STATUS_THEME[job.status]}>{isStopping(job) ? 'Останавливается…' : STATUS_LABEL[job.status]}</Label>
           <Text color="secondary">
             {MODEL_OPTIONS.find((m) => m.value === job.model)?.content ?? job.model}
           </Text>
@@ -161,6 +162,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         })}
         onClickButtonCancel={onClose}
       >
+        <CancelJobButton job={job} />
         {canDelete && (
           <Button view="outlined-danger" onClick={() => void handleDelete()} loading={isDeleting}>
             <Icon data={TrashBin} size={16} />

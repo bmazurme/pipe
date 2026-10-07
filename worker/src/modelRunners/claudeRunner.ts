@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 
+import { CancelledError } from '../cancelled.js';
+
 export interface RunResult {
   exitCode: number;
   output: string;
@@ -27,8 +29,15 @@ export function runClaude(
   claudeToken?: string | null,
   timeoutMs?: number,
   killGraceMs = DEFAULT_KILL_GRACE_MS,
+  signal?: AbortSignal,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
+    // Already asked to stop before there was anything to stop.
+    if (signal?.aborted) {
+      reject(new CancelledError());
+      return;
+    }
+
     const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel];
     // The CLI is a closed-source binary — worker can't control its HTTP
     // client directly, only hope it honors the standard proxy env vars (most
@@ -68,9 +77,21 @@ export function runClaude(
             killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs);
           }, timeoutMs)
         : undefined;
+    // The owner's stop request: same SIGTERM → SIGKILL ladder as the deadline, but
+    // the outcome is "cancelled", not "timed out".
+    let cancelled = false;
+    const onAbort = () => {
+      if (cancelled) return;
+      cancelled = true;
+      child.kill('SIGTERM');
+      clearTimeout(killTimer);
+      killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
     const clearTimers = () => {
       clearTimeout(timeoutTimer);
       clearTimeout(killTimer);
+      signal?.removeEventListener('abort', onAbort);
     };
 
     child.on('error', (error) => {
@@ -84,6 +105,10 @@ export function runClaude(
 
     child.on('close', (code) => {
       clearTimers();
+      if (cancelled) {
+        reject(new CancelledError());
+        return;
+      }
       if (timedOut) {
         reject(new Error(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`));
         return;

@@ -20,6 +20,9 @@ export enum JobStatus {
   Running = 'running',
   Succeeded = 'succeeded',
   Failed = 'failed',
+  // Stopped on the owner's request (see WorkerService.cancel) — terminal, like
+  // succeeded/failed, but never produces a result.
+  Cancelled = 'cancelled',
 }
 
 @Entity({ name: 'jobs' })
@@ -79,4 +82,10 @@ export class Job extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   finishedAt: Date | null;
+
+  // Set when the owner asks to stop a job a worker already holds. The worker polls
+  // for it, kills its run and confirms with status 'cancelled'; until then the job
+  // reads "stopping". A job that was only queued is cancelled outright instead.
+  @Column({ type: 'timestamp', nullable: true })
+  cancelRequestedAt: Date | null;
 }

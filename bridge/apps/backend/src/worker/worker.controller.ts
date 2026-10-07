@@ -25,8 +25,10 @@ import { MulterExceptionFilter } from '../storage/filters/multer-exception.filte
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
+import { CancelJobDto } from './dto/cancel-job.dto';
 import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
@@ -103,6 +105,17 @@ export class WorkerController {
       .json(ClaimedJobResponseDto.fromEntityWithToken(job, claudeToken));
   }
 
+  // Sent on an interval by a worker that's busy with a job (and so isn't
+  // polling claim) to keep showing as up. Name is required here, unlike claim.
+  @Post('heartbeat')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async heartbeat(
+    @Body() dto: HeartbeatDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
+  }
+
   @Get(':id')
   async get(
     @Param('id', ParseIntPipe) id: number,
@@ -142,6 +155,24 @@ export class WorkerController {
     const file = await this.workerService.getResultFile(id, currentUser.id);
 
     res.download(this.workerService.filePath(file), file.originalName);
+  }
+
+  // Stops a job — see WorkerService.cancel. POST (it mutates), and a sibling of
+  // :id/status rather than a status value of its own: the owner asks, the worker
+  // is the one that reports 'cancelled'.
+  @Post(':id/cancel')
+  async cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelJobDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.cancel(
+      id,
+      currentUser.id,
+      dto.force === true,
+    );
+
+    return JobResponseDto.fromEntity(job);
   }
 
   @Post(':id/status')

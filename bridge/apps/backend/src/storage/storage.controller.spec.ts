@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { Response } from 'express';
 
 import { StorageController } from './storage.controller';
@@ -43,6 +44,33 @@ describe('StorageController.download', () => {
 
     expect(service.delete).toHaveBeenCalledWith(file);
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('logs a warning and raises no unhandled rejection when the post-download delete fails', async () => {
+    const service = makeService();
+    service.delete.mockRejectedValue(new Error('db down'));
+    const res = makeResponse();
+    (res.download as jest.Mock).mockImplementation((_path, _name, callback) =>
+      callback(null),
+    );
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    await new StorageController(service).download(1, { id: 7 }, res);
+    // Let the rejection (and any unhandledRejection event) settle.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    process.off('unhandledRejection', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    expect(res.download).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+
+    warn.mockRestore();
   });
 
   it('sends a 404 instead of hanging when the file is missing on disk, and does not delete the row', async () => {
