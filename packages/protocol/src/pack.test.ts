@@ -59,6 +59,15 @@ describe('contentHash ordering', () => {
     assert.equal(contentHash(rotated), contentHash(files));
   });
 
+  it('treats entries with the same path as equal rather than reordering them', () => {
+    const duplicates: PackedFile[] = [
+      { relPath: 'same.txt', content: 'x' },
+      { relPath: 'same.txt', content: 'x' },
+    ];
+
+    assert.equal(contentHash(duplicates), contentHash([...duplicates].reverse()));
+  });
+
   it('orders assets the same way', () => {
     const assets: PackedAsset[] = [
       { relPath: 'b.png', base64: 'Yg==' },
