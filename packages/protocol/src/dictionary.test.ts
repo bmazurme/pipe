@@ -36,4 +36,59 @@ describe('applyDictionary', () => {
   it('counts the number of substitutions made', () => {
     assert.equal(applyDictionary('db and db again', toRemote).count, 2);
   });
+
+  describe('Cyrillic text', () => {
+    const cyrToRemote = new Map([['Иван', '{{PERSON}}']]);
+    const cyrToLocal = new Map([['{{PERSON}}', 'Иван']]);
+
+    it('replaces a Cyrillic key on word boundaries', () => {
+      const out = applyDictionary('Привет, Иван! Иван тут.', cyrToRemote);
+      assert.equal(out.result, 'Привет, {{PERSON}}! {{PERSON}} тут.');
+      assert.equal(out.count, 2);
+    });
+
+    it('does not replace inside a longer Cyrillic word', () => {
+      for (const text of ['Иванов', 'сИван', 'Иван1', 'Иван_x']) {
+        assert.deepEqual(applyDictionary(text, cyrToRemote), { result: text, count: 0 });
+      }
+    });
+
+    it('replaces placeholders back to Cyrillic values', () => {
+      assert.equal(applyDictionary('Привет, {{PERSON}}!', cyrToLocal).result, 'Привет, Иван!');
+    });
+
+    it('does not replace a Cyrillic replacement target inside a longer word on the way back', () => {
+      const back = new Map([['кот', 'пес']]);
+      assert.equal(applyDictionary('кот котик скот кот', back).result, 'пес котик скот пес');
+    });
+  });
+
+  describe('empty keys', () => {
+    it('is a no-op when the only key is the empty string', () => {
+      assert.deepEqual(applyDictionary('some text', new Map([['', 'X']])), { result: 'some text', count: 0 });
+    });
+
+    it('ignores an empty key alongside real keys', () => {
+      assert.equal(applyDictionary('db', new Map([['', 'X'], ['db', 'Y']])).result, 'Y');
+    });
+  });
+
+  describe('regex metacharacters in keys', () => {
+    it('matches a key with a dot literally', () => {
+      const dict = new Map([['a.b', 'X']]);
+      assert.equal(applyDictionary('a.b axb', dict).result, 'X axb');
+    });
+
+    it('matches other metacharacters literally', () => {
+      const dict = new Map([
+        ['a+b', 'P'],
+        ['(x|y)', 'Q'],
+        ['c*d?', 'R'],
+        ['[z]', 'S'],
+        ['e\\f', 'T'],
+      ]);
+      assert.equal(applyDictionary('a+b (x|y) c*d? [z] e\\f', dict).result, 'P Q R S T');
+      assert.equal(applyDictionary('aab x y ccd z', dict).count, 0);
+    });
+  });
 });

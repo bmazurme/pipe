@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analysisTitle, buildAnalysisPrompt, isAnalysisTitle, markDuplicates, parseBacklog, PROTECTED_PATHS } from './analysis';
+import { analysisTitle, buildAnalysisPrompt, isAnalysisTitle, markDuplicates, normalizeModule, parseBacklog, PROTECTED_PATHS } from './analysis';
 
 describe('analysis titles', () => {
   it('builds and recognizes an analysis task title', () => {
@@ -76,5 +76,53 @@ describe('markDuplicates', () => {
 
     expect(marked[0].duplicateOf).toBe(7);
     expect(marked[1].duplicateOf).toBeUndefined();
+  });
+});
+
+describe('analysis kind and module', () => {
+  const date = new Date('2026-10-07T10:00:00Z');
+
+  it('keeps the original title and prompt for a general whole-repo analysis', () => {
+    expect(analysisTitle(date)).toBe('Analysis 2026-10-07');
+    expect(buildAnalysisPrompt([])).not.toContain('Scope:');
+    expect(buildAnalysisPrompt([])).not.toContain('Focus on');
+  });
+
+  it('puts the kind and module in the title, which still reads as an analysis task', () => {
+    const title = analysisTitle(date, { kind: 'uiux', module: 'bridge/apps/frontend' });
+
+    expect(title).toBe('Analysis 2026-10-07 · UI/UX · bridge/apps/frontend');
+    expect(isAnalysisTitle(title)).toBe(true);
+  });
+
+  it('adds focus guidance and a scope restriction to the prompt', () => {
+    const prompt = buildAnalysisPrompt([], { kind: 'uiux', module: 'reports/packages/client' });
+
+    expect(prompt).toContain('Focus on UI/UX');
+    expect(prompt).toContain('review ONLY `reports/packages/client`');
+  });
+
+  it('still lists the protected paths and existing titles with a scope set', () => {
+    const prompt = buildAnalysisPrompt(['Already proposed'], { kind: 'security', module: 'worker' });
+
+    expect(prompt).toContain('- Already proposed');
+    expect(PROTECTED_PATHS.every((path) => prompt.includes(path))).toBe(true);
+  });
+});
+
+describe('normalizeModule', () => {
+  it('treats empty input as the whole repository', () => {
+    expect(normalizeModule(undefined)).toBeUndefined();
+    expect(normalizeModule('  ')).toBeUndefined();
+  });
+
+  it('trims, and strips a leading ./ and trailing slashes', () => {
+    expect(normalizeModule(' ./bridge/apps/frontend/ ')).toBe('bridge/apps/frontend');
+  });
+
+  it('rejects anything that is not a plain repo-relative path', () => {
+    for (const bad of ['../etc', 'a/../b', '/abs/path', 'a b', 'x`y', 'a;rm -rf', 'a\nb']) {
+      expect(() => normalizeModule(bad)).toThrow(/Некорректный путь/);
+    }
   });
 });

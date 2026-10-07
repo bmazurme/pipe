@@ -1,53 +1,55 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import path from 'node:path';
-
+import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import { resolveFileSecrets } from './secrets.js';
 
 describe('resolveFileSecrets', () => {
-  it('reads a secret from its _FILE path when the plain var is not set', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-secrets-test-'));
-    const filePath = path.join(dir, 'token');
-    writeFileSync(filePath, 'sk-ant-oat-from-file\n');
+  let dir: string;
 
-    const env: NodeJS.ProcessEnv = { CLAUDE_CODE_OAUTH_TOKEN_FILE: filePath };
-    resolveFileSecrets(env, ['CLAUDE_CODE_OAUTH_TOKEN']);
-
-    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat-from-file');
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'secrets-test-'));
   });
 
-  it('leaves an already-set plain var alone, ignoring any _FILE variant', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-secrets-test-'));
-    const filePath = path.join(dir, 'token');
-    writeFileSync(filePath, 'from-file');
-
-    const env: NodeJS.ProcessEnv = {
-      CLAUDE_CODE_OAUTH_TOKEN: 'from-plain-env',
-      CLAUDE_CODE_OAUTH_TOKEN_FILE: filePath,
-    };
-    resolveFileSecrets(env, ['CLAUDE_CODE_OAUTH_TOKEN']);
-
-    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, 'from-plain-env');
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
   });
 
-  it('does nothing when neither the plain var nor its _FILE variant is set', () => {
+  it('reads the file and trims it', () => {
+    const file = join(dir, 'key');
+    writeFileSync(file, '  s3cret\n');
+    const env: NodeJS.ProcessEnv = { FOO_KEY_FILE: file };
+    resolveFileSecrets(env, ['FOO_KEY']);
+    assert.equal(env.FOO_KEY, 's3cret');
+  });
+
+  it('lets a plain env value win without reading the file', () => {
+    const env: NodeJS.ProcessEnv = { FOO_KEY: 'plain', FOO_KEY_FILE: join(dir, 'does-not-exist') };
+    resolveFileSecrets(env, ['FOO_KEY']);
+    assert.equal(env.FOO_KEY, 'plain');
+  });
+
+  it('skips a key whose _FILE is unset', () => {
     const env: NodeJS.ProcessEnv = {};
-    resolveFileSecrets(env, ['OPENAI_API_KEY']);
-    assert.equal(env.OPENAI_API_KEY, undefined);
+    resolveFileSecrets(env, ['FOO_KEY']);
+    assert.equal(env.FOO_KEY, undefined);
   });
 
-  it('resolves multiple keys independently', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'worker-secrets-test-'));
-    const openaiPath = path.join(dir, 'openai');
-    writeFileSync(openaiPath, 'sk-openai');
+  it('names the key and path when the file is missing', () => {
+    const file = join(dir, 'missing');
+    const env: NodeJS.ProcessEnv = { FOO_KEY_FILE: file };
+    assert.throws(
+      () => resolveFileSecrets(env, ['FOO_KEY']),
+      (err: Error) => err.message.includes('FOO_KEY_FILE') && err.message.includes(file),
+    );
+  });
 
-    const env: NodeJS.ProcessEnv = { OPENAI_API_KEY_FILE: openaiPath };
-    resolveFileSecrets(env, ['OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'QWEN_API_KEY']);
-
-    assert.equal(env.OPENAI_API_KEY, 'sk-openai');
-    assert.equal(env.DEEPSEEK_API_KEY, undefined);
-    assert.equal(env.QWEN_API_KEY, undefined);
+  it('throws on an empty or whitespace-only file', () => {
+    const file = join(dir, 'empty');
+    writeFileSync(file, ' \n\t\n');
+    const env: NodeJS.ProcessEnv = { FOO_KEY_FILE: file };
+    assert.throws(() => resolveFileSecrets(env, ['FOO_KEY']), /FOO_KEY_FILE .* is empty/);
+    assert.equal(env.FOO_KEY, undefined);
   });
 });

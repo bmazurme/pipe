@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 
-import { TelegramService } from '../telegram/telegram.service';
+import { NotifyService } from '../telegram/notify.service';
 import { ClientHeartbeat } from './entities/client-heartbeat.entity';
 
 // reports heartbeats every ~15s (see its autopilot); three misses in a row
@@ -18,7 +18,7 @@ export class ClientHeartbeatService {
   constructor(
     @InjectRepository(ClientHeartbeat)
     private readonly repository: Repository<ClientHeartbeat>,
-    private readonly telegram: TelegramService,
+    private readonly telegram: NotifyService,
   ) {}
 
   async record(userId: number, name: string, kind: string): Promise<void> {

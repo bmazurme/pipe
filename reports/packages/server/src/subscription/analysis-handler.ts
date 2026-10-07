@@ -1,11 +1,11 @@
 import type { Request, Response } from 'express';
-import type { BacklogType, CreateBacklogIssuesPayload, CreateBacklogIssuesResult, StartAnalysisPayload } from '@reports/shared';
+import type { AnalysisModulesType, BacklogType, CreateBacklogIssuesPayload, CreateBacklogIssuesResult, StartAnalysisPayload } from '@reports/shared';
 
-import { analysisTitle, buildAnalysisPrompt, BACKLOG_FILE, isAnalysisTitle, markDuplicates, parseBacklog } from './analysis';
+import { ANALYSIS_KINDS, analysisTitle, buildAnalysisPrompt, BACKLOG_FILE, isAnalysisTitle, markDuplicates, normalizeModule, parseBacklog } from './analysis';
 import { sendClientEvent } from './bridge-client';
 import { findTrackedProject } from './config-props';
 import { createIssue, DEFAULT_GITHUB_LABEL, listAllIssues } from './github-client';
-import { showFile } from './git';
+import { listModules, showFile } from './git';
 import { createManualSubscriptionIssue, withStream } from './handler';
 import { getIssueState, setIssueState } from './state-props';
 import { hostname } from 'os';
@@ -25,12 +25,23 @@ function requireGithubProject(projectId: string) {
 // is new is only the prompt (which lists everything already proposed, so the
 // worker doesn't repeat it) and, after the pull, reading the result.
 export async function handleStartAnalysis(req: Request<Record<string, string>>, res: Response) {
-  const { projectId } = req.body as StartAnalysisPayload;
+  const { projectId, kind = 'general', module: rawModule } = req.body as StartAnalysisPayload;
 
   await withStream(res, 'Start analysis', async () => {
     const project = requireGithubProject(projectId);
+
+    if (!(kind in ANALYSIS_KINDS)) {
+      throw new Error(`Неизвестный тип анализа: ${kind}`);
+    }
+
+    const module = normalizeModule(rawModule);
     const existing = await listAllIssues(project.githubRepo, project.label);
-    const { iid, state } = await createManualSubscriptionIssue(projectId, analysisTitle(), buildAnalysisPrompt(existing.map((issue) => issue.title)));
+    const options = { kind, module };
+    const { iid, state } = await createManualSubscriptionIssue(
+      projectId,
+      analysisTitle(new Date(), options),
+      buildAnalysisPrompt(existing.map((issue) => issue.title), options),
+    );
 
     return { iid, state };
   });
@@ -103,5 +114,16 @@ export async function handleCreateBacklogIssues(req: Request<Record<string, stri
     }
 
     return result;
+  });
+}
+
+// Suggestions for the "which module" field — from the committed tree.
+export async function handleListAnalysisModules(req: Request<Record<string, string>>, res: Response) {
+  const { projectId } = req.params;
+
+  await withStream(res, 'List analysis modules', async () => {
+    const project = requireGithubProject(projectId);
+
+    return { modules: await listModules(project.path) } satisfies AnalysisModulesType;
   });
 }

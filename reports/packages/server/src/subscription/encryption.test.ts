@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 
 import { generateKeyPair, encryptBuffer, decryptBuffer } from './encryption';
 
-describe('generateKeyPair', () => {
+// RSA key generation is CPU-bound; on a busy CI runner a test that generates
+// two pairs exceeded vitest's 5s default and failed intermittently.
+const KEYGEN_TIMEOUT_MS = 30_000;
+
+describe('generateKeyPair', { timeout: KEYGEN_TIMEOUT_MS }, () => {
   it('produces a PEM-encoded RSA key pair', () => {
     const { publicKey, privateKey } = generateKeyPair();
 
@@ -11,7 +15,7 @@ describe('generateKeyPair', () => {
   });
 });
 
-describe('encryptBuffer / decryptBuffer', () => {
+describe('encryptBuffer / decryptBuffer', { timeout: KEYGEN_TIMEOUT_MS }, () => {
   it('round-trips a buffer through the public/private key pair', () => {
     const { publicKey, privateKey } = generateKeyPair();
     const original = Buffer.from('a fairly large parcel payload'.repeat(1000), 'utf-8');

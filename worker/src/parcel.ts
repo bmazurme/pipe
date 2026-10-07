@@ -61,10 +61,14 @@ export function extractParcel(buffer: Buffer): ExtractedParcel {
 // manifest shape/entry name the parcel was extracted with, so the result
 // round-trips through whichever side (reports' Subscription, or sync's
 // pull-issue/pull) eventually consumes it, unchanged from its perspective.
-export function buildResultParcel(parcel: ExtractedParcel, files: PackedFile[]): Buffer {
+export function buildResultParcel(
+  parcel: ExtractedParcel,
+  files: PackedFile[],
+  assets: PackedAsset[] = parcel.assets,
+): Buffer {
   const { schemaVersion: _schemaVersion, contentHash: _contentHash, ...manifestFields } = parcel.manifest;
 
-  const { buffer } = buildArchive(parcel.manifestEntry, files, manifestFields, parcel.assets);
+  const { buffer } = buildArchive(parcel.manifestEntry, files, manifestFields, assets);
   return buffer;
 }
 

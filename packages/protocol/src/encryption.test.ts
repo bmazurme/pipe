@@ -49,3 +49,53 @@ describe('encryptBuffer / decryptBuffer', () => {
     assert.throws(() => decryptBuffer(envelope, privateKey));
   });
 });
+
+describe('decryptBuffer envelope validation', () => {
+  const malformed = /Malformed encrypted parcel envelope/;
+
+  it('rejects an empty buffer', () => {
+    const { privateKey } = generateKeyPair();
+
+    assert.throws(() => decryptBuffer(Buffer.alloc(0), privateKey), malformed);
+  });
+
+  it('rejects a buffer shorter than the 4-byte header', () => {
+    const { privateKey } = generateKeyPair();
+
+    assert.throws(() => decryptBuffer(Buffer.from([0, 0, 1]), privateKey), malformed);
+  });
+
+  it('rejects a truncated real envelope', () => {
+    const { publicKey, privateKey } = generateKeyPair();
+    const envelope = encryptBuffer(Buffer.from('data'), publicKey);
+    const keyLength = envelope.readUInt32BE(0);
+    // Cut inside the auth tag, so the key and iv are intact but the tag is short.
+    const truncated = envelope.subarray(0, 4 + keyLength + 12 + 8);
+
+    assert.throws(() => decryptBuffer(truncated, privateKey), malformed);
+  });
+
+  it('rejects a header whose keyLength exceeds the buffer', () => {
+    const { privateKey } = generateKeyPair();
+    const bogus = Buffer.alloc(64);
+
+    bogus.writeUInt32BE(0xffffffff, 0);
+
+    assert.throws(() => decryptBuffer(bogus, privateKey), malformed);
+  });
+
+  it('still round-trips a valid envelope and keeps GCM tamper errors', () => {
+    const { publicKey, privateKey } = generateKeyPair();
+    const original = Buffer.from('payload');
+    const envelope = encryptBuffer(original, publicKey);
+
+    assert.ok(decryptBuffer(envelope, privateKey).equals(original));
+
+    envelope[envelope.length - 1] ^= 0xff;
+
+    assert.throws(
+      () => decryptBuffer(envelope, privateKey),
+      (err: Error) => !malformed.test(err.message) && /authenticate/i.test(err.message),
+    );
+  });
+});

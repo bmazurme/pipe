@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { PackedFile } from '@pipe/protocol';
+import type { PackedAsset, PackedFile } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
@@ -28,6 +28,20 @@ function sleep(ms: number): Promise<void> {
 // mean bridge fields a request storm for the duration of every job. Batched
 // into one append every LOG_FLUSH_INTERVAL_MS instead.
 const LOG_FLUSH_INTERVAL_MS = 1500;
+
+const EXCLUDED_RESULT_DIRS = new Set(['.claude', 'node_modules']);
+
+function isExcludedResultPath(relPath: string): boolean {
+  return relPath.split(/[\\/]/).some((segment) => EXCLUDED_RESULT_DIRS.has(segment));
+}
+
+function decodeUtf8Strict(bytes: Buffer): string | undefined {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
 
 function resultFilename(job: RemoteJob): string {
   return `worker-result-${job.id}.zip`;
@@ -102,21 +116,26 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
       throw new Error(`Model run exited with code ${result.exitCode}`);
     }
 
-    // Re-reads every text file currently on disk (covers edits AND new files
-    // the model created) as the result's file set. Assets (images) are kept
-    // exactly as extracted — agents aren't expected to edit binary assets,
-    // and re-encoding them isn't needed for their content to be unchanged.
+    // Re-reads every file currently on disk (covers edits AND new files the
+    // model created) as the result's file set. Original assets are kept
+    // exactly as extracted. Files that aren't valid UTF-8 (images, archives,
+    // compiled output) can't go through PackedFile's text content without
+    // corruption, so they travel as assets (raw bytes -> base64). Tool state
+    // dirs (.claude/, node_modules/) are never part of the result.
     const assetPaths = new Set(parcel.assets.map((asset) => asset.relPath));
-    const resultFiles: PackedFile[] = listFilesRecursively(jobDir)
-      .filter((relPath) => !assetPaths.has(relPath))
-      .map((relPath) => ({
-        relPath,
-        content: readFileSync(path.join(jobDir, relPath), 'utf-8'),
-      }));
+    const resultFiles: PackedFile[] = [];
+    const resultAssets: PackedAsset[] = [...parcel.assets];
+    for (const relPath of listFilesRecursively(jobDir)) {
+      if (assetPaths.has(relPath) || isExcludedResultPath(relPath)) continue;
+      const bytes = readFileSync(path.join(jobDir, relPath));
+      const text = decodeUtf8Strict(bytes);
+      if (text === undefined) resultAssets.push({ relPath, base64: bytes.toString('base64') });
+      else resultFiles.push({ relPath, content: text });
+    }
 
-    const resultBuffer = buildResultParcel(parcel, resultFiles);
+    const resultBuffer = buildResultParcel(parcel, resultFiles, resultAssets);
 
-    log(`Uploading result parcel (${resultFiles.length} files)...\n`);
+    log(`Uploading result parcel (${resultFiles.length} files, ${resultAssets.length} binary assets)...\n`);
     await client.uploadResult(job.id, resultFilename(job), resultBuffer);
 
     jlog.info('succeeded');

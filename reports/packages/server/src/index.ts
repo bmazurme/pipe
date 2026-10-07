@@ -35,7 +35,7 @@ import {
   handleGenerateEncryptionKeyPair,
   handleSetLeakScanStrict,
 } from './subscription/config-handler';
-import { handleCreateBacklogIssues, handleGetBacklog, handleStartAnalysis } from './subscription/analysis-handler';
+import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
 import { setupProxy } from './utils/setup-proxy';
@@ -94,6 +94,7 @@ app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
 app.put('/api/subscription/config/leak-scan-strict', handleSetLeakScanStrict);
 app.post('/api/subscription/analysis', handleStartAnalysis);
+app.get('/api/subscription/analysis/modules/:projectId', handleListAnalysisModules);
 app.get('/api/subscription/analysis/:projectId/:iid/backlog', handleGetBacklog);
 app.post('/api/subscription/analysis/:projectId/:iid/issues', handleCreateBacklogIssues);
 app.post('/api/subscription/purge/apply', handlePurgeApply);
