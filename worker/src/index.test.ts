@@ -1,10 +1,11 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { buildArchive } from '@pipe/protocol';
+import AdmZip from 'adm-zip';
+import { ASSET_PREFIX, buildArchive } from '@pipe/protocol';
 
 import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
@@ -93,6 +94,70 @@ function stubOpenAiCompletion(content: string): void {
       { status: 200 },
     )) as typeof fetch;
 }
+
+// Simulates the model leaving files behind: on the first completion call the
+// stub writes `files` into the job's dir (found under workDir), then replies
+// with a plain "done" message.
+function stubModelWritingFiles(workDir: string, files: Record<string, Buffer>): void {
+  let wrote = false;
+  globalThis.fetch = (async () => {
+    if (!wrote) {
+      wrote = true;
+      const jobDir = path.join(workDir, readdirSync(workDir).find((name) => name.startsWith('job-'))!);
+      for (const [relPath, bytes] of Object.entries(files)) {
+        mkdirSync(path.dirname(path.join(jobDir, relPath)), { recursive: true });
+        writeFileSync(path.join(jobDir, relPath), bytes);
+      }
+    }
+    return new Response(
+      JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }] }),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+}
+
+describe('processJob result parcel', () => {
+  it('carries a binary file created by the model byte-for-byte', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-bin-'));
+    const binary = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28]);
+    stubModelWritingFiles(workDir, { 'out/image.png': binary });
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 4, sourceFileId: 13, resultFileId: null, model: 'gpt', status: 'claimed' };
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    const uploaded = client.uploadResult.calls[0][2] as Buffer;
+    const entry = new AdmZip(uploaded).getEntry(`${ASSET_PREFIX}out/image.png`);
+    assert.ok(entry, 'binary file should be present as an asset');
+    assert.ok(entry.getData().equals(binary));
+    // And not also (corruptly) as a text file.
+    assert.equal(new AdmZip(uploaded).getEntry('out/image.png'), null);
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('excludes .claude/ and node_modules/ contents from the result', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-excl-'));
+    stubModelWritingFiles(workDir, {
+      '.claude/settings.json': Buffer.from('{}'),
+      'node_modules/pkg/index.js': Buffer.from('module.exports = 1;'),
+      'sub/node_modules/pkg/blob.bin': Buffer.from([0xff, 0xfe, 0x00]),
+      'kept.txt': Buffer.from('keep me'),
+    });
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 5, sourceFileId: 14, resultFileId: null, model: 'gpt', status: 'claimed' };
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const names = new AdmZip(client.uploadResult.calls[0][2] as Buffer).getEntries().map((e) => e.entryName);
+    assert.ok(names.includes('kept.txt'));
+    assert.ok(names.includes('a.ts'));
+    assert.ok(!names.some((n) => n.includes('.claude') || n.includes('node_modules')), names.join(', '));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
 
 describe('processJob', () => {
   it('runs a gpt job end to end: downloads the parcel, runs the model, uploads a result, marks it succeeded', async () => {
