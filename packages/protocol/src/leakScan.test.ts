@@ -24,6 +24,38 @@ describe('scanForLeaks', () => {
     assert.ok(findings.some((f) => f.kind === 'hostname' && f.match === 'prod-db.internal.example.ru'));
   });
 
+  it('reports an email once, without a hostname finding for its domain', () => {
+    const findings = scanForLeaks([{ source: 'a.ts', content: 'a@corp.internal' }]);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].kind, 'email');
+  });
+
+  it('still reports a standalone hostname on the same line as an email', () => {
+    const findings = scanForLeaks([{ source: 'a.ts', content: 'a@corp.internal via db.corp.internal' }]);
+    assert.deepEqual(
+      findings.map((f) => [f.kind, f.match]),
+      [['email', 'a@corp.internal'], ['hostname', 'db.corp.internal']],
+    );
+  });
+
+  it('reports correct line numbers on a multi-line sample', () => {
+    const content = 'line one\nip 203.0.113.42\n\nhost prod-db.internal.example.ru\nmail a@corp.internal';
+    const findings = scanForLeaks([{ source: 'a.ts', content }]);
+    const lineOf = (kind: string) => findings.find((f) => f.kind === kind)?.line;
+    assert.equal(lineOf('ip'), 2);
+    assert.equal(lineOf('hostname'), 4);
+    assert.equal(lineOf('email'), 5);
+  });
+
+  it('scans a large input with many matches in bounded time', () => {
+    const content = 'host-a.internal.example.ru\n'.repeat(50000);
+    const start = Date.now();
+    const findings = scanForLeaks([{ source: 'big.txt', content }]);
+    assert.equal(findings.length, 50000);
+    assert.equal(findings[49999].line, 50000);
+    assert.ok(Date.now() - start < 5000);
+  });
+
   it('does not flag a filename that only looks domain-shaped', () => {
     const findings = scanForLeaks([{ source: 'a.ts', content: "import { x } from './utils.ts';" }]);
     assert.equal(findings.filter((f) => f.kind === 'hostname').length, 0);
