@@ -4,9 +4,11 @@ import fg from 'fast-glob';
  * Lists project files (relative to `cwd`) matching `include` minus `exclude`.
  *
  * Note: dotfiles and dot-directories (`.env.example`, `.gitlab-ci.yml`,
- * `.eslintrc`, `.github/**`, ...) are never returned (`dot: false`), even if an
- * include pattern names them, and symlinks are skipped (`followSymbolicLinks:
- * false`, `onlyFiles: true`). They are therefore never part of a project parcel.
+ * `.eslintrc`, `.github/**`, ...) are not matched by wildcards such as `**\/*`
+ * (`dot: false`), but an include pattern that names the dot segment explicitly
+ * (`.env.example`, `.github/**`) does return them — so list them in `include`
+ * only on purpose. Symlinks are skipped (`followSymbolicLinks: false`,
+ * `onlyFiles: true`).
  */
 export async function walkProjectFiles(cwd: string, include: string[], exclude: string[]): Promise<string[]> {
   return fg(include, {

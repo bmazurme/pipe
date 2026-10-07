@@ -51,9 +51,9 @@ describe('walkProjectFiles', () => {
     }
   });
 
-  it('skips dotfiles even when an include pattern names them explicitly', async () => {
+  it('returns dotfiles only when an include pattern names the dot segment explicitly', async () => {
     const result = await walkProjectFiles(root, ['.env.example', '.github/**'], []);
-    assert.deepEqual(result, []);
+    assert.deepEqual(result.sort(), ['.env.example', '.github/workflows/ci.yml']);
   });
 
   it('skips symlinks to files and does not descend into symlinked directories', async () => {
