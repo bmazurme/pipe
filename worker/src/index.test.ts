@@ -167,6 +167,7 @@ describe('processJob heartbeat', () => {
       updateStatus: async () => {},
       appendLog: async () => {},
       uploadResult: async () => {},
+      isCancelRequested: async () => false,
       downloadParcel,
       heartbeat,
     };
