@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 import { JobStatus } from '../entities/job.entity';
 
@@ -6,7 +6,7 @@ import { JobStatus } from '../entities/job.entity';
 // 'failed' via this endpoint — 'queued'/'claimed' are set by the service
 // itself (create() and claim()), never accepted here.
 export class UpdateJobStatusDto {
-  @IsEnum(JobStatus)
+  @IsIn([JobStatus.Running, JobStatus.Succeeded, JobStatus.Failed])
   status: JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed;
 
   @IsString()
