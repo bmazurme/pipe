@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import path, { join } from 'node:path';
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
-import { executeTool, MAX_TOOL_RESULT_CHARS } from './openAiCompatibleRunner.js';
+import { executeTool, MAX_TOOL_RESULT_CHARS, runOpenAiCompatible } from './openAiCompatibleRunner.js';
 
 describe('executeTool read_file', () => {
   let dir: string;
@@ -37,5 +37,78 @@ describe('executeTool read_file', () => {
     writeFileSync(join(dir, 'big2.txt'), 'c'.repeat(total));
     const result = executeTool(dir, 'read_file', { path: 'big2.txt', offset: MAX_TOOL_RESULT_CHARS });
     assert.equal(result, 'c'.repeat(10));
+  });
+});
+
+const deadlineOptions = { baseUrl: 'http://stub.invalid', apiKey: 'k', model: 'gpt-test' };
+
+describe('runOpenAiCompatible job deadline', () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'oai-runner-'));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('rejects while a request is in flight', async () => {
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+
+    // AbortSignal.timeout's timer is unref'd, so with nothing else scheduled the
+    // event loop would drain while the mocked fetch is pending (Node 22 reports
+    // that as a cancelled test) — hold it open until the deadline fires.
+    const keepAlive = setTimeout(() => {}, 5000);
+    try {
+      await assert.rejects(
+        runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, 50),
+        /gpt-test job timed out after 0\.05s/,
+      );
+    } finally {
+      clearTimeout(keepAlive);
+    }
+  });
+
+  it('rejects on the next turn once the deadline has passed', async () => {
+    let calls = 0;
+    // Like a real fetch: yields to the event loop (so the deadline timer can fire)
+    // and rejects with the abort reason when its signal is already aborted.
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      calls++;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      if (init?.signal?.aborted) throw init.signal.reason;
+
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+          { id: 'c1', function: { name: 'list_files', arguments: '{}' } },
+        ] } }],
+      }));
+    }) as typeof fetch;
+
+    // Burns past the deadline synchronously while the first turn's tool output is logged.
+    const onOutput = () => {
+      const end = Date.now() + 80;
+      while (Date.now() < end) { /* spin */ }
+    };
+
+    await assert.rejects(
+      runOpenAiCompatible(dir, 'task', deadlineOptions, onOutput, undefined, 40),
+      /gpt-test job timed out/,
+    );
+    assert.equal(calls, 2);
+  });
+
+  it('keeps running without a timeout', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }] }))) as typeof fetch;
+
+    const result = await runOpenAiCompatible(dir, 'task', deadlineOptions, () => {});
+    assert.equal(result.exitCode, 0);
   });
 });

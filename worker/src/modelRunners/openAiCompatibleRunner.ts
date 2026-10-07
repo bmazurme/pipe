@@ -132,7 +132,11 @@ export async function runOpenAiCompatible(
   options: OpenAiCompatibleOptions,
   onOutput: (chunk: string) => void,
   proxyUrl?: string,
+  timeoutMs?: number,
 ): Promise<RunResult> {
+  const timeoutError = () => new Error(`${options.model} job timed out after ${(timeoutMs ?? 0) / 1000}s`);
+  const deadlineSignal = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
+
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: prompt },
@@ -141,31 +145,39 @@ export async function runOpenAiCompatible(
   let output = '';
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const response = await fetch(`${options.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: options.model,
-        messages,
-        tools: TOOLS,
-        tool_choice: 'auto',
-      }),
-      // `dispatcher` is a Node/undici-specific fetch extension not in the
-      // standard RequestInit type — real at runtime, just untyped here.
-      dispatcher: resolveDispatcher(proxyUrl),
-      signal: AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
-    } as RequestInit);
+    if (deadlineSignal?.aborted) throw timeoutError();
 
-    if (!response.ok) {
-      throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);
+    const completionSignal = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
+    let data: { choices?: { message?: ChatMessage }[] };
+    try {
+      const response = await fetch(`${options.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: options.model,
+          messages,
+          tools: TOOLS,
+          tool_choice: 'auto',
+        }),
+        // `dispatcher` is a Node/undici-specific fetch extension not in the
+        // standard RequestInit type — real at runtime, just untyped here.
+        dispatcher: resolveDispatcher(proxyUrl),
+        signal: deadlineSignal ? AbortSignal.any([completionSignal, deadlineSignal]) : completionSignal,
+      } as RequestInit);
+
+      if (!response.ok) {
+        throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);
+      }
+
+      data = (await response.json()) as { choices?: { message?: ChatMessage }[] };
+    } catch (error) {
+      // Only the job deadline is rewritten; a per-request timeout keeps its own message.
+      if (deadlineSignal?.aborted) throw timeoutError();
+      throw error;
     }
-
-    const data = (await response.json()) as {
-      choices?: { message?: ChatMessage }[];
-    };
     const message = data.choices?.[0]?.message;
 
     if (!message) {
