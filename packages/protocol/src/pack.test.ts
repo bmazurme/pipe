@@ -2,7 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import AdmZip from 'adm-zip';
 
-import { buildArchive, extractArchive, type PackedFile, type PackedAsset } from './pack.js';
+import { createHash } from 'node:crypto';
+
+import { buildArchive, contentHash, extractArchive, type PackedFile, type PackedAsset } from './pack.js';
 import { PROTOCOL_SCHEMA_VERSION, type BaseManifest } from './manifest.js';
 
 interface TestManifest extends BaseManifest {
@@ -11,6 +13,70 @@ interface TestManifest extends BaseManifest {
 }
 
 const ENTRY = '__test_manifest__.json';
+
+describe('contentHash ordering', () => {
+  // Mixed case, underscore, digits, Cyrillic. Code-unit order is:
+  // digits < uppercase < '_' < lowercase < Cyrillic. localeCompare would
+  // interleave these differently (e.g. 'a' before 'B', '_' before digits).
+  const files: PackedFile[] = [
+    { relPath: 'b.txt', content: 'b' },
+    { relPath: 'Zeta.txt', content: 'Z' },
+    { relPath: 'файл.txt', content: 'ф' },
+    { relPath: '_private.txt', content: '_' },
+    { relPath: '10.txt', content: '10' },
+    { relPath: 'Alpha.txt', content: 'A' },
+    { relPath: 'a.txt', content: 'a' },
+    { relPath: 'Файл.txt', content: 'Ф' },
+  ];
+  const expectedOrder = [
+    '10.txt',
+    'Alpha.txt',
+    'Zeta.txt',
+    '_private.txt',
+    'a.txt',
+    'b.txt',
+    'Файл.txt',
+    'файл.txt',
+  ];
+
+  function expectedHash(): string {
+    const hash = createHash('sha256');
+    for (const relPath of expectedOrder) {
+      const file = files.find((f) => f.relPath === relPath)!;
+      hash.update(`${file.relPath}\0${file.content}\0`);
+    }
+    return hash.digest('hex');
+  }
+
+  it('hashes files in code-unit order of relPath, independent of locale', () => {
+    assert.equal(contentHash(files), expectedHash());
+  });
+
+  it('is independent of input order', () => {
+    const reversed = [...files].reverse();
+    const rotated = [...files.slice(3), ...files.slice(0, 3)];
+    assert.equal(contentHash(reversed), contentHash(files));
+    assert.equal(contentHash(rotated), contentHash(files));
+  });
+
+  it('treats entries with the same path as equal rather than reordering them', () => {
+    const duplicates: PackedFile[] = [
+      { relPath: 'same.txt', content: 'x' },
+      { relPath: 'same.txt', content: 'x' },
+    ];
+
+    assert.equal(contentHash(duplicates), contentHash([...duplicates].reverse()));
+  });
+
+  it('orders assets the same way', () => {
+    const assets: PackedAsset[] = [
+      { relPath: 'b.png', base64: 'Yg==' },
+      { relPath: 'B.png', base64: 'Qg==' },
+      { relPath: '_c.png', base64: 'Xw==' },
+    ];
+    assert.equal(contentHash([], assets), contentHash([], [...assets].reverse()));
+  });
+});
 
 describe('buildArchive / extractArchive', () => {
   const files: PackedFile[] = [
