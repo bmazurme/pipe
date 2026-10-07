@@ -11,10 +11,13 @@ export type YearProps = {
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const propsPath = join(__dirname, 'props.json');
+// REPORTS_PROPS_PATH lets tests point at a temp file instead of the real props.json.
+const getPropsPath = () => process.env.REPORTS_PROPS_PATH ?? join(__dirname, 'props.json');
+
+const emptyYearProps = (): YearProps => ({ holidays: [], shortDays: [], badDays: [], offDays: [] });
 
 const readProps = (): Record<string, YearProps> => {
-  return JSON.parse(readFileSync(propsPath, 'utf-8'));
+  return JSON.parse(readFileSync(getPropsPath(), 'utf-8'));
 };
 
 export const getProps = (year: number | string | string[]): YearProps => {
@@ -33,13 +36,16 @@ export const getAllOffDaysByYear = (): Record<string, string[]> => {
 
 export const addOffDays = (year: number | string | string[], dates: string[]): YearProps => {
   const props = readProps();
-  const yearProps = props[String(year)];
+  const key = String(year);
+  const isNewYear = !props[key];
+  const yearProps = props[key] ?? emptyYearProps();
+  props[key] = yearProps;
 
-  const newDates = dates.filter((date) => !yearProps.offDays.includes(date));
+  const newDates = [...new Set(dates)].filter((date) => !yearProps.offDays.includes(date));
 
-  if (newDates.length > 0) {
+  if (newDates.length > 0 || isNewYear) {
     yearProps.offDays.push(...newDates);
-    writeJsonFileSync(propsPath, props);
+    writeJsonFileSync(getPropsPath(), props);
   }
 
   return yearProps;
@@ -48,7 +54,7 @@ export const addOffDays = (year: number | string | string[], dates: string[]): Y
 export const importDayOffs = (year: number | string | string[], imported: YearProps): YearProps => {
   const props = readProps();
   const key = String(year);
-  const existing = props[key] ?? { holidays: [], shortDays: [], badDays: [], offDays: [] };
+  const existing = props[key] ?? emptyYearProps();
 
   const merge = (a: string[], b: string[]) => [...new Set([...a, ...b])].sort();
 
@@ -60,7 +66,7 @@ export const importDayOffs = (year: number | string | string[], imported: YearPr
   };
 
   props[key] = yearProps;
-  writeJsonFileSync(propsPath, props);
+  writeJsonFileSync(getPropsPath(), props);
 
   return yearProps;
 };
@@ -68,11 +74,17 @@ export const importDayOffs = (year: number | string | string[], imported: YearPr
 export const removeOffDay = (year: number | string | string[], date: string | string[]): YearProps => {
   const props = readProps();
   const yearProps = props[String(year)];
+
+  // Nothing to remove from a year that isn't stored; don't create it as a side effect.
+  if (!yearProps) {
+    return emptyYearProps();
+  }
+
   const dateStr = String(date);
 
   if (yearProps.offDays.includes(dateStr)) {
     yearProps.offDays = yearProps.offDays.filter((d) => d !== dateStr);
-    writeJsonFileSync(propsPath, props);
+    writeJsonFileSync(getPropsPath(), props);
   }
 
   return yearProps;
