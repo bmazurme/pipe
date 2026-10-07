@@ -8,6 +8,12 @@ import { getProps, addOffDays, removeOffDay, importDayOffs } from './props';
 
 const BRIDGE_TIMEOUT_MS = 20_000;
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isDateStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.every((v) => typeof v === 'string' && DATE_RE.test(v) && !Number.isNaN(Date.parse(v)));
+
 export async function handleCounts(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -44,6 +50,10 @@ export async function handleAddOffDay(req: Request<Record<string, string>>, res:
   };
 
   try {
+    if (!isDateStringArray(dates)) {
+      throw new Error('Поле dates должно быть массивом строк формата YYYY-MM-DD');
+    }
+
     const { holidays, shortDays, badDays, offDays } = addOffDays(id, dates);
     const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
 
