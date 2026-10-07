@@ -490,6 +490,7 @@ describe('handlePullSubscriptionIssue', () => {
     expect(String(events()[0].data)).toMatch(/Сначала выполните init/);
   });
 
+  // RSA key generation is CPU-bound; vitest's 5s default failed intermittently on CI.
   it('round-trips an encrypted parcel', async () => {
     const { dir } = initTrackedProject('173');
     const { generateKeyPair } = await import('./encryption');
@@ -526,7 +527,7 @@ describe('handlePullSubscriptionIssue', () => {
     expect(events()[0].type).toBe('message');
     expect(getIssueState('173', '6')?.encrypted).toBe(true);
     expect(readFileSync(path.join(dir, 'pulled.txt'), 'utf-8')).toBe('from the parcel');
-  });
+  }, 30_000);
 });
 
 describe('handlePublishSubscriptionIssue', () => {
