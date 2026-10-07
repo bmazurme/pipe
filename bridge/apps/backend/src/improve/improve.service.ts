@@ -1,0 +1,693 @@
+import { readFile } from 'fs/promises';
+
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+
+import { AppLogService } from '../logs/app-log.service';
+import { GithubApiService, TreeEntry } from '../loop/github-api.service';
+import { findProtected } from '../loop/protected-paths';
+import { StoredFileDirection } from '../storage/entities/stored-file.entity';
+import { StorageService } from '../storage/storage.service';
+import { NotifyService } from '../telegram/notify.service';
+import { isValidTimeZone } from '../telegram/notification-settings.service';
+import { localMinutes } from '../telegram/quiet-hours';
+import { JobModel, JobStatus } from '../worker/entities/job.entity';
+import { WorkerService } from '../worker/worker.service';
+import {
+  ACTIVE_RUN_STATUSES,
+  ImproveRun,
+  ImproveRunStatus,
+  ImproveTrigger,
+} from './entities/improve-run.entity';
+import { ImproveSchedule } from './entities/improve-schedule.entity';
+import { ImproveSettings } from './entities/improve-settings.entity';
+import {
+  buildIssueParcel,
+  Change,
+  describeChanges,
+  diffResult,
+  MAX_CHANGED_BYTES,
+  MAX_CHANGED_FILES,
+  readResultParcel,
+  readZipball,
+  selectParcelFiles,
+} from './parcel';
+
+export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
+const ADVANCE_EVERY_MS = 15_000;
+const SCHEDULE_TICK_MS = 60_000;
+const AUTOSTART_MIN_AGE_SECONDS = 10;
+const PR_LABEL = 'loop';
+
+// The loop run on bridge itself: pick a GitHub issue, hand the repository snapshot
+// and the issue to a worker, and turn what comes back into a branch and a pull
+// request — no reports, no developer machine. Merging stays where it always was
+// (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
+@Injectable()
+export class ImproveService {
+  private readonly logger = new Logger(ImproveService.name);
+  private advancing = false;
+  private ticking = false;
+  private autoStarting = false;
+
+  constructor(
+    @InjectRepository(ImproveRun)
+    private readonly runs: Repository<ImproveRun>,
+    @InjectRepository(ImproveSchedule)
+    private readonly schedules: Repository<ImproveSchedule>,
+    @InjectRepository(ImproveSettings)
+    private readonly settings: Repository<ImproveSettings>,
+    private readonly github: GithubApiService,
+    private readonly storage: StorageService,
+    private readonly workers: WorkerService,
+    private readonly notifier: NotifyService,
+    private readonly dataSource: DataSource,
+    private readonly appLogs: AppLogService,
+  ) {}
+
+  // ---------------------------------------------------------------- status
+
+  status() {
+    return {
+      configured: this.github.isReady(),
+      repo: this.github.repoName() ?? null,
+      baseBranch: this.github.baseBranch(),
+      label: PR_LABEL,
+      models: IMPROVE_MODELS,
+    };
+  }
+
+  // The open `loop` issues, each with its latest run (if any), for the page.
+  async listIssues(label = PR_LABEL) {
+    this.requireConfigured();
+
+    const issues = await this.github.listOpenIssues(label, 100);
+    const runs = issues.length
+      ? await this.runs.find({
+          where: { issueNumber: In(issues.map((issue) => issue.number)) },
+          order: { id: 'DESC' },
+        })
+      : [];
+
+    return issues.map((issue) => ({
+      ...issue,
+      run: runs.find((run) => run.issueNumber === issue.number) ?? null,
+    }));
+  }
+
+  listRuns(limit = 50): Promise<ImproveRun[]> {
+    return this.runs.find({
+      order: { id: 'DESC' },
+      take: Math.min(Math.max(limit, 1), 200),
+    });
+  }
+
+  // ------------------------------------------------------------- start a run
+
+  async startRun(
+    userId: number,
+    issueNumber: number,
+    model: string,
+    trigger: ImproveTrigger = 'manual',
+    scheduleId: number | null = null,
+  ): Promise<ImproveRun> {
+    this.requireConfigured();
+    this.requireModel(model);
+
+    const blocking = await this.runs.findOne({
+      where: {
+        issueNumber,
+        status: In([...ACTIVE_RUN_STATUSES, ImproveRunStatus.PrOpen]),
+      },
+    });
+
+    if (blocking) {
+      throw new ConflictException(
+        blocking.status === ImproveRunStatus.PrOpen
+          ? `Для задачи #${issueNumber} уже открыт PR #${blocking.prNumber}`
+          : `Задача #${issueNumber} уже выполняется`,
+      );
+    }
+
+    const issue = await this.github.getIssue(issueNumber);
+
+    if (issue.isPull || issue.state !== 'open') {
+      throw new BadRequestException(`#${issueNumber} — не открытая задача`);
+    }
+
+    const baseBranch = this.github.baseBranch();
+    const baseSha = await this.github.getBranchSha(baseBranch);
+    const files = selectParcelFiles(
+      readZipball(await this.github.downloadZipball(baseSha)),
+    );
+    const { buffer, baseline } = buildIssueParcel(files, {
+      number: issue.number,
+      title: issue.title,
+      body: issue.body,
+      repo: this.github.repoName() as string,
+      baseBranch,
+    });
+    const stored = await this.storage.createFromBuffer(
+      userId,
+      buffer,
+      `improve-${issue.number}.subscription.zip`,
+      {
+        channel: 'issue',
+        taskKey: `improve:${issue.number}`,
+        direction: StoredFileDirection.Outbound,
+      },
+    );
+    const job = await this.workers.create(userId, {
+      sourceFileId: stored.id,
+      model: model as JobModel,
+    });
+
+    const run = await this.runs.save(
+      this.runs.create({
+        userId,
+        issueNumber: issue.number,
+        issueTitle: issue.title.slice(0, 255),
+        model,
+        trigger,
+        scheduleId,
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        baseSha,
+        baseline: JSON.stringify(baseline),
+      }),
+    );
+
+    this.log(
+      'info',
+      'improve.run_started',
+      `Run ${run.id}: issue #${issue.number} → job ${job.id} (${model}, ${trigger})`,
+      {
+        runId: run.id,
+        jobId: job.id,
+        files: files.length,
+      },
+    );
+
+    return run;
+  }
+
+  async cancelRun(id: number, userId: number): Promise<ImproveRun> {
+    const run = await this.runs.findOne({ where: { id } });
+
+    if (!run) throw new NotFoundException('Run not found');
+    if (!ACTIVE_RUN_STATUSES.includes(run.status)) return run;
+
+    if (run.jobId && run.status !== ImproveRunStatus.Publishing) {
+      await this.workers.cancel(run.jobId, run.userId ?? userId);
+    }
+
+    run.status = ImproveRunStatus.Cancelled;
+    run.finishedAt = new Date();
+
+    return this.runs.save(run);
+  }
+
+  // ------------------------------------------------- follow the jobs, publish
+
+  @Interval(ADVANCE_EVERY_MS)
+  async advance(): Promise<void> {
+    if (this.advancing) return;
+
+    this.advancing = true;
+
+    try {
+      const active = await this.runs.find({
+        where: {
+          status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
+        },
+        order: { id: 'ASC' },
+      });
+
+      for (const run of active) {
+        await this.advanceOne(run).catch((error) =>
+          this.logger.warn(
+            `Run ${run.id} could not be advanced: ${message(error)}`,
+          ),
+        );
+      }
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  async advanceOne(run: ImproveRun): Promise<void> {
+    if (!run.jobId) return;
+
+    const job = await this.workers.findOwned(run.jobId, run.userId);
+
+    if (job.status === JobStatus.Succeeded) {
+      // Claimed exactly once even if two ticks overlap.
+      const claim = await this.runs.update(
+        {
+          id: run.id,
+          status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
+        },
+        { status: ImproveRunStatus.Publishing },
+      );
+
+      if (claim.affected === 1) {
+        run.status = ImproveRunStatus.Publishing;
+        await this.publish(run, job.resultFileId);
+      }
+
+      return;
+    }
+
+    if (job.status === JobStatus.Failed) {
+      await this.finish(run, ImproveRunStatus.Failed, {
+        error: job.errorMessage ?? 'Задача worker завершилась ошибкой',
+      });
+    } else if (job.status === JobStatus.Cancelled) {
+      await this.finish(run, ImproveRunStatus.Cancelled, {
+        note: 'Задача worker остановлена',
+      });
+    } else {
+      const next =
+        job.status === JobStatus.Running
+          ? ImproveRunStatus.Running
+          : ImproveRunStatus.Queued;
+
+      if (run.status !== next) await this.runs.update(run.id, { status: next });
+    }
+  }
+
+  // result parcel → diff against the baseline → branch → PR.
+  async publish(run: ImproveRun, resultFileId: number | null): Promise<void> {
+    try {
+      if (!resultFileId) throw new Error('У задачи worker нет результата');
+
+      const file = await this.storage.findOwned(resultFileId, run.userId);
+      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const changes = diffResult(
+        JSON.parse(run.baseline ?? '{}') as Record<string, string>,
+        result,
+      );
+
+      // The enforced boundary: the loop never proposes a change to its own machinery
+      // or to CI/deploy — those are dropped here, not merely discouraged in a prompt.
+      const blocked = new Set(
+        findProtected(changes.map((change) => change.path)),
+      );
+      const allowed = changes.filter((change) => !blocked.has(change.path));
+      const note = blocked.size
+        ? `Отброшены изменения защищённых путей: ${[...blocked].join(', ')}`
+        : null;
+
+      if (allowed.length === 0) {
+        await this.finish(run, ImproveRunStatus.NoChanges, {
+          note: note ?? 'Worker ничего не изменил',
+        });
+        await this.notifier.send(
+          `ℹ️ Задача #${run.issueNumber}: worker не внёс изменений — PR не нужен`,
+        );
+
+        return;
+      }
+
+      if (allowed.length > MAX_CHANGED_FILES) {
+        throw new Error(
+          `Слишком много изменённых файлов (${allowed.length} > ${MAX_CHANGED_FILES})`,
+        );
+      }
+
+      const size = allowed.reduce(
+        (sum, change) => sum + (change.bytes?.length ?? 0),
+        0,
+      );
+
+      if (size > MAX_CHANGED_BYTES) {
+        throw new Error(
+          `Слишком большой результат (${Math.round(size / 1024)} КБ)`,
+        );
+      }
+
+      const pr = await this.openPullRequest(run, allowed, note);
+
+      await this.finish(run, ImproveRunStatus.PrOpen, {
+        branch: pr.branch,
+        prNumber: pr.number,
+        prUrl: pr.url,
+        note: [describeChanges(allowed), note].filter(Boolean).join('. '),
+      });
+      await this.storage.delete(file).catch(() => undefined);
+      await this.notifier.send(
+        `🔀 Задача #${run.issueNumber} → PR #${pr.number} (${describeChanges(allowed)})\n${pr.url}`,
+      );
+    } catch (error) {
+      await this.finish(run, ImproveRunStatus.Failed, {
+        error: message(error),
+      });
+      await this.notifier.send(
+        `🔴 Задача #${run.issueNumber}: не удалось открыть PR — ${message(error).slice(0, 200)}`,
+      );
+    }
+  }
+
+  private async openPullRequest(
+    run: ImproveRun,
+    changes: Change[],
+    note: string | null,
+  ) {
+    const baseSha = run.baseSha as string;
+    const baseTree = await this.github.getCommitTreeSha(baseSha);
+    const tree: TreeEntry[] = [];
+
+    for (const change of changes) {
+      tree.push({
+        path: change.path,
+        mode: '100644',
+        type: 'blob',
+        sha:
+          change.kind === 'deleted'
+            ? null
+            : await this.github.createBlob(change.bytes as Uint8Array),
+      });
+    }
+
+    const commit = await this.github.createCommit(
+      `Pull issue #${run.issueNumber}: ${run.issueTitle}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}).`,
+      await this.github.createTree(baseTree, tree),
+      baseSha,
+    );
+    const branch = `improve/issue-${run.issueNumber}-run-${run.id}`;
+
+    await this.github.createBranch(branch, commit);
+
+    const pull = await this.github.createPull({
+      title: run.issueTitle,
+      head: branch,
+      base: this.github.baseBranch(),
+      body: [
+        `Closes #${run.issueNumber}`,
+        '',
+        `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
+        ...(note ? ['', `⚠️ ${note}`] : []),
+        '',
+        'Не влито автоматически — проверьте и влейте как обычно (CI → Telegram → Merge).',
+      ].join('\n'),
+    });
+
+    // The loop picks the PR up by this label (see LoopService's adoption).
+    await this.github
+      .addLabels(pull.number, [PR_LABEL])
+      .catch((error) =>
+        this.logger.warn(
+          `Could not label PR #${pull.number}: ${message(error)}`,
+        ),
+      );
+
+    return { branch, number: pull.number, url: pull.htmlUrl };
+  }
+
+  private async finish(
+    run: ImproveRun,
+    status: ImproveRunStatus,
+    patch: Partial<
+      Pick<ImproveRun, 'error' | 'note' | 'branch' | 'prNumber' | 'prUrl'>
+    >,
+  ): Promise<void> {
+    Object.assign(run, patch, { status, finishedAt: new Date() });
+    await this.runs.save(run);
+    this.log(
+      status === ImproveRunStatus.Failed ? 'error' : 'info',
+      `improve.${status}`,
+      `Run ${run.id} (issue #${run.issueNumber}): ${status}${patch.error ? ` — ${patch.error}` : ''}`,
+      {
+        runId: run.id,
+        jobId: run.jobId ?? undefined,
+        prNumber: patch.prNumber ?? undefined,
+      },
+    );
+  }
+
+  // ------------------------------------------------------------- schedules
+
+  listSchedules(): Promise<ImproveSchedule[]> {
+    return this.schedules.find({ order: { id: 'ASC' } });
+  }
+
+  async saveSchedule(
+    userId: number,
+    input: Pick<
+      ImproveSchedule,
+      'name' | 'hour' | 'minute' | 'timezone' | 'count' | 'model' | 'enabled'
+    > & { label?: string },
+    id?: number,
+  ): Promise<ImproveSchedule> {
+    this.requireModel(input.model);
+
+    if (!isValidTimeZone(input.timezone)) {
+      throw new BadRequestException(
+        `Неизвестный часовой пояс: ${input.timezone}`,
+      );
+    }
+
+    const schedule = id
+      ? await this.schedules.findOne({ where: { id } })
+      : this.schedules.create({ userId });
+
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    Object.assign(schedule, { ...input, label: input.label || PR_LABEL });
+
+    return this.schedules.save(schedule);
+  }
+
+  async deleteSchedule(id: number): Promise<void> {
+    await this.schedules.delete(id);
+  }
+
+  async runScheduleNow(
+    id: number,
+  ): Promise<{ started: number[]; skipped: string[] }> {
+    const schedule = await this.schedules.findOne({ where: { id } });
+
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    return this.fire(schedule);
+  }
+
+  @Interval(SCHEDULE_TICK_MS)
+  async tickSchedules(now = new Date()): Promise<void> {
+    if (this.ticking || !this.github.isReady()) return;
+
+    this.ticking = true;
+
+    try {
+      for (const schedule of await this.schedules.find({
+        where: { enabled: true },
+      })) {
+        if (!isDue(schedule, now)) continue;
+
+        // Claim today's slot first (compare-and-set), so two ticks — or two
+        // bridge instances — never fire the same schedule twice.
+        const claim = await this.schedules
+          .createQueryBuilder()
+          .update()
+          .set({ lastRunOn: localDate(now, schedule.timezone), lastRunAt: now })
+          .where(
+            'id = :id AND ("lastRunOn" IS NULL OR "lastRunOn" <> :today)',
+            {
+              id: schedule.id,
+              today: localDate(now, schedule.timezone),
+            },
+          )
+          .execute();
+
+        if (claim.affected !== 1) continue;
+
+        await this.fire(schedule).catch((error) =>
+          this.logger.warn(`Schedule ${schedule.id} failed: ${message(error)}`),
+        );
+      }
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  // Starts up to `count` of the oldest eligible issues. An issue already being worked
+  // on or with an open PR is skipped (startRun refuses it), as is one that fails to
+  // start — the rest still run.
+  async fire(
+    schedule: ImproveSchedule,
+  ): Promise<{ started: number[]; skipped: string[] }> {
+    const started: number[] = [];
+    const skipped: string[] = [];
+
+    this.requireConfigured();
+
+    for (const issue of await this.github.listOpenIssues(schedule.label, 100)) {
+      if (started.length >= schedule.count) break;
+
+      try {
+        await this.startRun(
+          schedule.userId,
+          issue.number,
+          schedule.model,
+          'schedule',
+          schedule.id,
+        );
+        started.push(issue.number);
+      } catch (error) {
+        skipped.push(`#${issue.number}: ${message(error)}`);
+      }
+    }
+
+    const summary = `${started.length} запущено${skipped.length ? `, ${skipped.length} пропущено` : ''}`;
+
+    await this.schedules.update(schedule.id, {
+      lastRunAt: new Date(),
+      lastResult: summary,
+    });
+    await this.notifier.send(
+      `🌙 Расписание «${schedule.name}»: ${summary}${started.length ? ` (${started.map((n) => `#${n}`).join(', ')})` : ''}`,
+    );
+
+    return { started, skipped };
+  }
+
+  // ----------------------------------------- reports pushes → worker at once
+
+  async getSettings(userId: number): Promise<ImproveSettings | null> {
+    return this.settings.findOne({ where: { userId } });
+  }
+
+  async saveSettings(
+    userId: number,
+    autoStartModel: string | null,
+  ): Promise<ImproveSettings> {
+    if (autoStartModel) this.requireModel(autoStartModel);
+
+    const existing = await this.getSettings(userId);
+    const enabling = autoStartModel && !existing?.autoStartModel;
+
+    return this.settings.save({
+      userId,
+      autoStartModel,
+      autoStartSince: autoStartModel
+        ? enabling
+          ? new Date()
+          : (existing?.autoStartSince ?? new Date())
+        : null,
+    });
+  }
+
+  // A parcel pushed from Subscription (channel "issue", outbound, unencrypted) that no
+  // job has picked up yet, for an account that switched auto-start on, starts a job.
+  @Interval(ADVANCE_EVERY_MS)
+  async autoStartParcels(): Promise<void> {
+    if (this.autoStarting) return;
+
+    this.autoStarting = true;
+
+    try {
+      const rows = (await this.dataSource.query(
+        `SELECT f.id AS "fileId", f."userId", s."autoStartModel" AS model
+         FROM stored_files f
+         JOIN improve_settings s ON s."userId" = f."userId"
+         WHERE s."autoStartModel" IS NOT NULL
+           AND f."createdAt" >= s."autoStartSince"
+           AND f."createdAt" < now() - ($1 || ' seconds')::interval
+           AND f.channel = 'issue' AND f.direction = 'outbound'
+           AND f."originalName" NOT LIKE '%.enc'
+           AND f."taskKey" NOT LIKE 'improve:%'
+           AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."sourceFileId" = f.id)`,
+        [String(AUTOSTART_MIN_AGE_SECONDS)],
+      )) as Array<{ fileId: number; userId: number; model: string }>;
+
+      for (const row of rows) {
+        await this.workers
+          .create(row.userId, {
+            sourceFileId: row.fileId,
+            model: row.model as JobModel,
+          })
+          .then((job) =>
+            this.log(
+              'info',
+              'improve.auto_started',
+              `Parcel ${row.fileId} → job ${job.id} (${row.model})`,
+              { fileId: row.fileId, jobId: job.id },
+            ),
+          )
+          .catch((error) =>
+            this.logger.warn(
+              `Auto-start of parcel ${row.fileId} failed: ${message(error)}`,
+            ),
+          );
+      }
+    } finally {
+      this.autoStarting = false;
+    }
+  }
+
+  // ---------------------------------------------------------------- helpers
+
+  private requireConfigured(): void {
+    if (!this.github.isReady()) {
+      throw new BadRequestException(
+        'GitHub не настроен: задайте GITHUB_REPO и LOOP_GITHUB_TOKEN на bridge',
+      );
+    }
+  }
+
+  private requireModel(model: string): void {
+    if (!IMPROVE_MODELS.includes(model)) {
+      throw new BadRequestException(`Неизвестная модель: ${model}`);
+    }
+  }
+
+  private log(
+    level: 'info' | 'warn' | 'error',
+    event: string,
+    text: string,
+    meta: Record<string, unknown>,
+  ): void {
+    void this.appLogs.record({
+      level,
+      source: 'loop',
+      event,
+      message: text,
+      meta,
+    });
+  }
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// "YYYY-MM-DD" of `now` in the schedule's own time zone.
+export function localDate(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+// Due once today's HH:MM has passed in its time zone and it has not fired today —
+// ">=" rather than "==" so a bridge that was down at 02:00 still runs it when it is
+// back, once.
+export function isDue(
+  schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'lastRunOn'>,
+  now: Date,
+): boolean {
+  return (
+    localDate(now, schedule.timezone) !== schedule.lastRunOn &&
+    localMinutes(now, schedule.timezone) >= schedule.hour * 60 + schedule.minute
+  );
+}

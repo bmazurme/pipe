@@ -25,5 +25,6 @@ import { WorkerStatusController } from './worker-status.controller';
     WorkerStatusController,
   ],
   providers: [WorkerService, ClaudeCredentialsService, WorkerHeartbeatService],
+  exports: [WorkerService],
 })
 export class WorkerModule {}

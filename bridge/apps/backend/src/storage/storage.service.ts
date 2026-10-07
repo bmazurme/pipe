@@ -1,5 +1,6 @@
-import { join } from 'path';
-import { unlink } from 'fs/promises';
+import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
+import { unlink, writeFile } from 'fs/promises';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -45,6 +46,30 @@ export class StorageService {
       }
       throw error;
     }
+  }
+
+  // For files bridge itself produces (no multipart upload involved): writes the
+  // bytes under a fresh name and records them like any other upload.
+  async createFromBuffer(
+    userId: number,
+    buffer: Buffer,
+    originalName: string,
+    meta: UploadFileMetaDto = {},
+  ): Promise<StoredFile> {
+    const storedName = `${randomUUID()}${extname(originalName)}`;
+
+    await writeFile(join(UPLOAD_DIR, storedName), buffer);
+
+    return this.create(
+      userId,
+      {
+        originalname: originalName,
+        filename: storedName,
+        mimetype: 'application/zip',
+        size: buffer.length,
+      } as Express.Multer.File,
+      meta,
+    );
   }
 
   async findAllByUser(
