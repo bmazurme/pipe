@@ -1,8 +1,12 @@
 name: CI
 
+# A branch with an open PR is built by the pull_request run; a push trigger on
+# every branch ran the same suite a second time for each commit (12 jobs
+# instead of 6, and a long queue when several PRs are open). Pushes only matter
+# on main, where there is no PR.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -38,14 +42,14 @@ jobs:
         working-directory: packages/protocol
         run: node --test 'dist/**/*.test.js'
 
-      # IMPROVEMENTS_TECH.md 4.4 — a real gate (not informational), but
-      # scoped to this one package for now: Jest's/Vitest's coverage
-      # reporters are a different format from Node's own
-      # --experimental-test-coverage table this script parses, so the other
-      # 6 packages aren't covered by this yet.
+      # IMPROVEMENTS_TECH.md 4.4 — a real gate (not informational) for the
+      # packages on Node's own test runner (protocol, sync, worker, harness).
+      # Jest's/Vitest's reporters are a different format from the
+      # --experimental-test-coverage table the shared script parses, so
+      # bridge and reports aren't covered by it.
       - name: Coverage regression check
         working-directory: packages/protocol
-        run: node scripts/check-coverage.mjs
+        run: node ../../scripts/check-coverage.mjs .
 
   harness:
     name: harness (build, tests)
@@ -73,9 +77,11 @@ jobs:
         working-directory: harness
         run: npm run build
 
-      - name: Unit tests
+      # Runs the suite under coverage and fails on a drop below
+      # harness/coverage-baseline.json (IMPROVEMENTS_TECH.md 4.4).
+      - name: Unit tests + coverage regression check
         working-directory: harness
-        run: node --test 'dist/**/*.test.js'
+        run: node ../scripts/check-coverage.mjs .
 
   sync:
     name: sync (build, tests)
@@ -99,7 +105,10 @@ jobs:
         run: npm run lint
       - run: npm run build
         working-directory: sync
-      - run: node --test --test-concurrency=1 'dist/**/*.test.js'
+      # Runs the suite under coverage and fails on a drop below
+      # sync/coverage-baseline.json (IMPROVEMENTS_TECH.md 4.4).
+      - name: Unit tests + coverage regression check
+        run: node ../scripts/check-coverage.mjs . -- --test-concurrency=1
         working-directory: sync
 
   worker:
@@ -124,7 +133,10 @@ jobs:
         run: npm run lint
       - run: npm run build
         working-directory: worker
-      - run: node --test 'dist/**/*.test.js'
+      # Runs the suite under coverage and fails on a drop below
+      # worker/coverage-baseline.json (IMPROVEMENTS_TECH.md 4.4).
+      - name: Unit tests + coverage regression check
+        run: node ../scripts/check-coverage.mjs .
         working-directory: worker
 
   reports:
