@@ -130,13 +130,9 @@ export class StorageController {
   ): Promise<void> {
     const file = await this.storageService.findOwned(id, currentUser.id);
 
-    res.download(
-      this.storageService.path(file),
-      file.originalName,
-      (err) => {
-        if (err) this.respondDownloadError(res, file, err);
-      },
-    );
+    res.download(this.storageService.path(file), file.originalName, (err) => {
+      if (err) this.respondDownloadError(res, file, err);
+    });
   }
 
   private respondDownloadError(
