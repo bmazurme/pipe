@@ -9,11 +9,13 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "clean": "node -e \"for (const p of ['dist','tsconfig.tsbuildinfo']) require('fs').rmSync(p,{recursive:true,force:true})\"",
     "dev": "tsc -b -w",
     "start": "node dist/cli.js",
-    "test": "tsc -b && node --test --test-concurrency=1 'dist/**/*.test.js'",
-    "test:coverage": "tsc -b && node --test --experimental-test-coverage --test-concurrency=1 'dist/**/*.test.js'",
-    "lint": "eslint ."
+    "test": "npm run clean && tsc -b && node --test --test-concurrency=1 'dist/**/*.test.js'",
+    "test:coverage": "npm run clean && tsc -b && node --test --experimental-test-coverage --test-concurrency=1 'dist/**/*.test.js'",
+    "lint": "eslint .",
+    "coverage:check": "npm run clean && tsc -b && node ../scripts/check-coverage.mjs . -- --test-concurrency=1"
   },
   "dependencies": {
     "@pipe/protocol": "*",
