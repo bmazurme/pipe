@@ -103,8 +103,6 @@ Repo → Settings → Secrets and variables → Actions.
 | `COOKIE_DOMAIN` | домен для refresh-токен куки. Задавайте **конкретный хост** API (`api.bridge.ntlstl.dev`), а не родительский домен: соседние приложения на `*.ntlstl.dev` (notes, tools, rain) — порты этого же кода и ставят свою куку с `COOKIE_DOMAIN=.ntlstl.dev`, которая долетает и сюда. Кука bridge называется `bridgeRefreshToken` именно поэтому — совпадение имён приводило к 401 «invalid signature», лечившемуся только ручной очисткой кук |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
-| `TIME_EXPORT_API_KEY` | опционально: общий ключ для интеграции с [ntlstl.time](https://github.com/bmazurme/ntlstl.time) — включает `GET /api/v1/time/export/day-offs` (bridge → ntlstl.time) и `POST /api/v1/time/import/reports` (ntlstl.time → bridge); значение сверяется с заголовком `X-Api-Key`; пусто = оба эндпоинта выключены |
-| `TIME_EXPORT_USER_ID` | id пользователя, которым владеют оба эндпоинта выше |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |

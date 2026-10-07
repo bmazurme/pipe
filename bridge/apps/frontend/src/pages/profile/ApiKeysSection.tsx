@@ -17,6 +17,7 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import {
+  API_URL,
   ApiKey,
   useCreateApiKeyMutation,
   useListApiKeysQuery,
@@ -27,6 +28,7 @@ import { apiKeysSelector } from '../../store/slices';
 import styles from '../ProfilePage.module.css';
 
 const SKELETON_ROWS = [0, 1, 2];
+const USAGE_EXAMPLE = `curl -H "X-Api-Key: brk_…" ${API_URL}/api/v1/worker/status`;
 
 export function ApiKeysSection() {
   const { isLoading, isError } = useListApiKeysQuery();
@@ -98,9 +100,23 @@ export function ApiKeysSection() {
         />
 
         <Text color="secondary" variant="caption-2">
-          Для доступа без браузера — sync-cli, серверных интеграций, агентов.
-          Ключ действует до отзыва.
+          Единственный способ подключить интеграцию — sync-cli, reports, worker,
+          ntlstl.time, свои скрипты. Ключ действует до отзыва; в запросе его
+          передают заголовком <code>X-Api-Key</code>.
         </Text>
+
+        <div className={styles.endpointRow}>
+          <Text variant="code-inline-2" ellipsis title={USAGE_EXAMPLE}>
+            {USAGE_EXAMPLE}
+          </Text>
+          <ClipboardButton
+            text={USAGE_EXAMPLE}
+            size="xs"
+            view="flat-secondary"
+            tooltipInitialText="Скопировать пример"
+            tooltipSuccessText="Скопировано"
+          />
+        </div>
 
         {isLoading && (
           <ul className={styles.deviceList}>

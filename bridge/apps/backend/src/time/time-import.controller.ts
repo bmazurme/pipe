@@ -1,45 +1,27 @@
-import {
-  Body,
-  Controller,
-  InternalServerErrorException,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ImportReportEntriesDto } from './dto/import-report-entries.dto';
 import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
-import { ApiKeyGuard } from './guards/api-key.guard';
 import { TimeService } from './time.service';
 
-// Mirrors TimeExportController: same API-key guard and TIME_EXPORT_USER_ID
-// scoping, just the opposite direction — an external caller (e.g.
-// ntlstl.report) pushes a month's report entries in as JSON instead of a
-// human uploading an xlsx file through TimeController.
+// Mirrors TimeExportController: same personal-API-key auth and per-owner scoping,
+// just the opposite direction — an external caller (e.g. ntlstl.report) pushes a
+// month's report entries in as JSON instead of a human uploading an xlsx file
+// through TimeController.
 @Controller('api/v1/time/import')
-@UseGuards(ApiKeyGuard)
+@UseGuards(JwtOrApiKeyGuard)
 export class TimeImportController {
-  constructor(
-    private readonly timeService: TimeService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly timeService: TimeService) {}
 
   @Post('reports')
-  async importReports(
+  importReports(
     @Body() dto: ImportReportEntriesDto,
+    @CurrentUser() currentUser: { id: number },
   ): Promise<ImportTimeReportResponseDto> {
-    const userId = Number(
-      this.configService.get<string>('TIME_EXPORT_USER_ID'),
-    );
-
-    if (!Number.isInteger(userId)) {
-      throw new InternalServerErrorException(
-        'TIME_EXPORT_USER_ID is not configured',
-      );
-    }
-
     return this.timeService.importReportEntries(
-      userId,
+      currentUser.id,
       dto.year,
       dto.month,
       dto.entries,

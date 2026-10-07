@@ -22,7 +22,7 @@ so a machine caller no longer has to impersonate a human's browser session.
   no refresh dance needed at all.
 - **reports**: new Settings field "Bridge storage API key"
   (`bridgeStorageApiKey`, distinct from the pre-existing `bridgeApiKey`,
-  which is the unrelated `TIME_EXPORT_API_KEY` shared secret) — preferred by
+  which used to be a separate shared secret and is now just another personal API key) — preferred by
   [subscription/bridge-client.ts](../reports/packages/server/src/subscription/bridge-client.ts)
   over replaying `bridgeRefreshToken` when set.
 - **worker**: `BRIDGE_API_KEY` env var, consumed by

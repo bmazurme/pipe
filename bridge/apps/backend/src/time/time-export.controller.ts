@@ -1,44 +1,34 @@
 import {
   Controller,
   Get,
-  InternalServerErrorException,
-  Query,
   ParseIntPipe,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ExportDayOffsResponseDto } from './dto/export-day-offs-response.dto';
-import { ApiKeyGuard } from './guards/api-key.guard';
 import { TimeService } from './time.service';
 
-// Separate from TimeController (JwtGuard, browser sessions) on purpose: this
-// is called by another application's server (ntlstl.time), not a logged-in
-// user, so it needs its own auth model (a static API key) rather than a
-// method-level guard override that's easy to get wrong on the wrong route.
+// Separate from TimeController (browser sessions only) on purpose: this is called
+// by another application's server (ntlstl.time). It authenticates with a personal
+// API key (X-Api-Key: brk_…, created on the profile page) like every other
+// machine caller, and serves that key owner's own days off.
 @Controller('api/v1/time/export')
-@UseGuards(ApiKeyGuard)
+@UseGuards(JwtOrApiKeyGuard)
 export class TimeExportController {
-  constructor(
-    private readonly timeService: TimeService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly timeService: TimeService) {}
 
   @Get('day-offs')
   async exportDayOffs(
     @Query('year', ParseIntPipe) year: number,
+    @CurrentUser() currentUser: { id: number },
   ): Promise<ExportDayOffsResponseDto> {
-    const userId = Number(
-      this.configService.get<string>('TIME_EXPORT_USER_ID'),
+    const entries = await this.timeService.findAllByUserAndYear(
+      currentUser.id,
+      year,
     );
-
-    if (!Number.isInteger(userId)) {
-      throw new InternalServerErrorException(
-        'TIME_EXPORT_USER_ID is not configured',
-      );
-    }
-
-    const entries = await this.timeService.findAllByUserAndYear(userId, year);
 
     return ExportDayOffsResponseDto.fromEntities(year, entries);
   }

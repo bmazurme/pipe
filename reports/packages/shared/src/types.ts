@@ -42,9 +42,10 @@ export type SettingsType = {
   company: string;
   bridgeApiUrl: string;
   bridgeApiKey: string;
-  // Bridge Storage personal API key (Profile page → API keys) — distinct
-  // from bridgeApiKey above, which is the unrelated shared secret for
-  // bridge's /api/v1/time/* endpoints. The only auth path bridge Storage
+  // Bridge Storage personal API key (Profile page → API keys). bridgeApiKey
+  // above is also a personal API key now (bridge's /api/v1/time/* no longer has
+  // a separate shared secret), kept as its own field for the time endpoints'
+  // URL. The only auth path bridge Storage
   // integration supports — no impersonated browser session/refresh-token
   // replay fallback.
   bridgeStorageApiKey: string;

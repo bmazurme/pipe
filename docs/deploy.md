@@ -31,8 +31,8 @@ secrets — see `bridge/README.md` for the full table): `POSTGRES_HOST/PORT/USER
 exact backend host, not a shared parent domain — the cookie is named
 `bridgeRefreshToken` specifically because a shared `COOKIE_DOMAIN` with
 sibling apps on the same parent domain caused a name collision before),
-`EMAILS` (optional allowlist), `CORS_ORIGINS`, `TIME_EXPORT_API_KEY`/`TIME_EXPORT_USER_ID`
-(optional ntlstl.time integration), `CREDENTIALS_ENC_KEY` (base64, 32 raw
+`EMAILS` (optional allowlist), `CORS_ORIGINS`,
+`CREDENTIALS_ENC_KEY` (base64, 32 raw
 bytes — AES-256-GCM key encrypting `ClaudeCredential.token`,
 `VpnConnection.panelApiToken` and `Secret.value` at rest, see
 `src/crypto/encrypted-column.transformer.ts`; required, no dev fallback,
@@ -77,8 +77,7 @@ rebuildable from the panel via the VPN page rather than hand-maintained).
 **reports** (`SettingsType`, stored in the gitignored
 `reports/packages/server/src/settings/settings.json`, edited from the
 client's Settings page): `gitlabUrl`, `privateToken` (GitLab PAT),
-`bridgeApiUrl`, `bridgeApiKey` (the unrelated `TIME_EXPORT_API_KEY` shared
-secret), `bridgeStorageApiKey` (personal bridge API key, preferred — see
+`bridgeApiUrl`, `bridgeApiKey` (a personal bridge API key for the `time` endpoints), `bridgeStorageApiKey` (personal bridge API key, preferred — see
 [auth.md](auth.md)), `bridgeRefreshToken` (fallback: pasted from a
 bridge browser session cookie).
 
