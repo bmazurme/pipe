@@ -46,16 +46,17 @@ export function runClaude(
     const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
 
     let output = '';
-    child.stdout?.on('data', (chunk: Buffer) => {
+    const collect = (chunk: Buffer) => {
       const text = chunk.toString('utf-8');
       output += text;
       // Keep only the tail — a runaway CLI must not grow this without bound.
       if (output.length > MAX_OUTPUT_CHARS) output = output.slice(-MAX_OUTPUT_CHARS);
       onOutput(text);
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      onOutput(chunk.toString('utf-8'));
-    });
+    };
+    child.stdout?.on('data', collect);
+    // stderr carries the real failure cause (auth, rate limit, bad model), so
+    // it goes into the result's tail too, not just the streamed log.
+    child.stderr?.on('data', collect);
 
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
