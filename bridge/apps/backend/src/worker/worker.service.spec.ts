@@ -351,7 +351,8 @@ describe('WorkerService', () => {
       repository.save!.mockImplementation((j) => Promise.resolve(j));
 
       const result = await service.updateStatus(1, 7, {
-        status: to as JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed,
+        status: to as
+          JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed,
       });
 
       expect(result.status).toBe(to);

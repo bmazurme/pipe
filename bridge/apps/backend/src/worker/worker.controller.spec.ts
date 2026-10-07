@@ -30,10 +30,7 @@ describe('WorkerController', () => {
     it('records a heartbeat for the caller and the reported worker name', async () => {
       await controller.heartbeat({ workerName: 'worker-a' }, { id: 7 });
 
-      expect(workerService.recordHeartbeat).toHaveBeenCalledWith(
-        7,
-        'worker-a',
-      );
+      expect(workerService.recordHeartbeat).toHaveBeenCalledWith(7, 'worker-a');
     });
   });
 });
