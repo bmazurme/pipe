@@ -46,6 +46,18 @@ beforeEach(() => {
         return jsonResponse({ quietHours: '23:00-08:00', timezone: 'Europe/Moscow', isCustom: false, appliesToChat: true, isQuietNow: false });
       }
 
+      if (request.url.includes('logs/summary')) {
+        return jsonResponse({
+          days: 7,
+          total: 0,
+          byLevel: {},
+          bySource: {},
+          jobs: { succeeded: 0, failed: 0, successRate: null, avgDurationMs: null },
+          topErrors: [],
+          slowestRoutes: [],
+        });
+      }
+
       return jsonResponse([]);
     }),
   );
