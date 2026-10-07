@@ -33,12 +33,14 @@ import {
   handleRemoveCommentTemplate,
   handleSetEncryptionSettings,
   handleGenerateEncryptionKeyPair,
+  handleSetAutoStartWorkerModel,
   handleSetLeakScanStrict,
 } from './subscription/config-handler';
 import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
 import { setupProxy } from './utils/setup-proxy';
+import { codeStatus } from './utils/stale-code';
 
 setupProxy();
 
@@ -57,6 +59,17 @@ const isProductionMode = existsSync(join(clientDistDir, 'index.html'));
 
 app.use(cors());
 app.use(express.json());
+
+// Lets the UI warn when the running process is older than the code on disk (see
+// utils/stale-code.ts). Plain { type, data } like every other endpoint here.
+const codeDirectories = [
+  fileURLToPath(new URL('..', import.meta.url)),
+  fileURLToPath(new URL('../../shared/dist', import.meta.url)),
+  fileURLToPath(new URL('../../../../packages/protocol/dist', import.meta.url)),
+];
+app.get('/api/version', (_req, res) => {
+  res.json({ type: 'message', data: codeStatus(codeDirectories) });
+});
 
 app.get('/api/counts/:id', handleCounts);
 app.post('/api/counts/:id/off-days', handleAddOffDay);
@@ -93,6 +106,7 @@ app.delete('/api/subscription/config/comment-templates/:id', handleRemoveComment
 app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
 app.put('/api/subscription/config/leak-scan-strict', handleSetLeakScanStrict);
+app.put('/api/subscription/config/auto-start-worker', handleSetAutoStartWorkerModel);
 app.post('/api/subscription/analysis', handleStartAnalysis);
 app.get('/api/subscription/analysis/modules/:projectId', handleListAnalysisModules);
 app.get('/api/subscription/analysis/:projectId/:iid/backlog', handleGetBacklog);

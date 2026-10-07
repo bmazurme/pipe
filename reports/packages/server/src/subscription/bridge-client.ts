@@ -81,6 +81,19 @@ export async function uploadParcel(buffer: Buffer, filename: string, meta: Store
   return response.json() as Promise<StoredFile>;
 }
 
+// Starts a Worker job on bridge for an already-uploaded (unencrypted) parcel —
+// the same call the Worker page's "Запустить" makes, so a pushed task needs no
+// manual step to reach the worker.
+export async function createWorkerJob(sourceFileId: number, model: string): Promise<{ id: number; status: string }> {
+  const response = await authorizedFetch('/api/v1/worker/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceFileId, model }),
+  });
+
+  return response.json() as Promise<{ id: number; status: string }>;
+}
+
 // filter mirrors bridge's own ListFilesQueryDto (channel/taskKey/direction)
 // — all optional, an empty filter lists everything, same as before this
 // existed.

@@ -13,6 +13,7 @@ import {
   removeCommentTemplate,
   setEncryptionSettings,
   generateAndSaveKeyPair,
+  setAutoStartWorkerModel,
   setLeakScanStrict,
 } from './config-props';
 import { getRepo } from './github-client';
@@ -117,4 +118,21 @@ export function handleSetLeakScanStrict(req: Request<Record<string, string>>, re
   const { leakScanStrict } = req.body as { leakScanStrict: boolean };
 
   withSync(res, 'Set leak scan strict mode', () => setLeakScanStrict(Boolean(leakScanStrict)));
+}
+
+export const WORKER_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'] as const;
+
+// `model: null` (or an empty string) switches the automatic start off.
+export function handleSetAutoStartWorkerModel(req: Request<Record<string, string>>, res: Response) {
+  const { model } = req.body as { model?: string | null };
+
+  withSync(res, 'Set auto-start worker model', () => {
+    if (!model) return setAutoStartWorkerModel(undefined);
+
+    if (!(WORKER_MODELS as readonly string[]).includes(model)) {
+      throw new Error(`Неизвестная модель worker: ${model}`);
+    }
+
+    return setAutoStartWorkerModel(model as (typeof WORKER_MODELS)[number]);
+  });
 }
