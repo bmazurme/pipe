@@ -11,6 +11,7 @@ import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
+import { buildExitFailureMessage } from './failureMessage.js';
 import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
@@ -113,7 +114,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
       : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl);
 
     if (result.exitCode !== 0) {
-      throw new Error(`Model run exited with code ${result.exitCode}`);
+      throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
 
     // Re-reads every file currently on disk (covers edits AND new files the
