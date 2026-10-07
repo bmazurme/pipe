@@ -96,6 +96,13 @@ export class WorkerService {
     await this.jobRepository.delete(job.id);
   }
 
+  // Claim-less liveness ping — a worker busy running one long job never
+  // reaches claim() again, so without this it would look down after
+  // STALE_AFTER_MS (see WorkerHeartbeatService).
+  async recordHeartbeat(userId: number, workerName: string): Promise<void> {
+    await this.heartbeatService.record(userId, workerName);
+  }
+
   // Atomically takes the oldest queued job for this account — the subquery's
   // FOR UPDATE SKIP LOCKED is what makes this safe against two worker
   // processes polling the same account at once (each gets a different row,

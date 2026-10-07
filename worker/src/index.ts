@@ -31,6 +31,10 @@ function sleep(ms: number): Promise<void> {
 // into one append every LOG_FLUSH_INTERVAL_MS instead.
 const LOG_FLUSH_INTERVAL_MS = 1500;
 
+// Bridge treats a worker as down after 30s without a heartbeat, and the main
+// loop doesn't poll (so doesn't claim) while a job runs — ping well inside that.
+export const HEARTBEAT_INTERVAL_MS = 10_000;
+
 const EXCLUDED_RESULT_DIRS = new Set(['.claude', 'node_modules']);
 
 function isExcludedResultPath(relPath: string): boolean {
@@ -85,6 +89,13 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
   };
 
   const flushInterval = setInterval(flushLog, LOG_FLUSH_INTERVAL_MS);
+
+  // Best-effort, like log forwarding: a missed ping must never fail the job.
+  const heartbeatInterval = setInterval(() => {
+    void (async () => client.heartbeat(config.workerName))().catch((error) => {
+      jlog.warn({ err: error }, 'failed to send heartbeat to bridge');
+    });
+  }, HEARTBEAT_INTERVAL_MS);
 
   try {
     mkdirSync(config.workDir, { recursive: true });
@@ -155,6 +166,7 @@ export async function processJob(client: WorkerBridgeClient, job: RemoteJob, con
     }
   } finally {
     clearInterval(flushInterval);
+    clearInterval(heartbeatInterval);
     flushLog();
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });

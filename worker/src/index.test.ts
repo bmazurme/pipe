@@ -160,6 +160,77 @@ describe('processJob result parcel', () => {
   });
 });
 
+describe('processJob heartbeat', () => {
+  function heartbeatClient(heartbeat: (name: string) => Promise<void>, downloadParcel: () => Promise<Buffer>) {
+    return {
+      updateStatus: async () => {},
+      appendLog: async () => {},
+      uploadResult: async () => {},
+      downloadParcel,
+      heartbeat,
+    };
+  }
+
+  it('pings bridge every 10s while a long job runs, and stops once it finishes', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-hb-'));
+    const names: string[] = [];
+    let release!: (buffer: Buffer) => void;
+    const download = new Promise<Buffer>((resolve) => {
+      release = resolve;
+    });
+    stubOpenAiCompletion('done');
+
+    const client = heartbeatClient(async (name) => {
+      names.push(name);
+    }, () => download);
+    const job: RemoteJob = { id: 8, sourceFileId: 16, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const running = processJob(client as never, job, fakeConfig(workDir));
+
+    // Let processJob reach the (blocked) parcel download.
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(35_000);
+    assert.deepEqual(names, ['test-worker', 'test-worker', 'test-worker']);
+
+    release(fakeParcel());
+    await running;
+
+    t.mock.timers.tick(60_000);
+    assert.equal(names.length, 3, 'interval should be cleared after the job ends');
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('keeps the job going when a heartbeat fails, and clears the interval after a failed job', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-hbfail-'));
+    let pings = 0;
+    let fail!: (error: Error) => void;
+    const download = new Promise<Buffer>((_, reject) => {
+      fail = reject;
+    });
+
+    const client = heartbeatClient(async () => {
+      pings += 1;
+      throw new Error('bridge unreachable');
+    }, () => download);
+    const job: RemoteJob = { id: 9, sourceFileId: 17, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const running = processJob(client as never, job, fakeConfig(workDir));
+
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(10_000);
+    assert.equal(pings, 1);
+
+    fail(new Error('download broke'));
+    await running;
+
+    t.mock.timers.tick(60_000);
+    assert.equal(pings, 1);
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
 describe('processJob', () => {
   it('runs a gpt job end to end: downloads the parcel, runs the model, uploads a result, marks it succeeded', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-'));

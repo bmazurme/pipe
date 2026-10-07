@@ -27,6 +27,7 @@ import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
 import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
@@ -101,6 +102,17 @@ export class WorkerController {
     res
       .status(HttpStatus.OK)
       .json(ClaimedJobResponseDto.fromEntityWithToken(job, claudeToken));
+  }
+
+  // Sent on an interval by a worker that's busy with a job (and so isn't
+  // polling claim) to keep showing as up. Name is required here, unlike claim.
+  @Post('heartbeat')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async heartbeat(
+    @Body() dto: HeartbeatDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
   }
 
   @Get(':id')
