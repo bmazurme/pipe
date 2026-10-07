@@ -9,6 +9,7 @@ import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
+import { createChatToolset } from './chatTools.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
@@ -173,7 +174,7 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
 
     const reply = provider.tool === 'claude'
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl)
-      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl);
+      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey, config.chatTools));
 
     await client.complete(turn.messageId, reply);
     clog.info('succeeded');

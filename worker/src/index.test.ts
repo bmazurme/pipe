@@ -50,6 +50,7 @@ function fakeConfig(workDir: string): WorkerConfig {
     workDir,
     workerName: 'test-worker',
     jobTimeoutSec: 1800,
+    chatTools: 'off',
   };
 }
 
