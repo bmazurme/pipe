@@ -6,8 +6,9 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
@@ -22,6 +23,19 @@ import { Job, JobStatus } from './entities/job.entity';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
+
+// A worker handles one job at a time and only asks for the next one when it is
+// idle. So when it claims, any job still marked claimed/running under its name is
+// a run that no longer exists (the process was restarted or killed mid-job) — but
+// only once it has been silent this long, so a sibling replica that happens to
+// share the name and is genuinely working (it logs and heartbeats) is left alone.
+const ORPHAN_SILENCE_MS = 10 * 60_000;
+// Backstop for a worker that never comes back: nothing legitimate stays this
+// silent (the worker's own job deadline is 30 minutes by default).
+const LOST_JOB_SILENCE_MS = 3 * 60 * 60_000;
+const SWEEP_EVERY_MS = 5 * 60_000;
+const LOST_MESSAGE =
+  'Worker was restarted or lost while this job was running — the run did not finish';
 
 @Injectable()
 export class WorkerService {
@@ -100,12 +114,50 @@ export class WorkerService {
   // FOR UPDATE SKIP LOCKED is what makes this safe against two worker
   // processes polling the same account at once (each gets a different row,
   // or nothing, never the same one).
+  // Marks held-but-dead jobs failed so they stop showing as "running" forever.
+  private async failLostJobs(
+    where: { userId?: number; workerName?: string },
+    silenceMs: number,
+  ): Promise<number> {
+    const stale = await this.jobRepository.find({
+      where: {
+        ...where,
+        status: In([JobStatus.Claimed, JobStatus.Running]),
+        updatedAt: LessThan(new Date(Date.now() - silenceMs)),
+      },
+    });
+
+    for (const job of stale) {
+      job.status = JobStatus.Failed;
+      job.errorMessage = LOST_MESSAGE;
+      job.finishedAt = new Date();
+      job.logs += `\n[${LOST_MESSAGE}]\n`;
+      this.logJobOutcome(await this.jobRepository.save(job));
+    }
+
+    return stale.length;
+  }
+
+  // Backstop for jobs whose worker never returned.
+  @Interval(SWEEP_EVERY_MS)
+  async sweepLostJobs(): Promise<void> {
+    try {
+      await this.failLostJobs({}, LOST_JOB_SILENCE_MS);
+    } catch (error) {
+      this.logger.warn(
+        `Lost-job sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   async claim(userId: number, workerName?: string): Promise<Job | null> {
     // Recorded unconditionally — this is the actual liveness signal (see
     // WorkerHeartbeatService): a worker polling an empty queue still proves
     // it's alive here even though nothing below changes a single Job row.
     if (workerName) {
       await this.heartbeatService.record(userId, workerName);
+      // It is asking for work, so it is idle: whatever it still "holds" is lost.
+      await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
     }
 
     // node-postgres's driver (via TypeORM's Repository.query) returns
