@@ -1258,7 +1258,8 @@ export interface components {
             workerName?: string;
         };
         UpdateJobStatusDto: {
-            status: Record<string, never>;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed";
             errorMessage?: string;
         };
         AppendJobLogDto: {
