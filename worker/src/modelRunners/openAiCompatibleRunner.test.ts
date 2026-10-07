@@ -72,6 +72,53 @@ describe('runOpenAiCompatible', () => {
     }
   });
 
+  it('bounds the logged [tool] line for a large write_file while writing the full content', async () => {
+    const content = 'x'.repeat(50 * 1024);
+    let call = 0;
+    let toolMessageContent: unknown;
+
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      call++;
+      if (call === 1) {
+        return chatCompletion({
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-1',
+              function: { name: 'write_file', arguments: JSON.stringify({ path: 'big.txt', content }) },
+            },
+          ],
+        });
+      }
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      toolMessageContent = body.messages[body.messages.length - 1].content;
+      return chatCompletion({ role: 'assistant', content: 'Done.' });
+    }) as typeof fetch;
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-openai-'));
+    try {
+      let logged = '';
+      const result = await runOpenAiCompatible(
+        dir,
+        'write a big file',
+        { baseUrl: 'https://api.example.com/v1', apiKey: 'k', model: 'test-model' },
+        (chunk) => {
+          logged += chunk;
+        },
+      );
+
+      assert.equal(result.exitCode, 0);
+      assert.ok(logged.length < 1024, `expected bounded log output, got ${logged.length} chars`);
+      assert.match(logged, /\[tool\] write_file\(/);
+      assert.match(logged, /…\(\+\d+ chars\)/);
+      assert.equal(readFileSync(path.join(dir, 'big.txt'), 'utf-8'), content);
+      assert.equal(toolMessageContent, 'ok');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a write_file path that escapes the working directory', async () => {
     let sawErrorInToolResult = false;
 

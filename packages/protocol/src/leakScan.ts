@@ -88,40 +88,61 @@ function shannonEntropy(value: string): number {
   return entropy;
 }
 
-function lineAt(content: string, index: number): number {
-  let line = 1;
-  for (let i = 0; i < index && i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) line++;
+// Offsets of every newline, computed once per target; a line number is then
+// 1 + the count of newlines strictly before the index (binary search).
+function newlineOffsets(content: string): number[] {
+  const offsets: number[] = [];
+  for (let i = content.indexOf('\n'); i !== -1; i = content.indexOf('\n', i + 1)) offsets.push(i);
+  return offsets;
+}
+
+function lineAt(newlines: number[], index: number): number {
+  let lo = 0;
+  let hi = newlines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (newlines[mid] < index) lo = mid + 1;
+    else hi = mid;
   }
-  return line;
+  return lo + 1;
 }
 
 function scanOne({ source, content }: LeakScanTarget): LeakFinding[] {
   const findings: LeakFinding[] = [];
+  const newlines = newlineOffsets(content);
+  const emailSpans: Array<[number, number]> = [];
 
   for (const match of content.matchAll(EMAIL_RE)) {
-    findings.push({ source, line: lineAt(content, match.index ?? 0), kind: 'email', match: match[0] });
+    const index = match.index ?? 0;
+    emailSpans.push([index, index + match[0].length]);
+    findings.push({ source, line: lineAt(newlines, index), kind: 'email', match: match[0] });
   }
 
   for (const match of content.matchAll(IPV4_RE)) {
     if (IGNORED_IPV4.has(match[0])) continue;
-    findings.push({ source, line: lineAt(content, match.index ?? 0), kind: 'ip', match: match[0] });
+    findings.push({ source, line: lineAt(newlines, match.index ?? 0), kind: 'ip', match: match[0] });
   }
 
+  // Hostname matches arrive in index order, so a single advancing pointer
+  // into the (also ordered) email spans is enough.
+  let spanIdx = 0;
   for (const match of content.matchAll(HOSTNAME_RE)) {
+    const index = match.index ?? 0;
+    while (spanIdx < emailSpans.length && emailSpans[spanIdx][1] <= index) spanIdx++;
+    if (spanIdx < emailSpans.length && emailSpans[spanIdx][0] <= index) continue;
     const value = match[0];
     const tld = value.slice(value.lastIndexOf('.') + 1).toLowerCase();
     if (CODE_FILE_EXTENSIONS.has(tld)) continue;
     if (isKnownPublicHost(value)) continue;
     if (looksLikeCodeIdentifier(value)) continue;
-    findings.push({ source, line: lineAt(content, match.index ?? 0), kind: 'hostname', match: value });
+    findings.push({ source, line: lineAt(newlines, index), kind: 'hostname', match: value });
   }
 
   for (const match of content.matchAll(TOKEN_RE)) {
     const value = match[0];
     if (!/\d/.test(value)) continue;
     if (shannonEntropy(value) < TOKEN_ENTROPY_THRESHOLD) continue;
-    findings.push({ source, line: lineAt(content, match.index ?? 0), kind: 'token', match: value });
+    findings.push({ source, line: lineAt(newlines, match.index ?? 0), kind: 'token', match: value });
   }
 
   return findings;

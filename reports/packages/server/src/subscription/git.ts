@@ -137,6 +137,18 @@ export async function pushBranch(path: string, branch: string): Promise<void> {
 // Reads one file as it is on a branch without checking the branch out — the
 // working tree (often the developer's own, possibly on another branch) is
 // never touched. Null when the branch or the file doesn't exist.
+// Directories a person might want to scope an analysis to: up to two levels
+// deep, from the committed tree (so build output and node_modules never show).
+export async function listModules(path: string): Promise<string[]> {
+  const output = await git(path, ['ls-tree', '-r', '-d', '--name-only', 'HEAD']);
+
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((dir) => dir && dir.split('/').length <= 2 && !dir.split('/').some((part) => part.startsWith('.')))
+    .sort();
+}
+
 export async function showFile(path: string, ref: string, file: string): Promise<string | null> {
   try {
     return await git(path, ['show', `${ref}:${file}`]);

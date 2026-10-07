@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { TelegramService } from '../telegram/telegram.service';
+import { NotifyService } from '../telegram/notify.service';
 import { ClientHeartbeatService } from './client-heartbeat.service';
 import { LoopEvent } from './entities/loop-event.entity';
 import {
@@ -25,7 +25,7 @@ export class LoopService {
     private readonly runs: Repository<LoopRun>,
     @InjectRepository(LoopEvent)
     private readonly events: Repository<LoopEvent>,
-    private readonly telegram: TelegramService,
+    private readonly telegram: NotifyService,
     private readonly configService: ConfigService,
     private readonly clients: ClientHeartbeatService,
     private readonly merges: MergeService,

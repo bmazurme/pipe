@@ -31,7 +31,14 @@ describe('buildArchive / extractArchive', () => {
     assert.deepEqual(extractedFiles, files);
   });
 
-  it('throws when the manifest entry is missing', () => {
+  it('throws when the manifest entry is missing from an otherwise valid zip', () => {
+    const zip = new AdmZip();
+    zip.addFile('src/a.ts', Buffer.from('export const a = 1;', 'utf-8'));
+
+    assert.throws(() => extractArchive(zip.toBuffer(), ENTRY), /Archive is missing __test_manifest__\.json/);
+  });
+
+  it('throws on input that is not a zip at all', () => {
     assert.throws(() => extractArchive(Buffer.from('not a zip'), ENTRY));
   });
 
@@ -101,5 +108,33 @@ describe('buildArchive / extractArchive', () => {
     zip.updateFile(ENTRY, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
 
     assert.throws(() => extractArchive<TestManifest>(zip.toBuffer(), ENTRY), /schemaVersion/);
+  });
+
+  it('throws when a file entry was altered after the archive was built', () => {
+    const { buffer } = buildArchive<TestManifest>(ENTRY, files, {
+      project: 'demo',
+      createdAt: '2026-09-14T10:00:00.000Z',
+    });
+    const zip = new AdmZip(buffer);
+    zip.updateFile('src/a.ts', Buffer.from('export const a = 999;', 'utf-8'));
+
+    assert.throws(
+      () => extractArchive<TestManifest>(zip.toBuffer(), ENTRY),
+      /failed integrity check: contentHash mismatch/,
+    );
+  });
+
+  it('still extracts a manifest that has no contentHash', () => {
+    const { buffer, manifest } = buildArchive<TestManifest>(ENTRY, files, {
+      project: 'demo',
+      createdAt: '2026-09-14T10:00:00.000Z',
+    });
+    delete (manifest as Partial<TestManifest>).contentHash;
+
+    const zip = new AdmZip(buffer);
+    zip.updateFile(ENTRY, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+
+    const { files: extractedFiles } = extractArchive<TestManifest>(zip.toBuffer(), ENTRY);
+    assert.deepEqual(extractedFiles, files);
   });
 });

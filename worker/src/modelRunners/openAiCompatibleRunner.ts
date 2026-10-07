@@ -72,6 +72,12 @@ interface ChatMessage {
 
 const resolveInWorkDir = resolveInDir;
 
+// Keeps log lines bounded — write_file's arguments carry the entire file
+// content, which would otherwise be copied in full into the job's log row.
+function truncate(text: string, max = 200): string {
+  return text.length > max ? `${text.slice(0, max)}…(+${text.length - max} chars)` : text;
+}
+
 function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
   switch (name) {
     case 'list_files': {
@@ -171,7 +177,7 @@ export async function runOpenAiCompatible(
         result = `Error: ${(error as Error).message}`;
       }
 
-      onOutput(`[tool] ${call.function.name}(${call.function.arguments}) -> ${result.slice(0, 200)}\n`);
+      onOutput(`[tool] ${call.function.name}(${truncate(call.function.arguments)}) -> ${truncate(result)}\n`);
       messages.push({ role: 'tool', tool_call_id: call.id, content: result });
     }
   }

@@ -27,6 +27,14 @@ export function assertSchemaVersion(manifest: BaseManifest, entryName: string): 
     return;
   }
 
+  // Manifests come from untrusted JSON, so the declared type can't be trusted:
+  // null, strings and NaN all make the `>` comparison below false and would
+  // otherwise slip past the newer-than-understood check.
+  const version: unknown = manifest.schemaVersion;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
+    throw new Error(`${entryName} has an invalid schemaVersion (${JSON.stringify(version)})`);
+  }
+
   if (manifest.schemaVersion > PROTOCOL_SCHEMA_VERSION) {
     throw new Error(
       `${entryName} is schemaVersion ${manifest.schemaVersion}, but this build of @pipe/protocol only ` +
