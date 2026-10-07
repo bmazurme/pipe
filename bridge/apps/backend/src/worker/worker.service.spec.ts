@@ -52,6 +52,7 @@ describe('WorkerService', () => {
     heartbeatService = {
       record: jest.fn(),
     };
+    repository.find!.mockResolvedValue([]);
     appLogs = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -205,6 +206,80 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('lost jobs', () => {
+    const stale = (over: Partial<Job> = {}) =>
+      ({
+        id: 45,
+        status: JobStatus.Running,
+        model: JobModel.Sonnet,
+        workerName: 'swarm-worker',
+        logs: 'Running claude...',
+        errorMessage: null,
+        finishedAt: null,
+        startedAt: new Date(Date.now() - 40 * 60_000),
+        ...over,
+      }) as Job;
+
+    it('fails the jobs a worker still holds when it comes back asking for work', async () => {
+      const lost = stale();
+      repository.find!.mockResolvedValue([lost]);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7, 'swarm-worker');
+
+      expect(lost.status).toBe(JobStatus.Failed);
+      expect(lost.errorMessage).toMatch(/restarted or lost/);
+      expect(lost.finishedAt).toBeInstanceOf(Date);
+      expect(lost.logs).toContain('restarted or lost');
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.failed' }),
+      );
+    });
+
+    it("only looks at this worker's own silent jobs", async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7, 'swarm-worker');
+
+      const where = (
+        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
+      ).where;
+      expect(where).toMatchObject({ userId: 7, workerName: 'swarm-worker' });
+      // 10 minutes of silence, expressed as an updatedAt cutoff — a job that logged
+      // a minute ago (a live sibling replica) does not match.
+      expect(where.updatedAt).toBeDefined();
+    });
+
+    it('does nothing without a worker name', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7);
+
+      expect(repository.find).not.toHaveBeenCalled();
+    });
+
+    it('sweeps jobs silent for hours, whichever worker held them', async () => {
+      const lost = stale({ workerName: 'gone-worker' });
+      repository.find!.mockResolvedValue([lost]);
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      await service.sweepLostJobs();
+
+      const where = (
+        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
+      ).where;
+      expect(where).not.toHaveProperty('workerName');
+      expect(lost.status).toBe(JobStatus.Failed);
+    });
+
+    it('swallows a failing sweep instead of crashing the scheduler', async () => {
+      repository.find!.mockRejectedValue(new Error('db down'));
+
+      await expect(service.sweepLostJobs()).resolves.toBeUndefined();
+    });
+  });
+
   describe('claim', () => {
     // node-postgres (via TypeORM's Repository.query) returns
     // [rows, affectedCount] for an UPDATE, not a flat rows array — these
@@ -342,7 +417,8 @@ describe('WorkerService', () => {
       repository.save!.mockImplementation((j) => Promise.resolve(j));
 
       const result = await service.updateStatus(1, 7, {
-        status: to as JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed,
+        status: to as
+          JobStatus.Running | JobStatus.Succeeded | JobStatus.Failed,
       });
 
       expect(result.status).toBe(to);
