@@ -61,10 +61,18 @@ describe('runOpenAiCompatible job deadline', () => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
       })) as typeof fetch;
 
-    await assert.rejects(
-      runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, 50),
-      /gpt-test job timed out after 0\.05s/,
-    );
+    // AbortSignal.timeout's timer is unref'd, so with nothing else scheduled the
+    // event loop would drain while the mocked fetch is pending (Node 22 reports
+    // that as a cancelled test) — hold it open until the deadline fires.
+    const keepAlive = setTimeout(() => {}, 5000);
+    try {
+      await assert.rejects(
+        runOpenAiCompatible(dir, 'task', deadlineOptions, () => {}, undefined, 50),
+        /gpt-test job timed out after 0\.05s/,
+      );
+    } finally {
+      clearTimeout(keepAlive);
+    }
   });
 
   it('rejects on the next turn once the deadline has passed', async () => {
