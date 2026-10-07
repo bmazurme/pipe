@@ -277,8 +277,17 @@ export type CreateBacklogIssuesResult = {
   skipped: { title: string; reason: string }[];
 };
 
+export type AnalysisKindType = 'general' | 'uiux' | 'security' | 'tests' | 'performance' | 'docs' | 'reliability';
+
 export type StartAnalysisPayload = {
   // Tracked GitHub project (its gitlabProjectId / numeric repo id).
   projectId: string;
+  // What to look for. Absent = a general review (the original behavior).
+  kind?: AnalysisKindType;
+  // Repo-relative path to restrict the review to, e.g. `bridge/apps/frontend`.
+  // Absent or empty = the whole repository.
+  module?: string;
 };
+
+export type AnalysisModulesType = { modules: string[] };
 
