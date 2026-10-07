@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -143,6 +144,47 @@ describe('VpnService', () => {
       await expect(vpnService([]).getStatus()).rejects.toThrow(
         'No active VPN connection is configured',
       );
+    });
+  });
+
+  describe('outbound timeouts', () => {
+    function timeoutError(): Error {
+      const error = new Error('The operation was aborted due to timeout');
+      error.name = 'TimeoutError';
+      return error;
+    }
+
+    it('passes an abort signal to the panel fetch and maps a timeout to BadGatewayException', async () => {
+      const fetchMock = jest.fn(async () => {
+        throw timeoutError();
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const promise = vpnService().getStatus();
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow(
+        'VPN panel "primary" did not respond',
+      );
+      const init = (fetchMock.mock.calls[0] as unknown[])[1] as RequestInit;
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('passes an abort signal to the GitHub fetch and maps a timeout to BadGatewayException', async () => {
+      const fetchMock = jest.fn(async () => {
+        throw timeoutError();
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const promise = vpnService().setWorkerSecret(
+        WorkerSecretName.OpenAiApiKey,
+        'sk-test',
+      );
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow('GitHub API request timed out');
+      const init = (fetchMock.mock.calls[0] as unknown[])[1] as RequestInit;
+      expect(init.signal).toBeInstanceOf(AbortSignal);
     });
   });
 
