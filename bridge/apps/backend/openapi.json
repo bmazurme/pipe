@@ -1670,6 +1670,27 @@
         }
       }
     },
+    "/api/v1/worker/jobs/heartbeat": {
+      "post": {
+        "operationId": "WorkerController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}": {
       "get": {
         "operationId": "WorkerController_get",
@@ -2996,11 +3017,28 @@
           }
         }
       },
+      "HeartbeatDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "workerName"
+        ]
+      },
       "UpdateJobStatusDto": {
         "type": "object",
         "properties": {
           "status": {
-            "type": "object"
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ]
           },
           "errorMessage": {
             "type": "string"

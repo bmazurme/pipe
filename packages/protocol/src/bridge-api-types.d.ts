@@ -842,6 +842,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/{id}": {
         parameters: {
             query?: never;
@@ -1257,8 +1273,12 @@ export interface components {
         ClaimJobDto: {
             workerName?: string;
         };
+        HeartbeatDto: {
+            workerName: string;
+        };
         UpdateJobStatusDto: {
-            status: Record<string, never>;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed";
             errorMessage?: string;
         };
         AppendJobLogDto: {
@@ -2667,6 +2687,27 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WorkerController_heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatDto"];
+            };
+        };
+        responses: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -86,7 +86,14 @@ export class StorageController {
     // already went out — nothing valid to send at that point.
     res.download(this.storageService.path(file), file.originalName, (err) => {
       if (!err) {
-        void this.storageService.delete(file);
+        // Fire-and-forget: the response is already sent, but a rejected DB
+        // delete with no handler is an unhandled rejection, which on Node 22
+        // terminates the process.
+        this.storageService.delete(file).catch((deleteErr: unknown) => {
+          this.logger.warn(
+            `Failed to delete file ${file.id} (${file.storedName}) after download: ${deleteErr}`,
+          );
+        });
         return;
       }
 

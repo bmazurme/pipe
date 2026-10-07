@@ -52,6 +52,17 @@ export interface VpnStatus {
 // not absent — zero is not a valid epoch ms value for "just connected".
 const NEVER_ONLINE = 0;
 
+// Upper bound on any single outbound request (VPN panel or GitHub), so a
+// hung upstream can't hold a backend connection open indefinitely.
+const OUTBOUND_FETCH_TIMEOUT_MS = 10_000;
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  );
+}
+
 @Injectable()
 export class VpnService {
   constructor(
@@ -75,25 +86,32 @@ export class VpnService {
     init?: RequestInit,
   ): Promise<T> {
     const panelUrl = connection.panelUrl.replace(/\/$/, '');
-    const response = await fetch(`${panelUrl}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${connection.panelApiToken}`,
-        ...(init?.headers ?? {}),
-      },
-    });
+    let body: { success: boolean; msg?: string; obj: T };
+    try {
+      const response = await fetch(`${panelUrl}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${connection.panelApiToken}`,
+          ...(init?.headers ?? {}),
+        },
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
+      });
 
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `VPN panel request failed (${response.status})`,
-      );
+      if (!response.ok) {
+        throw new BadGatewayException(
+          `VPN panel request failed (${response.status})`,
+        );
+      }
+
+      body = (await response.json()) as typeof body;
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        throw new BadGatewayException(
+          `VPN panel "${connection.name}" did not respond within ${OUTBOUND_FETCH_TIMEOUT_MS}ms (${path})`,
+        );
+      }
+      throw error;
     }
-
-    const body = (await response.json()) as {
-      success: boolean;
-      msg?: string;
-      obj: T;
-    };
     if (!body.success) {
       throw new BadGatewayException(
         `VPN panel reported failure: ${body.msg ?? 'unknown error'}`,
@@ -200,27 +218,37 @@ export class VpnService {
   }
 
   private async githubRequest<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(
-      `https://api.github.com/repos/${this.githubRepo()}${path}`,
-      {
+    const url = `https://api.github.com/repos/${this.githubRepo()}${path}`;
+    const headers = {
+      Authorization: `Bearer ${this.required('GITHUB_TOKEN')}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(init?.headers ?? {}),
+    };
+
+    try {
+      const response = await fetch(url, {
         ...init,
-        headers: {
-          Authorization: `Bearer ${this.required('GITHUB_TOKEN')}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(init?.headers ?? {}),
-        },
-      },
-    );
+        headers,
+        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
+      });
 
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `GitHub API request failed (${response.status}): ${await response.text()}`,
-      );
+      if (!response.ok) {
+        throw new BadGatewayException(
+          `GitHub API request failed (${response.status}): ${await response.text()}`,
+        );
+      }
+
+      const text = await response.text();
+      return (text ? JSON.parse(text) : undefined) as T;
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        throw new BadGatewayException(
+          `GitHub API request timed out after ${OUTBOUND_FETCH_TIMEOUT_MS}ms (${init?.method ?? 'GET'} ${path})`,
+        );
+      }
+      throw error;
     }
-
-    const text = await response.text();
-    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   // GitHub Actions secrets are write-only (sealed-box encrypted client-side,
