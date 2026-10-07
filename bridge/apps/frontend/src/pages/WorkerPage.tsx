@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Text } from '@gravity-ui/uikit';
 
 import { useListJobsQuery } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
@@ -41,6 +42,10 @@ export function WorkerPage() {
       <NewJobForm onCreated={setOpenJobId} />
 
       <JobList jobs={jobs} isLoading={isLoadingJobs} onOpenJob={setOpenJobId} />
+
+      <Text variant="subheader-3" color="secondary" className={styles.settingsHeading}>
+        Подключения и ключи
+      </Text>
 
       <VpnConnectionSelector />
 

@@ -112,5 +112,10 @@ export function extractArchive<M extends BaseManifest>(
 
   assertSchemaVersion(manifest, entryName);
 
+  // Pre-hash parcels carry no contentHash — skip silently rather than reject them.
+  if (typeof manifest.contentHash === 'string' && manifest.contentHash !== contentHash(files, assets)) {
+    throw new Error(`Parcel ${entryName} failed integrity check: contentHash mismatch`);
+  }
+
   return { files, assets, manifest };
 }
