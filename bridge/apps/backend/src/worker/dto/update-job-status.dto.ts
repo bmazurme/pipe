@@ -1,6 +1,7 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { JobStatus } from '../entities/job.entity';
+import { MAX_ERROR_MESSAGE_LENGTH } from '../worker.limits';
 
 // Worker only ever moves a job forward through 'running' -> 'succeeded',
 // 'failed' or (after the owner asked it to stop) 'cancelled' via this endpoint
@@ -20,6 +21,7 @@ export class UpdateJobStatusDto {
     | JobStatus.Cancelled;
 
   @IsString()
+  @MaxLength(MAX_ERROR_MESSAGE_LENGTH)
   @IsOptional()
   errorMessage?: string;
 }
