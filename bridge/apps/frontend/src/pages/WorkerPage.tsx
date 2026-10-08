@@ -17,7 +17,11 @@ export function WorkerPage() {
   // Fast while something is queued or running, slow otherwise, and paused
   // entirely while the tab is in the background.
   const [pollingInterval, setPollingInterval] = useState(JOB_POLL_INTERVAL_MS);
-  const { data: jobsData, isLoading: isLoadingJobs } = useListJobsQuery(undefined, {
+  const {
+    data: jobsData,
+    isLoading: isLoadingJobs,
+    isError: isJobsError,
+  } = useListJobsQuery(undefined, {
     pollingInterval,
     skipPollingIfUnfocused: true,
   });
@@ -41,7 +45,12 @@ export function WorkerPage() {
 
       <NewJobForm onCreated={setOpenJobId} />
 
-      <JobList jobs={jobs} isLoading={isLoadingJobs} onOpenJob={setOpenJobId} />
+      <JobList
+        jobs={jobs}
+        isLoading={isLoadingJobs}
+        isError={isJobsError}
+        onOpenJob={setOpenJobId}
+      />
 
       <Text variant="subheader-3" color="secondary" className={styles.settingsHeading}>
         Подключения и ключи
