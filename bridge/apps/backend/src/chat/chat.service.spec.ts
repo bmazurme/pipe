@@ -192,8 +192,18 @@ describe('ChatService', () => {
         model: ChatModel.Sonnet,
       });
       messageRepository.find!.mockResolvedValue([
-        { id: 98, role: ChatMessageRole.User, content: 'hi' },
-        { id: 99, role: ChatMessageRole.Assistant, content: '' },
+        {
+          id: 98,
+          role: ChatMessageRole.User,
+          content: 'hi',
+          status: ChatMessageStatus.Complete,
+        },
+        {
+          id: 99,
+          role: ChatMessageRole.Assistant,
+          content: '',
+          status: ChatMessageStatus.Running,
+        },
       ]);
 
       const result = await service.claim(7);
@@ -207,6 +217,58 @@ describe('ChatService', () => {
       expect(result?.history).toEqual([
         { role: ChatMessageRole.User, content: 'hi' },
       ]);
+    });
+
+    it('excludes failed and pending assistant placeholders from history', async () => {
+      messageRepository.query!.mockResolvedValue([[{ id: 103 }], 1]);
+      messageRepository.findOneByOrFail!.mockResolvedValue({
+        id: 103,
+        chatId: 1,
+        role: ChatMessageRole.Assistant,
+        content: '',
+        status: ChatMessageStatus.Running,
+      });
+      chatRepository.findOneByOrFail!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.find!.mockResolvedValue([
+        {
+          id: 100,
+          role: ChatMessageRole.User,
+          content: 'first',
+          status: ChatMessageStatus.Complete,
+        },
+        {
+          id: 101,
+          role: ChatMessageRole.Assistant,
+          content: '',
+          status: ChatMessageStatus.Failed,
+        },
+        {
+          id: 102,
+          role: ChatMessageRole.User,
+          content: 'second',
+          status: ChatMessageStatus.Complete,
+        },
+        {
+          id: 103,
+          role: ChatMessageRole.Assistant,
+          content: '',
+          status: ChatMessageStatus.Running,
+        },
+        {
+          id: 104,
+          role: ChatMessageRole.Assistant,
+          content: '',
+          status: ChatMessageStatus.Pending,
+        },
+      ]);
+
+      const result = await service.claim(7);
+
+      expect(result?.history).toEqual([
+        { role: ChatMessageRole.User, content: 'first' },
+        { role: ChatMessageRole.User, content: 'second' },
+      ]);
+      expect(result?.history.some((h) => h.content === '')).toBe(false);
     });
   });
 
@@ -280,6 +342,28 @@ describe('ChatService', () => {
       expect(result.status).toBe(ChatMessageStatus.Complete);
     });
 
+    it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
+      'throws ConflictException and leaves a %s message unchanged',
+      async (status) => {
+        const stored = {
+          id: 99,
+          chatId: 1,
+          role: ChatMessageRole.Assistant,
+          content: 'original',
+          status,
+        };
+        messageRepository.findOne!.mockResolvedValue(stored);
+        chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+
+        await expect(service.completeTurn(99, 7, 'late')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(stored.content).toBe('original');
+        expect(stored.status).toBe(status);
+        expect(messageRepository.save).not.toHaveBeenCalled();
+      },
+    );
+
     it('throws NotFoundException for a message in a chat owned by someone else', async () => {
       messageRepository.findOne!.mockResolvedValue({ id: 99, chatId: 1 });
       chatRepository.findOne!.mockResolvedValue(null);
@@ -306,5 +390,26 @@ describe('ChatService', () => {
       expect(result.status).toBe(ChatMessageStatus.Failed);
       expect(result.errorMessage).toBe('boom');
     });
+
+    it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
+      'throws ConflictException for a %s message',
+      async (status) => {
+        const stored = {
+          id: 99,
+          chatId: 1,
+          role: ChatMessageRole.Assistant,
+          content: 'original',
+          status,
+        };
+        messageRepository.findOne!.mockResolvedValue(stored);
+        chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+
+        await expect(service.failTurn(99, 7, 'boom')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(stored.status).toBe(status);
+        expect(messageRepository.save).not.toHaveBeenCalled();
+      },
+    );
   });
 });

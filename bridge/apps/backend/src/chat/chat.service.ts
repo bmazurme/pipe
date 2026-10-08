@@ -141,11 +141,11 @@ export class ChatService {
       order: { createdAt: 'ASC' },
     });
 
-    // Every message up to and including the user message this reply
-    // answers — i.e. everything except the (now-claimed) empty assistant
-    // placeholder itself.
+    // Only Complete messages: the claimed message is Running, and
+    // Pending/Failed assistant placeholders have empty content, which
+    // providers such as Anthropic reject.
     const history: ClaimedTurnHistoryEntry[] = priorMessages
-      .filter((m) => m.id !== message.id)
+      .filter((m) => m.status === ChatMessageStatus.Complete)
       .map((m) => ({ role: m.role, content: m.content }));
 
     return { message, chat, history };
