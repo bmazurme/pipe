@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowDownToLine, FaceRobot } from '@gravity-ui/icons';
-import { Button, Card, Icon, Label, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, Loader, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { jobDuration } from '../../shared/lib/formatDuration';
@@ -20,6 +20,7 @@ import {
 interface JobListProps {
   jobs: WorkerJob[];
   isLoading: boolean;
+  isError?: boolean;
   onOpenJob: (jobId: number) => void;
 }
 
@@ -27,7 +28,7 @@ interface JobListProps {
 // rest one click away instead of an ever-longer scroll above the settings.
 const INITIAL_VISIBLE_JOBS = 8;
 
-export function JobList({ jobs, isLoading, onOpenJob }: JobListProps) {
+export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobListProps) {
   const [showAll, setShowAll] = useState(false);
   const visibleJobs = showAll ? jobs : jobs.slice(0, INITIAL_VISIBLE_JOBS);
   const hiddenCount = jobs.length - visibleJobs.length;
@@ -39,7 +40,13 @@ export function JobList({ jobs, isLoading, onOpenJob }: JobListProps) {
         meta={jobs.length > 0 ? String(jobs.length) : undefined}
       />
 
-      {jobs.length === 0 && !isLoading ? (
+      {jobs.length === 0 && isLoading ? (
+        <div className={styles.jobListLoader} role="status">
+          <Loader size="m" />
+        </div>
+      ) : jobs.length === 0 && isError ? (
+        <Alert theme="danger" title="Не удалось загрузить задачи" />
+      ) : jobs.length === 0 ? (
         <EmptyState
           icon={FaceRobot}
           title="Задач ещё нет"

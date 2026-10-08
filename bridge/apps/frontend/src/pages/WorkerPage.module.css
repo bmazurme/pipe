@@ -50,6 +50,12 @@
   width: 100%;
 }
 
+.jobListLoader {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
 .jobList {
   display: flex;
   flex-direction: column;
