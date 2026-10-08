@@ -6,25 +6,10 @@ import {
   useGetNotificationSettingsQuery,
   useUpdateNotificationSettingsMutation,
 } from '../../store/api';
+import { listTimeZones } from '../../shared/lib/timeZones';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../ProfilePage.module.css';
 import { formatQuietHours, parseQuietHours, QuietHoursForm, validateQuietHours } from './quietHours';
-
-const FALLBACK_ZONES = ['Europe/Moscow', 'Europe/Kaliningrad', 'Europe/Samara', 'Asia/Yekaterinburg', 'Asia/Novosibirsk', 'Asia/Vladivostok', 'Europe/Kyiv', 'Europe/Minsk', 'Asia/Almaty', 'Europe/Berlin', 'Europe/London', 'UTC'];
-
-function listTimeZones(current: string): string[] {
-  let zones = FALLBACK_ZONES;
-
-  try {
-    const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.('timeZone');
-
-    if (supported?.length) zones = [...new Set([...FALLBACK_ZONES, ...supported])];
-  } catch {
-    // Older engines: the short list is enough.
-  }
-
-  return zones.includes(current) ? zones : [current, ...zones];
-}
 
 export function NotificationsSection() {
   const { data, isLoading, isError } = useGetNotificationSettingsQuery();

@@ -436,6 +436,872 @@
         }
       }
     },
+    "/api/v1/improve/status": {
+      "get": {
+        "operationId": "ImproveController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/improve/issues": {
+      "get": {
+        "operationId": "ImproveController_issues",
+        "parameters": [
+          {
+            "name": "label",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/improve/runs": {
+      "get": {
+        "operationId": "ImproveController_runs",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImproveRun"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ImproveController_startRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/runs/{id}/cancel": {
+      "post": {
+        "operationId": "ImproveController_cancelRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/schedules": {
+      "get": {
+        "operationId": "ImproveController_schedules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImproveSchedule"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ImproveController_createSchedule",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveSchedule"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/schedules/{id}": {
+      "put": {
+        "operationId": "ImproveController_updateSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveSchedule"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ImproveController_deleteSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/improve/schedules/{id}/run": {
+      "post": {
+        "operationId": "ImproveController_runScheduleNow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/improve/settings": {
+      "get": {
+        "operationId": "ImproveController_settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "ImproveController_saveSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/clients/heartbeat": {
+      "post": {
+        "operationId": "ClientsController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientHeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/clients/events": {
+      "post": {
+        "operationId": "ClientsController_event",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/notification-settings": {
+      "get": {
+        "operationId": "NotificationSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "NotificationSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "StorageController_list",
+        "parameters": [
+          {
+            "name": "channel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskKey",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "outbound",
+                "result"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoredFileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "StorageController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadFileMetaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredFileResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storage/{id}/download": {
+      "get": {
+        "operationId": "StorageController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/storage/{id}": {
+      "delete": {
+        "operationId": "StorageController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/storage/{id}/peek": {
+      "get": {
+        "operationId": "StorageController_peek",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs": {
+      "get": {
+        "operationId": "WorkerController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "WorkerController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/claim": {
+      "post": {
+        "operationId": "WorkerController_claim",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/heartbeat": {
+      "post": {
+        "operationId": "WorkerController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}": {
+      "get": {
+        "operationId": "WorkerController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "WorkerController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/parcel": {
+      "get": {
+        "operationId": "WorkerController_downloadParcel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result/download": {
+      "get": {
+        "operationId": "WorkerController_downloadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "WorkerController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/status": {
+      "post": {
+        "operationId": "WorkerController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJobStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/logs": {
+      "post": {
+        "operationId": "WorkerController_appendLog",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendJobLogDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result": {
+      "post": {
+        "operationId": "WorkerController_uploadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials": {
+      "get": {
+        "operationId": "ClaudeCredentialsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ClaudeCredentialsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClaudeCredentialDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials/{id}": {
+      "delete": {
+        "operationId": "ClaudeCredentialsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/status": {
+      "get": {
+        "operationId": "WorkerStatusController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerStatusResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "operationId": "LogsController_list",
@@ -626,78 +1492,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/clients/heartbeat": {
-      "post": {
-        "operationId": "ClientsController_heartbeat",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClientHeartbeatDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/clients/events": {
-      "post": {
-        "operationId": "ClientsController_event",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClientEventDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/notification-settings": {
-      "get": {
-        "operationId": "NotificationSettingsController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      },
-      "put": {
-        "operationId": "NotificationSettingsController_update",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": ""
@@ -1019,144 +1813,6 @@
     "/api/v1/secrets/{id}/value": {
       "get": {
         "operationId": "SecretsController_reveal",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/storage": {
-      "get": {
-        "operationId": "StorageController_list",
-        "parameters": [
-          {
-            "name": "channel",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "maxLength": 64,
-              "type": "string"
-            }
-          },
-          {
-            "name": "taskKey",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "maxLength": 64,
-              "type": "string"
-            }
-          },
-          {
-            "name": "direction",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "enum": [
-                "outbound",
-                "result"
-              ],
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/StoredFileResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "StorageController_upload",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UploadFileMetaDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StoredFileResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/storage/{id}/download": {
-      "get": {
-        "operationId": "StorageController_download",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/storage/{id}": {
-      "delete": {
-        "operationId": "StorageController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/storage/{id}/peek": {
-      "get": {
-        "operationId": "StorageController_peek",
         "parameters": [
           {
             "name": "id",
@@ -1601,396 +2257,6 @@
           }
         }
       }
-    },
-    "/api/v1/worker/jobs": {
-      "get": {
-        "operationId": "WorkerController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/JobResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "WorkerController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/claim": {
-      "post": {
-        "operationId": "WorkerController_claim",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClaimJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/heartbeat": {
-      "post": {
-        "operationId": "WorkerController_heartbeat",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HeartbeatDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}": {
-      "get": {
-        "operationId": "WorkerController_get",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "WorkerController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/parcel": {
-      "get": {
-        "operationId": "WorkerController_downloadParcel",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/result/download": {
-      "get": {
-        "operationId": "WorkerController_downloadResult",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/cancel": {
-      "post": {
-        "operationId": "WorkerController_cancel",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CancelJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/status": {
-      "post": {
-        "operationId": "WorkerController_updateStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateJobStatusDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/logs": {
-      "post": {
-        "operationId": "WorkerController_appendLog",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AppendJobLogDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/result": {
-      "post": {
-        "operationId": "WorkerController_uploadResult",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/claude-credentials": {
-      "get": {
-        "operationId": "ClaudeCredentialsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "ClaudeCredentialsController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateClaudeCredentialDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/claude-credentials/{id}": {
-      "delete": {
-        "operationId": "ClaudeCredentialsController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/status": {
-      "get": {
-        "operationId": "WorkerStatusController_getStatus",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkerStatusResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "info": {
@@ -2285,22 +2551,74 @@
           }
         }
       },
-      "AppLog": {
+      "ImproveRun": {
         "type": "object",
         "properties": {
-          "level": {
-            "type": "object"
+          "userId": {
+            "type": "number"
           },
-          "source": {
-            "type": "object"
+          "issueNumber": {
+            "type": "number"
           },
-          "event": {
+          "issueTitle": {
             "type": "string"
           },
-          "message": {
+          "model": {
             "type": "string"
           },
-          "meta": {
+          "trigger": {
+            "type": "object"
+          },
+          "scheduleId": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "publishing",
+              "pr_open",
+              "no_changes",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "jobId": {
+            "type": "number",
+            "nullable": true
+          },
+          "baseSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "baseline": {
+            "type": "string",
+            "nullable": true
+          },
+          "branch": {
+            "type": "string",
+            "nullable": true
+          },
+          "prNumber": {
+            "type": "number",
+            "nullable": true
+          },
+          "prUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
             "type": "string",
             "nullable": true
           },
@@ -2317,15 +2635,171 @@
           }
         },
         "required": [
-          "level",
-          "source",
-          "event",
-          "message",
-          "meta",
+          "userId",
+          "issueNumber",
+          "issueTitle",
+          "model",
+          "trigger",
+          "scheduleId",
+          "status",
+          "jobId",
+          "baseSha",
+          "baseline",
+          "branch",
+          "prNumber",
+          "prUrl",
+          "note",
+          "error",
+          "finishedAt",
           "id",
           "createdAt",
           "updatedAt"
         ]
+      },
+      "StartRunDto": {
+        "type": "object",
+        "properties": {
+          "issueNumber": {
+            "type": "number",
+            "minimum": 1
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issueNumber",
+          "model"
+        ]
+      },
+      "ImproveSchedule": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hour": {
+            "type": "number"
+          },
+          "minute": {
+            "type": "number"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastRunOn": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastRunAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "lastResult": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "enabled",
+          "hour",
+          "minute",
+          "timezone",
+          "count",
+          "model",
+          "label",
+          "lastRunOn",
+          "lastRunAt",
+          "lastResult",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SaveScheduleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hour": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "minute": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 59
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "count": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "model": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "pattern": "/^[\\w.\\- ]{1,64}$/"
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "hour",
+          "minute",
+          "timezone",
+          "count",
+          "model"
+        ]
+      },
+      "SaveSettingsDto": {
+        "type": "object",
+        "properties": {
+          "autoStartModel": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       },
       "ClientHeartbeatDto": {
         "type": "object",
@@ -2403,6 +2877,371 @@
         "required": [
           "quietHours",
           "timezone"
+        ]
+      },
+      "StoredFileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "direction": {
+            "nullable": true,
+            "enum": [
+              "outbound",
+              "result"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "mimeType",
+          "size",
+          "createdAt",
+          "channel",
+          "taskKey",
+          "direction"
+        ]
+      },
+      "UploadFileMetaDto": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "taskKey": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "outbound",
+              "result"
+            ]
+          }
+        }
+      },
+      "JobResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "sourceFileId": {
+            "type": "number",
+            "nullable": true
+          },
+          "resultFileId": {
+            "type": "number",
+            "nullable": true
+          },
+          "model": {
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ],
+            "type": "string"
+          },
+          "claudeCredentialId": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "claimed",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "logs": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "workerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "claimedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "cancelRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceFileId",
+          "resultFileId",
+          "model",
+          "claudeCredentialId",
+          "status",
+          "logs",
+          "errorMessage",
+          "workerName",
+          "claimedAt",
+          "startedAt",
+          "finishedAt",
+          "cancelRequestedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateJobDto": {
+        "type": "object",
+        "properties": {
+          "sourceFileId": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
+          },
+          "claudeCredentialId": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sourceFileId",
+          "model"
+        ]
+      },
+      "ClaimJobDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      },
+      "HeartbeatDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "workerName"
+        ]
+      },
+      "CancelJobDto": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateJobStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "AppendJobLogDto": {
+        "type": "object",
+        "properties": {
+          "chunk": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk"
+        ]
+      },
+      "ClaudeCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt"
+        ]
+      },
+      "CreateClaudeCredentialDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "token"
+        ]
+      },
+      "WorkerHeartbeatStatusDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isUp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "lastSeenAt",
+          "isUp"
+        ]
+      },
+      "WorkerStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "isUp": {
+            "type": "boolean"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkerHeartbeatStatusDto"
+            }
+          }
+        },
+        "required": [
+          "isUp",
+          "workers"
+        ]
+      },
+      "AppLog": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "object"
+          },
+          "source": {
+            "type": "object"
+          },
+          "event": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "meta": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "source",
+          "event",
+          "message",
+          "meta",
+          "id",
+          "createdAt",
+          "updatedAt"
         ]
       },
       "MeResponseDto": {
@@ -2566,73 +3405,6 @@
       "UpdateSecretDto": {
         "type": "object",
         "properties": {}
-      },
-      "StoredFileResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "originalName": {
-            "type": "string"
-          },
-          "mimeType": {
-            "type": "string"
-          },
-          "size": {
-            "type": "number"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "channel": {
-            "type": "string",
-            "nullable": true
-          },
-          "taskKey": {
-            "type": "string",
-            "nullable": true
-          },
-          "direction": {
-            "nullable": true,
-            "enum": [
-              "outbound",
-              "result"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "originalName",
-          "mimeType",
-          "size",
-          "createdAt",
-          "channel",
-          "taskKey",
-          "direction"
-        ]
-      },
-      "UploadFileMetaDto": {
-        "type": "object",
-        "properties": {
-          "channel": {
-            "type": "string",
-            "maxLength": 64
-          },
-          "taskKey": {
-            "type": "string",
-            "maxLength": 64
-          },
-          "direction": {
-            "type": "string",
-            "enum": [
-              "outbound",
-              "result"
-            ]
-          }
-        }
       },
       "DayOffResponseDto": {
         "type": "object",
@@ -2928,262 +3700,6 @@
           "panelUrl",
           "panelApiToken",
           "serverAddress"
-        ]
-      },
-      "JobResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "sourceFileId": {
-            "type": "number",
-            "nullable": true
-          },
-          "resultFileId": {
-            "type": "number",
-            "nullable": true
-          },
-          "model": {
-            "enum": [
-              "sonnet",
-              "opus",
-              "gpt",
-              "deepseek",
-              "qwen"
-            ],
-            "type": "string"
-          },
-          "claudeCredentialId": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "enum": [
-              "queued",
-              "claimed",
-              "running",
-              "succeeded",
-              "failed",
-              "cancelled"
-            ],
-            "type": "string"
-          },
-          "logs": {
-            "type": "string"
-          },
-          "errorMessage": {
-            "type": "string",
-            "nullable": true
-          },
-          "workerName": {
-            "type": "string",
-            "nullable": true
-          },
-          "claimedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "startedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "finishedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "cancelRequestedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "sourceFileId",
-          "resultFileId",
-          "model",
-          "claudeCredentialId",
-          "status",
-          "logs",
-          "errorMessage",
-          "workerName",
-          "claimedAt",
-          "startedAt",
-          "finishedAt",
-          "cancelRequestedAt",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateJobDto": {
-        "type": "object",
-        "properties": {
-          "sourceFileId": {
-            "type": "number"
-          },
-          "model": {
-            "type": "string",
-            "enum": [
-              "sonnet",
-              "opus",
-              "gpt",
-              "deepseek",
-              "qwen"
-            ]
-          },
-          "claudeCredentialId": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "sourceFileId",
-          "model"
-        ]
-      },
-      "ClaimJobDto": {
-        "type": "object",
-        "properties": {
-          "workerName": {
-            "type": "string",
-            "maxLength": 255
-          }
-        }
-      },
-      "HeartbeatDto": {
-        "type": "object",
-        "properties": {
-          "workerName": {
-            "type": "string",
-            "maxLength": 255
-          }
-        },
-        "required": [
-          "workerName"
-        ]
-      },
-      "CancelJobDto": {
-        "type": "object",
-        "properties": {
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
-      "UpdateJobStatusDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "running",
-              "succeeded",
-              "failed",
-              "cancelled"
-            ]
-          },
-          "errorMessage": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "AppendJobLogDto": {
-        "type": "object",
-        "properties": {
-          "chunk": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "chunk"
-        ]
-      },
-      "ClaudeCredentialResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "createdAt"
-        ]
-      },
-      "CreateClaudeCredentialDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "token"
-        ]
-      },
-      "WorkerHeartbeatStatusDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "lastSeenAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "isUp": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "lastSeenAt",
-          "isUp"
-        ]
-      },
-      "WorkerStatusResponseDto": {
-        "type": "object",
-        "properties": {
-          "isUp": {
-            "type": "boolean"
-          },
-          "workers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkerHeartbeatStatusDto"
-            }
-          }
-        },
-        "required": [
-          "isUp",
-          "workers"
         ]
       }
     }

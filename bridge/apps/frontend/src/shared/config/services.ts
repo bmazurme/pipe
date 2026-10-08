@@ -7,6 +7,7 @@ import {
   Key,
   Lock,
   MagicWand,
+  Rocket,
   ShieldKeyhole,
   TrashBin,
 } from '@gravity-ui/icons';
@@ -68,6 +69,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Статус туннеля worker → AI-провайдеры, его настройка и ключи worker.',
     icon: ShieldKeyhole,
     path: '/vpn',
+  },
+  {
+    id: 'improve',
+    title: 'Improve',
+    description: 'Самоулучшение: задачи из GitHub issues уходят в worker, результат — PR; запуск вручную или по расписанию.',
+    icon: Rocket,
+    path: '/improve',
   },
   {
     id: 'keys',
