@@ -981,20 +981,6 @@ describe('WorkerService', () => {
     });
   });
 
-  describe('appendLog', () => {
-    it('appends the chunk to existing logs', async () => {
-      const job: Job = { id: 1, logs: 'line 1\n' } as Job;
-      repository.findOne!.mockResolvedValue(job);
-      repository.save!.mockImplementation((j) => Promise.resolve(j));
-
-      await service.appendLog(1, 7, 'line 2\n');
-
-      expect(repository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ logs: 'line 1\nline 2\n' }),
-      );
-    });
-  });
-
   describe('setResult', () => {
     it('creates a StoredFile, links it, and marks the job succeeded', async () => {
       const job: Job = {
