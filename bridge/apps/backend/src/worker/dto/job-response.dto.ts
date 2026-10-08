@@ -25,7 +25,8 @@ export class JobResponseDto {
       model: job.model,
       claudeCredentialId: job.claudeCredentialId,
       status: job.status,
-      logs: job.logs,
+      // Undefined when the list query deliberately skipped the column.
+      logs: job.logs ?? '',
       errorMessage: job.errorMessage,
       workerName: job.workerName,
       claimedAt: job.claimedAt,

@@ -53,6 +53,11 @@ describe('WorkerService', () => {
       record: jest.fn(),
     };
     repository.find!.mockResolvedValue([]);
+    (repository as { metadata?: unknown }).metadata = {
+      columns: ['id', 'userId', 'status', 'logs', 'createdAt'].map(
+        (propertyName) => ({ propertyName }),
+      ),
+    };
     appLogs = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -70,6 +75,21 @@ describe('WorkerService', () => {
     }).compile();
 
     service = module.get(WorkerService);
+  });
+
+  describe('findAllByUser', () => {
+    it('selects every column except logs', async () => {
+      await service.findAllByUser(7);
+
+      const options = repository.find!.mock.calls[0][0] as {
+        select: string[];
+        where: { userId: number };
+      };
+      expect(options.where).toEqual({ userId: 7 });
+      expect(options.select).toContain('id');
+      expect(options.select).toContain('status');
+      expect(options.select).not.toContain('logs');
+    });
   });
 
   describe('recordHeartbeat', () => {
