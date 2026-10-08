@@ -155,13 +155,13 @@ body,
     min-height: 40px;
   }
 
-  .g-segmented-radio-group_size_m,
+  /* Height AND line-height together: uikit centres the label with line-height,
+     and the selected highlight is drawn from the option's own box, so changing
+     only one of them left the text off-centre and the highlight taller than the
+     control. The group itself takes its height from its options. */
   .g-segmented-radio-group_size_m .g-segmented-radio-group__option {
     height: 40px;
-  }
-
-  .g-segmented-radio-group_size_m .g-segmented-radio-group__option-text {
-    line-height: 38px;
+    line-height: 40px;
   }
 
   /* No 300ms double-tap-zoom wait and no grey flash on tap. */
