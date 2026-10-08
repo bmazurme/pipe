@@ -167,11 +167,11 @@ export class GithubApiService {
     return this.configService.get<string>('GITHUB_BASE_BRANCH') || 'main';
   }
 
-  // Open issues carrying the label, oldest first. The issues endpoint also lists
+  // Open issues carrying the label (any open issue when the label is empty), oldest first. The issues endpoint also lists
   // pull requests (they are issues too) — those are filtered out.
   async listOpenIssues(label: string, limit = 50): Promise<IssueInfo[]> {
     const items = (await this.get(
-      `/issues?state=open&labels=${encodeURIComponent(label)}&sort=created&direction=asc&per_page=${Math.min(limit, 100)}`,
+      `/issues?state=open${label ? `&labels=${encodeURIComponent(label)}` : ''}&sort=created&direction=asc&per_page=${Math.min(limit, 100)}`,
     )) as Array<IssueRaw>;
 
     return items.filter((item) => !item.pull_request).map(toIssueInfo);

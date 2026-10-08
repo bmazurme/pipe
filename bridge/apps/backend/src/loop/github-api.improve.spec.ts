@@ -41,6 +41,16 @@ describe('GithubApiService (improve)', () => {
     ).toBe('trunk');
   });
 
+  it('lists every open issue when the label is empty', async () => {
+    const calls = stubFetch(() => []);
+
+    await service().listOpenIssues('', 30);
+
+    expect(calls[0].url).toBe(
+      'https://api.github.com/repos/o/r/issues?state=open&sort=created&direction=asc&per_page=30',
+    );
+  });
+
   it('lists open issues by label, oldest first, dropping pull requests', async () => {
     const calls = stubFetch(() => [
       {

@@ -36,6 +36,7 @@ function toForm(schedule: ImproveSchedule): Form {
     kind: schedule.kind,
     categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : ALL_CATEGORIES,
     autoCreateIssues: schedule.autoCreateIssues,
+    autoStartIssues: schedule.autoStartIssues,
   };
 }
 
@@ -193,6 +194,7 @@ export function SchedulesTab() {
                     options={ALL_CATEGORIES.map((value) => ({ value, content: CATEGORY_LABEL[value] }))}
                     width="max"
                   />
+                  <Switch checked={editing.form.autoStartIssues ?? false} onUpdate={(autoStartIssues) => update({ autoStartIssues })} content="И сразу брать в работу" />
                   <Switch checked={editing.form.autoCreateIssues ?? true} onUpdate={(autoCreateIssues) => update({ autoCreateIssues })} content="Сразу создавать issues" />
                 </>
               )}
