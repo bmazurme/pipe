@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Query,
   Post,
   Res,
   UploadedFile,
@@ -114,6 +115,16 @@ export class WorkerController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<void> {
     await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
+  }
+
+  // How many earlier runs of a parcel's task could be mixed in at launch. Declared before
+  // ':id' so "history" is never read as a job id.
+  @Get('history')
+  async history(
+    @Query('sourceFileId', ParseIntPipe) sourceFileId: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{ count: number }> {
+    return this.workerService.previewHistory(currentUser.id, sourceFileId);
   }
 
   @Get(':id')

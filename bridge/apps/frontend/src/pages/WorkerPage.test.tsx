@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 import { generateKeyPair, encryptBuffer } from '@pipe/protocol/encryption';
 
@@ -67,7 +68,9 @@ function renderPage() {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <WorkerPage />
+        <MemoryRouter>
+          <WorkerPage />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );

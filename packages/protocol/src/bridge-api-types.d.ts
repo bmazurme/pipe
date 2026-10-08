@@ -250,6 +250,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ContextController_list"];
+        put?: never;
+        post: operations["ContextController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contexts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["ContextController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["ContextController_update"];
+        trace?: never;
+    };
     "/api/v1/improve/status": {
         parameters: {
             query?: never;
@@ -596,6 +628,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["WorkerController_heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker/jobs/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["WorkerController_history"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1304,6 +1352,20 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        ContextResponseDto: {
+            id: number;
+            name: string;
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateContextDto: {
+            name: string;
+            content: string;
+        };
+        UpdateContextDto: Record<string, never>;
         ImproveRun: {
             userId: number;
             kind: Record<string, never>;
@@ -1437,6 +1499,8 @@ export interface components {
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId: number | null;
+            contextName: string | null;
+            historyCount: number | null;
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
@@ -1460,6 +1524,8 @@ export interface components {
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
+            contextId?: number;
+            includeHistory?: boolean;
         };
         ClaimJobDto: {
             workerName?: string;
@@ -2016,6 +2082,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatMessageResponseDto"];
+                };
+            };
+        };
+    };
+    ContextController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"][];
+                };
+            };
+        };
+    };
+    ContextController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateContextDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
+                };
+            };
+        };
+    };
+    ContextController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ContextController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateContextDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
                 };
             };
         };
@@ -2619,6 +2771,25 @@ export interface operations {
         };
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WorkerController_history: {
+        parameters: {
+            query: {
+                sourceFileId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -24,6 +24,10 @@ export interface WorkerJob {
   resultFileId: number | null;
   model: WorkerJobModel;
   claudeCredentialId: number | null;
+  /** The attached context's name, or null — the default. */
+  contextName: string | null;
+  /** How many earlier runs' outcomes were mixed in, or null when none were. */
+  historyCount: number | null;
   status: WorkerJobStatus;
   logs: string;
   errorMessage: string | null;
@@ -69,7 +73,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     }),
     createJob: builder.mutation<
       WorkerJob,
-      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number }
+      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number; contextId?: number; includeHistory?: boolean }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),
       invalidatesTags: ['WorkerJob'],
@@ -78,6 +82,12 @@ const workerApiEndpoints = workerApi.injectEndpoints({
           ?.message;
         return message ?? 'Не удалось создать задачу';
       },
+    }),
+    // How many earlier runs of this parcel's task could be mixed in at launch.
+    getJobHistoryPreview: builder.query<{ count: number }, number>({
+      query: (sourceFileId) => `worker/jobs/history?sourceFileId=${sourceFileId}`,
+      // A new run finishing changes the answer, and jobs are re-listed often — never serve it stale.
+      providesTags: ['WorkerJob'],
     }),
     // Asks the worker to stop a job (or cancels a queued one outright). `force`
     // marks it cancelled on bridge without waiting for a worker that is gone.
@@ -164,6 +174,7 @@ export const {
   useGetWorkerStatusQuery,
   useCreateJobMutation,
   useCancelJobMutation,
+  useGetJobHistoryPreviewQuery,
   useRetryJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,

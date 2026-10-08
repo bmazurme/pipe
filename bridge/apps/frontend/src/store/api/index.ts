@@ -13,6 +13,7 @@ export { default as chatApi } from './chat-api';
 export { default as vpnApi } from './vpn-api';
 export { default as logsApi } from './logs-api';
 export { default as improveApi } from './improve-api';
+export { default as contextApi } from './context-api';
 
 export * from './auth-api/endpoints';
 export * from './users-api/endpoints';
@@ -27,3 +28,4 @@ export * from './chat-api/endpoints';
 export * from './vpn-api/endpoints';
 export * from './logs-api/endpoints';
 export * from './improve-api/endpoints';
+export * from './context-api/endpoints';

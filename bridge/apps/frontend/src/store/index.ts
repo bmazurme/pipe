@@ -4,6 +4,7 @@ import {
   apiKeysApi,
   authApi,
   chatApi,
+  contextApi,
   improveApi,
   logsApi,
   purgeApi,
@@ -48,6 +49,7 @@ export const store = configureStore({
     [vpnApi.reducerPath]: vpnApi.reducer,
     [logsApi.reducerPath]: logsApi.reducer,
     [improveApi.reducerPath]: improveApi.reducer,
+    [contextApi.reducerPath]: contextApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -64,6 +66,7 @@ export const store = configureStore({
       vpnApi.middleware,
       logsApi.middleware,
       improveApi.middleware,
+      contextApi.middleware,
     ),
 });
 

@@ -18,6 +18,12 @@ export interface RemoteJob {
   // inherited CLAUDE_CODE_OAUTH_TOKEN env var, same as before this field
   // existed.
   claudeToken?: string | null;
+  // Background text the owner attached at launch (bridge's Context module), or
+  // null/absent for a job with none — the default.
+  context?: string | null;
+  // Outcomes of earlier runs of the same task, when the owner asked for them — bridge
+  // assembles the text; null/absent for the default (none).
+  history?: string | null;
   status: RemoteJobStatus;
 }
 

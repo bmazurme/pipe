@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module';
+import { ContextModule } from '../context/context.module';
 import { StorageModule } from '../storage/storage.module';
 import { ClaudeCredentialsController } from './claude-credentials.controller';
 import { ClaudeCredentialsService } from './claude-credentials.service';
@@ -16,6 +17,7 @@ import { WorkerStatusController } from './worker-status.controller';
 @Module({
   imports: [
     AuthModule,
+    ContextModule,
     StorageModule,
     TypeOrmModule.forFeature([Job, ClaudeCredential, WorkerHeartbeat]),
   ],
