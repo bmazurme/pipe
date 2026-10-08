@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveService, isDue, localDate } from './improve.service';
@@ -598,6 +598,25 @@ describe('auto-start of pushed parcels', () => {
     });
     await expect(service.saveSettings(3, 'nope')).rejects.toThrow(
       /Неизвестная модель/,
+    );
+  });
+});
+
+describe('ImproveService.startRun task text', () => {
+  it('hands the worker the issue followed by the definition of done', async () => {
+    const { service, storage } = setup();
+
+    await service.startRun(3, 7, 'sonnet');
+
+    const parcel = unzipSync(
+      new Uint8Array(storage.createFromBuffer.mock.calls[0][1]),
+    );
+    const manifest = strFromU8(parcel[MANIFEST_ENTRY]);
+
+    expect(manifest).toContain('Fix it');
+    expect(manifest).toContain('Definition of done');
+    expect(manifest.indexOf('Fix it')).toBeLessThan(
+      manifest.indexOf('Definition of done'),
     );
   });
 });
