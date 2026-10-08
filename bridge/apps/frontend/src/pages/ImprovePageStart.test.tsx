@@ -34,6 +34,16 @@ const ANALYSIS_RUN = {
   finishedAt: null,
 };
 
+const ISSUES = [12, 13, 14].map((number) => ({
+  number,
+  title: `Task ${number}`,
+  body: '',
+  htmlUrl: 'u',
+  createdAt: `2026-10-0${number - 11}T00:00:00Z`,
+  labels: ['loop'],
+  run: null,
+}));
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
@@ -61,6 +71,7 @@ beforeEach(() => {
 
       if (request.method !== 'GET') sent.push({ method: request.method, path, body });
       if (path === 'improve/status') return json(STATUS);
+      if (path === 'improve/issues') return json(ISSUES);
       if (path === 'improve/runs' && request.method === 'GET') return json([ANALYSIS_RUN]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
       if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null });
@@ -70,48 +81,52 @@ beforeEach(() => {
   );
 });
 
-describe('ImprovePage analysis', () => {
-  it('starts an analysis for the chosen directions', async () => {
+describe('ImprovePage start issues', () => {
+  it('starts the selected issues in one request', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await user.click(await screen.findByLabelText('Выбрать #12'));
+    await user.click(screen.getByLabelText('Выбрать #14'));
+    await user.click(screen.getByRole('button', { name: 'Запустить выбранные (2)' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [12, 14], model: 'sonnet' } }),
+    );
+  });
+
+  it('starts the oldest issues', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await user.click(await screen.findByRole('button', { name: 'Запустить 3 старых' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [12, 13, 14], model: 'sonnet' } }),
+    );
+  });
+
+  it('takes analysis proposals into work', async () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');
 
-    await user.click(await screen.findByLabelText('UI/UX'));
+    await user.click(await screen.findByRole('button', { name: 'В работу' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/start-items', body: { model: 'sonnet' } }));
+  });
+
+  it('can start an analysis that takes its issues straight into work', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    await user.click(await screen.findByText('И сразу взять в работу'));
     await user.click(screen.getByRole('button', { name: 'Запустить анализ' }));
 
     await waitFor(() =>
       expect(sent).toContainEqual({
         method: 'POST',
         path: 'improve/analysis',
-        body: { model: 'sonnet', categories: ['general', 'security', 'performance', 'reliability'], autoCreate: false, autoStart: false },
-      }),
-    );
-  });
-
-  it('shows proposals and files them as issues', async () => {
-    const user = userEvent.setup();
-    renderPage('/improve?tab=analysis');
-
-    expect(await screen.findByText(/Add rate limit/)).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Создать issues' }));
-
-    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/create-issues', body: {} }));
-  });
-
-  it('saves an analysis schedule with its directions', async () => {
-    const user = userEvent.setup();
-    renderPage('/improve?tab=schedules');
-
-    await user.click(await screen.findByRole('button', { name: 'Новое расписание' }));
-    await user.click(await screen.findByText('Задачи из issues'));
-    await user.click(await screen.findByText('Анализ (по 1 задаче на направление)'));
-    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
-
-    await waitFor(() =>
-      expect(sent).toContainEqual({
-        method: 'POST',
-        path: 'improve/schedules',
-        body: expect.objectContaining({ kind: 'analysis', categories: ['general', 'uiux', 'security', 'performance', 'reliability'], autoCreateIssues: true }),
+        body: expect.objectContaining({ autoCreate: true, autoStart: true }),
       }),
     );
   });

@@ -330,6 +330,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/runs/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_startMany"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/improve/runs/{id}/start-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_startItems"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/runs/{id}/create-issues": {
         parameters: {
             query?: never;
@@ -1291,6 +1323,15 @@ export interface components {
             model: string;
             categories?: string[];
             autoCreate?: boolean;
+            autoStart?: boolean;
+        };
+        StartManyDto: {
+            issueNumbers: number[];
+            model: string;
+        };
+        StartItemsDto: {
+            model: string;
+            indices?: number[];
         };
         CreateIssuesDto: {
             indices?: number[];
@@ -1305,6 +1346,7 @@ export interface components {
             kind: Record<string, never>;
             categories: string | null;
             autoCreateIssues: boolean;
+            autoStartIssues: boolean;
             count: number;
             model: string;
             label: string;
@@ -1331,6 +1373,7 @@ export interface components {
             kind?: "issues" | "analysis";
             categories?: string[];
             autoCreateIssues?: boolean;
+            autoStartIssues?: boolean;
         };
         SaveSettingsDto: {
             autoStartModel?: string | null;
@@ -2072,6 +2115,52 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StartAnalysisDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_startMany: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartManyDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ImproveController_startItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartItemsDto"];
             };
         };
         responses: {

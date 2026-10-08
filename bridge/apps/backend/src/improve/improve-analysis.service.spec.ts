@@ -117,4 +117,68 @@ describe('ImproveService analysis', () => {
     expect(stored.items[0].duplicateOf).toBe(5);
     expect(stored.items[1].issueNumber).toBe(40);
   });
+
+  it('starts many issues, reporting the ones that could not start', async () => {
+    const { service } = setup();
+    const startRun = jest
+      .spyOn(service, 'startRun')
+      .mockImplementation(async (_user, issue) => {
+        if (issue === 2) throw new Error('уже выполняется');
+
+        return {} as never;
+      });
+
+    const result = await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(startRun).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({
+      started: [1, 3],
+      skipped: ['#2: уже выполняется'],
+    });
+  });
+
+  it('files the chosen proposals and starts a run for each filed issue', async () => {
+    const run = {
+      id: 1,
+      userId: 3,
+      model: 'sonnet',
+      status: ImproveRunStatus.Analyzed,
+      result: JSON.stringify({
+        categories: ['performance'],
+        autoCreate: false,
+        items: [
+          {
+            category: 'performance',
+            title: 'Cache lists',
+            risk: 'low',
+            body: 'y',
+          },
+        ],
+      }),
+    };
+    const { service } = setup({ findOne: jest.fn().mockResolvedValue(run) });
+    const startRun = jest
+      .spyOn(service, 'startRun')
+      .mockResolvedValue({} as never);
+
+    await service.startItems(1, 'opus');
+
+    expect(startRun).toHaveBeenCalledWith(3, 40, 'opus');
+    expect(JSON.parse(run.result).items[0]).toMatchObject({
+      issueNumber: 40,
+      started: true,
+    });
+  });
+
+  it('refuses to take an unfinished analysis into work', async () => {
+    const { service } = setup({
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 1, status: ImproveRunStatus.Running }),
+    });
+
+    await expect(service.startItems(1, 'sonnet')).rejects.toThrow(
+      'Анализ ещё не завершён',
+    );
+  });
 });

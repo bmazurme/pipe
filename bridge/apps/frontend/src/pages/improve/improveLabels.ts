@@ -98,6 +98,7 @@ export interface ScheduleForm {
   kind?: 'issues' | 'analysis';
   categories?: AnalysisCategory[];
   autoCreateIssues?: boolean;
+  autoStartIssues?: boolean;
 }
 
 /** The API input, or the first problem to show the user. */
@@ -121,6 +122,7 @@ export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput |
       kind: 'analysis',
       categories: form.categories,
       autoCreateIssues: form.autoCreateIssues ?? true,
+      autoStartIssues: form.autoStartIssues ?? false,
     };
   }
   if (!Number.isInteger(count) || count < 1 || count > 20) return 'Количество задач — от 1 до 20';

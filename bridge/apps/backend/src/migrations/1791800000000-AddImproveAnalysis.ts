@@ -20,9 +20,15 @@ export class AddImproveAnalysis1791800000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "improve_schedules" ADD "autoCreateIssues" boolean NOT NULL DEFAULT true`,
     );
+    await queryRunner.query(
+      `ALTER TABLE "improve_schedules" ADD "autoStartIssues" boolean NOT NULL DEFAULT false`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "improve_schedules" DROP COLUMN "autoStartIssues"`,
+    );
     await queryRunner.query(
       `ALTER TABLE "improve_schedules" DROP COLUMN "autoCreateIssues"`,
     );

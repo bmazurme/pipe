@@ -578,6 +578,64 @@
         }
       }
     },
+    "/api/v1/improve/runs/batch": {
+      "post": {
+        "operationId": "ImproveController_startMany",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartManyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/improve/runs/{id}/start-items": {
+      "post": {
+        "operationId": "ImproveController_startItems",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs/{id}/create-issues": {
       "post": {
         "operationId": "ImproveController_createIssues",
@@ -2762,6 +2820,46 @@
           },
           "autoCreate": {
             "type": "boolean"
+          },
+          "autoStart": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "StartManyDto": {
+        "type": "object",
+        "properties": {
+          "issueNumbers": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 1
+            }
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issueNumbers",
+          "model"
+        ]
+      },
+      "StartItemsDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "indices": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         },
         "required": [
@@ -2811,6 +2909,9 @@
           "autoCreateIssues": {
             "type": "boolean"
           },
+          "autoStartIssues": {
+            "type": "boolean"
+          },
           "count": {
             "type": "number"
           },
@@ -2855,6 +2956,7 @@
           "kind",
           "categories",
           "autoCreateIssues",
+          "autoStartIssues",
           "count",
           "model",
           "label",
@@ -2916,6 +3018,9 @@
             }
           },
           "autoCreateIssues": {
+            "type": "boolean"
+          },
+          "autoStartIssues": {
             "type": "boolean"
           }
         },

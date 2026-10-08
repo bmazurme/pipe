@@ -22,6 +22,8 @@ import {
   SaveScheduleDto,
   SaveSettingsDto,
   StartAnalysisDto,
+  StartItemsDto,
+  StartManyDto,
   StartRunDto,
 } from './dto/improve.dto';
 import { ImproveService } from './improve.service';
@@ -76,8 +78,26 @@ export class ImproveController {
       user.id,
       dto.model,
       categories as AnalysisCategory[],
-      dto.autoCreate === true,
+      dto.autoCreate === true || dto.autoStart === true,
+      'manual',
+      null,
+      dto.autoStart === true,
     );
+  }
+
+  // Several issues into work at once: each is started independently.
+  @Post('runs/batch')
+  startMany(@Body() dto: StartManyDto, @CurrentUser() user: { id: number }) {
+    return this.improve.startMany(user.id, dto.issueNumbers, dto.model);
+  }
+
+  // Files the chosen proposals of a finished analysis and starts a run for each.
+  @Post('runs/:id/start-items')
+  startItems(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: StartItemsDto,
+  ) {
+    return this.improve.startItems(id, dto.model, dto.indices);
   }
 
   // Files the chosen proposals of a finished analysis as GitHub issues.
