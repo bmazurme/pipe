@@ -344,3 +344,118 @@
   justify-content: center;
   padding: 32px 0;
 }
+
+/* Dashboard tab */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--ntlstl-page-max);
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-l);
+}
+
+.heroTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 20px;
+}
+
+.heroValue {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.heroHours {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.heroBadges {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: var(--g-color-base-brand);
+  color: var(--g-color-text-brand-contrast);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.badgeDanger {
+  background-color: var(--g-color-base-danger-heavy);
+  color: var(--g-color-text-light-primary);
+}
+
+.progress {
+  width: 100%;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+}
+
+.tileValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+}
+
+.calendarStat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.calendarStat dt,
+.calendarStat dd {
+  margin: 0;
+}
+
+@media (min-width: 600px) {
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .calendarStats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

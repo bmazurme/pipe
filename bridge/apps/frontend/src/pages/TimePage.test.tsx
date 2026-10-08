@@ -32,7 +32,7 @@ describe('TimePage', () => {
   });
 
   it('builds only the active tab', () => {
-    renderAt('/time');
+    renderAt('/time?tab=calendar');
 
     // TabPanel hides inactive panels with CSS but still mounts their
     // children unless the page guards them — the report tab firing its own
@@ -42,7 +42,7 @@ describe('TimePage', () => {
   });
 
   it('marks the current month and explains the marker', async () => {
-    renderAt('/time');
+    renderAt('/time?tab=calendar');
 
     expect(await screen.findByText('Сейчас')).toBeTruthy();
     expect(screen.getByText('Сегодня')).toBeTruthy();
