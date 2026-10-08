@@ -436,6 +436,108 @@
         }
       }
     },
+    "/api/v1/contexts": {
+      "get": {
+        "operationId": "ContextController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContextResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ContextController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contexts/{id}": {
+      "patch": {
+        "operationId": "ContextController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ContextController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/improve/status": {
       "get": {
         "operationId": "ImproveController_status",
@@ -2643,6 +2745,56 @@
           }
         }
       },
+      "ContextResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "content",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateContextDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ]
+      },
+      "UpdateContextDto": {
+        "type": "object",
+        "properties": {}
+      },
       "ImproveRun": {
         "type": "object",
         "properties": {
@@ -3138,6 +3290,10 @@
             "type": "number",
             "nullable": true
           },
+          "contextName": {
+            "type": "string",
+            "nullable": true
+          },
           "status": {
             "enum": [
               "queued",
@@ -3195,6 +3351,7 @@
           "resultFileId",
           "model",
           "claudeCredentialId",
+          "contextName",
           "status",
           "logs",
           "errorMessage",
@@ -3224,6 +3381,9 @@
             ]
           },
           "claudeCredentialId": {
+            "type": "number"
+          },
+          "contextId": {
             "type": "number"
           }
         },

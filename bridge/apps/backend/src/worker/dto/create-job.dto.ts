@@ -12,4 +12,9 @@ export class CreateJobDto {
   @IsOptional()
   @IsInt()
   claudeCredentialId?: number;
+
+  // A saved context (ContextModule) to attach; absent = run with none.
+  @IsOptional()
+  @IsInt()
+  contextId?: number;
 }

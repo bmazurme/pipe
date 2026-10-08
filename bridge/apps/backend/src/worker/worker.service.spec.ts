@@ -7,6 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
+import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
@@ -38,6 +39,7 @@ describe('WorkerService', () => {
     Record<keyof WorkerHeartbeatService, jest.Mock>
   >;
   let appLogs: { record: jest.Mock };
+  let contextService: { findOwned: jest.Mock };
 
   beforeEach(async () => {
     repository = createMockRepository();
@@ -59,6 +61,7 @@ describe('WorkerService', () => {
       ),
     };
     appLogs = { record: jest.fn() };
+    contextService = { findOwned: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -71,6 +74,7 @@ describe('WorkerService', () => {
         },
         { provide: WorkerHeartbeatService, useValue: heartbeatService },
         { provide: AppLogService, useValue: appLogs },
+        { provide: ContextService, useValue: contextService },
       ],
     }).compile();
 
@@ -144,6 +148,8 @@ describe('WorkerService', () => {
         sourceFileId: 1,
         model: JobModel.Deepseek,
         claudeCredentialId: null,
+        contextName: null,
+        contextText: null,
         status: JobStatus.Queued,
       });
       expect(job).toMatchObject({ id: 10, status: JobStatus.Queued });
@@ -600,6 +606,102 @@ describe('WorkerService', () => {
       await expect(
         service.setResult(3, 7, {} as Express.Multer.File),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('context', () => {
+    beforeEach(() => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: 'x.subscription.zip',
+      });
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 9, ...job }),
+      );
+    });
+
+    it('attaches nothing by default', async () => {
+      const job = await service.create(7, {
+        sourceFileId: 1,
+        model: JobModel.Sonnet,
+      });
+
+      expect(job).toMatchObject({ contextName: null, contextText: null });
+      expect(contextService.findOwned).not.toHaveBeenCalled();
+    });
+
+    it('snapshots the chosen context onto the job', async () => {
+      contextService.findOwned.mockResolvedValue({
+        name: 'Project notes',
+        content: 'Use pnpm.',
+      });
+
+      const job = await service.create(7, {
+        sourceFileId: 1,
+        model: JobModel.Sonnet,
+        contextId: 3,
+      });
+
+      expect(contextService.findOwned).toHaveBeenCalledWith(3, 7);
+      expect(job).toMatchObject({
+        contextName: 'Project notes',
+        contextText: 'Use pnpm.',
+      });
+    });
+
+    it('rejects a context the user does not own, creating no job', async () => {
+      contextService.findOwned.mockRejectedValue(
+        new NotFoundException('Context not found'),
+      );
+
+      await expect(
+        service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          contextId: 99,
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('keeps the original snapshot when a job is retried', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 1,
+        model: JobModel.Opus,
+        claudeCredentialId: null,
+        status: JobStatus.Failed,
+        contextName: 'Project notes',
+        contextText: 'Use pnpm.',
+      });
+
+      const retried = await service.retry(5, 7);
+
+      // Not re-read from the saved context: it may have been edited or deleted.
+      expect(contextService.findOwned).not.toHaveBeenCalled();
+      expect(retried).toMatchObject({
+        contextName: 'Project notes',
+        contextText: 'Use pnpm.',
+      });
+    });
+
+    it('lists jobs without their context text', async () => {
+      repository.find!.mockResolvedValue([]);
+      (repository as unknown as { metadata: unknown }).metadata = {
+        columns: [
+          { propertyName: 'id' },
+          { propertyName: 'logs' },
+          { propertyName: 'contextName' },
+          { propertyName: 'contextText' },
+        ],
+      };
+
+      await service.findAllByUser(7);
+
+      expect(repository.find).toHaveBeenCalledWith(
+        expect.objectContaining({ select: ['id', 'contextName'] }),
+      );
     });
   });
 

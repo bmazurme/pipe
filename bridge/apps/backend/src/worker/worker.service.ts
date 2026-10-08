@@ -10,6 +10,7 @@ import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, Repository } from 'typeorm';
 
+import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import {
@@ -47,10 +48,18 @@ export class WorkerService {
     private readonly storageService: StorageService,
     private readonly claudeCredentialsService: ClaudeCredentialsService,
     private readonly heartbeatService: WorkerHeartbeatService,
+    private readonly contextService: ContextService,
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
-  async create(userId: number, dto: CreateJobDto): Promise<Job> {
+  // `carriedContext` is for a retry: it reuses the original job's own snapshot, so the
+  // retry runs with exactly the context the first attempt had even if the saved
+  // context was edited or deleted since.
+  async create(
+    userId: number,
+    dto: CreateJobDto,
+    carriedContext?: { name: string; text: string },
+  ): Promise<Job> {
     const sourceFile = await this.storageService.findOwned(
       dto.sourceFileId,
       userId,
@@ -72,9 +81,21 @@ export class WorkerService {
       }
     }
 
+    // Nothing is attached unless the owner chose a context; a chosen one is copied onto
+    // the job (see Job.contextText) rather than referenced.
+    const context =
+      carriedContext ??
+      (dto.contextId !== undefined
+        ? await this.contextService
+            .findOwned(dto.contextId, userId)
+            .then((found) => ({ name: found.name, text: found.content }))
+        : undefined);
+
     return this.jobRepository.save({
       userId,
       sourceFileId: sourceFile.id,
+      contextName: context?.name ?? null,
+      contextText: context?.text ?? null,
       model: dto.model,
       claudeCredentialId: dto.claudeCredentialId ?? null,
       status: JobStatus.Queued,
@@ -98,13 +119,19 @@ export class WorkerService {
       throw new ConflictException('The source parcel was already consumed');
     }
 
-    const retried = await this.create(userId, {
-      sourceFileId: job.sourceFileId,
-      model: job.model,
-      ...(job.claudeCredentialId !== null
-        ? { claudeCredentialId: job.claudeCredentialId }
-        : {}),
-    });
+    const retried = await this.create(
+      userId,
+      {
+        sourceFileId: job.sourceFileId,
+        model: job.model,
+        ...(job.claudeCredentialId !== null
+          ? { claudeCredentialId: job.claudeCredentialId }
+          : {}),
+      },
+      job.contextText !== null && job.contextName !== null
+        ? { name: job.contextName, text: job.contextText }
+        : undefined,
+    );
 
     void this.appLogs?.record({
       level: 'info',
@@ -118,11 +145,12 @@ export class WorkerService {
   }
 
   async findAllByUser(userId: number): Promise<Job[]> {
-    // `logs` is unbounded and appended on every worker flush — the list view
-    // never needs it, so it is left out of the SELECT (GET :id returns it).
+    // `logs` is unbounded and appended on every worker flush, and a context can be
+    // tens of KB — the list view needs neither, so both are left out of the SELECT
+    // (GET :id returns the logs; the context text only ever goes to the worker).
     const columns = this.jobRepository.metadata.columns
       .map((column) => column.propertyName as keyof Job)
-      .filter((name) => name !== 'logs');
+      .filter((name) => name !== 'logs' && name !== 'contextText');
 
     return this.jobRepository.find({
       select: columns,

@@ -6,6 +6,8 @@ export class JobResponseDto {
   resultFileId: number | null;
   model: JobModel;
   claudeCredentialId: number | null;
+  // The attached context's name, or null — never its text (see ClaimedJobResponseDto).
+  contextName: string | null;
   status: JobStatus;
   logs: string;
   errorMessage: string | null;
@@ -24,6 +26,7 @@ export class JobResponseDto {
       resultFileId: job.resultFileId,
       model: job.model,
       claudeCredentialId: job.claudeCredentialId,
+      contextName: job.contextName ?? null,
       status: job.status,
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',

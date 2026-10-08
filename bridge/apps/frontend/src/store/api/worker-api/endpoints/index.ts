@@ -24,6 +24,8 @@ export interface WorkerJob {
   resultFileId: number | null;
   model: WorkerJobModel;
   claudeCredentialId: number | null;
+  /** The attached context's name, or null — the default. */
+  contextName: string | null;
   status: WorkerJobStatus;
   logs: string;
   errorMessage: string | null;
@@ -69,7 +71,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     }),
     createJob: builder.mutation<
       WorkerJob,
-      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number }
+      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number; contextId?: number }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),
       invalidatesTags: ['WorkerJob'],

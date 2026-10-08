@@ -113,6 +113,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
             {MODEL_OPTIONS.find((m) => m.value === job.model)?.content ?? job.model}
           </Text>
           {job.workerName && <Text color="secondary">· {job.workerName}</Text>}
+          {job.contextName && <Text color="secondary">· Контекст: {job.contextName}</Text>}
           {duration && <Text color="secondary">· {duration}</Text>}
         </div>
 

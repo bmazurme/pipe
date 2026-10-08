@@ -1,5 +1,6 @@
 import {
   Bucket,
+  BookOpen,
   Clock,
   Comments,
   FaceRobot,
@@ -76,6 +77,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Самоулучшение: задачи из GitHub issues уходят в worker, результат — PR; запуск вручную или по расписанию.',
     icon: Rocket,
     path: '/improve',
+  },
+  {
+    id: 'context',
+    title: 'Context',
+    description: 'Сохранённый контекст для задач ИИ-агента: заметки о проекте и правила, которые можно прикрепить при запуске.',
+    icon: BookOpen,
+    path: '/context',
   },
   {
     id: 'keys',

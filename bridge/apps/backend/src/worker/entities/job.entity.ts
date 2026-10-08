@@ -1,6 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
+import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 
 // Sonnet/opus run through the existing `claude` CLI (same as sync's
 // agent-runner); gpt/deepseek/qwen run through worker's own minimal
@@ -56,6 +57,16 @@ export class Job extends BaseEntity {
   // delete or orphaning the FK.
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
+
+  // The context the owner attached at launch (see ContextModule) — a snapshot, not a
+  // reference, so editing or deleting the saved context never changes a job that is
+  // queued or already ran. Both null (the default) when nothing was attached. The text
+  // is only ever handed to the worker at claim time; human-facing routes see the name.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  contextName: string | null;
+
+  @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
+  contextText: string | null;
 
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
