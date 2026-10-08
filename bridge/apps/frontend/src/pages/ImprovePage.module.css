@@ -67,3 +67,39 @@
 .timeRow > * {
   flex: 1 1 140px;
 }
+
+/* Phone widths: title, meta, status label and actions in one row left the title
+   a dozen characters wide ("#101 Cap read_file output …"). Let the text take the
+   full line and wrap, with the status and actions underneath. */
+@media (max-width: 767px) {
+  .row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 12px;
+  }
+
+  .rowMain {
+    flex: 1 1 100%;
+  }
+
+  .rowMain :global(.g-text_ellipsis) {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .rowActions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  /* An icon-only link (the PR) was a 16px target. */
+  .rowActions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+  }
+}

@@ -202,3 +202,40 @@
   padding: 6px 2px;
 }
 
+
+/* Phone widths (412px on a Galaxy S22 Ultra): a job row has a title, a model/time
+   line, a status label and an action in one flex row, which squeezed the title
+   to a few characters. Stack the text above, and let the label and action share
+   the line below. */
+@media (max-width: 767px) {
+  .jobRow {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 12px;
+    min-height: 44px;
+  }
+
+  .jobRowMain {
+    flex: 1 1 100%;
+  }
+
+  .jobRowError {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .createForm > * {
+    flex-basis: 100%;
+  }
+
+  /* Name + token + button side by side left each field ~120px wide. */
+  .secretRow {
+    flex-wrap: wrap;
+  }
+
+  .secretRow > * {
+    flex: 1 1 100%;
+  }
+}
