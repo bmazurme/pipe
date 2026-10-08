@@ -23,7 +23,7 @@ const readProps = (): Record<string, YearProps> => {
 export const getProps = (year: number | string | string[]): YearProps => {
   const props = readProps();
 
-  return props[String(year)];
+  return props[String(year)] ?? emptyYearProps();
 };
 
 // For the settings-transfer bundle — only offDays travel (see
