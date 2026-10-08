@@ -297,9 +297,7 @@ describe('WorkerService', () => {
       expect(params.slice(6)).toEqual([7, 'swarm-worker']);
       // 10 minutes of silence, expressed as an updatedAt cutoff.
       const cutoff = params[3] as Date;
-      expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(
-        10 * 60_000,
-      );
+      expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(10 * 60_000);
     });
 
     it('does nothing without a worker name', async () => {
