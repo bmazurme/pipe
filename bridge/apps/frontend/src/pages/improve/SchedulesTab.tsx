@@ -3,6 +3,7 @@ import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Card, Dialog, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 import { Clock } from '@gravity-ui/icons';
 
+import { ALL_CATEGORIES, CATEGORY_LABEL } from './improveLabels';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { listTimeZones } from '../../shared/lib/timeZones';
 import {
@@ -32,6 +33,9 @@ function toForm(schedule: ImproveSchedule): Form {
     timezone: schedule.timezone,
     count: String(schedule.count),
     model: schedule.model,
+    kind: schedule.kind,
+    categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : ALL_CATEGORIES,
+    autoCreateIssues: schedule.autoCreateIssues,
   };
 }
 
@@ -154,9 +158,21 @@ export function SchedulesTab() {
           {editing && (
             <div className={styles.form}>
               <TextInput label="Название" value={editing.form.name} onUpdate={(name) => update({ name })} />
+              <Select
+                label="Что запускать"
+                value={[editing.form.kind ?? 'issues']}
+                onUpdate={([kind]) =>
+                  update(kind === 'analysis' ? { kind: 'analysis', categories: editing.form.categories ?? ALL_CATEGORIES, autoCreateIssues: editing.form.autoCreateIssues ?? true } : { kind: 'issues' })
+                }
+                options={[
+                  { value: 'issues', content: 'Задачи из issues' },
+                  { value: 'analysis', content: 'Анализ (по 1 задаче на направление)' },
+                ]}
+                width="max"
+              />
               <div className={styles.timeRow}>
                 <TextInput label="Время" value={editing.form.time} onUpdate={(time) => update({ time })} controlProps={{ type: 'time', 'aria-label': 'Время запуска' }} />
-                <TextInput label="Задач" value={editing.form.count} onUpdate={(count) => update({ count })} controlProps={{ type: 'number', min: 1, max: 20, 'aria-label': 'Количество задач' }} />
+                {editing.form.kind !== 'analysis' && <TextInput label="Задач" value={editing.form.count} onUpdate={(count) => update({ count })} controlProps={{ type: 'number', min: 1, max: 20, 'aria-label': 'Количество задач' }} />}
               </div>
               <Select
                 label="Часовой пояс"
@@ -167,6 +183,19 @@ export function SchedulesTab() {
                 width="max"
               />
               <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
+              {editing.form.kind === 'analysis' && (
+                <>
+                  <Select
+                    label="Направления"
+                    multiple
+                    value={editing.form.categories ?? []}
+                    onUpdate={(categories) => update({ categories: categories as ScheduleForm['categories'] })}
+                    options={ALL_CATEGORIES.map((value) => ({ value, content: CATEGORY_LABEL[value] }))}
+                    width="max"
+                  />
+                  <Switch checked={editing.form.autoCreateIssues ?? true} onUpdate={(autoCreateIssues) => update({ autoCreateIssues })} content="Сразу создавать issues" />
+                </>
+              )}
               <Switch checked={editing.form.enabled} onUpdate={(enabled) => update({ enabled })} content="Включено" />
               {error && <Alert theme="danger" view="filled" message={error} />}
             </div>

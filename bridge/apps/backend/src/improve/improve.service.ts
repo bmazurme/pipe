@@ -27,6 +27,19 @@ import {
   ImproveRunStatus,
   ImproveTrigger,
 } from './entities/improve-run.entity';
+import {
+  ALL_CATEGORIES,
+  AnalysisCategory,
+  BACKLOG_FILE,
+  BacklogItem,
+  buildAnalysisPrompt,
+  categoryLabel,
+  isCategory,
+  issueBody,
+  normalizeTitle,
+  parseBacklog,
+  pickOnePerCategory,
+} from './analysis';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import {
@@ -39,7 +52,14 @@ import {
   readResultParcel,
   readZipball,
   selectParcelFiles,
+  utf8Text,
 } from './parcel';
+
+interface AnalysisResult {
+  categories: AnalysisCategory[];
+  autoCreate: boolean;
+  items: Array<BacklogItem & { issueNumber?: number; duplicateOf?: number }>;
+}
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 const ADVANCE_EVERY_MS = 15_000;
@@ -92,7 +112,10 @@ export class ImproveService {
     const issues = await this.github.listOpenIssues(label, 100);
     const runs = issues.length
       ? await this.runs.find({
-          where: { issueNumber: In(issues.map((issue) => issue.number)) },
+          where: {
+            kind: 'issue',
+            issueNumber: In(issues.map((issue) => issue.number)),
+          },
           order: { id: 'DESC' },
         })
       : [];
@@ -124,6 +147,7 @@ export class ImproveService {
 
     const blocking = await this.runs.findOne({
       where: {
+        kind: 'issue',
         issueNumber,
         status: In([...ACTIVE_RUN_STATUSES, ImproveRunStatus.PrOpen]),
       },
@@ -143,36 +167,18 @@ export class ImproveService {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
     }
 
-    const baseBranch = this.github.baseBranch();
-    const baseSha = await this.github.getBranchSha(baseBranch);
-    const files = selectParcelFiles(
-      readZipball(await this.github.downloadZipball(baseSha)),
-    );
-    const { buffer, baseline } = buildIssueParcel(files, {
-      number: issue.number,
-      title: issue.title,
-      body: issue.body,
-      repo: this.github.repoName() as string,
-      baseBranch,
-    });
-    const stored = await this.storage.createFromBuffer(
+    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
       userId,
-      buffer,
+      model,
+      { number: issue.number, title: issue.title, body: issue.body },
+      `improve:${issue.number}`,
       `improve-${issue.number}.subscription.zip`,
-      {
-        channel: 'issue',
-        taskKey: `improve:${issue.number}`,
-        direction: StoredFileDirection.Outbound,
-      },
     );
-    const job = await this.workers.create(userId, {
-      sourceFileId: stored.id,
-      model: model as JobModel,
-    });
 
     const run = await this.runs.save(
       this.runs.create({
         userId,
+        kind: 'issue',
         issueNumber: issue.number,
         issueTitle: issue.title.slice(0, 255),
         model,
@@ -192,11 +198,51 @@ export class ImproveService {
       {
         runId: run.id,
         jobId: job.id,
-        files: files.length,
+        files: fileCount,
       },
     );
 
     return run;
+  }
+
+  // Snapshot of the base branch → parcel with this task as its manifest → Storage →
+  // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
+  // description is the prompt).
+  private async handToWorker(
+    userId: number,
+    model: string,
+    task: { number: number | string; title: string; body: string },
+    taskKey: string,
+    fileName: string,
+  ) {
+    const baseBranch = this.github.baseBranch();
+    const baseSha = await this.github.getBranchSha(baseBranch);
+    const files = selectParcelFiles(
+      readZipball(await this.github.downloadZipball(baseSha)),
+    );
+    const { buffer, baseline } = buildIssueParcel(files, {
+      number: task.number,
+      title: task.title,
+      body: task.body,
+      repo: this.github.repoName() as string,
+      baseBranch,
+    });
+    const stored = await this.storage.createFromBuffer(
+      userId,
+      buffer,
+      fileName,
+      {
+        channel: 'issue',
+        taskKey,
+        direction: StoredFileDirection.Outbound,
+      },
+    );
+    const job = await this.workers.create(userId, {
+      sourceFileId: stored.id,
+      model: model as JobModel,
+    });
+
+    return { job, baseSha, baseline, fileCount: files.length };
   }
 
   async cancelRun(id: number, userId: number): Promise<ImproveRun> {
@@ -260,7 +306,10 @@ export class ImproveService {
 
       if (claim.affected === 1) {
         run.status = ImproveRunStatus.Publishing;
-        await this.publish(run, job.resultFileId);
+
+        if (run.kind === 'analysis')
+          await this.finishAnalysis(run, job.resultFileId);
+        else await this.publish(run, job.resultFileId);
       }
 
       return;
@@ -416,7 +465,10 @@ export class ImproveService {
     run: ImproveRun,
     status: ImproveRunStatus,
     patch: Partial<
-      Pick<ImproveRun, 'error' | 'note' | 'branch' | 'prNumber' | 'prUrl'>
+      Pick<
+        ImproveRun,
+        'error' | 'note' | 'branch' | 'prNumber' | 'prUrl' | 'result'
+      >
     >,
   ): Promise<void> {
     Object.assign(run, patch, { status, finishedAt: new Date() });
@@ -433,6 +485,197 @@ export class ImproveService {
     );
   }
 
+  // -------------------------------------------------------------- analysis
+
+  // A worker reads the repository and proposes one improvement per direction. The
+  // proposals are filed as GitHub issues (labelled `loop`) right away when
+  // `autoCreate`, otherwise kept on the run for review.
+  async startAnalysis(
+    userId: number,
+    model: string,
+    categories: AnalysisCategory[] = ALL_CATEGORIES,
+    autoCreate = false,
+    trigger: ImproveTrigger = 'manual',
+    scheduleId: number | null = null,
+  ): Promise<ImproveRun> {
+    this.requireConfigured();
+    this.requireModel(model);
+
+    if (categories.length === 0 || !categories.every(isCategory)) {
+      throw new BadRequestException(
+        'Выберите хотя бы одно направление анализа',
+      );
+    }
+
+    const active = await this.runs.findOne({
+      where: { kind: 'analysis', status: In(ACTIVE_RUN_STATUSES) },
+    });
+
+    if (active) {
+      throw new ConflictException('Анализ уже выполняется');
+    }
+
+    const titles = (await this.github.listIssueTitles()).map(
+      (issue) => issue.title,
+    );
+    const date = new Date().toISOString().slice(0, 10);
+    const { job, baseSha, fileCount } = await this.handToWorker(
+      userId,
+      model,
+      {
+        number: `analysis-${date}`,
+        title: `Analysis ${date}`,
+        body: buildAnalysisPrompt(titles, categories),
+      },
+      'improve:analysis',
+      `improve-analysis-${date}.subscription.zip`,
+    );
+    const run = await this.runs.save(
+      this.runs.create({
+        userId,
+        kind: 'analysis',
+        issueNumber: null,
+        issueTitle: `Анализ: ${categories.map(categoryLabel).join(', ')}`.slice(
+          0,
+          255,
+        ),
+        model,
+        trigger,
+        scheduleId,
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        baseSha,
+        result: JSON.stringify({ categories, autoCreate, items: [] }),
+      }),
+    );
+
+    this.log(
+      'info',
+      'improve.analysis_started',
+      `Run ${run.id}: analysis (${categories.join(', ')}) → job ${job.id} (${model}, ${trigger})`,
+      {
+        runId: run.id,
+        jobId: job.id,
+        files: fileCount,
+      },
+    );
+
+    return run;
+  }
+
+  // The worker's backlog → one proposal per direction → (optionally) GitHub issues.
+  async finishAnalysis(
+    run: ImproveRun,
+    resultFileId: number | null,
+  ): Promise<void> {
+    try {
+      if (!resultFileId) throw new Error('У задачи worker нет результата');
+
+      const file = await this.storage.findOwned(resultFileId, run.userId);
+      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const raw = result.get(BACKLOG_FILE);
+
+      if (!raw) throw new Error(`Worker не создал ${BACKLOG_FILE}`);
+
+      const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
+      const items = pickOnePerCategory(
+        parseBacklog(utf8Text(raw)),
+        stored.categories ?? ALL_CATEGORIES,
+      );
+
+      if (items.length === 0) {
+        await this.finish(run, ImproveRunStatus.Analyzed, {
+          result: JSON.stringify({ ...stored, items: [] }),
+          note: 'Анализ ничего не предложил',
+        });
+        await this.notifier.send('ℹ️ Анализ завершён: предложений нет');
+        await this.storage.delete(file).catch(() => undefined);
+
+        return;
+      }
+
+      run.result = JSON.stringify({ ...stored, items });
+
+      const summary = stored.autoCreate
+        ? await this.createIssuesFromRun(run)
+        : null;
+
+      await this.finish(run, ImproveRunStatus.Analyzed, {
+        result: run.result,
+        note: summary ?? `${items.length} предложений ждут проверки`,
+      });
+      await this.storage.delete(file).catch(() => undefined);
+      await this.notifier.send(
+        `🔍 Анализ завершён: ${summary ?? `${items.length} предложений ждут проверки в Improve → Анализ`}`,
+      );
+    } catch (error) {
+      await this.finish(run, ImproveRunStatus.Failed, {
+        error: message(error),
+      });
+      await this.notifier.send(
+        `🔴 Анализ не удался: ${message(error).slice(0, 200)}`,
+      );
+    }
+  }
+
+  // Files the run's proposals as issues, skipping any whose title matches an existing
+  // issue. Records each item's outcome on the run and returns a one-line summary.
+  async createIssuesFromRun(run: ImproveRun, only?: number[]): Promise<string> {
+    const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
+    const existing = new Map(
+      (await this.github.listIssueTitles()).map((issue) => [
+        normalizeTitle(issue.title),
+        issue.number,
+      ]),
+    );
+    let created = 0;
+    let duplicates = 0;
+
+    for (const [index, item] of stored.items.entries()) {
+      if (only && !only.includes(index)) continue;
+      if (item.issueNumber || item.duplicateOf) continue;
+
+      const duplicate = existing.get(normalizeTitle(item.title));
+
+      if (duplicate) {
+        item.duplicateOf = duplicate;
+        duplicates += 1;
+        continue;
+      }
+
+      const issue = await this.github.createIssue({
+        title: item.title,
+        body: issueBody(item),
+        labels: [PR_LABEL, `risk:${item.risk}`, `category:${item.category}`],
+      });
+
+      item.issueNumber = issue.number;
+      existing.set(normalizeTitle(item.title), issue.number);
+      created += 1;
+    }
+
+    run.result = JSON.stringify(stored);
+    await this.runs.save(run);
+
+    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}`;
+  }
+
+  // The manual path for a reviewed analysis: file the chosen proposals.
+  async createIssues(id: number, indices?: number[]): Promise<ImproveRun> {
+    this.requireConfigured();
+
+    const run = await this.runs.findOne({ where: { id, kind: 'analysis' } });
+
+    if (!run) throw new NotFoundException('Analysis run not found');
+    if (run.status !== ImproveRunStatus.Analyzed) {
+      throw new ConflictException('Анализ ещё не завершён');
+    }
+
+    run.note = await this.createIssuesFromRun(run, indices);
+
+    return this.runs.save(run);
+  }
+
   // ------------------------------------------------------------- schedules
 
   listSchedules(): Promise<ImproveSchedule[]> {
@@ -444,7 +687,12 @@ export class ImproveService {
     input: Pick<
       ImproveSchedule,
       'name' | 'hour' | 'minute' | 'timezone' | 'count' | 'model' | 'enabled'
-    > & { label?: string },
+    > & {
+      label?: string;
+      kind?: 'issues' | 'analysis';
+      categories?: string[];
+      autoCreateIssues?: boolean;
+    },
     id?: number,
   ): Promise<ImproveSchedule> {
     this.requireModel(input.model);
@@ -461,7 +709,19 @@ export class ImproveService {
 
     if (!schedule) throw new NotFoundException('Schedule not found');
 
-    Object.assign(schedule, { ...input, label: input.label || PR_LABEL });
+    const categories = input.categories ?? [];
+
+    if (!categories.every(isCategory)) {
+      throw new BadRequestException('Неизвестное направление анализа');
+    }
+
+    Object.assign(schedule, {
+      ...input,
+      kind: input.kind ?? 'issues',
+      label: input.label || PR_LABEL,
+      categories: categories.length ? categories.join(',') : null,
+      autoCreateIssues: input.autoCreateIssues ?? true,
+    });
 
     return this.schedules.save(schedule);
   }
@@ -528,6 +788,40 @@ export class ImproveService {
     const skipped: string[] = [];
 
     this.requireConfigured();
+
+    if (schedule.kind === 'analysis') {
+      const categories = schedule.categories
+        ? (schedule.categories
+            .split(',')
+            .filter(isCategory) as AnalysisCategory[])
+        : ALL_CATEGORIES;
+      let summary: string;
+
+      try {
+        const run = await this.startAnalysis(
+          schedule.userId,
+          schedule.model,
+          categories,
+          schedule.autoCreateIssues,
+          'schedule',
+          schedule.id,
+        );
+
+        started.push(run.id);
+        summary = 'анализ запущен';
+      } catch (error) {
+        skipped.push(message(error));
+        summary = `анализ не запущен: ${message(error)}`;
+      }
+
+      await this.schedules.update(schedule.id, {
+        lastRunAt: new Date(),
+        lastResult: summary,
+      });
+      await this.notifier.send(`🌙 Расписание «${schedule.name}»: ${summary}`);
+
+      return { started, skipped };
+    }
 
     for (const issue of await this.github.listOpenIssues(schedule.label, 100)) {
       if (started.length >= schedule.count) break;

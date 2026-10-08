@@ -24,7 +24,20 @@ export class ImproveSchedule extends BaseEntity {
   @Column({ type: 'varchar', length: 64 })
   timezone: string;
 
-  // How many issues to start per run.
+  // 'issues' runs the oldest open issues; 'analysis' runs a repository analysis.
+  @Column({ type: 'varchar', length: 16, default: 'issues' })
+  kind: 'issues' | 'analysis';
+
+  // Analysis only: comma-separated direction ids (empty = all five).
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  categories: string | null;
+
+  // Analysis only: file the proposals as GitHub issues straight away, instead of
+  // leaving them for review on the Analysis tab.
+  @Column({ type: 'boolean', default: true })
+  autoCreateIssues: boolean;
+
+  // How many issues to start per run (issue schedules).
   @Column({ type: 'smallint' })
   count: number;
 

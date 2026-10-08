@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -15,9 +16,12 @@ import {
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { ALL_CATEGORIES, AnalysisCategory, isCategory } from './analysis';
 import {
+  CreateIssuesDto,
   SaveScheduleDto,
   SaveSettingsDto,
+  StartAnalysisDto,
   StartRunDto,
 } from './dto/improve.dto';
 import { ImproveService } from './improve.service';
@@ -55,6 +59,34 @@ export class ImproveController {
     @CurrentUser() user: { id: number },
   ) {
     return this.improve.cancelRun(id, user.id);
+  }
+
+  @Post('analysis')
+  startAnalysis(
+    @Body() dto: StartAnalysisDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const categories = dto.categories?.length ? dto.categories : ALL_CATEGORIES;
+
+    if (!categories.every(isCategory)) {
+      throw new BadRequestException('Неизвестное направление анализа');
+    }
+
+    return this.improve.startAnalysis(
+      user.id,
+      dto.model,
+      categories as AnalysisCategory[],
+      dto.autoCreate === true,
+    );
+  }
+
+  // Files the chosen proposals of a finished analysis as GitHub issues.
+  @Post('runs/:id/create-issues')
+  createIssues(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateIssuesDto,
+  ) {
+    return this.improve.createIssues(id, dto.indices);
   }
 
   @Get('schedules')

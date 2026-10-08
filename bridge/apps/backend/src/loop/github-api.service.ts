@@ -183,6 +183,43 @@ export class GithubApiService {
     return { ...toIssueInfo(item), isPull: Boolean(item.pull_request) };
   }
 
+  // Every issue title (open and closed, pull requests excluded), so an analysis is told
+  // what was already proposed and a new proposal can be checked for a duplicate.
+  async listIssueTitles(
+    max = 300,
+  ): Promise<Array<{ number: number; title: string }>> {
+    const titles: Array<{ number: number; title: string }> = [];
+
+    for (let page = 1; titles.length < max; page++) {
+      const batch = (await this.get(
+        `/issues?state=all&per_page=100&page=${page}`,
+      )) as Array<IssueRaw>;
+
+      titles.push(
+        ...batch
+          .filter((item) => !item.pull_request)
+          .map((item) => ({ number: item.number, title: item.title })),
+      );
+
+      if (batch.length < 100) break;
+    }
+
+    return titles.slice(0, max);
+  }
+
+  async createIssue(input: {
+    title: string;
+    body: string;
+    labels: string[];
+  }): Promise<{ number: number; htmlUrl: string }> {
+    const data = (await this.post('/issues', input)) as {
+      number: number;
+      html_url: string;
+    };
+
+    return { number: data.number, htmlUrl: data.html_url };
+  }
+
   async getBranchSha(branch: string): Promise<string> {
     const data = (await this.get(
       `/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`,

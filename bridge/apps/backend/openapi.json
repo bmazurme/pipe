@@ -550,6 +550,71 @@
         }
       }
     },
+    "/api/v1/improve/analysis": {
+      "post": {
+        "operationId": "ImproveController_startAnalysis",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAnalysisDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/runs/{id}/create-issues": {
+      "post": {
+        "operationId": "ImproveController_createIssues",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIssuesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/schedules": {
       "get": {
         "operationId": "ImproveController_schedules",
@@ -2557,8 +2622,12 @@
           "userId": {
             "type": "number"
           },
+          "kind": {
+            "type": "object"
+          },
           "issueNumber": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "issueTitle": {
             "type": "string"
@@ -2581,7 +2650,8 @@
               "pr_open",
               "no_changes",
               "failed",
-              "cancelled"
+              "cancelled",
+              "analyzed"
             ],
             "type": "string"
           },
@@ -2606,6 +2676,10 @@
             "nullable": true
           },
           "prUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "result": {
             "type": "string",
             "nullable": true
           },
@@ -2636,6 +2710,7 @@
         },
         "required": [
           "userId",
+          "kind",
           "issueNumber",
           "issueTitle",
           "model",
@@ -2648,6 +2723,7 @@
           "branch",
           "prNumber",
           "prUrl",
+          "result",
           "note",
           "error",
           "finishedAt",
@@ -2672,6 +2748,38 @@
           "model"
         ]
       },
+      "StartAnalysisDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoCreate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "CreateIssuesDto": {
+        "type": "object",
+        "properties": {
+          "indices": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      },
       "ImproveSchedule": {
         "type": "object",
         "properties": {
@@ -2692,6 +2800,16 @@
           },
           "timezone": {
             "type": "string"
+          },
+          "kind": {
+            "type": "object"
+          },
+          "categories": {
+            "type": "string",
+            "nullable": true
+          },
+          "autoCreateIssues": {
+            "type": "boolean"
           },
           "count": {
             "type": "number"
@@ -2734,6 +2852,9 @@
           "hour",
           "minute",
           "timezone",
+          "kind",
+          "categories",
+          "autoCreateIssues",
           "count",
           "model",
           "label",
@@ -2780,6 +2901,22 @@
           "label": {
             "type": "string",
             "pattern": "/^[\\w.\\- ]{1,64}$/"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "issues",
+              "analysis"
+            ]
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoCreateIssues": {
+            "type": "boolean"
           }
         },
         "required": [

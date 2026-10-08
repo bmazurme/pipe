@@ -13,6 +13,8 @@ export enum ImproveRunStatus {
   NoChanges = 'no_changes',
   Failed = 'failed',
   Cancelled = 'cancelled',
+  // An analysis run that finished: its proposals are in `result`, and (when asked) already filed as issues.
+  Analyzed = 'analyzed',
 }
 
 export const ACTIVE_RUN_STATUSES = [
@@ -22,6 +24,7 @@ export const ACTIVE_RUN_STATUSES = [
 ];
 
 export type ImproveTrigger = 'manual' | 'schedule';
+export type ImproveRunKind = 'issue' | 'analysis';
 
 // One attempt to implement one GitHub issue: snapshot → worker job → branch + PR.
 @Entity({ name: 'improve_runs' })
@@ -30,8 +33,13 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'int', unsigned: true })
   userId: number;
 
-  @Column({ type: 'int', unsigned: true })
-  issueNumber: number;
+  // 'issue' implements one GitHub issue; 'analysis' reads the repo and proposes some.
+  @Column({ type: 'varchar', length: 16, default: 'issue' })
+  kind: ImproveRunKind;
+
+  // Null for an analysis (it is not about one issue).
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  issueNumber: number | null;
 
   @Column({ type: 'varchar', length: 255 })
   issueTitle: string;
@@ -68,6 +76,11 @@ export class ImproveRun extends BaseEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   prUrl: string | null;
+
+  // Analysis only: JSON of { categories, autoCreate, items: [{ category, title, risk,
+  // body, issueNumber?, duplicateOf? }] }.
+  @Column({ type: 'text', nullable: true })
+  result: string | null;
 
   @Column({ type: 'text', nullable: true })
   note: string | null;

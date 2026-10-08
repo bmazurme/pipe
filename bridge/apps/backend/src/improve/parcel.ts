@@ -101,7 +101,7 @@ export function selectParcelFiles(files: SnapshotFile[]): SnapshotFile[] {
 }
 
 export interface IssueRef {
-  number: number;
+  number: number | string;
   title: string;
   body: string;
   repo: string;
