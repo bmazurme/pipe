@@ -149,10 +149,11 @@ export async function processJob(
       writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
     }
 
-    const prompt = withContext(describeTask(parcel), job.context);
+    const prompt = withContext(describeTask(parcel), job.context, job.history);
     const provider = resolveProvider(job.model);
 
     if (job.context?.trim()) log('Attached context: yes\n');
+    if (job.history?.trim()) log('Attached context: outcomes of earlier runs\n');
 
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 

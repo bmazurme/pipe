@@ -28,6 +28,7 @@ export enum JobStatus {
 
 @Entity({ name: 'jobs' })
 @Index(['userId', 'status'])
+@Index(['userId', 'taskKey'])
 export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: false })
   userId: number;
@@ -67,6 +68,21 @@ export class Job extends BaseEntity {
 
   @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
   contextText: string | null;
+
+  // Which task this job works on — the parcel's taskKey, or `file:<id>` for a plain file —
+  // copied at creation. A succeeded pipeline job loses its sourceFileId (the parcel is
+  // consumed), so this is what still ties its outcome to the next run on the same task.
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  taskKey: string | null;
+
+  // Outcomes of earlier runs of this task, when the owner asked for them at launch: a
+  // snapshot built at creation (see run-history.ts), like the context. Null when not
+  // asked for, or when there was nothing earlier. Like contextText, only the worker gets it.
+  @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
+  historyText: string | null;
+
+  @Column({ type: 'smallint', nullable: true })
+  historyCount: number | null;
 
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;

@@ -9,6 +9,7 @@ import { JobResponseDto } from './job-response.dto';
 export class ClaimedJobResponseDto extends JobResponseDto {
   claudeToken: string | null;
   context: string | null;
+  history: string | null;
 
   static fromEntityWithToken(
     job: Job,
@@ -18,6 +19,7 @@ export class ClaimedJobResponseDto extends JobResponseDto {
       ...JobResponseDto.fromEntity(job),
       claudeToken,
       context: job.contextText ?? null,
+      history: job.historyText ?? null,
     };
   }
 }

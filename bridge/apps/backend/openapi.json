@@ -1168,6 +1168,26 @@
         }
       }
     },
+    "/api/v1/worker/jobs/history": {
+      "get": {
+        "operationId": "WorkerController_history",
+        "parameters": [
+          {
+            "name": "sourceFileId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}": {
       "get": {
         "operationId": "WorkerController_get",
@@ -3294,6 +3314,10 @@
             "type": "string",
             "nullable": true
           },
+          "historyCount": {
+            "type": "number",
+            "nullable": true
+          },
           "status": {
             "enum": [
               "queued",
@@ -3352,6 +3376,7 @@
           "model",
           "claudeCredentialId",
           "contextName",
+          "historyCount",
           "status",
           "logs",
           "errorMessage",
@@ -3385,6 +3410,9 @@
           },
           "contextId": {
             "type": "number"
+          },
+          "includeHistory": {
+            "type": "boolean"
           }
         },
         "required": [

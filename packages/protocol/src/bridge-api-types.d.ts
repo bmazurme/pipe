@@ -602,6 +602,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["WorkerController_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/{id}": {
         parameters: {
             query?: never;
@@ -1441,6 +1457,7 @@ export interface components {
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId: number | null;
             contextName: string | null;
+            historyCount: number | null;
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
@@ -1465,6 +1482,7 @@ export interface components {
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
             contextId?: number;
+            includeHistory?: boolean;
         };
         ClaimJobDto: {
             workerName?: string;
@@ -2663,6 +2681,25 @@ export interface operations {
         };
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WorkerController_history: {
+        parameters: {
+            query: {
+                sourceFileId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

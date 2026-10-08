@@ -21,9 +21,19 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobStatus } from './entities/job.entity';
+import { buildRunHistory, FINISHED_STATUSES } from './run-history';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
+
+// More than the history keeps, so a few unreadable rows cannot starve it.
+const HISTORY_LOOKUP = 12;
+
+// What identifies "the same task" across runs: a pipeline parcel's own key (stable for an
+// issue however many times it is re-pushed), else the plain file itself.
+function taskKeyOf(sourceFile: { id: number; taskKey: string | null }): string {
+  return sourceFile.taskKey ?? `file:${sourceFile.id}`;
+}
 
 // A worker handles one job at a time and only asks for the next one when it is
 // idle. So when it claims, any job still marked claimed/running under its name is
@@ -52,13 +62,16 @@ export class WorkerService {
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
-  // `carriedContext` is for a retry: it reuses the original job's own snapshot, so the
-  // retry runs with exactly the context the first attempt had even if the saved
-  // context was edited or deleted since.
+  // `carried` is for a retry: it reuses the original job's own snapshots, so the retry
+  // runs with exactly the context and history the first attempt had, even if the saved
+  // context was edited or deleted (or more runs happened) since.
   async create(
     userId: number,
     dto: CreateJobDto,
-    carriedContext?: { name: string; text: string },
+    carried?: {
+      context?: { name: string; text: string };
+      history?: { text: string; count: number } | null;
+    },
   ): Promise<Job> {
     const sourceFile = await this.storageService.findOwned(
       dto.sourceFileId,
@@ -84,18 +97,29 @@ export class WorkerService {
     // Nothing is attached unless the owner chose a context; a chosen one is copied onto
     // the job (see Job.contextText) rather than referenced.
     const context =
-      carriedContext ??
+      carried?.context ??
       (dto.contextId !== undefined
         ? await this.contextService
             .findOwned(dto.contextId, userId)
             .then((found) => ({ name: found.name, text: found.content }))
         : undefined);
 
+    const taskKey = taskKeyOf(sourceFile);
+    const history =
+      carried !== undefined
+        ? (carried.history ?? null)
+        : dto.includeHistory
+          ? await this.runHistory(userId, taskKey)
+          : null;
+
     return this.jobRepository.save({
       userId,
       sourceFileId: sourceFile.id,
+      taskKey,
       contextName: context?.name ?? null,
       contextText: context?.text ?? null,
+      historyText: history?.text ?? null,
+      historyCount: history?.count ?? null,
       model: dto.model,
       claudeCredentialId: dto.claudeCredentialId ?? null,
       status: JobStatus.Queued,
@@ -128,9 +152,16 @@ export class WorkerService {
           ? { claudeCredentialId: job.claudeCredentialId }
           : {}),
       },
-      job.contextText !== null && job.contextName !== null
-        ? { name: job.contextName, text: job.contextText }
-        : undefined,
+      {
+        context:
+          job.contextText !== null && job.contextName !== null
+            ? { name: job.contextName, text: job.contextText }
+            : undefined,
+        history:
+          job.historyText !== null && job.historyCount !== null
+            ? { text: job.historyText, count: job.historyCount }
+            : null,
+      },
     );
 
     void this.appLogs?.record({
@@ -144,13 +175,44 @@ export class WorkerService {
     return retried;
   }
 
+  // The finished runs of the same task (same parcel key), newest first, summarised.
+  private async runHistory(
+    userId: number,
+    taskKey: string,
+  ): Promise<{ text: string; count: number } | null> {
+    const earlier = await this.jobRepository.find({
+      where: { userId, taskKey, status: In(FINISHED_STATUSES) },
+      order: { finishedAt: 'DESC', id: 'DESC' },
+      take: HISTORY_LOOKUP,
+    });
+
+    return buildRunHistory(earlier);
+  }
+
+  // How many earlier runs of this parcel's task could be mixed in — for the launch form.
+  async previewHistory(
+    userId: number,
+    sourceFileId: number,
+  ): Promise<{ count: number }> {
+    const sourceFile = await this.storageService.findOwned(
+      sourceFileId,
+      userId,
+    );
+    const history = await this.runHistory(userId, taskKeyOf(sourceFile));
+
+    return { count: history?.count ?? 0 };
+  }
+
   async findAllByUser(userId: number): Promise<Job[]> {
-    // `logs` is unbounded and appended on every worker flush, and a context can be
-    // tens of KB — the list view needs neither, so both are left out of the SELECT
-    // (GET :id returns the logs; the context text only ever goes to the worker).
+    // `logs` is unbounded and appended on every worker flush, and a context or history
+    // can be tens of KB — the list view needs none of them, so they are left out of the
+    // SELECT (GET :id returns the logs; the context/history text only ever goes to the worker).
     const columns = this.jobRepository.metadata.columns
       .map((column) => column.propertyName as keyof Job)
-      .filter((name) => name !== 'logs' && name !== 'contextText');
+      .filter(
+        (name) =>
+          name !== 'logs' && name !== 'contextText' && name !== 'historyText',
+      );
 
     return this.jobRepository.find({
       select: columns,

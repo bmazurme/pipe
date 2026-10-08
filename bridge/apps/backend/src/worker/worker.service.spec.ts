@@ -148,8 +148,11 @@ describe('WorkerService', () => {
         sourceFileId: 1,
         model: JobModel.Deepseek,
         claudeCredentialId: null,
+        taskKey: 'file:1',
         contextName: null,
         contextText: null,
+        historyText: null,
+        historyCount: null,
         status: JobStatus.Queued,
       });
       expect(job).toMatchObject({ id: 10, status: JobStatus.Queued });
@@ -686,6 +689,133 @@ describe('WorkerService', () => {
       });
     });
 
+    describe('history of earlier runs', () => {
+      const earlier = (id: number, over = {}) => ({
+        id,
+        model: JobModel.Sonnet,
+        status: JobStatus.Failed,
+        errorMessage: `error ${id}`,
+        logs: `tried ${id}\n`,
+        finishedAt: new Date(Date.UTC(2026, 9, id)),
+        ...over,
+      });
+
+      it('mixes in nothing unless asked, and does not even look', async () => {
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+        });
+
+        expect(job).toMatchObject({ historyText: null, historyCount: null });
+        expect(repository.find).not.toHaveBeenCalled();
+      });
+
+      it('summarises earlier finished runs of the same task when asked', async () => {
+        storageService.findOwned!.mockResolvedValue({
+          id: 1,
+          originalName: 'x.zip',
+          taskKey: '12:34',
+        });
+        repository.find!.mockResolvedValue([earlier(2), earlier(1)]);
+
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          includeHistory: true,
+        });
+
+        expect(repository.find).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ userId: 7, taskKey: '12:34' }),
+          }),
+        );
+        expect(job).toMatchObject({ taskKey: '12:34', historyCount: 2 });
+        expect(job.historyText).toContain('error 1');
+        expect(job.historyText).toContain('error 2');
+      });
+
+      it('keys a plain file by the file itself', async () => {
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+        });
+
+        expect(job.taskKey).toBe('file:1');
+      });
+
+      it('works with a context, without one, or with both', async () => {
+        repository.find!.mockResolvedValue([earlier(1)]);
+        contextService.findOwned.mockResolvedValue({
+          name: 'Notes',
+          content: 'Use pnpm.',
+        });
+
+        const onlyHistory = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          includeHistory: true,
+        });
+        const both = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          contextId: 3,
+          includeHistory: true,
+        });
+
+        expect(onlyHistory).toMatchObject({
+          contextText: null,
+          historyCount: 1,
+        });
+        expect(both).toMatchObject({
+          contextText: 'Use pnpm.',
+          historyCount: 1,
+        });
+      });
+
+      it('records no history when there are no earlier runs', async () => {
+        repository.find!.mockResolvedValue([]);
+
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          includeHistory: true,
+        });
+
+        expect(job).toMatchObject({ historyText: null, historyCount: null });
+      });
+
+      it('keeps the first attempt’s history when a job is retried', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 5,
+          userId: 7,
+          sourceFileId: 1,
+          model: JobModel.Opus,
+          claudeCredentialId: null,
+          status: JobStatus.Failed,
+          contextName: null,
+          contextText: null,
+          historyText: 'Run #1 failed.',
+          historyCount: 1,
+        });
+
+        const retried = await service.retry(5, 7);
+
+        expect(repository.find).not.toHaveBeenCalled();
+        expect(retried).toMatchObject({
+          historyText: 'Run #1 failed.',
+          historyCount: 1,
+        });
+      });
+
+      it('previews how many earlier runs there are', async () => {
+        repository.find!.mockResolvedValue([earlier(1), earlier(2)]);
+
+        await expect(service.previewHistory(7, 1)).resolves.toEqual({
+          count: 2,
+        });
+      });
+    });
+
     it('lists jobs without their context text', async () => {
       repository.find!.mockResolvedValue([]);
       (repository as unknown as { metadata: unknown }).metadata = {
@@ -694,6 +824,7 @@ describe('WorkerService', () => {
           { propertyName: 'logs' },
           { propertyName: 'contextName' },
           { propertyName: 'contextText' },
+          { propertyName: 'historyText' },
         ],
       };
 

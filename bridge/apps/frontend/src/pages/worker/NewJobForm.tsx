@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FaceRobot, LockOpen } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Select, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Select, Switch, Text, TextArea } from '@gravity-ui/uikit';
 import { Link } from 'react-router-dom';
 
 import {
@@ -9,6 +9,7 @@ import {
   WorkerJobModel,
   useCreateJobMutation,
   useListClaudeCredentialsQuery,
+  useGetJobHistoryPreviewQuery,
   useListContextsQuery,
   useListFilesQuery,
   usePeekFileMutation,
@@ -65,6 +66,7 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
   // Deliberately never defaulted or remembered: a job runs without a context unless the
   // owner attaches one for this launch.
   const [contextId, setContextId] = useState<number | undefined>(undefined);
+  const [includeHistory, setIncludeHistory] = useState(false);
   const [decryptKey, setDecryptKey] = useState('');
   const { keys: parcelKeys } = useParcelKeys();
   const [createError, setCreateError] = useState<string | null>(null);
@@ -72,6 +74,10 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
   // the decrypt-and-re-upload round trip that has to finish first for an
   // encrypted source, which createJob's own loading state knows nothing about.
   const [isPreparingSource, setIsPreparingSource] = useState(false);
+
+  // Only asked once a parcel is chosen: it is about that parcel's task.
+  const { data: historyPreview } = useGetJobHistoryPreviewQuery(sourceFileId ?? 0, { skip: !sourceFileId });
+  const earlierRuns = historyPreview?.count ?? 0;
 
   const isClaudeModel = model === 'sonnet' || model === 'opus';
 
@@ -123,10 +129,12 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
         model,
         ...(isClaudeModel && claudeCredentialId ? { claudeCredentialId } : {}),
         ...(contextId ? { contextId } : {}),
+        ...(includeHistory ? { includeHistory: true } : {}),
       }).unwrap();
       rememberModel(model);
       setSourceFileId(undefined);
       setContextId(undefined);
+      setIncludeHistory(false);
       setDecryptKey('');
       onCreated(job.id);
     } catch (err) {
@@ -204,9 +212,22 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
             </Button>
           </div>
 
+          <Switch
+            checked={includeHistory}
+            onUpdate={setIncludeHistory}
+            disabled={Boolean(sourceFileId) && earlierRuns === 0}
+            content={
+              sourceFileId
+                ? earlierRuns > 0
+                  ? `Подмешать итоги прошлых запусков (${earlierRuns})`
+                  : 'Подмешать итоги прошлых запусков (по этой задаче их ещё нет)'
+                : 'Подмешать итоги прошлых запусков'
+            }
+          />
+
           <Text variant="caption-2" color="secondary">
-            {contextId
-              ? 'К задаче будет прикреплена копия выбранного контекста.'
+            {contextId || includeHistory
+              ? `К задаче будет прикреплено: ${[contextId ? 'копия выбранного контекста' : null, includeHistory ? 'итоги прошлых запусков' : null].filter(Boolean).join(' и ')}.`
               : 'Контекст не прикреплён.'}{' '}
             <Link to="/context">Управление контекстами</Link>
           </Text>

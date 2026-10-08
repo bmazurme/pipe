@@ -33,7 +33,7 @@ export function ContextPage() {
     <div className={styles.page}>
       <PageHeader
         title="Context"
-        description="Сохранённый контекст для задач Worker: правила и заметки о проекте. По умолчанию задача идёт без контекста — его прикрепляют при запуске."
+        description="Сохранённый контекст для задач Worker: правила и заметки о проекте. По умолчанию задача идёт без контекста — его прикрепляют при запуске, вместе с итогами прошлых запусков или отдельно от них."
         actions={
           <Button view="action" size="m" onClick={() => setEditing(null)}>
             <Icon data={Plus} size={16} />

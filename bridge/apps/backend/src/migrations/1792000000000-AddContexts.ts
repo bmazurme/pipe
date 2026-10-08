@@ -22,9 +22,23 @@ export class AddContexts1792000000000 implements MigrationInterface {
       `ALTER TABLE "jobs" ADD "contextName" character varying(100)`,
     );
     await queryRunner.query(`ALTER TABLE "jobs" ADD "contextText" text`);
+    // Which task a job belongs to, and the outcomes of that task's earlier runs when the
+    // owner asked for them at launch.
+    await queryRunner.query(
+      `ALTER TABLE "jobs" ADD "taskKey" character varying(255)`,
+    );
+    await queryRunner.query(`ALTER TABLE "jobs" ADD "historyText" text`);
+    await queryRunner.query(`ALTER TABLE "jobs" ADD "historyCount" smallint`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_jobs_userId_taskKey" ON "jobs" ("userId", "taskKey")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX "public"."IDX_jobs_userId_taskKey"`);
+    await queryRunner.query(`ALTER TABLE "jobs" DROP COLUMN "historyCount"`);
+    await queryRunner.query(`ALTER TABLE "jobs" DROP COLUMN "historyText"`);
+    await queryRunner.query(`ALTER TABLE "jobs" DROP COLUMN "taskKey"`);
     await queryRunner.query(`ALTER TABLE "jobs" DROP COLUMN "contextText"`);
     await queryRunner.query(`ALTER TABLE "jobs" DROP COLUMN "contextName"`);
     await queryRunner.query(

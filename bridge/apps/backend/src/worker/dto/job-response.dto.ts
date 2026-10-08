@@ -8,6 +8,8 @@ export class JobResponseDto {
   claudeCredentialId: number | null;
   // The attached context's name, or null — never its text (see ClaimedJobResponseDto).
   contextName: string | null;
+  // How many earlier runs' outcomes were mixed in, or null when none were.
+  historyCount: number | null;
   status: JobStatus;
   logs: string;
   errorMessage: string | null;
@@ -27,6 +29,7 @@ export class JobResponseDto {
       model: job.model,
       claudeCredentialId: job.claudeCredentialId,
       contextName: job.contextName ?? null,
+      historyCount: job.historyCount ?? null,
       status: job.status,
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',
