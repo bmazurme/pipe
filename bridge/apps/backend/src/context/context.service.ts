@@ -36,7 +36,7 @@ export class ContextService {
   async create(userId: number, dto: CreateContextDto): Promise<Context> {
     await this.assertNameFree(userId, dto.name);
 
-    return this.repository.save(
+    return this.saveOrThrowConflict(
       this.repository.create({
         userId,
         name: dto.name.trim(),
@@ -59,7 +59,7 @@ export class ContextService {
 
     if (dto.content !== undefined) context.content = dto.content;
 
-    return this.repository.save(context);
+    return this.saveOrThrowConflict(context);
   }
 
   // Jobs hold their own snapshot of the text they started with, so deleting a
@@ -76,9 +76,30 @@ export class ContextService {
     });
 
     if (existing) {
-      throw new BadRequestException(
-        `A context named "${name.trim()}" already exists`,
-      );
+      throw this.nameTakenError(name);
     }
+  }
+
+  // assertNameFree is only a fast path: two concurrent saves can both pass it,
+  // and the (userId, name) unique index then rejects the second one.
+  private async saveOrThrowConflict(context: Context): Promise<Context> {
+    try {
+      return await this.repository.save(context);
+    } catch (error) {
+      const code = (error as { driverError?: { code?: string } })?.driverError
+        ?.code;
+
+      if (code === '23505') {
+        throw this.nameTakenError(context.name);
+      }
+
+      throw error;
+    }
+  }
+
+  private nameTakenError(name: string): BadRequestException {
+    return new BadRequestException(
+      `A context named "${name.trim()}" already exists`,
+    );
   }
 }

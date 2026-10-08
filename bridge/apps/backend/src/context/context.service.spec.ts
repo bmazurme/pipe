@@ -104,6 +104,55 @@ describe('ContextService', () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
+  describe('unique-index race on save', () => {
+    const uniqueViolation = Object.assign(new Error('duplicate key'), {
+      driverError: { code: '23505' },
+    });
+
+    it('maps a 23505 on create to the duplicate-name 400', async () => {
+      repository.findOne!.mockResolvedValue(null);
+      repository.save!.mockRejectedValue(uniqueViolation);
+
+      const result = service.create(7, { name: ' Notes ', content: 'x' });
+
+      await expect(result).rejects.toThrow(BadRequestException);
+      await expect(result).rejects.toThrow(
+        'A context named "Notes" already exists',
+      );
+    });
+
+    it('maps a 23505 on update to the duplicate-name 400', async () => {
+      repository
+        .findOne!.mockResolvedValueOnce({
+          id: 1,
+          userId: 7,
+          name: 'Notes',
+          content: 'x',
+        })
+        .mockResolvedValueOnce(null);
+      repository.save!.mockRejectedValue(uniqueViolation);
+
+      const result = service.update(1, 7, { name: 'Other' });
+
+      await expect(result).rejects.toThrow(BadRequestException);
+      await expect(result).rejects.toThrow(
+        'A context named "Other" already exists',
+      );
+    });
+
+    it('rethrows any other save error unchanged', async () => {
+      const other = Object.assign(new Error('boom'), {
+        driverError: { code: '57014' },
+      });
+      repository.findOne!.mockResolvedValue(null);
+      repository.save!.mockRejectedValue(other);
+
+      await expect(
+        service.create(7, { name: 'Notes', content: 'x' }),
+      ).rejects.toBe(other);
+    });
+  });
+
   it('deletes an owned context and 404s on someone else’s', async () => {
     repository.findOne!.mockResolvedValueOnce({ id: 1, userId: 7 });
     await service.delete(1, 7);
