@@ -5,6 +5,7 @@ import { WorkerJob } from '../../store/api';
 import { JobList } from './JobList';
 
 vi.mock('./CancelJobButton', () => ({ CancelJobButton: () => null }));
+vi.mock('./RetryJobButton', () => ({ RetryJobButton: () => null }));
 
 const job = {
   id: 7,

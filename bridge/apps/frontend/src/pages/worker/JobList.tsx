@@ -9,6 +9,7 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 import { CancelJobButton } from './CancelJobButton';
+import { RetryJobButton } from './RetryJobButton';
 import {
   isActive,
   isStopping,
@@ -95,6 +96,7 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobList
                 </button>
                 {/* A sibling, not a child: a button cannot be nested in the row button. */}
                 <CancelJobButton job={job} compact />
+                <RetryJobButton job={job} compact />
               </li>
             );
           })}

@@ -14,6 +14,7 @@ import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
 import { CancelJobButton } from './CancelJobButton';
+import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
 interface JobDetailDialogProps {
@@ -163,6 +164,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         onClickButtonCancel={onClose}
       >
         <CancelJobButton job={job} />
+        <RetryJobButton job={job} />
         {canDelete && (
           <Button view="outlined-danger" onClick={() => void handleDelete()} loading={isDeleting}>
             <Icon data={TrashBin} size={16} />

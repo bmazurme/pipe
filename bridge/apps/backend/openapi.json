@@ -1188,6 +1188,33 @@
         }
       }
     },
+    "/api/v1/worker/jobs/{id}/retry": {
+      "post": {
+        "operationId": "WorkerController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}/status": {
       "post": {
         "operationId": "WorkerController_updateStatus",

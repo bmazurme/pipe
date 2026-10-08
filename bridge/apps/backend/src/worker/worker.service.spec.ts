@@ -583,6 +583,83 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('retry', () => {
+    const failed = (over = {}) => ({
+      id: 5,
+      userId: 7,
+      sourceFileId: 11,
+      model: JobModel.Opus,
+      claudeCredentialId: 3,
+      status: JobStatus.Failed,
+      errorMessage: 'boom',
+      ...over,
+    });
+
+    it('queues a new job over the same parcel, model and credential', async () => {
+      repository.findOne!.mockResolvedValue(failed());
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.subscription.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 6, ...job }),
+      );
+
+      const retried = await service.retry(5, 7);
+
+      expect(retried).toMatchObject({
+        id: 6,
+        sourceFileId: 11,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Queued,
+      });
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.retried' }),
+      );
+    });
+
+    it('also retries a stopped job', async () => {
+      repository.findOne!.mockResolvedValue(
+        failed({ status: JobStatus.Cancelled }),
+      );
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) => Promise.resolve(job));
+
+      await expect(service.retry(5, 7)).resolves.toMatchObject({
+        status: JobStatus.Queued,
+      });
+    });
+
+    it.each([JobStatus.Queued, JobStatus.Running, JobStatus.Succeeded])(
+      'refuses a %s job',
+      async (status) => {
+        repository.findOne!.mockResolvedValue(failed({ status }));
+
+        await expect(service.retry(5, 7)).rejects.toThrow(ConflictException);
+        expect(repository.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('refuses when the parcel was already consumed', async () => {
+      repository.findOne!.mockResolvedValue(failed({ sourceFileId: null }));
+
+      await expect(service.retry(5, 7)).rejects.toThrow(ConflictException);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('does not retry someone else’s job', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.retry(5, 8)).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('appendLog', () => {
     it('appends the chunk to existing logs', async () => {
       const job: Job = { id: 1, logs: 'line 1\n' } as Job;
