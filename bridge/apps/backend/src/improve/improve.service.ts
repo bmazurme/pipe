@@ -41,6 +41,7 @@ import {
   parseBacklog,
   pickOnePerCategory,
 } from './analysis';
+import { withDefinitionOfDone } from './definition-of-done';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import {
@@ -180,7 +181,11 @@ export class ImproveService {
     const { job, baseSha, baseline, fileCount } = await this.handToWorker(
       userId,
       model,
-      { number: issue.number, title: issue.title, body: issue.body },
+      {
+        number: issue.number,
+        title: issue.title,
+        body: withDefinitionOfDone(issue.body),
+      },
       `improve:${issue.number}`,
       `improve-${issue.number}.subscription.zip`,
     );
