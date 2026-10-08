@@ -35,7 +35,7 @@ export function RunsTab() {
         <div key={run.id} className={styles.row}>
           <div className={styles.rowMain}>
             <Text variant="body-2" ellipsis title={run.issueTitle}>
-              #{run.issueNumber} {run.issueTitle}
+              {run.issueNumber ? `#${run.issueNumber} ` : ''}{run.issueTitle}
             </Text>
             <Text variant="caption-2" color="secondary">
               {modelLabel(run.model)} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}

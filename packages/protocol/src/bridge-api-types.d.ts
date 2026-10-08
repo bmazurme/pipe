@@ -314,6 +314,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_startAnalysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/improve/runs/{id}/create-issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_createIssues"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/schedules": {
         parameters: {
             query?: never;
@@ -1226,19 +1258,21 @@ export interface components {
         };
         ImproveRun: {
             userId: number;
-            issueNumber: number;
+            kind: Record<string, never>;
+            issueNumber: number | null;
             issueTitle: string;
             model: string;
             trigger: Record<string, never>;
             scheduleId: number | null;
             /** @enum {string} */
-            status: "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
+            status: "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled" | "analyzed";
             jobId: number | null;
             baseSha: string | null;
             baseline: string | null;
             branch: string | null;
             prNumber: number | null;
             prUrl: string | null;
+            result: string | null;
             note: string | null;
             error: string | null;
             /** Format: date-time */
@@ -1253,6 +1287,14 @@ export interface components {
             issueNumber: number;
             model: string;
         };
+        StartAnalysisDto: {
+            model: string;
+            categories?: string[];
+            autoCreate?: boolean;
+        };
+        CreateIssuesDto: {
+            indices?: number[];
+        };
         ImproveSchedule: {
             userId: number;
             name: string;
@@ -1260,6 +1302,9 @@ export interface components {
             hour: number;
             minute: number;
             timezone: string;
+            kind: Record<string, never>;
+            categories: string | null;
+            autoCreateIssues: boolean;
             count: number;
             model: string;
             label: string;
@@ -1282,6 +1327,10 @@ export interface components {
             count: number;
             model: string;
             label?: string;
+            /** @enum {string} */
+            kind?: "issues" | "analysis";
+            categories?: string[];
+            autoCreateIssues?: boolean;
         };
         SaveSettingsDto: {
             autoStartModel?: string | null;
@@ -2002,6 +2051,54 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_startAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAnalysisDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_createIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIssuesDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {

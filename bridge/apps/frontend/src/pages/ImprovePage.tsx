@@ -4,11 +4,12 @@ import { useTabParam } from '../shared/hooks/useTabParam';
 import { useGetImproveStatusQuery } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './ImprovePage.module.css';
+import { AnalysisTab } from './improve/AnalysisTab';
 import { IssuesTab } from './improve/IssuesTab';
 import { RunsTab } from './improve/RunsTab';
 import { SchedulesTab } from './improve/SchedulesTab';
 
-const TABS = ['issues', 'runs', 'schedules'] as const;
+const TABS = ['issues', 'analysis', 'runs', 'schedules'] as const;
 
 export function ImprovePage() {
   const [activeTab, setActiveTab] = useTabParam(TABS, 'issues');
@@ -37,12 +38,14 @@ export function ImprovePage() {
       <TabProvider value={activeTab} onUpdate={setActiveTab}>
         <TabList>
           <Tab value="issues">Задачи</Tab>
+          <Tab value="analysis">Анализ</Tab>
           <Tab value="runs">Запуски</Tab>
           <Tab value="schedules">Расписания</Tab>
         </TabList>
 
         {/* Only the open tab loads: TabPanel merely hides the others with CSS. */}
         <TabPanel value="issues">{activeTab === 'issues' && <IssuesTab configured={status?.configured ?? true} />}</TabPanel>
+        <TabPanel value="analysis">{activeTab === 'analysis' && <AnalysisTab configured={status?.configured ?? true} />}</TabPanel>
         <TabPanel value="runs">{activeTab === 'runs' && <RunsTab />}</TabPanel>
         <TabPanel value="schedules">{activeTab === 'schedules' && <SchedulesTab />}</TabPanel>
       </TabProvider>
