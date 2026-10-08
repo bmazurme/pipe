@@ -81,6 +81,42 @@ export class WorkerService {
     });
   }
 
+  // Runs a failed (or stopped) job again as a NEW job over the same parcel, model
+  // and credential — the original stays as history, so its log and error remain
+  // readable. The parcel is only consumed when a job succeeds, so a failed job's
+  // source is still there; if it was removed since, create() says so.
+  async retry(id: number, userId: number): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (job.status !== JobStatus.Failed && job.status !== JobStatus.Cancelled) {
+      throw new ConflictException(
+        `Only a failed or stopped job can be retried — this one is ${job.status}`,
+      );
+    }
+
+    if (job.sourceFileId === null) {
+      throw new ConflictException('The source parcel was already consumed');
+    }
+
+    const retried = await this.create(userId, {
+      sourceFileId: job.sourceFileId,
+      model: job.model,
+      ...(job.claudeCredentialId !== null
+        ? { claudeCredentialId: job.claudeCredentialId }
+        : {}),
+    });
+
+    void this.appLogs?.record({
+      level: 'info',
+      source: 'job',
+      event: 'job.retried',
+      message: `Job ${job.id} retried as job ${retried.id}`,
+      meta: { jobId: job.id, retryJobId: retried.id, model: job.model },
+    });
+
+    return retried;
+  }
+
   async findAllByUser(userId: number): Promise<Job[]> {
     return this.jobRepository.find({
       where: { userId },

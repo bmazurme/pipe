@@ -89,6 +89,15 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось остановить задачу';
       },
     }),
+    // Queues a new job over a failed/stopped job's parcel, model and credential.
+    retryJob: builder.mutation<WorkerJob, number>({
+      query: (id) => ({ url: `worker/jobs/${id}/retry`, method: 'POST' }),
+      invalidatesTags: ['WorkerJob'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        return message ?? 'Не удалось перезапустить задачу';
+      },
+    }),
     deleteJob: builder.mutation<void, number>({
       query: (id) => ({ url: `worker/jobs/${id}`, method: 'DELETE' }),
       invalidatesTags: ['WorkerJob'],
@@ -155,6 +164,7 @@ export const {
   useGetWorkerStatusQuery,
   useCreateJobMutation,
   useCancelJobMutation,
+  useRetryJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   usePeekJobResultMutation,

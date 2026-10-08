@@ -175,6 +175,17 @@ export class WorkerController {
     return JobResponseDto.fromEntity(job);
   }
 
+  // Runs a failed or stopped job again as a new job (see WorkerService.retry).
+  @Post(':id/retry')
+  async retry(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.retry(id, currentUser.id);
+
+    return JobResponseDto.fromEntity(job);
+  }
+
   @Post(':id/status')
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
