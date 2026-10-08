@@ -491,11 +491,22 @@ export class WorkerService {
   }
 
   async appendLog(id: number, userId: number, chunk: string): Promise<void> {
-    const job = await this.findOwned(id, userId);
+    // One atomic statement: no load (so no decrypting contextText/historyText and no
+    // re-reading the whole log), and concurrent flushes cannot overwrite each other.
+    const result = await this.jobRepository
+      .createQueryBuilder()
+      .update(Job)
+      .set({
+        logs: () => 'logs || :chunk',
+        updatedAt: () => 'now()',
+      })
+      .where('id = :id AND "userId" = :userId', { id, userId })
+      .setParameter('chunk', chunk)
+      .execute();
 
-    job.logs += chunk;
-
-    await this.jobRepository.save(job);
+    if (!result.affected) {
+      throw new NotFoundException('Job not found');
+    }
   }
 
   async setResult(

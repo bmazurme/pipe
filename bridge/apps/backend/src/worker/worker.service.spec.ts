@@ -28,7 +28,22 @@ function createMockRepository(): MockRepository {
     save: jest.fn(),
     delete: jest.fn(),
     query: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
+}
+
+// A chainable stand-in for the UPDATE query builder; `execute` resolves with the
+// given affected-row count.
+function mockUpdateBuilder(repository: MockRepository, affected: number) {
+  const builder = {
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    setParameter: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected }),
+  };
+  repository.createQueryBuilder!.mockReturnValue(builder);
+  return builder;
 }
 
 describe('WorkerService', () => {
@@ -527,6 +542,59 @@ describe('WorkerService', () => {
     );
   });
 
+  describe('appendLog', () => {
+    it('appends with one atomic UPDATE, bumping updatedAt, without loading the job', async () => {
+      const builder = mockUpdateBuilder(repository, 1);
+
+      await service.appendLog(5, 7, 'chunk\n');
+
+      expect(builder.execute).toHaveBeenCalledTimes(1);
+      const set = builder.set.mock.calls[0][0] as {
+        logs: () => string;
+        updatedAt: () => string;
+      };
+      expect(set.logs()).toContain('logs ||');
+      expect(set.updatedAt()).toBe('now()');
+      expect(builder.setParameter).toHaveBeenCalledWith('chunk', 'chunk\n');
+      expect(builder.where).toHaveBeenCalledWith(
+        expect.stringContaining('"userId"'),
+        { id: 5, userId: 7 },
+      );
+      expect(repository.findOne).not.toHaveBeenCalled();
+      expect(repository.findOneBy).not.toHaveBeenCalled();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for an unknown or foreign job, loading nothing', async () => {
+      const builder = mockUpdateBuilder(repository, 0);
+
+      await expect(service.appendLog(5, 999, 'x')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(builder.where).toHaveBeenCalledWith(expect.any(String), {
+        id: 5,
+        userId: 999,
+      });
+      expect(repository.findOne).not.toHaveBeenCalled();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('issues an independent UPDATE per concurrent append', async () => {
+      const builder = mockUpdateBuilder(repository, 1);
+
+      await Promise.all([
+        service.appendLog(5, 7, 'a'),
+        service.appendLog(5, 7, 'b'),
+      ]);
+
+      expect(builder.execute).toHaveBeenCalledTimes(2);
+      expect(builder.setParameter).toHaveBeenCalledWith('chunk', 'a');
+      expect(builder.setParameter).toHaveBeenCalledWith('chunk', 'b');
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('cancel', () => {
     const saveEcho = () =>
       repository.save!.mockImplementation((j) => Promise.resolve(j));
@@ -953,20 +1021,6 @@ describe('WorkerService', () => {
       repository.findOne!.mockResolvedValue(null);
 
       await expect(service.retry(5, 8)).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('appendLog', () => {
-    it('appends the chunk to existing logs', async () => {
-      const job: Job = { id: 1, logs: 'line 1\n' } as Job;
-      repository.findOne!.mockResolvedValue(job);
-      repository.save!.mockImplementation((j) => Promise.resolve(j));
-
-      await service.appendLog(1, 7, 'line 2\n');
-
-      expect(repository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ logs: 'line 1\nline 2\n' }),
-      );
     });
   });
 
