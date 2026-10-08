@@ -15,6 +15,9 @@ import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
 
+const LOST_MESSAGE_TEXT =
+  'Worker was restarted or lost while this job was running — the run did not finish';
+
 type MockRepository = Partial<Record<keyof Repository<Job>, jest.Mock>>;
 
 function createMockRepository(): MockRepository {
@@ -259,34 +262,44 @@ describe('WorkerService', () => {
       }) as Job;
 
     it('fails the jobs a worker still holds when it comes back asking for work', async () => {
-      const lost = stale();
-      repository.find!.mockResolvedValue([lost]);
-      repository.save!.mockImplementation((j) => Promise.resolve(j));
-      repository.query!.mockResolvedValue([[], 0]);
+      const lost = stale({ status: JobStatus.Failed, errorMessage: 'lost' });
+      repository.query!.mockResolvedValueOnce([[lost], 1]);
+      repository.query!.mockResolvedValueOnce([[], 0]);
 
       await service.claim(7, 'swarm-worker');
 
-      expect(lost.status).toBe(JobStatus.Failed);
-      expect(lost.errorMessage).toMatch(/restarted or lost/);
-      expect(lost.finishedAt).toBeInstanceOf(Date);
-      expect(lost.logs).toContain('restarted or lost');
+      const [sql, params] = repository.query!.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('UPDATE jobs SET');
+      expect(sql).toContain('status IN');
+      expect(params).toContain(JobStatus.Failed);
+      expect(params).toContain(LOST_MESSAGE_TEXT);
+      expect(repository.save).not.toHaveBeenCalled();
+      expect(appLogs.record).toHaveBeenCalledTimes(1);
       expect(appLogs.record).toHaveBeenCalledWith(
         expect.objectContaining({ event: 'job.failed' }),
       );
     });
 
-    it("only looks at this worker's own silent jobs", async () => {
+    it("only touches this worker's own silent jobs", async () => {
       repository.query!.mockResolvedValue([[], 0]);
 
       await service.claim(7, 'swarm-worker');
 
-      const where = (
-        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
-      ).where;
-      expect(where).toMatchObject({ userId: 7, workerName: 'swarm-worker' });
-      // 10 minutes of silence, expressed as an updatedAt cutoff — a job that logged
-      // a minute ago (a live sibling replica) does not match.
-      expect(where.updatedAt).toBeDefined();
+      const [sql, params] = repository.query!.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('"userId" = $7');
+      expect(sql).toContain('"workerName" = $8');
+      expect(params.slice(6)).toEqual([7, 'swarm-worker']);
+      // 10 minutes of silence, expressed as an updatedAt cutoff.
+      const cutoff = params[3] as Date;
+      expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(
+        10 * 60_000,
+      );
     });
 
     it('does nothing without a worker name', async () => {
@@ -294,27 +307,59 @@ describe('WorkerService', () => {
 
       await service.claim(7);
 
-      expect(repository.find).not.toHaveBeenCalled();
+      expect(repository.query).toHaveBeenCalledTimes(1);
+      expect(repository.query!.mock.calls[0][0]).not.toContain('errorMessage');
     });
 
     it('sweeps jobs silent for hours, whichever worker held them', async () => {
-      const lost = stale({ workerName: 'gone-worker' });
-      repository.find!.mockResolvedValue([lost]);
-      repository.save!.mockImplementation((j) => Promise.resolve(j));
+      repository.query!.mockResolvedValue([
+        [stale({ workerName: 'gone-worker', status: JobStatus.Failed })],
+        1,
+      ]);
 
       await service.sweepLostJobs();
 
-      const where = (
-        repository.find!.mock.calls[0][0] as { where: Record<string, unknown> }
-      ).where;
-      expect(where).not.toHaveProperty('workerName');
-      expect(lost.status).toBe(JobStatus.Failed);
+      const [sql, params] = repository.query!.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).not.toContain('"workerName" =');
+      expect(sql).not.toContain('"userId" =');
+      expect(params).toHaveLength(6);
+      expect(appLogs.record).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report or modify a job that finished before the update ran', async () => {
+      // The conditional UPDATE matches nothing: the job is already succeeded.
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.sweepLostJobs();
+
+      expect(repository.query!.mock.calls[0][0]).toContain(
+        'WHERE status IN ($5, $6)',
+      );
+      expect(repository.save).not.toHaveBeenCalled();
+      expect(appLogs.record).not.toHaveBeenCalled();
     });
 
     it('swallows a failing sweep instead of crashing the scheduler', async () => {
-      repository.find!.mockRejectedValue(new Error('db down'));
+      repository.query!.mockRejectedValue(new Error('db down'));
 
       await expect(service.sweepLostJobs()).resolves.toBeUndefined();
+    });
+
+    it('still claims from the queue when the orphan sweep throws', async () => {
+      repository.query!.mockRejectedValueOnce(new Error('db hiccup'));
+      repository.query!.mockResolvedValueOnce([[{ id: 42 }], 1]);
+      repository.findOneBy!.mockResolvedValue({
+        id: 42,
+        status: JobStatus.Claimed,
+      });
+
+      const job = await service.claim(7, 'swarm-worker');
+
+      expect(job).toMatchObject({ id: 42, status: JobStatus.Claimed });
+      expect(repository.query).toHaveBeenCalledTimes(2);
     });
   });
 

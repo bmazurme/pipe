@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
@@ -259,23 +259,42 @@ export class WorkerService {
     where: { userId?: number; workerName?: string },
     silenceMs: number,
   ): Promise<number> {
-    const stale = await this.jobRepository.find({
-      where: {
-        ...where,
-        status: In([JobStatus.Claimed, JobStatus.Running]),
-        updatedAt: LessThan(new Date(Date.now() - silenceMs)),
-      },
-    });
+    const params: unknown[] = [
+      JobStatus.Failed,
+      LOST_MESSAGE,
+      `\n[${LOST_MESSAGE}]\n`,
+      new Date(Date.now() - silenceMs),
+      JobStatus.Claimed,
+      JobStatus.Running,
+    ];
+    let filters = '';
 
-    for (const job of stale) {
-      job.status = JobStatus.Failed;
-      job.errorMessage = LOST_MESSAGE;
-      job.finishedAt = new Date();
-      job.logs += `\n[${LOST_MESSAGE}]\n`;
-      this.logJobOutcome(await this.jobRepository.save(job));
+    if (where.userId !== undefined) {
+      params.push(where.userId);
+      filters += ` AND "userId" = $${params.length}`;
     }
 
-    return stale.length;
+    if (where.workerName !== undefined) {
+      params.push(where.workerName);
+      filters += ` AND "workerName" = $${params.length}`;
+    }
+
+    // One conditional statement instead of find + save: the status/silence check and
+    // the write are atomic, so a job the worker finished in between is never touched.
+    // (Raw query result is [rows, affectedCount] — see claim().)
+    const [rows]: [Job[], number] = await this.jobRepository.query(
+      `UPDATE jobs SET status = $1, "errorMessage" = $2, "finishedAt" = now(),
+         logs = COALESCE(logs, '') || $3, "updatedAt" = now()
+       WHERE status IN ($5, $6) AND "updatedAt" < $4${filters}
+       RETURNING *`,
+      params,
+    );
+
+    for (const job of rows) {
+      this.logJobOutcome(job);
+    }
+
+    return rows.length;
   }
 
   // Backstop for jobs whose worker never returned.
@@ -297,7 +316,14 @@ export class WorkerService {
     if (workerName) {
       await this.heartbeatService.record(userId, workerName);
       // It is asking for work, so it is idle: whatever it still "holds" is lost.
-      await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
+      // A failing sweep must not stop the worker from taking new work.
+      try {
+        await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
+      } catch (error) {
+        this.logger.warn(
+          `Orphan sweep failed during claim: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     // node-postgres's driver (via TypeORM's Repository.query) returns
