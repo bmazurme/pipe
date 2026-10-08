@@ -38,6 +38,18 @@ export const ANALYSIS_CATEGORIES = [
     guidance:
       'A reliability problem: a missing timeout/retry, an unhandled error or rejection, a race condition, a resource leak, or a bad failure mode.',
   },
+  {
+    id: 'tests',
+    label: 'Тесты',
+    guidance:
+      'A testing gap: important behavior, an error path or a regression-prone area with no test, a flaky or tautological test, or a missing edge case. Propose the specific test(s) to add and where.',
+  },
+  {
+    id: 'docs',
+    label: 'Документация',
+    guidance:
+      'A documentation gap: a README/setup/deploy step that is missing, wrong or out of date, an undocumented environment variable, endpoint or command, or a comment that no longer matches the code.',
+  },
 ] as const;
 
 export type AnalysisCategory = (typeof ANALYSIS_CATEGORIES)[number]['id'];

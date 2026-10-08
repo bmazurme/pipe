@@ -181,4 +181,16 @@ describe('ImproveService analysis', () => {
       'Анализ ещё не завершён',
     );
   });
+
+  it('lists issues of any label when asked for all', async () => {
+    const { service, github } = setup();
+    const listOpenIssues = jest.fn().mockResolvedValue([]);
+    Object.assign(github, { listOpenIssues });
+
+    await service.listIssues(undefined, true);
+    await service.listIssues();
+
+    expect(listOpenIssues).toHaveBeenNthCalledWith(1, '', 100);
+    expect(listOpenIssues).toHaveBeenNthCalledWith(2, 'loop', 100);
+  });
 });
