@@ -59,7 +59,14 @@ import {
 interface AnalysisResult {
   categories: AnalysisCategory[];
   autoCreate: boolean;
-  items: Array<BacklogItem & { issueNumber?: number; duplicateOf?: number }>;
+  autoStart?: boolean;
+  items: Array<
+    BacklogItem & {
+      issueNumber?: number;
+      duplicateOf?: number;
+      started?: boolean;
+    }
+  >;
 }
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
@@ -108,10 +115,11 @@ export class ImproveService {
   }
 
   // The open `loop` issues, each with its latest run (if any), for the page.
-  async listIssues(label = PR_LABEL) {
+  // `all` lists every open issue, labelled or not.
+  async listIssues(label = PR_LABEL, all = false) {
     this.requireConfigured();
 
-    const issues = await this.github.listOpenIssues(label, 100);
+    const issues = await this.github.listOpenIssues(all ? '' : label, 100);
     const runs = issues.length
       ? await this.runs.find({
           where: {
@@ -499,6 +507,7 @@ export class ImproveService {
     autoCreate = false,
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
+    autoStart = false,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireModel(model);
@@ -547,7 +556,12 @@ export class ImproveService {
         status: ImproveRunStatus.Queued,
         jobId: job.id,
         baseSha,
-        result: JSON.stringify({ categories, autoCreate, items: [] }),
+        result: JSON.stringify({
+          categories,
+          autoCreate,
+          autoStart,
+          items: [],
+        }),
       }),
     );
 
@@ -618,9 +632,13 @@ export class ImproveService {
 
       run.result = JSON.stringify({ ...stored, items });
 
-      const summary = stored.autoCreate
+      let summary = stored.autoCreate
         ? await this.createIssuesFromRun(run)
         : null;
+
+      if (summary && stored.autoStart) {
+        summary += `; ${await this.startFiled(run)}`;
+      }
 
       await this.finish(run, ImproveRunStatus.Analyzed, {
         result: run.result,
@@ -682,6 +700,84 @@ export class ImproveService {
     return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}`;
   }
 
+  // Starts a run for each filed proposal that has not been started yet. One
+  // failing start (an issue already running, say) must not stop the others.
+  private async startFiled(
+    run: ImproveRun,
+    only?: number[],
+    model = run.model,
+  ): Promise<string> {
+    const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
+    let started = 0;
+    const failed: string[] = [];
+
+    for (const [index, item] of stored.items.entries()) {
+      if (only && !only.includes(index)) continue;
+      if (!item.issueNumber || item.started) continue;
+
+      try {
+        await this.startRun(run.userId, item.issueNumber, model);
+        item.started = true;
+        started += 1;
+      } catch (error) {
+        failed.push(`#${item.issueNumber}: ${message(error)}`);
+      }
+    }
+
+    run.result = JSON.stringify(stored);
+    await this.runs.save(run);
+
+    return `в работу: ${started}${failed.length ? `, не запущено: ${failed.join('; ')}` : ''}`;
+  }
+
+  // File the chosen proposals of a reviewed analysis and take them into work.
+  async startItems(
+    id: number,
+    model: string,
+    indices?: number[],
+  ): Promise<ImproveRun> {
+    this.requireConfigured();
+    this.requireModel(model);
+
+    const run = await this.runs.findOne({ where: { id, kind: 'analysis' } });
+
+    if (!run) throw new NotFoundException('Analysis run not found');
+    if (run.status !== ImproveRunStatus.Analyzed) {
+      throw new ConflictException('Анализ ещё не завершён');
+    }
+
+    const filed = await this.createIssuesFromRun(run, indices);
+
+    // Use the model the user picked now, not the one the analysis ran with.
+    run.note = `${filed}; ${await this.startFiled(run, indices, model)}`;
+
+    return this.runs.save(run);
+  }
+
+  // Several issues into work at once; each is independent.
+  async startMany(
+    userId: number,
+    issueNumbers: number[],
+    model: string,
+  ): Promise<{ started: number[]; skipped: string[] }> {
+    this.requireConfigured();
+    this.requireModel(model);
+
+    const started: number[] = [];
+    const skipped: string[] = [];
+
+    for (const number of issueNumbers) {
+      try {
+        await this.startRun(userId, number, model);
+        started.push(number);
+      } catch (error) {
+        skipped.push(`#${number}: ${message(error)}`);
+      }
+    }
+
+    return { started, skipped };
+  }
+
   // The manual path for a reviewed analysis: file the chosen proposals.
   async createIssues(id: number, indices?: number[]): Promise<ImproveRun> {
     this.requireConfigured();
@@ -714,6 +810,7 @@ export class ImproveService {
       kind?: 'issues' | 'analysis';
       categories?: string[];
       autoCreateIssues?: boolean;
+      autoStartIssues?: boolean;
     },
     id?: number,
   ): Promise<ImproveSchedule> {
@@ -743,6 +840,7 @@ export class ImproveService {
       label: input.label || PR_LABEL,
       categories: categories.length ? categories.join(',') : null,
       autoCreateIssues: input.autoCreateIssues ?? true,
+      autoStartIssues: input.autoStartIssues ?? false,
     });
 
     return this.schedules.save(schedule);
@@ -824,9 +922,10 @@ export class ImproveService {
           schedule.userId,
           schedule.model,
           categories,
-          schedule.autoCreateIssues,
+          schedule.autoCreateIssues || schedule.autoStartIssues,
           'schedule',
           schedule.id,
+          schedule.autoStartIssues,
         );
 
         started.push(run.id);

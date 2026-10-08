@@ -18,7 +18,7 @@ export interface ImproveStatus {
   models: string[];
 }
 
-export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability';
+export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability' | 'tests' | 'docs';
 
 export interface AnalysisItem {
   category: AnalysisCategory;
@@ -27,6 +27,7 @@ export interface AnalysisItem {
   body: string;
   issueNumber?: number;
   duplicateOf?: number;
+  started?: boolean;
 }
 
 export interface ImproveRun {
@@ -74,14 +75,16 @@ export interface ImproveSchedule {
   kind: 'issues' | 'analysis';
   categories: string | null;
   autoCreateIssues: boolean;
+  autoStartIssues: boolean;
   lastRunAt: string | null;
   lastResult: string | null;
 }
 
-export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues'> & {
+export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues'> & {
   kind?: 'issues' | 'analysis';
   categories?: string[];
   autoCreateIssues?: boolean;
+  autoStartIssues?: boolean;
 };
 
 function errorMessage(fallback: string) {
@@ -91,8 +94,8 @@ function errorMessage(fallback: string) {
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
     getImproveStatus: builder.query<ImproveStatus, void>({ query: () => 'improve/status' }),
-    listImproveIssues: builder.query<ImproveIssue[], void>({
-      query: () => 'improve/issues',
+    listImproveIssues: builder.query<ImproveIssue[], { all?: boolean } | void>({
+      query: (arg) => (arg && arg.all ? 'improve/issues?all=1' : 'improve/issues'),
       providesTags: ['ImproveIssues'],
       transformErrorResponse: errorMessage('Не удалось загрузить задачи'),
     }),
@@ -110,10 +113,20 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось остановить'),
     }),
-    startImproveAnalysis: builder.mutation<ImproveRun, { model: string; categories: string[]; autoCreate: boolean }>({
+    startImproveAnalysis: builder.mutation<ImproveRun, { model: string; categories: string[]; autoCreate: boolean; autoStart?: boolean }>({
       query: (body) => ({ url: 'improve/analysis', method: 'POST', body }),
       invalidatesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить анализ'),
+    }),
+    startImproveMany: builder.mutation<{ started: number[]; skipped: string[] }, { issueNumbers: number[]; model: string }>({
+      query: (body) => ({ url: 'improve/runs/batch', method: 'POST', body }),
+      invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось запустить'),
+    }),
+    startImproveItems: builder.mutation<ImproveRun, { id: number; model: string; indices?: number[] }>({
+      query: ({ id, ...body }) => ({ url: `improve/runs/${id}/start-items`, method: 'POST', body }),
+      invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось взять в работу'),
     }),
     createImproveIssues: builder.mutation<ImproveRun, { id: number; indices?: number[] }>({
       query: ({ id, indices }) => ({ url: `improve/runs/${id}/create-issues`, method: 'POST', body: { indices } }),
@@ -156,6 +169,8 @@ export const {
   useStartImproveRunMutation,
   useCancelImproveRunMutation,
   useStartImproveAnalysisMutation,
+  useStartImproveManyMutation,
+  useStartImproveItemsMutation,
   useCreateImproveIssuesMutation,
   useListImproveSchedulesQuery,
   useSaveImproveScheduleMutation,

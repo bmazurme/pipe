@@ -9,14 +9,16 @@ import {
   useCreateImproveIssuesMutation,
   useListImproveRunsQuery,
   useStartImproveAnalysisMutation,
+  useStartImproveItemsMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
 import { ALL_CATEGORIES, analysisItems, CATEGORY_LABEL, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
-function AnalysisRun({ run }: { run: ImproveRun }) {
+function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
+  const [startItems, { isLoading: isStarting }] = useStartImproveItemsMutation();
   const [error, setError] = useState<string | null>(null);
   const items = analysisItems(run);
   const hasUnfiled = items.some((item) => !item.issueNumber && !item.duplicateOf);
@@ -31,6 +33,16 @@ function AnalysisRun({ run }: { run: ImproveRun }) {
     }
   };
 
+  const handleStart = async () => {
+    setError(null);
+
+    try {
+      await startItems({ id: run.id, model }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось взять в работу'));
+    }
+  };
+
   return (
     <div className={styles.row}>
       <div className={styles.rowMain}>
@@ -39,6 +51,7 @@ function AnalysisRun({ run }: { run: ImproveRun }) {
           <Text key={item.title} variant="caption-2" color="secondary">
             {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
             {item.issueNumber && ` · issue #${item.issueNumber}`}
+            {item.started && ' · в работе'}
             {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}
           </Text>
         ))}
@@ -53,6 +66,11 @@ function AnalysisRun({ run }: { run: ImproveRun }) {
             Создать issues
           </Button>
         )}
+        {run.status === 'analyzed' && items.some((item) => !item.started && !item.duplicateOf) && (
+          <Button view="action" size="s" loading={isStarting} onClick={() => void handleStart()}>
+            В работу
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -64,6 +82,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
   const [model, setModel] = useState('sonnet');
   const [categories, setCategories] = useState<AnalysisCategory[]>(ALL_CATEGORIES);
   const [autoCreate, setAutoCreate] = useState(false);
+  const [autoStart, setAutoStart] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const analyses = runs?.filter((run) => run.kind === 'analysis') ?? [];
@@ -76,7 +95,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
     setError(null);
 
     try {
-      await start({ model, categories, autoCreate }).unwrap();
+      await start({ model, categories, autoCreate: autoCreate || autoStart, autoStart }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось запустить анализ'));
     }
@@ -94,7 +113,8 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
       </div>
       <div className={styles.toolbar}>
         <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={MODEL_OPTIONS} />
-        <Switch checked={autoCreate} onUpdate={setAutoCreate} content="Сразу создать issues" />
+        <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />
+        <Switch checked={autoStart} onUpdate={setAutoStart} content="И сразу взять в работу" />
         <Button view="action" size="m" loading={isLoading} disabled={!configured || busy || categories.length === 0} onClick={() => void handleStart()}>
           Запустить анализ
         </Button>
@@ -105,7 +125,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         <EmptyState icon={Magnifier} title="Анализов ещё не было" description="Запустите анализ вручную или добавьте расписание." />
       )}
       {analyses.map((run) => (
-        <AnalysisRun key={run.id} run={run} />
+        <AnalysisRun key={run.id} run={run} model={model} />
       ))}
     </div>
   );
