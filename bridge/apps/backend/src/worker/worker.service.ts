@@ -118,7 +118,14 @@ export class WorkerService {
   }
 
   async findAllByUser(userId: number): Promise<Job[]> {
+    // `logs` is unbounded and appended on every worker flush — the list view
+    // never needs it, so it is left out of the SELECT (GET :id returns it).
+    const columns = this.jobRepository.metadata.columns
+      .map((column) => column.propertyName as keyof Job)
+      .filter((name) => name !== 'logs');
+
     return this.jobRepository.find({
+      select: columns,
       where: { userId },
       order: { createdAt: 'DESC' },
     });
