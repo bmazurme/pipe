@@ -9,6 +9,7 @@ import { JobDetailDialog } from './worker/JobDetailDialog';
 import { JobList } from './worker/JobList';
 import { NewJobForm } from './worker/NewJobForm';
 import { VpnConnectionSelector } from './worker/VpnConnectionSelector';
+import { WorkerHelpCard } from './worker/WorkerHelpCard';
 import { WorkerSecretsCard } from './worker/WorkerSecretsCard';
 import { WorkerStatusCard } from './worker/WorkerStatusCard';
 import styles from './WorkerPage.module.css';
@@ -61,6 +62,8 @@ export function WorkerPage() {
       <ClaudeCredentialsCard />
 
       <WorkerSecretsCard />
+
+      <WorkerHelpCard />
 
       {openJobId !== null && (
         <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />
