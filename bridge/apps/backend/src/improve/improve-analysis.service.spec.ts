@@ -29,6 +29,11 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     delete: jest.fn(),
   };
   const workers = { create: jest.fn().mockResolvedValue({ id: 321 }) };
+  const appLogs = {
+    record: jest.fn(),
+    summary: jest.fn().mockRejectedValue(new Error('no table')),
+    list: jest.fn().mockResolvedValue([]),
+  };
   const service = new ImproveService(
     runs as never,
     {} as never,
@@ -38,10 +43,10 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     workers as never,
     { send: jest.fn() } as never,
     { query: jest.fn() } as never,
-    { record: jest.fn() } as never,
+    appLogs as never,
   );
 
-  return { service, runs, github, workers };
+  return { service, runs, github, workers, storage, appLogs };
 }
 
 describe('ImproveService analysis', () => {
@@ -116,5 +121,39 @@ describe('ImproveService analysis', () => {
     const stored = JSON.parse(run.result);
     expect(stored.items[0].duplicateOf).toBe(5);
     expect(stored.items[1].issueNumber).toBe(40);
+  });
+
+  it('still starts an analysis when the logs cannot be read', async () => {
+    const { service, workers } = setup();
+
+    await expect(service.startAnalysis(3, 'sonnet')).resolves.toMatchObject({
+      kind: 'analysis',
+    });
+    expect(workers.create).toHaveBeenCalled();
+  });
+
+  it('puts the log digest into the task handed to the worker', async () => {
+    const { service, storage, appLogs } = setup();
+    appLogs.summary.mockResolvedValue({
+      days: 7,
+      total: 3,
+      byLevel: { error: 3 },
+      bySource: {},
+      jobs: { succeeded: 0, failed: 3, successRate: 0, avgDurationMs: null },
+      topErrors: [{ message: 'claude exited with code N', count: 3 }],
+      slowestRoutes: [],
+    });
+
+    await service.startAnalysis(3, 'sonnet');
+
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const files = unzipSync(
+      new Uint8Array(storage.createFromBuffer.mock.calls[0][1]),
+    );
+    const text = Object.values(files)
+      .map((f) => strFromU8(f))
+      .join('\n');
+
+    expect(text).toContain('Top failure ×3: claude exited with code N');
   });
 });

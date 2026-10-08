@@ -33,6 +33,7 @@ import {
   BACKLOG_FILE,
   BacklogItem,
   buildAnalysisPrompt,
+  buildLogDigest,
   categoryLabel,
   isCategory,
   issueBody,
@@ -62,6 +63,7 @@ interface AnalysisResult {
 }
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
+const LOG_DIGEST_DAYS = 7;
 const ADVANCE_EVERY_MS = 15_000;
 const SCHEDULE_TICK_MS = 60_000;
 const AUTOSTART_MIN_AGE_SECONDS = 10;
@@ -525,7 +527,7 @@ export class ImproveService {
       {
         number: `analysis-${date}`,
         title: `Analysis ${date}`,
-        body: buildAnalysisPrompt(titles, categories),
+        body: buildAnalysisPrompt(titles, categories, await this.logDigest()),
       },
       'improve:analysis',
       `improve-analysis-${date}.subscription.zip`,
@@ -561,6 +563,26 @@ export class ImproveService {
     );
 
     return run;
+  }
+
+  // What the system's own logs say lately (Profile → Logs). Best-effort: an
+  // analysis must still run when the log table is unavailable or empty.
+  private async logDigest(): Promise<string> {
+    try {
+      const [summary, recent] = await Promise.all([
+        this.appLogs.summary(LOG_DIGEST_DAYS),
+        this.appLogs.list({ days: LOG_DIGEST_DAYS, limit: 300 }),
+      ]);
+
+      return buildLogDigest(
+        summary,
+        recent.filter((row) => row.level !== 'info'),
+      );
+    } catch (error) {
+      this.logger.warn(`Log digest skipped: ${message(error)}`);
+
+      return '';
+    }
   }
 
   // The worker's backlog → one proposal per direction → (optionally) GitHub issues.
