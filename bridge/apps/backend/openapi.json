@@ -3575,7 +3575,8 @@
             ]
           },
           "errorMessage": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 8192
           }
         },
         "required": [
@@ -3586,7 +3587,8 @@
         "type": "object",
         "properties": {
           "chunk": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 65536
           }
         },
         "required": [
