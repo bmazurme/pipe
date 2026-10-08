@@ -37,6 +37,10 @@ export class ImproveSchedule extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   autoCreateIssues: boolean;
 
+  // Analysis only: also start a run for every filed issue right away.
+  @Column({ type: 'boolean', default: false })
+  autoStartIssues: boolean;
+
   // How many issues to start per run (issue schedules).
   @Column({ type: 'smallint' })
   count: number;

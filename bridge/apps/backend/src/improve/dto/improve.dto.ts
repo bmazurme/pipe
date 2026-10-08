@@ -72,6 +72,10 @@ export class SaveScheduleDto {
   @IsOptional()
   @IsBoolean()
   autoCreateIssues?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoStartIssues?: boolean;
 }
 
 export class StartAnalysisDto {
@@ -88,6 +92,34 @@ export class StartAnalysisDto {
   @IsOptional()
   @IsBoolean()
   autoCreate?: boolean;
+
+  // File the proposals AND start a run for each (implies autoCreate).
+  @IsOptional()
+  @IsBoolean()
+  autoStart?: boolean;
+}
+
+export class StartManyDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  issueNumbers: number[];
+
+  @IsString()
+  model: string;
+}
+
+export class StartItemsDto {
+  @IsString()
+  model: string;
+
+  // Which proposals to take into work; absent = all.
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  indices?: number[];
 }
 
 export class CreateIssuesDto {
