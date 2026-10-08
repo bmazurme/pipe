@@ -122,3 +122,60 @@ body,
     scroll-behavior: auto !important;
   }
 }
+
+/* Phones (a Galaxy S22 Ultra is 412 CSS px wide): uikit's default controls are
+   24-28px tall — fine for a mouse, too small for a thumb, so mis-taps on rows
+   of icon buttons were routine. These are uikit's own public height hooks, so
+   buttons, inputs and selects grow together and stay aligned in a toolbar. */
+@media (max-width: 767px) {
+  body.g-root {
+    --g-button-height: 40px;
+    --g-text-input-height: 40px;
+  }
+
+  /* A checkbox/switch is as big as its label: make the whole row the target. */
+  .g-checkbox,
+  .g-switch {
+    min-height: 40px;
+    align-items: center;
+  }
+
+  /* The menu button is a bare 20px icon in a 50px header, so only the glyph
+     itself was tappable. Padding grows the target to 44px; the negative margin
+     keeps the header's layout exactly where it was. */
+  button[class*='gn-mobile-header-burger'] {
+    box-sizing: content-box;
+    padding: 12px;
+    margin: -12px;
+  }
+
+  /* Selects and segmented toggles size themselves (not via the hooks above). */
+  .g-select-control_size_m,
+  .g-select-control_size_m .g-select-control__button {
+    min-height: 40px;
+  }
+
+  .g-segmented-radio-group_size_m,
+  .g-segmented-radio-group_size_m .g-segmented-radio-group__option {
+    height: 40px;
+  }
+
+  .g-segmented-radio-group_size_m .g-segmented-radio-group__option-text {
+    line-height: 38px;
+  }
+
+  /* No 300ms double-tap-zoom wait and no grey flash on tap. */
+  button,
+  a,
+  [role='tab'],
+  label {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Landscape: a punch-hole camera cuts into the edge; keep content clear of it. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
