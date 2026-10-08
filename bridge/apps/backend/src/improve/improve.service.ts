@@ -113,10 +113,11 @@ export class ImproveService {
   }
 
   // The open `loop` issues, each with its latest run (if any), for the page.
-  async listIssues(label = PR_LABEL) {
+  // `all` lists every open issue, labelled or not.
+  async listIssues(label = PR_LABEL, all = false) {
     this.requireConfigured();
 
-    const issues = await this.github.listOpenIssues(label, 100);
+    const issues = await this.github.listOpenIssues(all ? '' : label, 100);
     const runs = issues.length
       ? await this.runs.find({
           where: {

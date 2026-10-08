@@ -12,6 +12,7 @@ import { improveApi } from '../store/api';
 const STATUS = { configured: true, repo: 'o/r', baseBranch: 'main', label: 'loop', models: ['sonnet'] };
 type Sent = { method: string; path: string; body: unknown };
 let sent: Sent[];
+let requested: string[];
 
 const ANALYSIS_RUN = {
   id: 20,
@@ -62,6 +63,7 @@ function renderPage(path: string) {
 
 beforeEach(() => {
   sent = [];
+  requested = [];
   store.dispatch(improveApi.util.resetApiState());
   vi.stubGlobal(
     'fetch',
@@ -71,7 +73,11 @@ beforeEach(() => {
 
       if (request.method !== 'GET') sent.push({ method: request.method, path, body });
       if (path === 'improve/status') return json(STATUS);
-      if (path === 'improve/issues') return json(ISSUES);
+      if (path === 'improve/issues') {
+        requested.push(new URL(request.url).search);
+
+        return json(ISSUES);
+      }
       if (path === 'improve/runs' && request.method === 'GET') return json([ANALYSIS_RUN]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
       if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null });
@@ -129,5 +135,17 @@ describe('ImprovePage start issues', () => {
         body: expect.objectContaining({ autoCreate: true, autoStart: true }),
       }),
     );
+  });
+
+  it('can list every open issue, not just the labelled ones', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await screen.findByLabelText('Выбрать #12');
+    expect(requested).toEqual(['']);
+
+    await user.click(screen.getByText('Все открытые issues'));
+
+    await waitFor(() => expect(requested).toContain('?all=1'));
   });
 });

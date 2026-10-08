@@ -2025,6 +2025,7 @@ export interface operations {
         parameters: {
             query: {
                 label: string;
+                all: string;
             };
             header?: never;
             path?: never;

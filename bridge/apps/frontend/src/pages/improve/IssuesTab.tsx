@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowUpRightFromSquare, Rocket } from '@gravity-ui/icons';
-import { Alert, Button, Checkbox, Icon, Label, Select, Skeleton, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Checkbox, Icon, Label, Select, Skeleton, Switch, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { getErrorMessage, ImproveIssue, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
@@ -22,7 +22,8 @@ function readModel(): string {
 }
 
 export function IssuesTab({ configured }: { configured: boolean }) {
-  const { data: issues, isLoading, isError, error, refetch, isFetching } = useListImproveIssuesQuery(undefined, { skip: !configured });
+  const [showAll, setShowAll] = useState(false);
+  const { data: issues, isLoading, isError, error, refetch, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
   const [start, { isLoading: isStarting }] = useStartImproveRunMutation();
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
@@ -79,6 +80,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
           onUpdate={([value]) => handleModel(value)}
           options={MODEL_OPTIONS}
         />
+        <Switch checked={showAll} onUpdate={setShowAll} content="Все открытые issues" />
         <Button view="action" size="m" disabled={selected.length === 0} loading={isStartingMany} onClick={() => void handleStartMany(selected)}>
           Запустить выбранные ({selected.length})
         </Button>
@@ -102,7 +104,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
       {isLoading && <Skeleton style={{ height: 120 }} />}
 
       {issues && issues.length === 0 && (
-        <EmptyState icon={Rocket} title="Открытых задач нет" description="Нет открытых issues с меткой loop — создайте их из анализа в Subscription или вручную на GitHub." />
+        <EmptyState icon={Rocket} title="Открытых задач нет" description={showAll ? 'В репозитории нет открытых issues.' : 'Нет открытых issues с меткой loop — включите «Все открытые issues», создайте их из анализа или вручную на GitHub.'} />
       )}
 
       {issues?.map((issue) => (
@@ -119,6 +121,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
             </Text>
             <Text variant="caption-2" color="secondary">
               создана {formatRelativeTime(issue.createdAt)}
+              {showAll && !issue.labels.includes('loop') && ' · без метки loop'}
               {issue.run?.note && ` · ${issue.run.note}`}
               {issue.run?.error && ` · ${issue.run.error}`}
             </Text>

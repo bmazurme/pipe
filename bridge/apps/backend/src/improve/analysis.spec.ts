@@ -20,9 +20,18 @@ describe('buildAnalysisPrompt', () => {
   it('asks for exactly one item per direction and names every direction id', () => {
     const prompt = buildAnalysisPrompt([]);
 
-    expect(prompt).toContain('exactly 5 small');
+    expect(prompt).toContain(`exactly ${ALL_CATEGORIES.length} small`);
+    expect(ALL_CATEGORIES).toEqual(expect.arrayContaining(['tests', 'docs']));
     for (const id of ALL_CATEGORIES) expect(prompt).toContain(`"${id}"`);
     expect(prompt).toContain(BACKLOG_FILE);
+  });
+
+  it('gives the tests and docs directions their own guidance', () => {
+    const prompt = buildAnalysisPrompt([], ['tests', 'docs']);
+
+    expect(prompt).toContain('exactly 2 small');
+    expect(prompt).toContain('testing gap');
+    expect(prompt).toContain('documentation gap');
   });
 
   it('can be limited to some directions', () => {

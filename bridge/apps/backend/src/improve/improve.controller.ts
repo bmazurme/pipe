@@ -41,8 +41,8 @@ export class ImproveController {
   }
 
   @Get('issues')
-  issues(@Query('label') label?: string) {
-    return this.improve.listIssues(label || undefined);
+  issues(@Query('label') label?: string, @Query('all') all?: string) {
+    return this.improve.listIssues(label || undefined, all === '1');
   }
 
   @Get('runs')

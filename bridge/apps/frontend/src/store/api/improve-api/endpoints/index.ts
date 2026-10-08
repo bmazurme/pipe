@@ -18,7 +18,7 @@ export interface ImproveStatus {
   models: string[];
 }
 
-export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability';
+export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability' | 'tests' | 'docs';
 
 export interface AnalysisItem {
   category: AnalysisCategory;
@@ -94,8 +94,8 @@ function errorMessage(fallback: string) {
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
     getImproveStatus: builder.query<ImproveStatus, void>({ query: () => 'improve/status' }),
-    listImproveIssues: builder.query<ImproveIssue[], void>({
-      query: () => 'improve/issues',
+    listImproveIssues: builder.query<ImproveIssue[], { all?: boolean } | void>({
+      query: (arg) => (arg && arg.all ? 'improve/issues?all=1' : 'improve/issues'),
       providesTags: ['ImproveIssues'],
       transformErrorResponse: errorMessage('Не удалось загрузить задачи'),
     }),
