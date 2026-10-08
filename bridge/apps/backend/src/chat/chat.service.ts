@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -167,12 +168,23 @@ export class ChatService {
     return message;
   }
 
-  // A late or duplicate report must not overwrite a turn that already
-  // finished — only a Running message can be completed or failed.
-  private assertRunning(message: ChatMessage): void {
-    if (message.status !== ChatMessageStatus.Running) {
-      throw new ConflictException('Message is not running');
+  // claim() is the only place that sets Running, so a turn report is only
+  // valid for an assistant message in that state — anything else is a wrong
+  // id (a user message) or a late/duplicate report for a finished turn.
+  private async findRunningAssistantMessage(
+    messageId: number,
+    userId: number,
+  ): Promise<ChatMessage> {
+    const message = await this.findOwnedMessage(messageId, userId);
+
+    if (message.role !== ChatMessageRole.Assistant) {
+      throw new BadRequestException('Message is not an assistant message');
     }
+    if (message.status !== ChatMessageStatus.Running) {
+      throw new ConflictException('Message is not awaiting a turn result');
+    }
+
+    return message;
   }
 
   async completeTurn(
@@ -180,8 +192,7 @@ export class ChatService {
     userId: number,
     content: string,
   ): Promise<ChatMessage> {
-    const message = await this.findOwnedMessage(messageId, userId);
-    this.assertRunning(message);
+    const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.content = content;
     message.status = ChatMessageStatus.Complete;
@@ -194,8 +205,7 @@ export class ChatService {
     userId: number,
     errorMessage?: string,
   ): Promise<ChatMessage> {
-    const message = await this.findOwnedMessage(messageId, userId);
-    this.assertRunning(message);
+    const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.status = ChatMessageStatus.Failed;
     message.errorMessage = errorMessage ?? null;

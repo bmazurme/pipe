@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
@@ -268,11 +272,64 @@ describe('ChatService', () => {
     });
   });
 
+  describe.each([
+    ['completeTurn', (id: number) => service.completeTurn(id, 7, 'x')],
+    ['failTurn', (id: number) => service.failTurn(id, 7, 'x')],
+  ])('%s state guard', (_name, call) => {
+    beforeEach(() => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+    });
+
+    it('rejects a user-role message without saving', async () => {
+      messageRepository.findOne!.mockResolvedValue({
+        id: 98,
+        chatId: 1,
+        role: ChatMessageRole.User,
+        content: 'hi',
+        status: ChatMessageStatus.Running,
+      });
+
+      await expect(call(98)).rejects.toThrow(BadRequestException);
+      expect(messageRepository.save).not.toHaveBeenCalled();
+    });
+
+    it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
+      'rejects an assistant message already %s without saving',
+      async (status) => {
+        messageRepository.findOne!.mockResolvedValue({
+          id: 99,
+          chatId: 1,
+          role: ChatMessageRole.Assistant,
+          content: 'done',
+          status,
+        });
+
+        await expect(call(99)).rejects.toThrow(ConflictException);
+        expect(messageRepository.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('succeeds for a running assistant message', async () => {
+      messageRepository.findOne!.mockResolvedValue({
+        id: 99,
+        chatId: 1,
+        role: ChatMessageRole.Assistant,
+        content: '',
+        status: ChatMessageStatus.Running,
+      });
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+
+      await expect(call(99)).resolves.toMatchObject({ id: 99 });
+      expect(messageRepository.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('completeTurn', () => {
     it('fills the message content and marks it complete', async () => {
       messageRepository.findOne!.mockResolvedValue({
         id: 99,
         chatId: 1,
+        role: ChatMessageRole.Assistant,
         content: '',
         status: ChatMessageStatus.Running,
       });
@@ -288,7 +345,13 @@ describe('ChatService', () => {
     it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
       'throws ConflictException and leaves a %s message unchanged',
       async (status) => {
-        const stored = { id: 99, chatId: 1, content: 'original', status };
+        const stored = {
+          id: 99,
+          chatId: 1,
+          role: ChatMessageRole.Assistant,
+          content: 'original',
+          status,
+        };
         messageRepository.findOne!.mockResolvedValue(stored);
         chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
 
@@ -316,6 +379,7 @@ describe('ChatService', () => {
       messageRepository.findOne!.mockResolvedValue({
         id: 99,
         chatId: 1,
+        role: ChatMessageRole.Assistant,
         status: ChatMessageStatus.Running,
       });
       chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
@@ -330,7 +394,13 @@ describe('ChatService', () => {
     it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
       'throws ConflictException for a %s message',
       async (status) => {
-        const stored = { id: 99, chatId: 1, content: 'original', status };
+        const stored = {
+          id: 99,
+          chatId: 1,
+          role: ChatMessageRole.Assistant,
+          content: 'original',
+          status,
+        };
         messageRepository.findOne!.mockResolvedValue(stored);
         chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
 
