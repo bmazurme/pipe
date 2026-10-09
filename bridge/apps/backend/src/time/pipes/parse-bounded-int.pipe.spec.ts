@@ -37,3 +37,18 @@ describe('ParseBoundedIntPipe', () => {
     ).toThrow('month must be an integer from 1 to 12');
   });
 });
+
+describe('ParseBoundedIntPipe after the global ValidationPipe', () => {
+  it('accepts a value that was already converted to a number', () => {
+    expect(monthPipe().transform(7)).toBe(7);
+    expect(yearPipe().transform(2026)).toBe(2026);
+  });
+
+  it('still rejects a number outside the range, or a non-integer one', () => {
+    expect(() => monthPipe().transform(13)).toThrow(BadRequestException);
+    expect(() => yearPipe().transform(1.5)).toThrow(BadRequestException);
+    expect(() => monthPipe().transform(Number.NaN)).toThrow(
+      BadRequestException,
+    );
+  });
+});
