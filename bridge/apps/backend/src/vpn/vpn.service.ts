@@ -1,10 +1,13 @@
 import {
   BadGatewayException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { AppLogService } from '../logs/app-log.service';
 import { encryptSecretForGitHub } from './github-secrets.util';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
@@ -56,6 +59,21 @@ const NEVER_ONLINE = 0;
 // hung upstream can't hold a backend connection open indefinitely.
 const OUTBOUND_FETCH_TIMEOUT_MS = 10_000;
 
+// The panel is a separate server: when it cannot be reached the useful fact is *why* (refused,
+// no such host, bad certificate), which Node reports on the error's `cause`, not its message.
+function networkReason(error: unknown): string | null {
+  const cause = (error as { cause?: { code?: string; message?: string } })
+    ?.cause;
+
+  if (cause?.code) return cause.code;
+  if (error instanceof TypeError) return cause?.message ?? error.message;
+
+  return null;
+}
+
+// How often the same failure is written to the app log: the VPN page polls every 15 s.
+const FAILURE_LOG_EVERY_MS = 5 * 60_000;
+
 function isTimeoutError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -65,10 +83,36 @@ function isTimeoutError(error: unknown): boolean {
 
 @Injectable()
 export class VpnService {
+  private readonly lastFailureLoggedAt = new Map<string, number>();
+
   constructor(
     private readonly configService: ConfigService,
     private readonly vpnConnectionsService: VpnConnectionsService,
+    @Optional() private readonly appLogs?: AppLogService,
   ) {}
+
+  // A failed status check reads as one generic line in the UI; this leaves the cause in
+  // Profile → Logs. Deduplicated, since the status is polled.
+  private recordStatusFailure(error: unknown): void {
+    const reason =
+      error instanceof HttpException ? error.message : String(error);
+    const now = Date.now();
+
+    if (
+      now - (this.lastFailureLoggedAt.get(reason) ?? 0) <
+      FAILURE_LOG_EVERY_MS
+    ) {
+      return;
+    }
+
+    this.lastFailureLoggedAt.set(reason, now);
+    void this.appLogs?.record({
+      level: 'warn',
+      source: 'integration',
+      event: 'vpn.status_failed',
+      message: `VPN status check failed: ${reason}`,
+    });
+  }
 
   private required(key: string): string {
     const value = this.configService.get<string>(key);
@@ -97,6 +141,12 @@ export class VpnService {
         signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new BadGatewayException(
+          `VPN panel "${connection.name}" rejected the API token (${response.status}) — check the token saved for this connection`,
+        );
+      }
+
       if (!response.ok) {
         throw new BadGatewayException(
           `VPN panel request failed (${response.status})`,
@@ -110,6 +160,16 @@ export class VpnService {
           `VPN panel "${connection.name}" did not respond within ${OUTBOUND_FETCH_TIMEOUT_MS}ms (${path})`,
         );
       }
+
+      const reason =
+        error instanceof HttpException ? null : networkReason(error);
+
+      if (reason) {
+        throw new BadGatewayException(
+          `VPN panel "${connection.name}" is unreachable from bridge (${reason})`,
+        );
+      }
+
       throw error;
     }
     if (!body.success) {
@@ -135,7 +195,15 @@ export class VpnService {
   private async getStatusFor(connection: VpnConnection): Promise<VpnStatus> {
     const inbound = await this.getInbound(connection);
     const stats = inbound.clientStats?.[0];
-    const reality = inbound.streamSettings.realitySettings;
+    const reality = inbound.streamSettings?.realitySettings;
+
+    // A panel whose first inbound is some other protocol has no Reality settings; reading
+    // them used to throw a TypeError, which the UI could only report as a generic failure.
+    if (!reality) {
+      throw new BadGatewayException(
+        'The first inbound on the VPN panel is not a VLESS Reality inbound',
+      );
+    }
 
     return {
       lastOnline:
@@ -151,15 +219,27 @@ export class VpnService {
   }
 
   async getStatus(): Promise<VpnStatus> {
-    const active = await this.vpnConnectionsService.getActive();
-    return this.getStatusFor(active);
+    try {
+      const active = await this.vpnConnectionsService.getActive();
+
+      return await this.getStatusFor(active);
+    } catch (error) {
+      this.recordStatusFailure(error);
+      throw error;
+    }
   }
 
   // Same status call against a specific connection, active or not — backs
   // the "Проверить" button on each row of the connections list.
   async checkConnectionStatus(id: number): Promise<VpnStatus> {
-    const connection = await this.vpnConnectionsService.findOne(id);
-    return this.getStatusFor(connection);
+    try {
+      const connection = await this.vpnConnectionsService.findOne(id);
+
+      return await this.getStatusFor(connection);
+    } catch (error) {
+      this.recordStatusFailure(error);
+      throw error;
+    }
   }
 
   // Rebuilds the worker's Xray client config from the active connection's

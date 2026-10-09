@@ -87,3 +87,19 @@ describe('Time dashboard', () => {
     expect(await screen.findByText(/За этот месяц отчёта нет/)).toBeTruthy();
   });
 });
+
+describe('Time dashboard load failures show their reason', () => {
+  it('names the cause instead of a generic message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (new URL(request.url).pathname.endsWith('time/day-offs')) return new Response(JSON.stringify({ message: 'Too Many Requests' }), { status: 429, headers: { 'content-type': 'application/json' } });
+
+        return json([]);
+      }),
+    );
+    renderDashboard();
+
+    expect(await screen.findByText(/Не удалось загрузить данные за период — слишком много запросов/)).toBeTruthy();
+  });
+});

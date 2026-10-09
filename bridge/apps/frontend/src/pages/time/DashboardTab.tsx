@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Alert, Loader, Progress, Text, Tooltip } from '@gravity-ui/uikit';
 
-import { useListDayOffsQuery, useListReportEntriesQuery } from '../../store/api';
+import { describeApiError, useListDayOffsQuery, useListReportEntriesQuery } from '../../store/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { reportMonthStepped, reportYearChanged, timeReportMonthSelector, timeReportYearSelector } from '../../store/slices';
 import { PeriodStepper } from '../../widgets/PeriodStepper';
@@ -21,8 +21,8 @@ export function DashboardTab() {
   const year = useAppSelector(timeReportYearSelector);
   const month = useAppSelector(timeReportMonthSelector);
 
-  const { data: entries = [], isLoading: entriesLoading, isError: entriesError } = useListReportEntriesQuery({ year, month });
-  const { data: dayOffs = [], isLoading: dayOffsLoading, isError: dayOffsError } = useListDayOffsQuery(year);
+  const { data: entries = [], isLoading: entriesLoading, isError: entriesError, error: entriesFailure } = useListReportEntriesQuery({ year, month });
+  const { data: dayOffs = [], isLoading: dayOffsLoading, isError: dayOffsError, error: dayOffsFailure } = useListDayOffsQuery(year);
 
   const stats = useMemo(() => monthStats(year, month, dayOffs), [year, month, dayOffs]);
   const summary = useMemo(() => summarizeReport(entries), [entries]);
@@ -66,7 +66,11 @@ export function DashboardTab() {
       </div>
 
       {(entriesError || dayOffsError) && (
-        <Alert theme="danger" view="filled" message="Не удалось загрузить данные за период" />
+        <Alert
+          theme="danger"
+          view="filled"
+          message={`Не удалось загрузить данные за период — ${describeApiError(entriesError ? entriesFailure : dayOffsFailure)}`}
+        />
       )}
 
       {entriesLoading || dayOffsLoading ? (
