@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
 import { ChatService } from './chat.service';
+import { ChatAttachment } from './entities/chat-attachment.entity';
 import { Chat, ChatModel } from './entities/chat.entity';
 import {
   ChatMessage,
@@ -34,10 +35,14 @@ describe('ChatService', () => {
   let service: ChatService;
   let chatRepository: MockRepository<Chat>;
   let messageRepository: MockRepository<ChatMessage>;
+  let attachmentRepository: MockRepository<ChatAttachment>;
 
   beforeEach(async () => {
     chatRepository = createMockRepository<Chat>();
     messageRepository = createMockRepository<ChatMessage>();
+    // No attachments unless a test adds some.
+    attachmentRepository = createMockRepository<ChatAttachment>();
+    attachmentRepository.find!.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -46,6 +51,10 @@ describe('ChatService', () => {
         {
           provide: getRepositoryToken(ChatMessage),
           useValue: messageRepository,
+        },
+        {
+          provide: getRepositoryToken(ChatAttachment),
+          useValue: attachmentRepository,
         },
       ],
     }).compile();

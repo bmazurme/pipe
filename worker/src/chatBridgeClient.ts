@@ -1,10 +1,21 @@
 // Same reasoning as bridgeClient.ts's own API_TIMEOUT_MS — claim() runs in
 // the same poll loop, so a hung request here would freeze it just as badly.
 const API_TIMEOUT_MS = 15_000;
+// A file can be several MB.
+const ATTACHMENT_TIMEOUT_MS = 60_000;
+
+// A file the user attached to a message — fetched with ChatBridgeClient.downloadAttachment.
+export interface ChatHistoryAttachment {
+  id: number;
+  name: string;
+  size: number;
+  isImage: boolean;
+}
 
 export interface ChatHistoryEntry {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: ChatHistoryAttachment[];
 }
 
 export interface ClaimedChatTurn {
@@ -49,6 +60,21 @@ export class ChatBridgeClient {
 
     const text = await response.text();
     return text ? (JSON.parse(text) as ClaimedChatTurn | null) : null;
+  }
+
+  // The bytes of one file in a turn's history (bridge refuses any file that is not part of
+  // the chat the message belongs to).
+  async downloadAttachment(messageId: number, attachmentId: number): Promise<Buffer> {
+    const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/${messageId}/attachments/${attachmentId}`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+      signal: AbortSignal.timeout(ATTACHMENT_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Downloading attachment ${attachmentId} failed (${response.status})`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 
   async complete(messageId: number, content: string): Promise<void> {

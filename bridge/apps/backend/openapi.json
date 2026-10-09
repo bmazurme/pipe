@@ -351,12 +351,107 @@
         }
       }
     },
+    "/api/v1/chat/chats/{id}/attachments": {
+      "post": {
+        "operationId": "ChatController_uploadAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAttachmentResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/attachments/{id}/content": {
+      "get": {
+        "operationId": "ChatController_attachmentContent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/attachments/{id}": {
+      "delete": {
+        "operationId": "ChatController_removeAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/chat/turns/claim": {
       "post": {
         "operationId": "ChatController_claim",
         "parameters": [],
         "responses": {
           "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/turns/{messageId}/attachments/{attachmentId}": {
+      "get": {
+        "operationId": "ChatController_turnAttachment",
+        "parameters": [
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -2774,6 +2869,34 @@
           "title"
         ]
       },
+      "ChatAttachmentResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "isImage": {
+            "type": "boolean"
+          },
+          "messageId": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "size",
+          "isImage",
+          "messageId"
+        ]
+      },
       "ChatMessageResponseDto": {
         "type": "object",
         "properties": {
@@ -2806,6 +2929,12 @@
             "type": "string",
             "nullable": true
           },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatAttachmentResponseDto"
+            }
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -2822,6 +2951,7 @@
           "content",
           "status",
           "errorMessage",
+          "attachments",
           "createdAt",
           "updatedAt"
         ]
@@ -2831,6 +2961,12 @@
         "properties": {
           "content": {
             "type": "string"
+          },
+          "attachmentIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
           }
         },
         "required": [
