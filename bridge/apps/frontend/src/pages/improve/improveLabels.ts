@@ -40,6 +40,7 @@ export const CATEGORY_LABEL: Record<AnalysisCategory, string> = {
   reliability: 'Надёжность',
   tests: 'Тесты',
   docs: 'Документация',
+  architecture: 'Архитектура',
 };
 
 export const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as AnalysisCategory[];

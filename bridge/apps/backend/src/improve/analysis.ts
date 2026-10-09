@@ -52,6 +52,12 @@ export const ANALYSIS_CATEGORIES = [
     guidance:
       'A documentation gap: a README/setup/deploy step that is missing, wrong or out of date, an undocumented environment variable, endpoint or command, or a comment that no longer matches the code.',
   },
+  {
+    id: 'architecture',
+    label: 'Архитектура',
+    guidance:
+      'A structural problem in how the code is organised: a module that knows too much about another (a layering or dependency-direction violation), logic duplicated across packages that belongs in one place, a god-class or a file doing several jobs, a leaky or inconsistent abstraction, an import cycle, or a boundary the architecture notes in CLAUDE.md describe but the code does not keep. Propose one concrete, incremental refactor — name the files and the target shape — not a rewrite.',
+  },
 ] as const;
 
 export type AnalysisCategory = (typeof ANALYSIS_CATEGORIES)[number]['id'];

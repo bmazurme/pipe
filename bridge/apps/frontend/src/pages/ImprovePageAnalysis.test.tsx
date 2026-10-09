@@ -82,7 +82,7 @@ describe('ImprovePage analysis', () => {
       expect(sent).toContainEqual({
         method: 'POST',
         path: 'improve/analysis',
-        body: { model: 'sonnet', categories: ['general', 'security', 'performance', 'reliability', 'tests', 'docs'], autoCreate: false, autoStart: false },
+        body: { model: 'sonnet', categories: ['general', 'security', 'performance', 'reliability', 'tests', 'docs', 'architecture'], autoCreate: false, autoStart: false },
       }),
     );
   });
@@ -111,7 +111,7 @@ describe('ImprovePage analysis', () => {
       expect(sent).toContainEqual({
         method: 'POST',
         path: 'improve/schedules',
-        body: expect.objectContaining({ kind: 'analysis', categories: ['general', 'uiux', 'security', 'performance', 'reliability', 'tests', 'docs'], autoCreateIssues: true }),
+        body: expect.objectContaining({ kind: 'analysis', categories: ['general', 'uiux', 'security', 'performance', 'reliability', 'tests', 'docs', 'architecture'], autoCreateIssues: true }),
       }),
     );
   });

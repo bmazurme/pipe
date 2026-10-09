@@ -149,3 +149,13 @@ describe('ImprovePage start issues', () => {
     await waitFor(() => expect(requested).toContain('?all=1'));
   });
 });
+
+describe('ImprovePage analysis directions', () => {
+  it('offers the architecture direction as a checkbox, ticked by default', async () => {
+    renderPage('/improve?tab=analysis');
+
+    const box = (await screen.findByLabelText('Архитектура')) as HTMLInputElement;
+
+    expect(box.checked).toBe(true);
+  });
+});
