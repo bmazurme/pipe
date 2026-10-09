@@ -48,13 +48,18 @@ export class VpnConnectionsService {
   // confirm before overwriting it — a field left out of `dto` entirely
   // (undefined, not an empty string) leaves that column untouched, same
   // convention as SecretsService.update.
-  async update(id: number, dto: UpdateVpnConnectionDto): Promise<VpnConnection> {
+  async update(
+    id: number,
+    dto: UpdateVpnConnectionDto,
+  ): Promise<VpnConnection> {
     const connection = await this.findOne(id);
 
     if (dto.name !== undefined) connection.name = dto.name;
     if (dto.panelUrl !== undefined) connection.panelUrl = dto.panelUrl;
-    if (dto.panelApiToken !== undefined) connection.panelApiToken = dto.panelApiToken;
-    if (dto.serverAddress !== undefined) connection.serverAddress = dto.serverAddress;
+    if (dto.panelApiToken !== undefined)
+      connection.panelApiToken = dto.panelApiToken;
+    if (dto.serverAddress !== undefined)
+      connection.serverAddress = dto.serverAddress;
 
     return this.repository.save(connection);
   }
