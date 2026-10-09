@@ -1,8 +1,35 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { Logger } from '@nestjs/common';
 import { ValueTransformer } from 'typeorm';
 
 const CURRENT_KEY_ID = 'v1';
 const ALGORITHM = 'aes-256-gcm';
+
+const logger = new Logger('encryptedColumn');
+
+// One bad key would otherwise log once per row of every list that reads the column.
+const WARN_EVERY_MS = 60_000;
+const lastWarned = new Map<string, number>();
+
+function warnUndecryptable(keyId: string, error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  const signature = `${keyId}|${reason}`;
+  const now = Date.now();
+
+  if (now - (lastWarned.get(signature) ?? 0) < WARN_EVERY_MS) return;
+
+  lastWarned.set(signature, now);
+  // Never the value: only the key id and why it failed.
+  logger.warn(
+    `Could not decrypt an encrypted column value (key ${keyId}): ${reason}. ` +
+      'The stored value is being returned unchanged — check CREDENTIALS_ENC_KEY (missing, rotated or wrong) or the row itself.',
+  );
+}
+
+// Test hook: forget what was already warned about.
+export function resetDecryptWarnings(): void {
+  lastWarned.clear();
+}
 
 // Each key is its own env var (CREDENTIALS_ENC_KEY for "v1") so rotation
 // doesn't require a backfill: bump CURRENT_KEY_ID, add
@@ -80,7 +107,8 @@ export const encryptedColumn: ValueTransformer = {
         decipher.update(ciphertext),
         decipher.final(),
       ]).toString('utf8');
-    } catch {
+    } catch (error) {
+      warnUndecryptable(keyId, error);
       // Matched the shape but didn't decrypt (missing/rotated key, corrupt
       // value) — fail safe by handing back the raw stored value rather than
       // throwing and taking down every read of this entity. Whatever uses

@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { ContextService } from './context.service';
 import { ContextResponseDto } from './dto/context-response.dto';
+import { ContextSummaryDto } from './dto/context-summary.dto';
 import { CreateContextDto } from './dto/create-context.dto';
 import { UpdateContextDto } from './dto/update-context.dto';
 
@@ -30,10 +31,21 @@ export class ContextController {
   @Get()
   async list(
     @CurrentUser() currentUser: { id: number },
-  ): Promise<ContextResponseDto[]> {
+  ): Promise<ContextSummaryDto[]> {
     const contexts = await this.contextService.findAllByUser(currentUser.id);
 
-    return contexts.map(ContextResponseDto.fromEntity);
+    return contexts.map(ContextSummaryDto.fromEntity);
+  }
+
+  // One context with its text — what opening it for editing needs.
+  @Get(':id')
+  async get(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ContextResponseDto> {
+    const context = await this.contextService.findOwned(id, currentUser.id);
+
+    return ContextResponseDto.fromEntity(context);
   }
 
   @Post()

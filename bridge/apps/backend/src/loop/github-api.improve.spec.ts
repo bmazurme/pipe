@@ -41,6 +41,58 @@ describe('GithubApiService (improve)', () => {
     ).toBe('trunk');
   });
 
+  it('creates an issue and reports no missing labels when GitHub applied them', async () => {
+    const calls = stubFetch(() => ({
+      number: 9,
+      html_url: 'u9',
+      labels: [{ name: 'loop' }, { name: 'risk:low' }],
+    }));
+
+    const issue = await service().createIssue({
+      title: 't',
+      body: 'b',
+      labels: ['loop', 'risk:low'],
+    });
+
+    expect(issue).toEqual({ number: 9, htmlUrl: 'u9', missingLabels: [] });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('sets the labels GitHub silently dropped on a new issue, and says when that works', async () => {
+    let call = 0;
+    const calls = stubFetch(() =>
+      call++ === 0
+        ? { number: 9, html_url: 'u9', labels: [] }
+        : [{ name: 'loop' }, { name: 'risk:low' }],
+    );
+
+    const issue = await service().createIssue({
+      title: 't',
+      body: 'b',
+      labels: ['loop', 'risk:low'],
+    });
+
+    expect(calls[1].url).toBe(
+      'https://api.github.com/repos/o/r/issues/9/labels',
+    );
+    expect(issue.missingLabels).toEqual([]);
+  });
+
+  it('reports the labels that still did not stick, without failing the issue', async () => {
+    let call = 0;
+    stubFetch(() =>
+      call++ === 0 ? { number: 9, html_url: 'u9', labels: [] } : [],
+    );
+
+    const issue = await service().createIssue({
+      title: 't',
+      body: 'b',
+      labels: ['loop'],
+    });
+
+    expect(issue).toMatchObject({ number: 9, missingLabels: ['loop'] });
+  });
+
   it('lists every open issue when the label is empty', async () => {
     const calls = stubFetch(() => []);
 

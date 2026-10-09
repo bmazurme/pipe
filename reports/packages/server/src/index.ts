@@ -39,6 +39,7 @@ import {
 import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
+import { corsOrigin, localOnly } from './security/local-only';
 import { setupProxy } from './utils/setup-proxy';
 import { codeStatus } from './utils/stale-code';
 
@@ -57,7 +58,8 @@ const startPort = Number(process.env.PORT) || 4000;
 const clientDistDir = join(dirname(fileURLToPath(import.meta.url)), '../../client/dist');
 const isProductionMode = existsSync(join(clientDistDir, 'index.html'));
 
-app.use(cors());
+app.use(cors({ origin: corsOrigin }));
+app.use(localOnly());
 app.use(express.json());
 
 // Lets the UI warn when the running process is older than the code on disk (see

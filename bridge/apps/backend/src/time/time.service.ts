@@ -127,10 +127,24 @@ export class TimeService {
     // Re-importing the same period replaces its rows outright rather than
     // merging — the source (CRM export or an external report push) is
     // always the full picture for that month, so the latest one wins.
-    await this.timeReportEntryRepository.delete({ userId, year, month });
+    //
+    // The delete and the insert are one transaction: if the insert fails (a value too
+    // long for its column, a DB error) the old month is still there instead of being
+    // gone for good. The advisory lock makes two imports of the same period take turns,
+    // so the second replaces the first rather than interleaving with it into duplicates.
+    const saved = await this.timeReportEntryRepository.manager.transaction(
+      async (manager) => {
+        await manager.query('SELECT pg_advisory_xact_lock($1, $2)', [
+          userId,
+          year * 100 + month,
+        ]);
+        await manager.delete(TimeReportEntry, { userId, year, month });
 
-    const saved = await this.timeReportEntryRepository.save(
-      entries.map((entry) => ({ userId, year, month, ...entry })),
+        return manager.save(
+          TimeReportEntry,
+          entries.map((entry) => ({ userId, year, month, ...entry })),
+        );
+      },
     );
 
     return {

@@ -204,6 +204,9 @@ describe('VpnPage', () => {
     await screen.findByText('backup');
 
     await user.click(screen.getByLabelText('Удалить подключение: backup'));
+    // A single click only arms the button; the second one deletes.
+    expect(deletedId).toBeUndefined();
+    await user.click(await screen.findByLabelText('Подтвердить удаление подключения: backup'));
 
     await waitFor(() => expect(deletedId).toBe(2));
   });

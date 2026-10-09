@@ -24,7 +24,7 @@ describe('listAssignedOpenIssues', () => {
 
     const issues = await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok');
 
-    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?scope=assigned_to_me&state=opened');
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?scope=assigned_to_me&state=opened&per_page=100&page=1');
     assert.deepEqual(capturedHeaders, { 'Private-Token': 'tok' });
     assert.equal(issues.length, 1);
     assert.equal(issues[0].iid, 2);

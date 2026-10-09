@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
 import { Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
@@ -11,6 +11,9 @@ import {
   VpnStatus,
 } from '../../store/api';
 import styles from '../VpnPage.module.css';
+
+// How long the armed "delete" button waits for its confirming second click.
+const CONFIRM_DELETE_MS = 4000;
 import { VpnConnectionStatusGrid } from './VpnConnectionStatusGrid';
 
 interface VpnConnectionRowProps {
@@ -39,6 +42,43 @@ export function VpnConnectionRow({
   const [checkedStatus, setCheckedStatus] = useState<VpnStatus | 'error' | null>(null);
   const [link, setLink] = useState<string | 'error' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // An armed delete disarms itself, so a stray earlier click cannot turn a later one into a delete.
+  useEffect(() => {
+    if (!isConfirmingDelete) return undefined;
+
+    const timer = setTimeout(() => setIsConfirmingDelete(false), CONFIRM_DELETE_MS);
+
+    return () => clearTimeout(timer);
+  }, [isConfirmingDelete]);
+
+  const handleActivate = async () => {
+    setActionError(null);
+
+    try {
+      await activateVpnConnection(connection.id).unwrap();
+    } catch {
+      setActionError('Не удалось сделать подключение активным');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true);
+      return;
+    }
+
+    setActionError(null);
+    setIsConfirmingDelete(false);
+
+    try {
+      await deleteVpnConnection(connection.id).unwrap();
+    } catch {
+      setActionError('Не удалось удалить подключение');
+    }
+  };
 
   const handleCheck = async () => {
     try {
@@ -90,7 +130,7 @@ export function VpnConnectionRow({
                 view="normal"
                 size="s"
                 loading={isActivating}
-                onClick={() => void activateVpnConnection(connection.id)}
+                onClick={() => void handleActivate()}
               >
                 Сделать активным
               </Button>
@@ -103,16 +143,28 @@ export function VpnConnectionRow({
             Ссылка
           </Button>
           <Button
-            view="flat-danger"
+            view={isConfirmingDelete ? 'outlined-danger' : 'flat-danger'}
             size="s"
-            aria-label={`Удалить подключение: ${connection.name}`}
+            title={isConfirmingDelete ? 'Нажмите ещё раз для подтверждения' : undefined}
+            aria-label={
+              isConfirmingDelete
+                ? `Подтвердить удаление подключения: ${connection.name}`
+                : `Удалить подключение: ${connection.name}`
+            }
             loading={isDeleting}
-            onClick={() => void deleteVpnConnection(connection.id)}
+            onClick={() => void handleDelete()}
           >
             <Icon data={TrashBin} size={16} />
+            {isConfirmingDelete && 'Удалить?'}
           </Button>
         </div>
       </div>
+
+      {actionError && (
+        <Text color="danger" variant="caption-2" role="alert">
+          {actionError}
+        </Text>
+      )}
 
       {connection.isActive && isLiveStatusLoading && (
         <div className={styles.statGrid}>
@@ -136,7 +188,7 @@ export function VpnConnectionRow({
       )}
       {link && link !== 'error' && (
         <div className={styles.secretRow}>
-          <TextInput value={link} readOnly />
+          <TextInput value={link} readOnly controlProps={{ 'aria-label': `Ссылка подключения ${connection.name}` }} />
           <Button view="normal" size="s" onClick={() => void handleCopyLink()}>
             {copied ? 'Скопировано' : 'Скопировать'}
           </Button>

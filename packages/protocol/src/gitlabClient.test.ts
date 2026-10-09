@@ -77,7 +77,7 @@ describe('listAssignedOpenIssues', () => {
 
     await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok');
 
-    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?scope=assigned_to_me&state=opened');
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?scope=assigned_to_me&state=opened&per_page=100&page=1');
   });
 
   it('with an assigneeId, uses scope=all + assignee_id (reports\' shape)', async () => {
@@ -89,7 +89,55 @@ describe('listAssignedOpenIssues', () => {
 
     await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok', { assigneeId: 42 });
 
-    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?assignee_id=42&scope=all&state=opened');
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/issues?assignee_id=42&scope=all&state=opened&per_page=100&page=1');
+  });
+});
+
+describe('listAssignedOpenIssues pagination', () => {
+  const issue = (iid: number) => ({ id: iid, iid, project_id: 1, title: `t${iid}`, description: null });
+
+  it('follows X-Next-Page until GitLab says there is no next page, and returns every issue', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      const page = Number(new URL(url).searchParams.get('page'));
+
+      return new Response(JSON.stringify([issue(page * 2 - 1), issue(page * 2)]), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'x-next-page': page < 3 ? String(page + 1) : '' },
+      });
+    }) as typeof fetch;
+
+    const issues = await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok');
+
+    assert.deepEqual(issues.map((entry) => entry.iid), [1, 2, 3, 4, 5, 6]);
+    assert.equal(urls.length, 3);
+    assert.ok(urls.every((url) => url.includes('per_page=100')));
+  });
+
+  it('makes a single request when the response names no next page', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+
+      return Response.json([issue(1)]);
+    }) as typeof fetch;
+
+    assert.equal((await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok')).length, 1);
+    assert.equal(calls, 1);
+  });
+
+  it('stops after a fixed number of pages even if GitLab never reports the last one', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+
+      return new Response('[]', { status: 200, headers: { 'content-type': 'application/json', 'x-next-page': '2' } });
+    }) as typeof fetch;
+
+    await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok');
+
+    assert.equal(calls, 20);
   });
 });
 

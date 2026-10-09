@@ -76,6 +76,33 @@ export interface GitlabLiveData {
 
 export type GitlabLiveStatusResult = { available: true; data: GitlabLiveData } | { available: false; reason: string };
 
+// Tasks looked up at once.
+export const GITLAB_CONCURRENCY = 5;
+
+// Like Promise.allSettled over `items`, but never more than `limit` calls in flight; results
+// keep the order of `items`.
+export async function settleWithLimit<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let next = 0;
+
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+
+      try {
+        results[index] = { status: 'fulfilled', value: await work(items[index]) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+
+  return results;
+}
+
 async function fetchTaskGitlabInfo(config: GitlabLiveConfig, projectId: string, iid: string, branch: string): Promise<LiveGitlabTaskInfo> {
   const [issue, mrs] = await Promise.all([
     getIssue(config.apiUrl, config.token, projectId, iid),
@@ -121,12 +148,12 @@ export async function fetchGitlabLiveStatus(
     .map((task) => ({ task, branch: resolveTaskBranch(task) }))
     .filter((entry): entry is { task: TaskEntry; branch: string } => Boolean(entry.branch));
 
-  const settled = await Promise.allSettled(
-    tasksWithBranch.map(({ task, branch }) => {
-      const [projectId, iid] = task.key.split(':');
-      return fetchTaskGitlabInfo(config, projectId, iid, branch);
-    }),
-  );
+  // Each task costs two requests; fired all at once, 50 tasks meant 100 simultaneous calls and
+  // GitLab's rate limiter answered some of them with errors that then read as "no info".
+  const settled = await settleWithLimit(tasksWithBranch, GITLAB_CONCURRENCY, ({ task, branch }) => {
+    const [projectId, iid] = task.key.split(':');
+    return fetchTaskGitlabInfo(config, projectId, iid, branch);
+  });
 
   const taskInfo = new Map<string, LiveGitlabTaskInfo>();
   tasksWithBranch.forEach(({ task }, index) => {

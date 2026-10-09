@@ -675,6 +675,7 @@ export class ImproveService {
     );
     let created = 0;
     let duplicates = 0;
+    const unlabelled: number[] = [];
 
     for (const [index, item] of stored.items.entries()) {
       if (only && !only.includes(index)) continue;
@@ -697,12 +698,25 @@ export class ImproveService {
       item.issueNumber = issue.number;
       existing.set(normalizeTitle(item.title), issue.number);
       created += 1;
+
+      if ((issue.missingLabels ?? []).includes(PR_LABEL)) {
+        unlabelled.push(issue.number);
+      }
+    }
+
+    if (unlabelled.length > 0) {
+      this.log(
+        'warn',
+        'improve.labels_missing',
+        `Issues ${unlabelled.map((n) => `#${n}`).join(', ')} were created without the "${PR_LABEL}" label`,
+        { runId: run.id },
+      );
     }
 
     run.result = JSON.stringify(stored);
     await this.runs.save(run);
 
-    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}`;
+    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}${unlabelled.length ? `; ⚠ без метки ${PR_LABEL}: ${unlabelled.map((n) => `#${n}`).join(', ')} — проверьте права токена (Issues: write)` : ''}`;
   }
 
   // Starts a run for each filed proposal that has not been started yet. One

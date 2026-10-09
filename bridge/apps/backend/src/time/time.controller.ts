@@ -25,6 +25,7 @@ import { DayOffResponseDto } from './dto/day-off-response.dto';
 import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
 import { TimeReportEntryResponseDto } from './dto/time-report-entry-response.dto';
 import { ReportImportMulterExceptionFilter } from './filters/report-import-multer-exception.filter';
+import { monthPipe, yearPipe } from './pipes/parse-bounded-int.pipe';
 import { TimeService } from './time.service';
 
 @Controller('api/v1/time')
@@ -34,7 +35,7 @@ export class TimeController {
 
   @Get('day-offs')
   async list(
-    @Query('year', ParseIntPipe) year: number,
+    @Query('year', yearPipe()) year: number,
     @CurrentUser() currentUser: { id: number },
   ): Promise<DayOffResponseDto[]> {
     const entries = await this.timeService.findAllByUserAndYear(
@@ -70,8 +71,8 @@ export class TimeController {
 
   @Get('reports')
   async listReports(
-    @Query('year', ParseIntPipe) year: number,
-    @Query('month', ParseIntPipe) month: number,
+    @Query('year', yearPipe()) year: number,
+    @Query('month', monthPipe()) month: number,
     @CurrentUser() currentUser: { id: number },
   ): Promise<TimeReportEntryResponseDto[]> {
     const entries = await this.timeService.findReportEntries(
@@ -86,8 +87,8 @@ export class TimeController {
   @Delete('reports')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteReports(
-    @Query('year', ParseIntPipe) year: number,
-    @Query('month', ParseIntPipe) month: number,
+    @Query('year', yearPipe()) year: number,
+    @Query('month', monthPipe()) month: number,
     @CurrentUser() currentUser: { id: number },
   ): Promise<void> {
     await this.timeService.deleteReportEntries(currentUser.id, year, month);

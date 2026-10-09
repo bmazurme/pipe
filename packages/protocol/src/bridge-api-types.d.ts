@@ -273,7 +273,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["ContextController_get"];
         put?: never;
         post?: never;
         delete: operations["ContextController_remove"];
@@ -1352,6 +1352,15 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        ContextSummaryDto: {
+            id: number;
+            name: string;
+            contentLength: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         ContextResponseDto: {
             id: number;
             name: string;
@@ -2100,7 +2109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContextResponseDto"][];
+                    "application/json": components["schemas"]["ContextSummaryDto"][];
                 };
             };
         };
@@ -2119,6 +2128,27 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
+                };
+            };
+        };
+    };
+    ContextController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

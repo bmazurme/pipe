@@ -26,4 +26,10 @@ export class Context extends BaseEntity {
   // user-supplied text bridge keeps (see Secret.value).
   @Column({ type: 'text', transformer: encryptedColumn })
   content: string;
+
+  // Length of `content`, kept beside it so a list can show the size without reading (and
+  // decrypting) every context's full text. Null for a row saved before this existed; it is
+  // filled in the next time the context is saved.
+  @Column({ type: 'int', nullable: true })
+  contentLength: number | null;
 }

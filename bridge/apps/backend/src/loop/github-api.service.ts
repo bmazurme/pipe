@@ -211,13 +211,35 @@ export class GithubApiService {
     title: string;
     body: string;
     labels: string[];
-  }): Promise<{ number: number; htmlUrl: string }> {
+  }): Promise<{ number: number; htmlUrl: string; missingLabels: string[] }> {
     const data = (await this.post('/issues', input)) as {
       number: number;
       html_url: string;
+      labels?: Array<{ name: string } | string>;
     };
+    const names = (labels: Array<{ name: string } | string> = []) =>
+      labels.map((label) => (typeof label === 'string' ? label : label.name));
+    const missing = (applied: string[]) =>
+      input.labels.filter((label) => !applied.includes(label));
+    let missingLabels = missing(names(data.labels));
 
-    return { number: data.number, htmlUrl: data.html_url };
+    // GitHub drops the labels of a *new* issue without a word when the token is not
+    // allowed to set them there, and the issue then never shows up in Improve (which
+    // lists by the `loop` label). Setting them on the existing issue is a different
+    // permission check, so try that, and report whatever still did not stick.
+    if (missingLabels.length > 0) {
+      try {
+        const applied = (await this.post(`/issues/${data.number}/labels`, {
+          labels: missingLabels,
+        })) as Array<{ name: string } | string>;
+
+        missingLabels = missing(names(applied));
+      } catch {
+        // Reported through missingLabels below.
+      }
+    }
+
+    return { number: data.number, htmlUrl: data.html_url, missingLabels };
   }
 
   async getBranchSha(branch: string): Promise<string> {
