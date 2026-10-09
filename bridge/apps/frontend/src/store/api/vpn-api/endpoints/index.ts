@@ -36,6 +36,17 @@ export interface CreateVpnConnectionBody {
   serverAddress: string;
 }
 
+// panelUrl/panelApiToken are never read back (see VpnConnection above), so
+// an edit can only ever overwrite them blind — a field left out entirely
+// here means "keep the current value", same convention as Secrets' update.
+export interface UpdateVpnConnectionBody {
+  id: number;
+  name?: string;
+  panelUrl?: string;
+  panelApiToken?: string;
+  serverAddress?: string;
+}
+
 const vpnApiEndpoints = vpnApi.injectEndpoints({
   endpoints: (builder) => ({
     getVpnStatus: builder.query<VpnStatus, void>({
@@ -68,6 +79,11 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
         return message ?? 'Не удалось добавить подключение';
       },
     }),
+    updateVpnConnection: builder.mutation<VpnConnection, UpdateVpnConnectionBody>({
+      query: ({ id, ...body }) => ({ url: `vpn/connections/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['VpnConnection'],
+      transformErrorResponse: () => 'Не удалось сохранить изменения',
+    }),
     deleteVpnConnection: builder.mutation<void, number>({
       query: (id) => ({ url: `vpn/connections/${id}`, method: 'DELETE' }),
       invalidatesTags: ['VpnConnection'],
@@ -94,6 +110,7 @@ export const {
   useProvisionVpnServerMutation,
   useListVpnConnectionsQuery,
   useCreateVpnConnectionMutation,
+  useUpdateVpnConnectionMutation,
   useDeleteVpnConnectionMutation,
   useActivateVpnConnectionMutation,
   useCheckVpnConnectionStatusMutation,

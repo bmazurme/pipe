@@ -211,6 +211,46 @@ describe('VpnPage', () => {
     await waitFor(() => expect(deletedId).toBe(2));
   });
 
+  it('edits a connection, sending only the panel fields that were actually filled in', async () => {
+    const user = userEvent.setup();
+    let updatedBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/vpn/status')) return jsonResponse(STATUS);
+        if (url.endsWith('/vpn/connections')) return jsonResponse(CONNECTIONS);
+        if (url.includes('/vpn/connections/2') && request.method === 'PATCH') {
+          updatedBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...CONNECTIONS[1], name: 'backup-renamed' });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('backup');
+
+    await user.click(screen.getByLabelText('Изменить подключение: backup'));
+
+    const nameInput = screen.getByDisplayValue('backup');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'backup-renamed');
+    const blankPanelFields = screen.getAllByPlaceholderText('оставьте пустым, чтобы не менять');
+    await user.type(blankPanelFields[1], 'new-token');
+
+    await user.click(screen.getByText('Сохранить'));
+
+    await waitFor(() =>
+      expect(updatedBody).toEqual({
+        name: 'backup-renamed',
+        serverAddress: '203.0.113.6',
+        panelApiToken: 'new-token',
+      }),
+    );
+  });
+
   it('adds a new connection', async () => {
     const user = userEvent.setup();
     let createdBody: unknown;

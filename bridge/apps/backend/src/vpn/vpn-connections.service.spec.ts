@@ -134,6 +134,62 @@ describe('VpnConnectionsService', () => {
     });
   });
 
+  describe('update', () => {
+    it('throws NotFoundException for an unknown id', async () => {
+      repository.findOneBy!.mockResolvedValue(null);
+
+      await expect(service.update(99, { name: 'new' })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('updates only the fields provided, leaving the rest untouched', async () => {
+      const connection = {
+        id: 1,
+        name: 'old',
+        panelUrl: 'https://old-panel',
+        panelApiToken: 'old-token',
+        serverAddress: '203.0.113.5',
+        isActive: true,
+      };
+      repository.findOneBy!.mockResolvedValue(connection);
+      repository.save!.mockImplementation((entity) => Promise.resolve(entity));
+
+      const result = await service.update(1, { name: 'renamed' });
+
+      expect(result).toMatchObject({
+        name: 'renamed',
+        panelUrl: 'https://old-panel',
+        panelApiToken: 'old-token',
+        serverAddress: '203.0.113.5',
+      });
+    });
+
+    it('overwrites panelUrl/panelApiToken only when a new value is given', async () => {
+      const connection = {
+        id: 1,
+        name: 'old',
+        panelUrl: 'https://old-panel',
+        panelApiToken: 'old-token',
+        serverAddress: '203.0.113.5',
+        isActive: true,
+      };
+      repository.findOneBy!.mockResolvedValue(connection);
+      repository.save!.mockImplementation((entity) => Promise.resolve(entity));
+
+      const result = await service.update(1, {
+        panelUrl: 'https://new-panel',
+        panelApiToken: 'new-token',
+      });
+
+      expect(result).toMatchObject({
+        name: 'old',
+        panelUrl: 'https://new-panel',
+        panelApiToken: 'new-token',
+      });
+    });
+  });
+
   describe('activate', () => {
     it('404s before touching anything if the id does not exist', async () => {
       repository.findOneBy!.mockResolvedValue(null);

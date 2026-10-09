@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { TrashBin } from '@gravity-ui/icons';
-import { Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Check, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
+import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
   useActivateVpnConnectionMutation,
   useCheckVpnConnectionStatusMutation,
   useDeleteVpnConnectionMutation,
   useGetVpnConnectionLinkMutation,
+  useUpdateVpnConnectionMutation,
   VpnConnection,
   VpnStatus,
 } from '../../store/api';
@@ -37,6 +38,7 @@ export function VpnConnectionRow({
   const [activateVpnConnection, { isLoading: isActivating }] = useActivateVpnConnectionMutation();
   const [checkVpnConnectionStatus, { isLoading: isChecking }] = useCheckVpnConnectionStatusMutation();
   const [getVpnConnectionLink, { isLoading: isLinking }] = useGetVpnConnectionLinkMutation();
+  const [updateVpnConnection, { isLoading: isSaving }] = useUpdateVpnConnectionMutation();
   const [deleteVpnConnection, { isLoading: isDeleting }] = useDeleteVpnConnectionMutation();
 
   const [checkedStatus, setCheckedStatus] = useState<VpnStatus | 'error' | null>(null);
@@ -77,6 +79,51 @@ export function VpnConnectionRow({
       await deleteVpnConnection(connection.id).unwrap();
     } catch {
       setActionError('Не удалось удалить подключение');
+    }
+  };
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(connection.name);
+  const [editServerAddress, setEditServerAddress] = useState(connection.serverAddress);
+  // panelUrl/panelApiToken are never sent to the frontend (see
+  // VpnConnectionResponseDto) — these start blank, and blank means "keep
+  // the current value" on save, same convention as Secrets' edit form.
+  const [editPanelUrl, setEditPanelUrl] = useState('');
+  const [editPanelApiToken, setEditPanelApiToken] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    setEditName(connection.name);
+    setEditServerAddress(connection.serverAddress);
+    setEditPanelUrl('');
+    setEditPanelApiToken('');
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    const name = editName.trim();
+    const serverAddress = editServerAddress.trim();
+    if (!name || !serverAddress) return;
+
+    setEditError(null);
+
+    try {
+      await updateVpnConnection({
+        id: connection.id,
+        name,
+        serverAddress,
+        ...(editPanelUrl.trim() ? { panelUrl: editPanelUrl.trim() } : {}),
+        ...(editPanelApiToken.trim() ? { panelApiToken: editPanelApiToken.trim() } : {}),
+      }).unwrap();
+      setIsEditing(false);
+    } catch (err) {
+      setEditError(typeof err === 'string' ? err : 'Не удалось сохранить изменения');
     }
   };
 
@@ -143,6 +190,14 @@ export function VpnConnectionRow({
             Ссылка
           </Button>
           <Button
+            view="normal"
+            size="s"
+            aria-label={`Изменить подключение: ${connection.name}`}
+            onClick={startEdit}
+          >
+            <Icon data={Pencil} size={16} />
+          </Button>
+          <Button
             view={isConfirmingDelete ? 'outlined-danger' : 'flat-danger'}
             size="s"
             title={isConfirmingDelete ? 'Нажмите ещё раз для подтверждения' : undefined}
@@ -164,6 +219,64 @@ export function VpnConnectionRow({
         <Text color="danger" variant="caption-2" role="alert">
           {actionError}
         </Text>
+      )}
+
+      {isEditing && (
+        <>
+          <div className={styles.provisionGrid}>
+            <label className={styles.secretField}>
+              <Text variant="body-2" color="secondary">
+                Название
+              </Text>
+              <TextInput value={editName} onUpdate={setEditName} autoFocus />
+            </label>
+            <label className={styles.secretField}>
+              <Text variant="body-2" color="secondary">
+                URL панели
+              </Text>
+              <TextInput
+                value={editPanelUrl}
+                onUpdate={setEditPanelUrl}
+                placeholder="оставьте пустым, чтобы не менять"
+              />
+            </label>
+            <label className={styles.secretField}>
+              <Text variant="body-2" color="secondary">
+                API-токен панели
+              </Text>
+              <TextInput
+                type="password"
+                value={editPanelApiToken}
+                onUpdate={setEditPanelApiToken}
+                placeholder="оставьте пустым, чтобы не менять"
+                hasClear
+              />
+            </label>
+            <label className={styles.secretField}>
+              <Text variant="body-2" color="secondary">
+                Адрес сервера
+              </Text>
+              <TextInput value={editServerAddress} onUpdate={setEditServerAddress} />
+            </label>
+          </div>
+          <div className={styles.connectionActions}>
+            <Button
+              view="action"
+              size="s"
+              loading={isSaving}
+              disabled={!editName.trim() || !editServerAddress.trim()}
+              onClick={() => void handleSaveEdit()}
+            >
+              <Icon data={Check} size={16} />
+              Сохранить
+            </Button>
+            <Button view="flat" size="s" onClick={cancelEdit}>
+              <Icon data={Xmark} size={16} />
+              Отменить
+            </Button>
+          </div>
+          {editError && <Alert theme="danger" view="filled" message={editError} />}
+        </>
       )}
 
       {connection.isActive && isLiveStatusLoading && (

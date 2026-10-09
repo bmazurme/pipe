@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { UpdateVpnConnectionDto } from './dto/update-vpn-connection.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 
 @Injectable()
@@ -40,6 +41,22 @@ export class VpnConnectionsService {
 
   async findAll(): Promise<VpnConnection[]> {
     return this.repository.find({ order: { id: 'ASC' } });
+  }
+
+  // panelUrl/panelApiToken are never read back to the frontend (see
+  // VpnConnectionResponseDto), so an edit can't show the current value to
+  // confirm before overwriting it — a field left out of `dto` entirely
+  // (undefined, not an empty string) leaves that column untouched, same
+  // convention as SecretsService.update.
+  async update(id: number, dto: UpdateVpnConnectionDto): Promise<VpnConnection> {
+    const connection = await this.findOne(id);
+
+    if (dto.name !== undefined) connection.name = dto.name;
+    if (dto.panelUrl !== undefined) connection.panelUrl = dto.panelUrl;
+    if (dto.panelApiToken !== undefined) connection.panelApiToken = dto.panelApiToken;
+    if (dto.serverAddress !== undefined) connection.serverAddress = dto.serverAddress;
+
+    return this.repository.save(connection);
   }
 
   async findOne(id: number): Promise<VpnConnection> {

@@ -7,12 +7,14 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CreateVpnConnectionDto } from './dto/create-vpn-connection.dto';
+import { UpdateVpnConnectionDto } from './dto/update-vpn-connection.dto';
 import { VpnConnectionResponseDto } from './dto/vpn-connection-response.dto';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService, VpnStatus } from './vpn.service';
@@ -43,6 +45,15 @@ export class VpnConnectionsController {
       dto.serverAddress,
     );
 
+    return VpnConnectionResponseDto.fromEntity(connection);
+  }
+
+  @Patch(':id')
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateVpnConnectionDto,
+  ): Promise<VpnConnectionResponseDto> {
+    const connection = await this.vpnConnectionsService.update(id, dto);
     return VpnConnectionResponseDto.fromEntity(connection);
   }
 
