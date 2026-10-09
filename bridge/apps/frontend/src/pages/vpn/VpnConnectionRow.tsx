@@ -3,6 +3,7 @@ import { Check, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
+  describeApiError,
   useActivateVpnConnectionMutation,
   useCheckVpnConnectionStatusMutation,
   useDeleteVpnConnectionMutation,
@@ -27,6 +28,7 @@ interface VpnConnectionRowProps {
   liveStatus?: VpnStatus;
   isLiveStatusLoading?: boolean;
   isLiveStatusError?: boolean;
+  liveStatusErrorReason?: string;
 }
 
 export function VpnConnectionRow({
@@ -34,6 +36,7 @@ export function VpnConnectionRow({
   liveStatus,
   isLiveStatusLoading,
   isLiveStatusError,
+  liveStatusErrorReason,
 }: VpnConnectionRowProps) {
   const [activateVpnConnection, { isLoading: isActivating }] = useActivateVpnConnectionMutation();
   const [checkVpnConnectionStatus, { isLoading: isChecking }] = useCheckVpnConnectionStatusMutation();
@@ -42,6 +45,7 @@ export function VpnConnectionRow({
   const [deleteVpnConnection, { isLoading: isDeleting }] = useDeleteVpnConnectionMutation();
 
   const [checkedStatus, setCheckedStatus] = useState<VpnStatus | 'error' | null>(null);
+  const [checkFailure, setCheckFailure] = useState<string | null>(null);
   const [link, setLink] = useState<string | 'error' | null>(null);
   const [copied, setCopied] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -129,8 +133,10 @@ export function VpnConnectionRow({
 
   const handleCheck = async () => {
     try {
+      setCheckFailure(null);
       setCheckedStatus(await checkVpnConnectionStatus(connection.id).unwrap());
-    } catch {
+    } catch (error) {
+      setCheckFailure(describeApiError(error));
       setCheckedStatus('error');
     }
   };
@@ -288,8 +294,9 @@ export function VpnConnectionRow({
       )}
 
       {status === 'error' && (
-        <Text color="danger" variant="caption-2">
+        <Text color="danger" variant="caption-2" role="alert">
           Не удалось получить статус
+          {(connection.isActive ? liveStatusErrorReason : checkFailure) ? ` — ${connection.isActive ? liveStatusErrorReason : checkFailure}` : ''}
         </Text>
       )}
       {status && status !== 'error' && <VpnConnectionStatusGrid status={status} />}

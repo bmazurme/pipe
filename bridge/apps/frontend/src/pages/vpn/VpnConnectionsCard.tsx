@@ -11,6 +11,7 @@ interface VpnConnectionsCardProps {
   activeStatus?: VpnStatus;
   isActiveStatusLoading: boolean;
   isActiveStatusError: boolean;
+  activeStatusErrorReason?: string;
   onSync: () => void;
   isSyncing: boolean;
   syncResult: 'success' | 'error' | null;
@@ -20,6 +21,7 @@ export function VpnConnectionsCard({
   activeStatus,
   isActiveStatusLoading,
   isActiveStatusError,
+  activeStatusErrorReason,
   onSync,
   isSyncing,
   syncResult,
@@ -64,6 +66,7 @@ export function VpnConnectionsCard({
               liveStatus={connection.isActive ? activeStatus : undefined}
               isLiveStatusLoading={connection.isActive ? isActiveStatusLoading : undefined}
               isLiveStatusError={connection.isActive ? isActiveStatusError : undefined}
+              liveStatusErrorReason={connection.isActive ? activeStatusErrorReason : undefined}
             />
           ))}
         </ul>
