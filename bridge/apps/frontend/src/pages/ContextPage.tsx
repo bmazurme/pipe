@@ -3,7 +3,7 @@ import { BookOpen, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
-import { getErrorMessage, SavedContext, useDeleteContextMutation, useListContextsQuery } from '../store/api';
+import { ContextSummary, getErrorMessage, useDeleteContextMutation, useListContextsQuery } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import { ContextDialog } from './context/ContextDialog';
@@ -12,9 +12,9 @@ import styles from './ContextPage.module.css';
 export function ContextPage() {
   const { data: contexts, isLoading, isError } = useListContextsQuery();
   const [deleteContext, { isLoading: isDeleting }] = useDeleteContextMutation();
-  // `undefined` = dialog closed; `null` = creating; a context = editing it.
-  const [editing, setEditing] = useState<SavedContext | null | undefined>(undefined);
-  const [deleting, setDeleting] = useState<SavedContext | null>(null);
+  // `undefined` = dialog closed; `null` = creating; an id = editing that context.
+  const [editing, setEditing] = useState<number | null | undefined>(undefined);
+  const [deleting, setDeleting] = useState<ContextSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async () => {
@@ -64,15 +64,12 @@ export function ContextPage() {
             <li key={context.id} className={styles.row}>
               <div className={styles.rowMain}>
                 <Text variant="body-2">{context.name}</Text>
-                <Text variant="caption-2" color="secondary" className={styles.preview}>
-                  {context.content}
-                </Text>
                 <Text variant="caption-2" color="secondary">
-                  {context.content.length} симв. · обновлён {formatRelativeTime(context.updatedAt)}
+                  {context.contentLength !== null ? `${context.contentLength} симв. · ` : ''}обновлён {formatRelativeTime(context.updatedAt)}
                 </Text>
               </div>
               <div className={styles.rowActions}>
-                <Button view="flat-secondary" size="s" aria-label={`Изменить: ${context.name}`} onClick={() => setEditing(context)}>
+                <Button view="flat-secondary" size="s" aria-label={`Изменить: ${context.name}`} onClick={() => setEditing(context.id)}>
                   <Icon data={Pencil} size={16} />
                 </Button>
                 <Button
@@ -92,7 +89,7 @@ export function ContextPage() {
         </ul>
       )}
 
-      {editing !== undefined && <ContextDialog context={editing} onClose={() => setEditing(undefined)} />}
+      {editing !== undefined && <ContextDialog contextId={editing} onClose={() => setEditing(undefined)} />}
 
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} maxWidth="s" aria-labelledby="delete-context-title">
         <Dialog.Header caption={`Удалить «${deleting?.name ?? ''}»?`} id="delete-context-title" />

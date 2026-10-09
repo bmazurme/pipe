@@ -10,6 +10,9 @@ import { store } from '../store';
 import { contextApi } from '../store/api';
 
 const NOTES = { id: 1, name: 'Project notes', content: 'Use pnpm. No default exports.', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
+// What GET /contexts returns: a summary, never the text.
+const SUMMARY = { id: 1, name: 'Project notes', contentLength: 29, createdAt: NOTES.createdAt, updatedAt: NOTES.updatedAt };
+let requested: string[];
 
 type Sent = { method: string; path: string; body: unknown };
 let sent: Sent[];
@@ -20,7 +23,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 beforeEach(() => {
   sent = [];
-  contexts = [NOTES];
+  contexts = [SUMMARY];
+  requested = [];
   failWith = null;
   store.dispatch(contextApi.util.resetApiState());
   vi.stubGlobal(
@@ -29,7 +33,11 @@ beforeEach(() => {
       const path = new URL(request.url).pathname.replace('/api/v1/', '');
       const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
 
-      if (request.method === 'GET') return json(contexts);
+      if (request.method === 'GET') {
+        requested.push(path);
+
+        return json(path === 'contexts/1' ? NOTES : contexts);
+      }
 
       sent.push({ method: request.method, path, body });
       if (failWith) return json({ message: failWith.message }, failWith.status);
@@ -51,11 +59,21 @@ const renderPage = () =>
   );
 
 describe('ContextPage', () => {
-  it('lists saved contexts with a preview', async () => {
+  it('lists saved contexts with their size, without loading any text', async () => {
     renderPage();
 
     expect(await screen.findByText('Project notes')).toBeTruthy();
-    expect(screen.getByText('Use pnpm. No default exports.')).toBeTruthy();
+    expect(screen.getByText(/29 симв\./)).toBeTruthy();
+    expect(screen.queryByText('Use pnpm. No default exports.')).toBeNull();
+    expect(requested).toEqual(['contexts']);
+  });
+
+  it('shows no size for a context saved before it was recorded', async () => {
+    contexts = [{ ...SUMMARY, contentLength: null }];
+    renderPage();
+
+    expect(await screen.findByText('Project notes')).toBeTruthy();
+    expect(screen.queryByText(/симв\./)).toBeNull();
   });
 
   it('explains the empty state, including that nothing is attached by default', async () => {
@@ -109,6 +127,9 @@ describe('ContextPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Изменить: Project notes' }));
     const text = await screen.findByLabelText('Текст контекста');
+    // The text was fetched for this one context, when it was opened.
+    expect(requested).toContain('contexts/1');
+    expect((text as HTMLTextAreaElement).value).toBe('Use pnpm. No default exports.');
     await user.clear(text);
     await user.type(text, 'Use yarn.');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));

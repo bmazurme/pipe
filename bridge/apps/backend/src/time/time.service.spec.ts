@@ -11,12 +11,28 @@ type MockRepository<T extends object> = Partial<
 >;
 
 function createMockRepository<T extends object>(): MockRepository<T> {
-  return {
+  const repository: MockRepository<T> = {
     find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
     delete: jest.fn(),
+    query: jest.fn(),
   };
+
+  // A report import runs inside a transaction: the manager handed to it delegates to the
+  // same mocks, so the assertions below still see every delete and save.
+  (repository as unknown as { manager: unknown }).manager = {
+    transaction: jest.fn(async (work: (manager: unknown) => Promise<unknown>) =>
+      work({
+        query: repository.query,
+        delete: (_entity: unknown, criteria: unknown) =>
+          repository.delete!(criteria),
+        save: (_entity: unknown, rows: unknown) => repository.save!(rows),
+      }),
+    ),
+  };
+
+  return repository;
 }
 
 describe('TimeService', () => {
@@ -101,6 +117,49 @@ describe('TimeService', () => {
         month: 7,
       });
       expect(result.entries).toEqual([]);
+    });
+  });
+
+  describe('importReportEntries atomicity', () => {
+    it('runs the delete and the save inside one transaction, under a per-period lock', async () => {
+      reportRepository.save!.mockResolvedValue([]);
+      const order: string[] = [];
+      reportRepository.query!.mockImplementation(async () =>
+        order.push('lock'),
+      );
+      reportRepository.delete!.mockImplementation(async () =>
+        order.push('delete'),
+      );
+      reportRepository.save!.mockImplementation(async () => {
+        order.push('save');
+
+        return [];
+      });
+
+      await service.importReportEntries(2, 2026, 7, []);
+
+      const manager = (
+        reportRepository as unknown as {
+          manager: { transaction: jest.Mock };
+        }
+      ).manager;
+
+      expect(manager.transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['lock', 'delete', 'save']);
+      expect(reportRepository.query).toHaveBeenCalledWith(
+        expect.stringContaining('pg_advisory_xact_lock'),
+        [2, 202607],
+      );
+    });
+
+    it('propagates a failed save, so the transaction rolls the delete back', async () => {
+      reportRepository.save!.mockRejectedValue(new Error('value too long'));
+
+      await expect(
+        service.importReportEntries(2, 2026, 7, [
+          { taskName: 'x'.repeat(600), status: 'Open', hours: 5 },
+        ]),
+      ).rejects.toThrow('value too long');
     });
   });
 

@@ -17,8 +17,22 @@ export class ContextService {
     private readonly repository: Repository<Context>,
   ) {}
 
+  // Summaries: `content` is deliberately not selected, so nothing is decrypted or copied
+  // for a list — each context's full text is up to 20 000 characters. The text comes from
+  // findOwned, when one context is actually opened.
   findAllByUser(userId: number): Promise<Context[]> {
-    return this.repository.find({ where: { userId }, order: { name: 'ASC' } });
+    return this.repository.find({
+      select: [
+        'id',
+        'userId',
+        'name',
+        'contentLength',
+        'createdAt',
+        'updatedAt',
+      ],
+      where: { userId },
+      order: { name: 'ASC' },
+    });
   }
 
   // For attaching to a job: scoped to the owner, so one user can never pull
@@ -41,6 +55,7 @@ export class ContextService {
         userId,
         name: dto.name.trim(),
         content: dto.content,
+        contentLength: dto.content.length,
       }),
     );
   }
@@ -57,7 +72,10 @@ export class ContextService {
       context.name = dto.name.trim();
     }
 
-    if (dto.content !== undefined) context.content = dto.content;
+    if (dto.content !== undefined) {
+      context.content = dto.content;
+      context.contentLength = dto.content.length;
+    }
 
     return this.saveOrThrowConflict(context);
   }

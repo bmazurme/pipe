@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Dialog, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Dialog, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 
 import {
   getErrorMessage,
@@ -7,17 +7,39 @@ import {
   MAX_CONTEXT_NAME_LENGTH,
   SavedContext,
   useCreateContextMutation,
+  useGetContextQuery,
   useUpdateContextMutation,
 } from '../../store/api';
 import styles from '../ContextPage.module.css';
 
 interface ContextDialogProps {
   /** The context being edited, or null to create a new one. */
-  context: SavedContext | null;
+  contextId: number | null;
   onClose: () => void;
 }
 
-export function ContextDialog({ context, onClose }: ContextDialogProps) {
+// The list only carries summaries, so an existing context's text is fetched when it is
+// opened; the form itself mounts once that has arrived, so it starts from the real text.
+export function ContextDialog({ contextId, onClose }: ContextDialogProps) {
+  const { data: context, isLoading, isError } = useGetContextQuery(contextId ?? 0, { skip: contextId === null });
+
+  if (contextId === null) return <ContextForm context={null} onClose={onClose} />;
+
+  if (context) return <ContextForm key={context.id} context={context} onClose={onClose} />;
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="context-dialog-title">
+      <Dialog.Header caption="Изменить контекст" id="context-dialog-title" />
+      <Dialog.Body>
+        {isLoading && <Loader size="m" />}
+        {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить контекст" />}
+      </Dialog.Body>
+      <Dialog.Footer textButtonApply="Закрыть" onClickButtonApply={onClose} />
+    </Dialog>
+  );
+}
+
+function ContextForm({ context, onClose }: { context: SavedContext | null; onClose: () => void }) {
   const [createContext, { isLoading: isCreating }] = useCreateContextMutation();
   const [updateContext, { isLoading: isUpdating }] = useUpdateContextMutation();
   const [name, setName] = useState(context?.name ?? '');

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { SettingsBundleType, SettingsType, StreamEvent } from '@reports/shared';
 
 import { getSettings, setSettings } from './props';
+import { redactSettings, restoreMaskedSecrets } from './redact';
 import { getSubscriptionConfig, setSubscriptionConfig } from '../subscription/config-props';
 import { getProjectDict, setProjectDict } from '../reports/project-dict-props';
 import { addOffDays, getAllOffDaysByYear } from '../counts/props';
@@ -17,7 +18,7 @@ export async function handleGetSettings(req: Request, res: Response) {
   };
 
   try {
-    sendEvent({ type: 'message', data: getSettings() });
+    sendEvent({ type: 'message', data: redactSettings(getSettings()) });
     res.end();
   } catch (error) {
     console.error('Get settings error:', error);
@@ -123,9 +124,10 @@ export async function handleSetSettings(req: Request, res: Response) {
   };
 
   try {
-    const settings = setSettings(req.body as SettingsType);
+    const settings = setSettings(restoreMaskedSecrets(req.body as SettingsType, getSettings()));
 
-    sendEvent({ type: 'message', data: settings });
+    // The saved settings go back to the UI masked, like GET: the secret was just stored, not echoed.
+    sendEvent({ type: 'message', data: redactSettings(settings) });
     res.end();
   } catch (error) {
     console.error('Set settings error:', error);

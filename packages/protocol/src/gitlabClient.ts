@@ -24,6 +24,10 @@ export class GitlabApiError extends Error {
 // url is always the full absolute URL — both products already build it
 // themselves (apiUrl + path, or an already-absolute image URL) before
 // calling this, so there's no apiUrl/path-splitting to get wrong here.
+const ISSUES_PER_PAGE = 100;
+// A hard stop (2 000 issues) so a server that never reports the last page cannot loop forever.
+const MAX_ISSUE_PAGES = 20;
+
 export async function gitlabFetch(
   url: string,
   privateToken: string,
@@ -96,11 +100,24 @@ export async function listAssignedOpenIssues(
     params.set('scope', 'assigned_to_me');
   }
   params.set('state', 'opened');
+  // GitLab's default page is 20; without this (and the page loop below) everything past the
+  // twentieth assigned issue was silently missing from sync, reports and harness.
+  params.set('per_page', String(ISSUES_PER_PAGE));
 
-  const url = `${apiUrl}/issues?${params.toString()}`;
-  const response = await gitlabFetch(url, privateToken);
+  const issues: GitlabIssue[] = [];
+  let page: string | null = '1';
 
-  return (await response.json()) as GitlabIssue[];
+  for (let fetched = 0; page && fetched < MAX_ISSUE_PAGES; fetched += 1) {
+    params.set('page', page);
+
+    const response = await gitlabFetch(`${apiUrl}/issues?${params.toString()}`, privateToken);
+
+    issues.push(...((await response.json()) as GitlabIssue[]));
+    // GitLab names the following page in X-Next-Page, and leaves it empty on the last one.
+    page = response.headers.get('x-next-page')?.trim() || null;
+  }
+
+  return issues;
 }
 
 // GitLab's standard MR list entity carries a `pipeline` summary field

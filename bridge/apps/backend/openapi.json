@@ -448,7 +448,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ContextResponseDto"
+                    "$ref": "#/components/schemas/ContextSummaryDto"
                   }
                 }
               }
@@ -484,6 +484,31 @@
       }
     },
     "/api/v1/contexts/{id}": {
+      "get": {
+        "operationId": "ContextController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "operationId": "ContextController_update",
         "parameters": [
@@ -2830,6 +2855,36 @@
             "type": "string"
           }
         }
+      },
+      "ContextSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "contentLength": {
+            "type": "number",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "contentLength",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "ContextResponseDto": {
         "type": "object",

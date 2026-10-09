@@ -31,15 +31,38 @@ describe('ContextService', () => {
     service = module.get(ContextService);
   });
 
-  it('lists only the owner’s contexts, by name', async () => {
+  it('lists only the owner’s contexts, by name, without reading their text', async () => {
     repository.find!.mockResolvedValue([]);
 
     await service.findAllByUser(7);
 
-    expect(repository.find).toHaveBeenCalledWith({
-      where: { userId: 7 },
-      order: { name: 'ASC' },
+    const query = repository.find!.mock.calls[0][0] as {
+      select: string[];
+      where: unknown;
+      order: unknown;
+    };
+
+    expect(query.where).toEqual({ userId: 7 });
+    expect(query.order).toEqual({ name: 'ASC' });
+    // Not selecting `content` is the point: no decrypting, no 20 000 chars per row.
+    expect(query.select).toContain('contentLength');
+    expect(query.select).not.toContain('content');
+  });
+
+  it('records the text length when creating and updating', async () => {
+    repository.findOne!.mockResolvedValue(null);
+    const created = await service.create(7, { name: 'N', content: 'abcde' });
+    expect(created.contentLength).toBe(5);
+
+    repository.findOne!.mockResolvedValue({
+      id: 1,
+      userId: 7,
+      name: 'N',
+      content: 'abcde',
+      contentLength: 5,
     });
+    const updated = await service.update(1, 7, { content: 'abcdefgh' });
+    expect(updated.contentLength).toBe(8);
   });
 
   it('will not hand out someone else’s context', async () => {

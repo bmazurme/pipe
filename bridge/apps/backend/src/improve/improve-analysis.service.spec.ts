@@ -22,7 +22,10 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     listIssueTitles: jest
       .fn()
       .mockResolvedValue([{ number: 5, title: 'Add Rate Limit!' }]),
-    createIssue: jest.fn(async () => ({ number: 40 })),
+    createIssue: jest.fn(async () => ({
+      number: 40,
+      missingLabels: [] as string[],
+    })),
   };
   const storage = {
     createFromBuffer: jest.fn().mockResolvedValue({ id: 99 }),
@@ -231,5 +234,33 @@ describe('ImproveService analysis', () => {
 
     expect(listOpenIssues).toHaveBeenNthCalledWith(1, '', 100);
     expect(listOpenIssues).toHaveBeenNthCalledWith(2, 'loop', 100);
+  });
+
+  it('warns, in the run note and the app log, when GitHub dropped the loop label', async () => {
+    const { service, github } = setup();
+    github.createIssue.mockResolvedValue({
+      number: 41,
+      missingLabels: ['loop'],
+    });
+    const run = {
+      id: 1,
+      result: JSON.stringify({
+        categories: ['performance'],
+        autoCreate: false,
+        items: [
+          {
+            category: 'performance',
+            title: 'Cache lists',
+            risk: 'low',
+            body: 'y',
+          },
+        ],
+      }),
+    };
+
+    const summary = await service.createIssuesFromRun(run as never);
+
+    expect(summary).toContain('без метки loop: #41');
+    expect(summary).toContain('Issues: write');
   });
 });
