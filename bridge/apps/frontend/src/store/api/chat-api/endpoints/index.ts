@@ -13,6 +13,19 @@ export interface ChatMeta {
 export type ChatMessageRole = 'user' | 'assistant';
 export type ChatMessageStatus = 'pending' | 'running' | 'complete' | 'failed';
 
+/** A file or image attached to a message (Claude chats only). */
+export interface ChatAttachmentMeta {
+  id: number;
+  name: string;
+  size: number;
+  isImage: boolean;
+  /** Null while uploaded but not yet sent. */
+  messageId: number | null;
+}
+
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+
 export interface ChatMessageMeta {
   id: number;
   chatId: number;
@@ -20,6 +33,7 @@ export interface ChatMessageMeta {
   content: string;
   status: ChatMessageStatus;
   errorMessage: string | null;
+  attachments: ChatAttachmentMeta[];
   createdAt: string;
   updatedAt: string;
 }
@@ -48,12 +62,12 @@ const chatApiEndpoints = chatApi.injectEndpoints({
     }),
     sendMessage: builder.mutation<
       { userMessage: ChatMessageMeta; assistantMessage: ChatMessageMeta },
-      { chatId: number; content: string }
+      { chatId: number; content: string; attachmentIds?: number[] }
     >({
-      query: ({ chatId, content }) => ({
+      query: ({ chatId, content, attachmentIds }) => ({
         url: `chat/chats/${chatId}/messages`,
         method: 'POST',
-        body: { content },
+        body: attachmentIds && attachmentIds.length > 0 ? { content, attachmentIds } : { content },
       }),
       invalidatesTags: (_result, _error, { chatId }) => [{ type: 'ChatMessages', id: chatId }, 'Chat'],
     }),

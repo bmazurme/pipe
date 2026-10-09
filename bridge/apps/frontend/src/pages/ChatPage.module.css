@@ -41,3 +41,31 @@
   font-size: 13px;
   white-space: nowrap;
 }
+
+.errorText {
+  white-space: pre-line;
+}
+
+.contextForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.counter {
+  align-self: flex-end;
+}
+
+/* Phones: the desk-sized 560px floor plus the page header left the conversation a sliver
+   once the on-screen keyboard opened. Fill what is left of the viewport instead. */
+@media (max-width: 767px) {
+  .container {
+    min-height: 0;
+    height: calc(100dvh - 190px);
+    border-radius: var(--g-border-radius-m);
+  }
+
+  .container :global(.g-aikit-chat-container__content) {
+    min-height: 240px;
+  }
+}

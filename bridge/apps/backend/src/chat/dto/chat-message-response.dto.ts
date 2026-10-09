@@ -1,3 +1,5 @@
+import { ChatAttachmentResponseDto } from './chat-attachment-response.dto';
+import { ChatAttachment } from '../entities/chat-attachment.entity';
 import {
   ChatMessage,
   ChatMessageRole,
@@ -11,10 +13,14 @@ export class ChatMessageResponseDto {
   content: string;
   status: ChatMessageStatus;
   errorMessage: string | null;
+  attachments: ChatAttachmentResponseDto[];
   createdAt: Date;
   updatedAt: Date;
 
-  static fromEntity(message: ChatMessage): ChatMessageResponseDto {
+  static fromEntity(
+    message: ChatMessage,
+    attachments: ChatAttachment[] = [],
+  ): ChatMessageResponseDto {
     return {
       id: message.id,
       chatId: message.chatId,
@@ -22,6 +28,7 @@ export class ChatMessageResponseDto {
       content: message.content,
       status: message.status,
       errorMessage: message.errorMessage,
+      attachments: attachments.map(ChatAttachmentResponseDto.fromEntity),
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
     };

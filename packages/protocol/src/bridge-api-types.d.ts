@@ -202,6 +202,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/chats/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChatController_uploadAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/attachments/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ChatController_attachmentContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["ChatController_removeAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/chat/turns/claim": {
         parameters: {
             query?: never;
@@ -212,6 +260,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["ChatController_claim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/turns/{messageId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ChatController_turnAttachment"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1329,6 +1393,13 @@ export interface components {
         RenameChatDto: {
             title: string;
         };
+        ChatAttachmentResponseDto: {
+            id: number;
+            name: string;
+            size: number;
+            isImage: boolean;
+            messageId: number | null;
+        };
         ChatMessageResponseDto: {
             id: number;
             chatId: number;
@@ -1338,6 +1409,7 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "running" | "complete" | "failed";
             errorMessage: string | null;
+            attachments: components["schemas"]["ChatAttachmentResponseDto"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1345,6 +1417,7 @@ export interface components {
         };
         SendMessageDto: {
             content: string;
+            attachmentIds?: number[];
         };
         CompleteTurnDto: {
             content: string;
@@ -2028,6 +2101,65 @@ export interface operations {
             };
         };
     };
+    ChatController_uploadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatAttachmentResponseDto"];
+                };
+            };
+        };
+    };
+    ChatController_attachmentContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChatController_removeAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ChatController_claim: {
         parameters: {
             query?: never;
@@ -2038,6 +2170,26 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChatController_turnAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                messageId: number;
+                attachmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
