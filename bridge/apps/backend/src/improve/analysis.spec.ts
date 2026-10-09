@@ -34,6 +34,16 @@ describe('buildAnalysisPrompt', () => {
     expect(prompt).toContain('documentation gap');
   });
 
+  it('has an architecture direction, with its own guidance', () => {
+    expect(ALL_CATEGORIES).toContain('architecture');
+
+    const prompt = buildAnalysisPrompt([], ['architecture']);
+
+    expect(prompt).toContain('exactly 1 small');
+    expect(prompt).toContain('"architecture" — Архитектура');
+    expect(prompt).toContain('dependency-direction');
+  });
+
   it('can be limited to some directions', () => {
     const prompt = buildAnalysisPrompt([], ['uiux', 'security']);
 
