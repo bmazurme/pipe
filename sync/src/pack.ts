@@ -6,12 +6,13 @@ import {
   buildArchive as buildArchiveGeneric,
   extractArchive as extractArchiveGeneric,
   contentHash,
+  SYNC_MANIFEST_ENTRY,
   type PackedFile,
 } from '@pipe/protocol';
 
 import type { SyncManifest } from './types.js';
 
-export const MANIFEST_ENTRY = '__sync_manifest__.json';
+export const MANIFEST_ENTRY = SYNC_MANIFEST_ENTRY;
 
 export type { PackedFile };
 export { contentHash };

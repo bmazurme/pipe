@@ -32,6 +32,10 @@
       "types": "./dist/pack.d.ts",
       "default": "./dist/pack.js"
     },
+    "./issueParcel": {
+      "types": "./dist/issueParcel.d.ts",
+      "default": "./dist/issueParcel.js"
+    },
     "./walk": {
       "types": "./dist/walk.d.ts",
       "default": "./dist/walk.js"
