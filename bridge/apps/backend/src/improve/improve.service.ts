@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService, TreeEntry } from '../loop/github-api.service';
@@ -1028,19 +1028,29 @@ export class ImproveService {
     this.autoStarting = true;
 
     try {
-      const rows = (await this.dataSource.query(
-        `SELECT f.id AS "fileId", f."userId", s."autoStartModel" AS model
-         FROM stored_files f
-         JOIN improve_settings s ON s."userId" = f."userId"
-         WHERE s."autoStartModel" IS NOT NULL
-           AND f."createdAt" >= s."autoStartSince"
-           AND f."createdAt" < now() - ($1 || ' seconds')::interval
-           AND f.channel = 'issue' AND f.direction = 'outbound'
-           AND f."originalName" NOT LIKE '%.enc'
-           AND f."taskKey" NOT LIKE 'improve:%'
-           AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."sourceFileId" = f.id)`,
-        [String(AUTOSTART_MIN_AGE_SECONDS)],
-      )) as Array<{ fileId: number; userId: number; model: string }>;
+      const accounts = await this.settings.find({
+        where: { autoStartModel: Not(IsNull()) },
+      });
+      const rows: Array<{ fileId: number; userId: number; model: string }> =
+        [];
+
+      for (const account of accounts) {
+        if (!account.autoStartModel || !account.autoStartSince) continue;
+
+        const parcels = await this.workers.findUnstartedIssueParcels(
+          account.userId,
+          account.autoStartSince,
+          AUTOSTART_MIN_AGE_SECONDS,
+          'improve:',
+        );
+        for (const parcel of parcels) {
+          rows.push({
+            fileId: parcel.id,
+            userId: account.userId,
+            model: account.autoStartModel,
+          });
+        }
+      }
 
       for (const row of rows) {
         await this.workers

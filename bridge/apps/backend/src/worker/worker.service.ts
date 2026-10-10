@@ -65,6 +65,49 @@ export class WorkerService {
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
+  // Outbound "issue" parcels of one account that no job has picked up yet: unencrypted
+  // (the only kind create() accepts), created on/after `since` and at least
+  // `minAgeSeconds` ago (so a parcel still being uploaded is left alone). Parcels whose
+  // task key starts with `excludeTaskKeyPrefix` are skipped.
+  findUnstartedIssueParcels(
+    userId: number,
+    since: Date,
+    minAgeSeconds: number,
+    excludeTaskKeyPrefix?: string,
+  ): Promise<StoredFile[]> {
+    const query = this.jobRepository.manager
+      .createQueryBuilder(StoredFile, 'f')
+      .where('f.userId = :userId', { userId })
+      .andWhere('f.createdAt >= :since', { since })
+      .andWhere('f.createdAt < :cutoff', {
+        cutoff: new Date(Date.now() - minAgeSeconds * 1000),
+      })
+      .andWhere('f.channel = :channel', { channel: 'issue' })
+      .andWhere('f.direction = :direction', {
+        direction: StoredFileDirection.Outbound,
+      })
+      .andWhere('f.originalName NOT LIKE :encrypted', {
+        encrypted: `%${ENCRYPTED_SUFFIX}`,
+      })
+      .andWhere(
+        (qb) =>
+          `NOT EXISTS ${qb
+            .subQuery()
+            .select('1')
+            .from(Job, 'j')
+            .where('j.sourceFileId = f.id')
+            .getQuery()}`,
+      );
+
+    if (excludeTaskKeyPrefix !== undefined) {
+      query.andWhere('f.taskKey NOT LIKE :excludedTasks', {
+        excludedTasks: `${excludeTaskKeyPrefix}%`,
+      });
+    }
+
+    return query.orderBy('f.id', 'ASC').getMany();
+  }
+
   // `carried` is for a retry: it reuses the original job's own snapshots, so the retry
   // runs with exactly the context and history the first attempt had, even if the saved
   // context was edited or deleted (or more runs happened) since.
