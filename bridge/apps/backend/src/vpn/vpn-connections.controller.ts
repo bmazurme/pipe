@@ -74,7 +74,7 @@ export class VpnConnectionsController {
   // auto-polling top status card (which only ever reflects the active one).
   @Get(':id/status')
   async getStatus(@Param('id', ParseIntPipe) id: number): Promise<VpnStatus> {
-    return this.vpnService.checkConnectionStatus(id);
+    return this.vpnService.checkConnectionStatus(id, true);
   }
 
   @Get(':id/connection-link')

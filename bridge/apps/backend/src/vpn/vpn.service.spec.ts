@@ -147,6 +147,84 @@ describe('VpnService', () => {
     });
   });
 
+  describe('status caching', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function okFetch(): jest.Mock {
+      const mock = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      );
+      globalThis.fetch = mock as unknown as typeof fetch;
+      return mock;
+    }
+
+    it('hits the panel once for two calls within the TTL', async () => {
+      const fetchMock = okFetch();
+      const service = vpnService();
+
+      await service.getStatus();
+      jest.advanceTimersByTime(9_000);
+      await service.getStatus();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('hits the panel again once the TTL has passed', async () => {
+      const fetchMock = okFetch();
+      const service = vpnService();
+
+      await service.getStatus();
+      jest.advanceTimersByTime(10_001);
+      await service.getStatus();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('caches a failure for the longer negative TTL and rethrows the same error', async () => {
+      const fetchMock = jest.fn(
+        async () => new Response('nope', { status: 500 }),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const service = vpnService();
+
+      await expect(service.getStatus()).rejects.toThrow(BadGatewayException);
+      jest.advanceTimersByTime(20_000);
+      await expect(service.getStatus()).rejects.toThrow(
+        'VPN panel request failed (500)',
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(10_001);
+      await expect(service.getStatus()).rejects.toThrow(BadGatewayException);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one in-flight request between concurrent calls', async () => {
+      const fetchMock = okFetch();
+      const service = vpnService();
+
+      await Promise.all([service.getStatus(), service.getStatus()]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('bypasses the cache when checkConnectionStatus is forced', async () => {
+      const fetchMock = okFetch();
+      const service = vpnService();
+
+      await service.checkConnectionStatus(1);
+      await service.checkConnectionStatus(1, true);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('outbound timeouts', () => {
     function timeoutError(): Error {
       const error = new Error('The operation was aborted due to timeout');
