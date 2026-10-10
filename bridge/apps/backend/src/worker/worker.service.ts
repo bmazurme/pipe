@@ -45,12 +45,15 @@ const ORPHAN_SILENCE_MS = 10 * 60_000;
 // silent (the worker's own job deadline is 30 minutes by default).
 const LOST_JOB_SILENCE_MS = 3 * 60 * 60_000;
 const SWEEP_EVERY_MS = 5 * 60_000;
+const ORPHAN_SWEEP_THROTTLE_MS = 60_000;
 const LOST_MESSAGE =
   'Worker was restarted or lost while this job was running — the run did not finish';
 
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
+  // `userId:workerName` → when claim() last ran the orphan sweep for it.
+  private readonly lastOrphanSweep = new Map<string, number>();
 
   constructor(
     @InjectRepository(Job)
@@ -317,8 +320,19 @@ export class WorkerService {
       await this.heartbeatService.record(userId, workerName);
       // It is asking for work, so it is idle: whatever it still "holds" is lost.
       // A failing sweep must not stop the worker from taking new work.
+      // Throttled per worker: the threshold is minutes, so sweeping on every ~10 s
+      // poll is needless row-locking. A worker's first claim after process start
+      // always sweeps (no entry yet).
+      const sweepKey = `${userId}:${workerName}`;
+      const lastSweep = this.lastOrphanSweep.get(sweepKey);
       try {
-        await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
+        if (
+          lastSweep === undefined ||
+          Date.now() - lastSweep >= ORPHAN_SWEEP_THROTTLE_MS
+        ) {
+          await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
+          this.lastOrphanSweep.set(sweepKey, Date.now());
+        }
       } catch (error) {
         this.logger.warn(
           `Orphan sweep failed during claim: ${error instanceof Error ? error.message : String(error)}`,
