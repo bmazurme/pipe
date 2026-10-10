@@ -75,7 +75,8 @@ describe('VPN status failures show their reason', () => {
   });
 
   it('still says there is no active connection when that is the cause', async () => {
-    statusResponse = () => json({ message: 'No active VPN connection is configured — add one and select it first' }, 500);
+    // A typed 404 now (not a 500 whose text is matched).
+    statusResponse = () => json({ message: 'No active VPN connection is configured — add one and select it first' }, 404);
     renderPage();
 
     expect(await screen.findByText('Нет активного VPN-подключения')).toBeTruthy();

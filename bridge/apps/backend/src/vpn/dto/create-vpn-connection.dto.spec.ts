@@ -60,7 +60,9 @@ describe('CreateVpnConnectionDto validation', () => {
 
   it('applies the same rules to the update DTO', async () => {
     const errors = await validate(
-      plainToInstance(UpdateVpnConnectionDto, { panelUrl: 'file:///etc/passwd' }),
+      plainToInstance(UpdateVpnConnectionDto, {
+        panelUrl: 'file:///etc/passwd',
+      }),
       { skipMissingProperties: true },
     );
     expect(errors.map((e) => e.property)).toContain('panelUrl');
