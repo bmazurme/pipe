@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldKeyhole } from '@gravity-ui/icons';
 
 import { describeApiError, useGetVpnStatusQuery, useSyncVpnConfigMutation } from '../store/api';
@@ -6,16 +6,21 @@ import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import { ProvisionServerForm } from './vpn/ProvisionServerForm';
 import { VpnConnectionsCard } from './vpn/VpnConnectionsCard';
+import { nextPollInterval } from './vpn/statusPollInterval';
 import styles from './VpnPage.module.css';
 
-const STATUS_POLL_INTERVAL_MS = 15000;
-
 export function VpnPage() {
-  const { data: status, isLoading, isError, error } = useGetVpnStatusQuery(undefined, {
-    pollingInterval: STATUS_POLL_INTERVAL_MS,
+  const [lastRequestFailed, setLastRequestFailed] = useState(false);
+  const { data: status, isLoading, isError, isSuccess, isFetching, error } = useGetVpnStatusQuery(undefined, {
+    pollingInterval: nextPollInterval(lastRequestFailed),
     // A background tab has no use for a fresh status, and the poll counts against the per-IP rate limit.
     skipPollingIfUnfocused: true,
   });
+  // isError drops back to false while a retry is in flight, so remember the last settled result instead.
+  useEffect(() => {
+    if (isError) setLastRequestFailed(true);
+    else if (isSuccess && !isFetching) setLastRequestFailed(false);
+  }, [isError, isSuccess, isFetching]);
   const [syncVpnConfig, { isLoading: isSyncing }] = useSyncVpnConfigMutation();
   const [syncResult, setSyncResult] = useState<'success' | 'error' | null>(null);
 
