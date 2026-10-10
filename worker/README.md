@@ -200,11 +200,33 @@ npm run build   # tsc -b
 npm test        # tsc -b && node --test 'dist/**/*.test.js'
 ```
 
-`claudeRunner.ts` (запуск `claude` CLI через `spawn`) намеренно не покрыт
-автотестами — как и в `sync`, где у одноимённого модуля тоже нет теста:
-надёжно мокать потоковый вывод дочернего процесса без реального CLI даёт
-немного, основная проверка — ручной прогон. Остальное (`parcel.ts`,
-`providers.ts`, `chatProviders.ts`, `config.ts`, `bridgeClient.ts`,
-`chatBridgeClient.ts`, `openAiCompatibleRunner.ts`,
-`chatRunners/anthropicChat.ts`, `chatRunners/openAiCompatibleChat.ts`)
-покрыто модульными тестами с замоканными `fetch`.
+`modelRunners/claudeRunner.ts` (запуск `claude` CLI через `spawn`) покрыт
+тестом `claudeRunner.test.ts`: `runClaude` запускается против поддельного
+бинарника `claude`, который кладётся в начало `PATH`. `index.ts`
+(`processJob`) покрыт `index.test.ts`. Также есть тесты у `chatTools.ts`,
+`secrets.ts`, `failureMessage.ts`, `parcel.ts`, `providers.ts`,
+`chatProviders.ts`, `config.ts`, `bridgeClient.ts`, `chatBridgeClient.ts`,
+`openAiCompatibleRunner.ts`, `chatRunners/*` и т.д. — HTTP-клиенты и
+провайдеры проверяются с замоканным `fetch`.
+
+### Остановка и heartbeat
+
+Пока задача выполняется, `processJob` (`src/index.ts`) делает две вещи:
+
+- **Остановка.** Каждые 3 с (`CANCEL_POLL_INTERVAL_MS`) спрашивает у bridge,
+  не нажал ли владелец «stop». Если да, процесс `claude` получает `SIGTERM`,
+  а если он не завершился через 5 с (`DEFAULT_KILL_GRACE_MS` в
+  `modelRunners/claudeRunner.ts`) — `SIGKILL`. Результат помечается как
+  отменённый, а не как таймаут.
+- **Heartbeat.** Каждые 10 с (`HEARTBEAT_INTERVAL_MS`) отправляет heartbeat в
+  bridge. Bridge считает worker выключенным («Worker is down»), если
+  heartbeat не приходил 30 с; во время задачи основной цикл не опрашивает
+  bridge, поэтому именно этот пинг держит worker «живым».
+
+Все четыре значения (3 с, 5 с, 10 с, 30 с) — константы в коде, а не
+переменные окружения; изменить их можно только правкой кода. Порог в 30 с
+живёт на стороне bridge, а не worker.
+
+`WORKER_JOB_TIMEOUT_SEC` (по умолчанию 1800 с) использует ту же лестницу:
+по истечении времени `SIGTERM`, затем через 5 с `SIGKILL`; отличается только
+итог — «таймаут» вместо «отменено».
