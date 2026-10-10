@@ -85,6 +85,26 @@ describe('createChatToolset', () => {
     assert.ok(result.logTail.length <= 1500);
   });
 
+  it('get_job rejects a missing, non-integer or non-positive id without calling bridge', async () => {
+    const calls = stubBridge({ '/worker/jobs/': { id: 7, status: 'running', model: 'opus' } });
+    const toolset = createChatToolset('https://b', 'k', 'read')!;
+
+    for (const args of [{ id: 'abc' }, {}, { id: 1.5 }, { id: 0 }, { id: -3 }]) {
+      assert.equal(await toolset.execute('get_job', args), 'get_job needs a positive integer id.');
+    }
+
+    assert.equal(calls.length, 0);
+  });
+
+  it('get_job still requests /worker/jobs/<id> for a valid id', async () => {
+    const calls = stubBridge({ '/worker/jobs/7': { id: 7, status: 'running', model: 'opus' } });
+    const toolset = createChatToolset('https://b', 'k', 'read')!;
+
+    assert.equal(JSON.parse(await toolset.execute('get_job', { id: 7 })).id, 7);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://b/api/v1/worker/jobs/7');
+  });
+
   it('turns a bridge failure into a readable tool result instead of throwing', async () => {
     stubBridge({});
     const toolset = createChatToolset('https://b', 'k', 'read')!;
