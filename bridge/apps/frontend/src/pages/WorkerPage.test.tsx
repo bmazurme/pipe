@@ -697,3 +697,39 @@ describe('WorkerPage — stopping a job', () => {
   });
 });
 
+describe('WorkerPage — polling a running job’s logs', () => {
+  it('fetches only the new log output on the next poll and shows both chunks', async () => {
+    const jobRequests: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs/1')) {
+          jobRequests.push(url);
+          // 'starting up\n' is 12 characters long.
+          if (url.includes('logsFrom=12')) return jsonResponse({ ...JOBS[0], logs: 'second chunk\n', logsLength: 25 });
+          if (url.includes('logsFrom=')) return jsonResponse({ ...JOBS[0], logs: '', logsLength: 25 });
+          return jsonResponse(JOBS[0]);
+        }
+        if (url.endsWith('/worker/status')) return jsonResponse({ isUp: true, workers: [] });
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        return jsonResponse([]);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByText('Задача #1'));
+    await screen.findByText('starting up');
+
+    // The next poll comes JOB_POLL_INTERVAL_MS (3 s) later.
+    const logs = await screen.findByText(/second chunk/, {}, { timeout: 5000 });
+
+    expect(logs.textContent).toBe('starting up\nsecond chunk\n');
+    expect(jobRequests[0]).not.toContain('logsFrom');
+    expect(jobRequests[1]).toContain('logsFrom=12');
+    // The whole log was fetched once — every later poll asked only for what was new.
+    expect(jobRequests.filter((url) => !url.includes('logsFrom='))).toHaveLength(1);
+  }, 10_000);
+});
+

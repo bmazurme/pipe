@@ -17,6 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -33,6 +34,9 @@ import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
+
+// Postgres' integer range, minus the +1 SUBSTRING needs — no log gets near it.
+const MAX_LOGS_FROM = 2_147_483_646;
 
 // One controller, one guard, for both audiences — JwtOrApiKeyGuard already
 // accepts a browser session OR a personal API key (the same "unified
@@ -127,14 +131,34 @@ export class WorkerController {
     return this.workerService.previewHistory(currentUser.id, sourceFileId);
   }
 
+  // `logsFrom` is for the job dialog's poll: with it, `logs` carries only the
+  // characters after the first `logsFrom` ones, plus `logsLength`, instead of
+  // re-sending the whole log every few seconds. Without it, nothing changes.
   @Get(':id')
+  @ApiQuery({ name: 'logsFrom', required: false, type: Number })
   async get(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
+    @Query('logsFrom', new ParseIntPipe({ optional: true })) logsFrom?: number,
   ): Promise<JobResponseDto> {
-    const job = await this.workerService.findOwned(id, currentUser.id);
+    if (logsFrom === undefined) {
+      const job = await this.workerService.findOwned(id, currentUser.id);
 
-    return JobResponseDto.fromEntity(job);
+      return JobResponseDto.fromEntity(job);
+    }
+
+    if (logsFrom < 0 || logsFrom > MAX_LOGS_FROM) {
+      throw new BadRequestException('logsFrom must be a non-negative integer');
+    }
+
+    const { job, logsTail, logsLength } =
+      await this.workerService.findOwnedWithLogsFrom(
+        id,
+        currentUser.id,
+        logsFrom,
+      );
+
+    return { ...JobResponseDto.fromEntity(job), logs: logsTail, logsLength };
   }
 
   @Get(':id/cancel-state')

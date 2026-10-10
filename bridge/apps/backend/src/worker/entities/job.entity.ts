@@ -87,8 +87,8 @@ export class Job extends BaseEntity {
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
 
-  // Append-only; the frontend polls the job and re-renders this in full —
-  // adequate for the expected volume of a single coding-agent run.
+  // Append-only; while a job runs the frontend polls only what was appended
+  // since its last poll (GET :id?logsFrom=, see WorkerService.findOwnedWithLogsFrom).
   @Column({ type: 'text', default: '' })
   logs: string;
 

@@ -30,6 +30,11 @@ export interface WorkerJob {
   historyCount: number | null;
   status: WorkerJobStatus;
   logs: string;
+  /**
+   * The whole log's length in characters as the server counts them (code points), set on
+   * the cached job and on a `?logsFrom=` reply — where `logs` is only what came after.
+   */
+  logsLength?: number;
   errorMessage: string | null;
   workerName: string | null;
   claimedAt: string | null;
@@ -67,8 +72,33 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     getWorkerStatus: builder.query<WorkerStatus, void>({
       query: () => 'worker/status',
     }),
+    // Polled every few seconds while a job runs. Once an active job is cached, only the
+    // log after what is already there is fetched and appended. The whole log is fetched
+    // again when it shrank (a status save raced a log append) and once the job has ended,
+    // so the final text is always the server's own.
     getJob: builder.query<WorkerJob, number>({
-      query: (id) => `worker/jobs/${id}`,
+      async queryFn(id, api, _extraOptions, baseQuery) {
+        const cached = cachedJob(api.getState, id);
+        const logsFrom =
+          cached && ACTIVE_JOB_STATUSES.includes(cached.status) ? cached.logsLength : undefined;
+
+        if (cached && logsFrom !== undefined) {
+          const tail = await baseQuery(`worker/jobs/${id}?logsFrom=${logsFrom}`);
+          if (tail.error) return { error: tail.error };
+
+          const job = tail.data as WorkerJob;
+          // A server without logsFrom support answers with the whole job.
+          if (job.logsLength === undefined) return { data: withLogsLength(job) };
+          if (job.logsLength >= logsFrom && ACTIVE_JOB_STATUSES.includes(job.status)) {
+            return { data: { ...job, logs: cached.logs + job.logs } };
+          }
+        }
+
+        const whole = await baseQuery(`worker/jobs/${id}`);
+        if (whole.error) return { error: whole.error };
+
+        return { data: withLogsLength(whole.data as WorkerJob) };
+      },
       providesTags: (_result, _error, id) => [{ type: 'WorkerJob', id }],
     }),
     createJob: builder.mutation<
@@ -167,6 +197,19 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     }),
   }),
 });
+
+// Declared with explicit types (and hoisted) so getJob's queryFn can read its own cache
+// entry without its type depending on itself.
+function cachedJob(getState: () => unknown, id: number): WorkerJob | undefined {
+  type State = Parameters<ReturnType<typeof workerApiEndpoints.endpoints.getJob.select>>[0];
+
+  return workerApiEndpoints.endpoints.getJob.select(id)(getState() as State).data;
+}
+
+// Counts code points, like the server's CHAR_LENGTH — not UTF-16 units like .length.
+function withLogsLength(job: WorkerJob): WorkerJob {
+  return { ...job, logsLength: Array.from(job.logs ?? '').length };
+}
 
 export const {
   useListJobsQuery,

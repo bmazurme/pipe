@@ -1602,6 +1602,7 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
+            logsLength?: number;
             errorMessage: string | null;
             workerName: string | null;
             /** Format: date-time */
@@ -2998,7 +2999,9 @@ export interface operations {
     };
     WorkerController_get: {
         parameters: {
-            query?: never;
+            query?: {
+                logsFrom?: number;
+            };
             header?: never;
             path: {
                 id: number;
