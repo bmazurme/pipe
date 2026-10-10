@@ -1,9 +1,5 @@
-// No request here had an AbortSignal before — a hung connection on `claim`
-// in particular would freeze the whole poll loop forever, not just one
-// request (see index.ts's main loop, which calls claim every tick).
-// Transfers get a longer budget since a parcel/result can be a real file.
-const API_TIMEOUT_MS = 15_000;
-const TRANSFER_TIMEOUT_MS = 120_000;
+import { API_TIMEOUT_MS, TRANSFER_TIMEOUT_MS, bearer, bridgeFetch, readOptionalJson } from './bridgeHttp.js';
+
 const UPLOAD_RETRY_DELAYS_MS = [2000, 5000];
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 
@@ -39,59 +35,35 @@ export class WorkerBridgeClient {
     private readonly apiKey: string,
   ) {}
 
-  private authHeaders(json = false): Record<string, string> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${this.apiKey}` };
-    if (json) headers['Content-Type'] = 'application/json';
-    return headers;
+  private get(path: string, what: string, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
+    return bridgeFetch(
+      `${this.apiUrl}/api/v1/worker/jobs${path}`,
+      { headers: bearer(this.apiKey) },
+      { timeoutMs, expectOk: what },
+    );
   }
 
-  // Returns null when nothing is queued right now — bridge sends an empty
-  // body for that case (204 is the current behavior; an older deployment
-  // may still send 201 with no body), never a 200 with JSON "null".
-  // response.json() throws on an empty body ("Unexpected end of JSON
-  // input"), so this checks the raw text first rather than assuming a
-  // specific status code — robust either way, and to bridge deployments
-  // that haven't picked up the 204 fix yet.
+  private post(path: string, what: string, body: unknown, includeBody = false): Promise<Response> {
+    return bridgeFetch(
+      `${this.apiUrl}/api/v1/worker/jobs${path}`,
+      { method: 'POST', headers: bearer(this.apiKey, true), body: JSON.stringify(body) },
+      { expectOk: what, includeBody },
+    );
+  }
+
+  // Returns null when nothing is queued right now (see readOptionalJson).
   async claim(workerName: string): Promise<RemoteJob | null> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/claim`, {
-      method: 'POST',
-      headers: this.authHeaders(true),
-      body: JSON.stringify({ workerName }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claim failed (${response.status}): ${await response.text()}`);
-    }
-
-    const text = await response.text();
-    return text ? (JSON.parse(text) as RemoteJob | null) : null;
+    return readOptionalJson<RemoteJob>(await this.post('/claim', 'Claim', { workerName }, true));
   }
 
   // Claim-less liveness ping for while a long job is running (claim is the
   // only other thing that records one, and the main loop doesn't poll then).
   async heartbeat(workerName: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/heartbeat`, {
-      method: 'POST',
-      headers: this.authHeaders(true),
-      body: JSON.stringify({ workerName }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Heartbeat failed (${response.status})`);
-    }
+    await this.post('/heartbeat', 'Heartbeat', { workerName });
   }
 
   async downloadParcel(jobId: number): Promise<Buffer> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/parcel`, {
-      headers: this.authHeaders(),
-      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Downloading parcel for job ${jobId} failed (${response.status})`);
-    }
+    const response = await this.get(`/${jobId}/parcel`, `Downloading parcel for job ${jobId}`, TRANSFER_TIMEOUT_MS);
 
     return Buffer.from(await response.arrayBuffer());
   }
@@ -101,30 +73,14 @@ export class WorkerBridgeClient {
     status: 'running' | 'succeeded' | 'failed' | 'cancelled',
     errorMessage?: string,
   ): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/status`, {
-      method: 'POST',
-      headers: this.authHeaders(true),
-      body: JSON.stringify({ status, errorMessage }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Updating status for job ${jobId} failed (${response.status})`);
-    }
+    await this.post(`/${jobId}/status`, `Updating status for job ${jobId}`, { status, errorMessage });
   }
 
   // Whether the owner asked to stop this job (or bridge already cancelled it).
   // Polled while a job runs — a CLI that prints nothing for minutes sends no log
   // chunks to piggyback the answer on, so it needs a request of its own.
   async isCancelRequested(jobId: number): Promise<boolean> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/cancel-state`, {
-      headers: this.authHeaders(),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Checking job ${jobId} failed (${response.status})`);
-    }
+    const response = await this.get(`/${jobId}/cancel-state`, `Checking job ${jobId}`);
 
     const job = (await response.json()) as { status?: string; cancelRequestedAt?: string | null };
 
@@ -135,16 +91,7 @@ export class WorkerBridgeClient {
   // abort the job itself, only be swallowed with a local console warning by
   // the caller (see index.ts) — the job's real outcome is its final status.
   async appendLog(jobId: number, chunk: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/logs`, {
-      method: 'POST',
-      headers: this.authHeaders(true),
-      body: JSON.stringify({ chunk }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Appending log for job ${jobId} failed (${response.status})`);
-    }
+    await this.post(`/${jobId}/logs`, `Appending log for job ${jobId}`, { chunk });
   }
 
   // The run before this call can take up to 30 minutes, so a transient failure
@@ -166,12 +113,11 @@ export class WorkerBridgeClient {
         const form = new FormData();
         form.append('file', new Blob([new Uint8Array(buffer)]), filename);
 
-        const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/result`, {
-          method: 'POST',
-          headers: this.authHeaders(),
-          body: form,
-          signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
-        });
+        const response = await bridgeFetch(
+          `${this.apiUrl}/api/v1/worker/jobs/${jobId}/result`,
+          { method: 'POST', headers: bearer(this.apiKey), body: form },
+          { timeoutMs: TRANSFER_TIMEOUT_MS },
+        );
 
         if (response.ok) return;
 

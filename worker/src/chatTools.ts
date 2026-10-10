@@ -9,6 +9,8 @@
 // feature is off unless WORKER_CHAT_TOOLS is set, and starting jobs needs the
 // stronger `write` level.
 
+import { bearer, bridgeFetch } from './bridgeHttp.js';
+
 export type ChatToolsMode = 'off' | 'read' | 'write';
 
 export interface ToolDefinition {
@@ -21,7 +23,6 @@ export interface ChatToolset {
   execute(name: string, args: Record<string, unknown>): Promise<string>;
 }
 
-const API_TIMEOUT_MS = 15_000;
 const MAX_RESULT_CHARS = 3000;
 const MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 
@@ -70,11 +71,7 @@ export function createChatToolset(apiUrl: string, apiKey: string, mode: ChatTool
   if (mode === 'off') return null;
 
   async function api(path: string, init: RequestInit = {}): Promise<unknown> {
-    const response = await fetch(`${apiUrl}/api/v1${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
+    const response = await bridgeFetch(`${apiUrl}/api/v1${path}`, { ...init, headers: bearer(apiKey, true) });
 
     if (!response.ok) {
       throw new Error(`bridge answered ${response.status}: ${(await response.text()).slice(0, 200)}`);
