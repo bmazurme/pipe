@@ -4,6 +4,7 @@ import { buildAnalysisPrompt, buildLogDigest } from './analysis';
 const summary = (over: Partial<LogSummary> = {}): LogSummary => ({
   days: 7,
   total: 120,
+  truncated: false,
   byLevel: { info: 100, warn: 15, error: 5 },
   bySource: { job: 40 },
   jobs: { succeeded: 8, failed: 2, successRate: 0.8, avgDurationMs: 90_000 },
