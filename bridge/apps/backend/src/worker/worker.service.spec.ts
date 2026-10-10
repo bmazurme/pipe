@@ -114,6 +114,28 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('getCancelState', () => {
+    it('selects only id, status and cancelRequestedAt for the owner', async () => {
+      const row = { id: 3, status: JobStatus.Running, cancelRequestedAt: null };
+      repository.findOne!.mockResolvedValue(row);
+
+      await expect(service.getCancelState(3, 7)).resolves.toEqual(row);
+
+      expect(repository.findOne).toHaveBeenCalledWith({
+        select: { id: true, status: true, cancelRequestedAt: true },
+        where: { id: 3, userId: 7 },
+      });
+    });
+
+    it('throws NotFoundException for a missing or foreign job', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.getCancelState(3, 7)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('recordHeartbeat', () => {
     it('records a heartbeat without touching any job row', async () => {
       await service.recordHeartbeat(7, 'worker-a');

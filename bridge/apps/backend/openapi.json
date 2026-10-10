@@ -1419,6 +1419,26 @@
         }
       }
     },
+    "/api/v1/worker/jobs/{id}/cancel-state": {
+      "get": {
+        "operationId": "WorkerController_cancelState",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}/parcel": {
       "get": {
         "operationId": "WorkerController_downloadParcel",
