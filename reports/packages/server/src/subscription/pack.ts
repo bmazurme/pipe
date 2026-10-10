@@ -2,25 +2,16 @@ import {
   buildArchive as buildArchiveGeneric,
   extractArchive as extractArchiveGeneric,
   contentHash,
-  type BaseManifest,
+  SUBSCRIPTION_MANIFEST_ENTRY,
+  type SubscriptionManifest,
   type PackedFile,
   type PackedAsset,
 } from '@pipe/protocol';
 
-export const MANIFEST_ENTRY = '__subscription_manifest__.json';
+export const MANIFEST_ENTRY = SUBSCRIPTION_MANIFEST_ENTRY;
 
-export type { PackedFile, PackedAsset };
+export type { PackedFile, PackedAsset, SubscriptionManifest };
 export { contentHash };
-
-export interface SubscriptionManifest extends BaseManifest {
-  issueId: string;
-  issueIid: string;
-  issueTitle: string;
-  issueDescription: string;
-  projectId: number;
-  branch: string;
-  createdAt: string;
-}
 
 export function buildArchive(
   files: PackedFile[],

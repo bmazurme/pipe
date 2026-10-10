@@ -1,33 +1,22 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import AdmZip from 'adm-zip';
-
 import {
   buildArchive as buildArchiveGeneric,
-  assertSchemaVersion,
-  ASSET_PREFIX,
-  type BaseManifest,
+  extractSubscriptionArchive,
+  SUBSCRIPTION_MANIFEST_ENTRY,
+  type SubscriptionManifest,
   type PackedFile,
   type PackedAsset,
 } from '@pipe/protocol';
 
 import { type Dictionary, toLocal } from './dictionary.js';
-import { MANIFEST_ENTRY as LEGACY_MANIFEST_ENTRY } from './pack.js';
 
-// Matches reports' subscription/pack.ts (MANIFEST_ENTRY) — the manifest name
-// used inside a parcel addressed by GitLab issue rather than by project name.
-export const SUBSCRIPTION_MANIFEST_ENTRY = '__subscription_manifest__.json';
-
-export interface SubscriptionManifest extends BaseManifest {
-  issueId: string;
-  issueIid: string;
-  issueTitle: string;
-  issueDescription: string;
-  projectId: number;
-  branch: string;
-  createdAt: string;
-}
+// The issue-parcel format (manifest name, manifest shape, extraction with a
+// legacy project-mode fallback) lives in @pipe/protocol, shared with reports'
+// subscription/pack.ts.
+export { SUBSCRIPTION_MANIFEST_ENTRY, type SubscriptionManifest };
+export const extractIssueArchive = extractSubscriptionArchive;
 
 export function buildIssueArchive(
   files: PackedFile[],
@@ -36,71 +25,6 @@ export function buildIssueArchive(
 ): Buffer {
   const { buffer } = buildArchiveGeneric<SubscriptionManifest>(SUBSCRIPTION_MANIFEST_ENTRY, files, manifest, assets);
   return buffer;
-}
-
-// Recognizes either manifest name actually present in the archive: the
-// subscription-mode one (reports, and sync-cli's own push-issue), or —
-// defensively — the older project-mode one, in case a project-mode parcel
-// ends up being pulled through pull-issue by mistake. The legacy manifest
-// carries no issue metadata, so those fields come back empty and
-// `legacyManifest` is set so callers can warn instead of silently printing
-// blanks as if they were real title/description/branch.
-export function extractIssueArchive(buffer: Buffer): {
-  manifest: SubscriptionManifest;
-  files: PackedFile[];
-  assets: PackedAsset[];
-  legacyManifest: boolean;
-} {
-  const zip = new AdmZip(buffer);
-  const entries = zip.getEntries().filter((entry) => !entry.isDirectory);
-
-  const subscriptionEntry = entries.find((entry) => entry.entryName === SUBSCRIPTION_MANIFEST_ENTRY);
-  const legacyEntry = entries.find((entry) => entry.entryName === LEGACY_MANIFEST_ENTRY);
-
-  if (!subscriptionEntry && !legacyEntry) {
-    throw new Error(
-      `Archive is missing both ${SUBSCRIPTION_MANIFEST_ENTRY} and ${LEGACY_MANIFEST_ENTRY} — not a sync-cli/reports parcel.`,
-    );
-  }
-
-  const contentEntries = entries.filter(
-    (entry) => entry.entryName !== SUBSCRIPTION_MANIFEST_ENTRY && entry.entryName !== LEGACY_MANIFEST_ENTRY,
-  );
-  const files = contentEntries
-    .filter((entry) => !entry.entryName.startsWith(ASSET_PREFIX))
-    .map((entry) => ({ relPath: entry.entryName, content: entry.getData().toString('utf-8') }));
-  const assets = contentEntries
-    .filter((entry) => entry.entryName.startsWith(ASSET_PREFIX))
-    .map((entry) => ({ relPath: entry.entryName.slice(ASSET_PREFIX.length), base64: entry.getData().toString('base64') }));
-
-  if (subscriptionEntry) {
-    const manifest = JSON.parse(subscriptionEntry.getData().toString('utf-8')) as SubscriptionManifest;
-    assertSchemaVersion(manifest, SUBSCRIPTION_MANIFEST_ENTRY);
-
-    return { manifest, files, assets, legacyManifest: false };
-  }
-
-  const legacy = JSON.parse(legacyEntry!.getData().toString('utf-8')) as {
-    createdAt: string;
-    contentHash: string;
-  };
-
-  return {
-    manifest: {
-      issueId: '',
-      issueIid: '',
-      issueTitle: '',
-      issueDescription: '',
-      projectId: 0,
-      branch: '',
-      createdAt: legacy.createdAt,
-      contentHash: legacy.contentHash,
-      schemaVersion: 0,
-    },
-    files,
-    assets,
-    legacyManifest: true,
-  };
 }
 
 export const ISSUE_FILE_NAME = 'ISSUE.md';

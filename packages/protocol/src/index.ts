@@ -2,6 +2,7 @@ export * from './manifest.js';
 export * from './encryption.js';
 export * from './dictionary.js';
 export * from './pack.js';
+export * from './issueParcel.js';
 export * from './walk.js';
 export * from './leakScan.js';
 export * from './markdownImages.js';

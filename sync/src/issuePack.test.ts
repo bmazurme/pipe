@@ -4,16 +4,19 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import AdmZip from 'adm-zip';
+
 import {
   buildIssueArchive,
   extractIssue,
   extractIssueArchive,
   updateIssueFile,
   ISSUE_FILE_NAME,
-  SUBSCRIPTION_MANIFEST_ENTRY,
 } from './issuePack.js';
-import { buildArchive } from './pack.js';
 
+// The extraction cases themselves (subscription manifest, legacy fallback,
+// assets, tampering) live in @pipe/protocol's issueParcel.test.ts — these only
+// check that sync's builder and its extractIssueArchive re-export fit together.
 describe('buildIssueArchive / extractIssueArchive', () => {
   const files = [
     { relPath: 'src/a.ts', content: 'export const a = 1;' },
@@ -29,63 +32,22 @@ describe('buildIssueArchive / extractIssueArchive', () => {
     createdAt: '2026-09-14T10:00:00.000Z',
   };
 
-  it('round-trips files and the manifest through a zip archive', () => {
-    const buffer = buildIssueArchive(files, manifest);
-    const { manifest: extracted, files: extractedFiles, legacyManifest } = extractIssueArchive(buffer);
+  it('round-trips a parcel built by buildIssueArchive', () => {
+    const { manifest: extracted, files: extractedFiles, legacyManifest } = extractIssueArchive(
+      buildIssueArchive(files, manifest),
+    );
 
     assert.equal(legacyManifest, false);
-    assert.equal(extracted.issueId, manifest.issueId);
     assert.equal(extracted.issueIid, manifest.issueIid);
-    assert.equal(extracted.issueTitle, manifest.issueTitle);
-    assert.equal(extracted.issueDescription, manifest.issueDescription);
-    assert.equal(extracted.projectId, manifest.projectId);
     assert.equal(extracted.branch, manifest.branch);
-    assert.equal(typeof extracted.contentHash, 'string');
-    assert.deepEqual(
-      [...extractedFiles].sort((a, b) => a.relPath.localeCompare(b.relPath)),
-      [...files].sort((a, b) => a.relPath.localeCompare(b.relPath)),
-    );
-  });
-
-  it('uses the __subscription_manifest__.json entry name', () => {
-    const buffer = buildIssueArchive(files, manifest);
-    // buildIssueArchive doesn't expose the zip directly, but extractIssueArchive
-    // failing to find SUBSCRIPTION_MANIFEST_ENTRY would fall back to the legacy
-    // entry and report legacyManifest: true — this confirms it does not.
-    const { legacyManifest } = extractIssueArchive(buffer);
-    assert.equal(legacyManifest, false, `expected the ${SUBSCRIPTION_MANIFEST_ENTRY} entry to be found`);
-  });
-
-  it('falls back to the legacy __sync_manifest__.json entry with empty issue fields', () => {
-    const { buffer } = buildArchive('some-project', files);
-    const { manifest: extracted, files: extractedFiles, legacyManifest } = extractIssueArchive(buffer);
-
-    assert.equal(legacyManifest, true);
-    assert.equal(extracted.issueId, '');
-    assert.equal(extracted.issueTitle, '');
-    assert.equal(extracted.branch, '');
-    assert.equal(typeof extracted.contentHash, 'string');
     assert.equal(extractedFiles.length, files.length);
   });
 
-  it('throws when neither manifest entry is present', () => {
-    assert.throws(() => extractIssueArchive(Buffer.from('not a zip')));
-  });
+  it('rejects a tampered parcel', () => {
+    const zip = new AdmZip(buildIssueArchive(files, manifest));
+    zip.updateFile('src/a.ts', Buffer.from('export const a = 666;', 'utf-8'));
 
-  it('round-trips assets separately from files', () => {
-    const assets = [{ relPath: 'issue-images/shot.png', base64: Buffer.from([1, 2, 3]).toString('base64') }];
-    const buffer = buildIssueArchive(files, manifest, assets);
-    const { files: extractedFiles, assets: extractedAssets } = extractIssueArchive(buffer);
-
-    assert.equal(extractedFiles.length, files.length);
-    assert.deepEqual(extractedAssets, assets);
-  });
-
-  it('extracts no assets from an archive built without any', () => {
-    const buffer = buildIssueArchive(files, manifest);
-    const { assets } = extractIssueArchive(buffer);
-
-    assert.deepEqual(assets, []);
+    assert.throws(() => extractIssueArchive(zip.toBuffer()), /contentHash mismatch/);
   });
 });
 

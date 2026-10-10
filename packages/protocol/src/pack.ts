@@ -21,10 +21,6 @@ export interface PackedAsset {
 
 // Reserved — nothing under this prefix in a real project tree collides with
 // it (double-underscore, matches the __*_manifest__.json convention).
-// Exported since sync's issuePack.ts reads a parcel's entries by hand
-// (rather than through extractArchive below, to also handle a legacy
-// no-issue-metadata manifest) and needs the exact same prefix to recognize
-// asset entries.
 export const ASSET_PREFIX = '__issue_assets__/';
 
 // Code-unit order, not localeCompare: the latter depends on the runtime's
