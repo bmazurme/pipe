@@ -1,7 +1,4 @@
-import {
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -113,9 +110,8 @@ describe('VpnConnectionsService', () => {
     it('throws when nothing is active', async () => {
       repository.findOneBy!.mockResolvedValue(null);
 
-      await expect(service.getActive()).rejects.toThrow(
-        InternalServerErrorException,
-      );
+      // A missing active connection is a 404 now (a client can tell it from a server fault).
+      await expect(service.getActive()).rejects.toThrow(NotFoundException);
     });
 
     it('returns the active connection', async () => {

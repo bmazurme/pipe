@@ -4398,14 +4398,17 @@
             "maxLength": 255
           },
           "panelUrl": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 255
           },
           "panelApiToken": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2048
           },
           "serverAddress": {
             "type": "string",
-            "maxLength": 255
+            "maxLength": 255,
+            "pattern": "/^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|[0-9A-Fa-f:]+)$/"
           }
         },
         "required": [

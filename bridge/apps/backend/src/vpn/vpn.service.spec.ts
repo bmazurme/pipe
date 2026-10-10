@@ -303,7 +303,7 @@ describe('VpnService', () => {
 
     it('maps a network failure to its cause code', async () => {
       globalThis.fetch = jest.fn(async () => {
-        throw new TypeError('fetch failed', {
+        throw Object.assign(new TypeError('fetch failed'), {
           cause: { code: 'CERT_HAS_EXPIRED' },
         });
       }) as unknown as typeof fetch;
