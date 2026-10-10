@@ -124,9 +124,9 @@ export function ChatPage() {
   });
   const accessToken = useAppSelector((state) => state.auth.accessToken);
 
-  const [createChat] = useCreateChatMutation();
+  const [createChat, { isLoading: isCreatingChat }] = useCreateChatMutation();
   const [deleteChat] = useDeleteChatMutation();
-  const [renameChat] = useRenameChatMutation();
+  const [renameChat, { isLoading: isRenamingChat }] = useRenameChatMutation();
   const [sendMessage] = useSendMessageMutation();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -238,17 +238,33 @@ export function ChatPage() {
     setContextDraft(buildContextDraft(chat?.title ?? activeChat?.name ?? 'Чат', messagesData ?? [], modelLabel(activeModel)));
   };
 
+  // Dialogs close only once their request succeeds, so a failure leaves the user's input in place.
   const handleCreateChat = async () => {
-    setIsCreateDialogOpen(false);
-    const chat = await createChat({ model: newChatModel }).unwrap();
-    setActiveChatId(chat.id);
-    setPendingFiles([]);
+    if (isCreatingChat) return;
     setChatError(null);
+
+    try {
+      const chat = await createChat({ model: newChatModel }).unwrap();
+
+      setIsCreateDialogOpen(false);
+      setActiveChatId(chat.id);
+      setPendingFiles([]);
+    } catch {
+      setChatError('Не удалось создать чат');
+    }
   };
 
   const handleDeleteChat = async (chat: ChatType) => {
     const id = Number(chat.id);
-    await deleteChat(id).unwrap();
+    setChatError(null);
+
+    try {
+      await deleteChat(id).unwrap();
+    } catch {
+      setChatError('Не удалось удалить чат');
+      return;
+    }
+
     if (activeChatId === id) {
       setActiveChatId(null);
       setPendingFiles([]);
@@ -263,9 +279,15 @@ export function ChatPage() {
 
   const handleRenameChat = async () => {
     const title = renameValue.trim();
-    if (activeChatId === null || !title) return;
-    setIsRenameDialogOpen(false);
-    await renameChat({ id: activeChatId, title }).unwrap();
+    if (activeChatId === null || !title || isRenamingChat) return;
+    setChatError(null);
+
+    try {
+      await renameChat({ id: activeChatId, title }).unwrap();
+      setIsRenameDialogOpen(false);
+    } catch {
+      setChatError('Не удалось переименовать чат');
+    }
   };
 
   // Lets the user see/change which model their first message will go to
@@ -360,6 +382,7 @@ export function ChatPage() {
         <Dialog.Header caption="Новый чат" />
         <Dialog.Body>
           <Select
+            aria-label="Модель"
             value={[newChatModel]}
             onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
             options={MODEL_OPTIONS}
@@ -369,6 +392,7 @@ export function ChatPage() {
         <Dialog.Footer
           textButtonCancel="Отмена"
           textButtonApply="Создать"
+          propsButtonApply={{ loading: isCreatingChat, disabled: isCreatingChat }}
           onClickButtonCancel={() => setIsCreateDialogOpen(false)}
           onClickButtonApply={() => void handleCreateChat()}
         />
@@ -380,6 +404,7 @@ export function ChatPage() {
           <TextInput
             value={renameValue}
             onUpdate={setRenameValue}
+            controlProps={{ 'aria-label': 'Название чата' }}
             autoFocus
             onKeyDown={(event) => {
               if (event.key === 'Enter') void handleRenameChat();
@@ -389,7 +414,7 @@ export function ChatPage() {
         <Dialog.Footer
           textButtonCancel="Отмена"
           textButtonApply="Сохранить"
-          propsButtonApply={{ disabled: !renameValue.trim() }}
+          propsButtonApply={{ loading: isRenamingChat, disabled: !renameValue.trim() || isRenamingChat }}
           onClickButtonCancel={() => setIsRenameDialogOpen(false)}
           onClickButtonApply={() => void handleRenameChat()}
         />
