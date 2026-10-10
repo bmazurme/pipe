@@ -115,6 +115,24 @@ describe('listAssignedOpenIssues pagination', () => {
     assert.ok(urls.every((url) => url.includes('per_page=100')));
   });
 
+  it('returns all 150 issues spread over 2 pages', async () => {
+    globalThis.fetch = (async (url: string) => {
+      const page = Number(new URL(url).searchParams.get('page'));
+      const count = page === 1 ? 100 : 50;
+      const items = Array.from({ length: count }, (_, i) => issue((page - 1) * 100 + i + 1));
+
+      return new Response(JSON.stringify(items), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'x-next-page': page === 1 ? '2' : '' },
+      });
+    }) as typeof fetch;
+
+    const issues = await listAssignedOpenIssues('https://gitlab.example.com/api/v4', 'tok');
+
+    assert.equal(issues.length, 150);
+    assert.equal(issues[149].iid, 150);
+  });
+
   it('makes a single request when the response names no next page', async () => {
     let calls = 0;
     globalThis.fetch = (async () => {
