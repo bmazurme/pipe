@@ -3,6 +3,8 @@ import type { AppLog } from './entities/app-log.entity';
 export interface LogSummary {
   days: number;
   total: number;
+  // True when the row cap was hit, so older rows in the window were dropped.
+  truncated: boolean;
   byLevel: Record<string, number>;
   bySource: Record<string, number>;
   jobs: {
@@ -40,7 +42,10 @@ function increment(map: Record<string, number>, key: string): void {
   map[key] = (map[key] ?? 0) + 1;
 }
 
-export function summarize(rows: AppLog[], days: number): LogSummary {
+export function summarize(
+  rows: AppLog[],
+  days: number,
+): Omit<LogSummary, 'truncated'> {
   const byLevel: Record<string, number> = {};
   const bySource: Record<string, number> = {};
   const errors = new Map<string, number>();
