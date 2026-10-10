@@ -390,3 +390,40 @@ describe('VpnPage', () => {
     expect(await screen.findByText(/Запущен передеплой/)).toBeTruthy();
   });
 });
+
+describe('VpnPage status errors', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  function stubStatusFailure(status: number) {
+    fetchMock = vi.fn(async (request: Request) => {
+      if (request.url.endsWith('/vpn/status')) {
+        return new Response(JSON.stringify({ message: 'No active VPN connection is configured', statusCode: status }), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (request.url.endsWith('/vpn/connections')) return jsonResponse(CONNECTIONS);
+      return jsonResponse({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  }
+
+  it('shows the empty state with a hint when the status answers 404', async () => {
+    stubStatusFailure(404);
+
+    renderPage();
+
+    expect(await screen.findByText('Нет активного VPN-подключения')).toBeTruthy();
+    expect(screen.getByText('Добавьте подключение ниже')).toBeTruthy();
+  });
+
+  it('does not show the empty state when the status answers 502', async () => {
+    stubStatusFailure(502);
+
+    renderPage();
+
+    await screen.findByText('primary');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringMatching(/\/vpn\/status$/) })));
+    expect(screen.queryByText('Нет активного VPN-подключения')).toBeNull();
+  });
+});
