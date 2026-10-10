@@ -1,9 +1,6 @@
-import {
-  BadGatewayException,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadGatewayException, NotFoundException } from '@nestjs/common';
 
+import { AppLogService } from '../logs/app-log.service';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
@@ -28,7 +25,7 @@ function fakeVpnConnectionsService(
     getActive: jest.fn(async () => {
       const active = connections.find((c) => c.isActive);
       if (!active) {
-        throw new InternalServerErrorException(
+        throw new NotFoundException(
           'No active VPN connection is configured — add one and select it first',
         );
       }
@@ -142,7 +139,10 @@ describe('VpnService', () => {
       );
     });
 
-    it('throws when no connection is active', async () => {
+    it('throws a NotFoundException when no connection is active', async () => {
+      await expect(vpnService([]).getStatus()).rejects.toThrow(
+        NotFoundException,
+      );
       await expect(vpnService([]).getStatus()).rejects.toThrow(
         'No active VPN connection is configured',
       );
@@ -227,6 +227,95 @@ describe('VpnService', () => {
     });
   });
 
+  describe('status cache invalidation and failure reporting', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function okFetch(): jest.Mock {
+      const mock = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      );
+      globalThis.fetch = mock as unknown as typeof fetch;
+      return mock;
+    }
+
+    it.each([
+      ['panelUrl', { panelUrl: 'https://other.example.com/panel' }],
+      ['panelApiToken', { panelApiToken: 'rotated-token' }],
+    ])('refetches within the TTL after %s is edited', async (_name, edit) => {
+      const fetchMock = okFetch();
+      const connection = { ...ACTIVE_CONNECTION } as VpnConnection;
+      const service = vpnService([connection]);
+
+      await service.getStatus();
+      Object.assign(connection, edit);
+      await service.getStatus();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs an identical failure once per 5 minutes', async () => {
+      globalThis.fetch = jest.fn(
+        async () => new Response('nope', { status: 500 }),
+      ) as unknown as typeof fetch;
+      const record = jest.fn();
+      const service = new VpnService(
+        fakeVpnConnectionsService(),
+        fakeGithub() as unknown as GithubActionsService,
+        { record } as unknown as AppLogService,
+      );
+
+      for (let i = 0; i < 3; i++) {
+        await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
+          'VPN panel request failed (500)',
+        );
+      }
+      expect(record).toHaveBeenCalledTimes(1);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'vpn.status_failed',
+          message: expect.stringContaining('VPN panel request failed (500)'),
+        }),
+      );
+
+      jest.advanceTimersByTime(5 * 60_000 + 1);
+      await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
+        BadGatewayException,
+      );
+      expect(record).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([401, 403])(
+      'reports a rejected API token on a %i response',
+      async (status) => {
+        globalThis.fetch = jest.fn(
+          async () => new Response('denied', { status }),
+        ) as unknown as typeof fetch;
+
+        await expect(vpnService().getStatus()).rejects.toThrow(
+          `rejected the API token (${status})`,
+        );
+      },
+    );
+
+    it('maps a network failure to its cause code', async () => {
+      globalThis.fetch = jest.fn(async () => {
+        throw Object.assign(new TypeError('fetch failed'), {
+          cause: { code: 'CERT_HAS_EXPIRED' },
+        });
+      }) as unknown as typeof fetch;
+
+      await expect(vpnService().getStatus()).rejects.toThrow(
+        'is unreachable from bridge (CERT_HAS_EXPIRED)',
+      );
+    });
+  });
+
   describe('outbound timeouts', () => {
     function timeoutError(): Error {
       const error = new Error('The operation was aborted due to timeout');
@@ -303,6 +392,55 @@ describe('VpnService', () => {
       await expect(vpnService().getConnectionLink(99)).rejects.toThrow(
         'VPN connection not found',
       );
+    });
+  });
+
+  describe('non-Reality inbounds', () => {
+    const NO_REALITY = { ...INBOUND, streamSettings: {} };
+    const NO_SERVER_NAMES = {
+      ...INBOUND,
+      streamSettings: {
+        realitySettings: {
+          ...INBOUND.streamSettings.realitySettings,
+          serverNames: [],
+        },
+      },
+    };
+
+    it('syncWorkerVpnConfig rejects before any GitHub request', async () => {
+      const fetchMock = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_REALITY] }),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const promise = vpnService().syncWorkerVpnConfig();
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow('not a VLESS Reality inbound');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('getConnectionLink rejects with the same exception', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_REALITY] }),
+      ) as typeof fetch;
+
+      const promise = vpnService().getConnectionLink(1);
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow('not a VLESS Reality inbound');
+    });
+
+    it('falls back to the host of target when serverNames is empty', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_SERVER_NAMES] }),
+      ) as typeof fetch;
+
+      const status = await vpnService().getStatus();
+      const { link } = await vpnService().getConnectionLink(1);
+
+      expect(status.sni).toBe('www.samsung.com');
+      expect(link).toContain('sni=www.samsung.com');
     });
   });
 

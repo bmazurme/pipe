@@ -35,7 +35,11 @@ interface XrayInbound {
     lastOnline: number;
   }[];
   settings: { clients: { id: string; flow: string }[] };
-  streamSettings: { realitySettings: XrayRealitySettings };
+  streamSettings?: { realitySettings?: XrayRealitySettings };
+}
+
+function sniOf(reality: XrayRealitySettings): string {
+  return reality.serverNames[0] ?? reality.target.split(':')[0];
 }
 
 export interface VpnStatus {
@@ -183,18 +187,28 @@ export class VpnService {
     return inbound;
   }
 
-  private async getStatusFor(connection: VpnConnection): Promise<VpnStatus> {
-    const inbound = await this.getInbound(connection);
-    const stats = inbound.clientStats?.[0];
+  // A panel whose first inbound is some other protocol has no Reality settings; reading
+  // them used to throw a TypeError, which callers could only report as a generic 500.
+  private realityOf(inbound: XrayInbound): XrayRealitySettings {
     const reality = inbound.streamSettings?.realitySettings;
 
-    // A panel whose first inbound is some other protocol has no Reality settings; reading
-    // them used to throw a TypeError, which the UI could only report as a generic failure.
     if (!reality) {
       throw new BadGatewayException(
         'The first inbound on the VPN panel is not a VLESS Reality inbound',
       );
     }
+
+    return {
+      ...reality,
+      serverNames: reality.serverNames ?? [],
+      shortIds: reality.shortIds ?? [],
+    };
+  }
+
+  private async getStatusFor(connection: VpnConnection): Promise<VpnStatus> {
+    const inbound = await this.getInbound(connection);
+    const stats = inbound.clientStats?.[0];
+    const reality = this.realityOf(inbound);
 
     return {
       lastOnline:
@@ -203,7 +217,7 @@ export class VpnService {
           : null,
       upBytes: stats?.up ?? 0,
       downBytes: stats?.down ?? 0,
-      sni: reality.serverNames[0] ?? reality.target.split(':')[0],
+      sni: sniOf(reality),
       fingerprint: reality.settings.fingerprint,
       port: inbound.port,
     };
@@ -277,7 +291,7 @@ export class VpnService {
   private async buildClientConfig(connection: VpnConnection): Promise<string> {
     const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
-    const reality = inbound.streamSettings.realitySettings;
+    const reality = this.realityOf(inbound);
 
     if (!client) {
       throw new BadGatewayException(
@@ -306,8 +320,7 @@ export class VpnService {
             network: 'tcp',
             security: 'reality',
             realitySettings: {
-              serverName:
-                reality.serverNames[0] ?? reality.target.split(':')[0],
+              serverName: sniOf(reality),
               fingerprint: reality.settings.fingerprint,
               publicKey: reality.settings.publicKey,
               shortId: reality.shortIds[0],
@@ -346,7 +359,7 @@ export class VpnService {
     const connection = await this.vpnConnectionsService.findOne(id);
     const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
-    const reality = inbound.streamSettings.realitySettings;
+    const reality = this.realityOf(inbound);
 
     if (!client) {
       throw new BadGatewayException(
@@ -354,7 +367,7 @@ export class VpnService {
       );
     }
 
-    const sni = reality.serverNames[0] ?? reality.target.split(':')[0];
+    const sni = sniOf(reality);
     const params = new URLSearchParams({
       security: 'reality',
       encryption: 'none',

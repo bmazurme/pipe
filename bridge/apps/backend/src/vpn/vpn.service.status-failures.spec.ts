@@ -1,7 +1,7 @@
 import { InternalServerErrorException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import { VpnConnection } from './entities/vpn-connection.entity';
+import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService } from './vpn.service';
 
@@ -42,10 +42,10 @@ function service(connection: VpnConnection | null = CONNECTION) {
     }),
     findOne: jest.fn(async () => CONNECTION),
   } as unknown as VpnConnectionsService;
-  const config = { get: () => 'x' } as unknown as ConfigService;
+  const github = {} as unknown as GithubActionsService;
 
   return {
-    vpn: new VpnService(config, connections, appLogs as never),
+    vpn: new VpnService(connections, github, appLogs as never),
     appLogs,
   };
 }
