@@ -146,8 +146,11 @@ export class WorkerController {
     status: string;
     cancelRequestedAt: Date | null;
   }> {
-    const { id: jobId, status, cancelRequestedAt } =
-      await this.workerService.getCancelState(id, currentUser.id);
+    const {
+      id: jobId,
+      status,
+      cancelRequestedAt,
+    } = await this.workerService.getCancelState(id, currentUser.id);
 
     return { id: jobId, status, cancelRequestedAt };
   }
