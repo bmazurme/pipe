@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { AppLogService } from '../logs/app-log.service';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { VpnConnectionsService } from './vpn-connections.service';
@@ -222,6 +223,95 @@ describe('VpnService', () => {
       await service.checkConnectionStatus(1, true);
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('status cache invalidation and failure reporting', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function okFetch(): jest.Mock {
+      const mock = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      );
+      globalThis.fetch = mock as unknown as typeof fetch;
+      return mock;
+    }
+
+    it.each([
+      ['panelUrl', { panelUrl: 'https://other.example.com/panel' }],
+      ['panelApiToken', { panelApiToken: 'rotated-token' }],
+    ])('refetches within the TTL after %s is edited', async (_name, edit) => {
+      const fetchMock = okFetch();
+      const connection = { ...ACTIVE_CONNECTION } as VpnConnection;
+      const service = vpnService([connection]);
+
+      await service.getStatus();
+      Object.assign(connection, edit);
+      await service.getStatus();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs an identical failure once per 5 minutes', async () => {
+      globalThis.fetch = jest.fn(
+        async () => new Response('nope', { status: 500 }),
+      ) as unknown as typeof fetch;
+      const record = jest.fn();
+      const service = new VpnService(
+        configService(),
+        fakeVpnConnectionsService(),
+        { record } as unknown as AppLogService,
+      );
+
+      for (let i = 0; i < 3; i++) {
+        await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
+          'VPN panel request failed (500)',
+        );
+      }
+      expect(record).toHaveBeenCalledTimes(1);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'vpn.status_failed',
+          message: expect.stringContaining('VPN panel request failed (500)'),
+        }),
+      );
+
+      jest.advanceTimersByTime(5 * 60_000 + 1);
+      await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
+        BadGatewayException,
+      );
+      expect(record).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([401, 403])(
+      'reports a rejected API token on a %i response',
+      async (status) => {
+        globalThis.fetch = jest.fn(
+          async () => new Response('denied', { status }),
+        ) as unknown as typeof fetch;
+
+        await expect(vpnService().getStatus()).rejects.toThrow(
+          `rejected the API token (${status})`,
+        );
+      },
+    );
+
+    it('maps a network failure to its cause code', async () => {
+      globalThis.fetch = jest.fn(async () => {
+        throw new TypeError('fetch failed', {
+          cause: { code: 'CERT_HAS_EXPIRED' },
+        });
+      }) as unknown as typeof fetch;
+
+      await expect(vpnService().getStatus()).rejects.toThrow(
+        'is unreachable from bridge (CERT_HAS_EXPIRED)',
+      );
     });
   });
 
