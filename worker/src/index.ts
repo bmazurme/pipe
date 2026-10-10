@@ -75,10 +75,10 @@ export async function processJob(
   // from `log` below, which forwards the model's textual output to bridge.
   const jlog = jobLogger(job.id);
 
-  // `flushed` chains each send onto the previous one, so appends stay
-  // strictly ordered and never overlap in flight — matters because
-  // WorkerService.appendLog does `job.logs += chunk`, which would scramble
-  // the log if an earlier chunk's request resolved after a later one's.
+  // `flushed` chains each send onto the previous one, so chunks reach bridge
+  // in the order they were produced and never overlap in flight — bridge
+  // appends atomically, but it cannot reorder requests that arrive out of
+  // order.
   let pendingLog = '';
   let flushed: Promise<void> = Promise.resolve();
 

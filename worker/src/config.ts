@@ -9,7 +9,7 @@ export interface WorkerConfig {
   pollIntervalSec: number;
   workDir: string;
   workerName: string;
-  // SOCKS5/HTTP proxy for reaching AI providers from behind a geo-restricted
+  // HTTP proxy (not SOCKS5 — see README) for reaching AI providers from behind a geo-restricted
   // host — scoped to provider calls only (OpenAI-compatible fetches, and the
   // claude CLI's own env), never bridge's own API: bridge is reachable
   // directly from wherever worker runs, so routing that through the proxy
