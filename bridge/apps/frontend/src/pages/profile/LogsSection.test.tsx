@@ -109,7 +109,7 @@ describe('LogsSection load errors', () => {
     );
     renderSection();
 
-    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(await screen.findByText(/Не удалось загрузить сводку — boom \(HTTP 500\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
   });
 
@@ -120,7 +120,7 @@ describe('LogsSection load errors', () => {
     );
     renderSection();
 
-    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(await screen.findByText(/Не удалось загрузить события — boom \(HTTP 500\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
     expect(screen.queryByText('Событий нет')).toBeNull();
   });

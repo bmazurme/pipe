@@ -4,6 +4,7 @@ import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Select, Skeleton
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
+  describeApiError,
   getErrorMessage,
   LogLevel,
   LogSource,
@@ -94,7 +95,7 @@ export function LogsSection() {
         ) : isSummaryError ? (
           <Alert
             theme="danger"
-            message={getErrorMessage(summaryError, 'Не удалось загрузить логи')}
+            message={`Не удалось загрузить сводку — ${describeApiError(summaryError)}`}
             actions={<Button view="outlined" size="m" onClick={() => void refetchSummary()}>Повторить</Button>}
           />
         ) : summary ? (
@@ -159,7 +160,7 @@ export function LogsSection() {
         ) : isListError ? (
           <Alert
             theme="danger"
-            message={getErrorMessage(listError, 'Не удалось загрузить логи')}
+            message={`Не удалось загрузить события — ${describeApiError(listError)}`}
             actions={<Button view="outlined" size="m" onClick={() => void refetchList()}>Повторить</Button>}
           />
         ) : onlyInfoReturned ? (
