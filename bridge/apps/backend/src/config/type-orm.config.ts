@@ -3,29 +3,7 @@ import { join } from 'path';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-import { ApiKey } from '../auth/entities/api-key.entity';
-import { Session } from '../auth/entities/session.entity';
-import { Chat } from '../chat/entities/chat.entity';
-import { ChatMessage } from '../chat/entities/chat-message.entity';
-import { ImproveRun } from '../improve/entities/improve-run.entity';
-import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
-import { ImproveSettings } from '../improve/entities/improve-settings.entity';
-import { AppLog } from '../logs/entities/app-log.entity';
-import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
-import { LoopEvent } from '../loop/entities/loop-event.entity';
-import { LoopRun } from '../loop/entities/loop-run.entity';
-import { PurgeEntry } from '../purge/entities/purge-entry.entity';
-import { Secret } from '../secrets/entities/secret.entity';
-import { NotificationSettings } from '../telegram/entities/notification-settings.entity';
-import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
-import { StoredFile } from '../storage/entities/stored-file.entity';
-import { DayOff } from '../time/entities/day-off.entity';
-import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
-import { User } from '../users/entities/user.entity';
-import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
-import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
-import { Job } from '../worker/entities/job.entity';
-import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
+import { ENTITIES } from './entities';
 
 export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
@@ -37,31 +15,7 @@ export const TypeOrmModuleConfig = TypeOrmModule.forRootAsync({
       username: configService.get<string>('POSTGRES_USER') ?? 'postgres',
       password: configService.get<string>('POSTGRES_PASSWORD') ?? 'postgres',
       database: configService.get<string>('POSTGRES_DB') ?? 'ntlstl-db',
-      entities: [
-        User,
-        StoredFile,
-        PurgeEntry,
-        Session,
-        ApiKey,
-        DayOff,
-        TimeReportEntry,
-        Job,
-        Chat,
-        ChatMessage,
-        ClaudeCredential,
-        VpnConnection,
-        WorkerHeartbeat,
-        Secret,
-        LoopRun,
-        LoopEvent,
-        ClientHeartbeat,
-        TelegramOutbox,
-        NotificationSettings,
-        AppLog,
-        ImproveRun,
-        ImproveSchedule,
-        ImproveSettings,
-      ],
+      entities: ENTITIES,
       // Dev used to run on synchronize: true (schema auto-matched to
       // entities, no migration files involved at all) — real migrations now
       // run everywhere, dev included, so the schema a developer actually
