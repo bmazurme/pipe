@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
-import { encryptedColumn } from './encrypted-column.transformer';
+import { Logger } from '@nestjs/common';
+
+import {
+  encryptedColumn,
+  resetDecryptWarnings,
+} from './encrypted-column.transformer';
 
 const ORIGINAL_ENV = process.env.CREDENTIALS_ENC_KEY;
 
@@ -52,5 +57,51 @@ describe('encryptedColumn', () => {
     const encrypted = encryptedColumn.to('secret') as string;
     delete process.env.CREDENTIALS_ENC_KEY;
     expect(encryptedColumn.from(encrypted)).toBe(encrypted);
+  });
+});
+
+describe('encryptedColumn decrypt warnings', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    process.env.CREDENTIALS_ENC_KEY = randomBytes(32).toString('base64');
+    resetDecryptWarnings();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  afterAll(() => {
+    process.env.CREDENTIALS_ENC_KEY = ORIGINAL_ENV;
+  });
+
+  it('returns the raw value and warns once, without leaking the value, when the key is wrong', () => {
+    const encrypted = encryptedColumn.to('plain-secret-value') as string;
+    process.env.CREDENTIALS_ENC_KEY = randomBytes(32).toString('base64');
+
+    expect(encryptedColumn.from(encrypted)).toBe(encrypted);
+    expect(encryptedColumn.from(encrypted)).toBe(encrypted);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0][0]);
+    expect(message).toContain('v1');
+    expect(message).not.toContain('plain-secret-value');
+    expect(message).not.toContain(encrypted.split(':')[3]);
+  });
+
+  it('warns naming the env var when the key is missing', () => {
+    const encrypted = encryptedColumn.to('secret') as string;
+    delete process.env.CREDENTIALS_ENC_KEY;
+
+    expect(encryptedColumn.from(encrypted)).toBe(encrypted);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('CREDENTIALS_ENC_KEY');
+  });
+
+  it('does not warn for a legacy plaintext row', () => {
+    encryptedColumn.from('legacy-plaintext');
+    expect(warn).not.toHaveBeenCalled();
   });
 });
