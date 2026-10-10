@@ -376,6 +376,48 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('claim orphan-sweep throttle', () => {
+    const sweepCalls = () =>
+      repository.query!.mock.calls.filter(([sql]) =>
+        (sql as string).includes('errorMessage'),
+      ).length;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      repository.query!.mockResolvedValue([[], 0]);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('sweeps on the first claim and skips a second one within 60 s', async () => {
+      await service.claim(7, 'swarm-worker');
+      jest.advanceTimersByTime(30_000);
+      await service.claim(7, 'swarm-worker');
+
+      expect(sweepCalls()).toBe(1);
+      // Both polls still reach the claim query.
+      expect(repository.query).toHaveBeenCalledTimes(3);
+    });
+
+    it('sweeps again on the first claim after the window', async () => {
+      await service.claim(7, 'swarm-worker');
+      jest.advanceTimersByTime(60_000);
+      await service.claim(7, 'swarm-worker');
+
+      expect(sweepCalls()).toBe(2);
+    });
+
+    it('sweeps on the first claim of a new worker name', async () => {
+      await service.claim(7, 'swarm-worker');
+      await service.claim(7, 'other-worker');
+
+      expect(sweepCalls()).toBe(2);
+    });
+  });
+
   describe('claim', () => {
     // node-postgres (via TypeORM's Repository.query) returns
     // [rows, affectedCount] for an UPDATE, not a flat rows array — these
