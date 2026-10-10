@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   ParseIntPipe,
   Query,
@@ -23,6 +24,7 @@ import { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from '../storage/config/multer.config';
+import { StoredFile } from '../storage/entities/stored-file.entity';
 import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
@@ -47,6 +49,8 @@ const MAX_LOGS_FROM = 2_147_483_646;
 @Controller('api/v1/worker/jobs')
 @UseGuards(JwtOrApiKeyGuard)
 export class WorkerController {
+  private readonly logger = new Logger(WorkerController.name);
+
   constructor(
     private readonly workerService: WorkerService,
     private readonly claudeCredentialsService: ClaudeCredentialsService,
@@ -196,7 +200,13 @@ export class WorkerController {
   ): Promise<void> {
     const file = await this.workerService.getSourceFile(id, currentUser.id);
 
-    res.download(this.workerService.filePath(file), file.originalName);
+    res.download(
+      this.workerService.filePath(file),
+      file.originalName,
+      (err) => {
+        if (err) this.respondDownloadError(res, file, err);
+      },
+    );
   }
 
   @Get(':id/result/download')
@@ -207,7 +217,29 @@ export class WorkerController {
   ): Promise<void> {
     const file = await this.workerService.getResultFile(id, currentUser.id);
 
-    res.download(this.workerService.filePath(file), file.originalName);
+    res.download(
+      this.workerService.filePath(file),
+      file.originalName,
+      (err) => {
+        if (err) this.respondDownloadError(res, file, err);
+      },
+    );
+  }
+
+  // Same shape as StorageController.respondDownloadError: res.download's
+  // callback is the only place a missing file surfaces; without it the
+  // request hangs. headersSent guards a mid-stream failure.
+  private respondDownloadError(
+    res: Response,
+    file: StoredFile,
+    err: Error,
+  ): void {
+    this.logger.warn(
+      `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
+    );
+    if (!res.headersSent) {
+      res.status(404).json({ message: 'File is missing on disk' });
+    }
   }
 
   // Stops a job — see WorkerService.cancel. POST (it mutates), and a sibling of
