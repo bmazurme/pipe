@@ -27,11 +27,12 @@ import { VpnService, VpnStatus } from './vpn.service';
 // IMPROVEMENTS_TECH.md 1.4; the actual fix is moving these out of bridge's
 // backend, not done in this pass). What's here instead: a required
 // `confirm: true` body field (no accidental/replayed trigger), a much
-// stricter per-route throttle than the app default, and an audit log line
-// naming who called what and when.
+// stricter per-route throttle than the app default (10/min, applied only to
+// the three mutation routes below — not the polled, read-only GET status,
+// which uses the global default), and an audit log line naming who called
+// what and when.
 @Controller('api/v1/vpn')
 @UseGuards(JwtGuard)
-@Throttle({ default: { limit: 10, ttl: 60_000 } })
 export class VpnController {
   private readonly logger = new Logger(VpnController.name);
 
@@ -43,6 +44,7 @@ export class VpnController {
   }
 
   @Post('sync')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async sync(
     @Body() _dto: ConfirmActionDto,
@@ -55,6 +57,7 @@ export class VpnController {
   }
 
   @Post('worker-secrets')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async setWorkerSecret(
     @Body() dto: SetWorkerSecretDto,
@@ -67,6 +70,7 @@ export class VpnController {
   }
 
   @Post('provision')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async provision(
     @Body() dto: ProvisionVpnServerDto,
