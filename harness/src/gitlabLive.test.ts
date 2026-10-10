@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { fetchGitlabLiveStatus, loadGitlabLiveConfig, resolveTaskBranch, type GitlabLiveConfigPaths } from './gitlabLive.js';
+import { fetchGitlabLiveStatus, loadGitlabLiveConfig, resolveTaskBranch, settleWithLimit, type GitlabLiveConfigPaths } from './gitlabLive.js';
 import type { TaskEntry } from './collect.js';
 
 function makeConfigPaths(dir: string): GitlabLiveConfigPaths {
@@ -28,6 +28,32 @@ describe('resolveTaskBranch', () => {
   it('is undefined when there\'s no signal to derive a branch from at all', () => {
     const task: TaskEntry = { key: '402:6', syncAgent: { lastOwnOutputHash: 'abc' } };
     assert.equal(resolveTaskBranch(task), undefined);
+  });
+});
+
+describe('settleWithLimit', () => {
+  it('never runs more than `limit` calls at once, and keeps the order of the items', async () => {
+    let inFlight = 0;
+    let peak = 0;
+
+    const results = await settleWithLimit([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 3, async (item) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      if (item === 4) throw new Error('boom');
+      return item * 2;
+    });
+
+    assert.equal(peak, 3);
+    assert.equal(results.length, 10);
+    assert.deepEqual(results[0], { status: 'fulfilled', value: 2 });
+    assert.equal(results[3].status, 'rejected');
+    assert.deepEqual(results[9], { status: 'fulfilled', value: 20 });
+  });
+
+  it('returns an empty list for no items', async () => {
+    assert.deepEqual(await settleWithLimit([], 5, async () => 1), []);
   });
 });
 
