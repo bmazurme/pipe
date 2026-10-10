@@ -48,6 +48,7 @@ function setup(
     }),
   };
   const settings = {
+    find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn(async (s: object) => s),
   };
@@ -94,6 +95,7 @@ function setup(
   };
   const workers = {
     create: jest.fn().mockResolvedValue({ id: 321 }),
+    findUnstartedIssueParcels: jest.fn().mockResolvedValue([]),
     findOwned: jest.fn(),
     cancel: jest.fn().mockResolvedValue(undefined),
   };
@@ -541,34 +543,36 @@ describe('schedules', () => {
 
 describe('auto-start of pushed parcels', () => {
   it("starts a job for each parcel the query returns, with the account's model", async () => {
-    const { service, dataSource, workers } = setup();
-    dataSource.query.mockResolvedValue([
-      { fileId: 40, userId: 3, model: 'opus' },
+    const { service, settings, workers } = setup();
+    const since = new Date('2026-10-01T00:00:00Z');
+    settings.find.mockResolvedValue([
+      { userId: 3, autoStartModel: 'opus', autoStartSince: since },
     ]);
+    workers.findUnstartedIssueParcels.mockResolvedValue([{ id: 40 }]);
     workers.create.mockResolvedValue({ id: 77 });
 
     await service.autoStartParcels();
 
+    expect(workers.create).toHaveBeenCalledTimes(1);
     expect(workers.create).toHaveBeenCalledWith(3, {
       sourceFileId: 40,
       model: 'opus',
     });
-    // The query only considers unencrypted outbound issue parcels created after
-    // the feature was switched on, that no job has picked up, and not Improve's own.
-    const sql = dataSource.query.mock.calls[0][0] as string;
-    expect(sql).toContain("f.direction = 'outbound'");
-    expect(sql).toContain('autoStartSince');
-    expect(sql).toContain("NOT LIKE '%.enc'");
-    expect(sql).toContain('NOT EXISTS');
-    expect(sql).toContain("NOT LIKE 'improve:%'");
+    // Worker owns which parcels are eligible; Improve only asks, excluding its own.
+    expect(workers.findUnstartedIssueParcels).toHaveBeenCalledWith(
+      3,
+      since,
+      expect.any(Number),
+      'improve:',
+    );
   });
 
   it('keeps going when one parcel cannot be started', async () => {
-    const { service, dataSource, workers } = setup();
-    dataSource.query.mockResolvedValue([
-      { fileId: 1, userId: 3, model: 'gpt' },
-      { fileId: 2, userId: 3, model: 'gpt' },
+    const { service, settings, workers } = setup();
+    settings.find.mockResolvedValue([
+      { userId: 3, autoStartModel: 'gpt', autoStartSince: new Date() },
     ]);
+    workers.findUnstartedIssueParcels.mockResolvedValue([{ id: 1 }, { id: 2 }]);
     workers.create
       .mockRejectedValueOnce(new Error('File not found'))
       .mockResolvedValueOnce({ id: 9 });
