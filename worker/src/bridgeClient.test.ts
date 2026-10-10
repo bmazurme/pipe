@@ -110,6 +110,55 @@ describe('WorkerBridgeClient', () => {
     });
   });
 
+  describe('uploadResult retry', () => {
+    const client = new WorkerBridgeClient('http://bridge.local', 'brk_test');
+    const upload = (delays: number[]) => client.uploadResult(1, 'r.zip', Buffer.from('x'), delays);
+
+    it('retries after a 503', async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        return calls === 1 ? new Response('down', { status: 503 }) : new Response('{}', { status: 200 });
+      }) as typeof fetch;
+
+      await upload([0, 0]);
+      assert.equal(calls, 2);
+    });
+
+    it('retries after a network error', async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        if (calls === 1) throw new TypeError('fetch failed');
+        return new Response('{}', { status: 200 });
+      }) as typeof fetch;
+
+      await upload([0, 0]);
+      assert.equal(calls, 2);
+    });
+
+    it('does not retry a 400 or 404', async () => {
+      for (const status of [400, 404]) {
+        let calls = 0;
+        globalThis.fetch = (async () => {
+          calls++;
+          return new Response('bad', { status });
+        }) as typeof fetch;
+
+        await assert.rejects(upload([0, 0]), new RegExp(`failed \\(${status}\\): bad`));
+        assert.equal(calls, 1);
+      }
+    });
+
+    it('throws the last error once attempts are exhausted', async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => new Response(`n${++calls}`, { status: 502 })) as typeof fetch;
+
+      await assert.rejects(upload([0, 0]), /Uploading result for job 1 failed \(502\): n3/);
+      assert.equal(calls, 3);
+    });
+  });
+
   describe('appendLog', () => {
     it('posts the chunk', async () => {
       let capturedBody: unknown;

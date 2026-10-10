@@ -4,6 +4,8 @@
 // Transfers get a longer budget since a parcel/result can be a real file.
 const API_TIMEOUT_MS = 15_000;
 const TRANSFER_TIMEOUT_MS = 120_000;
+const UPLOAD_RETRY_DELAYS_MS = [2000, 5000];
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 
 export type RemoteJobStatus = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -145,19 +147,49 @@ export class WorkerBridgeClient {
     }
   }
 
-  async uploadResult(jobId: number, filename: string, buffer: Buffer): Promise<void> {
-    const form = new FormData();
-    form.append('file', new Blob([new Uint8Array(buffer)]), filename);
+  // The run before this call can take up to 30 minutes, so a transient failure
+  // here (network error, timeout, 502/503/504 during a bridge redeploy) is
+  // retried rather than discarding the finished work. 4xx is never retried.
+  // `delaysMs` is injectable so tests don't sleep; its length is the retry count.
+  async uploadResult(
+    jobId: number,
+    filename: string,
+    buffer: Buffer,
+    delaysMs: number[] = UPLOAD_RETRY_DELAYS_MS,
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      let failure: Error;
+      let retryable: boolean;
 
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/result`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: form,
-      signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
-    });
+      try {
+        // A used FormData body can't be reused, so rebuild it per attempt.
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(buffer)]), filename);
 
-    if (!response.ok) {
-      throw new Error(`Uploading result for job ${jobId} failed (${response.status}): ${await response.text()}`);
+        const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/result`, {
+          method: 'POST',
+          headers: this.authHeaders(),
+          body: form,
+          signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
+        });
+
+        if (response.ok) return;
+
+        failure = new Error(
+          `Uploading result for job ${jobId} failed (${response.status}): ${await response.text()}`,
+        );
+        retryable = RETRYABLE_STATUSES.has(response.status);
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
+        retryable = failure instanceof TypeError || failure.name === 'TimeoutError';
+      }
+
+      if (!retryable || attempt >= delaysMs.length) throw failure;
+
+      console.warn(
+        `Uploading result for job ${jobId} failed (attempt ${attempt + 1}), retrying in ${delaysMs[attempt]} ms: ${failure.message}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
     }
   }
 }
