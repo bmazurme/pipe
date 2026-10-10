@@ -4,6 +4,7 @@ import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Select, Skeleton
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
+  describeApiError,
   getErrorMessage,
   LogLevel,
   LogSource,
@@ -32,8 +33,20 @@ export function LogsSection() {
   const [onlyProblems, setOnlyProblems] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const { data: summary, isLoading: isSummaryLoading } = useGetLogSummaryQuery(days);
-  const { data: entries, isLoading: isListLoading } = useListLogsQuery({
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = useGetLogSummaryQuery(days);
+  const {
+    data: entries,
+    isLoading: isListLoading,
+    isError: isListError,
+    error: listError,
+    refetch: refetchList,
+  } = useListLogsQuery({
     days,
     limit: 30,
     ...(source !== 'all' ? { source } : {}),
@@ -43,6 +56,7 @@ export function LogsSection() {
   const [exportLogs, { isLoading: isExporting }] = useExportLogsMutation();
 
   const visible = (entries ?? []).filter((entry) => !onlyProblems || entry.level !== 'info');
+  const onlyInfoReturned = onlyProblems && (entries?.length ?? 0) > 0 && visible.length === 0;
 
   const handleExport = async () => {
     setExportError(null);
@@ -78,6 +92,12 @@ export function LogsSection() {
 
         {isSummaryLoading ? (
           <Skeleton className={styles.logsSkeleton} />
+        ) : isSummaryError ? (
+          <Alert
+            theme="danger"
+            message={`Не удалось загрузить сводку — ${describeApiError(summaryError)}`}
+            actions={<Button view="outlined" size="m" onClick={() => void refetchSummary()}>Повторить</Button>}
+          />
         ) : summary ? (
           <div className={styles.statGrid}>
             <div className={styles.stat}>
@@ -137,6 +157,14 @@ export function LogsSection() {
 
         {isListLoading ? (
           <Skeleton className={styles.logsSkeleton} />
+        ) : isListError ? (
+          <Alert
+            theme="danger"
+            message={`Не удалось загрузить события — ${describeApiError(listError)}`}
+            actions={<Button view="outlined" size="m" onClick={() => void refetchList()}>Повторить</Button>}
+          />
+        ) : onlyInfoReturned ? (
+          <EmptyState icon={Receipt} title="Проблем не найдено" description="Среди последних 30 событий нет предупреждений и ошибок" />
         ) : visible.length === 0 ? (
           <EmptyState icon={Receipt} title="Событий нет" description="За выбранный период ничего не записано." />
         ) : (
