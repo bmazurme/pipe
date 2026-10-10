@@ -81,9 +81,22 @@ function isTimeoutError(error: unknown): boolean {
   );
 }
 
+const STATUS_TTL_MS = 10_000;
+const STATUS_FAILURE_TTL_MS = 30_000;
+
+interface StatusCacheEntry {
+  // Connection URL + token: editing either invalidates the entry.
+  signature: string;
+  expiresAt: number;
+  inFlight?: Promise<VpnStatus>;
+  // The settled promise itself, so a cached failure rethrows the same exception.
+  result?: Promise<VpnStatus>;
+}
+
 @Injectable()
 export class VpnService {
   private readonly lastFailureLoggedAt = new Map<string, number>();
+  private readonly statusCache = new Map<number, StatusCacheEntry>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -218,11 +231,48 @@ export class VpnService {
     };
   }
 
+  // Polled status checks share a short-lived per-connection result (and one in-flight request),
+  // so open tabs don't each hit the panel. A failure is remembered longer than a success to
+  // stop hammering a broken panel. `force` bypasses and refreshes the cache.
+  private cachedStatusFor(
+    connection: VpnConnection,
+    force: boolean,
+  ): Promise<VpnStatus> {
+    const signature = `${connection.panelUrl}\n${connection.panelApiToken}`;
+    const now = Date.now();
+    const entry = this.statusCache.get(connection.id);
+
+    if (!force && entry && entry.signature === signature) {
+      if (entry.inFlight) return entry.inFlight;
+      if (entry.expiresAt > now && entry.result) return entry.result;
+    }
+
+    const fresh: StatusCacheEntry = { signature, expiresAt: 0 };
+    const request = this.getStatusFor(connection);
+
+    fresh.inFlight = request;
+    this.statusCache.set(connection.id, fresh);
+    request.then(
+      () => {
+        delete fresh.inFlight;
+        fresh.expiresAt = Date.now() + STATUS_TTL_MS;
+        fresh.result = request;
+      },
+      () => {
+        delete fresh.inFlight;
+        fresh.expiresAt = Date.now() + STATUS_FAILURE_TTL_MS;
+        fresh.result = request;
+      },
+    );
+
+    return request;
+  }
+
   async getStatus(): Promise<VpnStatus> {
     try {
       const active = await this.vpnConnectionsService.getActive();
 
-      return await this.getStatusFor(active);
+      return await this.cachedStatusFor(active, false);
     } catch (error) {
       this.recordStatusFailure(error);
       throw error;
@@ -231,11 +281,11 @@ export class VpnService {
 
   // Same status call against a specific connection, active or not — backs
   // the "Проверить" button on each row of the connections list.
-  async checkConnectionStatus(id: number): Promise<VpnStatus> {
+  async checkConnectionStatus(id: number, force = false): Promise<VpnStatus> {
     try {
       const connection = await this.vpnConnectionsService.findOne(id);
 
-      return await this.getStatusFor(connection);
+      return await this.cachedStatusFor(connection, force);
     } catch (error) {
       this.recordStatusFailure(error);
       throw error;
