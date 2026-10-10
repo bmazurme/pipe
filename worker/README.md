@@ -173,6 +173,13 @@ journalctl -u pipe-worker -f
 создаёт несуществующий путь). Полная изоляция (контейнер/VM на задачу) —
 открытый пункт, см. IMPROVEMENTS_TECH.md 1.3.
 
+`claude` CLI получает не весь `process.env`, а только allowlist
+(`buildClaudeEnv` в `claudeRunner.ts`): `PATH`, `HOME`, `LANG`, `LC_*`,
+`TMPDIR`, `TERM`, `USER`, `SHELL`, `NODE_*`, `XDG_*`, `CLAUDE_CODE_OAUTH_TOKEN`
+и переменные прокси (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`/`NO_PROXY`);
+`BRIDGE_API_KEY*`, `OPENAI_*`, `DEEPSEEK_*`, `QWEN_*` и любые `*_FILE`
+никогда не передаются, чтобы prompt injection в задаче не мог их прочитать.
+
 Каждая задача выполняется в свежей временной директории (`WORKER_WORK_DIR`),
 которая удаляется после завершения независимо от результата. У worker нет
 доступа ни к одному реальному git-репозиторию и не требуется — он только

@@ -5,8 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
-import { runClaude } from './claudeRunner.js';
+import { buildClaudeEnv, runClaude } from './claudeRunner.js';
 
+// The fake is steered by NODE_FAKE_* variables on purpose: runClaude now hands the CLI only an
+// allowlisted environment (NODE_* is on it), so differently named variables never reach it.
 // A fake `claude` prepended onto PATH instead of mocking node:child_process
 // — the real binary isn't available in CI, but this exercises runClaude's
 // actual spawn/stdout/stderr/exit-code wiring end to end, same approach as
@@ -21,11 +23,12 @@ function writeFakeClaude(dir: string): void {
       "process.argv.slice(2).forEach((arg, i) => console.log(`ARG${i}:${arg}`));",
       "console.log(`TOKEN:${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ''}`);",
       "console.log(`PROXY:${process.env.HTTP_PROXY ?? ''}`);",
-      "if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);",
-      "if (process.env.FAKE_HANG) {",
-      "  if (process.env.FAKE_IGNORE_SIGTERM) process.on('SIGTERM', () => {});",
+      "console.log(`BRIDGEKEY:${process.env.BRIDGE_API_KEY ?? ''}`);",
+      "if (process.env.NODE_FAKE_STDERR) process.stderr.write(process.env.NODE_FAKE_STDERR);",
+      "if (process.env.NODE_FAKE_HANG) {",
+      "  if (process.env.NODE_FAKE_IGNORE_SIGTERM) process.on('SIGTERM', () => {});",
       "  setInterval(() => {}, 1000);",
-      "} else process.exit(Number(process.env.FAKE_EXIT_CODE ?? '0'));",
+      "} else process.exit(Number(process.env.NODE_FAKE_EXIT_CODE ?? '0'));",
       '',
     ].join('\n'),
   );
@@ -33,8 +36,8 @@ function writeFakeClaude(dir: string): void {
 }
 
 const originalPath = process.env.PATH;
-const originalExitCode = process.env.FAKE_EXIT_CODE;
-const originalStderr = process.env.FAKE_STDERR;
+const originalExitCode = process.env.NODE_FAKE_EXIT_CODE;
+const originalStderr = process.env.NODE_FAKE_STDERR;
 
 beforeEach(() => {
   const binDir = mkdtempSync(path.join(tmpdir(), 'worker-claude-runner-test-'));
@@ -44,15 +47,57 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env.PATH = originalPath;
-  if (originalExitCode === undefined) delete process.env.FAKE_EXIT_CODE;
-  else process.env.FAKE_EXIT_CODE = originalExitCode;
-  delete process.env.FAKE_HANG;
-  delete process.env.FAKE_IGNORE_SIGTERM;
-  if (originalStderr === undefined) delete process.env.FAKE_STDERR;
-  else process.env.FAKE_STDERR = originalStderr;
+  if (originalExitCode === undefined) delete process.env.NODE_FAKE_EXIT_CODE;
+  else process.env.NODE_FAKE_EXIT_CODE = originalExitCode;
+  delete process.env.NODE_FAKE_HANG;
+  delete process.env.NODE_FAKE_IGNORE_SIGTERM;
+  if (originalStderr === undefined) delete process.env.NODE_FAKE_STDERR;
+  else process.env.NODE_FAKE_STDERR = originalStderr;
+});
+
+describe('buildClaudeEnv', () => {
+  it('drops worker secrets and *_FILE paths, keeping only allowlisted variables', () => {
+    const env = buildClaudeEnv({
+      BRIDGE_API_KEY: 'brk_x',
+      BRIDGE_API_KEY_FILE: '/run/secrets/bridge',
+      OPENAI_API_KEY: 'sk-1',
+      DEEPSEEK_API_KEY: 'sk-2',
+      QWEN_API_KEY_FILE: '/run/secrets/qwen',
+      RANDOM_OTHER: 'x',
+      PATH: '/usr/bin',
+    });
+    assert.deepEqual(env, { PATH: '/usr/bin' });
+  });
+
+  it('keeps the allowlisted families', () => {
+    const base = { HOME: '/h', LANG: 'C', LC_ALL: 'C', TMPDIR: '/t', NODE_OPTIONS: '--x', XDG_CACHE_HOME: '/c', NO_PROXY: 'a', CLAUDE_CODE_OAUTH_TOKEN: 'inherited' };
+    assert.deepEqual(buildClaudeEnv(base), base);
+  });
+
+  it('adds proxy values and lets a per-job token override the inherited one', () => {
+    const env = buildClaudeEnv({ PATH: '/p', CLAUDE_CODE_OAUTH_TOKEN: 'old' }, 'http://proxy:1', 'new');
+    assert.deepEqual(env, {
+      PATH: '/p',
+      CLAUDE_CODE_OAUTH_TOKEN: 'new',
+      HTTP_PROXY: 'http://proxy:1',
+      HTTPS_PROXY: 'http://proxy:1',
+      ALL_PROXY: 'http://proxy:1',
+    });
+  });
 });
 
 describe('runClaude', () => {
+  it('does not leak BRIDGE_API_KEY into the child', async () => {
+    process.env.BRIDGE_API_KEY = 'brk_secret';
+    try {
+      const result = await runClaude('/tmp', 'p', 'opus', () => {});
+      assert.match(result.output, /BRIDGEKEY:\s*$/m);
+      assert.ok(!result.output.includes('brk_secret'));
+    } finally {
+      delete process.env.BRIDGE_API_KEY;
+    }
+  });
+
   it('passes the prompt and model as CLI args, captures stdout as output', async () => {
     const chunks: string[] = [];
     const result = await runClaude('/tmp', 'do the thing', 'sonnet', (chunk) => chunks.push(chunk));
@@ -82,15 +127,15 @@ describe('runClaude', () => {
   });
 
   it('captures stderr through onOutput too, not just stdout', async () => {
-    process.env.FAKE_STDERR = 'a warning from the CLI';
+    process.env.NODE_FAKE_STDERR = 'a warning from the CLI';
     const chunks: string[] = [];
     await runClaude('/tmp', 'p', 'opus', (chunk) => chunks.push(chunk));
     assert.ok(chunks.join('').includes('a warning from the CLI'));
   });
 
   it('includes stderr in the result output alongside stdout, even on a failing run', async () => {
-    process.env.FAKE_STDERR = 'Invalid API key';
-    process.env.FAKE_EXIT_CODE = '1';
+    process.env.NODE_FAKE_STDERR = 'Invalid API key';
+    process.env.NODE_FAKE_EXIT_CODE = '1';
     const result = await runClaude('/tmp', 'p', 'opus', () => {});
     assert.equal(result.exitCode, 1);
     assert.match(result.output, /ARG0:-p/);
@@ -98,21 +143,21 @@ describe('runClaude', () => {
   });
 
   it('resolves with the child process exit code', async () => {
-    process.env.FAKE_EXIT_CODE = '3';
+    process.env.NODE_FAKE_EXIT_CODE = '3';
     const result = await runClaude('/tmp', 'p', 'opus', () => {});
     assert.equal(result.exitCode, 3);
   });
 
   it('kills a hung claude after timeoutMs and rejects with "timed out"', async () => {
-    process.env.FAKE_HANG = '1';
+    process.env.NODE_FAKE_HANG = '1';
     const started = Date.now();
     await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 300), /timed out/);
     assert.ok(Date.now() - started < 5000);
   });
 
   it('escalates to SIGKILL when claude ignores SIGTERM', async () => {
-    process.env.FAKE_HANG = '1';
-    process.env.FAKE_IGNORE_SIGTERM = '1';
+    process.env.NODE_FAKE_HANG = '1';
+    process.env.NODE_FAKE_IGNORE_SIGTERM = '1';
     await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 300, 200), /timed out/);
   });
 
@@ -122,7 +167,7 @@ describe('runClaude', () => {
   });
 
   it('kills a hung claude when the owner stops the job and rejects with CancelledError', async () => {
-    process.env.FAKE_HANG = '1';
+    process.env.NODE_FAKE_HANG = '1';
     const stop = new AbortController();
     setTimeout(() => stop.abort(), 150);
     const started = Date.now();
@@ -135,8 +180,8 @@ describe('runClaude', () => {
   });
 
   it('escalates to SIGKILL when claude ignores SIGTERM on a stop', async () => {
-    process.env.FAKE_HANG = '1';
-    process.env.FAKE_IGNORE_SIGTERM = '1';
+    process.env.NODE_FAKE_HANG = '1';
+    process.env.NODE_FAKE_IGNORE_SIGTERM = '1';
     const stop = new AbortController();
     setTimeout(() => stop.abort(), 100);
 
