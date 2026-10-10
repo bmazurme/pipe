@@ -1,6 +1,5 @@
-// Same reasoning as bridgeClient.ts's own API_TIMEOUT_MS — claim() runs in
-// the same poll loop, so a hung request here would freeze it just as badly.
-const API_TIMEOUT_MS = 15_000;
+import { bearer, bridgeFetch, readOptionalJson } from './bridgeHttp.js';
+
 // A file can be several MB.
 const ATTACHMENT_TIMEOUT_MS = 60_000;
 
@@ -35,71 +34,36 @@ export class ChatBridgeClient {
     private readonly apiKey: string,
   ) {}
 
-  private authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
+  private post(path: string, what: string, body: unknown, includeBody = false): Promise<Response> {
+    return bridgeFetch(
+      `${this.apiUrl}/api/v1/chat/turns${path}`,
+      { method: 'POST', headers: bearer(this.apiKey, true), body: JSON.stringify(body) },
+      { expectOk: what, includeBody },
+    );
   }
 
-  // Returns null when nothing is pending right now — bridge sends an empty
-  // body for that case (204 is the current behavior; an older deployment
-  // may still send 201 with no body), never a 200 with JSON "null".
-  // response.json() throws on an empty body ("Unexpected end of JSON
-  // input"), so this checks the raw text first rather than assuming a
-  // specific status code — robust either way, and to bridge deployments
-  // that haven't picked up the 204 fix yet.
+  // Returns null when nothing is pending right now (see readOptionalJson).
   async claim(): Promise<ClaimedChatTurn | null> {
-    const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/claim`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: '{}',
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Chat claim failed (${response.status}): ${await response.text()}`);
-    }
-
-    const text = await response.text();
-    return text ? (JSON.parse(text) as ClaimedChatTurn | null) : null;
+    return readOptionalJson<ClaimedChatTurn>(await this.post('/claim', 'Chat claim', {}, true));
   }
 
   // The bytes of one file in a turn's history (bridge refuses any file that is not part of
   // the chat the message belongs to).
   async downloadAttachment(messageId: number, attachmentId: number): Promise<Buffer> {
-    const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/${messageId}/attachments/${attachmentId}`, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-      signal: AbortSignal.timeout(ATTACHMENT_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Downloading attachment ${attachmentId} failed (${response.status})`);
-    }
+    const response = await bridgeFetch(
+      `${this.apiUrl}/api/v1/chat/turns/${messageId}/attachments/${attachmentId}`,
+      { headers: bearer(this.apiKey) },
+      { timeoutMs: ATTACHMENT_TIMEOUT_MS, expectOk: `Downloading attachment ${attachmentId}` },
+    );
 
     return Buffer.from(await response.arrayBuffer());
   }
 
   async complete(messageId: number, content: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/${messageId}/complete`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify({ content }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Completing chat turn ${messageId} failed (${response.status})`);
-    }
+    await this.post(`/${messageId}/complete`, `Completing chat turn ${messageId}`, { content });
   }
 
   async fail(messageId: number, errorMessage: string): Promise<void> {
-    const response = await fetch(`${this.apiUrl}/api/v1/chat/turns/${messageId}/fail`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify({ errorMessage }),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failing chat turn ${messageId} failed (${response.status})`);
-    }
+    await this.post(`/${messageId}/fail`, `Failing chat turn ${messageId}`, { errorMessage });
   }
 }
