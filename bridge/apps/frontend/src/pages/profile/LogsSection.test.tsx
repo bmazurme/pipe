@@ -97,3 +97,42 @@ describe('LogsSection', () => {
     expect(requested.some((path) => path.includes('logs/export?days=7'))).toBe(true);
   });
 });
+
+describe('LogsSection load errors', () => {
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  const failure = () => new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } });
+
+  it('shows an alert with retry when the summary fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => (request.url.includes('/logs/summary') ? failure() : json(ENTRIES))),
+    );
+    renderSection();
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+  });
+
+  it('shows an alert, not the empty state, when the list fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => (request.url.includes('/logs/summary') ? json(SUMMARY) : failure())),
+    );
+    renderSection();
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.queryByText('Событий нет')).toBeNull();
+  });
+
+  it('does not claim nothing was recorded when only info entries come back', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => (request.url.includes('/logs/summary') ? json(SUMMARY) : json([ENTRIES[2]]))),
+    );
+    renderSection();
+
+    expect(await screen.findByText('Среди последних 30 событий нет предупреждений и ошибок')).toBeTruthy();
+    expect(screen.queryByText('Событий нет')).toBeNull();
+  });
+});
