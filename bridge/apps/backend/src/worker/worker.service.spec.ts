@@ -114,6 +114,79 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('findOwnedWithLogsFrom', () => {
+    function mockSelectBuilder(result: {
+      entities: Partial<Job>[];
+      raw: { logsTail: string | null; logsLength: number }[];
+    }) {
+      const builder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue(result),
+      };
+      repository.createQueryBuilder!.mockReturnValue(builder);
+      return builder;
+    }
+
+    it('returns the log after logsFrom and its full length, for the owner', async () => {
+      const job = { id: 3, userId: 7, status: JobStatus.Running };
+      const builder = mockSelectBuilder({
+        entities: [job],
+        raw: [{ logsTail: 'second chunk\n', logsLength: 25 }],
+      });
+
+      await expect(service.findOwnedWithLogsFrom(3, 7, 12)).resolves.toEqual({
+        job,
+        logsTail: 'second chunk\n',
+        logsLength: 25,
+      });
+
+      // SUBSTRING is 1-based: skipping 12 characters starts at the 13th.
+      expect(builder.setParameter).toHaveBeenCalledWith('logsStart', 13);
+      expect(builder.where).toHaveBeenCalledWith(expect.any(String), {
+        id: 3,
+        userId: 7,
+      });
+    });
+
+    it('never selects the whole log or the context/history text', async () => {
+      const builder = mockSelectBuilder({
+        entities: [{ id: 3 }],
+        raw: [{ logsTail: '', logsLength: 0 }],
+      });
+
+      await service.findOwnedWithLogsFrom(3, 7, 0);
+
+      const columns = builder.select.mock.calls[0][0] as string[];
+      expect(columns).toContain('job.id');
+      expect(columns).toContain('job.status');
+      expect(columns).not.toContain('job.logs');
+      expect(columns).not.toContain('job.contextText');
+      expect(columns).not.toContain('job.historyText');
+    });
+
+    it('treats a missing tail as an empty one', async () => {
+      mockSelectBuilder({
+        entities: [{ id: 3 }],
+        raw: [{ logsTail: null, logsLength: 0 }],
+      });
+
+      await expect(service.findOwnedWithLogsFrom(3, 7, 40)).resolves.toEqual(
+        expect.objectContaining({ logsTail: '', logsLength: 0 }),
+      );
+    });
+
+    it('throws NotFoundException for a missing or foreign job', async () => {
+      mockSelectBuilder({ entities: [], raw: [] });
+
+      await expect(service.findOwnedWithLogsFrom(3, 7, 0)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('getCancelState', () => {
     it('selects only id, status and cancelRequestedAt for the owner', async () => {
       const row = { id: 3, status: JobStatus.Running, cancelRequestedAt: null };

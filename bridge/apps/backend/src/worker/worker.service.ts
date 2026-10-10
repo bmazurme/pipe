@@ -234,6 +234,49 @@ export class WorkerService {
     return job;
   }
 
+  // The job dialog's poll: the same job GET :id returns, but only the log characters
+  // after the first `logsFrom` ones, plus the whole log's length (so the caller can tell
+  // when it shrank). Both are counted by Postgres in characters, not bytes. Skips the
+  // context/history text (and so their decryption), which GET :id never returns anyway.
+  async findOwnedWithLogsFrom(
+    id: number,
+    userId: number,
+    logsFrom: number,
+  ): Promise<{ job: Job; logsTail: string; logsLength: number }> {
+    const columns = this.jobRepository.metadata.columns
+      .map((column) => column.propertyName)
+      .filter(
+        (name) =>
+          name !== 'logs' && name !== 'contextText' && name !== 'historyText',
+      );
+
+    // CAST: an untyped parameter would make SUBSTRING(... FROM $n) pick the regex form.
+    const { entities, raw } = await this.jobRepository
+      .createQueryBuilder('job')
+      .select(columns.map((name) => `job.${name}`))
+      .addSelect(
+        `SUBSTRING(COALESCE("job"."logs", '') FROM CAST(:logsStart AS integer))`,
+        'logsTail',
+      )
+      .addSelect(`CHAR_LENGTH(COALESCE("job"."logs", ''))`, 'logsLength')
+      .where('"job"."id" = :id AND "job"."userId" = :userId', {
+        id,
+        userId,
+      })
+      .setParameter('logsStart', logsFrom + 1)
+      .getRawAndEntities<{ logsTail: string | null; logsLength: number }>();
+
+    if (entities.length === 0) {
+      throw new NotFoundException('Job not found');
+    }
+
+    return {
+      job: entities[0],
+      logsTail: raw[0]?.logsTail ?? '',
+      logsLength: Number(raw[0]?.logsLength ?? 0),
+    };
+  }
+
   // Polled by the worker every few seconds while a job runs, so it reads only the
   // columns it answers with — never the unbounded `logs` or the context/history text.
   async getCancelState(

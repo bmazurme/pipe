@@ -1385,6 +1385,14 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "logsFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -3690,6 +3698,9 @@
           },
           "logs": {
             "type": "string"
+          },
+          "logsLength": {
+            "type": "number"
           },
           "errorMessage": {
             "type": "string",

@@ -12,6 +12,9 @@ export class JobResponseDto {
   historyCount: number | null;
   status: JobStatus;
   logs: string;
+  // Only with ?logsFrom=N: then `logs` holds just the characters after the first N,
+  // and this is the whole log's length in characters.
+  logsLength?: number;
   errorMessage: string | null;
   workerName: string | null;
   claimedAt: Date | null;
