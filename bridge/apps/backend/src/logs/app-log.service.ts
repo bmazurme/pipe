@@ -9,7 +9,7 @@ import { redact, sanitizeMeta } from './redact';
 import { summarize, LogSummary } from './summary';
 
 const DEFAULT_RETENTION_DAYS = 30;
-const MAX_EXPORT_ROWS = 20_000;
+export const MAX_EXPORT_ROWS = 20_000;
 
 export interface RecordInput {
   level: AppLogLevel;
@@ -72,22 +72,24 @@ export class AppLogService {
   }
 
   async summary(days: number): Promise<LogSummary> {
-    const rows = await this.repository.find({
-      where: { createdAt: MoreThanOrEqual(since(days)) },
-      order: { id: 'ASC' },
-      take: MAX_EXPORT_ROWS,
-    });
+    const rows = await this.exportRows(days);
 
-    return summarize(rows, days);
+    return {
+      ...summarize(rows, days),
+      truncated: rows.length >= MAX_EXPORT_ROWS,
+    };
   }
 
-  // Oldest first, capped — the export is for feeding an analysis, not paging.
-  exportRows(days: number): Promise<AppLog[]> {
-    return this.repository.find({
+  // Oldest first, capped to the NEWEST rows of the window — the export is for
+  // feeding an analysis, not paging.
+  async exportRows(days: number): Promise<AppLog[]> {
+    const rows = await this.repository.find({
       where: { createdAt: MoreThanOrEqual(since(days)) },
-      order: { id: 'ASC' },
+      order: { id: 'DESC' },
       take: MAX_EXPORT_ROWS,
     });
+
+    return rows.reverse();
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
