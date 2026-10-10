@@ -2,13 +2,12 @@ import {
   BadGatewayException,
   HttpException,
   Injectable,
-  InternalServerErrorException,
   Optional,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import { AppLogService } from '../logs/app-log.service';
-import { encryptSecretForGitHub } from './github-secrets.util';
+import { GithubActionsService } from './github-actions.service';
+import { OUTBOUND_FETCH_TIMEOUT_MS, isTimeoutError } from './outbound';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
@@ -55,10 +54,6 @@ export interface VpnStatus {
 // not absent — zero is not a valid epoch ms value for "just connected".
 const NEVER_ONLINE = 0;
 
-// Upper bound on any single outbound request (VPN panel or GitHub), so a
-// hung upstream can't hold a backend connection open indefinitely.
-const OUTBOUND_FETCH_TIMEOUT_MS = 10_000;
-
 // The panel is a separate server: when it cannot be reached the useful fact is *why* (refused,
 // no such host, bad certificate), which Node reports on the error's `cause`, not its message.
 function networkReason(error: unknown): string | null {
@@ -73,13 +68,6 @@ function networkReason(error: unknown): string | null {
 
 // How often the same failure is written to the app log: the VPN page polls every 15 s.
 const FAILURE_LOG_EVERY_MS = 5 * 60_000;
-
-function isTimeoutError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === 'TimeoutError' || error.name === 'AbortError')
-  );
-}
 
 const STATUS_TTL_MS = 10_000;
 const STATUS_FAILURE_TTL_MS = 30_000;
@@ -99,8 +87,8 @@ export class VpnService {
   private readonly statusCache = new Map<number, StatusCacheEntry>();
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly vpnConnectionsService: VpnConnectionsService,
+    private readonly githubActions: GithubActionsService,
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
@@ -125,16 +113,6 @@ export class VpnService {
       event: 'vpn.status_failed',
       message: `VPN status check failed: ${reason}`,
     });
-  }
-
-  private required(key: string): string {
-    const value = this.configService.get<string>(key);
-    if (!value) {
-      throw new InternalServerErrorException(
-        `${key} is not configured on bridge's backend`,
-      );
-    }
-    return value;
   }
 
   private async panelRequest<T>(
@@ -343,88 +321,19 @@ export class VpnService {
     return JSON.stringify(config, null, 2);
   }
 
-  private githubRepo(): string {
-    return this.required('GITHUB_REPO');
-  }
-
-  private async githubRequest<T>(path: string, init?: RequestInit): Promise<T> {
-    const url = `https://api.github.com/repos/${this.githubRepo()}${path}`;
-    const headers = {
-      Authorization: `Bearer ${this.required('GITHUB_TOKEN')}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(init?.headers ?? {}),
-    };
-
-    try {
-      const response = await fetch(url, {
-        ...init,
-        headers,
-        signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        throw new BadGatewayException(
-          `GitHub API request failed (${response.status}): ${await response.text()}`,
-        );
-      }
-
-      const text = await response.text();
-      return (text ? JSON.parse(text) : undefined) as T;
-    } catch (error) {
-      if (isTimeoutError(error)) {
-        throw new BadGatewayException(
-          `GitHub API request timed out after ${OUTBOUND_FETCH_TIMEOUT_MS}ms (${init?.method ?? 'GET'} ${path})`,
-        );
-      }
-      throw error;
-    }
-  }
-
-  // GitHub Actions secrets are write-only (sealed-box encrypted client-side,
-  // no corresponding read endpoint) — see github-secrets.util.ts.
-  private async setGithubSecret(name: string, value: string): Promise<void> {
-    const { key, key_id: keyId } = await this.githubRequest<{
-      key: string;
-      key_id: string;
-    }>('/actions/secrets/public-key');
-    const encryptedValue = await encryptSecretForGitHub(key, value);
-
-    await this.githubRequest(`/actions/secrets/${name}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ encrypted_value: encryptedValue, key_id: keyId }),
-    });
-  }
-
-  private async triggerWorkflow(workflowFile: string): Promise<void> {
-    await this.githubRequest(`/actions/workflows/${workflowFile}/dispatches`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'main' }),
-    });
-  }
-
-  private async triggerDeploy(): Promise<void> {
-    const workflowFile =
-      this.configService.get<string>('GITHUB_DEPLOY_WORKFLOW') ??
-      'deploy-bridge.yml';
-    await this.triggerWorkflow(workflowFile);
-  }
-
   // Pushes the worker's VPN client config built from the active connection's
   // current live state, then redeploys — the one-button fix for the
   // publicKey/SNI drift class of bug.
   async syncWorkerVpnConfig(): Promise<void> {
     const active = await this.vpnConnectionsService.getActive();
     const config = await this.buildClientConfig(active);
-    await this.setGithubSecret('VPN_CLIENT_CONFIG', config);
-    await this.triggerDeploy();
+    await this.githubActions.setSecret('VPN_CLIENT_CONFIG', config);
+    await this.githubActions.triggerDeploy();
   }
 
   async setWorkerSecret(name: WorkerSecretName, value: string): Promise<void> {
-    await this.setGithubSecret(name, value);
-    await this.triggerDeploy();
+    await this.githubActions.setSecret(name, value);
+    await this.githubActions.triggerDeploy();
   }
 
   // A ready vless:// Reality link for the end user's own VPN client
@@ -475,9 +384,12 @@ export class VpnService {
   // VpnConnectionsService), added by hand via POST /api/v1/vpn/connections
   // once the workflow's own log prints the new panel's URL/token.
   async provisionServer(dto: ProvisionVpnServerDto): Promise<void> {
-    await this.setGithubSecret('VPN_PROVISION_HOST', dto.host);
-    await this.setGithubSecret('VPN_PROVISION_SSH_USER', dto.sshUser);
-    await this.setGithubSecret('VPN_PROVISION_SSH_PASSWORD', dto.sshPassword);
-    await this.triggerWorkflow('provision-vpn-server.yml');
+    await this.githubActions.setSecret('VPN_PROVISION_HOST', dto.host);
+    await this.githubActions.setSecret('VPN_PROVISION_SSH_USER', dto.sshUser);
+    await this.githubActions.setSecret(
+      'VPN_PROVISION_SSH_PASSWORD',
+      dto.sshPassword,
+    );
+    await this.githubActions.dispatchWorkflow('provision-vpn-server.yml');
   }
 }

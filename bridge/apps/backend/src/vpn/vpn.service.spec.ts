@@ -3,21 +3,12 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
+import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService } from './vpn.service';
-
-const ENV: Record<string, string> = {
-  GITHUB_TOKEN: 'gh-token',
-  GITHUB_REPO: 'acme/pipe',
-};
-
-function configService(): ConfigService {
-  return { get: (key: string) => ENV[key] } as unknown as ConfigService;
-}
 
 const ACTIVE_CONNECTION = {
   id: 1,
@@ -53,10 +44,21 @@ function fakeVpnConnectionsService(
   } as unknown as VpnConnectionsService;
 }
 
-function vpnService(connections?: VpnConnection[]): VpnService {
+function fakeGithub() {
+  return {
+    setSecret: jest.fn(async () => undefined),
+    dispatchWorkflow: jest.fn(async () => undefined),
+    triggerDeploy: jest.fn(async () => undefined),
+  };
+}
+
+function vpnService(
+  connections?: VpnConnection[],
+  github: ReturnType<typeof fakeGithub> = fakeGithub(),
+): VpnService {
   return new VpnService(
-    configService(),
     fakeVpnConnectionsService(connections),
+    github as unknown as GithubActionsService,
   );
 }
 
@@ -247,23 +249,6 @@ describe('VpnService', () => {
       const init = (fetchMock.mock.calls[0] as unknown[])[1] as RequestInit;
       expect(init.signal).toBeInstanceOf(AbortSignal);
     });
-
-    it('passes an abort signal to the GitHub fetch and maps a timeout to BadGatewayException', async () => {
-      const fetchMock = jest.fn(async () => {
-        throw timeoutError();
-      });
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-      const promise = vpnService().setWorkerSecret(
-        WorkerSecretName.OpenAiApiKey,
-        'sk-test',
-      );
-
-      await expect(promise).rejects.toThrow(BadGatewayException);
-      await expect(promise).rejects.toThrow('GitHub API request timed out');
-      const init = (fetchMock.mock.calls[0] as unknown[])[1] as RequestInit;
-      expect(init.signal).toBeInstanceOf(AbortSignal);
-    });
   });
 
   describe('checkConnectionStatus', () => {
@@ -284,85 +269,6 @@ describe('VpnService', () => {
     it('throws NotFoundException for an unknown connection id', async () => {
       await expect(vpnService().checkConnectionStatus(99)).rejects.toThrow(
         'VPN connection not found',
-      );
-    });
-  });
-
-  describe('syncWorkerVpnConfig', () => {
-    it("builds the client config from the active connection's live inbound, pushes it as a secret, and redeploys", async () => {
-      const calls: { url: string; init?: RequestInit }[] = [];
-
-      globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
-        calls.push({ url, init });
-
-        if (url.includes('/panel/api/inbounds/list')) {
-          return jsonResponse({ success: true, obj: [INBOUND] });
-        }
-        if (url.endsWith('/actions/secrets/public-key')) {
-          return jsonResponse({
-            key: Buffer.alloc(32, 7).toString('base64'),
-            key_id: 'key-id-1',
-          });
-        }
-        if (url.endsWith('/actions/secrets/VPN_CLIENT_CONFIG')) {
-          return new Response(null, { status: 204 });
-        }
-        if (url.endsWith('/actions/workflows/deploy-bridge.yml/dispatches')) {
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
-
-      await vpnService().syncWorkerVpnConfig();
-
-      const secretPut = calls.find((c) =>
-        c.url.endsWith('/actions/secrets/VPN_CLIENT_CONFIG'),
-      );
-      expect(secretPut).toBeDefined();
-      const body = JSON.parse(secretPut!.init!.body as string);
-      expect(body.key_id).toBe('key-id-1');
-      expect(typeof body.encrypted_value).toBe('string');
-
-      const dispatch = calls.find((c) => c.url.endsWith('/dispatches'));
-      expect(dispatch).toBeDefined();
-      expect(JSON.parse(dispatch!.init!.body as string)).toEqual({
-        ref: 'main',
-      });
-    });
-  });
-
-  describe('setWorkerSecret', () => {
-    it('encrypts and pushes the named secret, then redeploys', async () => {
-      const calls: string[] = [];
-
-      globalThis.fetch = jest.fn(async (url: string) => {
-        calls.push(url);
-
-        if (url.endsWith('/actions/secrets/public-key')) {
-          return jsonResponse({
-            key: Buffer.alloc(32, 1).toString('base64'),
-            key_id: 'key-id-2',
-          });
-        }
-        if (url.endsWith(`/actions/secrets/${WorkerSecretName.OpenAiApiKey}`)) {
-          return new Response(null, { status: 204 });
-        }
-        if (url.endsWith('/dispatches')) {
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
-
-      await vpnService().setWorkerSecret(
-        WorkerSecretName.OpenAiApiKey,
-        'sk-test',
-      );
-
-      expect(calls).toContain(
-        `https://api.github.com/repos/acme/pipe/actions/secrets/${WorkerSecretName.OpenAiApiKey}`,
-      );
-      expect(calls).toContain(
-        'https://api.github.com/repos/acme/pipe/actions/workflows/deploy-bridge.yml/dispatches',
       );
     });
   });
@@ -400,52 +306,61 @@ describe('VpnService', () => {
     });
   });
 
-  describe('provisionServer', () => {
-    it('pushes the SSH credentials as secrets and triggers the provisioning workflow', async () => {
-      const calls: string[] = [];
+  describe('GitHub delegation', () => {
+    it('syncWorkerVpnConfig sets VPN_CLIENT_CONFIG from the live inbound, then deploys', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      ) as typeof fetch;
+      const github = fakeGithub();
 
-      globalThis.fetch = jest.fn(async (url: string) => {
-        calls.push(url);
+      await vpnService(undefined, github).syncWorkerVpnConfig();
 
-        if (url.endsWith('/actions/secrets/public-key')) {
-          return jsonResponse({
-            key: Buffer.alloc(32, 3).toString('base64'),
-            key_id: 'key-id-3',
-          });
-        }
-        if (
-          url.endsWith('/actions/secrets/VPN_PROVISION_HOST') ||
-          url.endsWith('/actions/secrets/VPN_PROVISION_SSH_USER') ||
-          url.endsWith('/actions/secrets/VPN_PROVISION_SSH_PASSWORD')
-        ) {
-          return new Response(null, { status: 204 });
-        }
-        if (
-          url.endsWith('/actions/workflows/provision-vpn-server.yml/dispatches')
-        ) {
-          return new Response(null, { status: 204 });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as typeof fetch;
+      expect(github.setSecret).toHaveBeenCalledWith(
+        'VPN_CLIENT_CONFIG',
+        expect.stringContaining('"publicKey": "pub-key"'),
+      );
+      expect(github.triggerDeploy).toHaveBeenCalledTimes(1);
+    });
 
-      await vpnService().provisionServer({
+    it('setWorkerSecret sets the secret, then deploys', async () => {
+      const github = fakeGithub();
+
+      await vpnService(undefined, github).setWorkerSecret(
+        WorkerSecretName.OpenAiApiKey,
+        'sk-test',
+      );
+
+      expect(github.setSecret).toHaveBeenCalledWith(
+        WorkerSecretName.OpenAiApiKey,
+        'sk-test',
+      );
+      expect(github.triggerDeploy).toHaveBeenCalledTimes(1);
+    });
+
+    it('provisionServer sets the SSH secrets and dispatches the provisioning workflow', async () => {
+      const github = fakeGithub();
+
+      await vpnService(undefined, github).provisionServer({
         host: '198.51.100.9',
         sshUser: 'root',
         sshPassword: 'hunter2',
         confirm: true,
       });
 
-      expect(calls).toContain(
-        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_HOST',
+      expect(github.setSecret).toHaveBeenCalledWith(
+        'VPN_PROVISION_HOST',
+        '198.51.100.9',
       );
-      expect(calls).toContain(
-        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_SSH_USER',
+      expect(github.setSecret).toHaveBeenCalledWith(
+        'VPN_PROVISION_SSH_USER',
+        'root',
       );
-      expect(calls).toContain(
-        'https://api.github.com/repos/acme/pipe/actions/secrets/VPN_PROVISION_SSH_PASSWORD',
+      expect(github.setSecret).toHaveBeenCalledWith(
+        'VPN_PROVISION_SSH_PASSWORD',
+        'hunter2',
       );
-      expect(calls).toContain(
-        'https://api.github.com/repos/acme/pipe/actions/workflows/provision-vpn-server.yml/dispatches',
+      expect(github.dispatchWorkflow).toHaveBeenCalledWith(
+        'provision-vpn-server.yml',
       );
     });
   });
