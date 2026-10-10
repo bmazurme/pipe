@@ -406,23 +406,57 @@ export class WorkerService {
       );
     }
 
-    const now = new Date();
-
     if (job.status === JobStatus.Queued || force) {
-      job.status = JobStatus.Cancelled;
-      job.finishedAt = now;
-      job.cancelRequestedAt = job.cancelRequestedAt ?? now;
-      job.logs += `\n[stopped by the owner${force && job.workerName ? ' (forced)' : ''}]\n`;
-      this.logJobCancelled(await this.jobRepository.save(job), force);
+      const suffix = `\n[stopped by the owner${force && job.workerName ? ' (forced)' : ''}]\n`;
 
-      return job;
+      // One conditional statement instead of load + save: a log chunk the worker
+      // appended meanwhile is kept, and a job it just finished is never overwritten.
+      // (Raw query result is [rows, affectedCount] — see failLostJobs().)
+      const [rows]: [Job[], number] = await this.jobRepository.query(
+        `UPDATE jobs SET status = $1, "finishedAt" = now(),
+           "cancelRequestedAt" = COALESCE("cancelRequestedAt", now()),
+           logs = COALESCE(logs, '') || $2, "updatedAt" = now()
+         WHERE id = $3 AND "userId" = $4 AND status IN ($5, $6, $7)
+         RETURNING *`,
+        [
+          JobStatus.Cancelled,
+          suffix,
+          id,
+          userId,
+          JobStatus.Queued,
+          JobStatus.Claimed,
+          JobStatus.Running,
+        ],
+      );
+
+      if (rows.length > 0) {
+        this.logJobCancelled(rows[0], force);
+
+        return rows[0];
+      }
+
+      // Nothing matched: the job reached a final state since we loaded it.
+      const current = await this.findOwned(id, userId);
+
+      if (current.status === JobStatus.Cancelled) {
+        return current;
+      }
+
+      throw new ConflictException(
+        `Job already ${current.status} — there is nothing to stop`,
+      );
     }
 
     // Claimed or running: ask the worker. Idempotent — a second click keeps the
     // original request time.
-    job.cancelRequestedAt = job.cancelRequestedAt ?? now;
+    await this.jobRepository
+      .createQueryBuilder()
+      .update(Job)
+      .set({ cancelRequestedAt: () => 'COALESCE("cancelRequestedAt", now())' })
+      .where('id = :id AND "userId" = :userId', { id, userId })
+      .execute();
 
-    return this.jobRepository.save(job);
+    return this.findOwned(id, userId);
   }
 
   private logJobCancelled(job: Job, forced: boolean): void {
