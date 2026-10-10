@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -78,7 +74,7 @@ export class VpnConnectionsService {
     const active = await this.repository.findOneBy({ isActive: true });
 
     if (!active) {
-      throw new InternalServerErrorException(
+      throw new NotFoundException(
         'No active VPN connection is configured — add one and select it first',
       );
     }

@@ -1,8 +1,4 @@
-import {
-  BadGatewayException,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadGatewayException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
@@ -37,7 +33,7 @@ function fakeVpnConnectionsService(
     getActive: jest.fn(async () => {
       const active = connections.find((c) => c.isActive);
       if (!active) {
-        throw new InternalServerErrorException(
+        throw new NotFoundException(
           'No active VPN connection is configured — add one and select it first',
         );
       }
@@ -140,7 +136,10 @@ describe('VpnService', () => {
       );
     });
 
-    it('throws when no connection is active', async () => {
+    it('throws a NotFoundException when no connection is active', async () => {
+      await expect(vpnService([]).getStatus()).rejects.toThrow(
+        NotFoundException,
+      );
       await expect(vpnService([]).getStatus()).rejects.toThrow(
         'No active VPN connection is configured',
       );

@@ -19,6 +19,8 @@ export function VpnPage() {
   const [syncVpnConfig, { isLoading: isSyncing }] = useSyncVpnConfigMutation();
   const [syncResult, setSyncResult] = useState<'success' | 'error' | null>(null);
 
+  const isNoActiveConnection = isError && (error as { status?: unknown } | undefined)?.status === 404;
+
   const handleSync = async () => {
     setSyncResult(null);
     try {
@@ -50,8 +52,12 @@ export function VpnPage() {
 
       {/* Only when there really is no connection — any other failure (panel down, token
           rejected, throttled) used to land here too and read as "nothing configured". */}
-      {!isLoading && isError && !status && describeApiError(error).includes('No active VPN connection') && (
-        <EmptyState icon={ShieldKeyhole} title="Нет активного VPN-подключения" />
+      {!isLoading && isError && !status && isNoActiveConnection && (
+        <EmptyState
+          icon={ShieldKeyhole}
+          title="Нет активного VPN-подключения"
+          description="Добавьте подключение ниже"
+        />
       )}
     </div>
   );
