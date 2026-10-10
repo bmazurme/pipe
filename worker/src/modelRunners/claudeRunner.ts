@@ -10,6 +10,31 @@ export interface RunResult {
 const MAX_OUTPUT_CHARS = 1024 * 1024;
 const DEFAULT_KILL_GRACE_MS = 5000;
 
+// Variables worker's own secrets live in — never handed to the CLI, which runs
+// an unrestricted shell against untrusted task content.
+const DENIED_ENV = /^(BRIDGE_API_KEY|OPENAI_|DEEPSEEK_|QWEN_)|_FILE$/;
+const ALLOWED_ENV =
+  /^(PATH|HOME|LANG|TMPDIR|TERM|USER|SHELL|CLAUDE_CODE_OAUTH_TOKEN|(HTTP|HTTPS|ALL|NO)_PROXY|LC_.*|NODE_.*|XDG_.*)$/i;
+
+// Allowlist of what the claude CLI child may inherit; the deny list wins over it.
+export function buildClaudeEnv(
+  base: NodeJS.ProcessEnv,
+  proxyUrl?: string,
+  claudeToken?: string | null,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined || DENIED_ENV.test(key) || !ALLOWED_ENV.test(key)) continue;
+    env[key] = value;
+  }
+  // The CLI is a closed-source binary — worker can only hope it honors the
+  // standard proxy env vars. Set whichever flavor it reads; unused are harmless.
+  if (proxyUrl) Object.assign(env, { HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, ALL_PROXY: proxyUrl });
+  // A per-job credential (bridge's named Claude tokens) overrides the inherited one.
+  if (claudeToken) env.CLAUDE_CODE_OAUTH_TOKEN = claudeToken;
+  return env;
+}
+
 // Unattended, non-interactive run: `-p` (print mode) makes Claude Code do one
 // turn and exit instead of opening its REPL, and
 // `--dangerously-skip-permissions` is required for that turn to actually
@@ -43,15 +68,7 @@ export function runClaude(
     // client directly, only hope it honors the standard proxy env vars (most
     // tools built on common HTTP libraries do). Set whichever flavor it
     // reads; unused ones are harmless.
-    const env = {
-      ...process.env,
-      ...(proxyUrl ? { HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, ALL_PROXY: proxyUrl } : {}),
-      // A per-job credential (see bridge's named Claude tokens) overrides
-      // whatever this process inherited at startup — absent/null leaves the
-      // inherited value untouched, the same behavior as before this param
-      // existed.
-      ...(claudeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeToken } : {}),
-    };
+    const env = buildClaudeEnv(process.env, proxyUrl, claudeToken);
     const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
 
     let output = '';
