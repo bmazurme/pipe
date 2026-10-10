@@ -115,7 +115,7 @@ export class WorkerBridgeClient {
   // Polled while a job runs — a CLI that prints nothing for minutes sends no log
   // chunks to piggyback the answer on, so it needs a request of its own.
   async isCancelRequested(jobId: number): Promise<boolean> {
-    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}`, {
+    const response = await fetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/cancel-state`, {
       headers: this.authHeaders(),
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });

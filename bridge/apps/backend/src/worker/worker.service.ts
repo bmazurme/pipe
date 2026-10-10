@@ -234,6 +234,24 @@ export class WorkerService {
     return job;
   }
 
+  // Polled by the worker every few seconds while a job runs, so it reads only the
+  // columns it answers with — never the unbounded `logs` or the context/history text.
+  async getCancelState(
+    id: number,
+    userId: number,
+  ): Promise<Pick<Job, 'id' | 'status' | 'cancelRequestedAt'>> {
+    const job = await this.jobRepository.findOne({
+      select: { id: true, status: true, cancelRequestedAt: true },
+      where: { id, userId },
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    return job;
+  }
+
   async remove(id: number, userId: number): Promise<void> {
     const job = await this.findOwned(id, userId);
 

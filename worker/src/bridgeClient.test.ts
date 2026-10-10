@@ -77,6 +77,39 @@ describe('WorkerBridgeClient', () => {
     });
   });
 
+  describe('isCancelRequested (cancel-state endpoint)', () => {
+    const respondWith = (body: unknown) => {
+      let capturedUrl: string | undefined;
+      globalThis.fetch = (async (url: string) => {
+        capturedUrl = url;
+        return new Response(JSON.stringify(body), { status: 200 });
+      }) as typeof fetch;
+      return () => capturedUrl;
+    };
+
+    it('polls the lightweight cancel-state URL', async () => {
+      const url = respondWith({ id: 4, status: 'running', cancelRequestedAt: null });
+      const client = new WorkerBridgeClient('http://bridge.local', 'brk_test');
+
+      assert.equal(await client.isCancelRequested(4), false);
+      assert.equal(url(), 'http://bridge.local/api/v1/worker/jobs/4/cancel-state');
+    });
+
+    it('is true when status is cancelled', async () => {
+      respondWith({ id: 4, status: 'cancelled', cancelRequestedAt: null });
+      const client = new WorkerBridgeClient('http://bridge.local', 'brk_test');
+
+      assert.equal(await client.isCancelRequested(4), true);
+    });
+
+    it('is true when cancelRequestedAt is set', async () => {
+      respondWith({ id: 4, status: 'running', cancelRequestedAt: '2026-01-01T00:00:00.000Z' });
+      const client = new WorkerBridgeClient('http://bridge.local', 'brk_test');
+
+      assert.equal(await client.isCancelRequested(4), true);
+    });
+  });
+
   describe('appendLog', () => {
     it('posts the chunk', async () => {
       let capturedBody: unknown;

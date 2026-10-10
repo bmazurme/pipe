@@ -137,6 +137,21 @@ export class WorkerController {
     return JobResponseDto.fromEntity(job);
   }
 
+  @Get(':id/cancel-state')
+  async cancelState(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{
+    id: number;
+    status: string;
+    cancelRequestedAt: Date | null;
+  }> {
+    const { id: jobId, status, cancelRequestedAt } =
+      await this.workerService.getCancelState(id, currentUser.id);
+
+    return { id: jobId, status, cancelRequestedAt };
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(
