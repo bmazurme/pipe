@@ -717,8 +717,8 @@ describe('WorkerService', () => {
     });
 
     it('throws ConflictException when the job succeeded before the UPDATE ran', async () => {
-      repository.findOne!
-        .mockResolvedValueOnce({
+      repository
+        .findOne!.mockResolvedValueOnce({
           id: 6,
           status: JobStatus.Running,
           workerName: 'w',
