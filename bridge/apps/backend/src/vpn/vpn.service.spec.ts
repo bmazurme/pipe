@@ -400,6 +400,55 @@ describe('VpnService', () => {
     });
   });
 
+  describe('non-Reality inbounds', () => {
+    const NO_REALITY = { ...INBOUND, streamSettings: {} };
+    const NO_SERVER_NAMES = {
+      ...INBOUND,
+      streamSettings: {
+        realitySettings: {
+          ...INBOUND.streamSettings.realitySettings,
+          serverNames: [],
+        },
+      },
+    };
+
+    it('syncWorkerVpnConfig rejects before any GitHub request', async () => {
+      const fetchMock = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_REALITY] }),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const promise = vpnService().syncWorkerVpnConfig();
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow('not a VLESS Reality inbound');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('getConnectionLink rejects with the same exception', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_REALITY] }),
+      ) as typeof fetch;
+
+      const promise = vpnService().getConnectionLink(1);
+
+      await expect(promise).rejects.toThrow(BadGatewayException);
+      await expect(promise).rejects.toThrow('not a VLESS Reality inbound');
+    });
+
+    it('falls back to the host of target when serverNames is empty', async () => {
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [NO_SERVER_NAMES] }),
+      ) as typeof fetch;
+
+      const status = await vpnService().getStatus();
+      const { link } = await vpnService().getConnectionLink(1);
+
+      expect(status.sni).toBe('www.samsung.com');
+      expect(link).toContain('sni=www.samsung.com');
+    });
+  });
+
   describe('provisionServer', () => {
     it('pushes the SSH credentials as secrets and triggers the provisioning workflow', async () => {
       const calls: string[] = [];
