@@ -771,7 +771,7 @@ describe('WorkerService', () => {
         status: JobStatus.Running,
         finishedAt: null,
       } as Job);
-      saveEcho();
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
 
       const result = await service.updateStatus(9, 7, {
         status: JobStatus.Cancelled,
