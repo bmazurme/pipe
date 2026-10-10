@@ -133,7 +133,11 @@ export function createChatToolset(apiUrl: string, apiKey: string, mode: ChatTool
           return clip(JSON.stringify(jobs.filter((job) => !wanted || job.status === wanted).slice(0, limitOf(args.limit)).map(summarizeJob)));
         }
         case 'get_job': {
-          const job = (await api(`/worker/jobs/${Number(args.id)}`)) as JobRow;
+          const id = Number(args.id);
+
+          if (!Number.isInteger(id) || id <= 0) return 'get_job needs a positive integer id.';
+
+          const job = (await api(`/worker/jobs/${id}`)) as JobRow;
 
           return clip(JSON.stringify({ ...summarizeJob(job), logTail: (job.logs ?? '').slice(-1500) }));
         }
