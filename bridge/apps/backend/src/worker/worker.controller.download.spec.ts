@@ -40,36 +40,36 @@ describe('WorkerController download routes', () => {
     return { res, status, json, download };
   };
 
-  it.each([
-    ['downloadParcel' as const],
-    ['downloadResult' as const],
-  ])('%s responds 404 when the file is missing on disk', async (method) => {
-    const { controller, warn } = buildController();
-    const { res, status, json, download } = buildRes(false);
+  it.each([['downloadParcel' as const], ['downloadResult' as const]])(
+    '%s responds 404 when the file is missing on disk',
+    async (method) => {
+      const { controller, warn } = buildController();
+      const { res, status, json, download } = buildRes(false);
 
-    await controller[method](1, user, res);
+      await controller[method](1, user, res);
 
-    expect(download).toHaveBeenCalledWith(
-      '/nonexistent/abc.zip',
-      'parcel.zip',
-      expect.any(Function),
-    );
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('file 7'));
-    expect(status).toHaveBeenCalledWith(404);
-    expect(json).toHaveBeenCalledWith({ message: 'File is missing on disk' });
-  });
+      expect(download).toHaveBeenCalledWith(
+        '/nonexistent/abc.zip',
+        'parcel.zip',
+        expect.any(Function),
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('file 7'));
+      expect(status).toHaveBeenCalledWith(404);
+      expect(json).toHaveBeenCalledWith({ message: 'File is missing on disk' });
+    },
+  );
 
-  it.each([
-    ['downloadParcel' as const],
-    ['downloadResult' as const],
-  ])('%s writes nothing when headers were already sent', async (method) => {
-    const { controller, warn } = buildController();
-    const { res, status, json } = buildRes(true);
+  it.each([['downloadParcel' as const], ['downloadResult' as const]])(
+    '%s writes nothing when headers were already sent',
+    async (method) => {
+      const { controller, warn } = buildController();
+      const { res, status, json } = buildRes(true);
 
-    await controller[method](1, user, res);
+      await controller[method](1, user, res);
 
-    expect(warn).toHaveBeenCalled();
-    expect(status).not.toHaveBeenCalled();
-    expect(json).not.toHaveBeenCalled();
-  });
+      expect(warn).toHaveBeenCalled();
+      expect(status).not.toHaveBeenCalled();
+      expect(json).not.toHaveBeenCalled();
+    },
+  );
 });
