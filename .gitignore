@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
+
+# encrypted secret bundles are for the password manager, not for git
+*.age
