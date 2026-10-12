@@ -1,11 +1,11 @@
-import { createApi } from '@reduxjs/toolkit/query/react';
+import { createApi } from "@reduxjs/toolkit/query/react";
 
-import baseQuery from '../../base-query-with-reauth';
+import baseQuery from "../../base-query-with-reauth";
 
 const sessionsApi = createApi({
-  reducerPath: 'sessionsApi',
+  reducerPath: "sessionsApi",
   baseQuery,
-  tagTypes: ['Sessions'],
+  tagTypes: ["Sessions", "Identities"],
   endpoints: () => ({}),
 });
 
