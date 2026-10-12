@@ -9,6 +9,7 @@ Today the copies live on the Pi; the NAS comes later (a second `rsync` pulling `
 | `restore-check.sh` | restores `latest` into a throwaway Postgres container and counts tables/rows — a backup that was never restored is a hope |
 | `install.sh` | systemd units: 03:00 Moscow daily + hourly freshness check; template `/etc/pipe-backup.env` (mode 600) |
 | `pull.sh`, `install-pull.sh` | the copy on a **second Pi**: it pulls `latest` from the primary (rsync over a key restricted to read-only `rrsync` — no shell, no writes), verifies checksum/meta/age, then swaps its own `latest`. Daily 03:30 Moscow + hourly freshness check (age counted from the backup's creation, so a primary that stopped backing up is noticed too) |
+| `mirror-s3.sh`, `install-mirror.sh` | the **third copy**: the second Pi uploads the (encrypted, verified) `latest` to the Garage bucket `bridge-backups` — to an immutable `snapshots/<time>/` prefix, compares it with the local files, and only then rewrites the pointer object `LATEST`. Daily 03:45 Moscow, after the pull |
 | `verify-from-workstation.sh` | run on YOUR machine: fetches `latest` from a Pi, decrypts it with your private age key and restores it into a throwaway Postgres — the check that stays possible once the boards no longer hold the key |
 | `test.sh` | 41 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
@@ -43,7 +44,20 @@ ssh -t pi@192.168.50.12 'sudo systemctl start pipe-backup-pull.service && sudo s
 ```
 
 The pull key can neither open a shell on the primary nor write there (checked). Running state (2026-10-12): primary white
-(03:00) → red pulls at 03:30. Next copy: the `bridge-backups` bucket in Garage, then the NAS.
+(03:00) → red pulls at 03:30. Then red uploads to the Garage bucket `bridge-backups` (03:45). Next copy: the NAS.
+
+## A copy in Garage S3 (mirror)
+
+```bash
+# the bridge-backups key goes from white to red without being printed; the endpoint is red's own Garage node
+ssh pi@192.168.50.11 'sudo cat /etc/garage/keys/bridge-backups.env' | ssh pi@192.168.50.12 'sudo tee /etc/pipe-backup-s3.env >/dev/null'
+ssh pi@192.168.50.12 'sudo sed -i "s|^S3_ENDPOINT=.*|S3_ENDPOINT=http://192.168.50.12:3900|" /etc/pipe-backup-s3.env'
+scp -r infra/backup pi@192.168.50.12:/tmp/ && ssh -t pi@192.168.50.12 'sudo bash /tmp/backup/install-mirror.sh'
+ssh -t pi@192.168.50.12 'sudo systemctl start pipe-backup-mirror.service && sudo systemctl enable --now pipe-backup-mirror.timer'
+```
+
+Reading it back (any Garage node works): `rclone cat pi:bridge-backups/LATEST` names the snapshot, `rclone copy
+pi:bridge-backups/snapshots/<name> .` fetches it. Verified on 2026-10-12: uploaded via red, downloaded via green, checksums equal.
 
 ## Encryption
 

@@ -142,5 +142,35 @@ else
   echo "skip pull tests (rsync not installed)"
 fi
 
+# 8. mirror-s3.sh — against a local directory standing in for the bucket (needs rclone)
+if command -v rclone >/dev/null; then
+  BUCKET="$T/bucket"; mkdir -p "$BUCKET"
+  mirror() { RCLONE=rclone DEST="$BUCKET" BACKUP_DIR="$BACKUP_DIR" "$HERE/mirror-s3.sh" >"$T/out" 2>&1; }
+  sleep 1; dump_of 8500; run
+  mirror; check "mirror: first upload succeeds" $?
+  created="$(grep '^CREATED=' "$BACKUP_DIR/latest/meta.env" | cut -d= -f2)"
+  [ "$(cat "$BUCKET/LATEST")" = "$created" ]; check "mirror: LATEST names the uploaded snapshot" $?
+  (cd "$BUCKET/snapshots/$created" && sha256sum -c ./*.sha256 >/dev/null); check "mirror: the uploaded files verify" $?
+  mirror; check "mirror: uploading the same snapshot again is fine" $?
+  [ "$(ls "$BUCKET/snapshots" | wc -l)" -eq 1 ]; check "mirror: …and does not duplicate it" $?
+
+  sleep 1; dump_of 8600; run; mirror; check "mirror: a newer backup is uploaded" $?
+  new="$(grep '^CREATED=' "$BACKUP_DIR/latest/meta.env" | cut -d= -f2)"
+  [ "$(cat "$BUCKET/LATEST")" = "$new" ] && [ "$new" != "$created" ]; check "mirror: LATEST moved to it" $?
+  [ "$(ls "$BUCKET/snapshots")" = "$new" ]; check "mirror: the old snapshot was removed (KEEP=1)" $?
+
+  # nothing to upload -> fails and leaves the bucket as it was
+  before="$(cat "$BUCKET/LATEST")"
+  RCLONE=rclone DEST="$BUCKET" BACKUP_DIR="$T/empty" "$HERE/mirror-s3.sh" >"$T/out" 2>&1; [ $? -ne 0 ]; check "mirror: no local backup -> fails" $?
+  [ "$(cat "$BUCKET/LATEST")" = "$before" ]; check "mirror: …and LATEST is untouched" $?
+
+  # an unwritable destination -> fails before LATEST is touched
+  : > "$T/not-a-dir"
+  RCLONE=rclone DEST="$T/not-a-dir/x" BACKUP_DIR="$BACKUP_DIR" "$HERE/mirror-s3.sh" >"$T/out" 2>&1; [ $? -ne 0 ]; check "mirror: an unwritable destination fails" $?
+  [ "$(cat "$BUCKET/LATEST")" = "$before" ]; check "mirror: …and LATEST is untouched" $?
+else
+  echo "skip mirror tests (rclone not installed)"
+fi
+
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
