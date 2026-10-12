@@ -9,6 +9,7 @@ Today the copies live on the Pi; the NAS comes later (a second `rsync` pulling `
 | `restore-check.sh` | restores `latest` into a throwaway Postgres container and counts tables/rows — a backup that was never restored is a hope |
 | `install.sh` | systemd units: 03:00 Moscow daily + hourly freshness check; template `/etc/pipe-backup.env` (mode 600) |
 | `pull.sh`, `install-pull.sh` | the copy on a **second Pi**: it pulls `latest` from the primary (rsync over a key restricted to read-only `rrsync` — no shell, no writes), verifies checksum/meta/age, then swaps its own `latest`. Daily 03:30 Moscow + hourly freshness check (age counted from the backup's creation, so a primary that stopped backing up is noticed too) |
+| `verify-from-workstation.sh` | run on YOUR machine: fetches `latest` from a Pi, decrypts it with your private age key and restores it into a throwaway Postgres — the check that stays possible once the boards no longer hold the key |
 | `test.sh` | 41 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
 ```bash
@@ -48,8 +49,8 @@ The pull key can neither open a shell on the primary nor write there (checked). 
 
 `AGE_RECIPIENT` set → only ciphertext (`db.dump.age`) is stored. Generate the pair once, elsewhere:
 `age-keygen -o key.txt` (prints the public key); keep `key.txt` in the password manager and on paper —
-without it an encrypted backup cannot be restored. `restore-check.sh` needs `AGE_IDENTITY=<key file>` for
-encrypted backups, so run it from a machine that holds the key.
+without it an encrypted backup cannot be restored. On the boards `restore-check.sh` can only verify unencrypted backups; for encrypted ones run
+`AGE_IDENTITY=<key file> infra/backup/verify-from-workstation.sh [host]` from the machine that holds the key.
 
 ## Restore
 
