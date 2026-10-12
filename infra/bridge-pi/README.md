@@ -51,9 +51,13 @@ infra/bridge-pi/build-worker-image.sh          # on the Mac: arm64 image → gre
 # on white (ssh -t pi@192.168.50.11, cd ~/bridge-pi; scp the updated scripts first):
 ./secrets.sh set WORKER_BRIDGE_API_KEY         # bridge → Profile → Access → API keys (brk_…, shown once)
 ./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN       # `claude setup-token` where you are logged in to Claude
-install -m 600 /path/to/xray-client.json ~/.pipe/xray-client.json   # bridge/deploy/swarm/xray-client-config.example.json
+./vless-to-xray.sh                              # paste your vless://… Reality link (hidden) → ~/.pipe/xray-client.json
 ./deploy-worker.sh && ./deploy-worker.sh status
 ```
+
+The link comes from your VPN panel, from the VPN page in bridge (copy the connection link — note a fresh database has no
+saved connections yet) or from a VPN app on your phone. It contains the server address, your client UUID and the Reality keys,
+so treat it as a secret. (Hand-writing the file works too: `bridge/deploy/swarm/xray-client-config.example.json`.)
 
 The three values become Docker secrets (encrypted in the Swarm raft store); `deploy-worker.sh` writes them to a 0700
 temp directory and removes it on exit. The worker should then show up on bridge's Worker page as `pi-worker`.

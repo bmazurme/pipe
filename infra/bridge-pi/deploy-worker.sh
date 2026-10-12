@@ -4,7 +4,7 @@
 #
 #   ./secrets.sh set WORKER_BRIDGE_API_KEY       # a personal API key made in bridge: Profile → Access → API keys (brk_…)
 #   ./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN     # `claude setup-token` on a machine where you are logged in to Claude
-#   install -m 600 your-xray-client.json ~/.pipe/xray-client.json     # see bridge/deploy/swarm/xray-client-config.example.json
+#   ./vless-to-xray.sh                           # paste your vless:// Reality link (hidden) → ~/.pipe/xray-client.json
 #   ./deploy-worker.sh                           # (./deploy-worker.sh status to look)
 #
 # The values become Docker secrets (encrypted in the Swarm raft store, mounted as files); the temporary files
