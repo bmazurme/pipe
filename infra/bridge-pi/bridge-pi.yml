@@ -68,7 +68,7 @@ services:
       COOKIE_DOMAIN: ${API_HOST:-api.bridge.ntlstl.dev}
       CORS_ORIGINS: https://${APP_HOST:-bridge.ntlstl.dev}
       # Without an allowlist ANY Yandex account could register — required on a public host.
-      EMAILS: ${EMAILS:?EMAILS (comma-separated sign-in allowlist) is required}
+      EMAILS: ${EMAILS:?EMAILS is required}
       # Caddy runs in another container: trust X-Forwarded-For from private ranges, or every
       # client looks like one address (rate limits, sessions list). See src/config/trust-proxy.ts.
       TRUST_PROXY: uniquelocal
