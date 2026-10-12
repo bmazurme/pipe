@@ -23,6 +23,7 @@ import { useTabParam } from '../shared/hooks/useTabParam';
 import { getErrorMessage, useUpdateUserMutation } from '../store/api';
 import { ApiKeysSection } from './profile/ApiKeysSection';
 import { DevicesSection } from './profile/DevicesSection';
+import { IdentitiesSection } from './profile/IdentitiesSection';
 import { LogsSection } from './profile/LogsSection';
 import { NotificationsSection } from './profile/NotificationsSection';
 import styles from './ProfilePage.module.css';
@@ -180,6 +181,7 @@ export function ProfilePage() {
         <TabPanel value="access">
           {activeTab === 'access' && (
             <div className={styles.panel}>
+              <IdentitiesSection />
               <ApiKeysSection />
               <DevicesSection />
             </div>
