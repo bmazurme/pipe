@@ -200,3 +200,39 @@ ssh pi@<новый-адрес> 'sudo journalctl -u pi-ethernet-only --no-pager |
 
 До переустановки: платы только во внутренней сети (§4.1), SSH по ключам (§1.1), не публиковать
 через роутер ничего с них.
+
+## Docker and Swarm
+
+State since 2026-10-12. The old stacks are **stopped, not deleted** — their volumes and images are intact and
+restart policies are `no`, so nothing comes back after a reboot. Specs of the old `redis` stack are in
+`~/backups/swarm-<ts>/` on red (mode 700). The previous Swarm membership of each board was moved to
+`/var/lib/docker/swarm.old-<ts>`.
+
+| Node | Address | Role | Docker |
+|---|---|---|---|
+| white | 192.168.50.11 | manager (leader) | 29.7.2 (Ubuntu 25.10 repo) |
+| red | 192.168.50.12 | manager | 29.2.1 |
+| blue | 192.168.50.13 | manager | 29.2.1 |
+| green | 192.168.50.14 | worker | 29.2.1 |
+
+Three managers tolerate losing one. Plucky (25.04) only offers 29.2.1; the 29.x engines interoperate. All nodes
+carry the labels `pi=true` and `role=manager|worker`.
+
+Preparing a board — `docker-prep.sh` is idempotent (moves the old Swarm state aside, upgrades Docker, log rotation
+in `daemon.json`, loads `vxlan`/`br_netfilter`/`overlay` on boot, enables the memory cgroup — Ubuntu on the Pi has
+none by default, so memory limits would be ignored; reboot once if it says so):
+
+```bash
+scp infra/pi/docker-prep.sh pi@HOST:/tmp/ && ssh -t pi@HOST 'sudo bash /tmp/docker-prep.sh'
+```
+
+Creating the Swarm (tokens are read on the manager and never printed):
+
+```bash
+docker swarm init --advertise-addr 192.168.50.11 --data-path-addr 192.168.50.11            # on white
+docker swarm join --token "$(ssh pi@192.168.50.11 docker swarm join-token -q manager)" \
+  --advertise-addr 192.168.50.12 --data-path-addr 192.168.50.12 192.168.50.11:2377          # red, blue (their own address)
+# green: same with `join-token -q worker`
+```
+
+Smoke test passed: a global service with an overlay network ran 4/4 and every task answered across nodes.
