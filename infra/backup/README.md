@@ -8,7 +8,8 @@ Today the copies live on the Pi; the NAS comes later (a second `rsync` pulling `
 | `backup.sh` | dump → check (size, readable TOC, has table data, not <50 % of the previous) → optional `age` encryption → checksum → atomic swap of the `latest` symlink. A failed check leaves the last good copy untouched and raises an alert. `--check` exits 1 if the last success is older than 26 h |
 | `restore-check.sh` | restores `latest` into a throwaway Postgres container and counts tables/rows — a backup that was never restored is a hope |
 | `install.sh` | systemd units: 03:00 Moscow daily + hourly freshness check; template `/etc/pipe-backup.env` (mode 600) |
-| `test.sh` | 27 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`) |
+| `pull.sh`, `install-pull.sh` | the copy on a **second Pi**: it pulls `latest` from the primary (rsync over a key restricted to read-only `rrsync` — no shell, no writes), verifies checksum/meta/age, then swaps its own `latest`. Daily 03:30 Moscow + hourly freshness check (age counted from the backup's creation, so a primary that stopped backing up is noticed too) |
+| `test.sh` | 41 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
 ```bash
 # on a Mac, in a container (the scripts use flock / mv -T / sha256sum):
@@ -31,6 +32,17 @@ private key) are entered by hand on the board — never in chat or in the repo.
 The database must be reachable from the Pi. The primary site's Postgres should accept the Pi only over
 the WireGuard tunnel / an allow-listed address (plan §2, §10); the Pi **pulls**, so a compromised primary
 cannot reach the backups.
+
+## A copy on a second Pi (pull)
+
+```bash
+scp -r infra/backup pi@192.168.50.12:/tmp/ && ssh -t pi@192.168.50.12 'sudo bash /tmp/backup/install-pull.sh'
+# it prints one line — add it to pi@192.168.50.11:~/.ssh/authorized_keys (it is restricted to read-only /srv/backups)
+ssh -t pi@192.168.50.12 'sudo systemctl start pipe-backup-pull.service && sudo systemctl enable --now pipe-backup-pull.timer pipe-backup-pull-check.timer'
+```
+
+The pull key can neither open a shell on the primary nor write there (checked). Running state (2026-10-12): primary white
+(03:00) → red pulls at 03:30. Next copy: the `bridge-backups` bucket in Garage, then the NAS.
 
 ## Encryption
 

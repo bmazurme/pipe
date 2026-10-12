@@ -32,10 +32,14 @@ else
 fi
 
 docker run -d --rm --name "$NAME" -e POSTGRES_PASSWORD=check -e POSTGRES_DB=restore "$PG_IMAGE" >/dev/null
-for _ in $(seq 1 60); do
-  docker exec "$NAME" pg_isready -U postgres -d restore >/dev/null 2>&1 && break
+# The image first runs a temporary server (unix socket only) for initialisation, then restarts. Asking over TCP
+# only succeeds for the final server — a socket check would pass too early and the restore would hit a shutdown.
+ready=0
+for _ in $(seq 1 120); do
+  if docker exec "$NAME" pg_isready -h 127.0.0.1 -U postgres -d restore >/dev/null 2>&1; then ready=1; break; fi
   sleep 1
 done
+[ "$ready" = 1 ] || { echo "the throwaway postgres did not become ready" >&2; exit 1; }
 
 docker cp "$TMP/db.dump" "$NAME:/tmp/db.dump"
 docker exec "$NAME" pg_restore --no-owner -U postgres -d restore /tmp/db.dump

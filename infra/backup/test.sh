@@ -100,5 +100,47 @@ fi
 echo $(( $(date +%s) - 30 * 3600 )) > "$BACKUP_DIR/last-success"
 "$HERE/backup.sh" --check >"$T/out" 2>&1; [ $? -ne 0 ]; check "--check fails when the last backup is older than 26 h" $?
 
+# 7. pull.sh (the copy on a second machine) — needs rsync
+if command -v rsync >/dev/null; then
+  SRC_LATEST="$BACKUP_DIR/latest/"
+  PULL_DIR="$T/pulled"
+  pull() { BACKUP_DIR="$PULL_DIR" SOURCE="$SRC_LATEST" "$HERE/pull.sh" >"$T/out" 2>&1; }
+  # a fresh, good source copy
+  rm -f "$BACKUP_DIR/last-success"
+  sleep 1; dump_of 8200; run
+  pull; check "pull: first pull succeeds" $?
+  cmp -s "$BACKUP_DIR/latest/db.dump" "$PULL_DIR/latest/db.dump"; check "pull: the copy equals the source" $?
+  (cd "$PULL_DIR/latest" && sha256sum -c db.dump.sha256 >/dev/null); check "pull: checksum verifies there too" $?
+  want="$(readlink "$PULL_DIR/latest")"
+  pull; check "pull: pulling the same backup again is fine" $?
+  [ "$(readlink "$PULL_DIR/latest")" = "$want" ]; check "pull: …and changes nothing" $?
+  BACKUP_DIR="$PULL_DIR" "$HERE/backup.sh" --check >"$T/out" 2>&1; check "pull: freshness check passes (age is the backup's own)" $?
+
+  # a newer backup arrives
+  sleep 1; dump_of 8300; run; pull; check "pull: a newer backup is taken over" $?
+  [ "$(readlink "$PULL_DIR/latest")" != "$want" ] && [ "$(ls "$PULL_DIR/snapshots" | wc -l)" -eq 1 ]; check "pull: latest moved, one snapshot kept" $?
+  want="$(readlink "$PULL_DIR/latest")"; want_sum="$(sha256sum "$PULL_DIR/latest/db.dump" | cut -d' ' -f1)"
+  pulled_unchanged() { [ "$(readlink "$PULL_DIR/latest")" = "$want" ] && [ "$(sha256sum "$PULL_DIR/latest/db.dump" | cut -d' ' -f1)" = "$want_sum" ]; }
+
+  # a damaged source copy must not replace the good one
+  sleep 1; dump_of 8400; run
+  printf 'tampered' >> "$BACKUP_DIR/latest/db.dump"
+  pull; [ $? -ne 0 ]; check "pull: a copy whose checksum fails is rejected" $?
+  pulled_unchanged; check "pull: …and the local copy is untouched" $?
+
+  # an unreachable source
+  BACKUP_DIR="$PULL_DIR" SOURCE="$T/does-not-exist/" "$HERE/pull.sh" >"$T/out" 2>&1; [ $? -ne 0 ]; check "pull: an unreachable source fails" $?
+  pulled_unchanged; check "pull: …and the local copy is untouched" $?
+
+  # an OLDER backup than the one here (replayed source) is refused
+  older="$T/older"; mkdir -p "$older"
+  cp -a "$PULL_DIR/latest/." "$older/"
+  sed -i 's/^CREATED=.*/CREATED=20200101T000000Z/' "$older/meta.env"
+  BACKUP_DIR="$PULL_DIR" SOURCE="$older/" "$HERE/pull.sh" >"$T/out" 2>&1; [ $? -ne 0 ]; check "pull: an older backup than the local one is refused" $?
+  pulled_unchanged; check "pull: …and the local copy is untouched" $?
+else
+  echo "skip pull tests (rsync not installed)"
+fi
+
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
