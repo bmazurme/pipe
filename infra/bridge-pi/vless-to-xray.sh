@@ -10,6 +10,10 @@
 #   ./vless-to-xray.sh                  # paste the link, press Enter (nothing is shown)
 #   ./vless-to-xray.sh link.txt         # or read it from a file (a vless:// link or a sing-box JSON)
 #
+# FINGERPRINT=firefox ./vless-to-xray.sh …   overrides the TLS fingerprint the link/JSON carries. On this network the
+# `chrome` fingerprint was throttled (about 80% of connections hung, in series) while `firefox` passed 48 of 48 — if
+# the tunnel is flaky, try another one (firefox, safari, randomized) before blaming the server.
+#
 # The result is the same shape as bridge/deploy/swarm/xray-client-config.example.json: an HTTP proxy on :1080 inside
 # the worker network (HTTP, not SOCKS — the claude CLI and undici cannot use SOCKS5) and one VLESS+Reality outbound.
 set -euo pipefail
@@ -85,7 +89,7 @@ cfg = {
             'security': 'reality',
             'realitySettings': {
                 'serverName': need(q, 'sni'),
-                'fingerprint': q.get('fp', 'chrome'),
+                'fingerprint': os.environ.get('FINGERPRINT') or q.get('fp', 'chrome'),
                 'publicKey': need(q, 'pbk'),
                 'shortId': q.get('sid', ''),
                 'spiderX': q.get('spx', '/'),

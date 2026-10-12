@@ -59,6 +59,11 @@ The link comes from your VPN panel, from the VPN page in bridge (copy the connec
 saved connections yet) or from a VPN app on your phone. It contains the server address, your client UUID and the Reality keys,
 so treat it as a secret. (Hand-writing the file works too: `bridge/deploy/swarm/xray-client-config.example.json`.)
 
+If the worker's replies hang, check the tunnel first: `FINGERPRINT=firefox ./vless-to-xray.sh <link-or-json>` then
+`./deploy-worker.sh`. Here the default `chrome` fingerprint was throttled by the network (≈80 % of connections stalled
+in series; direct connects to the VPN server were fine) and `firefox` passed 48 of 48. `vpn-client` also uses
+`endpoint_mode: dnsrr` — the Swarm virtual IP added no value for a single task.
+
 The three values become Docker secrets (encrypted in the Swarm raft store); `deploy-worker.sh` writes them to a 0700
 temp directory and removes it on exit. The worker should then show up on bridge's Worker page as `pi-worker`.
 

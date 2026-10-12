@@ -21,6 +21,9 @@ services:
       driver: json-file
       options: { max-size: 10m, max-file: '3' }
     deploy:
+      # DNS round-robin instead of a virtual IP: with the VIP (IPVS) a share of connections from the worker
+      # hung until undici's 10 s connect timeout while direct connects to the VPN server were fine — see README.
+      endpoint_mode: dnsrr
       replicas: 1
       placement:
         constraints: [node.hostname == ubuntu-green]
