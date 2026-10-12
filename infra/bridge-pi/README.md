@@ -83,6 +83,22 @@ worker stays isolated. Updates arrive by long polling — only one consumer per 
 Chat id: after you have written "hi" to the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser with
 your VPN on — `"chat":{"id":123456789,…}`. (The page shows the token in the URL: do it on your own machine only.)
 
+## Images from GHCR (no more loading from the Mac)
+
+`.github/workflows/publish-images.yml` (manual: Actions → Publish images → Run workflow) builds the backend, frontend and worker
+for amd64 **and** arm64 on native runners and publishes `ghcr.io/bmazurme/pipe-bridge-backend`, `pipe-bridge-frontend`, `pipe-worker`
+tagged with the commit sha and `latest`. First publication makes the packages **private**; once, per package: GitHub → your profile →
+Packages → the package → *Package settings* → *Danger Zone* → *Change visibility* → Public (the images hold no secrets: every value arrives
+at runtime; `VITE_API_URL` in the frontend is a public address). Then the boards pull anonymously:
+
+```bash
+./deploy.sh ghcr [commit-sha|latest]          # backend + frontend (default tag: latest)
+./deploy-worker.sh ghcr [commit-sha|latest]   # worker
+```
+
+A sha tag is reproducible (and what to roll back to); `latest` follows the newest publication. The local-image path
+(`build-images.sh`, `./deploy.sh` without arguments) keeps working as the fallback when GitHub is unreachable.
+
 ## Operations
 
 ```bash

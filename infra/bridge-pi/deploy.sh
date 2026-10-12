@@ -2,8 +2,9 @@
 #
 # Deploys the Pi stack. Run on white (the node labelled bridge-primary), from this directory:
 #
-#   ./deploy.sh            # uses ~/.pipe/bridge.env and the image tag build-images.sh left in ~/.pipe/image-tag
-#   ./deploy.sh status     # services, replicas, health
+#   ./deploy.sh              # uses ~/.pipe/bridge.env and the image tag build-images.sh left in ~/.pipe/image-tag
+#   ./deploy.sh ghcr [tag]   # pulls the images from GHCR instead (tag: a commit sha or `latest`, default latest)
+#   ./deploy.sh status       # services, replicas, health
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -29,11 +30,21 @@ done
 [ ${#missing[@]} -eq 0 ] || { echo "missing in $ENV_FILE: ${missing[*]} (./secrets.sh set KEY)" >&2; exit 1; }
 [ -n "${YANDEX_ID:-}" ] || echo "WARNING: YANDEX_ID is empty — nobody will be able to sign in" >&2
 
-IMAGE_TAG="${IMAGE_TAG:-$(cat "$HOME/.pipe/image-tag" 2>/dev/null || true)}"
-[ -n "$IMAGE_TAG" ] || { echo "no image tag — run build-images.sh from your workstation" >&2; exit 1; }
-for img in bridge-backend bridge-frontend; do
-  docker image inspect "localhost/pipe/$img:$IMAGE_TAG" >/dev/null 2>&1 || { echo "image localhost/pipe/$img:$IMAGE_TAG is not on this node" >&2; exit 1; }
-done
+RESOLVE=never
+if [ "${1:-}" = ghcr ]; then
+  # Images from GitHub Container Registry (public packages — see infra/bridge-pi/README.md); the swarm resolves the tag to a digest.
+  IMAGE_TAG="${2:-latest}"
+  IMAGE_BACKEND=ghcr.io/bmazurme/pipe-bridge-backend
+  IMAGE_FRONTEND=ghcr.io/bmazurme/pipe-bridge-frontend
+  export IMAGE_BACKEND IMAGE_FRONTEND
+  RESOLVE=always
+else
+  IMAGE_TAG="${IMAGE_TAG:-$(cat "$HOME/.pipe/image-tag" 2>/dev/null || true)}"
+  [ -n "$IMAGE_TAG" ] || { echo "no image tag — run build-images.sh from your workstation" >&2; exit 1; }
+  for img in bridge-backend bridge-frontend; do
+    docker image inspect "localhost/pipe/$img:$IMAGE_TAG" >/dev/null 2>&1 || { echo "image localhost/pipe/$img:$IMAGE_TAG is not on this node" >&2; exit 1; }
+  done
+fi
 export IMAGE_TAG
 CADDYFILE_HASH="$(sha256sum "$HERE/Caddyfile" | cut -c1-12)"
 export CADDYFILE_HASH
@@ -45,5 +56,5 @@ node="$(hostname)"
 docker node update --label-add bridge-primary=true "$node" >/dev/null
 
 cd "$HERE"
-docker stack deploy --resolve-image never -c bridge-pi.yml "$STACK"
+docker stack deploy --resolve-image "$RESOLVE" -c bridge-pi.yml "$STACK"
 echo "deployed tag $IMAGE_TAG; watch with: ./deploy.sh status"
