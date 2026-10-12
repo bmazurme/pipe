@@ -8,7 +8,7 @@
 
 ```
 apps/
-  backend/    # NestJS: auth, oauth (Yandex), users, storage
+  backend/    # NestJS: auth, oauth (Yandex, GitHub), users, storage
   frontend/   # React + Vite + Gravity UI
 deploy/
   swarm/      # манифест и bootstrap-скрипт для продакшен-деплоя в Docker Swarm
@@ -29,6 +29,35 @@ npm run dev                        # Postgres + backend + frontend одной к
 
 Backend: `http://localhost:3002` (порт задаётся `PORT` в `apps/backend/.env`).
 Frontend: `http://localhost:5173`.
+
+## Способы входа (Yandex + GitHub)
+
+У пользователя может быть несколько способов входа (таблица `auth_identities`). В профиле → «Доступ» →
+«Способы входа» каждый можно выключить или отвязать; сервер не даёт оставить аккаунт без единого
+включённого способа (`409`, проверка в транзакции с блокировкой строк). Вход через выключенный способ
+отклоняется (`/oauth-error?reason=disabled`).
+
+- Аккаунт провайдера ищется по его стабильному id. Только новый аккаунт сопоставляется по **подтверждённому**
+  email: он должен быть в `EMAILS` (если список задан); если у пользователя с таким email уже подключён другой
+  аккаунт этого провайдера — отказ (`reason=conflict`), привязывать нужно явно.
+- Привязка нового способа — только из открытой сессии (`POST /api/v1/oauth/:provider/link` → `state` + nonce-кука),
+  чужой аккаунт привязать нельзя.
+- Пользователи, созданные до `AddAuthIdentities`, получают запись Yandex с `providerUserId = 'legacy:<email>'`;
+  при первом входе через Яндекс она заменяется настоящим id.
+- `GET /api/v1/oauth/providers` отдаёт провайдеров, для которых заданы `*_ID`; остальные кнопки скрыты.
+
+### Подключение GitHub и миграция на новую площадку
+
+1. github.com/settings/developers → New OAuth App; callback —
+   `https://api.bridge.ntlstl.dev/api/v1/oauth/github/redirect` (общий домен API: при переключении DNS
+   на другую площадку настройку менять не нужно).
+2. Секреты Actions (не в чат и не в коммит): `gh secret set OAUTH_GITHUB_ID`, `OAUTH_GITHUB_SECRET`,
+   `BRIDGE_GITHUB_REDIRECT`. Без них деплой проходит, кнопка GitHub скрыта.
+3. После деплоя: войти через Яндекс (id заменится настоящим) → профиль → «Подключить GitHub».
+4. Перенос базы: `auth_identities` едет в обычном дампе вместе с `users`; на новой площадке нужны те же
+   `YANDEX_*`/`GITHUB_*`, `COOKIE_DOMAIN` и redirect URI на общий домен API.
+5. Проверка после переноса: вход Яндексом и GitHub; выключить один способ (второй остаётся); попытка
+   выключить последний → `409`.
 
 ## CI/CD
 
@@ -99,6 +128,8 @@ Repo → Settings → Secrets and variables → Actions.
 | `YANDEX_ID` | client ID приложения на oauth.yandex.ru |
 | `YANDEX_SECRET` | client secret приложения на oauth.yandex.ru |
 | `BRIDGE_YANDEX_REDIRECT` | callback URL, зарегистрированный в приложении на oauth.yandex.ru (`https://<backend-host>/api/v1/oauth/yandex/redirect`) |
+| `GITHUB_ID` / `GITHUB_SECRET` | опционально: OAuth App на github.com/settings/developers — второй способ входа. Пусто — кнопка «Войти через GitHub» скрыта. В GitHub Actions секреты называются `OAUTH_GITHUB_ID` / `OAUTH_GITHUB_SECRET` (имя секрета не может начинаться с `GITHUB_`) |
+| `BRIDGE_GITHUB_REDIRECT` | callback URL приложения GitHub (`https://<backend-host>/api/v1/oauth/github/redirect`); адрес общий для обеих площадок, при переключении DNS его менять не нужно |
 | `BRIDGE_TARGET_URL` | куда браузер редиректит после логина/ошибки OAuth (адрес фронтенда) |
 | `COOKIE_DOMAIN` | домен для refresh-токен куки. Задавайте **конкретный хост** API (`api.bridge.ntlstl.dev`), а не родительский домен: соседние приложения на `*.ntlstl.dev` (notes, tools, rain) — порты этого же кода и ставят свою куку с `COOKIE_DOMAIN=.ntlstl.dev`, которая долетает и сюда. Кука bridge называется `bridgeRefreshToken` именно поэтому — совпадение имён приводило к 401 «invalid signature», лечившемуся только ручной очисткой кук |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
