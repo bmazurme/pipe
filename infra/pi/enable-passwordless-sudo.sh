@@ -4,9 +4,13 @@
 # Pi's hardware sensors. Idempotent; validates the sudoers file before installing
 # it, so a typo cannot lock sudo.
 #
-# Run it from your computer (prompts for the sudo password ONCE, on the Pi):
+# Run it from your computer (sudo prompts for the password ONCE, on the Pi):
 #
-#   ssh -t pi@192.168.50.89 'sudo bash -s' < infra/pi/enable-passwordless-sudo.sh
+#   scp infra/pi/enable-passwordless-sudo.sh pi@192.168.50.89:/tmp/
+#   ssh -t pi@192.168.50.89 'sudo bash /tmp/enable-passwordless-sudo.sh'
+#
+# (Not `ssh -t ... 'sudo bash -s' < script`: with the script on stdin there is no terminal for
+# sudo's password prompt — "a terminal is required to read the password".)
 #
 set -euo pipefail
 

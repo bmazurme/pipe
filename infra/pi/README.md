@@ -40,7 +40,8 @@ done
 порт 22 — единственная дверь:
 
 ```bash
-ssh -t pi@192.168.50.89 'sudo bash -s' < infra/pi/harden-ssh.sh
+scp infra/pi/harden-ssh.sh pi@192.168.50.89:/tmp/
+ssh -t pi@192.168.50.89 'sudo bash /tmp/harden-ssh.sh'
 ```
 
 Скрипт отказывается работать, если у пользователя нет ни одного ключа, проверяет
@@ -53,12 +54,15 @@ ssh -t pi@192.168.50.89 'sudo bash -s' < infra/pi/harden-ssh.sh
 Для `red`, `blue`, `green` (на `white` уже есть). С компьютера, по одной плате:
 
 ```bash
-ssh -t pi@192.168.50.89  'sudo bash -s' < infra/pi/enable-passwordless-sudo.sh
-ssh -t pi@192.168.50.117 'sudo bash -s' < infra/pi/enable-passwordless-sudo.sh
-ssh -t pi@192.168.50.240 'sudo bash -s' < infra/pi/enable-passwordless-sudo.sh
+for h in 192.168.50.89 192.168.50.117 192.168.50.240; do
+  scp infra/pi/enable-passwordless-sudo.sh pi@$h:/tmp/
+  ssh -t pi@$h 'sudo bash /tmp/enable-passwordless-sudo.sh'     # спросит пароль sudo — введите его
+done
 ```
 
-`-t` нужен, чтобы `sudo` один раз спросил пароль. Что делает скрипт:
+Скрипт **копируется на плату и запускается там** (а не подаётся через `ssh ... 'sudo bash -s' < файл`): при подаче
+скрипта через stdin у `ssh` нет терминала, и `sudo` отвечает «a terminal is required to read the password». `-t` даёт
+терминал, `sudo` один раз спросит пароль. Что делает скрипт:
 
 1. Пишет `/etc/sudoers.d/90-pi-nopasswd` со строкой `pi ALL=(ALL) NOPASSWD:ALL`,
    **сначала проверяет её `visudo -cf`**, ставит с правами `0440` и проверяет всю

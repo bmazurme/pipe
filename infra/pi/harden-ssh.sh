@@ -5,7 +5,11 @@
 # the configuration before reloading — but KEEP ONE SSH SESSION OPEN while you test
 # a second one, so a mistake cannot lock you out.
 #
-#   ssh -t pi@192.168.50.89 'sudo bash -s' < infra/pi/harden-ssh.sh
+#   scp infra/pi/harden-ssh.sh pi@192.168.50.89:/tmp/
+#   ssh -t pi@192.168.50.89 'sudo bash /tmp/harden-ssh.sh'
+#
+# (Not `ssh -t ... 'sudo bash -s' < script`: with the script on stdin there is no terminal for
+# sudo's password prompt — "a terminal is required to read the password".)
 #
 set -euo pipefail
 
