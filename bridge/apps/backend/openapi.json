@@ -191,6 +191,91 @@
         }
       }
     },
+    "/api/v1/auth/identities": {
+      "get": {
+        "operationId": "IdentitiesController_list",
+        "summary": "Sign-in methods connected to the current user",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/identities/{provider}/enable": {
+      "post": {
+        "operationId": "IdentitiesController_enable",
+        "summary": "Allow signing in with this method",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/auth/identities/{provider}/disable": {
+      "post": {
+        "operationId": "IdentitiesController_disable",
+        "summary": "Forbid signing in with this method (409 if it is the last enabled one)",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/auth/identities/{provider}": {
+      "delete": {
+        "operationId": "IdentitiesController_unlink",
+        "summary": "Disconnect this method (409 if it is the last enabled one)",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/chat/chats": {
       "get": {
         "operationId": "ChatController_listChats",
@@ -1927,6 +2012,39 @@
         }
       }
     },
+    "/api/v1/oauth/providers": {
+      "get": {
+        "operationId": "OauthController_providers",
+        "summary": "Sign-in providers configured on this deployment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/{provider}/link": {
+      "post": {
+        "operationId": "OauthController_startLink",
+        "summary": "Start connecting a sign-in method to this account",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/oauth/yandex": {
       "get": {
         "operationId": "OauthController_yandexLogin",
@@ -1941,6 +2059,28 @@
     "/api/v1/oauth/yandex/redirect": {
       "get": {
         "operationId": "OauthController_yandexLoginRedirect",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/github": {
+      "get": {
+        "operationId": "OauthController_githubLogin",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/github/redirect": {
+      "get": {
+        "operationId": "OauthController_githubLoginRedirect",
         "parameters": [],
         "responses": {
           "200": {

@@ -8,7 +8,10 @@ import { ApiKeysService } from './api-keys.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ApiKey } from './entities/api-key.entity';
+import { AuthIdentity } from './entities/auth-identity.entity';
 import { Session } from './entities/session.entity';
+import { IdentitiesController } from './identities.controller';
+import { IdentitiesService } from './identities.service';
 import { JwtOrApiKeyGuard } from './guards/jwt-or-api-key.guard';
 import { JwtGuard } from './guards/jwt.guard';
 import { SessionsService } from './sessions.service';
@@ -16,7 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Session, ApiKey]),
+    TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -33,12 +36,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, IdentitiesController],
   providers: [
     AuthService,
     JwtStrategy,
     SessionsService,
     ApiKeysService,
+    IdentitiesService,
     JwtGuard,
     JwtOrApiKeyGuard,
   ],
@@ -47,6 +51,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule,
     SessionsService,
     ApiKeysService,
+    IdentitiesService,
     JwtGuard,
     JwtOrApiKeyGuard,
   ],
