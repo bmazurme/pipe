@@ -40,6 +40,24 @@ cd ~/bridge-pi
    failed attempts count against Let's Encrypt's rate limit.
 4. Sign in with Yandex → profile → «Способы входа» (GitHub appears once its secrets are set, see PR #221).
 
+## worker + VPN client (stack `bridgew`)
+
+Runs on green, separate from the core stack. The AI providers answer 403 from Russia (checked from the board), so the
+worker's provider traffic goes out through an Xray client (HTTP proxy on its own network); the worker reaches bridge
+over its public address like any other client.
+
+```bash
+infra/bridge-pi/build-worker-image.sh          # on the Mac: arm64 image → green, tag → white
+# on white (ssh -t pi@192.168.50.11, cd ~/bridge-pi; scp the updated scripts first):
+./secrets.sh set WORKER_BRIDGE_API_KEY         # bridge → Profile → Access → API keys (brk_…, shown once)
+./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN       # `claude setup-token` where you are logged in to Claude
+install -m 600 /path/to/xray-client.json ~/.pipe/xray-client.json   # bridge/deploy/swarm/xray-client-config.example.json
+./deploy-worker.sh && ./deploy-worker.sh status
+```
+
+The three values become Docker secrets (encrypted in the Swarm raft store); `deploy-worker.sh` writes them to a 0700
+temp directory and removes it on exit. The worker should then show up on bridge's Worker page as `pi-worker`.
+
 ## Operations
 
 ```bash
@@ -55,4 +73,4 @@ docker service scale bridge_caddy=0                 # take the public entry down
   attachable for exactly this. Until that timer is enabled there is **no backup of this database**.
 - Garage S3 (PR #224) is not wired in yet: uploads live in the `bridge_uploads` volume on white (an S3 storage
   driver is the next code change).
-- Not covered yet: warm standby on red (restore from the daily dump is the plan), worker + vpn-client, `ntlstl.dev`.
+- Not covered yet: warm standby on red (restore from the daily dump is the plan), `ntlstl.dev` (the portfolio).
