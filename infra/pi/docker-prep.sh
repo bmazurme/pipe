@@ -14,7 +14,8 @@
 #   4. loads vxlan/br_netfilter/overlay now and on every boot (Swarm overlay networks)
 #   5. enables the memory cgroup (Ubuntu on the Pi ships without it, so `--limit-memory` and
 #      per-service limits are silently ignored) — needs a reboot, the script says so
-#   6. opens the Swarm ports in ufw when ufw is active
+#   6. makes dockerd wait for time sync (no RTC on the Pi)
+#   7. opens the Swarm ports in ufw when ufw is active
 set -euo pipefail
 
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -67,6 +68,12 @@ if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
   ufw allow 2377/tcp; ufw allow 7946/tcp; ufw allow 7946/udp; ufw allow 4789/udp
   log "ufw: swarm ports opened"
 fi
+
+# the Pi has no RTC: without this dockerd can start with a stale clock and Swarm rejects its
+# certificates as "expired or not yet valid" until it is restarted
+mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nAfter=time-sync.target\nWants=time-sync.target\n' > /etc/systemd/system/docker.service.d/10-time-sync.conf
+systemctl daemon-reload
 
 systemctl enable docker.service >/dev/null 2>&1
 systemctl start docker.service
