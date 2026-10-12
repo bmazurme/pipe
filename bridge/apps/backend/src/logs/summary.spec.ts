@@ -82,6 +82,38 @@ describe('summarize', () => {
     });
   });
 
+  it('keeps fast 5xx out of slowestRoutes and ranks failingRoutes by count', () => {
+    const s = summarize(
+      [
+        row('http.slow', 'warn', 'http', 'slow', {
+          route: '/slow',
+          durationMs: 2000,
+        }),
+        row('http.error', 'error', 'http', 'err a', {
+          route: '/a',
+          durationMs: 1,
+        }),
+        row('http.error', 'error', 'http', 'err b', {
+          route: '/b',
+          durationMs: 5,
+        }),
+        row('http.error', 'error', 'http', 'err b', {
+          route: '/b',
+          durationMs: 9,
+        }),
+      ],
+      7,
+    );
+
+    expect(s.slowestRoutes).toEqual([
+      { route: '/slow', count: 1, maxMs: 2000 },
+    ]);
+    expect(s.failingRoutes).toEqual([
+      { route: '/b', count: 2, maxMs: 9 },
+      { route: '/a', count: 1, maxMs: 1 },
+    ]);
+  });
+
   it('handles an empty window', () => {
     const s = summarize([], 7);
 
