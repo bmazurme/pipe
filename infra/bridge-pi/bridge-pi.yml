@@ -74,6 +74,12 @@ services:
       TRUST_PROXY: uniquelocal
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Improve (analysis, issue runs, nightly schedules) and the loop's merge button talk to this repository.
+      # Empty LOOP_GITHUB_TOKEN = Improve answers "GitHub не настроен". Fine-grained token, THIS repo only:
+      # Issues RW, Pull requests RW, Contents RW, Checks R.
+      GITHUB_REPO: ${GITHUB_REPO:-bmazurme/pipe}
+      GITHUB_BASE_BRANCH: ${GITHUB_BASE_BRANCH:-main}
+      LOOP_GITHUB_TOKEN: ${LOOP_GITHUB_TOKEN:-}
     ports:
       # LAN-only checks (the router forwards only 80/443): curl http://<node>:3300/api/v1/health
       - target: 3000
