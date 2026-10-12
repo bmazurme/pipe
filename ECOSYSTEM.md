@@ -48,6 +48,10 @@ version of this had grown past the point of being easy to navigate:
   how tasks are keyed, and how `harness` merges them.
 - **[docs/deploy.md](docs/deploy.md)** — ports & local dev, and the full
   secrets/env-var table for every product.
+- **[docs/ha-dr-plan.md](docs/ha-dr-plan.md)** — fault tolerance and disaster
+  recovery plan: Selectel as the primary site, four Raspberry Pi 5 as the
+  standby and backup store, Yandex returning later as a third copy, daily
+  backups, and the second (GitHub) login method.
 - **[docs/workflows.md](docs/workflows.md)** — the GitLab worker + ready
   notifications, and reports' pull-commits-and-pushes-the-task-branch flow.
 - **[docs/roadmap.md](docs/roadmap.md)** — what's deliberately not built
