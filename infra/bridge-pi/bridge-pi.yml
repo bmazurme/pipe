@@ -1,0 +1,195 @@
+# bridge on the Raspberry Pi Swarm (temporary primary while Selectel is on hold; docs/ha-dr-plan.md).
+#
+#   infra/bridge-pi/deploy.sh                # from white, after secrets.sh and images are in place
+#
+# Core only: Postgres, backend, frontend, Caddy (TLS). worker and vpn-client come after the first
+# sign-in (the worker needs a bridge API key). Everything stateful is pinned to the node labelled
+# bridge-primary=true (white) — local volumes, one backend (it owns the schedulers and the Telegram
+# long poll, so never run two).
+#
+# Images are built for arm64 and loaded straight into that node (build-images.sh), hence the
+# localhost/ prefix and `--resolve-image never` in deploy.sh; no registry is involved.
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bridge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-ntlstl-db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.bridge-primary == true]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits: { cpus: '1.50', memory: 1G }
+        reservations: { memory: 256M }
+
+  backend:
+    image: localhost/pipe/bridge-backend:${IMAGE_TAG:?IMAGE_TAG is required}
+    networks:
+      - internal
+      - web
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-bridge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-ntlstl-db}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:?REFRESH_JWT_SECRET is required}
+      CREDENTIALS_ENC_KEY: ${CREDENTIALS_ENC_KEY:?CREDENTIALS_ENC_KEY is required}
+      YANDEX_ID: ${YANDEX_ID:-}
+      YANDEX_SECRET: ${YANDEX_SECRET:-}
+      BRIDGE_YANDEX_REDIRECT: https://${API_HOST:-api.bridge.ntlstl.dev}/api/v1/oauth/yandex/redirect
+      GITHUB_ID: ${GITHUB_ID:-}
+      GITHUB_SECRET: ${GITHUB_SECRET:-}
+      BRIDGE_GITHUB_REDIRECT: https://${API_HOST:-api.bridge.ntlstl.dev}/api/v1/oauth/github/redirect
+      BRIDGE_TARGET_URL: https://${APP_HOST:-bridge.ntlstl.dev}
+      COOKIE_DOMAIN: ${API_HOST:-api.bridge.ntlstl.dev}
+      CORS_ORIGINS: https://${APP_HOST:-bridge.ntlstl.dev}
+      # Without an allowlist ANY Yandex account could register — required on a public host.
+      EMAILS: ${EMAILS:?EMAILS (comma-separated sign-in allowlist) is required}
+      # Caddy runs in another container: trust X-Forwarded-For from private ranges, or every
+      # client looks like one address (rate limits, sessions list). See src/config/trust-proxy.ts.
+      TRUST_PROXY: uniquelocal
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    ports:
+      # LAN-only checks (the router forwards only 80/443): curl http://<node>:3300/api/v1/health
+      - target: 3000
+        published: 3300
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - bridge_uploads:/app/uploads
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/api/v1/health >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.bridge-primary == true]
+      update_config:
+        order: stop-first      # one backend only: it holds schedulers and the Telegram long poll
+        failure_action: rollback
+        monitor: 60s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits: { cpus: '1.00', memory: 768M }
+        reservations: { memory: 128M }
+
+  frontend:
+    image: localhost/pipe/bridge-frontend:${IMAGE_TAG:?IMAGE_TAG is required}
+    networks:
+      - web
+    ports:
+      - target: 80
+        published: 3305
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1/ >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.bridge-primary == true]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits: { cpus: '0.25', memory: 128M }
+
+  # TLS front. Ports are published in HOST mode so the backend sees real client addresses (ingress
+  # mode would NAT them away). Certificates (Let's Encrypt, HTTP-01) need 80/443 forwarded to this
+  # node and the domains pointing at the home address; the certificates live in the caddy_data volume.
+  caddy:
+    image: caddy:2-alpine
+    networks:
+      - web
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+    environment:
+      APP_HOST: ${APP_HOST:-bridge.ntlstl.dev}
+      API_HOST: ${API_HOST:-api.bridge.ntlstl.dev}
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.bridge-primary == true]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits: { cpus: '0.50', memory: 128M }
+
+networks:
+  # attachable: a one-off `docker run --network bridge_internal` can reach postgres by name
+  # (that is how infra/backup dumps the database).
+  internal:
+    driver: overlay
+    attachable: true
+  web:
+    driver: overlay
+
+volumes:
+  pgdata:
+  bridge_uploads:
+  caddy_data:
+  caddy_config:
+
+configs:
+  caddyfile:
+    file: ./Caddyfile
+    name: caddyfile_${CADDYFILE_HASH:?CADDYFILE_HASH is required}
