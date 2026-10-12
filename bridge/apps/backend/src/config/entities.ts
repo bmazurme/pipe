@@ -1,4 +1,5 @@
 import { ApiKey } from '../auth/entities/api-key.entity';
+import { AuthIdentity } from '../auth/entities/auth-identity.entity';
 import { Session } from '../auth/entities/session.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
@@ -35,6 +36,7 @@ export const ENTITIES = [
   PurgeEntry,
   Session,
   ApiKey,
+  AuthIdentity,
   DayOff,
   TimeReportEntry,
   Job,

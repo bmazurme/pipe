@@ -1,4 +1,10 @@
-export { default as authApi, getYandexLoginUrl } from './auth-api';
+export {
+  default as authApi,
+  getOauthUrl,
+  getYandexLoginUrl,
+  getGithubLoginUrl,
+} from './auth-api';
+export type { OauthProvider } from './auth-api';
 export { API_URL } from './env';
 export { getErrorMessage } from './getErrorMessage';
 export { describeApiError } from './describeApiError';
