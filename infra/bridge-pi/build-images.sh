@@ -13,7 +13,7 @@ API_URL="${VITE_API_URL:-https://api.bridge.ntlstl.dev}"
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-[ -z "$(git status --porcelain)" ] || { echo "working tree is not clean — commit first (the tag is the commit id)" >&2; exit 1; }
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "tracked files have uncommitted changes — commit first (the tag is the commit id)" >&2; exit 1; }
 TAG="$(git rev-parse --short=10 HEAD)"
 
 echo "== backend $TAG"

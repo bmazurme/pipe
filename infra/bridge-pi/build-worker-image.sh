@@ -11,7 +11,7 @@ set -euo pipefail
 HOST="${1:-192.168.50.14}"
 MANAGER="${MANAGER:-192.168.50.11}"
 cd "$(git rev-parse --show-toplevel)"
-[ -z "$(git status --porcelain)" ] || { echo "working tree is not clean — commit first (the tag is the commit id)" >&2; exit 1; }
+[ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "tracked files have uncommitted changes — commit first (the tag is the commit id)" >&2; exit 1; }
 TAG="$(git rev-parse --short=10 HEAD)"
 
 docker build --platform linux/arm64 -f worker/Dockerfile -t "localhost/pipe/bridge-worker:$TAG" .
