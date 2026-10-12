@@ -53,6 +53,9 @@ WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH="$(hash "$WORKER_CLAUDE_CODE_OAUTH_TOKEN_FIL
 export XRAY_CONFIG_FILE WORKER_BRIDGE_API_KEY_FILE WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE
 export XRAY_CONFIG_HASH WORKER_BRIDGE_API_KEY_HASH WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH
 
+# shared by backend and vpn-client (Telegram goes out through the VPN proxy); idempotent
+docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
+
 cd "$HERE"
 docker stack deploy --resolve-image never -c worker-pi.yml "$STACK"
 echo "deployed worker tag $WORKER_IMAGE_TAG; watch with: ./deploy-worker.sh status"

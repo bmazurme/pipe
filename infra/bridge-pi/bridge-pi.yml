@@ -47,6 +47,7 @@ services:
     networks:
       - internal
       - web
+      - telegram-proxy-net
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -72,6 +73,11 @@ services:
       # Caddy runs in another container: trust X-Forwarded-For from private ranges, or every
       # client looks like one address (rate limits, sessions list). See src/config/trust-proxy.ts.
       TRUST_PROXY: uniquelocal
+      # Telegram is blocked from here, so the bot goes out through the VPN client of the worker stack (a shared
+      # network that holds only this backend and vpn-client) and receives updates by long polling — only one
+      # consumer per bot may poll, so never run a second backend with the same token.
+      TELEGRAM_PROXY_URL: http://vpn-client:1080
+      TELEGRAM_POLLING: 'true'
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       # Improve (analysis, issue runs, nightly schedules) and the loop's merge button talk to this repository.
@@ -188,6 +194,9 @@ networks:
     attachable: true
   web:
     driver: overlay
+  # created by deploy.sh / deploy-worker.sh (shared with the bridgew stack's vpn-client)
+  telegram-proxy-net:
+    external: true
 
 volumes:
   pgdata:
