@@ -38,6 +38,9 @@ export IMAGE_TAG
 CADDYFILE_HASH="$(sha256sum "$HERE/Caddyfile" | cut -c1-12)"
 export CADDYFILE_HASH
 
+# shared by backend and vpn-client (Telegram goes out through the VPN proxy); idempotent
+docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
+
 node="$(hostname)"
 docker node update --label-add bridge-primary=true "$node" >/dev/null
 

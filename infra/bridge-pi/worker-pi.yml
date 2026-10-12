@@ -13,7 +13,10 @@ services:
   vpn-client:
     image: ghcr.io/xtls/xray-core:latest
     networks:
-      - worker-net
+      worker-net: {}
+      # bridge's backend reaches Telegram through this proxy; the alias makes `vpn-client` resolve on the shared network
+      telegram-proxy-net:
+        aliases: [vpn-client]
     secrets:
       - source: xray_client_config
         target: /usr/local/etc/xray/config.json
@@ -66,6 +69,8 @@ services:
 networks:
   worker-net:
     driver: overlay
+  telegram-proxy-net:
+    external: true
 
 secrets:
   # Immutable Swarm objects: the content hash in the name makes a rotated value a new object.

@@ -67,6 +67,22 @@ in series; direct connects to the VPN server were fine) and `firefox` passed 48 
 The three values become Docker secrets (encrypted in the Swarm raft store); `deploy-worker.sh` writes them to a 0700
 temp directory and removes it on exit. The worker should then show up on bridge's Worker page as `pi-worker`.
 
+## Telegram notifications
+
+Telegram is blocked from here (direct connects time out), so the backend sends through the VPN client of the worker stack:
+a shared overlay network `telegram-proxy-net` (created by the deploy scripts) holds only the backend and `vpn-client`, so the
+worker stays isolated. Updates arrive by long polling — only one consumer per bot may poll.
+
+```bash
+# 1. create a bot in Telegram with @BotFather → its token; write to the bot once, then find your chat id (below)
+./secrets.sh set TELEGRAM_BOT_TOKEN
+./secrets.sh set TELEGRAM_CHAT_ID       # the ONLY chat the bot talks to and accepts commands from
+./deploy.sh
+```
+
+Chat id: after you have written "hi" to the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser with
+your VPN on — `"chat":{"id":123456789,…}`. (The page shows the token in the URL: do it on your own machine only.)
+
 ## Operations
 
 ```bash
