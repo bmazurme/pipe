@@ -7,8 +7,9 @@
 # bridge-primary=true (white) — local volumes, one backend (it owns the schedulers and the Telegram
 # long poll, so never run two).
 #
-# Images are built for arm64 and loaded straight into that node (build-images.sh), hence the
-# localhost/ prefix and `--resolve-image never` in deploy.sh; no registry is involved.
+# Images come from one of two places (deploy.sh decides): built for arm64 and loaded straight into the node
+# (build-images.sh; the localhost/ names, `--resolve-image never`), or pulled from GHCR (`./deploy.sh ghcr [tag]`,
+# images published by .github/workflows/publish-images.yml) — IMAGE_BACKEND / IMAGE_FRONTEND select the repository.
 version: '3.8'
 
 services:
@@ -43,7 +44,7 @@ services:
         reservations: { memory: 256M }
 
   backend:
-    image: localhost/pipe/bridge-backend:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_BACKEND:-localhost/pipe/bridge-backend}:${IMAGE_TAG:?IMAGE_TAG is required}
     networks:
       - internal
       - web
@@ -121,7 +122,7 @@ services:
         reservations: { memory: 128M }
 
   frontend:
-    image: localhost/pipe/bridge-frontend:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_FRONTEND:-localhost/pipe/bridge-frontend}:${IMAGE_TAG:?IMAGE_TAG is required}
     networks:
       - web
     ports:

@@ -37,7 +37,7 @@ services:
         limits: { cpus: '0.25', memory: 128M }
 
   worker:
-    image: localhost/pipe/bridge-worker:${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required}
+    image: ${IMAGE_WORKER:-localhost/pipe/bridge-worker}:${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required}
     networks:
       - worker-net
     environment:

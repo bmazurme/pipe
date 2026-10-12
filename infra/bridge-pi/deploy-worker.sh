@@ -6,6 +6,7 @@
 #   ./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN     # `claude setup-token` on a machine where you are logged in to Claude
 #   ./vless-to-xray.sh                           # paste your vless:// Reality link (hidden) → ~/.pipe/xray-client.json
 #   ./deploy-worker.sh                           # (./deploy-worker.sh status to look)
+#   ./deploy-worker.sh ghcr [tag]                # pull the worker image from GHCR instead of the node's own copy
 #
 # The values become Docker secrets (encrypted in the Swarm raft store, mounted as files); the temporary files
 # this script writes live in a 0700 directory and are removed on exit.
@@ -33,8 +34,16 @@ for k in WORKER_BRIDGE_API_KEY CLAUDE_CODE_OAUTH_TOKEN; do [ -n "${!k:-}" ] || m
 [ ${#missing[@]} -eq 0 ] || { echo "missing in $ENV_FILE: ${missing[*]} (./secrets.sh set KEY)" >&2; exit 1; }
 grep -qE 'VPN_SERVER_IP_HERE|CLIENT_UUID_HERE|REALITY_' "$XRAY" && { echo "$XRAY still has the example placeholders" >&2; exit 1; }
 
-WORKER_IMAGE_TAG="${WORKER_IMAGE_TAG:-$(cat "$HOME/.pipe/worker-image-tag" 2>/dev/null || true)}"
-[ -n "$WORKER_IMAGE_TAG" ] || { echo "no worker image tag — run build-worker-image.sh from your workstation" >&2; exit 1; }
+RESOLVE=never
+if [ "${1:-}" = ghcr ]; then
+  WORKER_IMAGE_TAG="${2:-latest}"
+  IMAGE_WORKER=ghcr.io/bmazurme/pipe-worker
+  export IMAGE_WORKER
+  RESOLVE=always
+else
+  WORKER_IMAGE_TAG="${WORKER_IMAGE_TAG:-$(cat "$HOME/.pipe/worker-image-tag" 2>/dev/null || true)}"
+  [ -n "$WORKER_IMAGE_TAG" ] || { echo "no worker image tag — run build-worker-image.sh from your workstation" >&2; exit 1; }
+fi
 export WORKER_IMAGE_TAG
 
 TMP="$(mktemp -d)"
@@ -57,5 +66,5 @@ export XRAY_CONFIG_HASH WORKER_BRIDGE_API_KEY_HASH WORKER_CLAUDE_CODE_OAUTH_TOKE
 docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
 
 cd "$HERE"
-docker stack deploy --resolve-image never -c worker-pi.yml "$STACK"
+docker stack deploy --resolve-image "$RESOLVE" -c worker-pi.yml "$STACK"
 echo "deployed worker tag $WORKER_IMAGE_TAG; watch with: ./deploy-worker.sh status"
