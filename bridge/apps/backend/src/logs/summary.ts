@@ -17,7 +17,10 @@ export interface LogSummary {
   // Most frequent failure messages (jobs and 5xx), numbers stripped so
   // "failed after 12s" and "failed after 40s" count as one problem.
   topErrors: Array<{ message: string; count: number }>;
+  // Routes with `http.slow` rows only, by worst duration.
   slowestRoutes: Array<{ route: string; count: number; maxMs: number }>;
+  // Routes with `http.error` (5xx) rows, by failure count — often fast.
+  failingRoutes: Array<{ route: string; count: number; maxMs: number }>;
 }
 
 function parseMeta(meta: string | null): Record<string, unknown> {
@@ -50,6 +53,7 @@ export function summarize(
   const bySource: Record<string, number> = {};
   const errors = new Map<string, number>();
   const routes = new Map<string, { count: number; maxMs: number }>();
+  const failing = new Map<string, { count: number; maxMs: number }>();
   let succeeded = 0;
   let failed = 0;
   let durationSum = 0;
@@ -82,11 +86,12 @@ export function summarize(
       typeof meta.route === 'string' &&
       typeof meta.durationMs === 'number'
     ) {
-      const entry = routes.get(meta.route) ?? { count: 0, maxMs: 0 };
+      const target = row.event === 'http.slow' ? routes : failing;
+      const entry = target.get(meta.route) ?? { count: 0, maxMs: 0 };
 
       entry.count += 1;
       entry.maxMs = Math.max(entry.maxMs, meta.durationMs);
-      routes.set(meta.route, entry);
+      target.set(meta.route, entry);
     }
   }
 
@@ -112,6 +117,10 @@ export function summarize(
     slowestRoutes: [...routes.entries()]
       .map(([route, v]) => ({ route, ...v }))
       .sort((a, b) => b.maxMs - a.maxMs)
+      .slice(0, 5),
+    failingRoutes: [...failing.entries()]
+      .map(([route, v]) => ({ route, ...v }))
+      .sort((a, b) => b.count - a.count)
       .slice(0, 5),
   };
 }
