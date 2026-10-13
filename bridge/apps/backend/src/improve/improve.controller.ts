@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   HttpCode,
@@ -46,8 +47,8 @@ export class ImproveController {
   }
 
   @Get('runs')
-  runs(@Query('limit') limit?: string) {
-    return this.improve.listRuns(limit ? Number(limit) : undefined);
+  runs(@Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number) {
+    return this.improve.listRuns(limit);
   }
 
   @Post('runs')
