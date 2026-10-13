@@ -1,0 +1,91 @@
+import { createHash } from 'node:crypto';
+import AdmZip from 'adm-zip';
+import { assertSchemaVersion, PROTOCOL_SCHEMA_VERSION } from './manifest.js';
+// Reserved — nothing under this prefix in a real project tree collides with
+// it (double-underscore, matches the __*_manifest__.json convention).
+export const ASSET_PREFIX = '__issue_assets__/';
+// Code-unit order, not localeCompare: the latter depends on the runtime's
+// ICU/locale data, so the same files could hash differently across machines.
+function byRelPath(a, b) {
+    return a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0;
+}
+function hashEntries(files, assets, compare) {
+    const hash = createHash('sha256');
+    for (const file of [...files].sort(compare)) {
+        hash.update(file.relPath);
+        hash.update('\0');
+        hash.update(file.content);
+        hash.update('\0');
+    }
+    for (const asset of [...assets].sort(compare)) {
+        hash.update(asset.relPath);
+        hash.update('\0');
+        hash.update(asset.base64);
+        hash.update('\0');
+    }
+    return hash.digest('hex');
+}
+export function contentHash(files, assets = []) {
+    return hashEntries(files, assets, byRelPath);
+}
+// Parcels built before the comparator became code-unit order (< #34) sorted with
+// localeCompare. A sender still running that build (a reports server that was not
+// restarted, an older sync-cli) produces a hash a current reader would reject as
+// tampered, though nothing is wrong with the parcel. Accept it on the read side
+// only; drop once every sender is known to be past the switch.
+function legacyContentHash(files, assets) {
+    return hashEntries(files, assets, (a, b) => a.relPath.localeCompare(b.relPath));
+}
+// Generic over the manifest shape so sync's project-mode manifest
+// (__sync_manifest__.json) and issue-mode/reports' manifest
+// (__subscription_manifest__.json) can each parameterize this with their own
+// fields while sharing the zip/hash/schemaVersion mechanics.
+export function buildArchive(entryName, files, manifestFields, assets = []) {
+    const manifest = {
+        ...manifestFields,
+        schemaVersion: PROTOCOL_SCHEMA_VERSION,
+        contentHash: contentHash(files, assets),
+    };
+    const zip = new AdmZip();
+    for (const file of files) {
+        zip.addFile(file.relPath, Buffer.from(file.content, 'utf-8'));
+    }
+    for (const asset of assets) {
+        zip.addFile(`${ASSET_PREFIX}${asset.relPath}`, Buffer.from(asset.base64, 'base64'));
+    }
+    zip.addFile(entryName, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+    return { buffer: zip.toBuffer(), manifest };
+}
+export function extractArchive(buffer, entryName) {
+    const zip = new AdmZip(buffer);
+    const files = [];
+    const assets = [];
+    let manifest;
+    for (const entry of zip.getEntries()) {
+        if (entry.isDirectory)
+            continue;
+        if (entry.entryName === entryName) {
+            manifest = JSON.parse(entry.getData().toString('utf-8'));
+            continue;
+        }
+        if (entry.entryName.startsWith(ASSET_PREFIX)) {
+            assets.push({
+                relPath: entry.entryName.slice(ASSET_PREFIX.length),
+                base64: entry.getData().toString('base64'),
+            });
+            continue;
+        }
+        files.push({ relPath: entry.entryName, content: entry.getData().toString('utf-8') });
+    }
+    if (!manifest) {
+        throw new Error(`Archive is missing ${entryName} — not a recognized parcel.`);
+    }
+    assertSchemaVersion(manifest, entryName);
+    // Pre-hash parcels carry no contentHash — skip silently rather than reject them.
+    if (typeof manifest.contentHash === 'string' &&
+        manifest.contentHash !== contentHash(files, assets) &&
+        manifest.contentHash !== legacyContentHash(files, assets)) {
+        throw new Error(`Parcel ${entryName} failed integrity check: contentHash mismatch`);
+    }
+    return { files, assets, manifest };
+}
