@@ -68,6 +68,8 @@ reset; CONFIRM=nope fb; c=$?
 reset; fb; c=$?
 [ "$c" -eq 0 ] && grep -q 'white is streaming' "$T/out"; check "the real run finishes" $?
 grep -q 'standby_white' "$FIX/log.stdin"; check "…creates the slot on red" $?
+# every SQL statement sent to red must end with a semicolon, or psql glues it to the next one (found by the real run)
+! grep -E "^(SELECT CASE|ALTER SYSTEM|SELECT pg_reload_conf)" "$FIX/log.stdin" | grep -vE ';$' | grep -q .; check "…every SQL statement it sends is terminated with a semicolon" $?
 ! grep -q 'secretpw' "$FIX/log"; check "…the password never appears on a command line" $?
 grep -q 'bridgesw' "$FIX/log.stdin" && grep -q 'scp' "$FIX/log"; check "…ships and deploys the replica stack on white" $?
 ! grep -q 'bridge-pi\|bridge_pgdata' "$FIX/log" "$FIX/log.stdin"; check "…never deploys white's own stack or touches its old volume" $?

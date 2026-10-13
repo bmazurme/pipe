@@ -75,7 +75,7 @@ subnet="$(ssh_ "$RED" "docker network inspect bridge_internal --format '{{range 
 [ -n "$subnet" ] || die "network bridge_internal not found on red."
 line="host replication replicator $subnet scram-sha-256"
 ssh_ "$RED" 'c=$(docker ps --filter name=bridgesb_postgres-standby -q | head -1); hba=/var/lib/postgresql/data/pg_hba.conf; docker exec "$c" sh -c "grep -qxF '"'$line'"' $hba || echo '"'$line'"' >> $hba"'
-printf "%s\n" "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name='$SLOT') THEN 'slot exists' ELSE (SELECT 'slot created' FROM pg_create_physical_replication_slot('$SLOT')) END" \
+printf "%s;\n" "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name='$SLOT') THEN 'slot exists' ELSE (SELECT 'slot created' FROM pg_create_physical_replication_slot('$SLOT')) END" \
   "ALTER SYSTEM SET max_slot_wal_keep_size = '$KEEP'" "SELECT pg_reload_conf()" | red_psql >/dev/null
 say "red: replication allowed, slot $SLOT ready."
 
