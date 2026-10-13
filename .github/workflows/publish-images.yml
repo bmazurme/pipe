@@ -3,12 +3,12 @@ name: Publish images (GHCR, multi-arch)
 # Builds bridge's backend/frontend and worker for linux/amd64 AND linux/arm64 and
 # publishes them to GitHub Container Registry as
 #   ghcr.io/<owner>/pipe-bridge-backend | pipe-bridge-frontend | pipe-worker
-# tagged with the commit SHA and `latest`. arm64 is what the Raspberry Pi standby
+# tagged with the commit SHA, `latest` and (once all three are out) `stable`. arm64 is what the Raspberry Pi standby
 # (docs/ha-dr-plan.md) runs; amd64 is the primary site.
 #
 # Deliberately separate from deploy-bridge.yml: it neither touches the production
-# deploy nor needs Yandex Cloud credentials. Manual for now (workflow_dispatch) —
-# each architecture builds natively on its own runner (no QEMU emulation), the
+# deploy nor needs Yandex Cloud credentials. Automatic on main (see `on:` below) and
+# by hand — each architecture builds natively on its own runner (no QEMU emulation), the
 # per-arch images are pushed by digest and merged into one multi-arch manifest.
 #
 # Needs only the built-in GITHUB_TOKEN, plus the existing VITE_API_URL secret for
@@ -20,8 +20,24 @@ name: Publish images (GHCR, multi-arch)
 # CR_REGISTRY=<owner> and CR_*_IMAGE=pipe-bridge-backend / -frontend / pipe-worker
 # (bridge/deploy/swarm/bridge-stack.yml already builds its image names from them).
 
+# Runs on its own for every change that can alter what is deployed on the Raspberry Pis (the app, the worker,
+# the protocol package, the lockfile, the Pi stack files) and by hand. After ALL three images are published a
+# final job moves the `stable` tag of each to this commit: the boards' auto-deploy (infra/autodeploy) follows
+# `stable` only, so it never sees a half-published set (a new backend next to an old frontend).
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'bridge/apps/**'
+      - 'bridge/package.json'
+      - 'bridge/package-lock.json'
+      - 'worker/**'
+      - 'packages/protocol/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'infra/bridge-pi/**'
+      - '.github/workflows/publish-images.yml'
 
 permissions:
   contents: read
@@ -149,3 +165,28 @@ jobs:
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           docker buildx imagetools inspect "${REGISTRY}/${owner}/pipe-${{ matrix.image }}:${GITHUB_SHA}"
+
+  # Only once every image of this commit is published: `stable` is what the Pis deploy.
+  promote:
+    name: Mark this commit stable
+    needs: merge
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the three images stable
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          for image in bridge-backend bridge-frontend worker; do
+            name="${REGISTRY}/${owner}/pipe-${image}"
+            docker buildx imagetools create -t "${name}:stable" "${name}:${GITHUB_SHA}"
+          done
