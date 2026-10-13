@@ -7,7 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
-import { UPLOAD_DIR } from '../storage/config/multer.config';
+import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatService } from './chat.service';
