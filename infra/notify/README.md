@@ -6,7 +6,8 @@ text to your Telegram chat, and `install.sh` points those scripts at it.
 - **Through the VPN.** Telegram is blocked from here. The message goes out through a throwaway `curlimages/curl` container that joins
   the shared overlay network `telegram-proxy-net` (the backend and `vpn-client` live there) and uses `http://vpn-client:1080` — the
   same path the bridge backend uses for its own notifications.
-- **Secrets.** `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` in `/etc/pipe-notify.env` (root, mode 600), copied from `~/.pipe/bridge.env` on
+- **Secrets.** `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` in `/etc/pipe-notify.env` (root, mode 600; on white 640 `root:pi`, because the auto-deploy
+  runs as `pi` — which already holds the same token in `~/.pipe/bridge.env`), copied from `~/.pipe/bridge.env` on
   white and by an ssh pipe to red — never printed. The token reaches the container as an environment variable, not on a command line,
   and is masked if it ever shows up in an error.
 - **Never fails the caller.** An undeliverable message is logged to stderr and the exit status is 0: the alert path must not break

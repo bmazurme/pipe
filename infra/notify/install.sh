@@ -25,6 +25,13 @@ if [ ! -s /etc/pipe-notify.env ]; then
   fi
 fi
 chmod 600 /etc/pipe-notify.env
+# The auto-deploy runs as the board's user (not root) and calls notify-telegram, so that user must be able to read
+# the file. On white that user already holds the very same token in ~/.pipe/bridge.env — nothing new is exposed.
+if [ -f /etc/pipe-autodeploy.env ] && id "${DEPLOY_USER:-pi}" >/dev/null 2>&1; then
+  chgrp "$(id -gn "${DEPLOY_USER:-pi}")" /etc/pipe-notify.env
+  chmod 640 /etc/pipe-notify.env
+  echo "/etc/pipe-notify.env: readable by ${DEPLOY_USER:-pi} (the auto-deploy runs as that user)"
+fi
 
 wire() { # file variable
   local file="$1" var="$2"
