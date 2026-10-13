@@ -64,7 +64,7 @@ describe('WorkerService', () => {
     storageService = {
       findOwned: jest.fn(),
       create: jest.fn(),
-      path: jest.fn(),
+      download: jest.fn(),
     };
     claudeCredentialsService = {
       resolveToken: jest.fn(),

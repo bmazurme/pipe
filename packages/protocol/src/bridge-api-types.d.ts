@@ -382,6 +382,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["StorageController_list"];
+        put?: never;
+        post: operations["StorageController_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/storage/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["StorageController_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/storage/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["StorageController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/storage/{id}/peek": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["StorageController_peek"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contexts": {
         parameters: {
             query?: never;
@@ -647,70 +711,6 @@ export interface paths {
         };
         get: operations["NotificationSettingsController_get"];
         put: operations["NotificationSettingsController_update"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/storage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["StorageController_list"];
-        put?: never;
-        post: operations["StorageController_upload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/storage/{id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["StorageController_download"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/storage/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["StorageController_remove"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/storage/{id}/peek": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["StorageController_peek"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1575,6 +1575,24 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        StoredFileResponseDto: {
+            id: number;
+            originalName: string;
+            mimeType: string;
+            size: number;
+            /** Format: date-time */
+            createdAt: string;
+            channel: string | null;
+            taskKey: string | null;
+            /** @enum {string|null} */
+            direction: "outbound" | "result" | null;
+        };
+        UploadFileMetaDto: {
+            channel?: string;
+            taskKey?: string;
+            /** @enum {string} */
+            direction?: "outbound" | "result";
+        };
         ContextSummaryDto: {
             id: number;
             name: string;
@@ -1706,24 +1724,6 @@ export interface components {
         UpdateNotificationSettingsDto: {
             quietHours: string;
             timezone: string;
-        };
-        StoredFileResponseDto: {
-            id: number;
-            originalName: string;
-            mimeType: string;
-            size: number;
-            /** Format: date-time */
-            createdAt: string;
-            channel: string | null;
-            taskKey: string | null;
-            /** @enum {string|null} */
-            direction: "outbound" | "result" | null;
-        };
-        UploadFileMetaDto: {
-            channel?: string;
-            taskKey?: string;
-            /** @enum {string} */
-            direction?: "outbound" | "result";
         };
         JobResponseDto: {
             id: number;
@@ -2476,6 +2476,109 @@ export interface operations {
             };
         };
     };
+    StorageController_list: {
+        parameters: {
+            query?: {
+                channel?: string;
+                taskKey?: string;
+                direction?: "outbound" | "result";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredFileResponseDto"][];
+                };
+            };
+        };
+    };
+    StorageController_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadFileMetaDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredFileResponseDto"];
+                };
+            };
+        };
+    };
+    StorageController_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StorageController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StorageController_peek: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ContextController_list: {
         parameters: {
             query?: never;
@@ -2993,109 +3096,6 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateNotificationSettingsDto"];
             };
         };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StorageController_list: {
-        parameters: {
-            query?: {
-                channel?: string;
-                taskKey?: string;
-                direction?: "outbound" | "result";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoredFileResponseDto"][];
-                };
-            };
-        };
-    };
-    StorageController_upload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadFileMetaDto"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoredFileResponseDto"];
-                };
-            };
-        };
-    };
-    StorageController_download: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StorageController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StorageController_peek: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             200: {
                 headers: {

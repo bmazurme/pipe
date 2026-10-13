@@ -9,6 +9,9 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { CHAT_UPLOAD_DIR } from './config/attachment-multer.config';
+import { UPLOAD_DIR } from '../storage/config/multer.config';
+import { FILE_STORE } from '../storage/file-store/file-store';
+import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatService } from './chat.service';
 import { Chat, ChatModel } from './entities/chat.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -38,6 +41,8 @@ async function setup() {
       { provide: getRepositoryToken(Chat), useValue: chats },
       { provide: getRepositoryToken(ChatMessage), useValue: messages },
       { provide: getRepositoryToken(ChatAttachment), useValue: attachments },
+      // the real local store on the real uploads directory: these tests check the files on disk
+      { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
     ],
   }).compile();
 
