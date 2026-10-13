@@ -6,12 +6,7 @@ import { ConflictException } from '@nestjs/common';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
-import {
-  describePublishError,
-  ImproveService,
-  isDue,
-  localDate,
-} from './improve.service';
+import { describePublishError, ImproveService } from './improve.service';
 import { MANIFEST_ENTRY, sha256 } from './parcel';
 
 const BASE = { 'a.ts': 'one', 'b.ts': 'two' };
@@ -39,19 +34,6 @@ function setup(
     create: jest.fn((run: object) => ({ ...run })),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     ...(overrides.runs as Record<string, jest.Mock>),
-  };
-  const qbExecute = jest.fn().mockResolvedValue({ affected: 1 });
-  const schedules = {
-    find: jest.fn().mockResolvedValue([]),
-    findOne: jest.fn(),
-    update: jest.fn(),
-    createQueryBuilder: jest.fn(() => {
-      const qb: Record<string, jest.Mock> = {};
-      for (const name of ['update', 'set', 'where'])
-        qb[name] = jest.fn(() => qb);
-      qb.execute = qbExecute;
-      return qb;
-    }),
   };
   const settings = {
     find: jest.fn().mockResolvedValue([]),
@@ -114,7 +96,6 @@ function setup(
   const appLogs = { record: jest.fn() };
   const service = new ImproveService(
     runs as never,
-    schedules as never,
     settings as never,
     github as never,
     storage as never,
@@ -127,14 +108,12 @@ function setup(
   return {
     service,
     runs,
-    schedules,
     settings,
     github,
     storage,
     workers,
     notifier,
     dataSource,
-    qbExecute,
     dir,
   };
 }
@@ -442,114 +421,6 @@ describe('ImproveService.publish', () => {
     expect(refused.notifier.send).toHaveBeenCalledWith(
       expect.stringContaining('не удалось открыть PR'),
     );
-  });
-});
-
-describe('schedules', () => {
-  // 2026-10-08T23:30:00Z is 02:30 on the 9th in Moscow (UTC+3).
-  const now = new Date('2026-10-08T23:30:00Z');
-  const schedule = {
-    hour: 2,
-    minute: 0,
-    timezone: 'Europe/Moscow',
-    lastRunOn: null as string | null,
-  };
-
-  it('is due once its local time has passed and it has not fired that local day', () => {
-    expect(localDate(now, 'Europe/Moscow')).toBe('2026-10-09');
-    expect(isDue(schedule, now)).toBe(true);
-    expect(isDue({ ...schedule, lastRunOn: '2026-10-09' }, now)).toBe(false);
-    expect(isDue({ ...schedule, lastRunOn: '2026-10-08' }, now)).toBe(true);
-  });
-
-  it('is not due before its time, and still due late (a bridge that was down at 02:00)', () => {
-    expect(isDue({ ...schedule, hour: 3 }, now)).toBe(false);
-    expect(isDue(schedule, new Date('2026-10-09T05:00:00Z'))).toBe(true); // 08:00 Moscow
-  });
-
-  it('fires a due schedule exactly once: only the tick that wins the compare-and-set runs it', async () => {
-    const { service, schedules, qbExecute } = setup();
-    schedules.find.mockResolvedValue([
-      {
-        id: 1,
-        userId: 3,
-        name: 'night',
-        enabled: true,
-        count: 2,
-        model: 'sonnet',
-        label: 'loop',
-        ...schedule,
-      },
-    ]);
-    const fire = jest
-      .spyOn(service, 'fire')
-      .mockResolvedValue({ started: [], skipped: [] });
-
-    await service.tickSchedules(now);
-    expect(fire).toHaveBeenCalledTimes(1);
-
-    qbExecute.mockResolvedValue({ affected: 0 }); // another instance already claimed today's slot
-    await service.tickSchedules(now);
-    expect(fire).toHaveBeenCalledTimes(1);
-  });
-
-  it('starts the oldest eligible issues up to count, skipping the ones that cannot start', async () => {
-    const { service, github, runs, notifier } = setup();
-    github.listOpenIssues.mockResolvedValue(
-      [5, 6, 7, 8].map((number) => ({
-        number,
-        title: `t${number}`,
-        body: '',
-        state: 'open',
-        labels: [],
-      })),
-    );
-    runs.findOne
-      .mockResolvedValueOnce({ status: ImproveRunStatus.PrOpen, prNumber: 9 }) // #5 already has a PR
-      .mockResolvedValue(null);
-    github.getIssue.mockImplementation(async (number: number) => ({
-      number,
-      title: `t${number}`,
-      body: '',
-      state: 'open',
-      isPull: false,
-      labels: [],
-    }));
-
-    const result = await service.fire({
-      id: 1,
-      userId: 3,
-      name: 'night',
-      count: 2,
-      model: 'sonnet',
-      label: 'loop',
-    } as never);
-
-    expect(result.started).toEqual([6, 7]);
-    expect(result.skipped).toEqual([expect.stringContaining('#5')]);
-    expect(notifier.send).toHaveBeenCalledWith(
-      expect.stringContaining('2 запущено, 1 пропущено'),
-    );
-  });
-
-  it('rejects an unknown time zone or model when saving', async () => {
-    const { service } = setup();
-    const input = {
-      name: 'n',
-      hour: 2,
-      minute: 0,
-      timezone: 'Mars/Base',
-      count: 1,
-      model: 'sonnet',
-      enabled: true,
-    };
-
-    await expect(service.saveSchedule(3, input)).rejects.toThrow(
-      /часовой пояс/,
-    );
-    await expect(
-      service.saveSchedule(3, { ...input, timezone: 'UTC', model: 'x' }),
-    ).rejects.toThrow(/Неизвестная модель/);
   });
 });
 

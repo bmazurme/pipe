@@ -27,6 +27,7 @@ import {
   StartManyDto,
   StartRunDto,
 } from './dto/improve.dto';
+import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
 // Browser session only: this starts paid worker runs and opens pull requests, so
@@ -34,7 +35,10 @@ import { ImproveService } from './improve.service';
 @Controller('api/v1/improve')
 @UseGuards(JwtGuard)
 export class ImproveController {
-  constructor(private readonly improve: ImproveService) {}
+  constructor(
+    private readonly improve: ImproveService,
+    private readonly scheduleService: ImproveScheduleService,
+  ) {}
 
   @Get('status')
   status() {
@@ -120,7 +124,7 @@ export class ImproveController {
 
   @Get('schedules')
   schedules() {
-    return this.improve.listSchedules();
+    return this.scheduleService.listSchedules();
   }
 
   @Post('schedules')
@@ -128,7 +132,7 @@ export class ImproveController {
     @Body() dto: SaveScheduleDto,
     @CurrentUser() user: { id: number },
   ) {
-    return this.improve.saveSchedule(user.id, dto);
+    return this.scheduleService.saveSchedule(user.id, dto);
   }
 
   @Put('schedules/:id')
@@ -137,18 +141,18 @@ export class ImproveController {
     @Body() dto: SaveScheduleDto,
     @CurrentUser() user: { id: number },
   ) {
-    return this.improve.saveSchedule(user.id, dto, id);
+    return this.scheduleService.saveSchedule(user.id, dto, id);
   }
 
   @Delete('schedules/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSchedule(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    await this.improve.deleteSchedule(id);
+    await this.scheduleService.deleteSchedule(id);
   }
 
   @Post('schedules/:id/run')
   runScheduleNow(@Param('id', ParseIntPipe) id: number) {
-    return this.improve.runScheduleNow(id);
+    return this.scheduleService.runScheduleNow(id);
   }
 
   @Get('settings')
