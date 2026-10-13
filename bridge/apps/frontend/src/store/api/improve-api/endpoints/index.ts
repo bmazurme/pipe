@@ -121,6 +121,11 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось остановить'),
     }),
+    retryImprovePublish: builder.mutation<ImproveRun, number>({
+      query: (id) => ({ url: `improve/runs/${id}/retry-publish`, method: 'POST' }),
+      invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось повторить публикацию'),
+    }),
     startImproveAnalysis: builder.mutation<ImproveRun, { model: string; categories: string[]; autoCreate: boolean; autoStart?: boolean }>({
       query: (body) => ({ url: 'improve/analysis', method: 'POST', body }),
       invalidatesTags: ['ImproveRuns'],
@@ -177,6 +182,7 @@ export const {
   useListImproveRunsQuery,
   useStartImproveRunMutation,
   useCancelImproveRunMutation,
+  useRetryImprovePublishMutation,
   useStartImproveAnalysisMutation,
   useStartImproveManyMutation,
   useStartImproveItemsMutation,

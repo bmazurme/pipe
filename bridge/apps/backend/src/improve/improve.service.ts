@@ -1,4 +1,4 @@
-import { readFile } from 'fs/promises';
+import { access, readFile } from 'fs/promises';
 
 import {
   BadRequestException,
@@ -342,6 +342,58 @@ export class ImproveService {
     run.finishedAt = new Date();
 
     return this.runs.save(run);
+  }
+
+  // A publish that failed after the worker had already succeeded (a token without
+  // rights, a GitHub outage) is repeated from the kept result parcel — no new job.
+  async retryPublish(id: number, userId: number): Promise<ImproveRun> {
+    const run = await this.runs.findOne({ where: { id } });
+
+    if (!run) throw new NotFoundException('Run not found');
+    if (run.kind === 'analysis' || run.status !== ImproveRunStatus.Failed) {
+      throw new ConflictException(
+        'Повторить публикацию можно только для запуска в статусе «ошибка»',
+      );
+    }
+    if (!run.jobId) {
+      throw new ConflictException('У запуска нет задачи worker');
+    }
+
+    const job = await this.workers.findOwned(run.jobId, run.userId ?? userId);
+
+    if (job.status !== JobStatus.Succeeded || !job.resultFileId) {
+      throw new ConflictException('Задача worker не дала результата');
+    }
+
+    try {
+      const file = await this.storage.findOwned(
+        job.resultFileId,
+        run.userId ?? userId,
+      );
+
+      await access(this.storage.path(file));
+    } catch {
+      throw new ConflictException(
+        'Файл результата уже удалён — запустите задачу заново',
+      );
+    }
+
+    // Claimed exactly once even if the button is pressed twice.
+    const claim = await this.runs.update(
+      { id: run.id, status: ImproveRunStatus.Failed },
+      { status: ImproveRunStatus.Publishing, error: null, finishedAt: null },
+    );
+
+    if (claim.affected !== 1) {
+      throw new ConflictException('Публикация уже повторяется');
+    }
+
+    run.status = ImproveRunStatus.Publishing;
+    run.error = null;
+    run.finishedAt = null;
+    await this.publish(run, job.resultFileId);
+
+    return run;
   }
 
   // ------------------------------------------------- follow the jobs, publish

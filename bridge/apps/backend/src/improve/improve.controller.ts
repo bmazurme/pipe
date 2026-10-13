@@ -64,6 +64,14 @@ export class ImproveController {
     return this.improve.cancelRun(id, user.id);
   }
 
+  @Post('runs/:id/retry-publish')
+  retryPublish(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.improve.retryPublish(id, user.id);
+  }
+
   @Post('analysis')
   startAnalysis(
     @Body() dto: StartAnalysisDto,

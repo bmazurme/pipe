@@ -1,0 +1,1 @@
+{"version":3,"file":"atomicWrite.d.ts","sourceRoot":"","sources":["../src/atomicWrite.ts"],"names":[],"mappings":"AAGA,MAAM,WAAW,oBAAoB;IASnC,IAAI,CAAC,EAAE,MAAM,CAAC;CACf;AAmBD,wBAAgB,iBAAiB,CAAC,QAAQ,EAAE,MAAM,EAAE,IAAI,EAAE,OAAO,EAAE,OAAO,GAAE,oBAAyB,GAAG,IAAI,CAW3G"}
