@@ -218,6 +218,13 @@ restart policies are `no`, so nothing comes back after a reboot. Specs of the ol
 Three managers tolerate losing one. Plucky (25.04) only offers 29.2.1; the 29.x engines interoperate. All nodes
 carry the labels `pi=true` and `role=manager|worker`.
 
+**Clock before Docker (after a power cut).** A Pi has no battery clock; after a cold start dockerd can run with a months-old date, reject the Swarm
+certificates as "not yet valid" and stay out of the cluster (`docker info` → `Swarm: error`) until restarted — found in the failover rehearsal.
+`docker-prep.sh`'s `After=time-sync.target` alone does not help (the target is reached at once). `clock-before-docker.sh` enables the real wait unit
+(`chrony-wait` / `systemd-time-wait-sync`, 120 s timeout) and installs `pipe-swarm-heal.timer` (restarts Docker if Swarm is in `error` and the clock is
+synchronised). Run on every board: `scp infra/pi/{clock-before-docker.sh,swarm-heal.sh} pi@HOST:/tmp/ && ssh -t pi@HOST 'sudo bash /tmp/clock-before-docker.sh'`.
+Tests: `bash infra/pi/test-clock.sh`.
+
 Preparing a board — `docker-prep.sh` is idempotent (moves the old Swarm state aside, upgrades Docker, log rotation
 in `daemon.json`, loads `vxlan`/`br_netfilter`/`overlay` on boot, enables the memory cgroup — Ubuntu on the Pi has
 none by default, so memory limits would be ignored; reboot once if it says so):

@@ -30,6 +30,18 @@ const EXCLUDED_FILES = new Set([
   'pnpm-lock.yaml',
 ]);
 
+// Generated or vendored output (build info too: a committed .tsbuildinfo makes `tsc -b` skip emitting in CI) and lockfiles is never part of the snapshot, so it can never be part of a change
+// either: a worker that builds before finishing leaves dist/ and friends in its result.
+export function isExcludedPath(path: string): boolean {
+  const segments = path.split('/');
+
+  return (
+    segments.slice(0, -1).some((segment) => EXCLUDED_DIRS.has(segment)) ||
+    EXCLUDED_FILES.has(segments[segments.length - 1]) ||
+    segments[segments.length - 1].endsWith('.tsbuildinfo')
+  );
+}
+
 export const MAX_CHANGED_FILES = 100;
 export const MAX_CHANGED_BYTES = 3 * 1024 * 1024;
 
@@ -78,12 +90,7 @@ export function selectParcelFiles(files: SnapshotFile[]): SnapshotFile[] {
   let total = 0;
 
   for (const file of files) {
-    const segments = file.path.split('/');
-    const name = segments[segments.length - 1];
-
-    if (segments.slice(0, -1).some((segment) => EXCLUDED_DIRS.has(segment)))
-      continue;
-    if (EXCLUDED_FILES.has(name)) continue;
+    if (isExcludedPath(file.path)) continue;
     if (file.bytes.length > MAX_FILE_BYTES || !isText(file.bytes)) continue;
 
     total += file.bytes.length;
@@ -157,7 +164,8 @@ export function readResultParcel(zip: Uint8Array): Map<string, Uint8Array> {
     if (
       name.endsWith('/') ||
       name === MANIFEST_ENTRY ||
-      name.startsWith(ASSET_PREFIX)
+      name.startsWith(ASSET_PREFIX) ||
+      isExcludedPath(name)
     )
       continue;
 

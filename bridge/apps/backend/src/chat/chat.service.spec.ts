@@ -7,6 +7,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
+import { UPLOAD_DIR } from '../storage/config/multer.config';
+import { FILE_STORE } from '../storage/file-store/file-store';
+import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatService } from './chat.service';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -56,6 +59,7 @@ describe('ChatService', () => {
           provide: getRepositoryToken(ChatAttachment),
           useValue: attachmentRepository,
         },
+        { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
       ],
     }).compile();
 

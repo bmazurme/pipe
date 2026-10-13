@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -97,7 +97,7 @@ function setup(
   const storage = {
     createFromBuffer: jest.fn().mockResolvedValue({ id: 99 }),
     findOwned: jest.fn(),
-    path: jest.fn(),
+    readBytes: jest.fn(),
     delete: jest.fn().mockResolvedValue(undefined),
   };
   const workers = {
@@ -329,7 +329,7 @@ describe('ImproveService.publish', () => {
       }),
     );
     ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-    ctx.storage.path.mockReturnValue(file);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
     return ctx;
   }
@@ -660,7 +660,7 @@ describe('ImproveService publish: no branch left behind', () => {
       }),
     );
     ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-    ctx.storage.path.mockReturnValue(file);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
     return ctx;
   }
@@ -844,7 +844,7 @@ describe('ImproveService CI repair', () => {
         }),
       );
       ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-      ctx.storage.path.mockReturnValue(file);
+      ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
       return ctx;
     }

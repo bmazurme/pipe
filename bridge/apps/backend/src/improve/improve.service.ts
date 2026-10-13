@@ -1,5 +1,3 @@
-import { readFile } from 'fs/promises';
-
 import {
   BadRequestException,
   ConflictException,
@@ -442,7 +440,7 @@ export class ImproveService {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const result = readResultParcel(await this.storage.readBytes(file));
       const changes = diffResult(
         JSON.parse(run.baseline ?? '{}') as Record<string, string>,
         result,
@@ -755,7 +753,7 @@ export class ImproveService {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const result = readResultParcel(await this.storage.readBytes(file));
       const raw = result.get(BACKLOG_FILE);
 
       if (!raw) throw new Error(`Worker не создал ${BACKLOG_FILE}`);

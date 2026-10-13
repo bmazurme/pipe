@@ -24,6 +24,7 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerExceptionFilterFor } from '../storage/filters/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
+import { ChatAttachment } from './entities/chat-attachment.entity';
 import { ChatService } from './chat.service';
 import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
@@ -140,11 +141,7 @@ export class ChatController {
       currentUser.id,
     );
 
-    this.sendAttachment(
-      res,
-      attachment.originalName,
-      this.chatService.attachmentPath(attachment),
-    );
+    this.sendAttachment(res, attachment);
   }
 
   // Takes back a file that was uploaded but not sent.
@@ -157,7 +154,9 @@ export class ChatController {
     await this.chatService.removeAttachment(id, currentUser.id);
   }
 
-  private sendAttachment(res: Response, name: string, path: string): void {
+  private sendAttachment(res: Response, attachment: ChatAttachment): void {
+    const name = attachment.originalName;
+
     res.setHeader('Content-Type', contentTypeOf(name));
     // Never rendered as a page: an uploaded .html must not run in bridge's origin.
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
@@ -166,7 +165,11 @@ export class ChatController {
       'Content-Disposition',
       `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
     );
-    res.sendFile(path);
+    this.chatService.sendAttachment(res, attachment, (err) => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ message: 'File is missing' });
+      }
+    });
   }
 
   @Post('chats/:id/messages')
@@ -234,11 +237,7 @@ export class ChatController {
       currentUser.id,
     );
 
-    this.sendAttachment(
-      res,
-      attachment.originalName,
-      this.chatService.attachmentPath(attachment),
-    );
+    this.sendAttachment(res, attachment);
   }
 
   @Post('turns/:messageId/complete')

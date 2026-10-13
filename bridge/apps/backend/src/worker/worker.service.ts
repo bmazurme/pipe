@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -486,11 +487,10 @@ export class WorkerService {
     return this.storageService.findOwned(job.resultFileId, userId);
   }
 
-  // Resolves an on-disk path for a StoredFile — kept here rather than
-  // making the controller reach into StorageService itself for a single
-  // method call.
-  filePath(file: StoredFile): string {
-    return this.storageService.path(file);
+  // Sends a StoredFile to the client — kept here rather than making the controller reach into StorageService
+  // itself for a single method call. `done` is res.download()'s callback.
+  download(res: Response, file: StoredFile, done: (error?: Error) => void) {
+    this.storageService.download(res, file, done);
   }
 
   // Stops a job. A queued job (no worker has it) is cancelled outright. One a

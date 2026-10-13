@@ -85,7 +85,7 @@ export class StorageController {
     // instead of failing with a clear status. headersSent is checked
     // because sendFile can fail mid-stream, after a 200 and partial body
     // already went out — nothing valid to send at that point.
-    res.download(this.storageService.path(file), file.originalName, (err) => {
+    this.storageService.download(res, file, (err) => {
       if (!err) {
         // Fire-and-forget: the response is already sent, but a rejected DB
         // delete with no handler is an unhandled rejection, which on Node 22
@@ -130,7 +130,7 @@ export class StorageController {
   ): Promise<void> {
     const file = await this.storageService.findOwned(id, currentUser.id);
 
-    res.download(this.storageService.path(file), file.originalName, (err) => {
+    this.storageService.download(res, file, (err) => {
       if (err) this.respondDownloadError(res, file, err);
     });
   }
