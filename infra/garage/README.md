@@ -57,3 +57,10 @@ docker exec garage /garage repair --all-nodes --yes tables   # after a long outa
 - Metadata is snapshotted every 6 h (`metadata_auto_snapshot_interval`) into `meta/snapshots`.
 - Verified on 2026-10-12: write via one board, read via another with matching checksum; one board stopped →
   write, read and read of older objects still succeed; the board rejoined and resynced.
+
+## Bridge writes its files here (`STORAGE_DRIVER=s3`)
+
+`enable-s3-storage.sh` (on the primary, `sudo`): copies the uploads volume into `bridge-uploads`, **checks** every file arrived, then adds `STORAGE_DRIVER=s3` and the
+`S3_*` settings (all four boards as endpoints, white first; the bucket's key is copied from `/etc/garage/keys/bridge-uploads.env`, never printed) to `~/.pipe/bridge.env`;
+`--deploy` restarts the backend. The old volume is kept. Read `infra/backup/README.md` ("Uploads: the bucket as the source") **first** — the existing copy on red must be
+turned around before, or it deletes what bridge writes. Tests: `infra/garage/test-enable-s3.sh`.

@@ -43,7 +43,10 @@ else
   log "the replica is already a primary — continuing"
 fi
 
-# --- 2. uploads
+# --- 2. uploads — with STORAGE_DRIVER=s3 the files are in the Garage bucket, not in a volume: nothing to restore
+if grep -q '^STORAGE_DRIVER=s3' "$ENV_FILE"; then
+  log "STORAGE_DRIVER=s3: the files live in the bucket — no uploads volume to restore (the S3_* settings travel in the decrypted secrets)"
+else
 docker volume inspect "$VOLUME" >/dev/null 2>&1 || docker volume create "$VOLUME" >/dev/null
 mountpoint="$(docker volume inspect "$VOLUME" -f '{{.Mountpoint}}')"
 if [ -z "$(sudo ls -A "$mountpoint" 2>/dev/null)" ]; then
@@ -56,6 +59,8 @@ if [ -z "$(sudo ls -A "$mountpoint" 2>/dev/null)" ]; then
   fi
 else
   log "the uploads volume already has files — left alone"
+fi
+
 fi
 
 # --- 3. roles
