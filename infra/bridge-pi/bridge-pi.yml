@@ -33,7 +33,8 @@ services:
       driver: json-file
       options: { max-size: 10m, max-file: '3' }
     deploy:
-      replicas: 1
+      # 1 normally; the failover sets 0 — the database is then the promoted replica, and the old primary must not start
+      replicas: ${POSTGRES_REPLICAS:-1}
       placement:
         constraints: [node.labels.bridge-primary == true]
       restart_policy:
@@ -52,7 +53,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      POSTGRES_HOST: postgres
+      # `postgres` normally; the failover points it at the promoted replica (infra/failover)
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-bridge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}

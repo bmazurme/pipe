@@ -18,8 +18,11 @@ c="$(docker ps --filter name=bridgesb_postgres-standby -q | head -1)"
 [ "$(docker exec "$c" psql -U "$DB_USER" -Atc 'SELECT pg_is_in_recovery()' postgres)" = t ] || { echo "already a primary" >&2; exit 1; }
 
 echo "last replayed transaction: $(docker exec "$c" psql -U "$DB_USER" -Atc "SELECT COALESCE(pg_last_xact_replay_timestamp()::text,'n/a')" postgres)"
-read -r -p "Promote this replica to the primary? Type PROMOTE to continue: " answer
-[ "$answer" = PROMOTE ] || { echo "cancelled"; exit 1; }
+# infra/failover/failover-red.sh has already asked (on the workstation) and passes PROMOTE_CONFIRMED=yes.
+if [ "${PROMOTE_CONFIRMED:-}" != yes ]; then
+  read -r -p "Promote this replica to the primary? Type PROMOTE to continue: " answer
+  [ "$answer" = PROMOTE ] || { echo "cancelled"; exit 1; }
+fi
 
 docker exec "$c" psql -U "$DB_USER" -Atc 'SELECT pg_promote(wait => true, wait_seconds => 60)' postgres
 [ "$(docker exec "$c" psql -U "$DB_USER" -Atc 'SELECT pg_is_in_recovery()' postgres)" = f ] && echo "promoted: this node is now a read-write primary"
