@@ -5,11 +5,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions, Response } from 'express';
 
+import { TelegramService } from '../telegram/telegram.service';
+import { EmergencyKeysService } from './emergency-keys.service';
 import { CheckAuthResponseDto } from './dto/check-auth.response.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
 import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token.exception';
@@ -30,6 +33,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly sessionsService: SessionsService,
+    private readonly emergencyKeys: EmergencyKeysService,
+    private readonly telegram: TelegramService,
   ) {}
 
   getCookieOptions(): CookieOptions {
@@ -95,6 +100,44 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  // The last resort when neither OAuth provider works: a valid emergency key becomes an ordinary browser session
+  // (the refresh cookie; the page then asks /auth/check for its access token). Every use is logged and sent to
+  // Telegram at once — it is the one way in that does not depend on a third party, so the owner must know when it opens.
+  async signInWithEmergencyKey(
+    key: string,
+    response: Response,
+    userAgent: string | null,
+    ip: string | null,
+  ): Promise<{ isAuthenticated: true }> {
+    const userId = await this.emergencyKeys.redeem(key);
+
+    if (userId === null) {
+      this.logger.warn(`Rejected an emergency key from ${ip ?? 'unknown ip'}`);
+      throw new UnauthorizedException('Invalid emergency key');
+    }
+
+    const session = await this.sessionsService.createSession(
+      userId,
+      userAgent,
+      ip,
+    );
+    const { refreshToken } = await this.generateNewTokens(userId, session.id);
+
+    await this.sessionsService.attachRefreshToken(session.id, refreshToken);
+    this.setRefreshCookie(response, refreshToken);
+
+    this.logger.warn(
+      `Signed in with the emergency key: user ${userId} from ${ip ?? 'unknown ip'}`,
+    );
+    void this.telegram
+      .send(
+        `🚨 Вход по аварийному ключу: пользователь ${userId}, адрес ${ip ?? 'неизвестен'}. Это были не вы — отзовите ключ в профиле.`,
+      )
+      .catch(() => undefined);
+
+    return { isAuthenticated: true };
   }
 
   private unauthorizedResponse(response: Response): CheckAuthResponseDto {

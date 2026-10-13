@@ -10,6 +10,7 @@ import {
 } from "../store/api";
 import { LogoMark } from "../shared/ui/Logo";
 import { AuthLayout } from "../widgets/AuthLayout";
+import { EmergencyLoginForm } from "./EmergencyLoginForm";
 import styles from "./LoginPage.module.css";
 
 export function LoginPage() {
@@ -65,6 +66,7 @@ export function LoginPage() {
               Войти через GitHub
             </Button>
           )}
+          <EmergencyLoginForm />
         </>
       )}
     </AuthLayout>

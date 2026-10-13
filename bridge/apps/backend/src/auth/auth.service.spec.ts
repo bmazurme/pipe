@@ -9,7 +9,9 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CookieOptions, Response } from 'express';
 
+import { TelegramService } from '../telegram/telegram.service';
 import { AuthService } from './auth.service';
+import { EmergencyKeysService } from './emergency-keys.service';
 import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token.exception';
 import { RefreshTokenNotFoundException } from './exceptions/refresh-token-not-found.exception';
 import { RequestWithAuthSession } from './guards/refresh-token.guard';
@@ -38,6 +40,8 @@ describe('AuthService cookies', () => {
           useValue: { get: (key: string) => CONFIG[key] },
         },
         { provide: SessionsService, useValue: {} },
+        { provide: EmergencyKeysService, useValue: {} },
+        { provide: TelegramService, useValue: { send: jest.fn() } },
       ],
     }).compile();
 
@@ -101,7 +105,13 @@ describe('AuthService cookies', () => {
 describe('AuthService sessions and token refresh', () => {
   let service: AuthService;
   let jwtService: { sign: jest.Mock };
-  let sessionsService: { attachRefreshToken: jest.Mock; revoke: jest.Mock };
+  let sessionsService: {
+    attachRefreshToken: jest.Mock;
+    revoke: jest.Mock;
+    createSession: jest.Mock;
+  };
+  let emergencyKeys: { redeem: jest.Mock };
+  let telegram: { send: jest.Mock };
   let response: Response & { cookie: jest.Mock; clearCookie: jest.Mock };
 
   const authReq = (): RequestWithAuthSession =>
@@ -118,7 +128,10 @@ describe('AuthService sessions and token refresh', () => {
     sessionsService = {
       attachRefreshToken: jest.fn().mockResolvedValue(undefined),
       revoke: jest.fn().mockResolvedValue(true),
+      createSession: jest.fn().mockResolvedValue({ id: 42 }),
     };
+    emergencyKeys = { redeem: jest.fn() };
+    telegram = { send: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -129,6 +142,8 @@ describe('AuthService sessions and token refresh', () => {
           useValue: { get: (key: string) => CONFIG[key] },
         },
         { provide: SessionsService, useValue: sessionsService },
+        { provide: EmergencyKeysService, useValue: emergencyKeys },
+        { provide: TelegramService, useValue: telegram },
       ],
     }).compile();
 
@@ -137,6 +152,69 @@ describe('AuthService sessions and token refresh', () => {
       cookie: jest.fn(),
       clearCookie: jest.fn(),
     } as unknown as typeof response;
+  });
+
+  describe('signInWithEmergencyKey', () => {
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+
+    it('rejects a key that does not match, sets no cookie and creates no session', async () => {
+      emergencyKeys.redeem.mockResolvedValue(null);
+
+      await expect(
+        service.signInWithEmergencyKey('bre_wrong', response, 'ua', '1.2.3.4'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+      expect(response.cookie).not.toHaveBeenCalled();
+      expect(telegram.send).not.toHaveBeenCalled();
+    });
+
+    it('turns a valid key into an ordinary session: a refresh cookie for that user', async () => {
+      emergencyKeys.redeem.mockResolvedValue(7);
+
+      const result = await service.signInWithEmergencyKey(
+        'bre_good',
+        response,
+        'Mozilla',
+        '1.2.3.4',
+      );
+
+      expect(result).toEqual({ isAuthenticated: true });
+      expect(sessionsService.createSession).toHaveBeenCalledWith(
+        7,
+        'Mozilla',
+        '1.2.3.4',
+      );
+      expect(sessionsService.attachRefreshToken).toHaveBeenCalledWith(
+        42,
+        'new-refresh',
+      );
+      expect(response.cookie).toHaveBeenCalledTimes(1);
+    });
+
+    it('tells Telegram at once that the emergency key was used, with the address', async () => {
+      emergencyKeys.redeem.mockResolvedValue(7);
+
+      await service.signInWithEmergencyKey(
+        'bre_good',
+        response,
+        null,
+        '9.9.9.9',
+      );
+
+      expect(telegram.send).toHaveBeenCalledTimes(1);
+      expect(telegram.send.mock.calls[0][0]).toContain('9.9.9.9');
+    });
+
+    it('still signs in when Telegram is down (the alert is best-effort)', async () => {
+      emergencyKeys.redeem.mockResolvedValue(7);
+      telegram.send.mockRejectedValue(new Error('telegram unreachable'));
+
+      await expect(
+        service.signInWithEmergencyKey('bre_good', response, null, '9.9.9.9'),
+      ).resolves.toEqual({ isAuthenticated: true });
+    });
   });
 
   describe('refreshTokens', () => {

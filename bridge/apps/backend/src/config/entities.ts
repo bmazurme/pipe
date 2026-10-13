@@ -1,5 +1,6 @@
 import { ApiKey } from '../auth/entities/api-key.entity';
 import { AuthIdentity } from '../auth/entities/auth-identity.entity';
+import { EmergencyKey } from '../auth/entities/emergency-key.entity';
 import { Session } from '../auth/entities/session.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
@@ -37,6 +38,7 @@ export const ENTITIES = [
   Session,
   ApiKey,
   AuthIdentity,
+  EmergencyKey,
   DayOff,
   TimeReportEntry,
   Job,

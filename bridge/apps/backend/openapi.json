@@ -191,6 +191,74 @@
         }
       }
     },
+    "/api/v1/auth/emergency-key": {
+      "get": {
+        "operationId": "AuthController_emergencyKeyStatus",
+        "summary": "Does the current user have an emergency key",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyKeyStatusResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "AuthController_createEmergencyKey",
+        "summary": "Create the emergency key (or replace the existing one) — the plaintext is returned once",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEmergencyKeyResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "AuthController_revokeEmergencyKey",
+        "summary": "Revoke the emergency key",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/auth/emergency-login": {
+      "post": {
+        "operationId": "AuthController_emergencyLogin",
+        "summary": "Exchange the emergency key for a browser session (sets the refresh cookie)",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/auth/identities": {
       "get": {
         "operationId": "IdentitiesController_list",
@@ -271,6 +339,36 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/notification-settings": {
+      "get": {
+        "operationId": "NotificationSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "NotificationSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -1342,36 +1440,6 @@
         },
         "responses": {
           "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/notification-settings": {
-      "get": {
-        "operationId": "NotificationSettingsController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      },
-      "put": {
-        "operationId": "NotificationSettingsController_update",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
             "description": ""
           }
         }
@@ -3032,6 +3100,84 @@
           "lastUsedAt"
         ]
       },
+      "EmergencyKeyStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "exists": {
+            "type": "boolean"
+          },
+          "prefix": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "exists",
+          "prefix",
+          "createdAt",
+          "lastUsedAt"
+        ]
+      },
+      "CreatedEmergencyKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "prefix": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefix",
+          "token",
+          "createdAt"
+        ]
+      },
+      "EmergencyLoginDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "UpdateNotificationSettingsDto": {
+        "type": "object",
+        "properties": {
+          "quietHours": {
+            "type": "string",
+            "pattern": "/^(off|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})$/i"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "quietHours",
+          "timezone"
+        ]
+      },
       "ChatResponseDto": {
         "type": "object",
         "properties": {
@@ -3801,23 +3947,6 @@
           "name",
           "type",
           "taskKey"
-        ]
-      },
-      "UpdateNotificationSettingsDto": {
-        "type": "object",
-        "properties": {
-          "quietHours": {
-            "type": "string",
-            "pattern": "/^(off|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})$/i"
-          },
-          "timezone": {
-            "type": "string",
-            "maxLength": 64
-          }
-        },
-        "required": [
-          "quietHours",
-          "timezone"
         ]
       },
       "JobResponseDto": {
