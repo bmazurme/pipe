@@ -30,14 +30,15 @@ const EXCLUDED_FILES = new Set([
   'pnpm-lock.yaml',
 ]);
 
-// Generated or vendored output (and lockfiles) is never part of the snapshot, so it can never be part of a change
+// Generated or vendored output (build info too: a committed .tsbuildinfo makes `tsc -b` skip emitting in CI) and lockfiles is never part of the snapshot, so it can never be part of a change
 // either: a worker that builds before finishing leaves dist/ and friends in its result.
 export function isExcludedPath(path: string): boolean {
   const segments = path.split('/');
 
   return (
     segments.slice(0, -1).some((segment) => EXCLUDED_DIRS.has(segment)) ||
-    EXCLUDED_FILES.has(segments[segments.length - 1])
+    EXCLUDED_FILES.has(segments[segments.length - 1]) ||
+    segments[segments.length - 1].endsWith('.tsbuildinfo')
   );
 }
 

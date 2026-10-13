@@ -111,6 +111,7 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
       'node_modules/x/index.js': strToU8('v'),
       'coverage/lcov.info': strToU8('c'),
       'package-lock.json': strToU8('{}'),
+      'packages/protocol/tsconfig.tsbuildinfo': strToU8('{}'),
     });
 
     expect([...readResultParcel(zip).keys()]).toEqual(['a.ts']);
