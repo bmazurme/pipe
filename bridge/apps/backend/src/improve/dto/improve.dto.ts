@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -12,6 +13,11 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { ALL_CATEGORIES } from '../analysis';
+
+// Each issue number / index can start a paid worker run or file a GitHub issue.
+export const MAX_BATCH_ISSUES = 20;
+export const MAX_ITEM_INDICES = 50;
 
 export class StartRunDto {
   @IsInt()
@@ -65,6 +71,7 @@ export class SaveScheduleDto {
   // Analysis only; empty/absent = all five directions.
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(ALL_CATEGORIES.length)
   @ArrayUnique()
   @IsString({ each: true })
   categories?: string[];
@@ -84,6 +91,7 @@ export class StartAnalysisDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(ALL_CATEGORIES.length)
   @ArrayUnique()
   @IsString({ each: true })
   categories?: string[];
@@ -101,6 +109,7 @@ export class StartAnalysisDto {
 
 export class StartManyDto {
   @IsArray()
+  @ArrayMaxSize(MAX_BATCH_ISSUES)
   @ArrayUnique()
   @IsInt({ each: true })
   @Min(1, { each: true })
@@ -117,6 +126,7 @@ export class StartItemsDto {
   // Which proposals to take into work; absent = all.
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_ITEM_INDICES)
   @IsInt({ each: true })
   @Min(0, { each: true })
   indices?: number[];
@@ -126,6 +136,7 @@ export class CreateIssuesDto {
   // Which proposals to file (indices into the run's items); absent = all.
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_ITEM_INDICES)
   @IsInt({ each: true })
   @Min(0, { each: true })
   indices?: number[];
