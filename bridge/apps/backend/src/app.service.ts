@@ -21,7 +21,7 @@ export class AppService {
   }
 
   // Readiness: the process can actually reach Postgres, and — since
-  // migrationsRun: !isDev (see config/type-orm.config.ts) is supposed to
+  // migrationsRun: true (see config/type-orm.config.ts) is supposed to
   // apply every pending migration on boot — there isn't a migration that
   // silently failed to run. 'degraded' maps to a non-2xx in the controller,
   // which is what lets a Swarm healthcheck/rollback actually catch this
