@@ -41,9 +41,22 @@ die() { printf 'REFUSED: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 red_psql() { ssh_ "$RED" 'c=$(docker ps --filter name=bridgesb_postgres-standby -q | head -1); [ -n "$c" ] && docker exec -i "$c" psql -v ON_ERROR_STOP=1 -U '"$DB_USER"' -At -F "|" postgres'; }
 
+# Only one switch at a time, from any workstation: the lock is a directory on red (mkdir is atomic). Found in the second rehearsal, when two
+# runs of the switch back overlapped. A crashed run leaves it behind: the message says how to remove it once you are SURE nothing runs.
+LOCK_DIR='.pipe-switch.lock'
+LOCKED=0
+take_lock() {
+  if ssh_ "$RED" "mkdir \"\$HOME/$LOCK_DIR\" 2>/dev/null && echo '$(id -un)@$(hostname) $(date -u +%FT%TZ) $(basename "$0")' > \"\$HOME/$LOCK_DIR/owner\""; then
+    LOCKED=1
+  else
+    die "another switch is running (or crashed): $(ssh_ "$RED" "cat \"\$HOME/$LOCK_DIR/owner\" 2>/dev/null" || echo unknown). Not touching anything. If you are SURE nothing runs: ssh $SSH_USER@$RED rm -rf $LOCK_DIR"
+  fi
+}
+release_lock() { [ "$LOCKED" = 1 ] && ssh_ "$RED" "rm -rf \"\$HOME/$LOCK_DIR\"" >/dev/null 2>&1 || true; }
+
 # What to do if it stops half way (the site is down once the application is scaled to 0).
 RECOVERY=""
-trap 'rc=$?; [ "$rc" -eq 0 ] || [ -z "$RECOVERY" ] || printf "\nSTOPPED. %s\n" "$RECOVERY" >&2' EXIT
+trap 'rc=$?; release_lock; [ "$rc" -eq 0 ] || [ -z "$RECOVERY" ] || printf "\nSTOPPED. %s\n" "$RECOVERY" >&2' EXIT
 
 # --- 1. checks
 step "checks"
@@ -70,6 +83,7 @@ say
 say "The site goes DOWN for a few minutes. White's old database and red's current one are copied aside, not deleted."
 read -r -p "Make white the primary again? Type SWITCHBACK to continue: " answer
 [ "$answer" = SWITCHBACK ] || { say "cancelled."; exit 1; }
+take_lock
 
 # --- 3. stop writing
 step "stopping the application on red"

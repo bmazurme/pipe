@@ -24,6 +24,8 @@ case "$cmd" in *psql*|*"bash -s"*) stdin="$(cat)";; *"-xf -"*|*"--skip-old-files
 echo "$host: $cmd" >> "$FIX/log"
 [ -n "$stdin" ] && { echo "--- $host: $cmd" >> "$FIX/log.stdin"; printf '%s\n' "$stdin" >> "$FIX/log.stdin"; }
 case "$cmd" in
+  *"mkdir "*pipe-switch.lock*) [ ! -f "$FIX/lock-held" ];;
+  *"cat "*pipe-switch.lock/owner*) echo "someone@elsewhere 2026-10-13T16:29:00Z switchback.sh";;
   true) [ ! -f "$FIX/down-$host" ];;
   *psql*)
      case "$stdin" in
@@ -66,5 +68,11 @@ sed -n '/^--- 192.168.50.11: bash/,/^--- 192.168.50.12: bash/p' "$FIX/log.stdin"
 grep -q 'standby_pgdata_prev_' "$FIX/log.stdin" && grep -q 'setup-standby.sh' "$FIX/log.stdin"; check "red: its database is kept aside, then rebuilt as a replica" $?
 grep -q -- '--skip-old-files' "$FIX/log"; check "uploads are added, never overwritten" $?
 ! grep -E 'docker (volume rm|system prune)' "$FIX/log" "$FIX/log.stdin" | grep -q .; check "nothing is ever deleted with docker volume rm / prune" $?
+
+reset; touch "$FIX/lock-held"; sb; c=$?
+[ "$c" -ne 0 ] && grep -q 'another switch is running' "$T/out" && grep -q 'someone@elsewhere' "$T/out" && ! grep -q 'docker service scale' "$FIX/log"; check "a second run while another holds the lock: refused, shows who, stops NOTHING" $?
+! grep -q 'rm -rf .*pipe-switch.lock' "$FIX/log"; check "…and it does not release a lock it does not own" $?
+reset; sb >/dev/null 2>&1; grep -q 'rm -rf .*pipe-switch.lock' "$FIX/log"; check "a normal run releases the lock at the end" $?
+reset; sb --dry-run >/dev/null 2>&1; ! grep -q 'mkdir .*pipe-switch.lock' "$FIX/log"; check "a dry run takes no lock" $?
 
 echo; echo "$PASS passed, $FAILED failed"; [ "$FAILED" -eq 0 ]
