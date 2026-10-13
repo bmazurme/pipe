@@ -28,6 +28,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
   const [model, setModel] = useState(readModel);
+  const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
   const [startingFor, setStartingFor] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -46,8 +47,11 @@ export function IssuesTab({ configured }: { configured: boolean }) {
 
   const startable = (issues ?? []).filter((issue) => !blocksNewRun(issue.run));
 
-  const handleStartMany = async (numbers: number[]) => {
+  const chosen = selected.filter((n) => startable.some((issue) => issue.number === n));
+
+  const handleStartMany = async (kind: 'selected' | 'oldest', numbers: number[]) => {
     setStartError(null);
+    setBatchKind(kind);
 
     try {
       const result = await startMany({ issueNumbers: numbers, model }).unwrap();
@@ -56,6 +60,8 @@ export function IssuesTab({ configured }: { configured: boolean }) {
       if (result.skipped.length) setStartError(`Запущено ${result.started.length}; не запущено: ${result.skipped.join('; ')}`);
     } catch (err) {
       setStartError(getErrorMessage(err, 'Не удалось запустить'));
+    } finally {
+      setBatchKind(null);
     }
   };
 
@@ -81,18 +87,26 @@ export function IssuesTab({ configured }: { configured: boolean }) {
           options={MODEL_OPTIONS}
         />
         <Switch checked={showAll} onUpdate={setShowAll} content="Все открытые issues" />
-        <Button view="action" size="m" disabled={selected.length === 0} loading={isStartingMany} onClick={() => void handleStartMany(selected)}>
-          Запустить выбранные ({selected.length})
-        </Button>
         <Button
-          view="outlined"
+          view="action"
           size="m"
-          disabled={startable.length === 0}
-          loading={isStartingMany}
-          onClick={() => void handleStartMany(startable.slice(0, 5).map((issue) => issue.number))}
+          disabled={chosen.length === 0 || isStartingMany}
+          loading={isStartingMany && batchKind === 'selected'}
+          onClick={() => void handleStartMany('selected', chosen)}
         >
-          Запустить {Math.min(5, startable.length)} старых
+          Запустить выбранные ({chosen.length})
         </Button>
+        {startable.length > 0 && (
+          <Button
+            view="outlined"
+            size="m"
+            disabled={isStartingMany}
+            loading={isStartingMany && batchKind === 'oldest'}
+            onClick={() => void handleStartMany('oldest', startable.slice(0, 5).map((issue) => issue.number))}
+          >
+            Запустить {Math.min(5, startable.length)} старых
+          </Button>
+        )}
         <Button view="outlined" size="m" loading={isFetching} onClick={() => void refetch()}>
           Обновить
         </Button>
