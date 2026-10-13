@@ -136,6 +136,10 @@ order="$(grep -nE 'promote|label-rm|label-add|deploy' "$LOG" | cut -d: -f1 | tr 
 p="$(grep -n promote "$LOG" | cut -d: -f1)"; l="$(grep -n 'label-add' "$LOG" | cut -d: -f1)"; d="$(grep -n 'deploy args' "$LOG" | cut -d: -f1)"
 [ "$p" -lt "$l" ] && [ "$l" -lt "$d" ]; check "order: promote → roles/fence → deploy (the fence is up before anything starts)" $?
 
+rreset; echo "STORAGE_DRIVER=s3" >> "$BR/home/.pipe/bridge.env"; red; code=$?
+[ "$code" -eq 0 ] && grep -q 'files live in the bucket' "$T/out" && [ -z "$(ls -A "$BR/vol")" ]; check "STORAGE_DRIVER=s3: the uploads restore is skipped (the files are in the bucket), the rest goes through" $?
+grep -q 'deploy args' "$LOG"; check "…and the stack is still deployed" $?
+
 rreset; echo f > "$FIX/recovery"; red
 ! grep -q '^promote' "$LOG" && grep -q 'already a primary' "$T/out" && grep -q 'deploy args' "$LOG"; check "an already promoted replica: not promoted again, the rest continues" $?
 

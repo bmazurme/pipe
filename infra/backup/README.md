@@ -72,6 +72,15 @@ ssh -t pi@192.168.50.12 'sudo systemctl start pipe-uploads-pull.service && sudo 
 Not encrypted (unlike the dumps): these are the user's own files on boards in your LAN; the Garage copy is on the same boards. The failover
 (`infra/failover`) restores them from `bridge-uploads` / `/srv/uploads-mirror` into the new primary's volume.
 
+### Uploads: the bucket as the source (`STORAGE_DRIVER=s3`)
+
+Once bridge itself writes its files to the Garage bucket `bridge-uploads` (`infra/garage/enable-s3-storage.sh`), the direction of this copy is **reversed**:
+the bucket is the source and red's `/srv/uploads-mirror` is its backup (`UPLOADS_FROM=s3` in `/etc/pipe-uploads.env`: bucket → red, same deleted-files bin,
+the mass-delete guard, and a refusal to follow an **empty** bucket). The old direction (red → bucket, `rclone sync`) must not run any more — it would delete what
+bridge wrote. The order of the switch: stop `pipe-uploads-pull.timer` on red → `sudo infra/garage/enable-s3-storage.sh --deploy` on white → set
+`UPLOADS_FROM=s3` (and drop `SOURCE`) in red's `/etc/pipe-uploads.env`, run `uploads-pull.sh` once, start the timer. With the driver on `s3` a failover does not restore
+an uploads volume (`failover-red.sh` skips it); the S3_* settings travel in the encrypted secrets — re-run `prepare-red.sh` after the switch.
+
 ## Encryption
 
 `AGE_RECIPIENT` set → only ciphertext (`db.dump.age`) is stored. Generate the pair once, elsewhere:
