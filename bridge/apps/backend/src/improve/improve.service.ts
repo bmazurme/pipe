@@ -356,14 +356,26 @@ export class ImproveService {
     if (!run) throw new NotFoundException('Run not found');
     if (!ACTIVE_RUN_STATUSES.includes(run.status)) return run;
 
-    if (run.jobId && run.status !== ImproveRunStatus.Publishing) {
+    if (run.status === ImproveRunStatus.Publishing) {
+      throw new ConflictException(
+        'The run is already being published and cannot be cancelled',
+      );
+    }
+
+    // Guarded by status: a run claimed for publishing in between is left alone.
+    const res = await this.runs.update(
+      {
+        id,
+        status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
+      },
+      { status: ImproveRunStatus.Cancelled, finishedAt: new Date() },
+    );
+
+    if (res.affected === 1 && run.jobId) {
       await this.workers.cancel(run.jobId, run.userId ?? userId);
     }
 
-    run.status = ImproveRunStatus.Cancelled;
-    run.finishedAt = new Date();
-
-    return this.runs.save(run);
+    return (await this.runs.findOne({ where: { id } })) ?? run;
   }
 
   // A publish that failed after the worker had already succeeded (a token without

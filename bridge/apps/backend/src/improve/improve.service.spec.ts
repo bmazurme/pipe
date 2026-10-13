@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
+import { ConflictException } from '@nestjs/common';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
@@ -1158,5 +1159,56 @@ describe('ImproveService.advance — stale publishing runs', () => {
     expect(runs.update).toHaveBeenCalledWith(8, {
       status: ImproveRunStatus.Running,
     });
+  });
+});
+
+describe('ImproveService.cancelRun', () => {
+  const runRow = (status: ImproveRunStatus) => ({
+    id: 5,
+    userId: 1,
+    jobId: 77,
+    status,
+  });
+
+  it('cancels a queued run and its job with a guarded update', async () => {
+    const { service, runs, workers } = setup();
+    runs.findOne
+      .mockResolvedValueOnce(runRow(ImproveRunStatus.Queued))
+      .mockResolvedValueOnce(runRow(ImproveRunStatus.Cancelled));
+
+    const res = await service.cancelRun(5, 1);
+
+    expect(runs.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 5 }),
+      expect.objectContaining({ status: ImproveRunStatus.Cancelled }),
+    );
+    expect(workers.cancel).toHaveBeenCalledWith(77, 1);
+    expect(res.status).toBe(ImproveRunStatus.Cancelled);
+    expect(runs.save).not.toHaveBeenCalled();
+  });
+
+  it('refuses a publishing run with 409 and saves nothing', async () => {
+    const { service, runs, workers } = setup();
+    runs.findOne.mockResolvedValue(runRow(ImproveRunStatus.Publishing));
+
+    await expect(service.cancelRun(5, 1)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.save).not.toHaveBeenCalled();
+    expect(workers.cancel).not.toHaveBeenCalled();
+  });
+
+  it('returns the current row when the publish claim wins the race', async () => {
+    const { service, runs, workers } = setup();
+    runs.update.mockResolvedValue({ affected: 0 });
+    runs.findOne
+      .mockResolvedValueOnce(runRow(ImproveRunStatus.Running))
+      .mockResolvedValueOnce(runRow(ImproveRunStatus.Publishing));
+
+    const res = await service.cancelRun(5, 1);
+
+    expect(res.status).toBe(ImproveRunStatus.Publishing);
+    expect(workers.cancel).not.toHaveBeenCalled();
   });
 });
