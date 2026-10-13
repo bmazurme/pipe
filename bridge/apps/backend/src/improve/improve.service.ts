@@ -491,8 +491,18 @@ export class ImproveService {
     try {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
+      // `baseline` is not selected by default; fetch it when the run came without.
+      if (run.baseline === undefined) {
+        const stored = await this.runs.findOne({
+          where: { id: run.id },
+          select: { id: true, baseline: true },
+        });
+
+        run.baseline = stored?.baseline ?? null;
+      }
       const file = await this.storage.findOwned(resultFileId, run.userId);
       const result = readResultParcel(await this.storage.readBytes(file));
+
       const changes = diffResult(
         JSON.parse(run.baseline ?? '{}') as Record<string, string>,
         result,
