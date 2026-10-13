@@ -302,6 +302,15 @@ describe('StorageService', () => {
       expect(store.readBytes).toHaveBeenCalledWith('stored-b.zip');
     });
 
+    it('says whether the content of a stored record is still there', async () => {
+      store.stat.mockResolvedValueOnce({ size: 5 });
+      await expect(service.exists(stored)).resolves.toBe(true);
+      expect(store.stat).toHaveBeenCalledWith('stored-b.zip');
+
+      store.stat.mockResolvedValueOnce(null);
+      await expect(service.exists(stored)).resolves.toBe(false);
+    });
+
     it('lets Express send a plain local file as a download under its original name', () => {
       store.localPath.mockReturnValue('/app/uploads/stored-b.zip');
       const res = { download: jest.fn() };

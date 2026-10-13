@@ -98,6 +98,7 @@ function setup(
     createFromBuffer: jest.fn().mockResolvedValue({ id: 99 }),
     findOwned: jest.fn(),
     readBytes: jest.fn(),
+    exists: jest.fn().mockResolvedValue(true),
     delete: jest.fn().mockResolvedValue(undefined),
   };
   const workers = {
@@ -952,6 +953,106 @@ describe('ImproveService.saveSettings', () => {
 
     expect(settings.save).toHaveBeenLastCalledWith(
       expect.objectContaining({ autoRepairCi: true }),
+    );
+  });
+});
+
+describe('ImproveService.retryPublish', () => {
+  const failedRun = (over = {}) => ({
+    id: 4,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'opus',
+    trigger: 'manual',
+    jobId: 321,
+    status: ImproveRunStatus.Failed,
+    error: 'GitHub 403',
+    baseSha: 'base-sha',
+    baseline: baselineOf(BASE),
+    ...over,
+  });
+
+  function withResult() {
+    const ctx = setup();
+    const file = join(ctx.dir, 'result.zip');
+    writeFileSync(
+      file,
+      zipSync({
+        'a.ts': strToU8('one'),
+        'b.ts': strToU8('TWO'),
+        [MANIFEST_ENTRY]: strToU8('{}'),
+      }),
+    );
+    ctx.storage.findOwned.mockResolvedValue({ id: 5 });
+    ctx.storage.exists.mockResolvedValue(true);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
+    ctx.workers.findOwned.mockResolvedValue({
+      status: 'succeeded',
+      resultFileId: 5,
+    });
+
+    return ctx;
+  }
+
+  it('publishes a failed run again from the kept parcel without a new job', async () => {
+    const { service, runs, workers, storage } = withResult();
+    const run = failedRun();
+    runs.findOne.mockResolvedValue(run);
+
+    const result = await service.retryPublish(4, 3);
+
+    expect(result).toMatchObject({
+      status: ImproveRunStatus.PrOpen,
+      prNumber: 55,
+      error: null,
+    });
+    expect(workers.create).not.toHaveBeenCalled();
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a run that is not failed with 409', async () => {
+    const { service, runs } = withResult();
+    runs.findOne.mockResolvedValue(
+      failedRun({ status: ImproveRunStatus.PrOpen }),
+    );
+
+    await expect(service.retryPublish(4, 3)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('rejects a run whose job never produced a result with 409', async () => {
+    const { service, runs, workers } = withResult();
+    runs.findOne.mockResolvedValue(failedRun());
+    workers.findOwned.mockResolvedValue({
+      status: 'failed',
+      resultFileId: null,
+    });
+
+    await expect(service.retryPublish(4, 3)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it('says so clearly when the stored record is there but its file is not', async () => {
+    const { service, runs, storage } = withResult();
+    runs.findOne.mockResolvedValue(failedRun());
+    storage.exists.mockResolvedValue(false);
+
+    await expect(service.retryPublish(4, 3)).rejects.toThrow(
+      /Файл результата уже удалён/,
+    );
+  });
+
+  it('says so clearly when the result file is gone', async () => {
+    const { service, runs, storage } = withResult();
+    runs.findOne.mockResolvedValue(failedRun());
+    storage.findOwned.mockRejectedValue(new Error('not found'));
+
+    await expect(service.retryPublish(4, 3)).rejects.toThrow(
+      /Файл результата уже удалён/,
     );
   });
 });

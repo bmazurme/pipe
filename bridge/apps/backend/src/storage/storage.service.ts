@@ -119,6 +119,11 @@ export class StorageService {
     return file;
   }
 
+  // Is the file's content still there (on the volume or in the bucket)? A record can outlive its file.
+  async exists(file: StoredFile): Promise<boolean> {
+    return (await this.store.stat(file.storedName)) !== null;
+  }
+
   // The bytes of a stored file, for bridge's own use (Improve reads a worker's result parcel this way).
   readBytes(file: StoredFile): Promise<Buffer> {
     return this.store.readBytes(file.storedName);

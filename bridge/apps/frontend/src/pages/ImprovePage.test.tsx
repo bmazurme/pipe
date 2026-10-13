@@ -57,6 +57,7 @@ const SCHEDULE = {
 type Sent = { method: string; path: string; body: unknown };
 let sent: Sent[];
 let status: typeof STATUS | (Omit<typeof STATUS, 'configured' | 'repo'> & { configured: boolean; repo: string | null }) = STATUS;
+let runsList: Array<Omit<typeof RUN, 'error'> & { error: string | null }> = [];
 
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -76,6 +77,7 @@ function renderPage(path = '/improve') {
 
 beforeEach(() => {
   sent = [];
+  runsList = [RUN];
   status = STATUS;
   store.dispatch(improveApi.util.resetApiState());
   vi.stubGlobal(
@@ -87,7 +89,7 @@ beforeEach(() => {
       if (request.method !== 'GET') sent.push({ method: request.method, path, body });
       if (path === 'improve/status') return json(status);
       if (path === 'improve/issues') return json(ISSUES);
-      if (path === 'improve/runs' && request.method === 'GET') return json([RUN]);
+      if (path === 'improve/runs' && request.method === 'GET') return json(runsList);
       if (path === 'improve/schedules' && request.method === 'GET') return json([SCHEDULE]);
       if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null });
 
@@ -136,6 +138,16 @@ describe('ImprovePage', () => {
     await user.click(screen.getByRole('button', { name: 'Остановить запуск #9' }));
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/9/cancel', body: undefined }));
+  });
+
+  it('offers to retry the publish of a failed run and posts to retry-publish', async () => {
+    const user = userEvent.setup();
+    runsList = [{ ...RUN, status: 'failed', error: 'GitHub 403' }];
+    renderPage('/improve?tab=runs');
+
+    await user.click(await screen.findByRole('button', { name: 'Повторить публикацию' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/9/retry-publish', body: undefined }));
   });
 
   it('describes existing schedules and creates a new one from the form', async () => {
