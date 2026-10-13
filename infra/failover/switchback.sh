@@ -6,8 +6,8 @@
 #
 #   infra/failover/switchback.sh [--dry-run]
 #
-# Nothing is deleted: white's diverged database and red's promoted copy are COPIED aside (bridge_pgdata_diverged_<date>,
-# standby_pgdata_prev_<date>) before the volumes are emptied, and the copy is checked before it is trusted.
+# Nothing is deleted: white's diverged database and red's promoted copy are COPIED aside (bridge_pgdata_diverged_<date-time>,
+# standby_pgdata_prev_<date-time>) before the volumes are emptied, and the copy is checked before it is trusted.
 #
 #   1. checks: red is the primary (failover=active), white is its replica and streams, both answer, ~/standby and
 #      ~/bridge-pi are in place;
@@ -30,7 +30,7 @@ WHITE="${WHITE:-192.168.50.11}"
 SSH_USER="${SSH_USER:-pi}"
 DB_USER="${DB_USER:-bridge}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-300}"
-STAMP="$(date +%Y%m%d)"
+STAMP="$(date +%Y%m%d-%H%M)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DRY_RUN=0
 [ "${1:-}" = --dry-run ] && DRY_RUN=1

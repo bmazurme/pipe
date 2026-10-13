@@ -81,8 +81,8 @@ infra/failover/switchback.sh              # asks you to type SWITCHBACK; the sit
 
 It needs red = primary, white = its streaming replica (`failback.sh` first), both boards up. It stops the application on red, copies the uploads made
 meanwhile red → white (additive), rebuilds white's database from red's with a base backup (white's diverged old copy is first **copied aside** as
-`bridge_pgdata_diverged_<date>`, and the copy is checked), moves the roles (red loses `failover`/`bridge-primary`), deploys on white, then rebuilds red as
-white's replica (red's promoted database is kept as `standby_pgdata_prev_<date>`). If it stops half way it prints how to bring the site back on red.
+`bridge_pgdata_diverged_<date-time>`, and the copy is checked), moves the roles (red loses `failover`/`bridge-primary`), deploys on white, then rebuilds red as
+white's replica (red's promoted database is kept as `standby_pgdata_prev_<date-time>`). If it stops half way it prints how to bring the site back on red.
 `test-switchback.sh` covers the checks and the order (15 checks, fake ssh).
 
 ## Rehearsal checklist (needs a window of about an hour; white switched off)
