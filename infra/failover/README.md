@@ -58,22 +58,52 @@ What is **not** carried over: Caddy's certificates (re-issued), the worker's in-
 ## Going back (or not)
 
 You do not have to go back. The simplest recovery is the symmetric one: **red stays the primary and white becomes its replica.**
-1. Bring white up with its stack *off* (the fence guarantees nothing deploys); move its old `bridge_pgdata` aside (it is the diverged copy — keep it until you are sure).
-2. On red, allow replication from the overlay and make a slot for white (the role/`pg_hba`/slot steps of `infra/standby/setup-primary.sh`, run against red's database);
-   take a base backup into a fresh volume on white and start it as a standby (`infra/standby/setup-standby.sh` with the nodes swapped).
-3. Remove `failover=active` only when the new roles are settled (`docker node update --label-rm failover red`), and re-run `prepare-red.sh`'s
-   counterpart for white if you want the same readiness the other way round.
+That is scripted now:
 
-A planned switch back to white later is the same failover in the other direction. These steps are not scripted yet — they are rare, and the
-first time is worth doing with your eyes on it.
+```bash
+# white is up again, its stack OFF (docker stack rm bridge — the fence already stops anything from redeploying it)
+infra/failover/failback.sh --dry-run    # checks only
+infra/failover/failback.sh              # asks you to type FAILBACK
+```
 
-## Rehearsal
+It refuses unless red is the primary (out of recovery, `failover=active`), white answers and runs no bridge services, and white has no
+`standby_pgdata` volume yet. It allows replication and creates the slot `standby_white` on red, takes a base backup of red's database into a **new**
+volume on white, starts it as stack `bridgesw` and waits until white is streaming. White's old database volume (`bridge_pgdata`, the diverged
+copy) is never touched — remove it yourself when you are sure. `failover=active` stays on red.
 
-Never rehearsed on the real boards with white switched off — the scripts are tested against fakes (`test.sh`, 31 checks: refuses on a living
-white, on a missing key, on a wrong confirmation, on unprepared red; order promote → fence → deploy; uploads restored without overwriting;
-idempotent re-run). Plan one when white can be off for half an hour: power white off, `failover.sh --dry-run`, then the real run, then check
-the site through the router, then follow "Going back". Until then treat the first real run as the rehearsal and keep this file open.
+Not covered by the script (do them by hand, once white is a replica): the jobs that assume white is the primary — the backup/Garage/uploads timers
+on white and red, and the auto-deploy — and `prepare-red.sh`'s counterpart if you want white ready to take over again. A planned switch back to
+white later is the same failover in the other direction (`failover.sh` with the boards swapped, `I_KNOW_WHITE_IS_ALIVE=yes` after stopping red's stack).
+
+## Rehearsal checklist (needs a window of about an hour; white switched off)
+
+Before (white up, evening or weekend, nobody mid-task):
+1. `AGE_IDENTITY=… infra/failover/prepare-red.sh --check` — red's encrypted secrets are current; `infra/standby/status.sh` — the replica streams, lag ≈ 0.
+2. A fresh backup is there (`infra/backup`, Telegram "backup ok"); note the time.
+3. Write down the last upload and the last Worker job (to compare afterwards); finish or stop running jobs.
+4. Router admin open in a tab (Virtual Server rules for 80/443 → 192.168.50.11).
+
+The switch:
+5. Power white off (or pull its network) — `failover.sh` refuses while it answers.
+6. `AGE_IDENTITY=… infra/failover/failover.sh --dry-run`, then the real run; type FAILOVER.
+7. Router: forward 80/443 to 192.168.50.12. Wait for Caddy's certificates (1–2 minutes).
+8. Check: `curl https://api.bridge.ntlstl.dev/api/v1/health`, sign in, open the last parcel and upload a new file, send a chat message (worker on green answers), Telegram says "Переключение выполнено".
+9. Compare with step 3: nothing missing except what the README says you may lose.
+
+The way back:
+10. Power white on; **do not** start its stack (`docker stack ls` on white shows nothing named bridge — the fence refuses a deploy).
+11. `infra/failover/failback.sh --dry-run`, then the real run; type FAILBACK; confirm white streams.
+12. Router stays on red (red is the primary now). Re-check the site once more and re-run `prepare-red.sh` if secrets changed.
+
+Stop and look if: `failover.sh` refuses (read why, do not force); the API is not healthy in 5 minutes (`docker service ps bridge_backend` on red);
+Caddy cannot get certificates (are 80/443 really forwarded?).
+
+## Rehearsal status
+
+Never run on the real boards with white switched off — the scripts are tested against fakes (`test.sh` for the failover, `test-failback.sh` for the
+way back: refuses on a replica that is not promoted, a missing fence label, a white that still runs services or already has a replica volume; never
+touches white's own stack or old volume; the password never reaches a command line). The checklist above is the rehearsal.
 
 ## Tests
 
-`bash` in a Linux container: `docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq && apt-get install -y -qq rsync && bash /r/infra/failover/test.sh'`
+`test-failback.sh` runs the same way (`bash /r/infra/failover/test-failback.sh`, no rsync needed). `bash` in a Linux container for `test.sh`: `docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq && apt-get install -y -qq rsync && bash /r/infra/failover/test.sh'`
