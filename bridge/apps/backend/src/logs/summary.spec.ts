@@ -84,7 +84,10 @@ describe('summarize', () => {
 
   it('keeps fast 5xx out of slowestRoutes and ranks failingRoutes by count', () => {
     const mixed = [
-      row('http.slow', 'warn', 'http', 'slow', { route: '/s', durationMs: 900 }),
+      row('http.slow', 'warn', 'http', 'slow', {
+        route: '/s',
+        durationMs: 900,
+      }),
       row('http.error', 'error', 'http', 'e1', { route: '/a', durationMs: 1 }),
       row('http.error', 'error', 'http', 'e2', { route: '/b', durationMs: 5 }),
       row('http.error', 'error', 'http', 'e3', { route: '/b', durationMs: 2 }),
