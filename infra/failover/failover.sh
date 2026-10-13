@@ -76,6 +76,6 @@ ssh_ "$STANDBY" '~/failover/failover-red.sh'
 
 say
 say "DONE on the board. What is left is yours:"
-say "  1. Router (ASUS) → Virtual Server: forward TCP 80 and 443 to $STANDBY (instead of $PRIMARY). DNS stays as it is."
+say "  1. Router: with the floating address (infra/vip) NOTHING — it follows Caddy to red within ~15 s. Without it: Router (ASUS) → Virtual Server: forward TCP 80 and 443 to $STANDBY (instead of $PRIMARY). DNS stays as it is."
 say "  2. Check: curl https://api.bridge.ntlstl.dev/api/v1/health   (the certificates are re-issued by Caddy once the ports point at red)"
 say "  3. When white is back: do NOT start its stack. infra/failover/README.md → \"Going back\"."

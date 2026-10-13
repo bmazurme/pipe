@@ -47,7 +47,8 @@ fi
 docker volume inspect "$VOLUME" >/dev/null 2>&1 || docker volume create "$VOLUME" >/dev/null
 mountpoint="$(docker volume inspect "$VOLUME" -f '{{.Mountpoint}}')"
 if [ -z "$(sudo ls -A "$mountpoint" 2>/dev/null)" ]; then
-  if [ -d "$MIRROR" ] && [ -n "$(ls -A "$MIRROR" 2>/dev/null)" ]; then
+  # /srv/uploads-mirror is not readable by the board's user: look with sudo, or a perfectly good copy is reported missing.
+  if sudo test -d "$MIRROR" && [ -n "$(sudo ls -A "$MIRROR" 2>/dev/null)" ]; then
     sudo rsync -a "$MIRROR/" "$mountpoint/"
     log "uploads restored from $MIRROR: $(sudo find "$mountpoint" -type f | wc -l) files"
   else
