@@ -12,7 +12,8 @@
 #   4. deploy the stack here with POSTGRES_HOST=postgres-standby and no postgres service (POSTGRES_REPLICAS=0)
 #   5. wait for the API to report a healthy database, and say so on Telegram
 #
-# What it does NOT do: change the router (80/443 → this board) — failover.sh prints that step — and it does not undo itself.
+# What it does NOT do: change the router (80/443 → this board) — with the floating address (infra/vip) none is needed, without it
+# failover.sh prints that step — and it does not undo itself.
 # Going back is deliberate (infra/failover/README.md).
 set -euo pipefail
 
@@ -81,4 +82,4 @@ until curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | grep -q '"database":tr
   waited=$((waited + 10))
 done
 log "the API reports a healthy database"
-notify "✅ Переключение выполнено: bridge работает на $ME (база — бывшая реплика). Осталось перекинуть порты 80/443 роутера на $ME."
+notify "✅ Переключение выполнено: bridge работает на $ME (база — бывшая реплика). С плавающим адресом роутер трогать не нужно (адрес переедет сам за ~15 с); без него — перекиньте порты 80/443 роутера на $ME."
