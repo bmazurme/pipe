@@ -50,6 +50,11 @@ const ORPHAN_SWEEP_THROTTLE_MS = 60_000;
 const LOST_MESSAGE =
   'Worker was restarted or lost while this job was running — the run did not finish';
 
+export type JobStatusRow = Pick<
+  Job,
+  'id' | 'userId' | 'status' | 'resultFileId' | 'errorMessage'
+>;
+
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
@@ -265,6 +270,17 @@ export class WorkerService {
       select: columns,
       where: { userId },
       order: { createdAt: 'DESC' },
+    });
+  }
+
+  // Only the fields a status follower needs, for many jobs in one query: no logs, no
+  // context/history text. The caller checks `userId` against its own owner.
+  async findStatuses(ids: number[]): Promise<JobStatusRow[]> {
+    if (ids.length === 0) return [];
+
+    return this.jobRepository.find({
+      where: { id: In(ids) },
+      select: ['id', 'userId', 'status', 'resultFileId', 'errorMessage'],
     });
   }
 

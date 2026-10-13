@@ -18,7 +18,7 @@ import { NotifyService } from '../telegram/notify.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { localMinutes } from '../telegram/quiet-hours';
 import { JobModel, JobStatus } from '../worker/entities/job.entity';
-import { WorkerService } from '../worker/worker.service';
+import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
   ACTIVE_RUN_STATUSES,
   ImproveRun,
@@ -440,8 +440,16 @@ export class ImproveService {
         order: { id: 'ASC' },
       });
 
+      const jobIds = active.flatMap((run) => (run.jobId ? [run.jobId] : []));
+      const statuses = new Map(
+        (await this.workers.findStatuses(jobIds)).map((job) => [job.id, job]),
+      );
+
       for (const run of active) {
-        await this.advanceOne(run).catch((error) =>
+        await this.advanceOne(
+          run,
+          run.jobId ? statuses.get(run.jobId) : undefined,
+        ).catch((error) =>
           this.logger.warn(
             `Run ${run.id} could not be advanced: ${message(error)}`,
           ),
@@ -477,10 +485,14 @@ export class ImproveService {
     }
   }
 
-  async advanceOne(run: ImproveRun): Promise<void> {
+  async advanceOne(
+    run: ImproveRun,
+    job: JobStatusRow | undefined,
+  ): Promise<void> {
     if (!run.jobId) return;
 
-    const job = await this.workers.findOwned(run.jobId, run.userId);
+    if (!job || job.userId !== run.userId)
+      throw new NotFoundException('Job not found');
 
     if (job.status === JobStatus.Succeeded) {
       // Claimed exactly once even if two ticks overlap.
