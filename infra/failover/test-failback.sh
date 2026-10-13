@@ -23,6 +23,8 @@ stdin=""; case "$cmd" in *psql*|*"bash -s"*) stdin="$(cat)";; esac
 echo "$host: $cmd" >> "$FIX/log"
 [ -n "$stdin" ] && printf '%s\n' "$stdin" | sed 's/PASSWORD .*/PASSWORD <hidden>/' >> "$FIX/log.stdin"
 case "$cmd" in
+  *"mkdir "*pipe-switch.lock*) [ ! -f "$FIX/lock-held" ];;
+  *"cat "*pipe-switch.lock/owner*) echo "someone@elsewhere 2026-10-13T16:29:00Z failback.sh";;
   true) [ ! -f "$FIX/down-$host" ];;
   *"pg_stat_replication WHERE state"*|*psql*)
      case "$stdin" in
@@ -73,5 +75,9 @@ grep -q 'standby_white' "$FIX/log.stdin"; check "…creates the slot on red" $?
 ! grep -q 'secretpw' "$FIX/log"; check "…the password never appears on a command line" $?
 grep -q 'bridgesw' "$FIX/log.stdin" && grep -q 'scp' "$FIX/log"; check "…ships and deploys the replica stack on white" $?
 ! grep -q 'bridge-pi\|bridge_pgdata' "$FIX/log" "$FIX/log.stdin"; check "…never deploys white's own stack or touches its old volume" $?
+
+reset; touch "$FIX/lock-held"; fb; c=$?
+[ "$c" -ne 0 ] && grep -q 'another switch is running' "$T/out" && ! grep -q 'pg_basebackup\|stack deploy' "$FIX/log" "$FIX/log.stdin" 2>/dev/null; check "a second run while another holds the lock: refused before anything is changed" $?
+reset; fb >/dev/null 2>&1; grep -q 'rm -rf .*pipe-switch.lock' "$FIX/log"; check "a normal run releases the lock at the end" $?
 
 echo; echo "$PASS passed, $FAILED failed"; [ "$FAILED" -eq 0 ]
