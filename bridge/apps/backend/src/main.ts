@@ -11,6 +11,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { configureCors } from './config/cors.config';
 import { swaggerConfig } from './config/swagger.config';
+import { resolveTrustProxy } from './config/trust-proxy';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -26,8 +27,12 @@ async function bootstrap() {
   // own loopback address for every request, so ThrottlerGuard's per-IP
   // tracking would lump every real client into one shared bucket. 'loopback'
   // trusts X-Forwarded-For only from that one known hop, not from an
-  // arbitrary client claiming any IP it likes.
-  app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+  // arbitrary client claiming any IP it likes. TRUST_PROXY overrides the hop
+  // for a proxy that is not on loopback (see config/trust-proxy.ts).
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set('trust proxy', resolveTrustProxy(process.env.TRUST_PROXY));
 
   const configService = app.get(ConfigService);
 

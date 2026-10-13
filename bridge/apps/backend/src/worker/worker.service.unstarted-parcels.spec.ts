@@ -79,12 +79,8 @@ describe('WorkerService.findUnstartedIssueParcels', () => {
 
     await service.findUnstartedIssueParcels(3, new Date(0), 10);
 
-    expect(paramsOf(conditions).cutoff).toEqual(
-      new Date(Date.now() - 10_000),
-    );
-    expect(conditions.map(([sql]) => sql)).toContain(
-      'f.createdAt < :cutoff',
-    );
+    expect(paramsOf(conditions).cutoff).toEqual(new Date(Date.now() - 10_000));
+    expect(conditions.map(([sql]) => sql)).toContain('f.createdAt < :cutoff');
   });
 
   it('leaves out a parcel that already has a job', async () => {

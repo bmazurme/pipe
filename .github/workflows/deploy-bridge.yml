@@ -14,6 +14,8 @@
 #   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`;
 #   encrypts ClaudeCredential.token/VpnConnection.panelApiToken at rest),
 #   YANDEX_ID, YANDEX_SECRET, BRIDGE_YANDEX_REDIRECT, BRIDGE_TARGET_URL,
+#   (optional: OAUTH_GITHUB_ID, OAUTH_GITHUB_SECRET, BRIDGE_GITHUB_REDIRECT —
+#   GitHub sign-in; absent = the button is hidden),
 #   COOKIE_DOMAIN, EMAILS, CORS_ORIGINS, TIME_EXPORT_API_KEY,
 #   TIME_EXPORT_USER_ID, VITE_API_URL, BACKEND_PUBLISHED_PORT,
 #   FRONTEND_PUBLISHED_PORT, HOST
@@ -317,6 +319,10 @@ jobs:
           YANDEX_ID: ${{ secrets.YANDEX_ID }}
           YANDEX_SECRET: ${{ secrets.YANDEX_SECRET }}
           BRIDGE_YANDEX_REDIRECT: ${{ secrets.BRIDGE_YANDEX_REDIRECT }}
+          # optional GitHub sign-in; secret names can't start with GITHUB_
+          GITHUB_ID: ${{ secrets.OAUTH_GITHUB_ID }}
+          GITHUB_SECRET: ${{ secrets.OAUTH_GITHUB_SECRET }}
+          BRIDGE_GITHUB_REDIRECT: ${{ secrets.BRIDGE_GITHUB_REDIRECT }}
           BRIDGE_TARGET_URL: ${{ secrets.BRIDGE_TARGET_URL }}
           COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN }}
           EMAILS: ${{ secrets.EMAILS }}

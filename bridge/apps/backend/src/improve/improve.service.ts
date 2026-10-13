@@ -1031,8 +1031,7 @@ export class ImproveService {
       const accounts = await this.settings.find({
         where: { autoStartModel: Not(IsNull()) },
       });
-      const rows: Array<{ fileId: number; userId: number; model: string }> =
-        [];
+      const rows: Array<{ fileId: number; userId: number; model: string }> = [];
 
       for (const account of accounts) {
         if (!account.autoStartModel || !account.autoStartSince) continue;

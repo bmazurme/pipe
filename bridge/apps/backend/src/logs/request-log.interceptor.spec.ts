@@ -1,4 +1,17 @@
-import { classifyRequest, SLOW_REQUEST_MS } from './request-log.interceptor';
+import {
+  CallHandler,
+  ExecutionContext,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { lastValueFrom, of, throwError } from 'rxjs';
+
+import { AppLogService } from './app-log.service';
+import {
+  classifyRequest,
+  RequestLogInterceptor,
+  SLOW_REQUEST_MS,
+} from './request-log.interceptor';
 
 const base = {
   method: 'GET',
@@ -54,5 +67,103 @@ describe('classifyRequest', () => {
         durationMs: 9000,
       }),
     ).toBeNull();
+  });
+});
+
+describe('RequestLogInterceptor.intercept', () => {
+  const setup = (
+    request: Record<string, unknown> = {},
+    type: string = 'http',
+  ) => {
+    const record = jest.fn();
+    const interceptor = new RequestLogInterceptor({
+      record,
+    } as unknown as AppLogService);
+    const context = {
+      getType: () => type,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method: 'GET',
+          path: '/api/v1/worker/jobs/12',
+          route: { path: '/api/v1/worker/jobs/:id' },
+          ...request,
+        }),
+        getResponse: () => ({ statusCode: 200 }),
+      }),
+    } as unknown as ExecutionContext;
+
+    const run = (handler: CallHandler) =>
+      lastValueFrom(interceptor.intercept(context, handler)).catch(
+        () => undefined,
+      );
+
+    return { record, run };
+  };
+  const failing = (error: unknown): CallHandler => ({
+    handle: () => throwError(() => error),
+  });
+
+  it('records an HttpException with its own status as an error', async () => {
+    const { record, run } = setup();
+
+    await run(failing(new ServiceUnavailableException()));
+
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        message: expect.stringContaining('→ 503'),
+      }),
+    );
+  });
+
+  it('records a non-HttpException error as 500', async () => {
+    const { record, run } = setup();
+
+    await run(failing(new Error('boom')));
+
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        message: expect.stringContaining('→ 500'),
+      }),
+    );
+  });
+
+  it('does not record a 401', async () => {
+    const { record, run } = setup();
+
+    await run(failing(new UnauthorizedException()));
+
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('passes non-http contexts straight through', async () => {
+    const { record, run } = setup({}, 'rpc');
+
+    await run(failing(new Error('boom')));
+
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a digit-masked path when request.route is absent', async () => {
+    const { record, run } = setup({ route: undefined });
+
+    await run(failing(new Error('boom')));
+
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('/api/v:n/worker/jobs/:n'),
+      }),
+    );
+  });
+
+  it('does not record a fast successful request', async () => {
+    const { record, run } = setup();
+
+    await run({ handle: () => of('ok') });
+
+    expect(record).not.toHaveBeenCalled();
   });
 });

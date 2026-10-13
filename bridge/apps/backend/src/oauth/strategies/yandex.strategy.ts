@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy } from 'passport-yandex';
 
+import { OauthProfile } from '../oauth-profile';
+
 @Injectable()
 export class YandexStrategy extends PassportStrategy(Strategy, 'yandex') {
   private static readonly logger = new Logger(YandexStrategy.name);
@@ -37,11 +39,14 @@ export class YandexStrategy extends PassportStrategy(Strategy, 'yandex') {
     done: (err: any, user: any, info?: any) => void,
   ): any {
     const { default_email: email } = profile._json;
-    const payload = {
-      user: { email },
-      accessToken,
+    // Yandex only reports addresses it has verified.
+    const oauthProfile: OauthProfile = {
+      provider: 'yandex',
+      providerUserId: String(profile.id),
+      email: email ?? null,
+      emailVerified: Boolean(email),
     };
 
-    done(null, payload);
+    done(null, { profile: oauthProfile });
   }
 }

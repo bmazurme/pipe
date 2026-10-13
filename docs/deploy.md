@@ -27,7 +27,7 @@ before reusing these).
 **bridge** (`bridge/apps/backend/.env`, production values as GitHub Actions
 secrets — see `bridge/README.md` for the full table): `POSTGRES_HOST/PORT/USER/PASSWORD/DB`,
 `JWT_SECRET`, `REFRESH_JWT_SECRET`, `YANDEX_ID`/`YANDEX_SECRET` (OAuth),
-`BRIDGE_YANDEX_REDIRECT`, `BRIDGE_TARGET_URL`, `COOKIE_DOMAIN` (must be the
+`BRIDGE_YANDEX_REDIRECT`, optional `GITHUB_ID`/`GITHUB_SECRET`/`BRIDGE_GITHUB_REDIRECT` (second sign-in method; Actions secrets `OAUTH_GITHUB_*`), `BRIDGE_TARGET_URL`, `COOKIE_DOMAIN` (must be the
 exact backend host, not a shared parent domain — the cookie is named
 `bridgeRefreshToken` specifically because a shared `COOKIE_DOMAIN` with
 sibling apps on the same parent domain caused a name collision before),
