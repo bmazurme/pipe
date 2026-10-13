@@ -1,5 +1,4 @@
 import { join } from 'path';
-import { unlink } from 'fs/promises';
 import { Logger, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -7,11 +6,22 @@ import { Repository } from 'typeorm';
 
 import { UPLOAD_DIR } from './config/multer.config';
 import { StoredFile, StoredFileDirection } from './entities/stored-file.entity';
+import { FILE_STORE } from './file-store/file-store';
 import { StorageService } from './storage.service';
 
-jest.mock('fs/promises', () => ({ unlink: jest.fn() }));
-
-const mockUnlink = unlink as jest.Mock;
+// The store behind StorageService is faked: its own behaviour is covered in file-store/*.spec.ts.
+function createMockStore() {
+  return {
+    driver: 'local' as const,
+    adopt: jest.fn().mockResolvedValue(undefined),
+    put: jest.fn().mockResolvedValue(undefined),
+    stat: jest.fn(),
+    openRead: jest.fn(),
+    readBytes: jest.fn(),
+    remove: jest.fn().mockResolvedValue(undefined),
+    localPath: jest.fn().mockReturnValue(null),
+  };
+}
 
 type MockRepository = Partial<Record<keyof Repository<StoredFile>, jest.Mock>>;
 
@@ -27,14 +37,17 @@ function createMockRepository(): MockRepository {
 describe('StorageService', () => {
   let service: StorageService;
   let repository: MockRepository;
+  let store: ReturnType<typeof createMockStore>;
 
   beforeEach(async () => {
     repository = createMockRepository();
+    store = createMockStore();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StorageService,
         { provide: getRepositoryToken(StoredFile), useValue: repository },
+        { provide: FILE_STORE, useValue: store },
       ],
     }).compile();
 
@@ -86,6 +99,75 @@ describe('StorageService', () => {
     });
   });
 
+  describe('where the file goes', () => {
+    const file = {
+      originalname: 'a.zip',
+      filename: 'stored-a.zip',
+      mimetype: 'application/zip',
+      size: 123,
+    } as Express.Multer.File;
+
+    it('hands the staged upload to the store before recording it', async () => {
+      repository.save!.mockResolvedValue({ id: 1 });
+
+      await service.create(7, file);
+
+      expect(store.adopt).toHaveBeenCalledWith(
+        'stored-a.zip',
+        join(UPLOAD_DIR, 'stored-a.zip'),
+      );
+      expect(store.adopt.mock.invocationCallOrder[0]).toBeLessThan(
+        repository.save!.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("uses multer's own path for the staged file when it has one", async () => {
+      repository.save!.mockResolvedValue({ id: 1 });
+
+      await service.create(7, { ...file, path: '/tmp/staging/x.zip' });
+
+      expect(store.adopt).toHaveBeenCalledWith(
+        'stored-a.zip',
+        '/tmp/staging/x.zip',
+      );
+    });
+
+    it('records nothing when the store cannot take the file', async () => {
+      const error = new Error('bucket unreachable');
+      store.adopt.mockRejectedValue(error);
+
+      await expect(service.create(7, file)).rejects.toBe(error);
+
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('stores the bytes of a file bridge made itself under a fresh name and records them', async () => {
+      repository.save!.mockImplementation((entity) =>
+        Promise.resolve({ id: 5, ...entity }),
+      );
+
+      const stored = await service.createFromBuffer(
+        7,
+        Buffer.from('zip'),
+        'p.zip',
+        {
+          channel: 'issue',
+        },
+      );
+
+      const [key, bytes] = store.put.mock.calls[0];
+
+      expect(key).toMatch(/^[0-9a-f-]{36}\.zip$/);
+      expect(bytes).toEqual(Buffer.from('zip'));
+      expect(stored).toMatchObject({
+        storedName: key,
+        size: 3,
+        channel: 'issue',
+      });
+      expect(store.adopt).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create failure cleanup', () => {
     const file = {
       originalname: 'a.zip',
@@ -94,20 +176,19 @@ describe('StorageService', () => {
       size: 123,
     } as Express.Multer.File;
 
-    it('unlinks the uploaded file and rethrows when save fails', async () => {
+    it('removes the stored file and rethrows when save fails', async () => {
       const error = new Error('db down');
       repository.save!.mockRejectedValue(error);
-      mockUnlink.mockResolvedValue(undefined);
 
       await expect(service.create(7, file)).rejects.toBe(error);
 
-      expect(mockUnlink).toHaveBeenCalledWith(join(UPLOAD_DIR, 'stored-a.zip'));
+      expect(store.remove).toHaveBeenCalledWith('stored-a.zip');
     });
 
-    it('still rethrows the original error when the cleanup unlink fails', async () => {
+    it('still rethrows the original error when the cleanup fails', async () => {
       const error = new Error('db down');
       repository.save!.mockRejectedValue(error);
-      mockUnlink.mockRejectedValue(new Error('ENOENT'));
+      store.remove.mockRejectedValue(new Error('bucket unreachable'));
 
       await expect(service.create(7, file)).rejects.toBe(error);
     });
@@ -150,19 +231,18 @@ describe('StorageService', () => {
   describe('delete', () => {
     const stored = { id: 3, storedName: 'stored-b.zip' } as StoredFile;
 
-    it('removes the row and the file on disk', async () => {
+    it('removes the row and the stored file', async () => {
       repository.delete!.mockResolvedValue(undefined);
-      mockUnlink.mockResolvedValue(undefined);
 
       await service.delete(stored);
 
       expect(repository.delete).toHaveBeenCalledWith(3);
-      expect(mockUnlink).toHaveBeenCalledWith(service.path(stored));
+      expect(store.remove).toHaveBeenCalledWith('stored-b.zip');
     });
 
-    it('logs and does not throw when unlink fails', async () => {
+    it('logs and does not throw when the file cannot be removed', async () => {
       repository.delete!.mockResolvedValue(undefined);
-      mockUnlink.mockRejectedValue(new Error('EACCES'));
+      store.remove.mockRejectedValue(new Error('EACCES'));
       const warn = jest
         .spyOn(Logger.prototype, 'warn')
         .mockImplementation(() => undefined);
@@ -204,6 +284,36 @@ describe('StorageService', () => {
         },
         order: { createdAt: 'DESC' },
       });
+    });
+  });
+  describe('reading and sending', () => {
+    const stored = {
+      id: 3,
+      storedName: 'stored-b.zip',
+      originalName: 'b.zip',
+    } as StoredFile;
+
+    it('reads the bytes of a stored file through the store', async () => {
+      store.readBytes.mockResolvedValue(Buffer.from('bytes'));
+
+      await expect(service.readBytes(stored)).resolves.toEqual(
+        Buffer.from('bytes'),
+      );
+      expect(store.readBytes).toHaveBeenCalledWith('stored-b.zip');
+    });
+
+    it('lets Express send a plain local file as a download under its original name', () => {
+      store.localPath.mockReturnValue('/app/uploads/stored-b.zip');
+      const res = { download: jest.fn() };
+      const done = jest.fn();
+
+      service.download(res as never, stored, done);
+
+      expect(res.download).toHaveBeenCalledWith(
+        '/app/uploads/stored-b.zip',
+        'b.zip',
+        done,
+      );
     });
   });
 });

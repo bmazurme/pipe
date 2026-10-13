@@ -28,7 +28,11 @@ describe('StorageController.download', () => {
   function makeService(): jest.Mocked<StorageService> {
     return {
       findOwned: jest.fn().mockResolvedValue(file),
-      path: jest.fn().mockReturnValue('/uploads/abc.zip'),
+      // What the real service does for a plain local file: Express's own download, same callback.
+      download: jest.fn(
+        (res: Response, f: StoredFile, done: (e?: Error) => void) =>
+          res.download('/uploads/abc.zip', f.originalName, done),
+      ),
       delete: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<StorageService>;
   }
@@ -122,7 +126,11 @@ describe('StorageController.peek', () => {
   function makeService(): jest.Mocked<StorageService> {
     return {
       findOwned: jest.fn().mockResolvedValue(file),
-      path: jest.fn().mockReturnValue('/uploads/abc.zip'),
+      // What the real service does for a plain local file: Express's own download, same callback.
+      download: jest.fn(
+        (res: Response, f: StoredFile, done: (e?: Error) => void) =>
+          res.download('/uploads/abc.zip', f.originalName, done),
+      ),
       delete: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<StorageService>;
   }
