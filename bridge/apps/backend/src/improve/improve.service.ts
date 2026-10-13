@@ -42,6 +42,7 @@ import {
   pickOnePerCategory,
 } from './analysis';
 import { withDefinitionOfDone } from './definition-of-done';
+import { MAX_REPAIRS_PER_PR, repairBody } from './repair';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import {
@@ -220,6 +221,70 @@ export class ImproveService {
     return run;
   }
 
+  // CI went red on an open Improve PR: a worker gets the PR's branch as it is now, with the failing
+  // checks in front of it. Its result becomes a new commit on that same branch (publishRepair) — no
+  // new PR, and CI runs again on the push.
+  async startRepair(
+    parent: ImproveRun,
+    pull: { number: number; headSha: string; branch: string },
+    failures: string,
+  ): Promise<ImproveRun> {
+    this.requireConfigured();
+
+    const attempt =
+      (await this.runs.count({
+        where: { kind: 'repair', prNumber: pull.number },
+      })) + 1;
+    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
+      parent.userId,
+      parent.model,
+      {
+        number: parent.issueNumber as number,
+        title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
+        body: withDefinitionOfDone(
+          repairBody({
+            prNumber: pull.number,
+            branch: pull.branch,
+            issueNumber: parent.issueNumber,
+            issueTitle: parent.issueTitle,
+            attempt,
+            failures,
+          }),
+        ),
+      },
+      `improve:${parent.issueNumber}:repair:${attempt}`,
+      `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
+      { sha: pull.headSha, branch: pull.branch },
+    );
+    const run = await this.runs.save(
+      this.runs.create({
+        userId: parent.userId,
+        kind: 'repair',
+        issueNumber: parent.issueNumber,
+        issueTitle: parent.issueTitle,
+        model: parent.model,
+        trigger: 'ci',
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        baseSha,
+        baseline: JSON.stringify(baseline),
+        branch: pull.branch,
+        prNumber: pull.number,
+        prUrl: parent.prUrl,
+        note: `Автоисправление CI, попытка ${attempt} из ${MAX_REPAIRS_PER_PR}`,
+      }),
+    );
+
+    this.log(
+      'info',
+      'improve.repair_started',
+      `Run ${run.id}: CI repair ${attempt}/${MAX_REPAIRS_PER_PR} for PR #${pull.number} → job ${job.id} (${parent.model})`,
+      { runId: run.id, jobId: job.id, prNumber: pull.number, files: fileCount },
+    );
+
+    return run;
+  }
+
   // Snapshot of the base branch → parcel with this task as its manifest → Storage →
   // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
   // description is the prompt).
@@ -229,9 +294,12 @@ export class ImproveService {
     task: { number: number | string; title: string; body: string },
     taskKey: string,
     fileName: string,
+    // A CI repair works on the PR's branch as it is now, not on the base branch.
+    snapshot?: { sha: string; branch: string },
   ) {
-    const baseBranch = this.github.baseBranch();
-    const baseSha = await this.github.getBranchSha(baseBranch);
+    const baseBranch = snapshot?.branch ?? this.github.baseBranch();
+    const baseSha =
+      snapshot?.sha ?? (await this.github.getBranchSha(baseBranch));
     const files = selectParcelFiles(
       readZipball(await this.github.downloadZipball(baseSha)),
     );
@@ -375,7 +443,9 @@ export class ImproveService {
           note: note ?? 'Worker ничего не изменил',
         });
         await this.notifier.send(
-          `ℹ️ Задача #${run.issueNumber}: worker не внёс изменений — PR не нужен`,
+          run.kind === 'repair'
+            ? `ℹ️ PR #${run.prNumber}: автоисправление CI не внесло изменений`
+            : `ℹ️ Задача #${run.issueNumber}: worker не внёс изменений — PR не нужен`,
         );
 
         return;
@@ -398,6 +468,21 @@ export class ImproveService {
         );
       }
 
+      if (run.kind === 'repair') {
+        await this.commitRepair(run, allowed);
+        await this.finish(run, ImproveRunStatus.PrUpdated, {
+          note: [run.note, describeChanges(allowed), note]
+            .filter(Boolean)
+            .join('. '),
+        });
+        await this.storage.delete(file).catch(() => undefined);
+        await this.notifier.send(
+          `🔧 PR #${run.prNumber}: автоисправление CI (${describeChanges(allowed)}) — жду новый прогон\n${run.prUrl ?? ''}`.trim(),
+        );
+
+        return;
+      }
+
       const pr = await this.openPullRequest(run, allowed, note);
 
       await this.finish(run, ImproveRunStatus.PrOpen, {
@@ -411,21 +496,22 @@ export class ImproveService {
         `🔀 Задача #${run.issueNumber} → PR #${pr.number} (${describeChanges(allowed)})\n${pr.url}`,
       );
     } catch (error) {
-      await this.finish(run, ImproveRunStatus.Failed, {
-        error: message(error),
-      });
+      const reason = describePublishError(error);
+
+      await this.finish(run, ImproveRunStatus.Failed, { error: reason });
       await this.notifier.send(
-        `🔴 Задача #${run.issueNumber}: не удалось открыть PR — ${message(error).slice(0, 200)}`,
+        run.kind === 'repair'
+          ? `🔴 PR #${run.prNumber}: автоисправление CI не удалось — ${reason.slice(0, 200)}`
+          : `🔴 Задача #${run.issueNumber}: не удалось открыть PR — ${reason.slice(0, 200)}`,
       );
     }
   }
 
-  private async openPullRequest(
-    run: ImproveRun,
+  // The blobs and the tree of a result on top of a commit — shared by the first PR and by a repair.
+  private async createTreeFor(
+    baseSha: string,
     changes: Change[],
-    note: string | null,
-  ) {
-    const baseSha = run.baseSha as string;
+  ): Promise<string> {
     const baseTree = await this.github.getCommitTreeSha(baseSha);
     const tree: TreeEntry[] = [];
 
@@ -441,28 +527,64 @@ export class ImproveService {
       });
     }
 
+    return this.github.createTree(baseTree, tree);
+  }
+
+  // A repair is a commit on top of the PR's head, pushed to the PR's own branch (never forced).
+  private async commitRepair(run: ImproveRun, changes: Change[]) {
+    const headSha = run.baseSha as string;
+    const commit = await this.github.createCommit(
+      `Fix CI on PR #${run.prNumber}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}): ${describeChanges(changes)}.`,
+      await this.createTreeFor(headSha, changes),
+      headSha,
+    );
+
+    await this.github.updateBranch(run.branch as string, commit);
+  }
+
+  private async openPullRequest(
+    run: ImproveRun,
+    changes: Change[],
+    note: string | null,
+  ) {
+    const baseSha = run.baseSha as string;
     const commit = await this.github.createCommit(
       `Pull issue #${run.issueNumber}: ${run.issueTitle}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}).`,
-      await this.github.createTree(baseTree, tree),
+      await this.createTreeFor(baseSha, changes),
       baseSha,
     );
     const branch = `improve/issue-${run.issueNumber}-run-${run.id}`;
 
     await this.github.createBranch(branch, commit);
 
-    const pull = await this.github.createPull({
-      title: run.issueTitle,
-      head: branch,
-      base: this.github.baseBranch(),
-      body: [
-        `Closes #${run.issueNumber}`,
-        '',
-        `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
-        ...(note ? ['', `⚠️ ${note}`] : []),
-        '',
-        'Не влито автоматически — проверьте и влейте как обычно (CI → Telegram → Merge).',
-      ].join('\n'),
-    });
+    let pull: { number: number; htmlUrl: string };
+
+    try {
+      pull = await this.github.createPull({
+        title: run.issueTitle,
+        head: branch,
+        base: this.github.baseBranch(),
+        body: [
+          `Closes #${run.issueNumber}`,
+          '',
+          `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
+          ...(note ? ['', `⚠️ ${note}`] : []),
+          '',
+          'Не влито автоматически — проверьте и влейте как обычно (CI → Telegram → Merge).',
+        ].join('\n'),
+      });
+    } catch (error) {
+      // A branch with no PR helps nobody, and every retry would leave another one behind.
+      await this.github
+        .deleteBranch(branch)
+        .catch((cleanup) =>
+          this.logger.warn(
+            `Could not remove branch ${branch} after a failed PR: ${message(cleanup)}`,
+          ),
+        );
+
+      throw error;
+    }
 
     // The loop picks the PR up by this label (see LoopService's adoption).
     await this.github
@@ -1002,6 +1124,7 @@ export class ImproveService {
   async saveSettings(
     userId: number,
     autoStartModel: string | null,
+    autoRepairCi?: boolean,
   ): Promise<ImproveSettings> {
     if (autoStartModel) this.requireModel(autoStartModel);
 
@@ -1011,6 +1134,8 @@ export class ImproveService {
     return this.settings.save({
       userId,
       autoStartModel,
+      // Left alone when the caller did not send it (the page saves the two settings separately).
+      autoRepairCi: autoRepairCi ?? existing?.autoRepairCi ?? true,
       autoStartSince: autoStartModel
         ? enabling
           ? new Date()
@@ -1106,6 +1231,19 @@ export class ImproveService {
       meta,
     });
   }
+}
+
+// GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
+// about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
+const TOKEN_PERMISSION_ERROR =
+  'Resource not accessible by personal access token';
+
+export function describePublishError(error: unknown): string {
+  const text = message(error);
+
+  return text.includes(TOKEN_PERMISSION_ERROR)
+    ? `${text}. Токену GitHub (LOOP_GITHUB_TOKEN) не хватает права: для Improve нужны Issues, Pull requests и Contents — чтение и запись, Checks — чтение`
+    : text;
 }
 
 function message(error: unknown): string {

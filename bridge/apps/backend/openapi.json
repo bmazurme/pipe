@@ -3310,7 +3310,8 @@
               "no_changes",
               "failed",
               "cancelled",
-              "analyzed"
+              "analyzed",
+              "pr_updated"
             ],
             "type": "string"
           },
@@ -3641,6 +3642,9 @@
           "autoStartModel": {
             "type": "string",
             "nullable": true
+          },
+          "autoRepairCi": {
+            "type": "boolean"
           }
         }
       },

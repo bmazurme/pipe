@@ -147,7 +147,10 @@ export class ImproveController {
   async settings(@CurrentUser() user: { id: number }) {
     const settings = await this.improve.getSettings(user.id);
 
-    return { autoStartModel: settings?.autoStartModel ?? null };
+    return {
+      autoStartModel: settings?.autoStartModel ?? null,
+      autoRepairCi: settings?.autoRepairCi ?? true,
+    };
   }
 
   @Put('settings')
@@ -155,11 +158,19 @@ export class ImproveController {
     @Body() dto: SaveSettingsDto,
     @CurrentUser() user: { id: number },
   ) {
+    const current = await this.improve.getSettings(user.id);
     const saved = await this.improve.saveSettings(
       user.id,
-      dto.autoStartModel || null,
+      // Each of the two switches is saved on its own: a missing field keeps what is stored.
+      dto.autoStartModel === undefined
+        ? (current?.autoStartModel ?? null)
+        : dto.autoStartModel || null,
+      dto.autoRepairCi,
     );
 
-    return { autoStartModel: saved.autoStartModel };
+    return {
+      autoStartModel: saved.autoStartModel,
+      autoRepairCi: saved.autoRepairCi,
+    };
   }
 }
