@@ -14,8 +14,8 @@ const SLOW_POLL_MS = 30000;
 export function RunsTab() {
   // Fast while something is working, slow otherwise, paused in a background tab.
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
-  const { data: runs, isLoading } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
-  const [cancel, { isLoading: isCancelling, error }] = useCancelImproveRunMutation();
+  const { data: runs, isLoading, isError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
+  const [cancel, { isLoading: isCancelling, originalArgs: cancellingId, error }] = useCancelImproveRunMutation();
   const [retry, { isLoading: isRetrying, error: retryError }] = useRetryImprovePublishMutation();
   const hasActive = Boolean(runs?.some((run) => isActiveRun(run)));
 
@@ -27,6 +27,18 @@ export function RunsTab() {
     <div className={styles.panel}>
       {error && <Alert theme="danger" view="filled" message={getErrorMessage(error, 'Не удалось остановить')} />}
       {retryError && <Alert theme="danger" view="filled" message={getErrorMessage(retryError, 'Не удалось повторить публикацию')} />}
+      {isError && (
+        <Alert
+          theme="danger"
+          view="filled"
+          message={getErrorMessage(listError, 'Не удалось загрузить запуски')}
+          actions={
+            <Button view="outlined" size="s" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
       {isLoading && <Skeleton style={{ height: 120 }} />}
 
       {runs && runs.length === 0 && (
@@ -62,7 +74,7 @@ export function RunsTab() {
               </Button>
             )}
             {isActiveRun(run) && run.status !== 'publishing' && (
-              <Button view="flat-danger" size="s" loading={isCancelling} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
+              <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
                 <Icon data={Stop} size={16} />
               </Button>
             )}
