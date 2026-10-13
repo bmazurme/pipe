@@ -21,7 +21,7 @@ import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { multerExceptionFilterFor } from '../storage/filters/multer-exception.filter';
+import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
