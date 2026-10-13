@@ -53,6 +53,7 @@ import {
   readResultParcel,
   readZipball,
   selectParcelFiles,
+  SnapshotFile,
   utf8Text,
 } from './parcel';
 
@@ -80,12 +81,17 @@ const PR_LABEL = 'loop';
 // and the issue to a worker, and turn what comes back into a branch and a pull
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
+const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
   private advancing = false;
   private ticking = false;
   private autoStarting = false;
+  // One repo snapshot, reused by consecutive launches on the same base SHA.
+  private zipCache: { sha: string; files: SnapshotFile[]; at: number } | null =
+    null;
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -283,6 +289,22 @@ export class ImproveService {
     return run;
   }
 
+  private async snapshotFiles(sha: string) {
+    const cached = this.zipCache;
+    if (
+      cached &&
+      cached.sha === sha &&
+      Date.now() - cached.at < ZIP_CACHE_TTL_MS
+    ) {
+      return cached.files;
+    }
+    const files = selectParcelFiles(
+      readZipball(await this.github.downloadZipball(sha)),
+    );
+    this.zipCache = { sha, files, at: Date.now() };
+    return files;
+  }
+
   // Snapshot of the base branch → parcel with this task as its manifest → Storage →
   // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
   // description is the prompt).
@@ -298,9 +320,7 @@ export class ImproveService {
     const baseBranch = snapshot?.branch ?? this.github.baseBranch();
     const baseSha =
       snapshot?.sha ?? (await this.github.getBranchSha(baseBranch));
-    const files = selectParcelFiles(
-      readZipball(await this.github.downloadZipball(baseSha)),
-    );
+    const files = await this.snapshotFiles(baseSha);
     const { buffer, baseline } = buildIssueParcel(files, {
       number: task.number,
       title: task.title,
