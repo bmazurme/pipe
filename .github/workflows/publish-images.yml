@@ -1,0 +1,151 @@
+name: Publish images (GHCR, multi-arch)
+
+# Builds bridge's backend/frontend and worker for linux/amd64 AND linux/arm64 and
+# publishes them to GitHub Container Registry as
+#   ghcr.io/<owner>/pipe-bridge-backend | pipe-bridge-frontend | pipe-worker
+# tagged with the commit SHA and `latest`. arm64 is what the Raspberry Pi standby
+# (docs/ha-dr-plan.md) runs; amd64 is the primary site.
+#
+# Deliberately separate from deploy-bridge.yml: it neither touches the production
+# deploy nor needs Yandex Cloud credentials. Manual for now (workflow_dispatch) —
+# each architecture builds natively on its own runner (no QEMU emulation), the
+# per-arch images are pushed by digest and merged into one multi-arch manifest.
+#
+# Needs only the built-in GITHUB_TOKEN, plus the existing VITE_API_URL secret for
+# the frontend (Vite inlines it at build time, same as deploy-bridge.yml).
+#
+# First publish creates the packages as private: either make them public in the
+# package settings or `docker login ghcr.io` on every node that pulls them.
+# To deploy from GHCR instead of Yandex CR, set the stack's CR_HOST=ghcr.io,
+# CR_REGISTRY=<owner> and CR_*_IMAGE=pipe-bridge-backend / -frontend / pipe-worker
+# (bridge/deploy/swarm/bridge-stack.yml already builds its image names from them).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-images
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+        image: [bridge-backend, bridge-frontend, worker]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          # Contexts differ per image — see each Dockerfile's own header comment:
+          # backend builds from bridge/, the other two need the repo root.
+          - image: bridge-backend
+            dockerfile: bridge/apps/backend/Dockerfile
+            context: bridge
+          - image: bridge-frontend
+            dockerfile: bridge/apps/frontend/Dockerfile
+            context: .
+          - image: worker
+            dockerfile: worker/Dockerfile
+            context: .
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Prepare names
+        id: names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=${REGISTRY}/${owner}/pipe-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+          echo "pair=${{ matrix.platform }}" | tr '/' '-' >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VITE_API_URL=${{ matrix.image == 'bridge-frontend' && secrets.VITE_API_URL || '' }}
+          outputs: type=image,name=${{ steps.names.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.names.outputs.pair }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.names.outputs.pair }}
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ steps.names.outputs.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish ${{ matrix.image }} manifest
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [bridge-backend, bridge-frontend, worker]
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          name="${REGISTRY}/${owner}/pipe-${{ matrix.image }}"
+          refs=()
+          for digest in *; do refs+=("${name}@sha256:${digest}"); done
+          docker buildx imagetools create \
+            -t "${name}:${GITHUB_SHA}" -t "${name}:latest" "${refs[@]}"
+
+      - name: Inspect
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          docker buildx imagetools inspect "${REGISTRY}/${owner}/pipe-${{ matrix.image }}:${GITHUB_SHA}"

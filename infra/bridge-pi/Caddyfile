@@ -1,0 +1,10 @@
+# APP_HOST / API_HOST come from the container environment (bridge-pi.yml).
+{$APP_HOST} {
+	encode gzip
+	reverse_proxy frontend:80
+}
+
+{$API_HOST} {
+	encode gzip
+	reverse_proxy backend:3000
+}

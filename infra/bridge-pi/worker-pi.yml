@@ -1,0 +1,85 @@
+# worker + vpn-client on the Pi Swarm — a separate stack (`bridgew`) next to `bridge`, so the core keeps running
+# whatever happens here. Deployed by deploy-worker.sh.
+#
+# worker talks to bridge only over its public address (BRIDGE_API_URL), like any other machine client, and sits
+# on its own network with no path to Postgres or the backend: `claude --dangerously-skip-permissions` runs
+# arbitrary code against task content, so its blast radius must stop at the container. The AI providers are
+# blocked from Russia (403), so their traffic goes out through the Xray client — a plain HTTP proxy on worker-net.
+#
+# Placement: green, a plain worker node — keeps job load off white (database, backend, TLS).
+version: '3.8'
+
+services:
+  vpn-client:
+    image: ghcr.io/xtls/xray-core:latest
+    networks:
+      worker-net: {}
+      # bridge's backend reaches Telegram through this proxy; the alias makes `vpn-client` resolve on the shared network
+      telegram-proxy-net:
+        aliases: [vpn-client]
+    secrets:
+      - source: xray_client_config
+        target: /usr/local/etc/xray/config.json
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      # DNS round-robin instead of a virtual IP: with the VIP (IPVS) a share of connections from the worker
+      # hung until undici's 10 s connect timeout while direct connects to the VPN server were fine — see README.
+      endpoint_mode: dnsrr
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-green]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits: { cpus: '0.25', memory: 128M }
+
+  worker:
+    image: ${IMAGE_WORKER:-localhost/pipe/bridge-worker}:${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required}
+    networks:
+      - worker-net
+    environment:
+      BRIDGE_API_URL: https://${API_HOST:-api.bridge.ntlstl.dev}
+      BRIDGE_API_KEY_FILE: /run/secrets/worker_bridge_api_key
+      CLAUDE_CODE_OAUTH_TOKEN_FILE: /run/secrets/worker_claude_code_oauth_token
+      WORKER_NAME: pi-worker
+      # HTTP proxy, not socks5:// — neither the claude CLI nor undici's ProxyAgent speaks SOCKS5.
+      WORKER_PROXY_URL: http://vpn-client:1080
+    secrets:
+      - worker_bridge_api_key
+      - worker_claude_code_oauth_token
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-green]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits: { cpus: '2.00', memory: 2G }
+        reservations: { memory: 256M }
+
+networks:
+  worker-net:
+    driver: overlay
+  telegram-proxy-net:
+    external: true
+
+secrets:
+  # Immutable Swarm objects: the content hash in the name makes a rotated value a new object.
+  xray_client_config:
+    file: ${XRAY_CONFIG_FILE:?XRAY_CONFIG_FILE is required}
+    name: xray_client_config_${XRAY_CONFIG_HASH:?XRAY_CONFIG_HASH is required}
+  worker_bridge_api_key:
+    file: ${WORKER_BRIDGE_API_KEY_FILE:?WORKER_BRIDGE_API_KEY_FILE is required}
+    name: worker_bridge_api_key_${WORKER_BRIDGE_API_KEY_HASH:?WORKER_BRIDGE_API_KEY_HASH is required}
+  worker_claude_code_oauth_token:
+    file: ${WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE:?WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE is required}
+    name: worker_claude_code_oauth_token_${WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH:?WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH is required}

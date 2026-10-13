@@ -1,0 +1,42 @@
+# The warm standby: a streaming replica of the primary Postgres, on red. Deployed by setup-standby.sh as stack `bridgesb`.
+#
+# It joins the primary's overlay network `bridge_internal` (attachable) and finds the primary as `postgres`; the data
+# volume `standby_pgdata` is created and filled by pg_basebackup in setup-standby.sh (so the first start is already a
+# standby: standby.signal + primary_conninfo are in the volume). Nothing is published — it is reachable only on that
+# network, as `postgres-standby`, and only for read-only queries until it is promoted (promote.sh).
+version: '3.8'
+
+services:
+  postgres-standby:
+    image: postgres:16-alpine
+    networks:
+      - bridge_internal
+    volumes:
+      - standby_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-red]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits: { cpus: '1.50', memory: 1G }
+        reservations: { memory: 256M }
+
+networks:
+  bridge_internal:
+    external: true
+
+volumes:
+  standby_pgdata:
+    external: true

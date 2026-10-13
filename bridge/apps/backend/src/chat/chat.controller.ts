@@ -21,8 +21,8 @@ import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
-import { contentTypeOf } from './attachments';
+import { multerExceptionFilterFor } from '../storage/filters/multer-exception.filter';
+import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatService } from './chat.service';
 import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
@@ -34,6 +34,11 @@ import { CreateChatDto } from './dto/create-chat.dto';
 import { FailTurnDto } from './dto/fail-turn.dto';
 import { RenameChatDto } from './dto/rename-chat.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+
+const AttachmentMulterExceptionFilter = multerExceptionFilterFor(
+  MAX_ATTACHMENT_BYTES,
+  (mb) => `Файл больше ${mb} МБ`,
+);
 
 // One controller, one guard, for both audiences — same reasoning as
 // WorkerController: JwtOrApiKeyGuard already accepts a browser session or
@@ -103,7 +108,7 @@ export class ChatController {
   // Upload first, then send the message with the returned ids — a file travels once, and
   // a failed or abandoned message leaves nothing half-attached.
   @Post('chats/:id/attachments')
-  @UseFilters(MulterExceptionFilter)
+  @UseFilters(AttachmentMulterExceptionFilter)
   @UseInterceptors(FileInterceptor('file', attachmentMulterConfig))
   async uploadAttachment(
     @Param('id', ParseIntPipe) id: number,

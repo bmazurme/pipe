@@ -44,6 +44,11 @@ services:
       YANDEX_ID: ${YANDEX_ID:?YANDEX_ID is required}
       YANDEX_SECRET: ${YANDEX_SECRET:?YANDEX_SECRET is required}
       BRIDGE_YANDEX_REDIRECT: ${BRIDGE_YANDEX_REDIRECT:?BRIDGE_YANDEX_REDIRECT is required}
+      # Optional second sign-in method. Empty GITHUB_ID leaves GitHub sign-in
+      # off (the login page hides the button); Yandex keeps working either way.
+      GITHUB_ID: ${GITHUB_ID:-}
+      GITHUB_SECRET: ${GITHUB_SECRET:-}
+      BRIDGE_GITHUB_REDIRECT: ${BRIDGE_GITHUB_REDIRECT:-}
       BRIDGE_TARGET_URL: ${BRIDGE_TARGET_URL:?BRIDGE_TARGET_URL is required}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN is required}
       EMAILS: ${EMAILS:-}
