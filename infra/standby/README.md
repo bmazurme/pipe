@@ -33,21 +33,11 @@ the replica rejects writes; a promotion rehearsal on a throwaway copy worked (an
 - `infra/standby/status.sh` (workstation): replica attached + `streaming`, lag in bytes, slot, seconds since the last replayed transaction; exit 1 if not streaming or lagging > 16 MB.
 - `pipe-standby-check.timer` on red (every 5 min): `check.sh` asks the replica's WAL receiver (status `streaming`, last message from the primary < 180 s — keepalives keep it fresh even when idle). Failure → `systemctl --failed`, the journal, and `ALERT_CMD` in `/etc/pipe-standby.env`.
 
-## Failover — what is automated and what is not
+## Failover
 
-`promote.sh` (on red) turns the replica into a read-write primary after you type `PROMOTE`. It is **only** the database half.
-A full switch to red also needs, in this order:
-
-1. Be sure white is really down (a promoted replica next to a living primary = two diverging databases).
-2. `./promote.sh` on red.
-3. Start the application against it on red: the bridge stack's `postgres` service must be the promoted node (`postgres-standby` under another name,
-   or point `POSTGRES_HOST` of the backend at it), plus backend/frontend/Caddy on red. **Not prepared yet**: red has none of the arm64 images
-   (`infra/bridge-pi/build-images.sh red`), none of the secrets (`~/.pipe/bridge.env`: JWT secrets and `CREDENTIALS_ENC_KEY` — copying them to red widens where
-   they live; decide that on purpose), and no Caddy certificates (they are re-issued, but only once DNS/ports point there).
-4. Router: forward TCP 80/443 to red (192.168.50.12) instead of white. DNS stays — the records point at the home address, not at a board.
-5. Afterwards rebuild a replica (a new base backup, `setup-standby.sh` on the other board) or restore white from the backups, then go back deliberately.
-
-This is the basis for the failover automation planned in docs/ha-dr-plan.md §8 (confirm-first watchdog); it is a runbook, not a button, until step 3 is prepared.
+`promote.sh` (on red, after you type `PROMOTE`, or `PROMOTE_CONFIRMED=yes` from the script below) is only the database half. The whole switch —
+the encrypted secrets, the uploads, the roles and the **fence** that keeps white from reviving its old database, the deploy on red, the router
+step — is `infra/failover` (start with its README): `prepare-red.sh` while white is up, `failover.sh` from your workstation when it is gone.
 
 ## Rebuilding / removing the replica
 

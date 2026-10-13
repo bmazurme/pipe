@@ -172,5 +172,45 @@ else
   echo "skip mirror tests (rclone not installed)"
 fi
 
+# 9. uploads-pull.sh — the uploaded files: a copy that survives an accidental wipe (needs rsync, rclone)
+if command -v rsync >/dev/null && command -v rclone >/dev/null; then
+  SRCU="$T/primary-uploads"; UP="$T/uploads-mirror"; UBUCKET="$T/uploads-bucket"
+  mkdir -p "$SRCU/chat" "$UBUCKET"
+  for i in $(seq 1 12); do echo "parcel $i" > "$SRCU/f$i.zip"; done; echo "attachment" > "$SRCU/chat/a.png"
+  upl() { BACKUP_DIR="$UP" SOURCE="$SRCU/" RCLONE=rclone DEST="$UBUCKET" "$HERE/uploads-pull.sh" "$@" >"$T/out" 2>&1; }
+
+  upl; check "uploads: first pull succeeds" $?
+  diff -r "$SRCU" "$UP/current" >/dev/null; check "uploads: the copy equals the source, subfolders included" $?
+  diff -r "$SRCU" "$UBUCKET" >/dev/null; check "uploads: …and it is mirrored to the bucket" $?
+  BACKUP_DIR="$UP" "$HERE/uploads-pull.sh" --check >"$T/out" 2>&1; check "uploads: freshness check passes" $?
+
+  echo "changed" > "$SRCU/f1.zip"; echo "new" > "$SRCU/f13.zip"; rm -f "$SRCU/f2.zip"
+  upl; check "uploads: a normal change (edit, add, delete) is taken over" $?
+  [ "$(cat "$UP/current/f1.zip")" = changed ] && [ -f "$UP/current/f13.zip" ] && [ ! -f "$UP/current/f2.zip" ]; check "uploads: the copy follows it" $?
+  [ -f "$UP/deleted/$(date -u +%F)/f2.zip" ]; check "uploads: the deleted file is kept in deleted/<date>, not lost" $?
+  [ -f "$UP/deleted/$(date -u +%F)/f1.zip" ] && [ "$(cat "$UP/deleted/$(date -u +%F)/f1.zip")" = "parcel 1" ]; check "uploads: so is the previous version of an overwritten one" $?
+  [ ! -f "$UBUCKET/f2.zip" ] && [ "$(cat "$UBUCKET/f1.zip")" = changed ]; check "uploads: the bucket mirror follows the local copy" $?
+
+  before="$(find "$UP/current" -type f | wc -l | tr -d ' ')"
+  mkdir -p "$T/wiped"; mv "$SRCU" "$T/primary-saved"; mkdir -p "$SRCU"      # the primary lost everything
+  upl; [ $? -ne 0 ]; check "uploads: a run that would delete almost everything is refused" $?
+  grep -q "would delete" "$T/out"; check "uploads: …and says why" $?
+  [ "$(find "$UP/current" -type f | wc -l | tr -d ' ')" = "$before" ]; check "uploads: …and the copy is untouched" $?
+  [ "$(find "$UBUCKET" -type f | wc -l | tr -d ' ')" -ge 12 ]; check "uploads: …and so is the bucket" $?
+  FORCE=1 upl; check "uploads: FORCE=1 overrides when it really is what happened" $?
+  rm -rf "$SRCU"; mv "$T/primary-saved" "$SRCU"
+
+  mkdir -p "$UP/deleted/2020-01-01" "$UP/deleted/$(date -u +%F)x"; touch -d '40 days ago' "$UP/deleted/2020-01-01"
+  upl; check "uploads: another run" $?
+  [ ! -d "$UP/deleted/2020-01-01" ] && [ -d "$UP/deleted/$(date -u +%F)" ]; check "uploads: deleted/ older than the retention is pruned, today's is kept" $?
+
+  echo $(( $(date +%s) - 30 * 3600 )) > "$UP/last-success"
+  BACKUP_DIR="$UP" "$HERE/uploads-pull.sh" --check >"$T/out" 2>&1; [ $? -ne 0 ]; check "uploads: --check fails when the last copy is older than 26 h" $?
+
+  BACKUP_DIR="$T/other" SOURCE="$T/does-not-exist/" "$HERE/uploads-pull.sh" >"$T/out" 2>&1; [ $? -ne 0 ]; check "uploads: an unreachable source fails" $?
+else
+  echo "skip uploads tests (rsync and rclone are needed)"
+fi
+
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
