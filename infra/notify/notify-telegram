@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# Sends one message to your Telegram chat from a board — for the infrastructure scripts that otherwise only write to the
+# journal (backup, replica check, auto-deploy): set `ALERT_CMD=/usr/local/bin/notify-telegram` (or NOTIFY_CMD for the
+# auto-deploy) in their /etc/pipe-*.env and they call it with the text as $1.
+#
+#   notify-telegram "text"
+#
+# Telegram is blocked from here, so the message goes out through the VPN proxy of the worker stack: a throwaway curl
+# container joins the shared overlay network `telegram-proxy-net` (backend and vpn-client live there) and uses
+# http://vpn-client:1080. Settings in /etc/pipe-notify.env (mode 600, root): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+#
+# It never fails the caller: a message that cannot be sent is logged to stderr and the exit status is 0 — an alert path
+# must not break the thing it reports on. The token travels as an environment variable, not on a command line.
+set -uo pipefail
+
+ENV_FILE="${NOTIFY_ENV_FILE:-/etc/pipe-notify.env}"
+NETWORK="${NOTIFY_NETWORK:-telegram-proxy-net}"
+PROXY="${NOTIFY_PROXY:-http://vpn-client:1080}"
+IMAGE="${NOTIFY_CURL_IMAGE:-curlimages/curl:8.10.1}"
+text="${1:-}"
+
+[ -n "$text" ] || { echo "usage: notify-telegram \"text\"" >&2; exit 0; }
+[ -r "$ENV_FILE" ] || { echo "notify-telegram: cannot read $ENV_FILE" >&2; exit 0; }
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+[ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || { echo "notify-telegram: token or chat id missing in $ENV_FILE" >&2; exit 0; }
+
+# Telegram caps a message at 4096 characters.
+NOTIFY_TEXT="${text:0:4000}"
+export NOTIFY_TEXT
+
+out="$(docker run --rm --network "$NETWORK" \
+  -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e NOTIFY_TEXT -e NOTIFY_PROXY="$PROXY" \
+  --entrypoint sh "$IMAGE" -c '
+    curl -sS -m 25 -x "$NOTIFY_PROXY" \
+      --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+      --data-urlencode "text=$NOTIFY_TEXT" \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"' 2>&1)" || true
+
+case "$out" in
+  *'"ok":true'*) ;;
+  *) echo "notify-telegram: not delivered: $(printf '%s' "$out" | sed -E 's/bot[0-9]+:[A-Za-z0-9_-]+/bot<token>/g' | tail -c 300)" >&2 ;;
+esac
+exit 0
