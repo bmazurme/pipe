@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Lock, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, ClipboardButton, Icon, Label, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, ClipboardButton, Dialog, Icon, Label, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 
 import { fingerprintOfPublicKey, keyFileName, keyKind } from '../../shared/lib/keyGeneration';
 import { triggerBlobDownload } from '../../shared/lib/parcelCrypto';
@@ -12,16 +12,19 @@ import styles from '../KeysPage.module.css';
 function KeyRow({ keyEntry, onRemove }: { keyEntry: StoredParcelKey; onRemove: () => void }) {
   const kind = keyKind(keyEntry.pem);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [fingerprintFailed, setFingerprintFailed] = useState(false);
 
   // Only public keys get a fingerprint: it is derived from the public key's DER, and a
   // private one would have to be parsed for it. The fingerprint lets a pair be matched.
   useEffect(() => {
     let cancelled = false;
 
+    setFingerprintFailed(false);
+
     if (kind === 'public') {
       fingerprintOfPublicKey(keyEntry.pem)
         .then((value) => !cancelled && setFingerprint(value))
-        .catch(() => undefined);
+        .catch(() => !cancelled && setFingerprintFailed(true));
     }
 
     return () => {
@@ -36,6 +39,11 @@ function KeyRow({ keyEntry, onRemove }: { keyEntry: StoredParcelKey; onRemove: (
         {fingerprint && (
           <Text variant="caption-2" color="secondary" className={styles.fingerprint} ellipsis title={fingerprint}>
             {fingerprint}
+          </Text>
+        )}
+        {fingerprintFailed && (
+          <Text variant="caption-2" color="secondary" className={styles.fingerprint} title="Не удалось вычислить отпечаток ключа">
+            —
           </Text>
         )}
       </div>
@@ -66,6 +74,13 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
   const [name, setName] = useState('');
   const [pem, setPem] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<StoredParcelKey | null>(null);
+  const pendingIsPrivate = pendingRemoval ? keyKind(pendingRemoval.pem) === 'private' : false;
+
+  const handleConfirmRemoval = () => {
+    if (pendingRemoval) removeKey(pendingRemoval.id);
+    setPendingRemoval(null);
+  };
 
   const handleImport = () => {
     const label = name.trim();
@@ -96,7 +111,7 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
       ) : (
         <ul className={styles.keyList}>
           {keys.map((entry) => (
-            <KeyRow key={entry.id} keyEntry={entry} onRemove={() => removeKey(entry.id)} />
+            <KeyRow key={entry.id} keyEntry={entry} onRemove={() => setPendingRemoval(entry)} />
           ))}
         </ul>
       )}
@@ -113,6 +128,22 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
       </div>
 
       {error && <Alert theme="danger" view="filled" message={error} />}
+
+      <Dialog open={pendingRemoval !== null} onClose={() => setPendingRemoval(null)} maxWidth="s" aria-labelledby="remove-key-title">
+        <Dialog.Header caption={`Удалить ключ «${pendingRemoval?.name ?? ''}»?`} id="remove-key-title" />
+        <Dialog.Body>
+          {pendingIsPrivate
+            ? 'Этот приватный ключ хранится только в этом браузере. После удаления восстановить его нельзя, а посылки, зашифрованные на него, больше не откроются.'
+            : 'Ключ будет удалён из этого браузера.'}
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Удалить"
+          propsButtonApply={{ view: 'outlined-danger' }}
+          onClickButtonCancel={() => setPendingRemoval(null)}
+          onClickButtonApply={handleConfirmRemoval}
+        />
+      </Dialog>
     </Card>
   );
 }
