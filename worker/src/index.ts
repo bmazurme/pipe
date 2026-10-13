@@ -20,6 +20,7 @@ import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
+import { requireShell } from './shell.js';
 import { withContext } from './taskContext.js';
 import { resolveInDir } from './resolveInDir.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
@@ -177,6 +178,9 @@ export async function processJob(
 
     if (job.context?.trim()) log('Attached context: yes\n');
     if (job.history?.trim()) log('Attached context: outcomes of earlier runs\n');
+
+    // Fail the job up front rather than let it run with no shell and open an unchecked pull request.
+    if (provider.tool === 'claude') requireShell();
 
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
