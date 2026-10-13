@@ -24,6 +24,10 @@ cat > "$BIN/docker" <<'SH'
 [ -f "$FIX/caddy-running" ] && echo abc123
 exit 0
 SH
+cat > "$BIN/systemctl" <<'SH'
+#!/usr/bin/env bash
+[ -f "$FIX/ka-running" ]
+SH
 cat > "$BIN/hostname" <<'SH'
 #!/usr/bin/env bash
 echo ubuntu-white
@@ -36,9 +40,10 @@ rm -f "$FIX"/*; inst --dry-run; [ $? -ne 0 ] && grep -q -- '--peer' "$T/out"; ch
 rm -f "$FIX"/*; inst --dry-run --peer 192.168.50.12; c=$?
 [ $c -eq 0 ] && grep -q 'unicast_src_ip 192.168.50.11' "$T/out" && grep -q '192.168.50.10/24 dev eth0' "$T/out" && grep -q 'interface eth0' "$T/out"; check "renders interface, own address, VIP, peer" $?
 grep -qE '^\s+192\.168\.50\.12$' "$T/out" && ! grep -q '@' "$T/out"; check "…every placeholder filled, peer listed" $?
-grep -q 'nopreempt' "$T/out" && grep -q 'weight -50' "$T/out"; check "…nopreempt and the Caddy check lowers priority" $?
+grep -q 'weight -50' "$T/out" && ! grep -qE '^\s+nopreempt' "$T/out"; check "…the Caddy check lowers priority, and preempt is on (the Caddy holder must be able to take the address)" $?
 rm -f "$FIX"/*; touch "$FIX/vip-answers"; inst --dry-run --peer 192.168.50.12; [ $? -ne 0 ] && grep -q 'already answers' "$T/out"; check "a VIP that already answers is refused" $?
 rm -f "$FIX"/*; touch "$FIX/vip-answers" "$FIX/holds-vip"; inst --dry-run --peer 192.168.50.12; [ $? -eq 0 ]; check "…unless this board already holds it (re-run)" $?
+rm -f "$FIX"/*; touch "$FIX/vip-answers" "$FIX/ka-running"; inst --dry-run --peer 192.168.50.12; [ $? -eq 0 ]; check "…or keepalived already runs here (a re-run to change the config while the other board holds the address)" $?
 rm -f "$FIX"/*; inst --dry-run --peer 192.168.50.12 --vip 192.168.50.11; [ $? -ne 0 ] && grep -q 'equals this board' "$T/out"; check "VIP equal to the board's own address: refused" $?
 rm -f "$FIX"/*; inst --peer 192.168.50.12 >/dev/null 2>&1 </dev/null; [ "$(id -u)" = 0 ] || [ $? -ne 0 ]; check "without --dry-run needs root" $?
 
