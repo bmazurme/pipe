@@ -11,19 +11,26 @@ import {
   ParseIntPipe,
   Post,
   Request,
+  Req,
   Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Response } from 'express';
+import { Request as ExpressRequest, Response } from 'express';
 
 import { ApiKeysService } from './api-keys.service';
+import { EmergencyKeysService } from './emergency-keys.service';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ApiKeyResponseDto } from './dto/api-key-response.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
+import {
+  CreatedEmergencyKeyResponseDto,
+  EmergencyKeyStatusResponseDto,
+} from './dto/emergency-key.response.dto';
+import { EmergencyLoginDto } from './dto/emergency-login.dto';
 import { CreatedApiKeyResponseDto } from './dto/created-api-key.response.dto';
 import { JwtGuard } from './guards/jwt.guard';
 import {
@@ -43,6 +50,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly apiKeysService: ApiKeysService,
+    private readonly emergencyKeysService: EmergencyKeysService,
   ) {}
 
   @UseGuards(RefreshTokenGuard)
@@ -132,5 +140,61 @@ export class AuthController {
     }
 
     return { message: 'API key revoked' };
+  }
+
+  // --- the emergency key (docs/ha-dr-plan.md §7.5): a way in when neither Yandex nor GitHub works.
+
+  @UseGuards(JwtGuard)
+  @Get('emergency-key')
+  @ApiOperation({ summary: 'Does the current user have an emergency key' })
+  async emergencyKeyStatus(
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<EmergencyKeyStatusResponseDto> {
+    return this.emergencyKeysService.status(currentUser.id);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('emergency-key')
+  @ApiOperation({
+    summary:
+      'Create the emergency key (or replace the existing one) — the plaintext is returned once',
+  })
+  async createEmergencyKey(
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<CreatedEmergencyKeyResponseDto> {
+    return this.emergencyKeysService.createOrReplace(currentUser.id);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('emergency-key')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revoke the emergency key' })
+  async revokeEmergencyKey(
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    if (!(await this.emergencyKeysService.revoke(currentUser.id))) {
+      throw new NotFoundException('No emergency key');
+    }
+  }
+
+  // Public (it IS the sign-in) and brute-force-hostile: 5 tries a minute per address on top of a 256-bit token.
+  @Post('emergency-login')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      'Exchange the emergency key for a browser session (sets the refresh cookie)',
+  })
+  async emergencyLogin(
+    @Body() dto: EmergencyLoginDto,
+    @Req() request: ExpressRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{ isAuthenticated: true }> {
+    return this.authService.signInWithEmergencyKey(
+      dto.key,
+      response,
+      request.headers['user-agent'] ?? null,
+      request.ip ?? null,
+    );
   }
 }

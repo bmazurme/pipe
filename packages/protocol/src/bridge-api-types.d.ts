@@ -154,6 +154,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/emergency-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Does the current user have an emergency key */
+        get: operations["AuthController_emergencyKeyStatus"];
+        put?: never;
+        /** Create the emergency key (or replace the existing one) — the plaintext is returned once */
+        post: operations["AuthController_createEmergencyKey"];
+        /** Revoke the emergency key */
+        delete: operations["AuthController_revokeEmergencyKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/emergency-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange the emergency key for a browser session (sets the refresh cookie) */
+        post: operations["AuthController_emergencyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/identities": {
         parameters: {
             query?: never;
@@ -217,6 +253,22 @@ export interface paths {
         post?: never;
         /** Disconnect this method (409 if it is the last enabled one) */
         delete: operations["IdentitiesController_unlink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["NotificationSettingsController_get"];
+        put: operations["NotificationSettingsController_update"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -712,22 +764,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["ClientsController_event"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notification-settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["NotificationSettingsController_get"];
-        put: operations["NotificationSettingsController_update"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1542,6 +1578,27 @@ export interface components {
             /** Format: date-time */
             lastUsedAt: string | null;
         };
+        EmergencyKeyStatusResponseDto: {
+            exists: boolean;
+            prefix: string | null;
+            /** Format: date-time */
+            createdAt: string | null;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+        };
+        CreatedEmergencyKeyResponseDto: {
+            prefix: string;
+            token: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        EmergencyLoginDto: {
+            key: string;
+        };
+        UpdateNotificationSettingsDto: {
+            quietHours: string;
+            timezone: string;
+        };
         ChatResponseDto: {
             id: number;
             /** @enum {string} */
@@ -1736,10 +1793,6 @@ export interface components {
             branch?: string;
             error?: string;
             count?: number;
-        };
-        UpdateNotificationSettingsDto: {
-            quietHours: string;
-            timezone: string;
         };
         JobResponseDto: {
             id: number;
@@ -2140,6 +2193,82 @@ export interface operations {
             };
         };
     };
+    AuthController_emergencyKeyStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergencyKeyStatusResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_createEmergencyKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedEmergencyKeyResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_revokeEmergencyKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_emergencyLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmergencyLoginDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     IdentitiesController_list: {
         parameters: {
             query?: never;
@@ -2209,6 +2338,44 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    NotificationSettingsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    NotificationSettingsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3097,44 +3264,6 @@ export interface operations {
         };
         responses: {
             204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    NotificationSettingsController_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    NotificationSettingsController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateNotificationSettingsDto"];
-            };
-        };
-        responses: {
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };

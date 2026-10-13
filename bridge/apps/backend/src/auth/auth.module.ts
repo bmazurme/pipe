@@ -4,11 +4,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { TelegramModule } from '../telegram/telegram.module';
+
 import { ApiKeysService } from './api-keys.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmergencyKeysService } from './emergency-keys.service';
 import { ApiKey } from './entities/api-key.entity';
 import { AuthIdentity } from './entities/auth-identity.entity';
+import { EmergencyKey } from './entities/emergency-key.entity';
 import { Session } from './entities/session.entity';
 import { IdentitiesController } from './identities.controller';
 import { IdentitiesService } from './identities.service';
@@ -19,7 +23,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity]),
+    TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity, EmergencyKey]),
+    TelegramModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -42,6 +47,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     SessionsService,
     ApiKeysService,
+    EmergencyKeysService,
     IdentitiesService,
     JwtGuard,
     JwtOrApiKeyGuard,

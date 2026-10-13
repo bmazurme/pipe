@@ -22,7 +22,7 @@ export function getGithubLoginUrl(): string {
 const authApi = createApi({
   reducerPath: "authApi",
   baseQuery,
-  tagTypes: ["Auth"],
+  tagTypes: ["Auth", "EmergencyKey"],
   endpoints: () => ({}),
 });
 
