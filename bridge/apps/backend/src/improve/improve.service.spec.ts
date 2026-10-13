@@ -955,3 +955,44 @@ describe('ImproveService.saveSettings', () => {
     );
   });
 });
+
+describe('ImproveService zipball reuse', () => {
+  it('downloads the zipball once for several issues on the same base SHA', async () => {
+    const { service, github } = setup();
+
+    const result = await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(result.started).toEqual([1, 2, 3]);
+    expect(github.downloadZipball).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads again when the base SHA changes', async () => {
+    const { service, github } = setup();
+    github.getBranchSha
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValue('sha-2');
+
+    await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+    expect(github.downloadZipball).toHaveBeenNthCalledWith(1, 'sha-1');
+    expect(github.downloadZipball).toHaveBeenNthCalledWith(2, 'sha-2');
+  });
+
+  it('downloads again once the cached entry is older than the TTL', async () => {
+    const { service, github } = setup();
+    const t0 = Date.now();
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(t0);
+      await service.startRun(3, 1, 'sonnet');
+      now.mockReturnValue(t0 + 11 * 60 * 1000);
+      await service.startRun(3, 2, 'sonnet');
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+  });
+});
