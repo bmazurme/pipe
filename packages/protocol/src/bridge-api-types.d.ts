@@ -2622,7 +2622,7 @@ export interface operations {
     ImproveController_runs: {
         parameters: {
             query: {
-                limit: string;
+                limit: number;
             };
             header?: never;
             path?: never;
