@@ -12,7 +12,11 @@ describe('WorkerController download routes', () => {
     const workerService = {
       getSourceFile: jest.fn().mockResolvedValue(file),
       getResultFile: jest.fn().mockResolvedValue(file),
-      filePath: jest.fn().mockReturnValue('/nonexistent/abc.zip'),
+      // the failing case: the file is gone — the callback gets the error
+      download: jest.fn(
+        (_res: unknown, _file: unknown, cb: (err?: Error) => void) =>
+          cb(new Error('ENOENT: no such file')),
+      ),
     };
     const controller = new WorkerController(
       workerService as unknown as WorkerService,
@@ -25,32 +29,28 @@ describe('WorkerController download routes', () => {
       )
       .mockImplementation(() => undefined);
 
-    return { controller, warn };
+    return { controller, warn, workerService };
   };
 
   const buildRes = (headersSent: boolean) => {
     const json = jest.fn();
     const status = jest.fn().mockReturnValue({ json });
-    const download = jest.fn(
-      (_path: string, _name: string, cb: (err?: Error) => void) =>
-        cb(new Error('ENOENT: no such file')),
-    );
-    const res = { headersSent, status, download } as unknown as Response;
+    const res = { headersSent, status } as unknown as Response;
 
-    return { res, status, json, download };
+    return { res, status, json };
   };
 
   it.each([['downloadParcel' as const], ['downloadResult' as const]])(
     '%s responds 404 when the file is missing on disk',
     async (method) => {
-      const { controller, warn } = buildController();
-      const { res, status, json, download } = buildRes(false);
+      const { controller, warn, workerService } = buildController();
+      const { res, status, json } = buildRes(false);
 
       await controller[method](1, user, res);
 
-      expect(download).toHaveBeenCalledWith(
-        '/nonexistent/abc.zip',
-        'parcel.zip',
+      expect(workerService.download).toHaveBeenCalledWith(
+        res,
+        file,
         expect.any(Function),
       );
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('file 7'));

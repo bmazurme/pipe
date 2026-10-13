@@ -103,6 +103,20 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     ).toEqual([]);
   });
 
+  it('ignores build output and lockfiles a worker leaves behind (they are not a change to publish)', () => {
+    const zip = zipSync({
+      'a.ts': strToU8('x'),
+      'packages/protocol/dist/index.js': strToU8('built'),
+      'apps/backend/dist/tsconfig.tsbuildinfo': strToU8('{}'),
+      'node_modules/x/index.js': strToU8('v'),
+      'coverage/lcov.info': strToU8('c'),
+      'package-lock.json': strToU8('{}'),
+      'packages/protocol/tsconfig.tsbuildinfo': strToU8('{}'),
+    });
+
+    expect([...readResultParcel(zip).keys()]).toEqual(['a.ts']);
+  });
+
   it('ignores the manifest and binary assets in the worker result', () => {
     const zip = zipSync({
       'a.ts': strToU8('x'),

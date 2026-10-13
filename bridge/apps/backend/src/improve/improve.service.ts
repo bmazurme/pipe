@@ -1,5 +1,3 @@
-import { access, readFile } from 'fs/promises';
-
 import {
   BadRequestException,
   ConflictException,
@@ -371,7 +369,7 @@ export class ImproveService {
         run.userId ?? userId,
       );
 
-      await access(this.storage.path(file));
+      if (!(await this.storage.exists(file))) throw new Error('file is gone');
     } catch {
       throw new ConflictException(
         'Файл результата уже удалён — запустите задачу заново',
@@ -474,7 +472,7 @@ export class ImproveService {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const result = readResultParcel(await this.storage.readBytes(file));
       const changes = diffResult(
         JSON.parse(run.baseline ?? '{}') as Record<string, string>,
         result,
@@ -787,7 +785,7 @@ export class ImproveService {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await readFile(this.storage.path(file)));
+      const result = readResultParcel(await this.storage.readBytes(file));
       const raw = result.get(BACKLOG_FILE);
 
       if (!raw) throw new Error(`Worker не создал ${BACKLOG_FILE}`);

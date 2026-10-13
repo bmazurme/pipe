@@ -109,6 +109,13 @@ fi
 exec 9>"$STATE_DIR/lock"
 flock -n 9 || { log "another pass is running"; exit 0; }
 
+# --- a failover to another board is active: do nothing (the old primary must not be brought back by a routine deploy)
+other="$(docker node ls -q 2>/dev/null | xargs -r docker node inspect --format '{{.Description.Hostname}} {{index .Spec.Labels "failover"}}' 2>/dev/null | awk -v me="$(hostname)" '$2=="active" && $1!=me {print $1}' | head -1 || true)"
+if [ -n "$other" ]; then
+  log "a failover to $other is active — not deploying from $(hostname)"
+  exit 0
+fi
+
 # --- what is published
 sha="$(release_sha)" || { log "GitHub unreachable — nothing done"; exit 0; }
 [ -n "$sha" ] || { log "no successful publication yet"; exit 0; }

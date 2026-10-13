@@ -44,8 +44,8 @@ ssh pi@192.168.50.11 'sudo journalctl -u pipe-autodeploy -n 30 --no-pager'     #
 ssh -t pi@192.168.50.11 'sudo systemctl disable --now pipe-autodeploy.timer'   # stop following main; stacks stay as they are
 ```
 
-A failed deploy leaves the unit `failed` (`systemctl --failed`). For a Telegram message set `NOTIFY_CMD` in `/etc/pipe-autodeploy.env`
-(a command that takes the text as `$1`).
+A failed deploy leaves the unit `failed` (`systemctl --failed`). Messages (deployed / rolled back) go to Telegram through `NOTIFY_CMD`
+(`/etc/pipe-autodeploy.env`; `infra/notify` sets it up).
 
 Pausing for a manual deployment: disable the timer, deploy by hand (`./deploy.sh ghcr <sha>`), enable it again — the script then sees
 the deployed digests differ from `stable` only if `stable` really moved.

@@ -68,6 +68,18 @@ export function LogsSection() {
     }
   };
 
+  const isForbidden = [summaryError, listError].some(
+    (err) => typeof err === 'object' && err !== null && 'status' in err && err.status === 403,
+  );
+
+  if (isForbidden) {
+    return (
+      <Card view="outlined" className={styles.card}>
+        <EmptyState icon={Receipt} title="Логи недоступны" description="Системные логи видит только владелец развёртывания." />
+      </Card>
+    );
+  }
+
   return (
     <Card view="outlined" className={styles.card}>
       <div className={styles.form}>

@@ -1,0 +1,39 @@
+# After a failover: white as the replica of red (failback.sh). Stack `bridgesw`, service `postgres-standby-white`,
+# volume `standby_pgdata` on white (created and filled by pg_basebackup in failback.sh). Same shape as
+# infra/standby/bridge-standby.yml with the boards swapped; reachable only on `bridge_internal`, read-only.
+version: '3.8'
+
+services:
+  postgres-standby-white:
+    image: postgres:16-alpine
+    networks:
+      - bridge_internal
+    volumes:
+      - standby_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-white]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits: { cpus: '1.50', memory: 1G }
+        reservations: { memory: 256M }
+
+networks:
+  bridge_internal:
+    external: true
+
+volumes:
+  standby_pgdata:
+    external: true

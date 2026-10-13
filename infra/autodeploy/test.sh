@@ -60,6 +60,8 @@ case "$1 $2" in
       *Version.Index*) cat "$FIX/index-$name";;
       *ContainerSpec.Image*) cat "$FIX/image-$name";;
     esac;;
+  "node ls") [ -f "$FIX/failover" ] && printf 'n1\nn2\n';;
+  "node inspect") cat "$FIX/failover" 2>/dev/null;;
   "service ls") cat "$FIX/replicas";;
   "service rollback") echo "$3" >> "$FIX/rollbacks";;
   *) echo "unexpected docker $*" >&2; exit 1;;
@@ -171,6 +173,16 @@ grep -q 'bad-stack-files' "$STATE/failed.txt"; check "…and remembered, so it i
 echo "# status"
 run status; check "status runs" $?
 grep -q 'deployed:' "$T/out" && grep -q 'published: 22222222bbbb' "$T/out"; check "status shows the deployed and the published release" $?
+
+echo "# a failover to another board is active"
+fresh_swarm; rm -f "$STATE/failed.txt"; set_published 33333333cccc b9 f9 w9; files v9
+printf 'ubuntu-white \nubuntu-red active\n' > "$FIX/failover"
+run; code=$?
+[ "$code" -eq 0 ] && [ -z "$(calls)" ]; check "failover active elsewhere: nothing is deployed (the old primary must not come back)" $?
+grep -q 'failover to ubuntu-red is active' "$T/out"; check "failover active elsewhere: it says why" $?
+rm -f "$FIX/failover"
+run; check "no failover label: deploys again" $?
+[ -n "$(calls)" ]; check "no failover label: the deploy scripts ran" $?
 
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]

@@ -200,13 +200,9 @@ export class WorkerController {
   ): Promise<void> {
     const file = await this.workerService.getSourceFile(id, currentUser.id);
 
-    res.download(
-      this.workerService.filePath(file),
-      file.originalName,
-      (err) => {
-        if (err) this.respondDownloadError(res, file, err);
-      },
-    );
+    this.workerService.download(res, file, (err) => {
+      if (err) this.respondDownloadError(res, file, err);
+    });
   }
 
   @Get(':id/result/download')
@@ -217,13 +213,9 @@ export class WorkerController {
   ): Promise<void> {
     const file = await this.workerService.getResultFile(id, currentUser.id);
 
-    res.download(
-      this.workerService.filePath(file),
-      file.originalName,
-      (err) => {
-        if (err) this.respondDownloadError(res, file, err);
-      },
-    );
+    this.workerService.download(res, file, (err) => {
+      if (err) this.respondDownloadError(res, file, err);
+    });
   }
 
   // Same shape as StorageController.respondDownloadError: res.download's

@@ -32,6 +32,10 @@ export class UsersService {
     return this.userRepository.findOne({ where: { email } });
   }
 
+  async findOwner(): Promise<User | null> {
+    return this.userRepository.findOne({ where: {}, order: { id: 'ASC' } });
+  }
+
   async findById(id: number): Promise<User | null> {
     return this.userRepository.findOne({ where: { id } });
   }

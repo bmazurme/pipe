@@ -1,7 +1,9 @@
 import { unlink } from 'fs/promises';
 import { join } from 'path';
+import type { Response } from 'express';
 import {
   BadRequestException,
+  Inject,
   ConflictException,
   Injectable,
   Logger,
@@ -18,6 +20,11 @@ import {
   MAX_ATTACHMENTS_PER_CHAT,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from './attachments';
+import { FILE_STORE, type FileStore } from '../storage/file-store/file-store';
+import {
+  type SendDone,
+  sendStoredFile,
+} from '../storage/file-store/send-stored-file';
 import { CHAT_UPLOAD_DIR } from './config/attachment-multer.config';
 import { ClaimedTurnHistoryEntry } from './dto/claimed-turn-response.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
@@ -29,6 +36,9 @@ import {
   ChatMessageStatus,
 } from './entities/chat-message.entity';
 
+// Chat attachments live under chat/ in the store (apart from Storage's mailbox, see attachment-multer.config.ts).
+const chatKey = (storedName: string) => `chat/${storedName}`;
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -38,6 +48,7 @@ export class ChatService {
     private readonly messageRepository: Repository<ChatMessage>,
     @InjectRepository(ChatAttachment)
     private readonly attachmentRepository: Repository<ChatAttachment>,
+    @Inject(FILE_STORE) private readonly store: FileStore,
   ) {}
 
   private readonly logger = new Logger(ChatService.name);
@@ -95,7 +106,7 @@ export class ChatService {
 
   private async deleteFile(attachment: ChatAttachment): Promise<void> {
     try {
-      await unlink(join(CHAT_UPLOAD_DIR, attachment.storedName));
+      await this.store.remove(chatKey(attachment.storedName));
     } catch (error) {
       this.logger.warn(
         `Could not remove chat attachment file ${attachment.storedName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -109,8 +120,10 @@ export class ChatService {
     userId: number,
     file: Express.Multer.File,
   ): Promise<ChatAttachment> {
+    // Refused before the file reached its final place: only the staged copy exists.
+    const staged = file.path ?? join(CHAT_UPLOAD_DIR, file.filename);
     const discard = async (reason: BadRequestException) => {
-      await unlink(join(CHAT_UPLOAD_DIR, file.filename)).catch(() => undefined);
+      await unlink(staged).catch(() => undefined);
       throw reason;
     };
 
@@ -152,6 +165,10 @@ export class ChatService {
       );
     }
 
+    // Moved to wherever files live (nothing to do for the local driver); an upload that fails removes the
+    // staged copy itself, and a row that cannot be saved removes the stored file again.
+    await this.store.adopt(chatKey(file.filename), staged);
+
     try {
       return await this.attachmentRepository.save({
         chatId,
@@ -162,7 +179,7 @@ export class ChatService {
         size: file.size,
       });
     } catch (error) {
-      await unlink(join(CHAT_UPLOAD_DIR, file.filename)).catch(() => undefined);
+      await this.store.remove(chatKey(file.filename)).catch(() => undefined);
       throw error;
     }
   }
@@ -201,8 +218,19 @@ export class ChatService {
     return attachment;
   }
 
-  attachmentPath(attachment: ChatAttachment): string {
-    return join(CHAT_UPLOAD_DIR, attachment.storedName);
+  // Sends an attachment's bytes where it is (the caller has set the headers); `done` reports the outcome once.
+  sendAttachment(
+    res: Response,
+    attachment: ChatAttachment,
+    done: SendDone,
+  ): void {
+    sendStoredFile(
+      this.store,
+      res,
+      chatKey(attachment.storedName),
+      { kind: 'inline' },
+      done,
+    );
   }
 
   // Only a file that has not been sent yet can be taken back; one in a sent message is

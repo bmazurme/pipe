@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -97,7 +97,8 @@ function setup(
   const storage = {
     createFromBuffer: jest.fn().mockResolvedValue({ id: 99 }),
     findOwned: jest.fn(),
-    path: jest.fn(),
+    readBytes: jest.fn(),
+    exists: jest.fn().mockResolvedValue(true),
     delete: jest.fn().mockResolvedValue(undefined),
   };
   const workers = {
@@ -329,7 +330,7 @@ describe('ImproveService.publish', () => {
       }),
     );
     ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-    ctx.storage.path.mockReturnValue(file);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
     return ctx;
   }
@@ -660,7 +661,7 @@ describe('ImproveService publish: no branch left behind', () => {
       }),
     );
     ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-    ctx.storage.path.mockReturnValue(file);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
     return ctx;
   }
@@ -844,7 +845,7 @@ describe('ImproveService CI repair', () => {
         }),
       );
       ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-      ctx.storage.path.mockReturnValue(file);
+      ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
 
       return ctx;
     }
@@ -985,7 +986,8 @@ describe('ImproveService.retryPublish', () => {
       }),
     );
     ctx.storage.findOwned.mockResolvedValue({ id: 5 });
-    ctx.storage.path.mockReturnValue(file);
+    ctx.storage.exists.mockResolvedValue(true);
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
     ctx.workers.findOwned.mockResolvedValue({
       status: 'succeeded',
       resultFileId: 5,
@@ -1032,6 +1034,16 @@ describe('ImproveService.retryPublish', () => {
     await expect(service.retryPublish(4, 3)).rejects.toMatchObject({
       status: 409,
     });
+  });
+
+  it('says so clearly when the stored record is there but its file is not', async () => {
+    const { service, runs, storage } = withResult();
+    runs.findOne.mockResolvedValue(failedRun());
+    storage.exists.mockResolvedValue(false);
+
+    await expect(service.retryPublish(4, 3)).rejects.toThrow(
+      /Файл результата уже удалён/,
+    );
   });
 
   it('says so clearly when the result file is gone', async () => {
