@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ALL_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
 import { ImproveController } from './improve.controller';
+import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
 describe('ImproveController', () => {
@@ -23,7 +24,11 @@ describe('ImproveController', () => {
         autoRepairCi: true,
       }),
     };
-    controller = new ImproveController(service as unknown as ImproveService);
+    // schedules live in their own service now (#287); none of the flows under test here touches them
+    controller = new ImproveController(
+      service as unknown as ImproveService,
+      {} as unknown as ImproveScheduleService,
+    );
   });
 
   describe('startAnalysis', () => {
