@@ -15,6 +15,8 @@ export enum ImproveRunStatus {
   Cancelled = 'cancelled',
   // An analysis run that finished: its proposals are in `result`, and (when asked) already filed as issues.
   Analyzed = 'analyzed',
+  // A CI repair run that finished: its fix is a new commit on the existing PR's branch.
+  PrUpdated = 'pr_updated',
 }
 
 export const ACTIVE_RUN_STATUSES = [
@@ -23,8 +25,10 @@ export const ACTIVE_RUN_STATUSES = [
   ImproveRunStatus.Publishing,
 ];
 
-export type ImproveTrigger = 'manual' | 'schedule';
-export type ImproveRunKind = 'issue' | 'analysis';
+// 'ci' = started by bridge itself because CI went red on one of its pull requests.
+export type ImproveTrigger = 'manual' | 'schedule' | 'ci';
+// 'repair' fixes a red CI on an open PR of an earlier 'issue' run.
+export type ImproveRunKind = 'issue' | 'analysis' | 'repair';
 
 // One attempt to implement one GitHub issue: snapshot → worker job → branch + PR.
 @Entity({ name: 'improve_runs' })
@@ -33,7 +37,7 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'int', unsigned: true })
   userId: number;
 
-  // 'issue' implements one GitHub issue; 'analysis' reads the repo and proposes some.
+  // 'issue' implements one GitHub issue; 'analysis' reads the repo and proposes some; 'repair' fixes a red CI on the PR of an earlier issue run.
   @Column({ type: 'varchar', length: 16, default: 'issue' })
   kind: ImproveRunKind;
 

@@ -10,6 +10,7 @@ const summary = (over: Partial<LogSummary> = {}): LogSummary => ({
   jobs: { succeeded: 8, failed: 2, successRate: 0.8, avgDurationMs: 90_000 },
   topErrors: [{ message: 'claude exited with code N', count: 2 }],
   slowestRoutes: [{ route: 'GET /api/v1/worker/jobs', count: 4, maxMs: 2300 }],
+  failingRoutes: [],
   ...over,
 });
 

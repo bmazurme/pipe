@@ -23,6 +23,11 @@ export class ImproveSettings {
   @Column({ type: 'timestamp', nullable: true })
   autoStartSince: Date | null;
 
+  // When CI goes red on a pull request Improve opened, start a worker on the PR's branch with the
+  // failing checks (at most twice per PR) and push the fix to the same branch.
+  @Column({ type: 'boolean', default: true })
+  autoRepairCi: boolean;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 

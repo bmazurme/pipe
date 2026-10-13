@@ -49,6 +49,13 @@ RUN addgroup -S pipe-worker && adduser -S pipe-worker -G pipe-worker
 # this repo).
 RUN npm install -g @anthropic-ai/claude-code
 
+# Claude Code's Bash tool needs bash (busybox sh is not enough), and the Improve jobs it runs need git and
+# ripgrep (its search tool). Without them every command fails with "No suitable shell found": the model then
+# cannot run the linter or the tests, and the pull requests it opens reach CI unformatted and with broken
+# tests. The check after the install fails the build instead of shipping such an image again.
+RUN apk add --no-cache bash git ripgrep \
+ && bash --version >/dev/null && git --version >/dev/null && rg --version >/dev/null
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/worker/package.json ./package.json
 COPY --from=builder /app/worker/dist ./dist

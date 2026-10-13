@@ -105,6 +105,9 @@ describe('KeysPage', () => {
     expect(storedKeys()).toHaveLength(1);
 
     await user.click(screen.getByRole('button', { name: 'Удалить ключ: чужой' }));
+    // Removal now asks first (SavedKeysCard's confirmation dialog); nothing is gone until it is confirmed.
+    expect(storedKeys()).toHaveLength(1);
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(storedKeys()).toHaveLength(0));
   });

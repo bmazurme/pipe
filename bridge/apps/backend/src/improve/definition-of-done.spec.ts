@@ -26,6 +26,16 @@ describe('withDefinitionOfDone', () => {
     expect(DEFINITION_OF_DONE).toContain('never edit a migration');
   });
 
+  it('tells the worker to install dependencies first and not to claim unrun checks', () => {
+    // The sandbox starts from a bare snapshot; without `npm ci` every lint/test command fails
+    // and the worker used to give up and open an unchecked pull request.
+    expect(DEFINITION_OF_DONE).toContain('npm ci');
+    expect(DEFINITION_OF_DONE).toContain('node_modules');
+    expect(DEFINITION_OF_DONE).toContain(
+      'never say a check passed that you did not run',
+    );
+  });
+
   it('only mentions commands and paths that exist in this repository', () => {
     // A checklist that points at a missing script would send the worker chasing it.
     const fs = jest.requireActual<typeof import('fs')>('fs');

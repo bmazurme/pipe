@@ -1607,7 +1607,7 @@ export interface components {
             trigger: Record<string, never>;
             scheduleId: number | null;
             /** @enum {string} */
-            status: "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled" | "analyzed";
+            status: "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled" | "analyzed" | "pr_updated";
             jobId: number | null;
             baseSha: string | null;
             baseline: string | null;
@@ -1687,6 +1687,7 @@ export interface components {
         };
         SaveSettingsDto: {
             autoStartModel?: string | null;
+            autoRepairCi?: boolean;
         };
         ClientHeartbeatDto: {
             name: string;
@@ -2622,7 +2623,7 @@ export interface operations {
     ImproveController_runs: {
         parameters: {
             query: {
-                limit: string;
+                limit: number;
             };
             header?: never;
             path?: never;

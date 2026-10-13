@@ -137,4 +137,9 @@ export class SaveSettingsDto {
   @Type(() => String)
   @IsString()
   autoStartModel?: string | null;
+
+  // Fix CI on the pull requests Improve opened (a worker on the PR's branch, at most twice per PR).
+  @IsOptional()
+  @IsBoolean()
+  autoRepairCi?: boolean;
 }
