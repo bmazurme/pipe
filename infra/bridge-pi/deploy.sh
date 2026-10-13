@@ -17,6 +17,11 @@ if [ "${1:-}" = status ]; then
   exit 0
 fi
 
+# A failover to ANOTHER board is active (infra/failover labels it `failover=active`): this board must not redeploy the
+# stack — that would bring the old primary and its diverged database back next to the promoted one.
+other="$(docker node ls -q 2>/dev/null | xargs -r docker node inspect --format '{{.Description.Hostname}} {{index .Spec.Labels "failover"}}' 2>/dev/null | awk -v me="$(hostname)" '$2=="active" && $1!=me {print $1}' | head -1 || true)"
+[ -z "$other" ] || { echo "a failover to $other is active — refusing to deploy from $(hostname). Failback is a deliberate procedure: infra/failover/README.md" >&2; exit 1; }
+
 [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE — run ./secrets.sh init" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
