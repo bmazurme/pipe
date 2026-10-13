@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
+import { DataSource, In, IsNull, LessThan, Not, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService, TreeEntry } from '../loop/github-api.service';
@@ -73,6 +73,10 @@ interface AnalysisResult {
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 const LOG_DIGEST_DAYS = 7;
 const ADVANCE_EVERY_MS = 15_000;
+// A run claimed for publishing and untouched this long was lost to a restart.
+const PUBLISHING_STALE_MS = 10 * 60_000;
+const PUBLISH_ABANDONED_ERROR =
+  'Публикация прервана (bridge перезапускался); запустите задачу заново';
 const SCHEDULE_TICK_MS = 60_000;
 const AUTOSTART_MIN_AGE_SECONDS = 10;
 const PR_LABEL = 'loop';
@@ -423,6 +427,12 @@ export class ImproveService {
     this.advancing = true;
 
     try {
+      await this.abandonStalePublishing().catch((error) =>
+        this.logger.warn(
+          `Stale publishing runs could not be checked: ${message(error)}`,
+        ),
+      );
+
       const active = await this.runs.find({
         where: {
           status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
@@ -439,6 +449,31 @@ export class ImproveService {
       }
     } finally {
       this.advancing = false;
+    }
+  }
+
+  // Publishing runs in-process, so a restart mid-publish leaves the run claimed for
+  // good. The claim bumps `updatedAt`; one untouched for longer than the bound is
+  // dead. Not retried on its own: a half-made branch or PR may already exist.
+  private async abandonStalePublishing(): Promise<void> {
+    const stale = await this.runs.find({
+      where: {
+        status: ImproveRunStatus.Publishing,
+        updatedAt: LessThan(new Date(Date.now() - PUBLISHING_STALE_MS)),
+      },
+      order: { id: 'ASC' },
+    });
+
+    for (const run of stale) {
+      await this.finish(run, ImproveRunStatus.Failed, {
+        error: PUBLISH_ABANDONED_ERROR,
+      });
+      this.log(
+        'warn',
+        'improve.publish_abandoned',
+        `Run ${run.id} (issue #${run.issueNumber}): publishing abandoned after a restart`,
+        { runId: run.id, jobId: run.jobId ?? undefined },
+      );
     }
   }
 

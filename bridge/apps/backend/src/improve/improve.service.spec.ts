@@ -1097,3 +1097,66 @@ describe('ImproveService zipball reuse', () => {
     expect(github.downloadZipball).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('ImproveService.advance — stale publishing runs', () => {
+  const publishing = (over = {}) => ({
+    id: 8,
+    userId: 3,
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    jobId: 321,
+    status: ImproveRunStatus.Publishing,
+    ...over,
+  });
+
+  // Answers each query by the status it filters on, like the real repository.
+  const findByStatus =
+    (publishingRuns: object[], activeRuns: object[] = []) =>
+    async ({ where }: { where: { status: unknown } }) =>
+      where.status === ImproveRunStatus.Publishing
+        ? publishingRuns
+        : activeRuns;
+
+  it('fails a run stuck in publishing, with an explanation', async () => {
+    const stuck = publishing();
+    const { service, runs } = setup({
+      runs: { find: jest.fn(findByStatus([stuck])) },
+    });
+
+    await service.advance();
+
+    expect(stuck).toMatchObject({
+      status: ImproveRunStatus.Failed,
+      error: expect.stringContaining('Публикация прервана'),
+    });
+    expect(runs.save).toHaveBeenCalledWith(stuck);
+    const where = runs.find.mock.calls[0][0].where;
+    expect(where.status).toBe(ImproveRunStatus.Publishing);
+    expect(where.updatedAt).toBeDefined();
+  });
+
+  it('leaves a freshly claimed run alone', async () => {
+    // The repository filters by age, so a fresh run is simply not returned.
+    const { service, runs } = setup({
+      runs: { find: jest.fn(findByStatus([])) },
+    });
+
+    await service.advance();
+
+    expect(runs.save).not.toHaveBeenCalled();
+  });
+
+  it('still advances a queued run as before', async () => {
+    const queued = publishing({ status: ImproveRunStatus.Queued });
+    const { service, workers, runs } = setup({
+      runs: { find: jest.fn(findByStatus([], [queued])) },
+    });
+    workers.findOwned.mockResolvedValue({ status: 'running' });
+
+    await service.advance();
+
+    expect(runs.update).toHaveBeenCalledWith(8, {
+      status: ImproveRunStatus.Running,
+    });
+  });
+});
