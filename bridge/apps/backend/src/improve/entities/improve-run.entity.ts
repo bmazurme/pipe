@@ -69,7 +69,8 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'varchar', length: 64, nullable: true })
   baseSha: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  // Not selected by default: it is large and only publish() reads it.
+  @Column({ type: 'text', nullable: true, select: false })
   baseline: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
