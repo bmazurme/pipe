@@ -106,6 +106,7 @@ function setup(
     create: jest.fn().mockResolvedValue({ id: 321 }),
     findUnstartedIssueParcels: jest.fn().mockResolvedValue([]),
     findOwned: jest.fn(),
+    findStatuses: jest.fn().mockResolvedValue([]),
     cancel: jest.fn().mockResolvedValue(undefined),
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
@@ -258,10 +259,12 @@ describe('ImproveService.advanceOne', () => {
   });
 
   it('follows the job: queued → running', async () => {
-    const { service, workers, runs } = setup();
-    workers.findOwned.mockResolvedValue({ status: 'running' });
+    const { service, runs } = setup();
 
-    await service.advanceOne(run() as never);
+    await service.advanceOne(
+      run() as never,
+      { userId: 3, status: 'running' } as never,
+    );
 
     expect(runs.update).toHaveBeenCalledWith(1, {
       status: ImproveRunStatus.Running,
@@ -270,34 +273,34 @@ describe('ImproveService.advanceOne', () => {
 
   it('records a failed or cancelled job on the run', async () => {
     const failed = setup();
-    failed.workers.findOwned.mockResolvedValue({
-      status: 'failed',
-      errorMessage: 'timed out',
-    });
     const failedRun = run();
-    await failed.service.advanceOne(failedRun as never);
+    await failed.service.advanceOne(
+      failedRun as never,
+      { userId: 3, status: 'failed', errorMessage: 'timed out' } as never,
+    );
     expect(failedRun).toMatchObject({
       status: ImproveRunStatus.Failed,
       error: 'timed out',
     });
 
     const cancelled = setup();
-    cancelled.workers.findOwned.mockResolvedValue({ status: 'cancelled' });
     const cancelledRun = run();
-    await cancelled.service.advanceOne(cancelledRun as never);
+    await cancelled.service.advanceOne(
+      cancelledRun as never,
+      { userId: 3, status: 'cancelled' } as never,
+    );
     expect(cancelledRun.status).toBe(ImproveRunStatus.Cancelled);
   });
 
   it('publishes only once even if two ticks overlap', async () => {
-    const { service, workers, runs } = setup();
-    workers.findOwned.mockResolvedValue({
-      status: 'succeeded',
-      resultFileId: 5,
-    });
+    const { service, runs } = setup();
     runs.update.mockResolvedValue({ affected: 0 }); // someone else already claimed it
     const publish = jest.spyOn(service, 'publish').mockResolvedValue(undefined);
 
-    await service.advanceOne(run() as never);
+    await service.advanceOne(
+      run() as never,
+      { userId: 3, status: 'succeeded', resultFileId: 5 } as never,
+    );
 
     expect(publish).not.toHaveBeenCalled();
   });
@@ -1152,13 +1155,70 @@ describe('ImproveService.advance — stale publishing runs', () => {
     const { service, workers, runs } = setup({
       runs: { find: jest.fn(findByStatus([], [queued])) },
     });
-    workers.findOwned.mockResolvedValue({ status: 'running' });
+    workers.findStatuses.mockResolvedValue([
+      { id: 321, userId: 3, status: 'running' },
+    ]);
 
     await service.advance();
 
     expect(runs.update).toHaveBeenCalledWith(8, {
       status: ImproveRunStatus.Running,
     });
+  });
+
+  it('reads the statuses of all active runs in one query', async () => {
+    const a = publishing({
+      id: 8,
+      jobId: 321,
+      status: ImproveRunStatus.Queued,
+    });
+    const b = publishing({
+      id: 9,
+      jobId: 322,
+      status: ImproveRunStatus.Queued,
+    });
+    const { service, workers, runs } = setup({
+      runs: { find: jest.fn(findByStatus([], [a, b])) },
+    });
+    workers.findStatuses.mockResolvedValue([
+      { id: 321, userId: 3, status: 'running' },
+      { id: 322, userId: 3, status: 'running' },
+    ]);
+
+    await service.advance();
+
+    expect(workers.findStatuses).toHaveBeenCalledTimes(1);
+    expect(workers.findStatuses).toHaveBeenCalledWith([321, 322]);
+    expect(workers.findOwned).not.toHaveBeenCalled();
+    expect(runs.update).toHaveBeenCalledWith(8, {
+      status: ImproveRunStatus.Running,
+    });
+    expect(runs.update).toHaveBeenCalledWith(9, {
+      status: ImproveRunStatus.Running,
+    });
+  });
+
+  it('does not advance a run whose job is missing or owned by someone else', async () => {
+    const a = publishing({
+      id: 8,
+      jobId: 321,
+      status: ImproveRunStatus.Queued,
+    });
+    const b = publishing({
+      id: 9,
+      jobId: 322,
+      status: ImproveRunStatus.Queued,
+    });
+    const { service, workers, runs } = setup({
+      runs: { find: jest.fn(findByStatus([], [a, b])) },
+    });
+    workers.findStatuses.mockResolvedValue([
+      { id: 322, userId: 99, status: 'running' },
+    ]);
+
+    await service.advance();
+
+    expect(runs.update).not.toHaveBeenCalled();
   });
 });
 

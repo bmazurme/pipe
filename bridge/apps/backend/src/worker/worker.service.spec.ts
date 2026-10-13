@@ -114,6 +114,31 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('findStatuses', () => {
+    it('selects only the status fields, never logs or context/history', async () => {
+      repository.find!.mockResolvedValue([]);
+
+      await service.findStatuses([3, 4]);
+
+      const options = repository.find!.mock.calls[0][0] as {
+        select: string[];
+      };
+      expect(options.select).toEqual([
+        'id',
+        'userId',
+        'status',
+        'resultFileId',
+        'errorMessage',
+      ]);
+      expect(options.select).not.toContain('logs');
+    });
+
+    it('skips the query for no ids', async () => {
+      await expect(service.findStatuses([])).resolves.toEqual([]);
+      expect(repository.find).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findOwnedWithLogsFrom', () => {
     function mockSelectBuilder(result: {
       entities: Partial<Job>[];
