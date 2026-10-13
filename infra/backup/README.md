@@ -10,8 +10,9 @@ Today the copies live on the Pi; the NAS comes later (a second `rsync` pulling `
 | `install.sh` | systemd units: 03:00 Moscow daily + hourly freshness check; template `/etc/pipe-backup.env` (mode 600) |
 | `pull.sh`, `install-pull.sh` | the copy on a **second Pi**: it pulls `latest` from the primary (rsync over a key restricted to read-only `rrsync` — no shell, no writes), verifies checksum/meta/age, then swaps its own `latest`. Daily 03:30 Moscow + hourly freshness check (age counted from the backup's creation, so a primary that stopped backing up is noticed too) |
 | `mirror-s3.sh`, `install-mirror.sh` | the **third copy**: the second Pi uploads the (encrypted, verified) `latest` to the Garage bucket `bridge-backups` — to an immutable `snapshots/<time>/` prefix, compares it with the local files, and only then rewrites the pointer object `LATEST`. Daily 03:45 Moscow, after the pull |
+| `uploads-pull.sh`, `install-uploads.sh` | the **uploaded files** (`bridge_uploads`: parcels in transit, chat attachments) — the database dump does not hold them. red pulls the volume over a restricted read-only `rrsync` key into `/srv/uploads-mirror/current`, keeps what the primary deletes in `deleted/<date>/` (14 days), refuses a run that would delete more than half of the files, then mirrors to the Garage bucket `bridge-uploads`. Daily 04:10 Moscow + hourly freshness check |
 | `verify-from-workstation.sh` | run on YOUR machine: fetches `latest` from a Pi, decrypts it with your private age key and restores it into a throwaway Postgres — the check that stays possible once the boards no longer hold the key |
-| `test.sh` | 41 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
+| `test.sh` | 71 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
 ```bash
 # on a Mac, in a container (the scripts use flock / mv -T / sha256sum):
@@ -58,6 +59,18 @@ ssh -t pi@192.168.50.12 'sudo systemctl start pipe-backup-mirror.service && sudo
 
 Reading it back (any Garage node works): `rclone cat pi:bridge-backups/LATEST` names the snapshot, `rclone copy
 pi:bridge-backups/snapshots/<name> .` fetches it. Verified on 2026-10-12: uploaded via red, downloaded via green, checksums equal.
+
+## The uploaded files
+
+```bash
+scp -r infra/backup pi@192.168.50.12:/tmp/ && ssh -t pi@192.168.50.12 'sudo bash /tmp/backup/install-uploads.sh'
+# add the printed line to pi@192.168.50.11:~/.ssh/authorized_keys (a separate key: read-only access to the uploads volume, nothing else)
+ssh pi@192.168.50.11 'sudo cat /etc/garage/keys/bridge-uploads.env' | ssh pi@192.168.50.12 'sed "s|^S3_ENDPOINT=.*|S3_ENDPOINT=http://192.168.50.12:3900|" | sudo tee -a /etc/pipe-uploads.env >/dev/null'
+ssh -t pi@192.168.50.12 'sudo systemctl start pipe-uploads-pull.service && sudo systemctl enable --now pipe-uploads-pull.timer pipe-uploads-check.timer'
+```
+
+Not encrypted (unlike the dumps): these are the user's own files on boards in your LAN; the Garage copy is on the same boards. The failover
+(`infra/failover`) restores them from `bridge-uploads` / `/srv/uploads-mirror` into the new primary's volume.
 
 ## Encryption
 
