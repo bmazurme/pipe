@@ -4,6 +4,7 @@ import { Response } from 'express';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { AppLogService } from './app-log.service';
 import { LogsQueryDto } from './dto/logs-query.dto';
+import { tryParseMeta } from './meta';
 
 // Browser session only. The log holds operational detail about the whole
 // system, not one account — fine for the single-owner deployment this is, and
@@ -44,7 +45,7 @@ export class LogsController {
             source: row.source,
             event: row.event,
             message: row.message,
-            meta: row.meta ? (JSON.parse(row.meta) as unknown) : undefined,
+            meta: tryParseMeta(row.meta),
           }),
         )
         .join('\n') + (rows.length ? '\n' : ''),
