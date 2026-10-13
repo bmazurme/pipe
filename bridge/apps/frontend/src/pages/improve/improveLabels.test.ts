@@ -26,6 +26,8 @@ describe('improve labels', () => {
     expect(isActiveRun({ status: 'running' })).toBe(true);
     expect(isActiveRun({ status: 'failed' })).toBe(false);
     expect(blocksNewRun({ status: 'pr_open' })).toBe(true);
+    // a CI repair that pushed its fix leaves the PR open too
+    expect(blocksNewRun({ status: 'pr_updated' })).toBe(true);
     expect(blocksNewRun({ status: 'failed' })).toBe(false);
     expect(blocksNewRun(null)).toBe(false);
   });

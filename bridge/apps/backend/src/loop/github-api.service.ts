@@ -65,6 +65,25 @@ export interface TreeEntry {
 
 export type CiState = 'success' | 'pending' | 'failure' | 'none';
 
+// One failed check run of a commit, with what GitHub shows for it: the run's own summary and
+// its annotations (a lint or test failure becomes one annotation with file, line and message).
+export interface FailedCheck {
+  name: string;
+  conclusion: string;
+  summary: string;
+  annotations: Array<{
+    path: string;
+    line: number | null;
+    level: string;
+    message: string;
+  }>;
+}
+
+// refs/heads/<branch> with every segment encoded, "/" kept.
+function refPath(branch: string): string {
+  return `/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 // bridge's own GitHub access for the loop — separate from BRIDGE_GITHUB_TOKEN
 // (which only has what the VPN page needs). Needs, on this repo only:
 // Pull requests: read & write, Contents: write (merging), Checks: read.
@@ -335,6 +354,65 @@ export class GithubApiService {
 
   private async get(path: string): Promise<unknown> {
     return (await this.request(path)).json();
+  }
+
+  // ---- Improve: repairing a red pull request, and not leaving a branch behind when no PR comes of it.
+  // Needs Contents: write (the branch) and Checks: read (what failed).
+
+  async deleteBranch(branch: string): Promise<void> {
+    await this.request(refPath(branch), { method: 'DELETE' });
+  }
+
+  // Fast-forwards the branch to a commit made on top of its current head (never forced: a branch somebody pushed to meanwhile is refused).
+  async updateBranch(branch: string, sha: string): Promise<void> {
+    await this.request(refPath(branch), {
+      method: 'PATCH',
+      body: JSON.stringify({ sha, force: false }),
+    });
+  }
+
+  // The check runs of a commit that failed or timed out (a cancelled run is not a failure to repair), each with its annotations.
+  async failedChecks(sha: string): Promise<FailedCheck[]> {
+    const data = (await this.get(
+      `/commits/${sha}/check-runs?per_page=100`,
+    )) as {
+      check_runs: Array<{
+        id: number;
+        name: string;
+        conclusion: string | null;
+        output?: { title?: string | null; summary?: string | null };
+      }>;
+    };
+    const failed = data.check_runs.filter((run) =>
+      ['failure', 'timed_out'].includes(run.conclusion ?? ''),
+    );
+
+    return Promise.all(
+      failed.map(async (run) => {
+        const annotations = (await this.get(
+          `/check-runs/${run.id}/annotations?per_page=50`,
+        ).catch(() => [])) as Array<{
+          path: string;
+          start_line: number | null;
+          annotation_level: string;
+          message: string;
+        }>;
+
+        return {
+          name: run.name,
+          conclusion: run.conclusion as string,
+          summary: [run.output?.title, run.output?.summary]
+            .filter(Boolean)
+            .join(' — '),
+          annotations: annotations.map((annotation) => ({
+            path: annotation.path,
+            line: annotation.start_line,
+            level: annotation.annotation_level,
+            message: annotation.message,
+          })),
+        };
+      }),
+    );
   }
 
   private async post(path: string, body: unknown): Promise<unknown> {

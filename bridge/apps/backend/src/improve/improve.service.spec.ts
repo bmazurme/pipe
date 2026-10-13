@@ -5,7 +5,12 @@ import { join } from 'path';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
-import { ImproveService, isDue, localDate } from './improve.service';
+import {
+  describePublishError,
+  ImproveService,
+  isDue,
+  localDate,
+} from './improve.service';
 import { MANIFEST_ENTRY, sha256 } from './parcel';
 
 const BASE = { 'a.ts': 'one', 'b.ts': 'two' };
@@ -85,6 +90,8 @@ function setup(
       .fn()
       .mockResolvedValue({ number: 55, htmlUrl: 'https://gh/pr/55' }),
     addLabels: jest.fn().mockResolvedValue(undefined),
+    deleteBranch: jest.fn().mockResolvedValue(undefined),
+    updateBranch: jest.fn().mockResolvedValue(undefined),
     ...overrides.github,
   };
   const storage = {
@@ -599,6 +606,7 @@ describe('auto-start of pushed parcels', () => {
       userId: 3,
       autoStartModel: null,
       autoStartSince: null,
+      autoRepairCi: true,
     });
     await expect(service.saveSettings(3, 'nope')).rejects.toThrow(
       /Неизвестная модель/,
@@ -621,6 +629,329 @@ describe('ImproveService.startRun task text', () => {
     expect(manifest).toContain('Definition of done');
     expect(manifest.indexOf('Fix it')).toBeLessThan(
       manifest.indexOf('Definition of done'),
+    );
+  });
+});
+
+describe('ImproveService publish: no branch left behind', () => {
+  const run = () => ({
+    id: 4,
+    userId: 3,
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'opus',
+    trigger: 'manual',
+    jobId: 321,
+    status: ImproveRunStatus.Publishing,
+    baseSha: 'base-sha',
+    baseline: baselineOf(BASE),
+  });
+
+  function withResult(files: Record<string, string>) {
+    const ctx = setup();
+    const file = join(ctx.dir, 'result.zip');
+    writeFileSync(
+      file,
+      zipSync({
+        ...Object.fromEntries(
+          Object.entries(files).map(([p, t]) => [p, strToU8(t)]),
+        ),
+        [MANIFEST_ENTRY]: strToU8('{}'),
+      }),
+    );
+    ctx.storage.findOwned.mockResolvedValue({ id: 5 });
+    ctx.storage.path.mockReturnValue(file);
+
+    return ctx;
+  }
+
+  it('deletes the branch it just created when the PR cannot be opened', async () => {
+    const ctx = withResult({ 'a.ts': 'X' });
+    ctx.github.createPull.mockRejectedValue(
+      new Error('GitHub 403: Resource not accessible by personal access token'),
+    );
+    const r = run();
+
+    await ctx.service.publish(r as never, 5);
+
+    expect(ctx.github.createBranch).toHaveBeenCalledWith(
+      'improve/issue-7-run-4',
+      'new-commit',
+    );
+    expect(ctx.github.deleteBranch).toHaveBeenCalledWith(
+      'improve/issue-7-run-4',
+    );
+    expect(r).toMatchObject({ status: ImproveRunStatus.Failed });
+  });
+
+  it('still reports the original failure when the cleanup fails too', async () => {
+    const ctx = withResult({ 'a.ts': 'X' });
+    ctx.github.createPull.mockRejectedValue(new Error('GitHub 422: nope'));
+    ctx.github.deleteBranch.mockRejectedValue(new Error('GitHub 403: no'));
+    const r = run();
+
+    await ctx.service.publish(r as never, 5);
+
+    expect(r).toMatchObject({
+      status: ImproveRunStatus.Failed,
+      error: expect.stringContaining('GitHub 422: nope'),
+    });
+  });
+
+  it('does not touch a branch when it never got as far as creating one', async () => {
+    const ctx = withResult({ 'a.ts': 'X' });
+    ctx.github.createBranch.mockRejectedValue(new Error('GitHub 422: exists'));
+
+    await ctx.service.publish(run() as never, 5);
+
+    expect(ctx.github.deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('names the missing token permissions instead of just "Resource not accessible"', async () => {
+    const ctx = withResult({ 'a.ts': 'X' });
+    ctx.github.createPull.mockRejectedValue(
+      new Error('GitHub 403: Resource not accessible by personal access token'),
+    );
+    const r = run();
+
+    await ctx.service.publish(r as never, 5);
+
+    expect((r as { error?: string }).error).toContain('Pull requests');
+    expect((r as { error?: string }).error).toContain('LOOP_GITHUB_TOKEN');
+    expect(describePublishError(new Error('GitHub 500: boom'))).toBe(
+      'GitHub 500: boom',
+    );
+  });
+});
+
+describe('ImproveService CI repair', () => {
+  const parent = {
+    id: 9,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'sonnet',
+    status: ImproveRunStatus.PrOpen,
+    branch: 'improve/issue-7-run-9',
+    prNumber: 55,
+    prUrl: 'https://gh/pr/55',
+  };
+  const pull = {
+    number: 55,
+    headSha: 'head-sha',
+    branch: 'improve/issue-7-run-9',
+  };
+
+  it('works on the PR head (not the base branch), with the failures and the definition of done in the task', async () => {
+    const { service, github, storage, workers, runs } = setup({
+      runs: { count: jest.fn().mockResolvedValue(0) },
+    });
+
+    const run = await service.startRepair(
+      parent as never,
+      pull,
+      '### bridge — failure\n- a.ts:1 [failure] prettier/prettier',
+    );
+
+    expect(github.getBranchSha).not.toHaveBeenCalled();
+    expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
+
+    const manifest = strFromU8(
+      unzipSync(new Uint8Array(storage.createFromBuffer.mock.calls[0][1]))[
+        MANIFEST_ENTRY
+      ],
+    );
+
+    expect(manifest).toContain('prettier/prettier');
+    expect(manifest).toContain('exactly the head of that branch');
+    expect(manifest).toContain('Definition of done');
+    expect(manifest).toContain('repair attempt 1 of 2');
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ model: 'sonnet' }),
+    );
+    expect(run).toMatchObject({
+      kind: 'repair',
+      trigger: 'ci',
+      status: ImproveRunStatus.Queued,
+      issueNumber: 7,
+      prNumber: 55,
+      branch: 'improve/issue-7-run-9',
+      baseSha: 'head-sha',
+      jobId: 321,
+    });
+    expect(runs.save).toHaveBeenCalled();
+  });
+
+  it('numbers the attempts from the repairs this PR already had', async () => {
+    const { service, storage } = setup({
+      runs: { count: jest.fn().mockResolvedValue(1) },
+    });
+
+    const run = await service.startRepair(parent as never, pull, 'x');
+
+    expect(run.note).toContain('попытка 2 из 2');
+    expect(
+      strFromU8(
+        unzipSync(new Uint8Array(storage.createFromBuffer.mock.calls[0][1]))[
+          MANIFEST_ENTRY
+        ],
+      ),
+    ).toContain('repair attempt 2 of 2');
+  });
+
+  it('refuses when GitHub is not configured', async () => {
+    const { service, github } = setup({
+      runs: { count: jest.fn().mockResolvedValue(0) },
+    });
+    github.isReady.mockReturnValue(false);
+
+    await expect(
+      service.startRepair(parent as never, pull, 'x'),
+    ).rejects.toThrow(/GitHub не настроен/);
+  });
+
+  describe('publishing a repair', () => {
+    const repair = () => ({
+      id: 12,
+      userId: 3,
+      kind: 'repair',
+      issueNumber: 7,
+      issueTitle: 'Fix it',
+      model: 'sonnet',
+      trigger: 'ci',
+      jobId: 400,
+      status: ImproveRunStatus.Publishing,
+      baseSha: 'head-sha',
+      baseline: baselineOf(BASE),
+      branch: 'improve/issue-7-run-9',
+      prNumber: 55,
+      prUrl: 'https://gh/pr/55',
+      note: 'Автоисправление CI, попытка 1 из 2',
+    });
+
+    function withResult(files: Record<string, string>) {
+      const ctx = setup();
+      const file = join(ctx.dir, 'result.zip');
+      writeFileSync(
+        file,
+        zipSync({
+          ...Object.fromEntries(
+            Object.entries(files).map(([p, t]) => [p, strToU8(t)]),
+          ),
+          [MANIFEST_ENTRY]: strToU8('{}'),
+        }),
+      );
+      ctx.storage.findOwned.mockResolvedValue({ id: 5 });
+      ctx.storage.path.mockReturnValue(file);
+
+      return ctx;
+    }
+
+    it('commits on top of the PR head and moves the PR branch — no new branch, no new PR', async () => {
+      const { service, github, notifier } = withResult({
+        'a.ts': 'one',
+        'b.ts': 'FIXED',
+      });
+      const r = repair();
+
+      await service.publish(r as never, 5);
+
+      expect(github.getCommitTreeSha).toHaveBeenCalledWith('head-sha');
+      expect(github.createCommit).toHaveBeenCalledWith(
+        expect.stringContaining('Fix CI on PR #55'),
+        'new-tree',
+        'head-sha',
+      );
+      expect(github.updateBranch).toHaveBeenCalledWith(
+        'improve/issue-7-run-9',
+        'new-commit',
+      );
+      expect(github.createBranch).not.toHaveBeenCalled();
+      expect(github.createPull).not.toHaveBeenCalled();
+      expect(r).toMatchObject({ status: ImproveRunStatus.PrUpdated });
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('автоисправление CI'),
+      );
+    });
+
+    it('records "no changes" without touching the branch when the worker fixed nothing', async () => {
+      const { service, github, notifier } = withResult(BASE);
+      const r = repair();
+
+      await service.publish(r as never, 5);
+
+      expect(r.status).toBe(ImproveRunStatus.NoChanges);
+      expect(github.updateBranch).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('не внесло изменений'),
+      );
+    });
+
+    it('fails the repair run (the PR stays as it was) when the branch moved meanwhile', async () => {
+      const { service, github, notifier } = withResult({ 'a.ts': 'X' });
+      github.updateBranch.mockRejectedValue(
+        new Error('GitHub 422: Update is not a fast forward'),
+      );
+      const r = repair();
+
+      await service.publish(r as never, 5);
+
+      expect(r).toMatchObject({
+        status: ImproveRunStatus.Failed,
+        error: expect.stringContaining('not a fast forward'),
+      });
+      expect(github.deleteBranch).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('PR #55: автоисправление CI не удалось'),
+      );
+    });
+
+    it('never pushes a change to a protected path', async () => {
+      const baseline = baselineOf({ ...BASE, '.github/ci.yml': 'ci' });
+      const { service, github } = withResult({
+        'a.ts': 'one',
+        'b.ts': 'two',
+        '.github/ci.yml': 'EVIL',
+      });
+      const r = { ...repair(), baseline };
+
+      await service.publish(r as never, 5);
+
+      expect(github.updateBranch).not.toHaveBeenCalled();
+      expect(r.status).toBe(ImproveRunStatus.NoChanges);
+    });
+  });
+});
+
+describe('ImproveService.saveSettings', () => {
+  it('keeps the CI-repair switch when only the auto-start model is saved, and the other way round', async () => {
+    const { service, settings } = setup();
+    settings.findOne.mockResolvedValue({
+      userId: 3,
+      autoStartModel: 'sonnet',
+      autoRepairCi: false,
+    });
+
+    await service.saveSettings(3, 'opus');
+    expect(settings.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoStartModel: 'opus', autoRepairCi: false }),
+    );
+
+    await service.saveSettings(3, 'sonnet', true);
+    expect(settings.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoRepairCi: true }),
+    );
+  });
+
+  it('defaults to repairing CI when nothing is stored yet', async () => {
+    const { service, settings } = setup();
+
+    await service.saveSettings(3, null);
+
+    expect(settings.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoRepairCi: true }),
     );
   });
 });

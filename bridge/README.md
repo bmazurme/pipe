@@ -59,6 +59,12 @@ Frontend: `http://localhost:5173`.
 5. Проверка после переноса: вход Яндексом и GitHub; выключить один способ (второй остаётся); попытка
    выключить последний → `409`.
 
+## Improve: автоисправление CI
+
+PR, который открыл Improve, может покраснеть в CI из-за того, что worker не проверил (устаревший тест, форматирование, спецификация). Поэтому bridge каждые 3 минуты смотрит открытые PR Improve: если CI красный, он запускает worker на **ветке этого PR** — тот получает снимок головного коммита и список упавших проверок (с аннотациями: файл, строка, сообщение), чинит и пушит исправление **в ту же ветку** (CI запускается заново). Ограничения: не больше двух попыток на PR, по одной на головной коммит (исправление, ничего не изменившее, не зацикливается), PR старше трёх дней, закрытые и влитые не трогаются, защищённые пути не меняются. Включено по умолчанию; переключатель — Improve → Расписания → «Автоисправление CI». Нужен тот же токен (Checks: read для причин падения, Contents: write для пуша). Об исчерпанных попытках бот пишет в Telegram.
+
+Если PR не удалось открыть (например, у токена нет права), созданная ветка `improve/issue-N-run-M` удаляется — запуск помечается ошибкой, и в ошибке названы недостающие права токена.
+
 ## CI/CD
 
 Два workflow в `.github/workflows`:
@@ -138,7 +144,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |
 | `GITHUB_CI_WORKFLOW`, `GITHUB_DEPLOY_WORKFLOW` | имена workflow (`name:`), на которые реагирует цикл; по умолчанию `CI` и `Deploy bridge` |
-| `LOOP_GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_BASE_BRANCH` | merge «по кнопке» в Telegram: когда CI зелёный на PR с меткой `loop`, бот присылает сообщение с кнопкой «✅ Merge». `LOOP_GITHUB_TOKEN` — fine-grained токен **только на этот репозиторий** (Pull requests RW, Contents RW, Checks R); пусто = кнопка не предлагается никогда. Все проверки повторяются в момент нажатия: PR открыт, не draft, метка `loop`, база = `GITHUB_BASE_BRANCH` (по умолчанию `main`), `head` не изменился с момента сообщения, CI зелёный, **ни один изменённый файл не в защищённых путях** (`.github/`, `bridge/deploy/`, `loop/`, `telegram/`, `autopilot.ts`, `SELF_IMPROVEMENT_PLAN.md`) — такие PR мержатся только вручную на GitHub. Squash, привязан к проверенному sha |
+| `LOOP_GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_BASE_BRANCH` | merge «по кнопке» в Telegram: когда CI зелёный на PR с меткой `loop`, бот присылает сообщение с кнопкой «✅ Merge». `LOOP_GITHUB_TOKEN` — fine-grained токен **только на этот репозиторий** (Issues RW, Pull requests RW, Contents RW, Checks R; Issues и Pull requests нужны и Improve — без Pull requests: write PR не откроется, `403 Resource not accessible by personal access token`); пусто = кнопка не предлагается никогда. Все проверки повторяются в момент нажатия: PR открыт, не draft, метка `loop`, база = `GITHUB_BASE_BRANCH` (по умолчанию `main`), `head` не изменился с момента сообщения, CI зелёный, **ни один изменённый файл не в защищённых путях** (`.github/`, `bridge/deploy/`, `loop/`, `telegram/`, `autopilot.ts`, `SELF_IMPROVEMENT_PLAN.md`) — такие PR мержатся только вручную на GitHub. Squash, привязан к проверенному sha |
 
 **Сборка frontend:**
 

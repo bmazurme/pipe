@@ -6,6 +6,7 @@ export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
   running: 'Выполняется',
   publishing: 'Открываем PR',
   pr_open: 'PR открыт',
+  pr_updated: 'PR исправлен',
   analyzed: 'Анализ готов',
   no_changes: 'Без изменений',
   failed: 'Ошибка',
@@ -17,6 +18,7 @@ export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'suc
   running: 'info',
   publishing: 'info',
   pr_open: 'success',
+  pr_updated: 'success',
   analyzed: 'success',
   no_changes: 'warning',
   failed: 'danger',
@@ -28,9 +30,10 @@ export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['queued', 'running', 'pu
 export const isActiveRun = (run: Pick<ImproveRun, 'status'> | null | undefined): boolean =>
   Boolean(run) && ACTIVE_RUN_STATUSES.includes((run as ImproveRun).status);
 
-// A run blocks starting another for the same issue while it is working or its PR is open.
+// A run blocks starting another for the same issue while it is working or its PR is open
+// (a CI repair that pushed its fix to the PR leaves the PR open too).
 export const blocksNewRun = (run: Pick<ImproveRun, 'status'> | null | undefined): boolean =>
-  isActiveRun(run) || run?.status === 'pr_open';
+  isActiveRun(run) || run?.status === 'pr_open' || run?.status === 'pr_updated';
 
 export const CATEGORY_LABEL: Record<AnalysisCategory, string> = {
   general: 'Общий анализ',

@@ -249,4 +249,85 @@ describe('GithubApiService (improve)', () => {
       'GitHub 403: Resource not accessible',
     );
   });
+
+  it('deletes a branch with every segment encoded', async () => {
+    const calls = stubFetch(() => new Response(null, { status: 204 }));
+
+    await service().deleteBranch('improve/issue-7-run-4');
+
+    expect(calls[0].url).toBe(
+      'https://api.github.com/repos/o/r/git/refs/heads/improve/issue-7-run-4',
+    );
+    expect(calls[0].init.method).toBe('DELETE');
+  });
+
+  it('moves a branch to a commit without forcing it', async () => {
+    const calls = stubFetch(() => ({ ref: 'refs/heads/b' }));
+
+    await service().updateBranch('improve/x', 'abc123');
+
+    expect(calls[0].init.method).toBe('PATCH');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      sha: 'abc123',
+      force: false,
+    });
+  });
+
+  it('lists only failed or timed-out check runs, each with its annotations', async () => {
+    stubFetch((url) =>
+      url.includes('/annotations')
+        ? [
+            {
+              path: 'a.ts',
+              start_line: 3,
+              annotation_level: 'failure',
+              message: 'prettier/prettier',
+            },
+          ]
+        : {
+            check_runs: [
+              {
+                id: 1,
+                name: 'bridge',
+                conclusion: 'failure',
+                output: { title: 'Failed', summary: 'exit 1' },
+              },
+              { id: 2, name: 'worker', conclusion: 'success' },
+              { id: 3, name: 'sync', conclusion: 'cancelled' },
+              { id: 4, name: 'slow', conclusion: 'timed_out' },
+            ],
+          },
+    );
+
+    const failed = await service().failedChecks('sha1');
+
+    expect(failed.map((check) => check.name)).toEqual(['bridge', 'slow']);
+    expect(failed[0]).toMatchObject({
+      conclusion: 'failure',
+      summary: 'Failed — exit 1',
+      annotations: [
+        {
+          path: 'a.ts',
+          line: 3,
+          level: 'failure',
+          message: 'prettier/prettier',
+        },
+      ],
+    });
+  });
+
+  it('still reports a failed check when its annotations cannot be read', async () => {
+    stubFetch((url) =>
+      url.includes('/annotations')
+        ? new Response('{}', { status: 403 })
+        : {
+            check_runs: [{ id: 1, name: 'bridge', conclusion: 'failure' }],
+          },
+    );
+
+    const failed = await service().failedChecks('sha1');
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0].annotations).toEqual([]);
+  });
 });

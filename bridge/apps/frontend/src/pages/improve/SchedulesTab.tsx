@@ -65,6 +65,29 @@ function AutoStartCard() {
   );
 }
 
+function AutoRepairCard() {
+  const { data } = useGetImproveSettingsQuery();
+  const [save, { isLoading }] = useSaveImproveSettingsMutation();
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Автоисправление CI" />
+      <Text color="secondary" variant="body-2">
+        Если CI покраснел на PR, который открыл Improve, bridge сам запускает worker на ветке этого PR: он получает список упавших проверок, чинит и
+        пушит исправление в ту же ветку. Не больше двух попыток на PR и по одной на коммит; PR старше трёх дней, закрытые и влитые не трогаются.
+      </Text>
+      <div className={styles.toolbar}>
+        <Switch
+          checked={data?.autoRepairCi ?? true}
+          disabled={isLoading || !data}
+          onUpdate={(autoRepairCi) => void save({ autoRepairCi })}
+          content="Чинить CI автоматически"
+        />
+      </div>
+    </Card>
+  );
+}
+
 export function SchedulesTab() {
   const { data: schedules, isLoading } = useListImproveSchedulesQuery();
   const [saveSchedule, { isLoading: isSaving }] = useSaveImproveScheduleMutation();
@@ -152,6 +175,7 @@ export function SchedulesTab() {
       ))}
 
       <AutoStartCard />
+      <AutoRepairCard />
 
       <Dialog open={editing !== null} onClose={() => setEditing(null)} maxWidth="s" aria-labelledby="schedule-title">
         <Dialog.Header caption={editing?.id ? 'Изменить расписание' : 'Новое расписание'} id="schedule-title" />

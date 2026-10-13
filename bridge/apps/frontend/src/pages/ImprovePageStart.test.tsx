@@ -80,7 +80,7 @@ beforeEach(() => {
       }
       if (path === 'improve/runs' && request.method === 'GET') return json([ANALYSIS_RUN]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
-      if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null });
+      if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null, autoRepairCi: true });
 
       return json(ANALYSIS_RUN);
     }),
@@ -157,5 +157,20 @@ describe('ImprovePage analysis directions', () => {
     const box = (await screen.findByLabelText('Архитектура')) as HTMLInputElement;
 
     expect(box.checked).toBe(true);
+  });
+});
+
+describe('ImprovePage CI auto-repair setting', () => {
+  it('is on by default and switches off with a request that leaves the auto-start model alone', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    const toggle = await screen.findByRole('switch', { name: 'Чинить CI автоматически' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { autoRepairCi: false } }));
   });
 });

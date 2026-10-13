@@ -5,10 +5,17 @@ export type ImproveRunStatus =
   | 'running'
   | 'publishing'
   | 'pr_open'
+  | 'pr_updated'
   | 'analyzed'
   | 'no_changes'
   | 'failed'
   | 'cancelled';
+
+export interface ImproveSettings {
+  autoStartModel: string | null;
+  /** Fix a red CI on the PRs Improve opened (a worker on the PR's branch, twice at most). */
+  autoRepairCi: boolean;
+}
 
 export interface ImproveStatus {
   configured: boolean;
@@ -33,13 +40,14 @@ export interface AnalysisItem {
 export interface ImproveRun {
   id: number;
   userId: number;
-  kind: 'issue' | 'analysis';
+  /** 'repair' = an automatic fix of a red CI on the PR of an earlier run. */
+  kind: 'issue' | 'analysis' | 'repair';
   /** JSON `{categories, autoCreate, items}` — analysis runs only. */
   result: string | null;
   issueNumber: number | null;
   issueTitle: string;
   model: string;
-  trigger: 'manual' | 'schedule';
+  trigger: 'manual' | 'schedule' | 'ci';
   scheduleId: number | null;
   status: ImproveRunStatus;
   jobId: number | null;
@@ -151,11 +159,12 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveSchedules', 'ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить расписание'),
     }),
-    getImproveSettings: builder.query<{ autoStartModel: string | null }, void>({
+    getImproveSettings: builder.query<ImproveSettings, void>({
       query: () => 'improve/settings',
       providesTags: ['ImproveSettings'],
     }),
-    saveImproveSettings: builder.mutation<{ autoStartModel: string | null }, { autoStartModel: string | null }>({
+    // Each switch is saved on its own: a field that is left out keeps the stored value.
+    saveImproveSettings: builder.mutation<ImproveSettings, Partial<ImproveSettings>>({
       query: (body) => ({ url: 'improve/settings', method: 'PUT', body }),
       invalidatesTags: ['ImproveSettings'],
     }),
