@@ -96,6 +96,9 @@ services:
       GITHUB_REPO: ${GITHUB_REPO:-bmazurme/pipe}
       GITHUB_BASE_BRANCH: ${GITHUB_BASE_BRANCH:-main}
       LOOP_GITHUB_TOKEN: ${LOOP_GITHUB_TOKEN:-}
+      # The repo's webhook (pull_request + workflow_run -> POST /api/v1/github/webhook) is verified with this secret (HMAC).
+      # Empty = every delivery gets 503 (what the webhook's "Recent deliveries" showed). Set the SAME value in the webhook's settings.
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
     ports:
       # LAN-only checks (the router forwards only 80/443): curl http://<node>:3300/api/v1/health
       - target: 3000
