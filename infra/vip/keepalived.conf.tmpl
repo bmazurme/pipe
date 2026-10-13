@@ -32,5 +32,7 @@ vrrp_instance BRIDGE_VIP {
     track_script {
         check_caddy
     }
-    notify /usr/local/bin/vip-notify
+    notify_master "/usr/local/bin/vip-notify MASTER @VIP@"
+    notify_backup "/usr/local/bin/vip-notify BACKUP @VIP@"
+    notify_fault "/usr/local/bin/vip-notify FAULT @VIP@"
 }

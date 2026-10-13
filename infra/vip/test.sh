@@ -51,4 +51,6 @@ echo "$1" >> "$FIX/sent"
 SH
 chmod +x "$BIN/notify-telegram"
 "$HERE/vip-notify" INSTANCE x >/dev/null 2>&1; [ $? -eq 0 ]; check "notify script ignores states it does not know and never fails" $?
+NOTIFY_TELEGRAM="$BIN/notify-telegram" "$HERE/vip-notify" MASTER 192.168.50.10; grep -q 'ubuntu-white.*192.168.50.10' "$FIX/sent"; check "notify MASTER sends the message with the board and the VIP" $?
+rm -f "$FIX"/*; inst --dry-run --peer 192.168.50.12; grep -q 'notify_master "/usr/local/bin/vip-notify MASTER 192.168.50.10"' "$T/out"; check "the config passes state and VIP to the notify script explicitly" $?
 echo; echo "$PASS passed, $FAILED failed"; [ "$FAILED" -eq 0 ]

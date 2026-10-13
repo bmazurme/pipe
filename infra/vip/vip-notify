@@ -7,5 +7,6 @@ case "$state" in
   FAULT)  text="🔴 $(hostname): keepalived в состоянии FAULT, адрес $vip не держит" ;;
   *) exit 0 ;;
 esac
-if [ -x /usr/local/bin/notify-telegram ]; then /usr/local/bin/notify-telegram "$text" || true; fi
+notify="${NOTIFY_TELEGRAM:-/usr/local/bin/notify-telegram}"
+if [ -x "$notify" ]; then "$notify" "$text" || true; fi
 exit 0
