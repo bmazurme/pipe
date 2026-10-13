@@ -72,8 +72,18 @@ volume on white, starts it as stack `bridgesw` and waits until white is streamin
 copy) is never touched — remove it yourself when you are sure. `failover=active` stays on red.
 
 Not covered by the script (do them by hand, once white is a replica): the jobs that assume white is the primary — the backup/Garage/uploads timers
-on white and red, and the auto-deploy — and `prepare-red.sh`'s counterpart if you want white ready to take over again. A planned switch back to
-white later is the same failover in the other direction (`failover.sh` with the boards swapped, `I_KNOW_WHITE_IS_ALIVE=yes` after stopping red's stack).
+on white and red, and the auto-deploy — and `prepare-red.sh`'s counterpart if you want white ready to take over again. To make white the **primary again** (the original shape: white primary, red replica) there is a planned switch back:
+
+```bash
+infra/failover/switchback.sh --dry-run    # checks only
+infra/failover/switchback.sh              # asks you to type SWITCHBACK; the site is down a few minutes
+```
+
+It needs red = primary, white = its streaming replica (`failback.sh` first), both boards up. It stops the application on red, copies the uploads made
+meanwhile red → white (additive), rebuilds white's database from red's with a base backup (white's diverged old copy is first **copied aside** as
+`bridge_pgdata_diverged_<date>`, and the copy is checked), moves the roles (red loses `failover`/`bridge-primary`), deploys on white, then rebuilds red as
+white's replica (red's promoted database is kept as `standby_pgdata_prev_<date>`). If it stops half way it prints how to bring the site back on red.
+`test-switchback.sh` covers the checks and the order (15 checks, fake ssh).
 
 ## Rehearsal checklist (needs a window of about an hour; white switched off)
 

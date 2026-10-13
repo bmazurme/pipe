@@ -10,8 +10,7 @@ internet → router (80/443 → 192.168.50.10) → whichever board runs Caddy
 
 Caddy publishes 80/443 in **host mode** (`infra/bridge-pi/bridge-pi.yml`), so only the board that runs the Caddy task answers on them.
 keepalived on each board runs `vip-check-caddy` every 5 s (is a `bridge_caddy` task running here?); a board without Caddy lowers its priority
-by 50 and gives the address up, the other one takes it (gratuitous ARP) and Telegram says so. `nopreempt`: a board that comes back does not
-snatch the address — it moves only because Caddy moved.
+by 50 and gives the address up, the other one takes it (gratuitous ARP) and Telegram says so. Preempt is on: the board whose Caddy runs (priority 100) always wins over the one without (50) — a board that merely comes back changes nothing, because both have 100 only when both run Caddy (never).
 
 What this changes in a failover: `failover.sh` ends with Caddy starting on red → within ~10–15 s the address is on red → **no router step**.
 White's death needs nothing from you except the failover itself. Without Caddy anywhere the address sits on a board that does not answer

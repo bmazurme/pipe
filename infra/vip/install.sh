@@ -31,8 +31,9 @@ SELF="${SELF:-$(ip -o -4 route get "${PEERS[0]}" | sed -n 's/.* src \([^ ]*\).*/
 [ -n "$IFACE" ] && [ -n "$SELF" ] || { echo "cannot find this board's interface/address towards ${PEERS[0]}" >&2; exit 1; }
 [ "$SELF" != "$VIP" ] || { echo "the VIP equals this board's own address" >&2; exit 1; }
 
-# A VIP that already answers is somebody's — unless it is us already holding it.
-if ! ip -o -4 addr show dev "$IFACE" | grep -q " $VIP/"; then
+# A VIP that already answers is somebody's — unless it is us already holding it, or keepalived already runs here (a re-run
+# to change the config: the OTHER board may hold the address).
+if ! ip -o -4 addr show dev "$IFACE" | grep -q " $VIP/" && ! systemctl is-active --quiet keepalived 2>/dev/null; then
   if ping -c 2 -W 1 "$VIP" >/dev/null 2>&1; then
     echo "REFUSED: $VIP already answers on the network — pick an address nobody uses (outside the router's DHCP pool)." >&2
     exit 1
