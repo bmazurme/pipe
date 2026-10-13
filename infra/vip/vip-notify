@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# keepalived notify script: tells Telegram when this board takes or loses the address (never fails keepalived).
+state="${1:-?}"; vip="${2:-?}"
+case "$state" in
+  MASTER) text="🌐 $(hostname) теперь держит адрес $vip (сюда идёт роутер)" ;;
+  BACKUP) text="ℹ️ $(hostname) отдал адрес $vip" ;;
+  FAULT)  text="🔴 $(hostname): keepalived в состоянии FAULT, адрес $vip не держит" ;;
+  *) exit 0 ;;
+esac
+if [ -x /usr/local/bin/notify-telegram ]; then /usr/local/bin/notify-telegram "$text" || true; fi
+exit 0

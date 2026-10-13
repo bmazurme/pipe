@@ -49,7 +49,7 @@ last message), decrypts the secrets with your key straight onto red (mode 600), 
    the stack's own `postgres` service stays at zero so the old primary can never start);
 5. **wait** for the API to report a healthy database, and message you on Telegram.
 
-Then yours: **router (ASUS) → Virtual Server: forward TCP 80 and 443 to 192.168.50.12.** DNS does not change (the records point at the home
+Then yours — **unless the floating address is installed (`infra/vip`): then the address follows Caddy to red by itself and there is nothing to do** — **router (ASUS) → Virtual Server: forward TCP 80 and 443 to 192.168.50.12.** DNS does not change (the records point at the home
 address). Caddy re-issues the certificates once the ports reach red (HTTP-01; a minute or two, then the site is on HTTPS again).
 
 What you lose: writes that had not reached the replica (seconds, usually none), and uploads since the last daily copy (≤ 1 day).

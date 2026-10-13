@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# keepalived health script: exit 0 only when THIS board runs the Caddy task of the bridge stack (the one that listens on
+# 80/443 in host mode). A board without Caddy must not hold the address the router forwards to.
+set -u
+docker ps --filter 'name=bridge_caddy' --filter 'status=running' -q 2>/dev/null | grep -q .
