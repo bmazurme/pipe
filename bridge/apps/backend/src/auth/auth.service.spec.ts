@@ -1,9 +1,18 @@
+import {
+  ForbiddenException,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CookieOptions, Response } from 'express';
 
 import { AuthService } from './auth.service';
+import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token.exception';
+import { RefreshTokenNotFoundException } from './exceptions/refresh-token-not-found.exception';
+import { RequestWithAuthSession } from './guards/refresh-token.guard';
 import { SessionsService } from './sessions.service';
 
 const CONFIG: Record<string, string> = {
@@ -86,5 +95,145 @@ describe('AuthService cookies', () => {
     expect(options.httpOnly).toBe(true);
     expect(options.secure).toBe(true);
     expect(options.path).toBe('/api/v1/auth');
+  });
+});
+
+describe('AuthService sessions and token refresh', () => {
+  let service: AuthService;
+  let jwtService: { sign: jest.Mock };
+  let sessionsService: { attachRefreshToken: jest.Mock; revoke: jest.Mock };
+  let response: Response & { cookie: jest.Mock; clearCookie: jest.Mock };
+
+  const authReq = (): RequestWithAuthSession =>
+    ({
+      authSession: { userId: 7, sessionId: 3 },
+    }) as unknown as RequestWithAuthSession;
+
+  beforeEach(async () => {
+    jwtService = {
+      sign: jest.fn((_payload: unknown, options: { secret?: string }) =>
+        options.secret ? 'new-refresh' : 'new-access',
+      ),
+    };
+    sessionsService = {
+      attachRefreshToken: jest.fn().mockResolvedValue(undefined),
+      revoke: jest.fn().mockResolvedValue(true),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: JwtService, useValue: jwtService },
+        {
+          provide: ConfigService,
+          useValue: { get: (key: string) => CONFIG[key] },
+        },
+        { provide: SessionsService, useValue: sessionsService },
+      ],
+    }).compile();
+
+    service = module.get(AuthService);
+    response = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as typeof response;
+  });
+
+  describe('refreshTokens', () => {
+    it('rejects with RefreshTokenNotFoundException without an authSession', async () => {
+      const req = {} as RequestWithAuthSession;
+
+      await expect(service.refreshTokens(req, response)).rejects.toBeInstanceOf(
+        RefreshTokenNotFoundException,
+      );
+      expect(response.cookie).not.toHaveBeenCalled();
+    });
+
+    it('returns a new access token, attaches the refresh token and sets the cookie', async () => {
+      const result = await service.refreshTokens(authReq(), response);
+
+      expect(result).toEqual({ accessToken: 'new-access', expiresIn: '15m' });
+      expect(sessionsService.attachRefreshToken).toHaveBeenCalledTimes(1);
+      expect(sessionsService.attachRefreshToken).toHaveBeenCalledWith(
+        3,
+        'new-refresh',
+      );
+      const [name, value] = response.cookie.mock.calls[0] as CookieCall;
+      expect(name).toBe('bridgeRefreshToken');
+      expect(value).toBe('new-refresh');
+    });
+
+    it('signs the refresh token with the refresh secret and 7d expiry', async () => {
+      await service.refreshTokens(authReq(), response);
+
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        { sub: 7, sessionId: 3 },
+        { secret: 'refresh-secret', expiresIn: '7d' },
+      );
+    });
+
+    it('maps a plain error from attachRefreshToken to InvalidRefreshTokenException', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      sessionsService.attachRefreshToken.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.refreshTokens(authReq(), response),
+      ).rejects.toBeInstanceOf(InvalidRefreshTokenException);
+      expect(response.cookie).not.toHaveBeenCalled();
+    });
+
+    it('rethrows an HttpException from attachRefreshToken unchanged', async () => {
+      const error = new UnauthorizedException('nope');
+      sessionsService.attachRefreshToken.mockRejectedValue(error);
+
+      await expect(service.refreshTokens(authReq(), response)).rejects.toBe(
+        error,
+      );
+      expect(response.cookie).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('revokeSession', () => {
+    it('refuses to revoke the current session', async () => {
+      await expect(service.revokeSession(7, 3, 3)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(sessionsService.revoke).not.toHaveBeenCalled();
+    });
+
+    it('gives 404 for an unknown session', async () => {
+      sessionsService.revoke.mockResolvedValue(false);
+
+      await expect(service.revokeSession(7, 99, 3)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(sessionsService.revoke).toHaveBeenCalledWith(99, 7);
+    });
+
+    it('revokes another session of the user', async () => {
+      await expect(service.revokeSession(7, 4, 3)).resolves.toEqual({
+        message: 'Session revoked',
+      });
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes the session and clears the cookie', async () => {
+      const result = await service.logout(authReq(), response);
+
+      expect(sessionsService.revoke).toHaveBeenCalledWith(3, 7);
+      const cleared = (response.clearCookie.mock.calls as ClearCall[]).map(
+        ([name]) => name,
+      );
+      expect(cleared).toEqual(['bridgeRefreshToken', 'refreshToken']);
+      expect(result).toEqual({ message: 'Successfully logged out' });
+    });
+
+    it('still clears the cookie without a session', async () => {
+      await service.logout({} as RequestWithAuthSession, response);
+
+      expect(sessionsService.revoke).not.toHaveBeenCalled();
+      expect(response.clearCookie).toHaveBeenCalled();
+    });
   });
 });
