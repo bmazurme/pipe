@@ -8,6 +8,7 @@ import { WorkerModule } from '../worker/worker.module';
 import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
+import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveCiService } from './improve-ci.service';
 import { ImproveController } from './improve.controller';
 import { ImproveService } from './improve.service';
@@ -21,6 +22,6 @@ import { ImproveService } from './improve.service';
     WorkerModule,
   ],
   controllers: [ImproveController],
-  providers: [ImproveService, ImproveCiService],
+  providers: [ImproveService, ImproveCiService, ImproveScheduleService],
 })
 export class ImproveModule {}
