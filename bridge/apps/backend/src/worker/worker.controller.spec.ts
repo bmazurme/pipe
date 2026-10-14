@@ -35,6 +35,83 @@ describe('WorkerController', () => {
     controller = module.get(WorkerController);
   });
 
+  describe('claim — which Claude token a job gets', () => {
+    const response = () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+        end: jest.fn(),
+      };
+
+      return res;
+    };
+    const job = (model: string, claudeCredentialId: number | null) => ({
+      id: 5,
+      model,
+      claudeCredentialId,
+    });
+    let credentials: { resolveForRun: jest.Mock };
+    let claimController: WorkerController;
+
+    beforeEach(async () => {
+      credentials = { resolveForRun: jest.fn().mockResolvedValue('tok') };
+      (workerService as Record<string, jest.Mock>).claim = jest.fn();
+      (workerService as Record<string, jest.Mock>).resolveProvider = jest
+        .fn()
+        .mockResolvedValue(null);
+
+      const module = await Test.createTestingModule({
+        controllers: [WorkerController],
+        providers: [
+          { provide: WorkerService, useValue: workerService },
+          { provide: ClaudeCredentialsService, useValue: credentials },
+          { provide: WorkersService, useValue: workersService },
+        ],
+      })
+        .overrideGuard(JwtOrApiKeyGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
+
+      claimController = module.get(WorkerController);
+    });
+
+    const claim = async (claimed: object) => {
+      (workerService as Record<string, jest.Mock>).claim.mockResolvedValue(
+        claimed,
+      );
+      const res = response();
+
+      await claimController.claim(
+        { workerName: 'w' },
+        { id: 7, workerId: 3 },
+        res as never,
+      );
+
+      return res;
+    };
+
+    it("hands a sonnet job the token it picked, or the account's first when it picked none", async () => {
+      const res = await claim(job('sonnet', null));
+
+      expect(credentials.resolveForRun).toHaveBeenCalledWith(7, null);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ claudeToken: 'tok' }),
+      );
+
+      await claim(job('opus', 9));
+      expect(credentials.resolveForRun).toHaveBeenLastCalledWith(7, 9);
+    });
+
+    it('gives no Claude token to a gpt/deepseek/qwen job', async () => {
+      const res = await claim(job('gpt', null));
+
+      expect(credentials.resolveForRun).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ claudeToken: null }),
+      );
+    });
+  });
+
   describe('heartbeat', () => {
     it('a personal API key reports by name (legacy worker)', async () => {
       await controller.heartbeat({ workerName: 'old-worker' }, { id: 7 });

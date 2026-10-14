@@ -26,6 +26,7 @@ import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { ClaudeCredentialsService } from '../worker/claude-credentials.service';
 import { ProviderCredentialsService } from '../worker/provider-credentials.service';
 import { WorkersService } from '../worker/workers.service';
 import { ChatService } from './chat.service';
@@ -55,6 +56,7 @@ export class ChatController {
     private readonly chatService: ChatService,
     private readonly workersService: WorkersService,
     private readonly providerCredentials: ProviderCredentialsService,
+    private readonly claudeCredentials: ClaudeCredentialsService,
   ) {}
 
   @Get('chats')
@@ -236,6 +238,10 @@ export class ChatController {
         claimed.chat.model,
         null,
       ),
+      claudeToken:
+        claimed.chat.model === 'sonnet' || claimed.chat.model === 'opus'
+          ? await this.claudeCredentials.resolveForRun(currentUser.id, null)
+          : null,
       history: claimed.history,
     };
 

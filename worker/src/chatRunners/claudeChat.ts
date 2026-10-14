@@ -45,6 +45,8 @@ export async function claudeChat(
   downloadAttachment?: (attachmentId: number) => Promise<Buffer>,
   // Gets what the CLI reported about the plan limits for this turn.
   onReport?: (report: ClaudeReport) => void,
+  // A stored Claude token handed over by bridge; absent: the CLI's own login.
+  claudeToken?: string | null,
 ): Promise<string> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
@@ -52,7 +54,7 @@ export async function claudeChat(
   try {
     const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
     const prompt = buildPrompt(history, staged);
-    const result = await runClaude(turnDir, prompt, claudeModel, () => {}, proxyUrl);
+    const result = await runClaude(turnDir, prompt, claudeModel, () => {}, proxyUrl, claudeToken);
 
     if (result.report) onReport?.(result.report);
 

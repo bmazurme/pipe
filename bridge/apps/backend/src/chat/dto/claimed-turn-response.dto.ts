@@ -24,6 +24,8 @@ export class ClaimedTurnResponseDto {
   // The stored API key for a gpt/deepseek/qwen turn (the account's first one for that provider); null when there is
   // none — the worker then falls back to its own environment.
   provider: ClaimedProviderDto | null;
+  // The account's first stored Claude token for a sonnet/opus turn; null when there is none (the worker then uses its own login).
+  claudeToken: string | null;
   // Every message in the chat up to and including the user message this
   // pending reply answers — worker is stateless between turns, so it needs
   // full context each time, not just the latest message.
