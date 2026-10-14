@@ -1910,6 +1910,61 @@
         }
       }
     },
+    "/api/v1/users/me": {
+      "get": {
+        "operationId": "UsersController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "operationId": "LogsController_list",
@@ -2103,61 +2158,6 @@
         "responses": {
           "200": {
             "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/users/me": {
-      "get": {
-        "operationId": "UsersController_getMe",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MeResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/{id}": {
-      "patch": {
-        "operationId": "UsersController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponseDto"
-                }
-              }
-            }
           }
         }
       }
@@ -4226,48 +4226,6 @@
           "workers"
         ]
       },
-      "AppLog": {
-        "type": "object",
-        "properties": {
-          "level": {
-            "type": "object"
-          },
-          "source": {
-            "type": "object"
-          },
-          "event": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "meta": {
-            "type": "string",
-            "nullable": true
-          },
-          "id": {
-            "type": "number"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "level",
-          "source",
-          "event",
-          "message",
-          "meta",
-          "id",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
       "MeResponseDto": {
         "type": "object",
         "properties": {
@@ -4317,6 +4275,48 @@
           "id",
           "email",
           "status"
+        ]
+      },
+      "AppLog": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "object"
+          },
+          "source": {
+            "type": "object"
+          },
+          "event": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "meta": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "source",
+          "event",
+          "message",
+          "meta",
+          "id",
+          "createdAt",
+          "updatedAt"
         ]
       },
       "PurgeEntryResponseDto": {

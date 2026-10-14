@@ -1,4 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { JwtGuard } from '../auth/guards/jwt.guard';
+import { LogViewerGuard } from '../logs/log-viewer.guard';
+import { UsersService } from '../users/users.service';
 
 import { ALL_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
@@ -97,5 +106,37 @@ describe('ImproveController', () => {
 
       expect(service.saveSettings).toHaveBeenCalledWith(7, null, undefined);
     });
+  });
+});
+
+describe('ImproveController access', () => {
+  it('is guarded by JwtGuard and LogViewerGuard', () => {
+    const guards = Reflect.getMetadata('__guards__', ImproveController);
+
+    expect(guards).toEqual([JwtGuard, LogViewerGuard]);
+  });
+
+  it('answers 403 to a non-owner on POST /improve/runs', async () => {
+    const guards = Reflect.getMetadata(
+      '__guards__',
+      ImproveController,
+    ) as unknown[];
+
+    expect(guards).toContain(LogViewerGuard);
+
+    const guard = new LogViewerGuard(
+      {
+        findOwner: jest.fn().mockResolvedValue({ id: 1 }),
+        findById: jest.fn().mockResolvedValue({ id: 2, email: 'x@y.z' }),
+      } as unknown as UsersService,
+      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+    );
+    const context = {
+      switchToHttp: () => ({ getRequest: () => ({ user: { id: 2 } }) }),
+    } as unknown as ExecutionContext;
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });
