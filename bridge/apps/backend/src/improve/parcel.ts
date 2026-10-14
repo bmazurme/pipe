@@ -150,17 +150,28 @@ export interface BuiltParcel {
   baseline: Record<string, string>;
 }
 
+// path → sha256 of every snapshot file. It depends only on the snapshot, so
+// several launches on one base SHA can hash it once and pass it in.
+export function snapshotBaseline(
+  files: SnapshotFile[],
+): Record<string, string> {
+  const baseline: Record<string, string> = {};
+  for (const file of files) {
+    baseline[file.path] = sha256(file.bytes);
+  }
+  return baseline;
+}
+
 export async function buildIssueParcel(
   files: SnapshotFile[],
   issue: IssueRef,
   now = new Date(),
+  baseline: Record<string, string> = snapshotBaseline(files),
 ): Promise<BuiltParcel> {
   const entries: Record<string, Uint8Array> = {};
-  const baseline: Record<string, string> = {};
 
   for (const file of files) {
     entries[file.path] = file.bytes;
-    baseline[file.path] = sha256(file.bytes);
   }
 
   entries[MANIFEST_ENTRY] = strToU8(

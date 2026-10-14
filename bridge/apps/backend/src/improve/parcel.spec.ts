@@ -12,6 +12,7 @@ import {
   readZipball,
   selectParcelFiles,
   sha256,
+  snapshotBaseline,
   SnapshotFile,
 } from './parcel';
 
@@ -170,5 +171,36 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     await buildIssueParcel(big, issue).then(() => order.push('parcel'));
 
     expect(order).toEqual(['immediate', 'parcel']);
+  });
+});
+
+describe('snapshotBaseline', () => {
+  const issue = {
+    number: 12,
+    title: 'Fix x',
+    body: 'details',
+    repo: 'o/r',
+    baseBranch: 'main',
+  };
+  const files = [file('a.ts', 'one'), file('dir/b.ts', 'two')];
+
+  it('hashes every file with sha256', () => {
+    expect(snapshotBaseline(files)).toEqual({
+      'a.ts': sha256(strToU8('one')),
+      'dir/b.ts': sha256(strToU8('two')),
+    });
+  });
+
+  it('gives buildIssueParcel the same baseline whether precomputed or not', async () => {
+    const now = new Date('2026-10-08T00:00:00Z');
+    const computed = await buildIssueParcel(files, issue, now);
+    const passed = await buildIssueParcel(
+      files,
+      issue,
+      now,
+      snapshotBaseline(files),
+    );
+
+    expect(passed.baseline).toEqual(computed.baseline);
   });
 });

@@ -50,6 +50,7 @@ import {
   readResultParcel,
   readZipball,
   selectParcelFiles,
+  snapshotBaseline,
   SnapshotFile,
   utf8Text,
 } from './parcel';
@@ -91,8 +92,13 @@ export class ImproveService {
   private advancing = false;
   private autoStarting = false;
   // One repo snapshot, reused by consecutive launches on the same base SHA.
-  private zipCache: { sha: string; files: SnapshotFile[]; at: number } | null =
-    null;
+  // The baseline hashes are cached with it: hashing the whole repo is synchronous.
+  private zipCache: {
+    sha: string;
+    files: SnapshotFile[];
+    baseline: Record<string, string>;
+    at: number;
+  } | null = null;
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -318,13 +324,14 @@ export class ImproveService {
       cached.sha === sha &&
       Date.now() - cached.at < ZIP_CACHE_TTL_MS
     ) {
-      return cached.files;
+      return { files: cached.files, baseline: cached.baseline };
     }
     const files = selectParcelFiles(
       await readZipball(await this.github.downloadZipball(sha)),
     );
-    this.zipCache = { sha, files, at: Date.now() };
-    return files;
+    const baseline = snapshotBaseline(files);
+    this.zipCache = { sha, files, baseline, at: Date.now() };
+    return { files, baseline };
   }
 
   // Snapshot of the base branch → parcel with this task as its manifest → Storage →
@@ -342,14 +349,19 @@ export class ImproveService {
     const baseBranch = snapshot?.branch ?? this.github.baseBranch();
     const baseSha =
       snapshot?.sha ?? (await this.github.getBranchSha(baseBranch));
-    const files = await this.snapshotFiles(baseSha);
-    const { buffer, baseline } = await buildIssueParcel(files, {
-      number: task.number,
-      title: task.title,
-      body: task.body,
-      repo: this.github.repoName() as string,
-      baseBranch,
-    });
+    const { files, baseline } = await this.snapshotFiles(baseSha);
+    const { buffer } = await buildIssueParcel(
+      files,
+      {
+        number: task.number,
+        title: task.title,
+        body: task.body,
+        repo: this.github.repoName() as string,
+        baseBranch,
+      },
+      new Date(),
+      baseline,
+    );
     const stored = await this.storage.createFromBuffer(
       userId,
       buffer,
