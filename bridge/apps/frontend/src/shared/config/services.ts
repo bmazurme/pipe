@@ -4,6 +4,7 @@ import {
   Clock,
   Comments,
   FaceRobot,
+  FileZipper,
   House,
   Key,
   Lock,
@@ -98,6 +99,13 @@ export const SERVICES: ServiceLink[] = [
     description: 'Личное хранилище секретов — пары «имя — значение», зашифрованные на сервере.',
     icon: Key,
     path: '/secrets',
+  },
+  {
+    id: 'reports',
+    title: 'Reports',
+    description: 'Скачать последнюю версию reports с GitHub и синхронизировать его настройки с bridge.',
+    icon: FileZipper,
+    path: '/reports',
   },
 ];
 

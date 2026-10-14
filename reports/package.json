@@ -9,8 +9,9 @@
   ],
   "scripts": {
     "postinstall": "npm run build --workspace=packages/shared",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/client",
     "start": "npm run build --workspace=packages/shared && npm run dev",
-    "dev": "npm run dev --workspace=packages/server & npm run dev --workspace=packages/client",
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
     "dev:client": "npm run dev --workspace=packages/client",
     "dev:server": "npm run dev --workspace=packages/server"
   },
@@ -18,6 +19,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "typescript": "^5.7.2"
   }
 }
