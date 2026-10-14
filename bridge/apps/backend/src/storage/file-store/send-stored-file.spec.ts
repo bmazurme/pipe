@@ -10,6 +10,7 @@ import request from 'supertest';
 import { FileMissingError, type FileStore } from './file-store';
 import { LocalFileStore } from './local-file-store';
 import {
+  respondDownloadError,
   sendStoredFile,
   type SendDone,
   type SendMode,
@@ -246,5 +247,46 @@ describe('sendStoredFile', () => {
         message: 'The client closed the connection',
       });
     });
+  });
+});
+
+describe('respondDownloadError', () => {
+  const file = { id: 7, storedName: 'abc.zip' };
+  const err = new Error('ENOENT');
+
+  function fakeRes(headersSent: boolean) {
+    const res = {
+      headersSent,
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    return res as typeof res & import('express').Response;
+  }
+
+  it('answers 404 JSON for a missing file and logs a warning', () => {
+    const res = fakeRes(false);
+    const logger = { warn: jest.fn() };
+
+    respondDownloadError(res, file, err, logger);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'File is missing on disk',
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Failed to send file 7 (abc.zip): ENOENT',
+    );
+  });
+
+  it('sends no second response once headers are sent', () => {
+    const res = fakeRes(true);
+    const logger = { warn: jest.fn() };
+
+    respondDownloadError(res, file, err, logger);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 });

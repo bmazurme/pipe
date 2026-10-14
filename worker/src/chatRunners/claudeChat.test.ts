@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { buildPrompt } from './claudeChat.js';
 
 describe('buildPrompt', () => {
@@ -11,6 +12,8 @@ describe('buildPrompt', () => {
       { role: 'user', content: 'how are you' },
     ]);
 
+    // The model is told how to propose a change to a pull request, before the conversation.
+    assert.ok(prompt.startsWith(CHAT_ACTIONS_INSTRUCTION));
     assert.match(prompt, /User: hi/);
     assert.match(prompt, /Assistant: hello/);
     assert.match(prompt, /User: how are you/);

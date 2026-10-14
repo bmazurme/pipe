@@ -1,3 +1,4 @@
+import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -32,6 +33,7 @@ describe('openAiCompatibleChat', () => {
     assert.deepEqual(capturedBody, {
       model: 'deepseek-chat',
       messages: [
+        { role: 'system', content: CHAT_ACTIONS_INSTRUCTION },
         { role: 'user', content: 'hi' },
         { role: 'assistant', content: 'hello' },
         { role: 'user', content: 'again' },
@@ -179,13 +181,14 @@ describe('openAiCompatibleChat', () => {
       assert.deepEqual(seen, {});
     });
 
-    it('sends no tools and no system prompt when there is no toolset', async () => {
+    it('sends no tools and only the actions instruction as system prompt when there is no toolset', async () => {
       const { bodies } = sequence([{ role: 'assistant', content: 'hi' }]);
 
       await openAiCompatibleChat(history, options);
 
       assert.equal(bodies[0].tools, undefined);
-      assert.equal(bodies[0].messages[0].role, 'user');
+      assert.deepEqual(bodies[0].messages[0], { role: 'system', content: CHAT_ACTIONS_INSTRUCTION });
+      assert.equal(bodies[0].messages[1].role, 'user');
     });
   });
 });

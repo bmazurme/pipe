@@ -68,3 +68,25 @@ export function repairBody(input: {
     'Reproduce each failure locally with the commands from the definition of done below (install dependencies first), fix it, and run the checks again until they pass. If a failure cannot be fixed by a code change in this repository (a CI service outage, a path you must not change), change nothing and say why in your final message.',
   ].join('\n');
 }
+
+// A person asked, from the chat, for a change on an open pull request.
+export function prFixBody(input: {
+  prNumber: number;
+  prTitle: string;
+  branch: string;
+  instruction: string;
+}): string {
+  return [
+    `Pull request #${input.prNumber} “${input.prTitle}” (branch \`${input.branch}\`) is open, and its owner asked for a change.`,
+    '',
+    'The repository you were given is exactly the head of that branch. Make the requested change and nothing else: the smallest change that does it. Do not refactor or reformat unrelated files, and never delete a test just to make it pass — when a test describes the old behaviour, update that test.',
+    '',
+    '## Requested change',
+    '',
+    input.instruction.trim(),
+    '',
+    '## How',
+    '',
+    'Run the checks from the definition of done below (install dependencies first) and make them pass. If the request cannot be done by a code change in this repository, change nothing and say why in your final message.',
+  ].join('\n');
+}

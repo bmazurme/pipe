@@ -1,6 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
 import { loadOptionalDictionary, toLocal } from '../dictionary.js';
@@ -8,6 +5,7 @@ import { extractArchive } from '../pack.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { log } from '../log.js';
+import { writeParcelFiles } from '../writeParcelFiles.js';
 
 export async function pullCommand(name: string, options: { force?: boolean }): Promise<void> {
   const config = loadConfig();
@@ -43,11 +41,7 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
     return;
   }
 
-  for (const file of files) {
-    const destination = path.join(project.path, file.relPath);
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(destination, toLocal(dictionary, file.content), 'utf-8');
-  }
+  writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
 
   setLastHash(name, manifest.contentHash);
   log.info(`Pulled "${name}" (${files.length} files) from ${manifest.machine}, applied at ${project.path}.`);

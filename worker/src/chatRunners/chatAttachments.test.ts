@@ -105,6 +105,6 @@ describe('buildPrompt with attachments', () => {
     const prompt = buildPrompt([{ role: 'user', content: 'hi' }]);
 
     assert.doesNotMatch(prompt, /attach/i);
-    assert.match(prompt, /^User: hi\n\nContinue the conversation/);
+    assert.match(prompt, /\n\nUser: hi\n\nContinue the conversation/);
   });
 });

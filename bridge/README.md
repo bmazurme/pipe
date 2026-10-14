@@ -67,6 +67,10 @@ PR, который открыл Improve, может покраснеть в CI �
 
 Если PR не удалось открыть (например, у токена нет права), созданная ветка `improve/issue-N-run-M` удаляется — запуск помечается ошибкой, и в ошибке названы недостающие права токена.
 
+## Worker: потерянные задачи
+
+Если worker перезапустили или он пропал посреди задачи, bridge сам завершает её с ошибкой «Worker was restarted or lost…» (через 10 минут или 3 часа тишины) и не повторяет — см. [worker/README.md](../worker/README.md#потерянные-задачи-рестарт-worker).
+
 ## CI/CD
 
 Два workflow в `.github/workflows`:
@@ -142,6 +146,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `COOKIE_DOMAIN` | домен для refresh-токен куки. Задавайте **конкретный хост** API (`api.bridge.ntlstl.dev`), а не родительский домен: соседние приложения на `*.ntlstl.dev` (notes, tools, rain) — порты этого же кода и ставят свою куку с `COOKIE_DOMAIN=.ntlstl.dev`, которая долетает и сюда. Кука bridge называется `bridgeRefreshToken` именно поэтому — совпадение имён приводило к 401 «invalid signature», лечившемуся только ручной очисткой кук |
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
+| `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | опционально: хранилище загруженных файлов — `local` (по умолчанию, том) или `s3`; при `s3` все, кроме `S3_REGION`, обязательны, иначе backend не стартует. Подробности: [docs/deploy.md](../docs/deploy.md#file-storage) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |

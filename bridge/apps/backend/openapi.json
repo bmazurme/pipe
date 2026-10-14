@@ -1890,6 +1890,34 @@
         }
       }
     },
+    "/api/v1/improve/pr-fix": {
+      "post": {
+        "operationId": "ImproveController_startPrFix",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPrFixDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs/{id}/cancel": {
       "post": {
         "operationId": "ImproveController_cancelRun",
@@ -4677,6 +4705,28 @@
         },
         "required": [
           "issueNumber",
+          "model"
+        ]
+      },
+      "StartPrFixDto": {
+        "type": "object",
+        "properties": {
+          "prNumber": {
+            "type": "number",
+            "minimum": 1
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 4000
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prNumber",
+          "instruction",
           "model"
         ]
       },

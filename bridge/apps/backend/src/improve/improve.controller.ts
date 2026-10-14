@@ -26,6 +26,7 @@ import {
   StartAnalysisDto,
   StartItemsDto,
   StartManyDto,
+  StartPrFixDto,
   StartRunDto,
 } from './dto/improve.dto';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -65,6 +66,17 @@ export class ImproveController {
   @Post('runs')
   startRun(@Body() dto: StartRunDto, @CurrentUser() user: { id: number }) {
     return this.improve.startRun(user.id, dto.issueNumber, dto.model);
+  }
+
+  // The chat's "fix this PR" card, after the person confirmed it.
+  @Post('pr-fix')
+  startPrFix(@Body() dto: StartPrFixDto, @CurrentUser() user: { id: number }) {
+    return this.improve.startPrFix(
+      user.id,
+      dto.prNumber,
+      dto.instruction,
+      dto.model,
+    );
   }
 
   @Post('runs/:id/cancel')

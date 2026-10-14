@@ -27,8 +27,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from '../storage/config/multer.config';
-import { StoredFile } from '../storage/entities/stored-file.entity';
 import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
+import { respondDownloadError } from '../storage/file-store/send-stored-file';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
@@ -249,7 +249,7 @@ export class WorkerController {
     const file = await this.workerService.getSourceFile(id, currentUser.id);
 
     this.workerService.download(res, file, (err) => {
-      if (err) this.respondDownloadError(res, file, err);
+      if (err) respondDownloadError(res, file, err, this.logger);
     });
   }
 
@@ -262,24 +262,8 @@ export class WorkerController {
     const file = await this.workerService.getResultFile(id, currentUser.id);
 
     this.workerService.download(res, file, (err) => {
-      if (err) this.respondDownloadError(res, file, err);
+      if (err) respondDownloadError(res, file, err, this.logger);
     });
-  }
-
-  // Same shape as StorageController.respondDownloadError: res.download's
-  // callback is the only place a missing file surfaces; without it the
-  // request hangs. headersSent guards a mid-stream failure.
-  private respondDownloadError(
-    res: Response,
-    file: StoredFile,
-    err: Error,
-  ): void {
-    this.logger.warn(
-      `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
-    );
-    if (!res.headersSent) {
-      res.status(404).json({ message: 'File is missing on disk' });
-    }
   }
 
   // Stops a job — see WorkerService.cancel. POST (it mutates), and a sibling of

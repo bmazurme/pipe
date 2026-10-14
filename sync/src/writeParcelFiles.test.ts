@@ -1,0 +1,37 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { writeParcelFiles } from './writeParcelFiles.js';
+
+describe('writeParcelFiles', () => {
+  it('writes nested files and names that merely start with dots', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'parcel-ok-'));
+    writeParcelFiles(root, [
+      { relPath: 'a/b.txt', content: '1' },
+      { relPath: '..foo', content: '2' },
+    ]);
+    assert.equal(readFileSync(path.join(root, 'a', 'b.txt'), 'utf-8'), '1');
+    assert.equal(readFileSync(path.join(root, '..foo'), 'utf-8'), '2');
+  });
+
+  it('rejects an escaping entry and writes nothing, even for earlier valid entries', () => {
+    const base = mkdtempSync(path.join(tmpdir(), 'parcel-bad-'));
+    const root = path.join(base, 'project');
+    for (const bad of ['../x', 'a/../../x', path.join(base, 'abs.txt')]) {
+      assert.throws(
+        () =>
+          writeParcelFiles(root, [
+            { relPath: 'ok.txt', content: 'fine' },
+            { relPath: bad, content: 'bad' },
+          ]),
+        /escapes|Absolute/,
+      );
+    }
+    assert.equal(existsSync(path.join(base, 'x')), false);
+    assert.equal(existsSync(path.join(base, 'abs.txt')), false);
+    assert.equal(existsSync(path.join(root, 'ok.txt')), false);
+  });
+});

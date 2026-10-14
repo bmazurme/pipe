@@ -108,6 +108,22 @@ alternatively be supplied as `<NAME>_FILE=/path/to/file` instead of a plain
 value (`worker/src/secrets.ts`) — what Docker/Swarm secrets use under the
 hood, but a plain mechanism usable outside Swarm too.
 
+### File storage
+
+**bridge backend** — where uploaded files live (Storage parcels and chat
+attachments share the same store, chat ones under `chat/` keys):
+- `STORAGE_DRIVER` — `local` (default) keeps files on the volume under `uploads/`; `s3` puts them in a bucket (any S3 API, path-style, e.g. Garage). Any other value makes bridge refuse to start (`STORAGE_DRIVER must be "local" or "s3"`).
+- `S3_ENDPOINT` — required for `s3`. May list several nodes, comma-separated; the next one is tried when the first is down.
+- `S3_REGION` — optional; default `garage`.
+- `S3_BUCKET` — required for `s3`.
+- `S3_ACCESS_KEY_ID` — required for `s3`.
+- `S3_SECRET_ACCESS_KEY` — required for `s3`.
+
+With `STORAGE_DRIVER=s3`, bridge fails at startup, not at the first upload, if
+any required variable is missing: `STORAGE_DRIVER=s3 needs S3_BUCKET, ...`
+(the error lists the missing names). The `S3_*` variables are ignored with
+`local`. Setting up a Garage cluster: [infra/garage/README.md](../infra/garage/README.md).
+
 ### Self-improvement loop
 
 Variables added for the self-improvement loop (see
@@ -125,6 +141,7 @@ Actions secrets):
 - `NOTIFY_TIMEZONE` — IANA time zone the window is evaluated in; default `Europe/Moscow`. Optional.
 - **Improve module** (`/improve` in bridge): runs the self-improvement loop on bridge itself — takes open GitHub issues labelled `loop`, hands the repository snapshot and the issue to a worker, and turns the result into a branch + pull request (labelled `loop`, `Closes #N`). Needs no extra variables: it uses `GITHUB_REPO`, `GITHUB_BASE_BRANCH` and `LOOP_GITHUB_TOKEN`, whose token (the full set is Issues RW, Pull requests RW, Contents RW, Checks R, plus Metadata R, which GitHub adds automatically) must now also have **Issues: read** and **Contents: write** (creating the branch/commits) and **Pull requests: write** (opening the PR). It never merges — that stays with the CI → Telegram → Merge flow — and it drops any change to the loop's protected paths before committing. Schedules (e.g. "every night at 02:00 start the 5 oldest issues") fire once per local day at their time in their time zone, or late if bridge was down then. "Auto-start" (per account) makes every unencrypted Subscription parcel pushed from reports start a worker job at once; reports' own auto-start (Subscription page) does the same, so use one of them. **Analysis** (Improve → Анализ, or a schedule of kind "analysis"): a worker reads the repository and proposes exactly one improvement per direction — general, UI/UX, security, performance, reliability, tests, documentation, architecture (pick any subset). The analysis also reads the last 7 days of bridge's own operational log (Profile → Logs: failed jobs, slow routes, flapping integrations) as a short digest, so proposals start from what actually fails; if the log is empty or unreadable the analysis still runs. Proposals are kept on the run for review, or filed as GitHub issues (labels `loop`, `risk:*`, `category:*`) straight away; a title matching an existing issue is skipped as a duplicate. Needs **Issues: write** on `LOOP_GITHUB_TOKEN` in addition to the above; if Profile → Logs shows `GitHub 403: Resource not accessible by personal access token`, the token is missing a permission — edit its repository permissions on GitHub (no need to recreate it). Migrations `1791800000000-AddImproveAnalysis` and `1791900000000-AddImproveAutoStart` ship with it. The Tasks tab lists open `loop` issues; its "Все открытые issues" switch lists every open issue (an unlabelled one can be started too — its PR still gets the `loop` label). Issues can be taken into work in bulk (Задачи → select several, or "start the 5 oldest"), from an analysis ("В работу" files the proposals and starts a run for each), or automatically ("И сразу взять в работу" on a manual analysis or an analysis schedule).
 - `LOG_RETENTION_DAYS` — how long the operational log (`app_logs`: job outcomes, loop events, 5xx/slow requests, integration failures — shown on the profile page, exportable as NDJSON) is kept; default `30`. Bodies, query strings and secrets are never stored. Optional.
+- `STORAGE_RETENTION_DAYS` — retention for stored files (`stored_files` rows and their disk/S3 objects) that were never downloaded: files older than this many days are deleted daily at 4am. Unset or `0` (default) keeps everything. The value must be larger than the longest job runtime, or a parcel can vanish while its job is still running. Optional.
 - `GITHUB_WEBHOOK_SECRET` — secret of the repo's GitHub webhook for `POST /api/v1/github/webhook` (Pull requests + Workflow runs events, HMAC over the raw body); empty means 503.
 - `GITHUB_CI_WORKFLOW` — name (`name:`) of the CI workflow the loop reacts to; optional, defaults to `CI`.
 - `GITHUB_DEPLOY_WORKFLOW` — name (`name:`) of the deploy workflow the loop reacts to; optional, defaults to `Deploy bridge`.

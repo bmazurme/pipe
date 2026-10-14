@@ -49,7 +49,7 @@ export interface ImproveRun {
   issueNumber: number | null;
   issueTitle: string;
   model: string;
-  trigger: 'manual' | 'schedule' | 'ci';
+  trigger: 'manual' | 'schedule' | 'ci' | 'chat';
   scheduleId: number | null;
   status: ImproveRunStatus;
   jobId: number | null;
@@ -122,6 +122,12 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить'),
     }),
+    // The chat's "fix this PR" card, after the person confirmed it there.
+    startImprovePrFix: builder.mutation<ImproveRun, { prNumber: number; instruction: string; model: string }>({
+      query: (body) => ({ url: 'improve/pr-fix', method: 'POST', body }),
+      invalidatesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось запустить правку'),
+    }),
     cancelImproveRun: builder.mutation<ImproveRun, number>({
       query: (id) => ({ url: `improve/runs/${id}/cancel`, method: 'POST' }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
@@ -188,6 +194,7 @@ export const {
   useListImproveRunsQuery,
   useGetImproveRunQuery,
   useStartImproveRunMutation,
+  useStartImprovePrFixMutation,
   useCancelImproveRunMutation,
   useRetryImprovePublishMutation,
   useStartImproveAnalysisMutation,

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
+
 import { issueKey, loadAgentState, recordOwnOutput } from '../agentState.js';
 import { BridgeClient } from '../bridgeClient.js';
 import { buildIssuePrompt, runClaude } from '../claudeRunner.js';
@@ -93,6 +95,10 @@ async function processCandidate(
   const branch = manifest.branch || `task/${candidate.projectId}-${candidate.iid}`;
   const worktreeDir = path.join(AGENT_WORK_DIR, `${candidate.projectId}-${candidate.iid}`);
 
+  // The parcel is untrusted: reject escaping entry names before touching disk.
+  const destinations = packedFiles.map((file) => resolveInDir(worktreeDir, file.relPath));
+  for (const asset of assets) resolveInDir(worktreeDir, asset.relPath);
+
   mkdirSync(AGENT_WORK_DIR, { recursive: true });
   if (existsSync(worktreeDir)) {
     log.info(`Removing a leftover worktree from a previous run at ${worktreeDir} before starting.`);
@@ -109,11 +115,10 @@ async function processCandidate(
   // work with no way to recover it (see incident when this was a `finally`).
   addTaskWorktree(project.path, worktreeDir, branch, project.baseBranch ?? 'main');
 
-  for (const file of packedFiles) {
-    const destination = path.join(worktreeDir, file.relPath);
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(destination, file.content, 'utf-8');
-  }
+  packedFiles.forEach((file, i) => {
+    mkdirSync(path.dirname(destinations[i]), { recursive: true });
+    writeFileSync(destinations[i], file.content, 'utf-8');
+  });
 
   // No dictionary anywhere in agent-runner: the empty {} makes extractIssue's
   // internal de-anonymization step a no-op, so ISSUE.md keeps whatever
