@@ -90,6 +90,7 @@ function setup(
     findUnstartedIssueParcels: jest.fn().mockResolvedValue([]),
     findOwned: jest.fn(),
     findStatuses: jest.fn().mockResolvedValue([]),
+    findRetriesOf: jest.fn().mockResolvedValue(new Map()),
     cancel: jest.fn().mockResolvedValue(undefined),
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
@@ -1110,7 +1111,9 @@ describe('ImproveService.advance — stale publishing runs', () => {
     async ({ where }: { where: { status: unknown } }) =>
       where.status === ImproveRunStatus.Publishing
         ? publishingRuns
-        : activeRuns;
+        : where.status === ImproveRunStatus.Failed
+          ? []
+          : activeRuns;
 
   it('fails a run stuck in publishing, with an explanation', async () => {
     const stuck = publishing();
@@ -1261,6 +1264,104 @@ describe('ImproveService.cancelRun', () => {
 
     expect(res.status).toBe(ImproveRunStatus.Publishing);
     expect(workers.cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImproveService following a retried job', () => {
+  const failedRun = {
+    id: 99,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 312,
+    status: ImproveRunStatus.Failed,
+    jobId: 102,
+    error:
+      'Worker was stopped (SIGTERM) before the job finished — start it again',
+    finishedAt: new Date(),
+  };
+
+  const start = (oldStatus: string, retry?: object) => {
+    const ctx = setup({
+      runs: {
+        find: jest.fn(async ({ where }: { where: { status: unknown } }) =>
+          where.status === ImproveRunStatus.Failed ? [failedRun] : [],
+        ),
+      },
+    });
+
+    ctx.workers.findStatuses.mockResolvedValue([
+      { id: 102, userId: 3, status: oldStatus },
+    ]);
+    ctx.workers.findRetriesOf.mockResolvedValue(
+      retry ? new Map([[102, retry]]) : new Map(),
+    );
+
+    return ctx;
+  };
+
+  it('queues the run again on the new job when a failed job was retried from the Worker page', async () => {
+    const { service, runs, workers } = start('failed', {
+      id: 103,
+      userId: 3,
+      status: 'running',
+    });
+
+    await service.advance();
+
+    expect(workers.findRetriesOf).toHaveBeenCalledWith([102]);
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 99, status: ImproveRunStatus.Failed },
+      {
+        jobId: 103,
+        status: ImproveRunStatus.Queued,
+        error: null,
+        finishedAt: null,
+      },
+    );
+  });
+
+  it('does the same for a stopped job', async () => {
+    const { service, runs } = start('cancelled', {
+      id: 103,
+      userId: 3,
+      status: 'queued',
+    });
+
+    await service.advance();
+
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 99, status: ImproveRunStatus.Failed },
+      expect.objectContaining({ jobId: 103 }),
+    );
+  });
+
+  it('leaves a run alone when its job succeeded (that is a publishing failure, with its own retry)', async () => {
+    const { service, runs, workers } = start('succeeded');
+
+    await service.advance();
+
+    expect(workers.findRetriesOf).toHaveBeenCalledWith([]);
+    expect(runs.update).not.toHaveBeenCalled();
+  });
+
+  it('leaves a run alone when its job was not retried', async () => {
+    const { service, runs } = start('failed');
+
+    await service.advance();
+
+    expect(runs.update).not.toHaveBeenCalled();
+  });
+
+  it('never follows a job that belongs to someone else', async () => {
+    const { service, runs } = start('failed', {
+      id: 103,
+      userId: 9,
+      status: 'running',
+    });
+
+    await service.advance();
+
+    expect(runs.update).not.toHaveBeenCalled();
   });
 });
 

@@ -56,6 +56,7 @@ function setup() {
     create: jest.fn().mockResolvedValue({ id: 321 }),
     findUnstartedIssueParcels: jest.fn().mockResolvedValue([]),
     findStatuses: jest.fn().mockResolvedValue([]),
+    findRetriesOf: jest.fn().mockResolvedValue(new Map()),
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
   const dataSource = { query: jest.fn().mockResolvedValue([]) };
