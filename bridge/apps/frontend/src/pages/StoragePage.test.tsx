@@ -74,9 +74,12 @@ describe('StoragePage polling', () => {
       await screen.findByText('Выбрать файлы');
       const listCalls = () =>
         vi.mocked(fetch).mock.calls.filter(([i]) => (i instanceof Request ? i.url : String(i)).includes('/storage')).length;
-      const before = listCalls();
 
       store.dispatch(storageApi.internalActions.onFocusLost());
+      // Let any fetch already in flight (or a poll timer armed before the
+      // tab lost focus) land before taking the baseline.
+      await vi.advanceTimersByTimeAsync(4500);
+      const before = listCalls();
       await vi.advanceTimersByTimeAsync(9000);
       expect(listCalls()).toBe(before);
 
