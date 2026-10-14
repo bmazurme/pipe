@@ -7,6 +7,7 @@ import {
   getErrorMessage,
   ImproveRun,
   useCreateImproveIssuesMutation,
+  useGetImproveRunQuery,
   useListImproveRunsQuery,
   useStartImproveAnalysisMutation,
   useStartImproveItemsMutation,
@@ -20,7 +21,13 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
   const [startItems, { isLoading: isStarting }] = useStartImproveItemsMutation();
   const [error, setError] = useState<string | null>(null);
-  const items = analysisItems(run);
+  const [open, setOpen] = useState(false);
+  // Fetched only once the user opens the run, and polled only while it is active.
+  const { data: detail } = useGetImproveRunQuery(run.id, {
+    skip: !open,
+    pollingInterval: isActiveRun(run) ? 5000 : 0,
+  });
+  const items = detail ? analysisItems(detail) : [];
   const hasUnfiled = items.some((item) => !item.issueNumber && !item.duplicateOf);
 
   const handleCreate = async () => {
@@ -47,6 +54,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
     <div className={styles.row}>
       <div className={styles.rowMain}>
         <Text variant="body-2">{run.issueTitle}</Text>
+        {open && !detail && <Text variant="caption-2" color="secondary">Загрузка…</Text>}
         {items.map((item) => (
           <Text key={item.title} variant="caption-2" color="secondary">
             {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
@@ -61,6 +69,11 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
       </div>
       <div className={styles.rowActions}>
         <Label theme={RUN_STATUS_THEME[run.status]}>{RUN_STATUS_LABEL[run.status]}</Label>
+        {run.hasResult && (
+          <Button view="flat" size="s" onClick={() => setOpen(!open)}>
+            {open ? 'Скрыть предложения' : 'Показать предложения'}
+          </Button>
+        )}
         {run.status === 'analyzed' && hasUnfiled && (
           <Button view="outlined" size="s" loading={isLoading} onClick={() => void handleCreate()}>
             Создать issues

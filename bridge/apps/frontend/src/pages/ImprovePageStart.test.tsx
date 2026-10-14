@@ -45,6 +45,9 @@ const ISSUES = [12, 13, 14].map((number) => ({
   run: null,
 }));
 
+// The list leaves `result` out; the run by id has it.
+const LISTED_RUN = { ...ANALYSIS_RUN, result: undefined };
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
@@ -78,7 +81,7 @@ beforeEach(() => {
 
         return json(ISSUES);
       }
-      if (path === 'improve/runs' && request.method === 'GET') return json([ANALYSIS_RUN]);
+      if (path === 'improve/runs' && request.method === 'GET') return json([{ ...LISTED_RUN, hasResult: true }]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
       if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null, autoRepairCi: true });
 
@@ -116,6 +119,7 @@ describe('ImprovePage start issues', () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');
 
+    await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
     await user.click(await screen.findByRole('button', { name: 'В работу' }));
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/start-items', body: { model: 'sonnet' } }));

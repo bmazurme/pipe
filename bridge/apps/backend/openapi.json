@@ -1828,7 +1828,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ImproveRun"
+                    "type": "object"
                   }
                 }
               }
@@ -1851,6 +1851,33 @@
         },
         "responses": {
           "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/runs/{id}": {
+      "get": {
+        "operationId": "ImproveController_run",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
