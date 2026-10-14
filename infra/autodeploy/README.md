@@ -19,7 +19,9 @@ merge to main
 
 - **Deployed automatically:** the backend, frontend and worker images (the three together — `stable` only moves once all three
   exist, so a new backend never meets an old frontend) and the declarative stack files of the same commit
-  (`infra/bridge-pi/bridge-pi.yml`, `worker-pi.yml`, `Caddyfile`).
+  (`infra/bridge-pi/bridge-pi.yml`, `worker-pi.yml`, `worker-managed-pi.yml`, `Caddyfile`). Which worker kind is redeployed is
+  the one `deploy-worker.sh` last ran as (`--managed` / `--legacy`, remembered in `~/.pipe/worker-mode`) — a board running a UI-added
+  worker keeps it across releases. Update `deploy-worker.sh` on the board (`scp`) before relying on that.
 - **Not updated automatically, on purpose:** the shell scripts in `~/bridge-pi` (`deploy.sh`, `deploy-worker.sh`,
   `secrets.sh`) and this script. They run as the board's user; a merge to main may change what the stack runs, but
   should not silently change what runs on the host. Changing them is a manual `scp` (rare).

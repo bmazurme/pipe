@@ -100,7 +100,7 @@ fresh_swarm() {
   printf 'bridge_backend 1/1\nbridge_frontend 1/1\nbridge_caddy 1/1\nbridgew_worker 1/1\nbridgew_vpn-client 1/1\n' > "$FIX/replicas"
 }
 yml() { printf 'version: "3.8"\nservices:\n  x: %s\n' "$1"; }
-files() { yml "$1" > "$FIX/files/bridge-pi.yml"; yml "$1" > "$FIX/files/worker-pi.yml"; echo "caddy $1" > "$FIX/files/Caddyfile"; }
+files() { yml "$1" > "$FIX/files/bridge-pi.yml"; yml "$1" > "$FIX/files/worker-pi.yml"; yml "$1" > "$FIX/files/worker-managed-pi.yml"; echo "caddy $1" > "$FIX/files/Caddyfile"; }
 run() { "$HERE/autodeploy.sh" "$@" > "$T/out" 2>&1; }
 check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   $1"; else FAILED=$((FAILED + 1)); echo "FAIL $1"; sed 's/^/     | /' "$T/out"; fi; }
 calls() { cat "$FIX/calls" 2>/dev/null | tr '\n' ';'; }
@@ -118,7 +118,7 @@ echo "# new release, healthy"
 fresh_swarm; set_published bbbbbbbb2222 b2 f2 w2; files v2; echo old > "$BRIDGE/bridge-pi.yml"
 run; check "new release: exit 0" $?
 [ "$(calls)" = "deploy.sh ghcr stable;deploy-worker.sh ghcr stable;" ]; check "new release: both deploy scripts, from GHCR, tag stable" $?
-grep -q 'x: v2' "$BRIDGE/bridge-pi.yml" && grep -q 'x: v2' "$BRIDGE/worker-pi.yml" && grep -q 'caddy v2' "$BRIDGE/Caddyfile"; check "new release: the stack files of that commit were put in place" $?
+grep -q 'x: v2' "$BRIDGE/bridge-pi.yml" && grep -q 'x: v2' "$BRIDGE/worker-pi.yml" && grep -q 'x: v2' "$BRIDGE/worker-managed-pi.yml" && grep -q 'caddy v2' "$BRIDGE/Caddyfile"; check "new release: the stack files of that commit were put in place" $?
 cut -d' ' -f1,2 "$STATE/deployed.txt" | grep -q "^$(rid) bbbbbbbb$"; check "new release: recorded as deployed" $?
 grep -q '✅ Pi: развёрнута версия bbbbbbbb' "$FIX/notified"; check "new release: the owner is told" $?
 [ ! -s "$FIX/rollbacks" ]; check "new release: nothing rolled back" $?
