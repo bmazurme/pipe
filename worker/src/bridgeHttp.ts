@@ -5,6 +5,18 @@
 export const API_TIMEOUT_MS = 15_000;
 export const TRANSFER_TIMEOUT_MS = 120_000;
 
+// A non-ok answer from bridge. The status is kept so a caller can tell "my key was revoked" (401) from "bridge is
+// down" (5xx) without parsing the message.
+export class BridgeHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'BridgeHttpError';
+  }
+}
+
 export function bearer(apiKey: string, json = false): Record<string, string> {
   const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
   if (json) headers['Content-Type'] = 'application/json';
@@ -29,7 +41,7 @@ export async function bridgeFetch(
 
   if (expectOk !== undefined && !response.ok) {
     const body = includeBody ? `: ${await response.text()}` : '';
-    throw new Error(`${expectOk} failed (${response.status})${body}`);
+    throw new BridgeHttpError(`${expectOk} failed (${response.status})${body}`, response.status);
   }
 
   return response;

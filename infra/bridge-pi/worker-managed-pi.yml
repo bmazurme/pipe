@@ -1,0 +1,88 @@
+# The same worker + vpn-client stack, for a worker added in the UI (Worker page → Worker'ы → Добавить): NO bridge API key
+# and NO Claude token among the secrets — the worker joins with a one-time code (infra/bridge-pi/enroll-worker.sh),
+# keeps its own key in the `worker_state` volume, and gets its settings, Claude tokens and provider API keys from bridge.
+# Deployed by `deploy-worker.sh --managed`; stack `bridgew` like worker-pi.yml (switching between the two replaces the
+# worker service, the volume survives).
+#
+# worker + vpn-client on the Pi Swarm — a separate stack (`bridgew`) next to `bridge`, so the core keeps running
+# whatever happens here.
+#
+# worker talks to bridge only over its public address (BRIDGE_API_URL), like any other machine client, and sits
+# on its own network with no path to Postgres or the backend: `claude --dangerously-skip-permissions` runs
+# arbitrary code against task content, so its blast radius must stop at the container. The AI providers are
+# blocked from Russia (403), so their traffic goes out through the Xray client — a plain HTTP proxy on worker-net.
+#
+# Placement: green, a plain worker node — keeps job load off white (database, backend, TLS).
+version: '3.8'
+
+services:
+  vpn-client:
+    image: ghcr.io/xtls/xray-core:latest
+    networks:
+      worker-net: {}
+      # bridge's backend reaches Telegram through this proxy; the alias makes `vpn-client` resolve on the shared network
+      telegram-proxy-net:
+        aliases: [vpn-client]
+    secrets:
+      - source: xray_client_config
+        target: /usr/local/etc/xray/config.json
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      # DNS round-robin instead of a virtual IP: with the VIP (IPVS) a share of connections from the worker
+      # hung until undici's 10 s connect timeout while direct connects to the VPN server were fine — see README.
+      endpoint_mode: dnsrr
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-green]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits: { cpus: '0.25', memory: 128M }
+
+  worker:
+    image: ${IMAGE_WORKER:-localhost/pipe/bridge-worker}:${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required}
+    networks:
+      - worker-net
+    environment:
+      BRIDGE_API_URL: https://${API_HOST:-api.bridge.ntlstl.dev}
+      # Where the worker keeps the key it receives at enrolment (a volume, so a restart or a redeploy keeps it).
+      WORKER_STATE_DIR: /app/.worker-state
+      # Optional: a one-time code from the Worker page, redeemed at start-up (enroll-worker.sh does the same later).
+      WORKER_ENROLL_CODE: ${WORKER_ENROLL_CODE:-}
+      # HTTP proxy, not socks5:// — neither the claude CLI nor undici's ProxyAgent speaks SOCKS5.
+      WORKER_PROXY_URL: http://vpn-client:1080
+    volumes:
+      - worker_state:/app/.worker-state
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ubuntu-green]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits: { cpus: '2.00', memory: 2G }
+        reservations: { memory: 256M }
+
+networks:
+  worker-net:
+    driver: overlay
+  telegram-proxy-net:
+    external: true
+
+secrets:
+  # Immutable Swarm objects: the content hash in the name makes a rotated value a new object.
+  xray_client_config:
+    file: ${XRAY_CONFIG_FILE:?XRAY_CONFIG_FILE is required}
+    name: xray_client_config_${XRAY_CONFIG_HASH:?XRAY_CONFIG_HASH is required}
+
+volumes:
+  worker_state: {}

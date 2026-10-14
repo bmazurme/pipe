@@ -18,6 +18,10 @@ import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
 async function main(): Promise<void> {
   resolveFileSecrets(process.env, SECRET_ENV_KEYS);
   const config = loadConfig();
+  if (!config.bridgeApiKey) {
+    throw new Error('BRIDGE_API_KEY is not set — start:once runs one job with a personal API key');
+  }
+
   const client = new WorkerBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
 
   const job = await client.claim(config.workerName);

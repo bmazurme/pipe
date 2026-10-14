@@ -16,6 +16,9 @@ export interface RemoteJob {
   // inherited CLAUDE_CODE_OAUTH_TOKEN env var, same as before this field
   // existed.
   claudeToken?: string | null;
+  // The API key (and optional endpoint / model) for a gpt/deepseek/qwen job, from the account's stored keys. Null/absent:
+  // fall back to this process's own environment, as before stored keys existed.
+  provider?: { apiKey: string; baseUrl?: string | null; model?: string | null } | null;
   // Background text the owner attached at launch (bridge's Context module), or
   // null/absent for a job with none — the default.
   context?: string | null;
@@ -25,10 +28,9 @@ export interface RemoteJob {
   status: RemoteJobStatus;
 }
 
-// A worker instance authenticates with a single personal API key — the same
-// "unified machine auth" mechanism sync/reports already use — so, unlike
-// sync's own BridgeClient, there's no browser-session refresh-token dance
-// to implement here at all.
+// A worker instance authenticates with a single key — its own (brw_…, from enrolment in the UI) or, the legacy way, a
+// personal API key (brk_…) — so, unlike sync's own BridgeClient, there's no browser-session refresh-token dance to
+// implement here at all.
 export class WorkerBridgeClient {
   constructor(
     private readonly apiUrl: string,

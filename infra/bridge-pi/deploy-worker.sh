@@ -8,6 +8,11 @@
 #   ./deploy-worker.sh                           # (./deploy-worker.sh status to look)
 #   ./deploy-worker.sh ghcr [tag]                # pull the worker image from GHCR instead of the node's own copy
 #
+# A worker added in the UI needs none of the two secrets above (it enrols with a one-time code and gets its Claude tokens,
+# provider keys and settings from bridge):
+#   ./deploy-worker.sh --managed [ghcr [tag]]    # worker-managed-pi.yml: no bridge API key, no Claude token, a state volume
+#   infra/bridge-pi/enroll-worker.sh <code>      # from your workstation, with the code the Worker page showed
+#
 # The values become Docker secrets (encrypted in the Swarm raft store, mounted as files); the temporary files
 # this script writes live in a 0700 directory and are removed on exit.
 set -euo pipefail
@@ -16,6 +21,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$HOME/.pipe/bridge.env"
 XRAY="$HOME/.pipe/xray-client.json"
 STACK=bridgew
+
+MANAGED=0
+if [ "${1:-}" = --managed ]; then MANAGED=1; shift; fi
 
 if [ "${1:-}" = status ]; then
   docker stack services "$STACK"
@@ -34,9 +42,11 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
-missing=()
-for k in WORKER_BRIDGE_API_KEY CLAUDE_CODE_OAUTH_TOKEN; do [ -n "${!k:-}" ] || missing+=("$k"); done
-[ ${#missing[@]} -eq 0 ] || { echo "missing in $ENV_FILE: ${missing[*]} (./secrets.sh set KEY)" >&2; exit 1; }
+if [ "$MANAGED" = 0 ]; then
+  missing=()
+  for k in WORKER_BRIDGE_API_KEY CLAUDE_CODE_OAUTH_TOKEN; do [ -n "${!k:-}" ] || missing+=("$k"); done
+  [ ${#missing[@]} -eq 0 ] || { echo "missing in $ENV_FILE: ${missing[*]} (./secrets.sh set KEY)" >&2; exit 1; }
+fi
 grep -qE 'VPN_SERVER_IP_HERE|CLIENT_UUID_HERE|REALITY_' "$XRAY" && { echo "$XRAY still has the example placeholders" >&2; exit 1; }
 
 RESOLVE=never
@@ -54,22 +64,29 @@ export WORKER_IMAGE_TAG
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 trap 'rm -rf "$TMP"' EXIT
-printf %s "$WORKER_BRIDGE_API_KEY" > "$TMP/bridge_api_key"
-printf %s "$CLAUDE_CODE_OAUTH_TOKEN" > "$TMP/claude_token"
 cp "$XRAY" "$TMP/xray.json"
 hash() { sha256sum "$1" | cut -c1-12; }
 XRAY_CONFIG_FILE="$TMP/xray.json"
-WORKER_BRIDGE_API_KEY_FILE="$TMP/bridge_api_key"
-WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE="$TMP/claude_token"
 XRAY_CONFIG_HASH="$(hash "$XRAY_CONFIG_FILE")"
-WORKER_BRIDGE_API_KEY_HASH="$(hash "$WORKER_BRIDGE_API_KEY_FILE")"
-WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH="$(hash "$WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE")"
-export XRAY_CONFIG_FILE WORKER_BRIDGE_API_KEY_FILE WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE
-export XRAY_CONFIG_HASH WORKER_BRIDGE_API_KEY_HASH WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH
+export XRAY_CONFIG_FILE XRAY_CONFIG_HASH
+
+STACK_FILE=worker-managed-pi.yml
+if [ "$MANAGED" = 0 ]; then
+  STACK_FILE=worker-pi.yml
+  printf %s "$WORKER_BRIDGE_API_KEY" > "$TMP/bridge_api_key"
+  printf %s "$CLAUDE_CODE_OAUTH_TOKEN" > "$TMP/claude_token"
+  WORKER_BRIDGE_API_KEY_FILE="$TMP/bridge_api_key"
+  WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE="$TMP/claude_token"
+  WORKER_BRIDGE_API_KEY_HASH="$(hash "$WORKER_BRIDGE_API_KEY_FILE")"
+  WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH="$(hash "$WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE")"
+  export WORKER_BRIDGE_API_KEY_FILE WORKER_CLAUDE_CODE_OAUTH_TOKEN_FILE
+  export WORKER_BRIDGE_API_KEY_HASH WORKER_CLAUDE_CODE_OAUTH_TOKEN_HASH
+fi
 
 # shared by backend and vpn-client (Telegram goes out through the VPN proxy); idempotent
 docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
 
 cd "$HERE"
-docker stack deploy --resolve-image "$RESOLVE" -c worker-pi.yml "$STACK"
-echo "deployed worker tag $WORKER_IMAGE_TAG; watch with: ./deploy-worker.sh status"
+docker stack deploy --resolve-image "$RESOLVE" -c "$STACK_FILE" "$STACK"
+echo "deployed worker tag $WORKER_IMAGE_TAG ($STACK_FILE); watch with: ./deploy-worker.sh status"
+[ "$MANAGED" = 0 ] || echo "next: Worker page → Worker'ы → Добавить, then from your workstation: infra/bridge-pi/enroll-worker.sh <code>"
