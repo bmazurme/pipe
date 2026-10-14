@@ -2737,6 +2737,99 @@
         }
       }
     },
+    "/api/v1/reports-release/info": {
+      "get": {
+        "operationId": "ReportsReleaseController_info",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports-release/download": {
+      "get": {
+        "operationId": "ReportsReleaseController_download",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/reports-settings": {
+      "get": {
+        "operationId": "ReportsSettingsController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "ReportsSettingsController_upsert",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertReportsSettingsBackupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportsSettingsBackupResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ReportsSettingsController_remove",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/reports-settings/payload": {
+      "get": {
+        "operationId": "ReportsSettingsController_payload",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/secrets": {
       "get": {
         "operationId": "SecretsController_list",
@@ -5233,6 +5326,29 @@
       "UpdatePurgeEntryDto": {
         "type": "object",
         "properties": {}
+      },
+      "UpsertReportsSettingsBackupDto": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payload"
+        ]
+      },
+      "ReportsSettingsBackupResponseDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "updatedAt"
+        ]
       },
       "SecretResponseDto": {
         "type": "object",
