@@ -24,6 +24,7 @@ function writeFakeClaude(dir: string): void {
       "console.log(`TOKEN:${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ''}`);",
       "console.log(`PROXY:${process.env.HTTP_PROXY ?? ''}`);",
       "console.log(`BRIDGEKEY:${process.env.BRIDGE_API_KEY ?? ''}`);",
+      "if (process.env.NODE_FAKE_STREAM) for (const event of JSON.parse(process.env.NODE_FAKE_STREAM)) console.log(JSON.stringify(event));",
       "if (process.env.NODE_FAKE_STDERR) process.stderr.write(process.env.NODE_FAKE_STDERR);",
       "if (process.env.NODE_FAKE_HANG) {",
       "  if (process.env.NODE_FAKE_IGNORE_SIGTERM) process.on('SIGTERM', () => {});",
@@ -50,9 +51,38 @@ afterEach(() => {
   if (originalExitCode === undefined) delete process.env.NODE_FAKE_EXIT_CODE;
   else process.env.NODE_FAKE_EXIT_CODE = originalExitCode;
   delete process.env.NODE_FAKE_HANG;
+  delete process.env.NODE_FAKE_STREAM;
   delete process.env.NODE_FAKE_IGNORE_SIGTERM;
   if (originalStderr === undefined) delete process.env.NODE_FAKE_STDERR;
   else process.env.NODE_FAKE_STDERR = originalStderr;
+});
+
+describe('runClaude stream-json', () => {
+  it('asks the CLI for stream-json and reads the reply, limits and cost out of it', async () => {
+    process.env.NODE_FAKE_STREAM = JSON.stringify([
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'thinking out loud' }] } },
+      { type: 'rate_limit_event', rate_limit_info: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.2, resetsAt: 5 } } } },
+      { type: 'result', result: 'The answer', total_cost_usd: 0.5, usage: { input_tokens: 3, output_tokens: 4 } },
+    ]);
+    const chunks: string[] = [];
+    const result = await runClaude('/tmp', 'p', 'sonnet', (text) => chunks.push(text));
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.output, 'The answer');
+    assert.ok(chunks.join('').includes('thinking out loud'));
+    assert.ok(chunks.join('').includes('ARG') && chunks.join('').includes('stream-json'));
+    assert.equal(result.report?.limits?.windows.five_hour?.utilization, 0.2);
+    assert.equal(result.report?.usage?.costUsd, 0.5);
+  });
+
+  it('keeps the whole output when the run failed, so the failure cause is not lost', async () => {
+    process.env.NODE_FAKE_STREAM = JSON.stringify([{ type: 'result', result: 'is error text', is_error: true }]);
+    process.env.NODE_FAKE_EXIT_CODE = '1';
+    const result = await runClaude('/tmp', 'p', 'sonnet', () => {});
+
+    assert.equal(result.exitCode, 1);
+    assert.match(result.output, /ARG0:-p/);
+  });
 });
 
 describe('buildClaudeEnv', () => {

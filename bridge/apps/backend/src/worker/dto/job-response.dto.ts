@@ -1,3 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
+
+import type { ClaudeRunUsage } from '../claude-limits';
 import { Job, JobModel, JobStatus } from '../entities/job.entity';
 
 export class JobResponseDto {
@@ -20,6 +23,9 @@ export class JobResponseDto {
   // and this is the whole log's length in characters.
   logsLength?: number;
   errorMessage: string | null;
+  // Tokens and cost of a Claude run, or null.
+  @ApiProperty({ type: 'object', additionalProperties: true, nullable: true })
+  usage: ClaudeRunUsage | null;
   workerName: string | null;
   claimedAt: Date | null;
   startedAt: Date | null;
@@ -44,6 +50,7 @@ export class JobResponseDto {
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',
       errorMessage: job.errorMessage,
+      usage: job.usage ?? null,
       workerName: job.workerName,
       claimedAt: job.claimedAt,
       startedAt: job.startedAt,

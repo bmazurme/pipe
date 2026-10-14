@@ -1,7 +1,7 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { API_TIMEOUT_MS, bearer, bridgeFetch, readOptionalJson } from './bridgeHttp.js';
+import { API_TIMEOUT_MS, bearer, bridgeFetch, readOptionalJson, reportClaudeUsage } from './bridgeHttp.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -64,6 +64,43 @@ describe('bridgeHttp', () => {
 
     it('parses a JSON body', async () => {
       assert.deepEqual(await readOptionalJson(new Response('{"id":1}')), { id: 1 });
+    });
+  });
+
+  describe('reportClaudeUsage', () => {
+    it('posts the report, with the job id when there is one', async () => {
+      const sent: { url: string; body: unknown; auth: unknown }[] = [];
+
+      globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        sent.push({ url, body: JSON.parse(String(init?.body)), auth: (init?.headers as Record<string, string>).Authorization });
+        return new Response(null, { status: 204 });
+      }) as typeof fetch;
+
+      await reportClaudeUsage('http://bridge.local', 'k', { limits: { status: 'allowed' } }, 7);
+      await reportClaudeUsage('http://bridge.local', 'k', { usage: { costUsd: 1 } });
+
+      assert.deepEqual(sent[0], { url: 'http://bridge.local/api/v1/worker/jobs/usage', body: { jobId: 7, limits: { status: 'allowed' } }, auth: 'Bearer k' });
+      assert.deepEqual(sent[1].body, { usage: { costUsd: 1 } });
+    });
+
+    it('sends nothing for an empty report, and never throws', async () => {
+      let calls = 0;
+
+      globalThis.fetch = (async () => {
+        calls += 1;
+        throw new Error('network down');
+      }) as typeof fetch;
+
+      await reportClaudeUsage('http://bridge.local', 'k', {});
+      assert.equal(calls, 0);
+      await assert.doesNotReject(reportClaudeUsage('http://bridge.local', 'k', { limits: {} }));
+      assert.equal(calls, 1);
+    });
+
+    it('ignores a bridge that answers an error (an older deployment without the route)', async () => {
+      globalThis.fetch = (async () => new Response('nope', { status: 404 })) as typeof fetch;
+
+      await assert.doesNotReject(reportClaudeUsage('http://bridge.local', 'k', { limits: {} }, 1));
     });
   });
 });

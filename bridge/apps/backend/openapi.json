@@ -996,6 +996,27 @@
         }
       }
     },
+    "/api/v1/worker/jobs/usage": {
+      "post": {
+        "operationId": "WorkerController_reportUsage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportUsageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/history": {
       "get": {
         "operationId": "WorkerController_history",
@@ -3813,6 +3834,11 @@
       "JobResponseDto": {
         "type": "object",
         "properties": {
+          "usage": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
           "id": {
             "type": "number"
           },
@@ -3913,6 +3939,7 @@
           }
         },
         "required": [
+          "usage",
           "id",
           "sourceFileId",
           "resultFileId",
@@ -3993,6 +4020,23 @@
           "workerName"
         ]
       },
+      "ReportUsageDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
       "CancelJobDto": {
         "type": "object",
         "properties": {
@@ -4037,6 +4081,11 @@
       "ClaudeCredentialResponseDto": {
         "type": "object",
         "properties": {
+          "limits": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
           "id": {
             "type": "number"
           },
@@ -4049,6 +4098,7 @@
           }
         },
         "required": [
+          "limits",
           "id",
           "name",
           "createdAt"
@@ -4198,6 +4248,11 @@
               ]
             }
           },
+          "claudeLimits": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
           "id": {
             "type": "number",
             "nullable": true
@@ -4263,6 +4318,7 @@
         },
         "required": [
           "models",
+          "claudeLimits",
           "id",
           "name",
           "kind",

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import type { ClaudeLimits } from './claude-limits';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 
 @Injectable()
@@ -10,6 +11,15 @@ export class ClaudeCredentialsService {
     @InjectRepository(ClaudeCredential)
     private readonly repository: Repository<ClaudeCredential>,
   ) {}
+
+  // The plan limits a run on this token reported; best-effort, so a deleted token is simply ignored.
+  async recordLimits(
+    id: number,
+    userId: number,
+    limits: ClaudeLimits,
+  ): Promise<void> {
+    await this.repository.update({ id, userId }, { limits });
+  }
 
   async create(
     userId: number,

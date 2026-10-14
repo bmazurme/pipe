@@ -5,6 +5,7 @@ import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
+import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 
 // `claude -p` is a single-shot, stateless invocation — there's no session to
 // resume across separate chat turns (worker keeps no state between turns;
@@ -42,6 +43,8 @@ export async function claudeChat(
   proxyUrl?: string,
   // Fetches one attached file by id; absent when the turn has no way to (older callers).
   downloadAttachment?: (attachmentId: number) => Promise<Buffer>,
+  // Gets what the CLI reported about the plan limits for this turn.
+  onReport?: (report: ClaudeReport) => void,
 ): Promise<string> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
@@ -50,6 +53,8 @@ export async function claudeChat(
     const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
     const prompt = buildPrompt(history, staged);
     const result = await runClaude(turnDir, prompt, claudeModel, () => {}, proxyUrl);
+
+    if (result.report) onReport?.(result.report);
 
     if (result.exitCode !== 0) {
       throw new Error(`claude exited with code ${result.exitCode}: ${result.output}`);

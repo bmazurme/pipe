@@ -578,6 +578,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_reportUsage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/history": {
         parameters: {
             query?: never;
@@ -1840,6 +1856,9 @@ export interface components {
             direction?: "outbound" | "result";
         };
         JobResponseDto: {
+            usage: {
+                [key: string]: unknown;
+            } | null;
             id: number;
             sourceFileId: number | null;
             resultFileId: number | null;
@@ -1886,6 +1905,15 @@ export interface components {
         HeartbeatDto: {
             workerName: string;
         };
+        ReportUsageDto: {
+            jobId?: number;
+            limits?: {
+                [key: string]: unknown;
+            };
+            usage?: {
+                [key: string]: unknown;
+            };
+        };
         CancelJobDto: {
             force?: boolean;
         };
@@ -1898,6 +1926,9 @@ export interface components {
             chunk: string;
         };
         ClaudeCredentialResponseDto: {
+            limits: {
+                [key: string]: unknown;
+            } | null;
             id: number;
             name: string;
             /** Format: date-time */
@@ -1937,6 +1968,9 @@ export interface components {
         };
         WorkerResponseDto: {
             models: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            claudeLimits: {
+                [key: string]: unknown;
+            } | null;
             id: number | null;
             name: string;
             kind: Record<string, never>;
@@ -3136,6 +3170,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["HeartbeatDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WorkerController_reportUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportUsageDto"];
             };
         };
         responses: {

@@ -5,6 +5,7 @@ import { Alert, Button, Card, Icon, Label, Switch, Text } from '@gravity-ui/uiki
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { type FleetWorker, useUpdateWorkerMutation, type WorkerJob } from '../../store/api';
 import styles from '../WorkerPage.module.css';
+import { ClaudeLimitsView } from './ClaudeLimitsView';
 import { describeModels, modelName, WORKER_STATE_LABEL, WORKER_STATE_THEME } from './fleet';
 
 interface WorkerCardProps {
@@ -74,6 +75,8 @@ export function WorkerCard({ worker, activeJob, onOpenJob, onSettings, onReconne
           {facts.join(' · ')}
         </Text>
       )}
+
+      {!isPending && !isLegacy && <ClaudeLimitsView limits={worker.claudeLimits} />}
 
       {isPending && (
         <Text color="secondary">

@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
 import { User } from '../../users/entities/user.entity';
+import type { ClaudeLimits } from '../claude-limits';
 import { JobModel } from './job.entity';
 
 // A worker process the owner added in the UI. It joins with a one-time enrollment code (no secret in its
@@ -69,4 +70,8 @@ export class Worker extends BaseEntity {
   // Whether it also answers Chat turns.
   @Column({ type: 'boolean', default: true })
   chatEnabled: boolean;
+
+  // The Claude plan limits last reported by a run on this worker (claude-limits.ts).
+  @Column({ type: 'jsonb', nullable: true })
+  claudeLimits: ClaudeLimits | null;
 }

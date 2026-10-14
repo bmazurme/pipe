@@ -2,6 +2,7 @@ import { Column, Entity, Index } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
+import type { ClaudeRunUsage } from '../claude-limits';
 
 // Sonnet/opus run through the existing `claude` CLI (same as sync's
 // agent-runner); gpt/deepseek/qwen run through worker's own minimal
@@ -58,6 +59,10 @@ export class Job extends BaseEntity {
   // delete or orphaning the FK.
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
+
+  // Tokens and cost of the Claude run, as the worker reported them (claude-limits.ts); null for other models.
+  @Column({ type: 'jsonb', nullable: true })
+  usage: ClaudeRunUsage | null;
 
   // Which stored API key (ProviderCredential) a gpt/deepseek/qwen job runs with; null = the account's first one for that
   // provider. ON DELETE SET NULL in the migration, like claudeCredentialId.

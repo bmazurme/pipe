@@ -19,8 +19,10 @@ import {
   StoredFile,
   StoredFileDirection,
 } from '../storage/entities/stored-file.entity';
+import { sanitizeLimits, sanitizeUsage } from './claude-limits';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
+import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
@@ -646,6 +648,41 @@ export class WorkerService {
   }
 
   // A worker added in the UI may only touch the jobs it holds (a personal API key keeps its account-wide reach).
+  // What a worker reports after a Claude run: the plan limits (kept on the worker and, for a job on a named
+  // token, on that token) and the job's tokens and cost. Everything is checked on the way in; garbage is dropped.
+  async recordClaudeReport(
+    userId: number,
+    workerId: number | undefined,
+    dto: ReportUsageDto,
+    now = new Date(),
+  ): Promise<void> {
+    const limits = sanitizeLimits(dto.limits, now);
+    const usage = sanitizeUsage(dto.usage);
+
+    if (limits && workerId !== undefined) {
+      await this.workerRepository.update(
+        { id: workerId, userId },
+        { claudeLimits: limits },
+      );
+    }
+
+    if (dto.jobId === undefined) return;
+
+    await this.assertHeldBy(dto.jobId, userId, workerId);
+
+    const job = await this.findOwned(dto.jobId, userId);
+
+    if (usage) await this.jobRepository.update(job.id, { usage });
+
+    if (limits && job.claudeCredentialId !== null) {
+      await this.claudeCredentialsService.recordLimits(
+        job.claudeCredentialId,
+        userId,
+        limits,
+      );
+    }
+  }
+
   async assertHeldBy(
     id: number,
     userId: number,
