@@ -1773,7 +1773,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ImproveRun"
+                    "type": "object"
                   }
                 }
               }
