@@ -108,6 +108,22 @@ alternatively be supplied as `<NAME>_FILE=/path/to/file` instead of a plain
 value (`worker/src/secrets.ts`) — what Docker/Swarm secrets use under the
 hood, but a plain mechanism usable outside Swarm too.
 
+### File storage
+
+**bridge backend** — where uploaded files live (Storage parcels and chat
+attachments share the same store, chat ones under `chat/` keys):
+- `STORAGE_DRIVER` — `local` (default) keeps files on the volume under `uploads/`; `s3` puts them in a bucket (any S3 API, path-style, e.g. Garage). Any other value makes bridge refuse to start (`STORAGE_DRIVER must be "local" or "s3"`).
+- `S3_ENDPOINT` — required for `s3`. May list several nodes, comma-separated; the next one is tried when the first is down.
+- `S3_REGION` — optional; default `garage`.
+- `S3_BUCKET` — required for `s3`.
+- `S3_ACCESS_KEY_ID` — required for `s3`.
+- `S3_SECRET_ACCESS_KEY` — required for `s3`.
+
+With `STORAGE_DRIVER=s3`, bridge fails at startup, not at the first upload, if
+any required variable is missing: `STORAGE_DRIVER=s3 needs S3_BUCKET, ...`
+(the error lists the missing names). The `S3_*` variables are ignored with
+`local`. Setting up a Garage cluster: [infra/garage/README.md](../infra/garage/README.md).
+
 ### Self-improvement loop
 
 Variables added for the self-improvement loop (see
