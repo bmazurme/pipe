@@ -89,10 +89,13 @@ function AutoRepairCard() {
 }
 
 export function SchedulesTab() {
-  const { data: schedules, isLoading } = useListImproveSchedulesQuery();
+  const { data: schedules, isLoading, isError } = useListImproveSchedulesQuery();
   const [saveSchedule, { isLoading: isSaving }] = useSaveImproveScheduleMutation();
   const [deleteSchedule] = useDeleteImproveScheduleMutation();
-  const [runNow, { isLoading: isRunning }] = useRunImproveScheduleNowMutation();
+  const [runNow] = useRunImproveScheduleNowMutation();
+  const [runningId, setRunningId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ImproveSchedule | null>(null);
 
   const [editing, setEditing] = useState<{ id?: number; form: Form } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,12 +123,34 @@ export function SchedulesTab() {
   const handleRunNow = async (schedule: ImproveSchedule) => {
     setNotice(null);
     setError(null);
+    setRunningId(schedule.id);
 
     try {
       const result = await runNow(schedule.id).unwrap();
       setNotice(`Запущено: ${result.started.length ? result.started.map((n) => `#${n}`).join(', ') : 'ничего'}${result.skipped.length ? `; пропущено ${result.skipped.length}` : ''}`);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось запустить расписание'));
+    } finally {
+      setRunningId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+
+    const { id } = confirmDelete;
+
+    setConfirmDelete(null);
+    setNotice(null);
+    setError(null);
+    setDeletingId(id);
+
+    try {
+      await deleteSchedule(id).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось удалить расписание'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -143,6 +168,7 @@ export function SchedulesTab() {
       {notice && <Alert theme="success" view="filled" message={notice} />}
       {error && !editing && <Alert theme="danger" view="filled" message={error} />}
       {isLoading && <Skeleton style={{ height: 80 }} />}
+      {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить расписания" />}
 
       {schedules && schedules.length === 0 && (
         <EmptyState icon={Clock} title="Расписаний нет" description="Например: каждую ночь в 02:00 запускать 5 самых старых задач с меткой loop." />
@@ -161,13 +187,13 @@ export function SchedulesTab() {
           </div>
           <div className={styles.rowActions}>
             {!schedule.enabled && <Label theme="normal">выключено</Label>}
-            <Button view="flat-secondary" size="s" loading={isRunning} aria-label={`Запустить сейчас: ${schedule.name}`} title="Запустить сейчас" onClick={() => void handleRunNow(schedule)}>
+            <Button view="flat-secondary" size="s" loading={runningId === schedule.id} disabled={runningId !== null && runningId !== schedule.id} aria-label={`Запустить сейчас: ${schedule.name}`} title="Запустить сейчас" onClick={() => void handleRunNow(schedule)}>
               <Icon data={Play} size={16} />
             </Button>
             <Button view="flat-secondary" size="s" aria-label={`Изменить: ${schedule.name}`} onClick={() => { setError(null); setEditing({ id: schedule.id, form: toForm(schedule) }); }}>
               <Icon data={Pencil} size={16} />
             </Button>
-            <Button view="flat-danger" size="s" aria-label={`Удалить: ${schedule.name}`} onClick={() => void deleteSchedule(schedule.id)}>
+            <Button view="flat-danger" size="s" aria-label={`Удалить: ${schedule.name}`} loading={deletingId === schedule.id} onClick={() => setConfirmDelete(schedule)}>
               <Icon data={TrashBin} size={16} />
             </Button>
           </div>
@@ -176,6 +202,20 @@ export function SchedulesTab() {
 
       <AutoStartCard />
       <AutoRepairCard />
+
+      <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} maxWidth="s" aria-labelledby="schedule-delete-title">
+        <Dialog.Header caption="Удалить расписание" id="schedule-delete-title" />
+        <Dialog.Body>
+          <Text variant="body-2">Удалить расписание «{confirmDelete?.name}»?</Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Удалить"
+          propsButtonApply={{ view: 'outlined-danger' }}
+          onClickButtonCancel={() => setConfirmDelete(null)}
+          onClickButtonApply={() => void handleDelete()}
+        />
+      </Dialog>
 
       <Dialog open={editing !== null} onClose={() => setEditing(null)} maxWidth="s" aria-labelledby="schedule-title">
         <Dialog.Header caption={editing?.id ? 'Изменить расписание' : 'Новое расписание'} id="schedule-title" />
