@@ -100,6 +100,7 @@ function setup(
     runs as never,
     settings as never,
     github as never,
+    {} as never,
     storage as never,
     workers as never,
     notifier as never,

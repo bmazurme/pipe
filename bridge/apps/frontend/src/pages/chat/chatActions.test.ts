@@ -28,4 +28,19 @@ describe('extractChatAction', () => {
     expect(extractChatAction(block('{"type":"fix-pr","pr":"304","instruction":"abc"}')).action).toBeNull();
     expect(extractChatAction(block('{"type":"fix-pr","pr":3.5,"instruction":"abc"}')).action).toBeNull();
   });
+
+  it('takes a merge-pr action out of the text', () => {
+    const reply = `Смержу.\n\n${block('{"type":"merge-pr","pr":331}')}`;
+
+    expect(extractChatAction(reply)).toEqual({
+      text: 'Смержу.',
+      action: { type: 'merge-pr', pr: 331 },
+    });
+  });
+
+  it('refuses a merge-pr action without a valid pr', () => {
+    expect(extractChatAction(block('{"type":"merge-pr","pr":0}')).action).toBeNull();
+    expect(extractChatAction(block('{"type":"merge-pr","pr":"331"}')).action).toBeNull();
+    expect(extractChatAction(block('{"type":"merge-pr"}')).action).toBeNull();
+  });
 });

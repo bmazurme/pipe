@@ -26,7 +26,11 @@ export class MergeService {
     private readonly configService: ConfigService,
   ) {}
 
-  async evaluate(number: number, expectedSha?: string): Promise<MergeVerdict> {
+  async evaluate(
+    number: number,
+    expectedSha?: string,
+    opts?: { requireLabel?: boolean },
+  ): Promise<MergeVerdict> {
     if (!this.github.isConfigured()) {
       return {
         ok: false,
@@ -40,7 +44,7 @@ export class MergeService {
     if (pr.merged) return { ok: false, pr, reason: 'PR уже влит' };
     if (pr.state !== 'open') return { ok: false, pr, reason: 'PR закрыт' };
     if (pr.draft) return { ok: false, pr, reason: 'PR в статусе draft' };
-    if (!pr.labels.includes(LOOP_PR_LABEL)) {
+    if ((opts?.requireLabel ?? true) && !pr.labels.includes(LOOP_PR_LABEL)) {
       return { ok: false, pr, reason: `у PR нет метки «${LOOP_PR_LABEL}»` };
     }
     if (pr.baseRef !== base) {
@@ -144,6 +148,42 @@ export class MergeService {
       this.logger.warn(`merge #${number} failed: ${errorMessage(error)}`);
 
       return `⛔ PR #${number} не влит: ${errorMessage(error)}`;
+    }
+  }
+
+  // The chat's "merge this PR" card, after the person confirmed it — any open PR in the
+  // configured repo, not just ones the loop itself opened (no `loop` label required).
+  async mergeAny(number: number): Promise<{
+    merged: boolean;
+    reason: string;
+    prUrl?: string;
+    baseRef?: string;
+  }> {
+    try {
+      const verdict = await this.evaluate(number, undefined, {
+        requireLabel: false,
+      });
+
+      if (!verdict.ok) {
+        return {
+          merged: false,
+          reason: verdict.reason,
+          prUrl: verdict.pr?.htmlUrl,
+        };
+      }
+
+      await this.github.merge(number, verdict.pr.headSha);
+
+      return {
+        merged: true,
+        reason: 'ok',
+        prUrl: verdict.pr.htmlUrl,
+        baseRef: verdict.pr.baseRef,
+      };
+    } catch (error) {
+      this.logger.warn(`mergeAny #${number} failed: ${errorMessage(error)}`);
+
+      return { merged: false, reason: errorMessage(error) };
     }
   }
 }

@@ -40,6 +40,7 @@ describe('ImproveService.listRuns leaves out result', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return { qb, service };
@@ -80,6 +81,7 @@ describe('ImproveService.getRun', () => {
     const findOne = jest.fn().mockResolvedValue(found);
     const service = new ImproveService(
       { findOne } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -134,6 +136,7 @@ describe('ImproveService list queries leave out baseline', () => {
     const findOne = jest.fn().mockResolvedValue({ id: 1, baseline: '{}' });
     const service = new ImproveService(
       { findOne, update: jest.fn(), save: jest.fn() } as never,
+      { send: jest.fn() } as never,
       { send: jest.fn() } as never,
       { send: jest.fn() } as never,
       { send: jest.fn() } as never,

@@ -35,6 +35,6 @@ import { TelegramWebhookController } from './telegram-webhook.controller';
     TelegramCommandsService,
     TelegramPollerService,
   ],
-  exports: [LoopService, GithubApiService],
+  exports: [LoopService, GithubApiService, MergeService],
 })
 export class LoopModule {}

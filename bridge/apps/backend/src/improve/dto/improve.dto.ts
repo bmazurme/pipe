@@ -43,6 +43,12 @@ export class StartPrFixDto {
   model: string;
 }
 
+export class StartPrMergeDto {
+  @IsInt()
+  @Min(1)
+  prNumber: number;
+}
+
 export class SaveScheduleDto {
   @IsString()
   @MaxLength(100)
