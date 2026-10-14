@@ -10,6 +10,8 @@ const pr = (over: Partial<PullInfo> = {}): PullInfo => ({
   mergeable: true,
   baseRef: 'main',
   headSha: 'abc1234def5678',
+  headRef: 'improve/x',
+  headRepo: 'o/r',
   labels: ['loop'],
   htmlUrl: 'https://github.com/o/r/pull/9',
   ...over,

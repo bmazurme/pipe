@@ -1263,3 +1263,89 @@ describe('ImproveService.cancelRun', () => {
     expect(workers.cancel).not.toHaveBeenCalled();
   });
 });
+
+describe('ImproveService change of a PR from the chat', () => {
+  const open = {
+    number: 304,
+    title: 'Allowlist',
+    state: 'open',
+    merged: false,
+    headSha: 'head-sha',
+    headRef: 'improve/issue-297-run-78',
+    headRepo: 'o/r',
+    htmlUrl: 'https://gh/pr/304',
+  };
+
+  const start = (pull: object, runs: Record<string, unknown> = {}) => {
+    return setup({
+      runs: { count: jest.fn().mockResolvedValue(0), ...runs },
+      github: { getPull: jest.fn().mockResolvedValue(pull) },
+    });
+  };
+
+  it('hands the PR branch and the request to a worker, as a repair run that is not a CI one', async () => {
+    const { service, github, storage, runs } = start(open);
+
+    const run = await service.startPrFix(3, 304, 'Rename the helper', 'sonnet');
+
+    expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
+
+    const manifest = strFromU8(
+      unzipSync(new Uint8Array(storage.createFromBuffer.mock.calls[0][1]))[
+        MANIFEST_ENTRY
+      ],
+    );
+
+    expect(manifest).toContain('Rename the helper');
+    expect(manifest).toContain('Definition of done');
+    expect(run).toMatchObject({
+      kind: 'repair',
+      trigger: 'chat',
+      issueNumber: null,
+      prNumber: 304,
+      branch: 'improve/issue-297-run-78',
+      baseSha: 'head-sha',
+      prUrl: 'https://gh/pr/304',
+    });
+    expect(runs.save).toHaveBeenCalled();
+  });
+
+  it('refuses a closed or merged PR', async () => {
+    await expect(
+      start({ ...open, state: 'closed' }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/не открыт/);
+    await expect(
+      start({ ...open, merged: true }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/не открыт/);
+  });
+
+  it('refuses a PR from a fork — its branch cannot be pushed to', async () => {
+    await expect(
+      start({ ...open, headRepo: 'someone/r' }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/другого репозитория/);
+  });
+
+  it('refuses while another change of the same PR is running', async () => {
+    const ctx = start(open, { count: jest.fn().mockResolvedValue(1) });
+
+    await expect(
+      ctx.service.startPrFix(3, 304, 'x y z', 'sonnet'),
+    ).rejects.toThrow(/уже исправляется/);
+    expect(ctx.workers.create).not.toHaveBeenCalled();
+  });
+});

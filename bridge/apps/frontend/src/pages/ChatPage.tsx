@@ -29,6 +29,8 @@ import {
 import { PageHeader } from '../widgets/PageHeader';
 import { AttachButton } from './chat/AttachButton';
 import { attachmentProblem, deleteChatAttachment, isClaudeModel, uploadChatAttachment } from './chat/chatAttachments';
+import { extractChatAction } from './chat/chatActions';
+import { PrFixCard } from './chat/PrFixCard';
 import { buildContextDraft, ContextDraft } from './chat/chatContext';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
 import { useAttachmentUrls } from './chat/useAttachmentUrls';
@@ -107,7 +109,7 @@ function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, strin
 
   const content = message.status === 'failed'
     ? `⚠️ ${message.errorMessage ?? 'Не удалось получить ответ'}`
-    : message.content;
+    : extractChatAction(message.content).text;
 
   return { role: 'assistant', id, timestamp, content };
 }
@@ -138,6 +140,15 @@ export function ChatPage() {
   const activeChat = chats.find((chat) => chat.id === String(activeChatId)) ?? null;
   const imageUrls = useAttachmentUrls(messagesData ?? [], accessToken);
   const messages = useMemo(() => (messagesData ?? []).map((message) => toChatMessage(message, imageUrls)), [messagesData, imageUrls]);
+
+  // The model's proposal to change a pull request, from its latest finished reply — offered as a card to
+  // confirm, once; the person's decision is remembered per message.
+  const [decidedActions, setDecidedActions] = useState<ReadonlySet<number>>(new Set());
+  const lastReply = [...(messagesData ?? [])].reverse().find((message) => message.role === 'assistant');
+  const proposal =
+    lastReply && lastReply.status === 'complete' && !decidedActions.has(lastReply.id)
+      ? extractChatAction(lastReply.content).action
+      : null;
 
   const hasPendingReply = (messagesData ?? []).some(
     (message) => message.status === 'pending' || message.status === 'running',
@@ -345,6 +356,15 @@ export function ChatPage() {
 
       {chatError && (
         <Alert theme="danger" view="filled" message={<span className={styles.errorText}>{chatError}</span>} onClose={() => setChatError(null)} />
+      )}
+
+      {proposal && lastReply && activeChatId !== null && (
+        <PrFixCard
+          key={lastReply.id}
+          action={proposal}
+          model={activeModel}
+          onDone={() => setDecidedActions((previous) => new Set(previous).add(lastReply.id))}
+        />
       )}
 
       <div className={styles.container}>

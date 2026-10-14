@@ -98,7 +98,7 @@ export class ImproveCiService {
     if ((await this.github.ciState(pull.headSha)) !== 'failure') return 'ci-ok';
 
     const repairs = await this.runs.find({
-      where: { kind: 'repair', prNumber },
+      where: { kind: 'repair', prNumber, trigger: 'ci' },
     });
 
     // The same head commit was already tried (and changed nothing, or failed): don't loop on it.
