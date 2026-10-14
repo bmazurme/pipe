@@ -15,6 +15,11 @@ import {
 // issue), minus the contentHash/dictionary: this runs inside bridge on a public
 // repository, so there is nothing to anonymize and no second machine to verify
 // integrity against. The worker treats a parcel without a hash as a legacy one.
+// Only those two are left out: the manifest is still stamped with a schemaVersion.
+
+// Mirrors PROTOCOL_SCHEMA_VERSION in packages/protocol/src/manifest.ts; the backend
+// deliberately does not depend on @pipe/protocol (parcel.spec.ts guards against drift).
+export const PARCEL_SCHEMA_VERSION = 2;
 
 export const MANIFEST_ENTRY = '__subscription_manifest__.json';
 export const ASSET_PREFIX = '__issue_assets__/';
@@ -161,6 +166,7 @@ export async function buildIssueParcel(
   entries[MANIFEST_ENTRY] = strToU8(
     JSON.stringify(
       {
+        schemaVersion: PARCEL_SCHEMA_VERSION,
         issueId: String(issue.number),
         issueIid: String(issue.number),
         issueTitle: issue.title,
