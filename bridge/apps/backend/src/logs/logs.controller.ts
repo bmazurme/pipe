@@ -2,16 +2,16 @@ import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
-import { LogViewerGuard } from './log-viewer.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import { AppLogService } from './app-log.service';
 import { LogsQueryDto } from './dto/logs-query.dto';
 import { tryParseMeta } from './meta';
 
 // Browser session only. The log holds operational detail about the whole
 // system, not one account, so it is limited to the deployment owner (see
-// LogViewerGuard) and there is deliberately no machine-auth (API key) route.
+// OwnerGuard) and there is deliberately no machine-auth (API key) route.
 @Controller('api/v1/logs')
-@UseGuards(JwtGuard, LogViewerGuard)
+@UseGuards(JwtGuard, OwnerGuard)
 export class LogsController {
   constructor(private readonly logs: AppLogService) {}
 

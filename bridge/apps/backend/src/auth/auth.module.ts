@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TelegramModule } from '../telegram/telegram.module';
+import { UsersModule } from '../users/users.module';
 
 import { ApiKeysService } from './api-keys.service';
 import { AuthController } from './auth.controller';
@@ -13,11 +14,13 @@ import { EmergencyKeysService } from './emergency-keys.service';
 import { ApiKey } from './entities/api-key.entity';
 import { AuthIdentity } from './entities/auth-identity.entity';
 import { EmergencyKey } from './entities/emergency-key.entity';
+import { DeploymentAccessService } from './deployment-access';
 import { Session } from './entities/session.entity';
 import { IdentitiesController } from './identities.controller';
 import { IdentitiesService } from './identities.service';
 import { JwtOrApiKeyGuard } from './guards/jwt-or-api-key.guard';
 import { JwtGuard } from './guards/jwt.guard';
+import { OwnerGuard } from './guards/owner.guard';
 import { SessionsService } from './sessions.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -25,6 +28,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   imports: [
     TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity, EmergencyKey]),
     TelegramModule,
+    UsersModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -51,6 +55,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     IdentitiesService,
     JwtGuard,
     JwtOrApiKeyGuard,
+    DeploymentAccessService,
+    OwnerGuard,
   ],
   exports: [
     AuthService,
@@ -60,6 +66,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     IdentitiesService,
     JwtGuard,
     JwtOrApiKeyGuard,
+    DeploymentAccessService,
+    OwnerGuard,
   ],
 })
 export class AuthModule {}

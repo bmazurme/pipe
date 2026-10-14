@@ -1,10 +1,11 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 
-import type { UsersService } from '../users/users.service';
-import { LogViewerGuard } from './log-viewer.guard';
+import type { UsersService } from '../../users/users.service';
+import { DeploymentAccessService } from '../deployment-access';
+import { OwnerGuard } from './owner.guard';
 
-describe('LogViewerGuard', () => {
+describe('OwnerGuard', () => {
   const context = (id: number) =>
     ({
       switchToHttp: () => ({ getRequest: () => ({ user: { id } }) }),
@@ -19,9 +20,11 @@ describe('LogViewerGuard', () => {
     };
     const config = { get: jest.fn().mockReturnValue(emails) };
 
-    return new LogViewerGuard(
-      users as unknown as UsersService,
-      config as unknown as ConfigService,
+    return new OwnerGuard(
+      new DeploymentAccessService(
+        users as unknown as UsersService,
+        config as unknown as ConfigService,
+      ),
     );
   };
 
@@ -43,6 +46,16 @@ describe('LogViewerGuard', () => {
 
   it('rejects a non-owner when EMAILS is unset', async () => {
     await expect(build(undefined).canActivate(context(2))).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('rejects a request without a user', async () => {
+    const ctx = {
+      switchToHttp: () => ({ getRequest: () => ({}) }),
+    } as unknown as ExecutionContext;
+
+    await expect(build(undefined).canActivate(ctx)).rejects.toThrow(
       ForbiddenException,
     );
   });
