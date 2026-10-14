@@ -17,11 +17,14 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { unlink } from 'fs/promises';
+
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from '../storage/config/multer.config';
 import { StoredFile } from '../storage/entities/stored-file.entity';
@@ -36,9 +39,22 @@ import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
+import { WorkersService } from './workers.service';
 
 // Postgres' integer range, minus the +1 SUBSTRING needs — no log gets near it.
 const MAX_LOGS_FROM = 2_147_483_646;
+
+function parseLogsFrom(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+
+  const value = /^\d+$/.test(raw) ? Number(raw) : NaN;
+
+  if (!Number.isSafeInteger(value) || value > MAX_LOGS_FROM) {
+    throw new BadRequestException('logsFrom must be a non-negative integer');
+  }
+
+  return value;
+}
 
 // One controller, one guard, for both audiences — JwtOrApiKeyGuard already
 // accepts a browser session OR a personal API key (the same "unified
@@ -54,6 +70,7 @@ export class WorkerController {
   constructor(
     private readonly workerService: WorkerService,
     private readonly claudeCredentialsService: ClaudeCredentialsService,
+    private readonly workersService: WorkersService,
   ) {}
 
   @Get()
@@ -79,12 +96,17 @@ export class WorkerController {
   // body (the worker's self-reported name). Being POST also means it can't
   // collide with the GET ':id' route below regardless of registration order.
   @Post('claim')
+  @WorkerKeyAllowed()
   async claim(
     @Body() dto: ClaimJobDto,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
     @Res() res: Response,
   ): Promise<void> {
-    const job = await this.workerService.claim(currentUser.id, dto.workerName);
+    const job = await this.workerService.claim(
+      currentUser.id,
+      dto.workerName,
+      currentUser.workerId,
+    );
 
     // A bare `return null` from a Nest handler sends a genuinely empty body
     // (no content-type, nothing for .json() to parse) rather than the JSON
@@ -109,19 +131,33 @@ export class WorkerController {
           )
         : null;
 
+    const provider = await this.workerService.resolveProvider(
+      currentUser.id,
+      job,
+    );
+
     res
       .status(HttpStatus.OK)
-      .json(ClaimedJobResponseDto.fromEntityWithToken(job, claudeToken));
+      .json(
+        ClaimedJobResponseDto.fromEntityWithToken(job, claudeToken, provider),
+      );
   }
 
   // Sent on an interval by a worker that's busy with a job (and so isn't
   // polling claim) to keep showing as up. Name is required here, unlike claim.
   @Post('heartbeat')
+  @WorkerKeyAllowed()
   @HttpCode(HttpStatus.NO_CONTENT)
   async heartbeat(
     @Body() dto: HeartbeatDto,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<void> {
+    // A worker added in the UI is known by its key, whatever name it passes.
+    if (currentUser.workerId !== undefined) {
+      await this.workersService.touch(currentUser.workerId);
+      return;
+    }
+
     await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
   }
 
@@ -143,16 +179,16 @@ export class WorkerController {
   async get(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
-    @Query('logsFrom', new ParseIntPipe({ optional: true })) logsFrom?: number,
+    // A string on purpose: the app-wide ValidationPipe (transform: true) turns a missing number into NaN before a
+    // ParseIntPipe could treat it as absent, which made a plain GET :id answer 400.
+    @Query('logsFrom') logsFromRaw?: string,
   ): Promise<JobResponseDto> {
+    const logsFrom = parseLogsFrom(logsFromRaw);
+
     if (logsFrom === undefined) {
       const job = await this.workerService.findOwned(id, currentUser.id);
 
       return JobResponseDto.fromEntity(job);
-    }
-
-    if (logsFrom < 0 || logsFrom > MAX_LOGS_FROM) {
-      throw new BadRequestException('logsFrom must be a non-negative integer');
     }
 
     const { job, logsTail, logsLength } =
@@ -166,14 +202,20 @@ export class WorkerController {
   }
 
   @Get(':id/cancel-state')
+  @WorkerKeyAllowed()
   async cancelState(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<{
     id: number;
     status: string;
     cancelRequestedAt: Date | null;
   }> {
+    await this.workerService.assertHeldBy(
+      id,
+      currentUser.id,
+      currentUser.workerId,
+    );
     const {
       id: jobId,
       status,
@@ -193,11 +235,17 @@ export class WorkerController {
   }
 
   @Get(':id/parcel')
+  @WorkerKeyAllowed()
   async downloadParcel(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
     @Res() res: Response,
   ): Promise<void> {
+    await this.workerService.assertHeldBy(
+      id,
+      currentUser.id,
+      currentUser.workerId,
+    );
     const file = await this.workerService.getSourceFile(id, currentUser.id);
 
     this.workerService.download(res, file, (err) => {
@@ -264,34 +312,59 @@ export class WorkerController {
   }
 
   @Post(':id/status')
+  @WorkerKeyAllowed()
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateJobStatusDto,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<JobResponseDto> {
+    await this.workerService.assertHeldBy(
+      id,
+      currentUser.id,
+      currentUser.workerId,
+    );
     const job = await this.workerService.updateStatus(id, currentUser.id, dto);
 
     return JobResponseDto.fromEntity(job);
   }
 
   @Post(':id/logs')
+  @WorkerKeyAllowed()
   @HttpCode(HttpStatus.NO_CONTENT)
   async appendLog(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AppendJobLogDto,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<void> {
+    await this.workerService.assertHeldBy(
+      id,
+      currentUser.id,
+      currentUser.workerId,
+    );
     await this.workerService.appendLog(id, currentUser.id, dto.chunk);
   }
 
   @Post(':id/result')
+  @WorkerKeyAllowed()
   @UseFilters(MulterExceptionFilter)
   @UseInterceptors(FileInterceptor('file', multerConfig))
   async uploadResult(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<JobResponseDto> {
+    try {
+      await this.workerService.assertHeldBy(
+        id,
+        currentUser.id,
+        currentUser.workerId,
+      );
+    } catch (error) {
+      // multer has already staged the upload on disk; a refused one must not leave it there
+      if (file?.path) await unlink(file.path).catch(() => undefined);
+      throw error;
+    }
+
     if (!file) {
       throw new BadRequestException('File is required');
     }

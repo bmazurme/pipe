@@ -59,6 +59,20 @@ export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
 
+  // Which stored API key (ProviderCredential) a gpt/deepseek/qwen job runs with; null = the account's first one for that
+  // provider. ON DELETE SET NULL in the migration, like claudeCredentialId.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  providerCredentialId: number | null;
+
+  // The worker that claimed this job (null for a legacy worker that authenticates with a personal API key, and
+  // after that worker is deleted) — and, when the owner pinned the job to one worker at launch, which one may take it.
+  // Null target = any free worker.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  workerId: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  targetWorkerId: number | null;
+
   // The context the owner attached at launch (see ContextModule) — a snapshot, not a
   // reference, so editing or deleting the saved context never changes a job that is
   // queued or already ran. Both null (the default) when nothing was attached. The text

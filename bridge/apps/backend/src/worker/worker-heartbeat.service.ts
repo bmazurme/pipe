@@ -14,7 +14,7 @@ export interface WorkerHeartbeatStatus {
 // generous relative to worker's own default poll interval (POLL_INTERVAL_SEC
 // in worker/src/config.ts, default 10s) to absorb one slow or dropped poll
 // without flapping between up/down on every page refresh.
-const STALE_AFTER_MS = 30_000;
+export const STALE_AFTER_MS = 30_000;
 
 @Injectable()
 export class WorkerHeartbeatService {
@@ -39,5 +39,10 @@ export class WorkerHeartbeatService {
       lastSeenAt: row.lastSeenAt,
       isUp: now - row.lastSeenAt.getTime() < STALE_AFTER_MS,
     }));
+  }
+
+  // Removes a legacy worker's row from the list (it comes back by itself if that process keeps polling).
+  async forget(userId: number, workerName: string): Promise<void> {
+    await this.repository.delete({ userId, workerName });
   }
 }

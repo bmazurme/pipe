@@ -13,6 +13,16 @@ export class CreateJobDto {
   @IsInt()
   claudeCredentialId?: number;
 
+  // gpt/deepseek/qwen: which stored API key to run with; absent = the account's first one for that provider.
+  @IsOptional()
+  @IsInt()
+  providerCredentialId?: number;
+
+  // Pin the job to one worker; absent = any free worker that can run the model.
+  @IsOptional()
+  @IsInt()
+  targetWorkerId?: number;
+
   // A saved context (ContextModule) to attach; absent = run with none.
   @IsOptional()
   @IsInt()

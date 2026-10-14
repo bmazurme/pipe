@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { WorkerController } from './worker.controller';
 import { WorkerService } from './worker.service';
+import { WorkersService } from './workers.service';
 
 describe('WorkerController download routes', () => {
   const file = { id: 7, storedName: 'abc.zip', originalName: 'parcel.zip' };
@@ -12,6 +13,7 @@ describe('WorkerController download routes', () => {
     const workerService = {
       getSourceFile: jest.fn().mockResolvedValue(file),
       getResultFile: jest.fn().mockResolvedValue(file),
+      assertHeldBy: jest.fn().mockResolvedValue(undefined),
       // the failing case: the file is gone — the callback gets the error
       download: jest.fn(
         (_res: unknown, _file: unknown, cb: (err?: Error) => void) =>
@@ -21,6 +23,7 @@ describe('WorkerController download routes', () => {
     const controller = new WorkerController(
       workerService as unknown as WorkerService,
       {} as unknown as ClaudeCredentialsService,
+      {} as unknown as WorkersService,
     );
     const warn = jest
       .spyOn(

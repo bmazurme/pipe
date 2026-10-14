@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -21,7 +22,12 @@ import {
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
-import { Job, JobStatus } from './entities/job.entity';
+import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { Worker } from './entities/worker.entity';
+import {
+  isProviderModel,
+  ProviderCredentialsService,
+} from './provider-credentials.service';
 import { buildRunHistory, FINISHED_STATUSES } from './run-history';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
@@ -68,6 +74,9 @@ export class WorkerService {
     private readonly claudeCredentialsService: ClaudeCredentialsService,
     private readonly heartbeatService: WorkerHeartbeatService,
     private readonly contextService: ContextService,
+    @InjectRepository(Worker)
+    private readonly workerRepository: Repository<Worker>,
+    private readonly providerCredentialsService: ProviderCredentialsService,
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
@@ -146,6 +155,42 @@ export class WorkerService {
       }
     }
 
+    if (dto.providerCredentialId !== undefined) {
+      if (
+        !isProviderModel(dto.model) ||
+        !(await this.providerCredentialsService.existsFor(
+          dto.providerCredentialId,
+          userId,
+          dto.model,
+        ))
+      ) {
+        throw new BadRequestException(
+          'Provider credential not found for this model',
+        );
+      }
+    }
+
+    // Pinned to one worker: it must be the owner's, switched on, and allowed to run this model — otherwise the job
+    // would sit in the queue for ever. Not pinned (the default) = whichever suitable worker is free first.
+    if (dto.targetWorkerId !== undefined) {
+      const target = await this.workerRepository.findOneBy({
+        id: dto.targetWorkerId,
+        userId,
+      });
+
+      if (!target) {
+        throw new BadRequestException('Worker not found');
+      }
+      if (!target.enabled) {
+        throw new BadRequestException(`Worker "${target.name}" is paused`);
+      }
+      if (target.models !== null && !target.models.includes(dto.model)) {
+        throw new BadRequestException(
+          `Worker "${target.name}" is not set up to run ${dto.model}`,
+        );
+      }
+    }
+
     // Nothing is attached unless the owner chose a context; a chosen one is copied onto
     // the job (see Job.contextText) rather than referenced.
     const context =
@@ -174,6 +219,8 @@ export class WorkerService {
       historyCount: history?.count ?? null,
       model: dto.model,
       claudeCredentialId: dto.claudeCredentialId ?? null,
+      providerCredentialId: dto.providerCredentialId ?? null,
+      targetWorkerId: dto.targetWorkerId ?? null,
       status: JobStatus.Queued,
     });
   }
@@ -195,6 +242,18 @@ export class WorkerService {
       throw new ConflictException('The source parcel was already consumed');
     }
 
+    // The pin only while that worker is still there, switched on and allowed to run the model; otherwise any free one.
+    const pinned =
+      job.targetWorkerId !== null
+        ? await this.workerRepository.findOneBy({
+            id: job.targetWorkerId,
+            userId,
+            enabled: true,
+          })
+        : null;
+    const pinUsable =
+      pinned !== null &&
+      (pinned.models === null || pinned.models.includes(job.model));
     const retried = await this.create(
       userId,
       {
@@ -203,6 +262,10 @@ export class WorkerService {
         ...(job.claudeCredentialId !== null
           ? { claudeCredentialId: job.claudeCredentialId }
           : {}),
+        ...(job.providerCredentialId !== null
+          ? { providerCredentialId: job.providerCredentialId }
+          : {}),
+        ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
       },
       {
         context:
@@ -380,7 +443,7 @@ export class WorkerService {
   // or nothing, never the same one).
   // Marks held-but-dead jobs failed so they stop showing as "running" forever.
   private async failLostJobs(
-    where: { userId?: number; workerName?: string },
+    where: { userId?: number; workerName?: string; workerId?: number },
     silenceMs: number,
   ): Promise<number> {
     const params: unknown[] = [
@@ -401,6 +464,11 @@ export class WorkerService {
     if (where.workerName !== undefined) {
       params.push(where.workerName);
       filters += ` AND "workerName" = $${params.length}`;
+    }
+
+    if (where.workerId !== undefined) {
+      params.push(where.workerId);
+      filters += ` AND "workerId" = $${params.length}`;
     }
 
     // One conditional statement instead of find + save: the status/silence check and
@@ -433,11 +501,43 @@ export class WorkerService {
     }
   }
 
-  async claim(userId: number, workerName?: string): Promise<Job | null> {
-    // Recorded unconditionally — this is the actual liveness signal (see
-    // WorkerHeartbeatService): a worker polling an empty queue still proves
-    // it's alive here even though nothing below changes a single Job row.
-    if (workerName) {
+  // `workerId` is set when the caller is a worker added in the UI (it authenticates with its own key); a worker on a
+  // personal API key has none and is known only by the name it reports. Who may take what:
+  //  - a managed worker: only while switched on, only the models it is set up for, jobs pinned to it or not pinned at
+  //    all, and only one job at a time;
+  //  - a legacy worker: only jobs that are not pinned to a specific worker.
+  async claim(
+    userId: number,
+    workerName?: string,
+    workerId?: number,
+  ): Promise<Job | null> {
+    let name = workerName;
+    let worker: Worker | null = null;
+
+    if (workerId !== undefined) {
+      worker = await this.workerRepository.findOneBy({ id: workerId, userId });
+
+      // A deleted worker's key no longer authenticates, so this is only a race with its deletion.
+      if (!worker) return null;
+
+      name = worker.name;
+      await this.workerRepository.update(worker.id, { lastSeenAt: new Date() });
+
+      // It is asking for work, so it is idle: whatever it still "holds" is lost (the process was restarted).
+      // Immediately — unlike a legacy name, a key belongs to exactly one process.
+      try {
+        await this.failLostJobs({ userId, workerId: worker.id }, 0);
+      } catch (error) {
+        this.logger.warn(
+          `Lost-job sweep failed during claim: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!worker.enabled) return null;
+    } else if (workerName) {
+      // Recorded unconditionally — this is the actual liveness signal (see
+      // WorkerHeartbeatService): a worker polling an empty queue still proves
+      // it's alive here even though nothing below changes a single Job row.
       await this.heartbeatService.record(userId, workerName);
       // It is asking for work, so it is idle: whatever it still "holds" is lost.
       // A failing sweep must not stop the worker from taking new work.
@@ -467,20 +567,62 @@ export class WorkerService {
     // Indexing straight into the result ([0]?.id) silently reads the rows
     // array itself as if it were the first row, always finding no `.id` and
     // reporting "nothing to claim" even though the UPDATE just committed.
+    const params: unknown[] = [
+      JobStatus.Claimed,
+      name ?? null,
+      JobStatus.Queued,
+      userId,
+      worker?.id ?? null,
+    ];
+    let eligibility = ' AND "targetWorkerId" IS NULL';
+
+    if (worker) {
+      eligibility = ' AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5)';
+
+      if (worker.models !== null) {
+        params.push(worker.models);
+        eligibility += ` AND model::text = ANY($${params.length}::text[])`;
+      }
+    }
+
     const [rows]: [{ id: number }[], number] = await this.jobRepository.query(
-      `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "updatedAt" = now()
+      `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "workerId" = $5, "updatedAt" = now()
        WHERE id = (
-         SELECT id FROM jobs WHERE status = $3 AND "userId" = $4
+         SELECT id FROM jobs WHERE status = $3 AND "userId" = $4${eligibility}
          ORDER BY "createdAt" ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        )
        RETURNING id`,
-      [JobStatus.Claimed, workerName ?? null, JobStatus.Queued, userId],
+      params,
     );
 
     const claimedId: number | undefined = rows[0]?.id;
     if (claimedId === undefined) return null;
 
     return this.jobRepository.findOneBy({ id: claimedId });
+  }
+
+  // A worker added in the UI may only touch the jobs it holds (a personal API key keeps its account-wide reach).
+  async assertHeldBy(
+    id: number,
+    userId: number,
+    workerId: number | undefined,
+  ): Promise<void> {
+    if (workerId === undefined) return;
+
+    const job = await this.findOwned(id, userId);
+
+    if (job.workerId !== workerId) {
+      throw new ForbiddenException('This job is not held by this worker');
+    }
+  }
+
+  // The key a claimed gpt/deepseek/qwen job runs with (see ProviderCredentialsService.resolveForJob).
+  resolveProvider(userId: number, job: Job) {
+    return this.providerCredentialsService.resolveForJob(
+      userId,
+      job.model as JobModel,
+      job.providerCredentialId,
+    );
   }
 
   async getSourceFile(id: number, userId: number): Promise<StoredFile> {
