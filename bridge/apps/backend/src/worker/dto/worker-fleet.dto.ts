@@ -14,6 +14,7 @@ import {
   Min,
 } from 'class-validator';
 
+import type { ClaudeLimits } from '../claude-limits';
 import { JobModel } from '../entities/job.entity';
 import { Worker } from '../entities/worker.entity';
 
@@ -125,6 +126,9 @@ export class WorkerResponseDto {
   enrollmentPending: boolean;
   enrollmentExpiresAt: Date | null;
   createdAt: Date | null;
+  // The Claude plan limits the last run on this worker reported, or null before any run did.
+  @ApiProperty({ type: 'object', additionalProperties: true, nullable: true })
+  claudeLimits: ClaudeLimits | null;
 
   static fromWorker(
     worker: Worker,
@@ -165,6 +169,7 @@ export class WorkerResponseDto {
         worker.enrollExpiresAt.getTime() > now.getTime(),
       enrollmentExpiresAt: worker.enrollExpiresAt,
       createdAt: worker.createdAt,
+      claudeLimits: worker.claudeLimits ?? null,
     };
   }
 
@@ -193,6 +198,7 @@ export class WorkerResponseDto {
       enrollmentPending: false,
       enrollmentExpiresAt: null,
       createdAt: null,
+      claudeLimits: null,
     };
   }
 }

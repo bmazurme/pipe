@@ -206,6 +206,9 @@ export async function processJob(
       ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, config.jobTimeoutSec * 1000, undefined, cancel.signal)
       : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, config.jobTimeoutSec * 1000, cancel.signal);
 
+    // Plan limits and cost, reported before the final status (a job can no longer be touched once it is done).
+    if ('report' in result && result.report) await client.reportClaudeUsage(job.id, result.report);
+
     if (result.exitCode !== 0) {
       throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
@@ -285,13 +288,18 @@ export async function processJob(
 export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig): Promise<void> {
   const clog = chatLogger(turn.messageId);
 
+  const reports: Promise<void>[] = [];
+
   try {
     const provider = resolveChatProvider(turn.model, process.env, turn.provider);
 
     const reply = provider.tool === 'claude'
-      ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId))
+      ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
+          reports.push(client.reportClaudeUsage(report));
+        })
       : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools));
 
+    await Promise.all(reports);
     await client.complete(turn.messageId, reply);
     clog.info('succeeded');
   } catch (error) {

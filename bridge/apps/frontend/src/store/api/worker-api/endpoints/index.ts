@@ -18,6 +18,33 @@ export const ACTIVE_JOB_STATUSES: WorkerJobStatus[] = [
   'running',
 ];
 
+/** One plan-limit window of a Claude subscription, as the claude CLI reported it while a run was going. */
+export interface ClaudeLimitWindow {
+  /** 0..1 of the window's allowance. */
+  utilization: number;
+  /** Unix seconds when the window resets, or null when unknown. */
+  resetsAt: number | null;
+}
+
+/** The last plan limits a run reported — a snapshot "as of reportedAt", not live. */
+export interface ClaudeLimits {
+  status: string;
+  rateLimitType: string | null;
+  isUsingOverage: boolean;
+  /** five_hour, seven_day, … */
+  windows: Record<string, ClaudeLimitWindow>;
+  reportedAt: string;
+}
+
+/** Tokens and cost of one Claude run. */
+export interface ClaudeRunUsage {
+  costUsd: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface WorkerJob {
   id: number;
   sourceFileId: number | null;
@@ -40,6 +67,8 @@ export interface WorkerJob {
    */
   logsLength?: number;
   errorMessage: string | null;
+  /** Tokens and cost of a Claude run, or null. */
+  usage: ClaudeRunUsage | null;
   workerName: string | null;
   claimedAt: string | null;
   startedAt: string | null;
@@ -54,6 +83,8 @@ export interface ClaudeCredential {
   id: number;
   name: string;
   createdAt: string;
+  /** The plan limits the last run on this token reported, or null before any run did. */
+  limits: ClaudeLimits | null;
 }
 
 export type ProviderModel = 'gpt' | 'deepseek' | 'qwen';
@@ -96,6 +127,8 @@ export interface FleetWorker {
   enrollmentPending: boolean;
   enrollmentExpiresAt: string | null;
   createdAt: string | null;
+  /** The Claude plan limits the last run on this worker reported, or null before any run did. */
+  claudeLimits: ClaudeLimits | null;
 }
 
 /** Returned once, when a worker is created or its enrolment code is renewed. */

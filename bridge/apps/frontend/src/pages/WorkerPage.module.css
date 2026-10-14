@@ -194,6 +194,14 @@
   gap: 6px;
 }
 
+.credentialInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .credentialRow {
   display: flex;
   align-items: center;
@@ -442,5 +450,37 @@
   .enrollCode {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+.limits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.limitRow {
+  display: grid;
+  grid-template-columns: 110px minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.limitLabel {
+  white-space: nowrap;
+}
+
+.limitBar {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .limitRow {
+    grid-template-columns: 1fr auto;
+  }
+
+  .limitBar {
+    grid-column: 1 / -1;
+    order: 3;
   }
 }

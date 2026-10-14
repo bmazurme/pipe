@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
+import type { ClaudeLimits } from '../claude-limits';
 import { User } from '../../users/entities/user.entity';
 
 // A named Claude Code OAuth token (the `claude setup-token` output —
@@ -29,4 +30,8 @@ export class ClaudeCredential extends BaseEntity {
   // pgadmin access no longer hands over a usable Claude OAuth token.
   @Column({ type: 'text', transformer: encryptedColumn })
   token: string;
+
+  // The plan limits last reported by a run on this token (claude-limits.ts), and when.
+  @Column({ type: 'jsonb', nullable: true })
+  limits: ClaudeLimits | null;
 }

@@ -37,6 +37,7 @@ import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
+import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
 import { WorkersService } from './workers.service';
@@ -159,6 +160,21 @@ export class WorkerController {
     }
 
     await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
+  }
+
+  // After a Claude run: plan limits and the job's tokens and cost (see WorkerService.recordClaudeReport).
+  @Post('usage')
+  @WorkerKeyAllowed()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async reportUsage(
+    @Body() dto: ReportUsageDto,
+    @CurrentUser() currentUser: { id: number; workerId?: number },
+  ): Promise<void> {
+    await this.workerService.recordClaudeReport(
+      currentUser.id,
+      currentUser.workerId,
+      dto,
+    );
   }
 
   // How many earlier runs of a parcel's task could be mixed in at launch. Declared before

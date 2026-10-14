@@ -1,4 +1,5 @@
-import { bearer, bridgeFetch, readOptionalJson } from './bridgeHttp.js';
+import { bearer, bridgeFetch, readOptionalJson, reportClaudeUsage } from './bridgeHttp.js';
+import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 
 // A file can be several MB.
 const ATTACHMENT_TIMEOUT_MS = 60_000;
@@ -59,6 +60,11 @@ export class ChatBridgeClient {
     );
 
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  // The plan limits the claude CLI reported for this turn; never throws.
+  reportClaudeUsage(report: ClaudeReport): Promise<void> {
+    return reportClaudeUsage(this.apiUrl, this.apiKey, report);
   }
 
   async complete(messageId: number, content: string): Promise<void> {

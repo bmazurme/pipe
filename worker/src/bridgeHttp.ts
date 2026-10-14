@@ -55,3 +55,24 @@ export async function readOptionalJson<T>(response: Response): Promise<T | null>
   const text = await response.text();
   return text ? (JSON.parse(text) as T | null) : null;
 }
+
+// Tells bridge what a Claude run reported — plan limits and, for a job, tokens and cost. Best-effort: an
+// old bridge without the route, a timeout, anything — a run's outcome never depends on this.
+export async function reportClaudeUsage(
+  apiUrl: string,
+  apiKey: string,
+  report: { limits?: unknown; usage?: unknown },
+  jobId?: number,
+): Promise<void> {
+  if (!report.limits && !report.usage) return;
+
+  try {
+    await bridgeFetch(
+      `${apiUrl}/api/v1/worker/jobs/usage`,
+      { method: 'POST', headers: bearer(apiKey, true), body: JSON.stringify({ ...(jobId !== undefined ? { jobId } : {}), ...report }) },
+      { expectOk: 'Reporting Claude usage' },
+    );
+  } catch {
+    // Deliberately ignored — see above.
+  }
+}

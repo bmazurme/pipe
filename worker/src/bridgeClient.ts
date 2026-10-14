@@ -1,4 +1,5 @@
-import { API_TIMEOUT_MS, TRANSFER_TIMEOUT_MS, bearer, bridgeFetch, readOptionalJson } from './bridgeHttp.js';
+import { API_TIMEOUT_MS, TRANSFER_TIMEOUT_MS, bearer, bridgeFetch, readOptionalJson, reportClaudeUsage } from './bridgeHttp.js';
+import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 
 const UPLOAD_RETRY_DELAYS_MS = [2000, 5000];
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
@@ -62,6 +63,11 @@ export class WorkerBridgeClient {
   // only other thing that records one, and the main loop doesn't poll then).
   async heartbeat(workerName: string): Promise<void> {
     await this.post('/heartbeat', 'Heartbeat', { workerName });
+  }
+
+  // What the claude CLI reported for this job (plan limits, tokens, cost); never throws.
+  reportClaudeUsage(jobId: number, report: ClaudeReport): Promise<void> {
+    return reportClaudeUsage(this.apiUrl, this.apiKey, report, jobId);
   }
 
   async downloadParcel(jobId: number): Promise<Buffer> {

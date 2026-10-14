@@ -28,6 +28,7 @@ function createMockRepository(): MockRepository {
     findOne: jest.fn(),
     findOneBy: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
     delete: jest.fn(),
     query: jest.fn(),
     createQueryBuilder: jest.fn(),
@@ -78,6 +79,7 @@ describe('WorkerService', () => {
     };
     claudeCredentialsService = {
       resolveToken: jest.fn(),
+      recordLimits: jest.fn(),
     };
     heartbeatService = {
       record: jest.fn(),
@@ -159,6 +161,88 @@ describe('WorkerService', () => {
     it('skips the query for no ids', async () => {
       await expect(service.findStatuses([])).resolves.toEqual([]);
       expect(repository.find).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordClaudeReport', () => {
+    const limits = {
+      status: 'allowed_warning',
+      rateLimitType: 'seven_day',
+      isUsingOverage: false,
+      windows: { seven_day: { utilization: 0.76, resetsAt: 1792148400 } },
+    };
+    const usage = {
+      costUsd: 0.25,
+      inputTokens: 2,
+      outputTokens: 4,
+      cacheReadTokens: 10,
+      cacheCreationTokens: 7,
+    };
+    const now = new Date('2026-10-14T12:00:00.000Z');
+
+    it('keeps the limits on the worker, and the job usage and the token limits on the job it ran', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: 11,
+      });
+
+      await service.recordClaudeReport(3, 5, { jobId: 7, limits, usage }, now);
+
+      expect(workerRepository.update).toHaveBeenCalledWith(
+        { id: 5, userId: 3 },
+        {
+          claudeLimits: { ...limits, reportedAt: '2026-10-14T12:00:00.000Z' },
+        },
+      );
+      expect(repository.update).toHaveBeenCalledWith(7, { usage });
+      expect(claudeCredentialsService.recordLimits).toHaveBeenCalledWith(
+        11,
+        3,
+        expect.objectContaining({ status: 'allowed_warning' }),
+      );
+    });
+
+    it('for a chat turn (no job) only updates the worker', async () => {
+      await service.recordClaudeReport(3, 5, { limits }, now);
+
+      expect(workerRepository.update).toHaveBeenCalledTimes(1);
+      expect(repository.findOne).not.toHaveBeenCalled();
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('does not touch a token when the job ran on the worker own login', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: null,
+      });
+
+      await service.recordClaudeReport(3, 5, { jobId: 7, limits, usage }, now);
+
+      expect(claudeCredentialsService.recordLimits).not.toHaveBeenCalled();
+    });
+
+    it('refuses a job another worker holds', async () => {
+      repository.findOne!.mockResolvedValue({ id: 7, userId: 3, workerId: 6 });
+
+      await expect(
+        service.recordClaudeReport(3, 5, { jobId: 7, usage }, now),
+      ).rejects.toThrow(/not held by this worker/);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('drops garbage instead of storing it', async () => {
+      await service.recordClaudeReport(
+        3,
+        5,
+        { limits: { nope: true }, usage: undefined },
+        now,
+      );
+
+      expect(workerRepository.update).not.toHaveBeenCalled();
     });
   });
 

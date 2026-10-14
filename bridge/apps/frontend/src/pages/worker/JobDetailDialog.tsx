@@ -13,6 +13,7 @@ import { encryptParcel, triggerBlobDownload } from '../../shared/lib/parcelCrypt
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
+import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
@@ -116,6 +117,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
           {job.contextName && <Text color="secondary">· Контекст: {job.contextName}</Text>}
           {job.historyCount ? <Text color="secondary">· Итоги прошлых запусков: {job.historyCount}</Text> : null}
           {duration && <Text color="secondary">· {duration}</Text>}
+          {job.usage && <Text color="secondary">· {describeUsage(job.usage)}</Text>}
         </div>
 
         {job.errorMessage && (

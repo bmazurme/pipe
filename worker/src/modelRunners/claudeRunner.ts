@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
 
 import { CancelledError } from '../cancelled.js';
+import { ClaudeStreamParser, type ClaudeReport } from './claudeUsage.js';
 
 export interface RunResult {
   exitCode: number;
   output: string;
+  // Plan limits and cost of this run, when the CLI reported them.
+  report?: ClaudeReport;
 }
 
 const MAX_OUTPUT_CHARS = 1024 * 1024;
@@ -63,7 +66,9 @@ export function runClaude(
       return;
     }
 
-    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel];
+    // stream-json (which needs --verbose) is what carries the plan-limit and cost events; the reply text is
+    // read back out of it, so callers still see the same text as with the plain format.
+    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel, '--output-format', 'stream-json', '--verbose'];
     // The CLI is a closed-source binary — worker can't control its HTTP
     // client directly, only hope it honors the standard proxy env vars (most
     // tools built on common HTTP libraries do). Set whichever flavor it
@@ -72,17 +77,17 @@ export function runClaude(
     const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
 
     let output = '';
-    const collect = (chunk: Buffer) => {
-      const text = chunk.toString('utf-8');
+    const collect = (text: string) => {
       output += text;
       // Keep only the tail — a runaway CLI must not grow this without bound.
       if (output.length > MAX_OUTPUT_CHARS) output = output.slice(-MAX_OUTPUT_CHARS);
       onOutput(text);
     };
-    child.stdout?.on('data', collect);
+    const stream = new ClaudeStreamParser(collect);
+    child.stdout?.on('data', (chunk: Buffer) => stream.push(chunk.toString('utf-8')));
     // stderr carries the real failure cause (auth, rate limit, bad model), so
     // it goes into the result's tail too, not just the streamed log.
-    child.stderr?.on('data', collect);
+    child.stderr?.on('data', (chunk: Buffer) => collect(chunk.toString('utf-8')));
 
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
@@ -130,7 +135,13 @@ export function runClaude(
         reject(new Error(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`));
         return;
       }
-      resolve({ exitCode: code ?? 1, output });
+      stream.end();
+      resolve({
+        exitCode: code ?? 1,
+        // The CLI's own final reply is the cleanest text; the collected stream is the fallback.
+        output: stream.finalText !== null && code === 0 ? stream.finalText : output,
+        ...(stream.report.limits || stream.report.usage ? { report: stream.report } : {}),
+      });
     });
   });
 }

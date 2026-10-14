@@ -8,6 +8,7 @@ import {
   useDeleteClaudeCredentialMutation,
   useListClaudeCredentialsQuery,
 } from '../../store/api';
+import { ClaudeLimitsView } from './ClaudeLimitsView';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 
@@ -81,7 +82,10 @@ export function ClaudeCredentialsCard() {
         <ul className={styles.jobList}>
           {credentials.map((credential: ClaudeCredential) => (
             <li key={credential.id} className={styles.credentialRow}>
-              <Text variant="body-2">{credential.name}</Text>
+              <div className={styles.credentialInfo}>
+                <Text variant="body-2">{credential.name}</Text>
+                <ClaudeLimitsView limits={credential.limits} emptyText="Лимиты появятся после первого запуска на этом токене" />
+              </div>
               <Button
                 view="flat-danger"
                 size="s"
