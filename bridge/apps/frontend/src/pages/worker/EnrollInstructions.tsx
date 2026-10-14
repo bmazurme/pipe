@@ -43,8 +43,10 @@ interface EnrollInstructionsProps {
 export function EnrollInstructions({ workerId, workerName, code, expiresAt, onRenewed }: EnrollInstructionsProps) {
   const [method, setMethod] = useState<Method>('docker');
   const [now, setNow] = useState(() => Date.now());
+  const [pollingInterval, setPollingInterval] = useState(3000);
   const { data: workers } = useListWorkersQuery(undefined, {
-    pollingInterval: 3000,
+    pollingInterval,
+    skipPollingIfUnfocused: true,
   });
   const [renew, { isLoading: isRenewing }] = useRenewWorkerEnrollmentMutation();
   const [renewError, setRenewError] = useState<string | null>(null);
@@ -57,6 +59,12 @@ export function EnrollInstructions({ workerId, workerName, code, expiresAt, onRe
 
   const worker = workers?.find((candidate) => candidate.id === workerId);
   const isConnected = worker !== undefined && worker.state !== 'pending';
+
+  useEffect(() => {
+    if (isConnected) {
+      setPollingInterval(0);
+    }
+  }, [isConnected]);
   const left = minutesLeft(expiresAt, now);
   const isExpired = left <= 0;
   const snippets = enrollSnippets(API_URL, code);
