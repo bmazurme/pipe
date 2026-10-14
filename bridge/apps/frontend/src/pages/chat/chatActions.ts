@@ -7,15 +7,30 @@ export interface FixPrAction {
   instruction: string;
 }
 
+export interface MergePrAction {
+  type: 'merge-pr';
+  pr: number;
+}
+
+export type ChatAction = FixPrAction | MergePrAction;
+
 const ACTION_BLOCK = /```pipe-action\s*\n([\s\S]*?)```/g;
 const MAX_INSTRUCTION = 4000;
 
-function parseAction(raw: string): FixPrAction | null {
+function parseAction(raw: string): ChatAction | null {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
+    const validPr = Number.isInteger(value.pr) && (value.pr as number) >= 1;
+
+    if (!validPr) return null;
+
+    if (value.type === 'merge-pr') {
+      return { type: 'merge-pr', pr: value.pr as number };
+    }
+
     const instruction = typeof value.instruction === 'string' ? value.instruction.trim() : '';
 
-    if (value.type !== 'fix-pr' || !Number.isInteger(value.pr) || (value.pr as number) < 1) return null;
+    if (value.type !== 'fix-pr') return null;
     if (instruction.length < 3 || instruction.length > MAX_INSTRUCTION) return null;
 
     return { type: 'fix-pr', pr: value.pr as number, instruction };
@@ -25,8 +40,8 @@ function parseAction(raw: string): FixPrAction | null {
 }
 
 // `text` is the reply without any action block; `action` is the last valid one, if any.
-export function extractChatAction(content: string): { text: string; action: FixPrAction | null } {
-  let action: FixPrAction | null = null;
+export function extractChatAction(content: string): { text: string; action: ChatAction | null } {
+  let action: ChatAction | null = null;
   const text = content
     .replace(ACTION_BLOCK, (_block, raw: string) => {
       action = parseAction(raw) ?? action;

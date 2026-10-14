@@ -19,6 +19,7 @@ import {
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService, TreeEntry } from '../loop/github-api.service';
+import { MergeService } from '../loop/merge.service';
 import { findProtected } from '../loop/protected-paths';
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
@@ -116,6 +117,7 @@ export class ImproveService {
     @InjectRepository(ImproveSettings)
     private readonly settings: Repository<ImproveSettings>,
     private readonly github: GithubApiService,
+    private readonly mergeService: MergeService,
     private readonly storage: StorageService,
     private readonly workers: WorkerService,
     private readonly notifier: NotifyService,
@@ -414,6 +416,21 @@ export class ImproveService {
     );
 
     return run;
+  }
+
+  // The chat's "merge this PR" card, after the person confirmed it — a direct,
+  // synchronous GitHub call (no worker job, no ImproveRun row to track).
+  async startPrMerge(prNumber: number) {
+    const result = await this.mergeService.mergeAny(prNumber);
+
+    this.log(
+      'info',
+      'improve.pr_merge',
+      `PR #${prNumber}: ${result.merged ? 'merged' : `refused (${result.reason})`}`,
+      { prNumber, merged: result.merged },
+    );
+
+    return result;
   }
 
   private async snapshotFiles(sha: string) {

@@ -41,6 +41,7 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     runs as never,
     {} as never,
     github as never,
+    {} as never,
     storage as never,
     workers as never,
     { send: jest.fn() } as never,

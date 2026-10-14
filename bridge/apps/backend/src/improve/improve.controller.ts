@@ -27,6 +27,7 @@ import {
   StartItemsDto,
   StartManyDto,
   StartPrFixDto,
+  StartPrMergeDto,
   StartRunDto,
 } from './dto/improve.dto';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -77,6 +78,12 @@ export class ImproveController {
       dto.instruction,
       dto.model,
     );
+  }
+
+  // The chat's "merge this PR" card, after the person confirmed it.
+  @Post('pr-merge')
+  startPrMerge(@Body() dto: StartPrMergeDto) {
+    return this.improve.startPrMerge(dto.prNumber);
   }
 
   @Post('runs/:id/cancel')

@@ -120,6 +120,16 @@ describe('MergeService.evaluate', () => {
 
     expect((verdict as { reason: string }).reason).toMatch(/LOOP_GITHUB_TOKEN/);
   });
+
+  it('skips the loop-label check when requireLabel is false', async () => {
+    const verdict = await setup({ pr: { labels: [] } }).service.evaluate(
+      9,
+      undefined,
+      { requireLabel: false },
+    );
+
+    expect(verdict).toMatchObject({ ok: true });
+  });
 });
 
 describe('MergeService.offer', () => {
@@ -200,5 +210,59 @@ describe('MergeService.merge', () => {
     await expect(service.merge(9, 'abc1234')).resolves.toMatch(
       /Head branch was modified/,
     );
+  });
+});
+
+describe('MergeService.mergeAny', () => {
+  it('merges an unlabeled PR that passes every other check', async () => {
+    const { service, github } = setup({ pr: { labels: [] } });
+
+    await expect(service.mergeAny(9)).resolves.toMatchObject({
+      merged: true,
+      baseRef: 'main',
+    });
+    expect(github.merge).toHaveBeenCalledWith(9, 'abc1234def5678');
+  });
+
+  it('refuses a CI-red PR without merging', async () => {
+    const { service, github } = setup({ ci: 'failure' });
+
+    await expect(service.mergeAny(9)).resolves.toMatchObject({
+      merged: false,
+      reason: expect.stringMatching(/не зелёный/),
+    });
+    expect(github.merge).not.toHaveBeenCalled();
+  });
+
+  it('refuses a protected-path PR without merging', async () => {
+    const { service, github } = setup({ files: ['bridge/deploy/x.yml'] });
+
+    await expect(service.mergeAny(9)).resolves.toMatchObject({
+      merged: false,
+      reason: expect.stringContaining('защищённые пути'),
+    });
+    expect(github.merge).not.toHaveBeenCalled();
+  });
+
+  it('refuses a conflicting PR without merging', async () => {
+    const { service, github } = setup({ pr: { mergeable: false } });
+
+    await expect(service.mergeAny(9)).resolves.toMatchObject({
+      merged: false,
+      reason: expect.stringMatching(/конфликты/),
+    });
+    expect(github.merge).not.toHaveBeenCalled();
+  });
+
+  it('turns a refused GitHub merge call into a result, not an exception', async () => {
+    const { service, github } = setup();
+    github.merge.mockRejectedValue(
+      new Error('GitHub 409: Head branch was modified'),
+    );
+
+    await expect(service.mergeAny(9)).resolves.toMatchObject({
+      merged: false,
+      reason: expect.stringContaining('Head branch was modified'),
+    });
   });
 });

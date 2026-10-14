@@ -30,6 +30,7 @@ import { PageHeader } from '../widgets/PageHeader';
 import { AttachButton } from './chat/AttachButton';
 import { attachmentProblem, deleteChatAttachment, isClaudeModel, uploadChatAttachment } from './chat/chatAttachments';
 import { extractChatAction } from './chat/chatActions';
+import { MergePrCard } from './chat/MergePrCard';
 import { PrFixCard } from './chat/PrFixCard';
 import { buildContextDraft, ContextDraft } from './chat/chatContext';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
@@ -358,11 +359,19 @@ export function ChatPage() {
         <Alert theme="danger" view="filled" message={<span className={styles.errorText}>{chatError}</span>} onClose={() => setChatError(null)} />
       )}
 
-      {proposal && lastReply && activeChatId !== null && (
+      {proposal && lastReply && activeChatId !== null && proposal.type === 'fix-pr' && (
         <PrFixCard
           key={lastReply.id}
           action={proposal}
           model={activeModel}
+          onDone={() => setDecidedActions((previous) => new Set(previous).add(lastReply.id))}
+        />
+      )}
+
+      {proposal && lastReply && activeChatId !== null && proposal.type === 'merge-pr' && (
+        <MergePrCard
+          key={lastReply.id}
+          action={proposal}
           onDone={() => setDecidedActions((previous) => new Set(previous).add(lastReply.id))}
         />
       )}

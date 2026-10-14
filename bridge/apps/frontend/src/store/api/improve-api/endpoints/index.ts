@@ -128,6 +128,14 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить правку'),
     }),
+    // The chat's "merge this PR" card, after the person confirmed it there.
+    startImprovePrMerge: builder.mutation<
+      { merged: boolean; reason: string; prUrl?: string; baseRef?: string },
+      { prNumber: number }
+    >({
+      query: (body) => ({ url: 'improve/pr-merge', method: 'POST', body }),
+      transformErrorResponse: errorMessage('Не удалось смержить PR'),
+    }),
     cancelImproveRun: builder.mutation<ImproveRun, number>({
       query: (id) => ({ url: `improve/runs/${id}/cancel`, method: 'POST' }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
@@ -195,6 +203,7 @@ export const {
   useGetImproveRunQuery,
   useStartImproveRunMutation,
   useStartImprovePrFixMutation,
+  useStartImprovePrMergeMutation,
   useCancelImproveRunMutation,
   useRetryImprovePublishMutation,
   useStartImproveAnalysisMutation,
