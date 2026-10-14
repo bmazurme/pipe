@@ -141,11 +141,34 @@ export class ImproveService {
     }));
   }
 
-  listRuns(limit = 50): Promise<ImproveRun[]> {
-    return this.runs.find({
-      order: { id: 'DESC' },
-      take: Math.min(Math.max(limit, 1), 200),
-    });
+  // The list is polled, so it leaves out `result` (the whole analysis JSON) and
+  // reports only whether there is one; getRun returns the full row.
+  async listRuns(
+    limit = 50,
+  ): Promise<(Omit<ImproveRun, 'result'> & { hasResult: boolean })[]> {
+    const columns = this.runs.metadata.columns
+      .filter((c) => !['result', 'baseline'].includes(c.propertyName))
+      .map((c) => `run.${c.propertyName}`);
+    const { entities, raw } = await this.runs
+      .createQueryBuilder('run')
+      .select(columns)
+      .addSelect('run.result IS NOT NULL', 'hasResult')
+      .orderBy('run.id', 'DESC')
+      .limit(Math.min(Math.max(limit, 1), 200))
+      .getRawAndEntities<{ hasResult: boolean }>();
+
+    return entities.map((run, i) => ({
+      ...run,
+      hasResult: Boolean(raw[i].hasResult),
+    }));
+  }
+
+  async getRun(id: number): Promise<ImproveRun> {
+    const run = await this.runs.findOne({ where: { id } });
+
+    if (!run) throw new NotFoundException('Run not found');
+
+    return run;
   }
 
   // ------------------------------------------------------------- start a run

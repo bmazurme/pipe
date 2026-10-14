@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   DefaultValuePipe,
+  NotFoundException,
   ParseIntPipe,
 } from '@nestjs/common';
 
@@ -9,37 +10,100 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveService } from './improve.service';
 
-describe('ImproveService.listRuns limit', () => {
-  const find = jest.fn().mockResolvedValue([]);
-  const service = new ImproveService(
-    { find } as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+describe('ImproveService.listRuns leaves out result', () => {
+  const build = () => {
+    const qb: Record<string, jest.Mock> = {};
 
-  beforeEach(() => find.mockClear());
+    for (const name of ['select', 'addSelect', 'orderBy', 'limit']) {
+      qb[name] = jest.fn().mockReturnValue(qb);
+    }
 
-  it('defaults to 50', async () => {
-    await service.listRuns();
+    qb.getRawAndEntities = jest.fn().mockResolvedValue({
+      entities: [{ id: 2 }, { id: 1 }],
+      raw: [{ hasResult: true }, { hasResult: false }],
+    });
 
-    expect(find).toHaveBeenCalledWith(expect.objectContaining({ take: 50 }));
+    const repo = {
+      metadata: {
+        columns: ['id', 'result', 'baseline', 'note'].map((propertyName) => ({
+          propertyName,
+        })),
+      },
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+    const service = new ImproveService(
+      repo as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    return { qb, service };
+  };
+
+  it('selects every column but result and baseline, and adds hasResult', async () => {
+    const { qb, service } = build();
+
+    const rows = await service.listRuns();
+
+    expect(qb.select).toHaveBeenCalledWith(['run.id', 'run.note']);
+    expect(qb.addSelect).toHaveBeenCalledWith(
+      'run.result IS NOT NULL',
+      'hasResult',
+    );
+    expect(rows).toEqual([
+      { id: 2, hasResult: true },
+      { id: 1, hasResult: false },
+    ]);
+    expect(rows[0]).not.toHaveProperty('result');
   });
 
-  it('clamps 0 to 1', async () => {
-    await service.listRuns(0);
+  it.each([
+    [undefined, 50],
+    [0, 1],
+    [1000, 200],
+  ])('limit %p becomes %p', async (input, expected) => {
+    const { qb, service } = build();
 
-    expect(find).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
+    await service.listRuns(input);
+
+    expect(qb.limit).toHaveBeenCalledWith(expected);
+  });
+});
+
+describe('ImproveService.getRun', () => {
+  const build = (found: unknown) => {
+    const findOne = jest.fn().mockResolvedValue(found);
+    const service = new ImproveService(
+      { findOne } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    return { findOne, service };
+  };
+
+  it('returns the full run including result', async () => {
+    const run = { id: 3, result: '{"items":[]}' };
+    const { findOne, service } = build(run);
+
+    await expect(service.getRun(3)).resolves.toBe(run);
+    expect(findOne).toHaveBeenCalledWith({ where: { id: 3 } });
   });
 
-  it('clamps 1000 to 200', async () => {
-    await service.listRuns(1000);
+  it('throws NotFoundException for an unknown id', async () => {
+    const { service } = build(null);
 
-    expect(find).toHaveBeenCalledWith(expect.objectContaining({ take: 200 }));
+    await expect(service.getRun(99)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

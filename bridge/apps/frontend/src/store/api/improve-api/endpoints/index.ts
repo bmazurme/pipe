@@ -43,7 +43,9 @@ export interface ImproveRun {
   /** 'repair' = an automatic fix of a red CI on the PR of an earlier run. */
   kind: 'issue' | 'analysis' | 'repair';
   /** JSON `{categories, autoCreate, items}` — analysis runs only. */
-  result: string | null;
+  result?: string | null;
+  /** Set by the list, which leaves `result` out; fetch the run by id for it. */
+  hasResult?: boolean;
   issueNumber: number | null;
   issueTitle: string;
   model: string;
@@ -110,6 +112,10 @@ const improveApiEndpoints = improveApi.injectEndpoints({
     listImproveRuns: builder.query<ImproveRun[], void>({
       query: () => 'improve/runs',
       providesTags: ['ImproveRuns'],
+    }),
+    getImproveRun: builder.query<ImproveRun, number>({
+      query: (id) => `improve/runs/${id}`,
+      providesTags: (_result, _error, id) => [{ type: 'ImproveRuns', id }],
     }),
     startImproveRun: builder.mutation<ImproveRun, { issueNumber: number; model: string }>({
       query: (body) => ({ url: 'improve/runs', method: 'POST', body }),
@@ -180,6 +186,7 @@ export const {
   useGetImproveStatusQuery,
   useListImproveIssuesQuery,
   useListImproveRunsQuery,
+  useGetImproveRunQuery,
   useStartImproveRunMutation,
   useCancelImproveRunMutation,
   useRetryImprovePublishMutation,

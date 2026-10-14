@@ -57,6 +57,11 @@ export class ImproveController {
     return this.improve.listRuns(limit);
   }
 
+  @Get('runs/:id')
+  run(@Param('id', ParseIntPipe) id: number) {
+    return this.improve.getRun(id);
+  }
+
   @Post('runs')
   startRun(@Body() dto: StartRunDto, @CurrentUser() user: { id: number }) {
     return this.improve.startRun(user.id, dto.issueNumber, dto.model);
