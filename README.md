@@ -28,6 +28,22 @@ GitLab issue → sync-cli or reports' Subscription module
 Each has its own README with setup/usage detail. **[ECOSYSTEM.md](ECOSYSTEM.md)**
 covers what spans them: ports, secrets, state files, and the roadmap.
 
+## Monorepo-wide commands
+
+```bash
+npm run build   # from a bare clone: installs + builds every product, in dependency order
+npm run dev     # (or npm start) starts bridge + reports together
+```
+
+`npm run build` is a one-time (or after-a-pull) bootstrap — it runs `npm install`
+in each product that needs its own (`reports/`, `bridge/`) and builds
+`packages/protocol` before anything that depends on it. `npm run dev` assumes
+`build` has already run at least once; it rebuilds `packages/protocol` (cheap,
+incremental) and then starts bridge and reports together via `concurrently`.
+Both commands are plain Node/npm — no shell-specific syntax — so they work the
+same on macOS, Linux and Windows. bridge's own `dev` still needs Docker running
+(for Postgres), same as running it standalone.
+
 ## CI/CD
 
 - **`ci.yml`** — build + test all four workspaces on every push/PR.

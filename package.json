@@ -14,9 +14,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "e2e:cross-repo": "node scripts/e2e-cross-repo-pipeline.mjs"
+    "e2e:cross-repo": "node scripts/e2e-cross-repo-pipeline.mjs",
+    "build": "node scripts/build-all.mjs",
+    "dev": "npm run build -w packages/protocol && concurrently -n bridge,reports -c blue,green \"npm run dev --prefix bridge\" \"npm run start --prefix reports\"",
+    "start": "npm run dev"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "eslint": "^10.12.0",
     "typescript-eslint": "^8.71.0"
   }
