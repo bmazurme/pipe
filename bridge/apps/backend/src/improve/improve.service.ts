@@ -81,6 +81,8 @@ export const PR_LABEL = 'loop';
 // and the issue to a worker, and turn what comes back into a branch and a pull
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
+// Blobs of one result are created this many at a time — modest, so GitHub's secondary rate limits stay quiet.
+const BLOB_CONCURRENCY = 6;
 const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
 
 @Injectable()
@@ -645,10 +647,10 @@ export class ImproveService {
     changes: Change[],
   ): Promise<string> {
     const baseTree = await this.github.getCommitTreeSha(baseSha);
-    const tree: TreeEntry[] = [];
-
-    for (const change of changes) {
-      tree.push({
+    const tree = await mapInBatches(
+      changes,
+      BLOB_CONCURRENCY,
+      async (change): Promise<TreeEntry> => ({
         path: change.path,
         mode: '100644',
         type: 'blob',
@@ -656,8 +658,8 @@ export class ImproveService {
           change.kind === 'deleted'
             ? null
             : await this.github.createBlob(change.bytes as Uint8Array),
-      });
-    }
+      }),
+    );
 
     return this.github.createTree(baseTree, tree);
   }
@@ -1187,6 +1189,21 @@ export class ImproveService {
 
 // GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
 // about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
+// Maps in order, at most `size` calls in flight; the first rejection rejects the whole map.
+async function mapInBatches<T, R>(
+  items: T[],
+  size: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
+  }
+
+  return out;
+}
+
 const TOKEN_PERMISSION_ERROR =
   'Resource not accessible by personal access token';
 

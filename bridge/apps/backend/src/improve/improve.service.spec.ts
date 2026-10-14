@@ -369,6 +369,71 @@ describe('ImproveService.publish', () => {
     ]);
   });
 
+  describe('concurrent blob creation', () => {
+    const many = (n: number) =>
+      Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [`f${i}.ts`, `v${i}`]),
+      );
+
+    it('keeps the input order with added, modified and deleted changes', async () => {
+      const { service, github } = withResult({
+        'a.ts': 'ONE', // modified
+        'new.ts': 'n', // added
+      }); // b.ts deleted
+      // later blobs finish first
+      github.createBlob.mockImplementation(async (bytes: Uint8Array) => {
+        const text = Buffer.from(bytes).toString();
+        await new Promise((r) => setTimeout(r, text === 'ONE' ? 20 : 1));
+
+        return `blob:${text}`;
+      });
+
+      await service.publish(run() as never, 5);
+
+      expect(github.createBlob).toHaveBeenCalledTimes(2);
+      expect(github.createTree).toHaveBeenCalledWith('tree-sha', [
+        { path: 'a.ts', mode: '100644', type: 'blob', sha: 'blob:ONE' },
+        { path: 'b.ts', mode: '100644', type: 'blob', sha: null },
+        { path: 'new.ts', mode: '100644', type: 'blob', sha: 'blob:n' },
+      ]);
+    });
+
+    it('runs blobs concurrently but never more than the cap at once', async () => {
+      const { service, github } = withResult({ ...many(20) });
+      let inFlight = 0;
+      let peak = 0;
+      github.createBlob.mockImplementation(async (bytes: Uint8Array) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+
+        return `blob:${Buffer.from(bytes).toString()}`;
+      });
+
+      await service.publish(run() as never, 5);
+
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(8);
+      expect(github.createBlob).toHaveBeenCalledTimes(20);
+    });
+
+    it('aborts before createTree when a blob is rejected', async () => {
+      const { service, github } = withResult({ 'a.ts': 'X', 'b.ts': 'Y' });
+      github.createBlob.mockRejectedValueOnce(new Error('GitHub 500: boom'));
+      const r = run();
+
+      await service.publish(r as never, 5);
+
+      expect(github.createTree).not.toHaveBeenCalled();
+      expect(github.createCommit).not.toHaveBeenCalled();
+      expect(r).toMatchObject({
+        status: ImproveRunStatus.Failed,
+        error: expect.stringContaining('boom'),
+      });
+    });
+  });
+
   it('never proposes a change to a protected path', async () => {
     const baseline = baselineOf({ ...BASE, '.github/workflows/ci.yml': 'ci' });
     const { service, github } = withResult({
