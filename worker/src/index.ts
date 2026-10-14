@@ -25,9 +25,29 @@ import { withContext } from './taskContext.js';
 import { resolveInDir } from './resolveInDir.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Resolves early when `signal` aborts, so an idle worker exits promptly on SIGTERM.
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
+
+export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
+
+// Aborted on SIGTERM/SIGINT: the main loop stops claiming and a running job is failed with a clear reason.
+const shutdown = new AbortController();
 
 // Model output can arrive many times a second — one POST per chunk would
 // mean bridge fields a request storm for the duration of every job. Batched
@@ -92,7 +112,7 @@ export async function processJob(
   client: WorkerBridgeClient,
   job: RemoteJob,
   config: WorkerConfig,
-  options: { cancelPollMs?: number } = {},
+  options: { cancelPollMs?: number; shutdown?: AbortSignal } = {},
 ): Promise<void> {
   let jobDir: string | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
@@ -144,6 +164,17 @@ export async function processJob(
         polling = false;
       });
   }, options.cancelPollMs ?? CANCEL_POLL_INTERVAL_MS);
+
+  // A worker shutdown reuses the owner-stop ladder, but is reported as a failure.
+  let shutdownRequested = false;
+  const onShutdown = () => {
+    if (shutdownRequested) return;
+    shutdownRequested = true;
+    log('Worker is shutting down — stopping the run...\n');
+    cancel.abort();
+  };
+  if (options.shutdown?.aborted) onShutdown();
+  else options.shutdown?.addEventListener('abort', onShutdown, { once: true });
 
   // Best-effort, like log forwarding: a missed ping must never fail the job.
   const heartbeatInterval = setInterval(() => {
@@ -218,7 +249,16 @@ export async function processJob(
 
     jlog.info('succeeded');
   } catch (error) {
-    if (error instanceof CancelledError) {
+    if (shutdownRequested) {
+      log(`Failed: ${SHUTDOWN_FAILURE_MESSAGE}\n`);
+      jlog.warn('stopped by worker shutdown');
+
+      try {
+        await client.updateStatus(job.id, 'failed', SHUTDOWN_FAILURE_MESSAGE);
+      } catch (statusError) {
+        jlog.error({ err: statusError }, 'additionally failed to report failure status');
+      }
+    } else if (error instanceof CancelledError) {
       log('Stopped by the owner.\n');
       jlog.info('cancelled');
 
@@ -243,6 +283,7 @@ export async function processJob(
     clearInterval(cancelPoll);
 
     clearInterval(heartbeatInterval);
+    options.shutdown?.removeEventListener('abort', onShutdown);
     flushLog();
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });
@@ -289,7 +330,14 @@ async function main(): Promise<void> {
     'pipe-worker starting',
   );
 
-  for (;;) {
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(sig, () => {
+      logger.info({ signal: sig }, 'shutting down');
+      shutdown.abort();
+    });
+  }
+
+  while (!shutdown.signal.aborted) {
     let job: RemoteJob | null = null;
 
     try {
@@ -299,9 +347,11 @@ async function main(): Promise<void> {
     }
 
     if (job) {
-      await processJob(client, job, config);
+      await processJob(client, job, config, { shutdown: shutdown.signal });
       continue;
     }
+
+    if (shutdown.signal.aborted) break;
 
     let turn: ClaimedChatTurn | null = null;
 
@@ -316,9 +366,12 @@ async function main(): Promise<void> {
 
       await withHeartbeat(client, config.workerName, () => processChatTurn(chatClient, claimedTurn, config));
     } else {
-      await sleep(config.pollIntervalSec * 1000);
+      await sleep(config.pollIntervalSec * 1000, shutdown.signal);
     }
   }
+
+  logger.info('pipe-worker stopped');
+  process.exit(0);
 }
 
 // Guards against running main() as a side effect of a test file importing
