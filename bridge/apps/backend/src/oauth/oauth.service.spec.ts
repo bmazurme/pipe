@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 
+import { DeploymentAccessService } from '../auth/deployment-access';
 import { OauthProfile } from './oauth-profile';
 import { OauthService } from './oauth.service';
 
@@ -44,6 +45,7 @@ function setup(env: Record<string, string> = {}) {
     authService as never,
     sessionsService as never,
     config as never,
+    new DeploymentAccessService(usersService as never, config as never),
   );
 
   return {
