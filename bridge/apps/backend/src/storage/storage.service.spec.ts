@@ -256,6 +256,85 @@ describe('StorageService', () => {
     });
   });
 
+  describe('pruneStale', () => {
+    const original = process.env.STORAGE_RETENTION_DAYS;
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+
+      if (original === undefined) {
+        delete process.env.STORAGE_RETENTION_DAYS;
+      } else {
+        process.env.STORAGE_RETENTION_DAYS = original;
+      }
+    });
+
+    it('does nothing when the variable is unset or 0', async () => {
+      delete process.env.STORAGE_RETENTION_DAYS;
+      await expect(service.pruneStale()).resolves.toBe(0);
+
+      process.env.STORAGE_RETENTION_DAYS = '0';
+      await expect(service.pruneStale()).resolves.toBe(0);
+
+      expect(repository.find).not.toHaveBeenCalled();
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes rows older than the cutoff from the db and the store', async () => {
+      process.env.STORAGE_RETENTION_DAYS = '7';
+      repository
+        .find!.mockResolvedValueOnce([
+          { id: 1, storedName: 'a.zip' },
+          { id: 2, storedName: 'b.zip' },
+        ])
+        .mockResolvedValueOnce([]);
+      repository.delete!.mockResolvedValue({ affected: 1 });
+
+      const before = Date.now();
+      await expect(service.pruneStale()).resolves.toBe(2);
+
+      const where = (
+        repository.find!.mock.calls[0] as [
+          { where: { createdAt: { value: Date } } },
+        ]
+      )[0].where;
+      const cutoff = where.createdAt.value.getTime();
+      expect(cutoff).toBeLessThanOrEqual(before - 7 * 86_400_000 + 1000);
+      expect(cutoff).toBeGreaterThan(before - 7 * 86_400_000 - 5000);
+      expect(repository.delete).toHaveBeenCalledWith(1);
+      expect(repository.delete).toHaveBeenCalledWith(2);
+      expect(store.remove).toHaveBeenCalledWith('a.zip');
+      expect(store.remove).toHaveBeenCalledWith('b.zip');
+    });
+
+    it('keeps going when one delete fails and does not throw', async () => {
+      process.env.STORAGE_RETENTION_DAYS = '7';
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      repository
+        .find!.mockResolvedValueOnce([
+          { id: 1, storedName: 'a.zip' },
+          { id: 2, storedName: 'b.zip' },
+        ])
+        .mockResolvedValueOnce([]);
+      repository
+        .delete!.mockRejectedValueOnce(new Error('db down'))
+        .mockResolvedValueOnce({ affected: 1 });
+
+      await expect(service.pruneStale()).resolves.toBe(1);
+
+      expect(store.remove).toHaveBeenCalledTimes(1);
+      expect(store.remove).toHaveBeenCalledWith('b.zip');
+    });
+
+    it('does not throw when listing fails', async () => {
+      process.env.STORAGE_RETENTION_DAYS = '7';
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      repository.find!.mockRejectedValue(new Error('db down'));
+
+      await expect(service.pruneStale()).resolves.toBe(0);
+    });
+  });
+
   describe('findAllByUser', () => {
     it('queries by userId alone when no filter is given', async () => {
       repository.find!.mockResolvedValue([]);
