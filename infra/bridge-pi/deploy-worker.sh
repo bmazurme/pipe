@@ -11,6 +11,8 @@
 # A worker added in the UI needs none of the two secrets above (it enrols with a one-time code and gets its Claude tokens,
 # provider keys and settings from bridge):
 #   ./deploy-worker.sh --managed [ghcr [tag]]    # worker-managed-pi.yml: no bridge API key, no Claude token, a state volume
+#                                                # (remembered in ~/.pipe/worker-mode: later runs, autodeploy's included, stay managed;
+#                                                #  --legacy goes back to the environment-key worker)
 #   infra/bridge-pi/enroll-worker.sh <code>      # from your workstation, with the code the Worker page showed
 #
 # The values become Docker secrets (encrypted in the Swarm raft store, mounted as files); the temporary files
@@ -22,8 +24,16 @@ ENV_FILE="$HOME/.pipe/bridge.env"
 XRAY="$HOME/.pipe/xray-client.json"
 STACK=bridgew
 
+# Which kind of worker this board runs is remembered, so the automatic deploy of a release (autodeploy calls this
+# script with no flag) redeploys the SAME kind instead of silently putting the environment-key worker back:
+#   --managed → a worker added in the UI · --legacy → the older worker with a bridge API key in the environment.
+MODE_FILE="$HOME/.pipe/worker-mode"
 MANAGED=0
-if [ "${1:-}" = --managed ]; then MANAGED=1; shift; fi
+if [ "$(cat "$MODE_FILE" 2>/dev/null || true)" = managed ]; then MANAGED=1; fi
+case "${1:-}" in
+  --managed) MANAGED=1; shift ;;
+  --legacy) MANAGED=0; shift ;;
+esac
 
 if [ "${1:-}" = status ]; then
   docker stack services "$STACK"
@@ -85,6 +95,9 @@ fi
 
 # shared by backend and vpn-client (Telegram goes out through the VPN proxy); idempotent
 docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
+
+mkdir -p "$(dirname "$MODE_FILE")"
+[ "$MANAGED" = 1 ] && echo managed > "$MODE_FILE" || echo legacy > "$MODE_FILE"
 
 cd "$HERE"
 docker stack deploy --resolve-image "$RESOLVE" -c "$STACK_FILE" "$STACK"

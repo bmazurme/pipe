@@ -9,7 +9,7 @@
 # A "release" is what .github/workflows/publish-images.yml marks `stable` after it published ALL THREE images of
 # a commit (backend, frontend, worker). Its id is the three image digests plus the commit; when it differs from
 # the deployed one:
-#   1. the stack files of THAT commit (infra/bridge-pi/{bridge-pi,worker-pi}.yml, Caddyfile) are fetched — only the
+#   1. the stack files of THAT commit (infra/bridge-pi/{bridge-pi,worker-pi,worker-managed-pi}.yml, Caddyfile) are fetched — only the
 #      declarative files; the shell scripts in ~/bridge-pi are updated by hand on purpose: whatever is merged to
 #      main may change a stack, but should not be able to change what runs as the board's user without you
 #   2. deploy.sh ghcr stable / deploy-worker.sh ghcr stable roll the services
@@ -32,7 +32,7 @@ BRIDGE_DIR="${BRIDGE_DIR:-$HOME/bridge-pi}"
 STATE_DIR="${STATE_DIR:-$HOME/.pipe/autodeploy}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-420}"
 IMAGES=(pipe-bridge-backend pipe-bridge-frontend pipe-worker)
-SERVICES_FILE_GLOB=(bridge-pi.yml worker-pi.yml Caddyfile)
+SERVICES_FILE_GLOB=(bridge-pi.yml worker-pi.yml worker-managed-pi.yml Caddyfile)
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 notify() { log "$1"; if [ -n "${NOTIFY_CMD:-}" ]; then $NOTIFY_CMD "$1" || true; fi; }
@@ -145,7 +145,7 @@ for file in "${SERVICES_FILE_GLOB[@]}"; do
     || { log "could not fetch $file of ${sha:0:8} — nothing done"; exit 0; }
   [ -s "$work/$file" ] || { log "$file of ${sha:0:8} is empty — nothing done"; exit 0; }
 done
-grep -q '^services:' "$work/bridge-pi.yml" && grep -q '^services:' "$work/worker-pi.yml" \
+grep -q '^services:' "$work/bridge-pi.yml" && grep -q '^services:' "$work/worker-pi.yml" && grep -q '^services:' "$work/worker-managed-pi.yml" \
   || { notify "⚠️ release ${sha:0:8}: the stack files look wrong — not deployed"; echo "$release_id ${sha:0:8} bad-stack-files" > "$STATE_DIR/failed.txt"; exit 0; }
 
 # --- deploy
