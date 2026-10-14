@@ -1,6 +1,13 @@
 import { createHash } from 'crypto';
 
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import {
+  strFromU8,
+  strToU8,
+  unzip,
+  zip,
+  type Unzipped,
+  type Zippable,
+} from 'fflate';
 
 // Builds the parcel a worker job consumes from a repository snapshot, and reads
 // the worker's result parcel back. Same on-the-wire shape as reports' Subscription
@@ -56,14 +63,31 @@ export function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+// fflate's callback forms run on worker threads in Node, so large archives do
+// not block bridge's event loop.
+function unzipAsync(data: Uint8Array): Promise<Unzipped> {
+  return new Promise((resolve, reject) => {
+    unzip(data, (err, out) => (err ? reject(err) : resolve(out)));
+  });
+}
+
+// A parcel is a short-lived transfer artifact: speed matters more than ratio.
+function zipAsync(entries: Zippable): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    zip(entries, { level: 1 }, (err, out) =>
+      err ? reject(err) : resolve(out),
+    );
+  });
+}
+
 export interface SnapshotFile {
   path: string;
   bytes: Uint8Array;
 }
 
 // A repository zipball has one top-level folder ("owner-repo-<sha>/"); strip it.
-export function readZipball(zip: Uint8Array): SnapshotFile[] {
-  const entries = unzipSync(zip);
+export async function readZipball(data: Uint8Array): Promise<SnapshotFile[]> {
+  const entries = await unzipAsync(data);
   const files: SnapshotFile[] = [];
 
   for (const [name, bytes] of Object.entries(entries)) {
@@ -126,11 +150,11 @@ export interface BuiltParcel {
   baseline: Record<string, string>;
 }
 
-export function buildIssueParcel(
+export async function buildIssueParcel(
   files: SnapshotFile[],
   issue: IssueRef,
   now = new Date(),
-): BuiltParcel {
+): Promise<BuiltParcel> {
   const entries: Record<string, Uint8Array> = {};
   const baseline: Record<string, string> = {};
 
@@ -157,16 +181,18 @@ export function buildIssueParcel(
     ),
   );
 
-  return { buffer: Buffer.from(zipSync(entries)), baseline };
+  return { buffer: Buffer.from(await zipAsync(entries)), baseline };
 }
 
 // The worker's result: every text file left on disk (edited, new, untouched), the
 // binaries as __issue_assets__/ entries, and the manifest. Only the text files can
 // be a change we publish.
-export function readResultParcel(zip: Uint8Array): Map<string, Uint8Array> {
+export async function readResultParcel(
+  data: Uint8Array,
+): Promise<Map<string, Uint8Array>> {
   const result = new Map<string, Uint8Array>();
 
-  for (const [name, bytes] of Object.entries(unzipSync(zip))) {
+  for (const [name, bytes] of Object.entries(await unzipAsync(data))) {
     if (
       name.endsWith('/') ||
       name === MANIFEST_ENTRY ||

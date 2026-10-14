@@ -296,7 +296,7 @@ export class ImproveService {
       return cached.files;
     }
     const files = selectParcelFiles(
-      readZipball(await this.github.downloadZipball(sha)),
+      await readZipball(await this.github.downloadZipball(sha)),
     );
     this.zipCache = { sha, files, at: Date.now() };
     return files;
@@ -318,7 +318,7 @@ export class ImproveService {
     const baseSha =
       snapshot?.sha ?? (await this.github.getBranchSha(baseBranch));
     const files = await this.snapshotFiles(baseSha);
-    const { buffer, baseline } = buildIssueParcel(files, {
+    const { buffer, baseline } = await buildIssueParcel(files, {
       number: task.number,
       title: task.title,
       body: task.body,
@@ -553,7 +553,7 @@ export class ImproveService {
         run.baseline = stored?.baseline ?? null;
       }
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await this.storage.readBytes(file));
+      const result = await readResultParcel(await this.storage.readBytes(file));
 
       const changes = diffResult(
         JSON.parse(run.baseline ?? '{}') as Record<string, string>,
@@ -867,7 +867,7 @@ export class ImproveService {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = readResultParcel(await this.storage.readBytes(file));
+      const result = await readResultParcel(await this.storage.readBytes(file));
       const raw = result.get(BACKLOG_FILE);
 
       if (!raw) throw new Error(`Worker не создал ${BACKLOG_FILE}`);

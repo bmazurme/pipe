@@ -21,18 +21,17 @@ const file = (path: string, text: string): SnapshotFile => ({
 });
 
 describe('readZipball', () => {
-  it('strips the top-level folder and ignores directories', () => {
+  it('strips the top-level folder and ignores directories', async () => {
     const zip = zipSync({
       'owner-repo-abc/': new Uint8Array(),
       'owner-repo-abc/src/a.ts': strToU8('a'),
       'owner-repo-abc/README.md': strToU8('r'),
     });
 
-    expect(
-      readZipball(zip)
-        .map((entry) => entry.path)
-        .sort(),
-    ).toEqual(['README.md', 'src/a.ts']);
+    expect((await readZipball(zip)).map((entry) => entry.path).sort()).toEqual([
+      'README.md',
+      'src/a.ts',
+    ]);
   });
 });
 
@@ -71,13 +70,13 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     file('c.ts', 'three'),
   ];
 
-  it('writes the issue into a manifest the worker recognises, and a baseline of hashes', () => {
-    const { buffer, baseline } = buildIssueParcel(
+  it('writes the issue into a manifest the worker recognises, and a baseline of hashes', async () => {
+    const { buffer, baseline } = await buildIssueParcel(
       files,
       issue,
       new Date('2026-10-08T00:00:00Z'),
     );
-    const read = new Map([...readResultParcel(buffer)]);
+    const read = new Map([...(await readResultParcel(buffer))]);
 
     expect(read.has('a.ts')).toBe(true);
     expect(read.has(MANIFEST_ENTRY)).toBe(false);
@@ -85,8 +84,8 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     expect(Object.keys(baseline)).toHaveLength(3);
   });
 
-  it('stamps the manifest with the current schemaVersion', () => {
-    const { buffer } = buildIssueParcel(files, issue);
+  it('stamps the manifest with the current schemaVersion', async () => {
+    const { buffer } = await buildIssueParcel(files, issue);
     const manifest = JSON.parse(
       strFromU8(unzipSync(buffer)[MANIFEST_ENTRY]),
     ) as { schemaVersion?: number };
@@ -107,8 +106,8 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     expect(PARCEL_SCHEMA_VERSION).toBe(Number(match![1]));
   });
 
-  it('classifies modified, added and deleted files against the baseline', () => {
-    const { baseline } = buildIssueParcel(files, issue);
+  it('classifies modified, added and deleted files against the baseline', async () => {
+    const { baseline } = await buildIssueParcel(files, issue);
     const result = new Map<string, Uint8Array>([
       ['a.ts', strToU8('one')], // untouched
       ['b.ts', strToU8('TWO')], // modified
@@ -121,15 +120,15 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     ).toEqual(['modified:b.ts', 'deleted:c.ts', 'added:new.ts']);
   });
 
-  it('reports no changes for an untouched result', () => {
-    const { baseline } = buildIssueParcel(files, issue);
+  it('reports no changes for an untouched result', async () => {
+    const { baseline } = await buildIssueParcel(files, issue);
 
     expect(
       diffResult(baseline, new Map(files.map((f) => [f.path, f.bytes]))),
     ).toEqual([]);
   });
 
-  it('ignores build output and lockfiles a worker leaves behind (they are not a change to publish)', () => {
+  it('ignores build output and lockfiles a worker leaves behind (they are not a change to publish)', async () => {
     const zip = zipSync({
       'a.ts': strToU8('x'),
       'packages/protocol/dist/index.js': strToU8('built'),
@@ -140,16 +139,36 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
       'packages/protocol/tsconfig.tsbuildinfo': strToU8('{}'),
     });
 
-    expect([...readResultParcel(zip).keys()]).toEqual(['a.ts']);
+    expect([...(await readResultParcel(zip)).keys()]).toEqual(['a.ts']);
   });
 
-  it('ignores the manifest and binary assets in the worker result', () => {
+  it('ignores the manifest and binary assets in the worker result', async () => {
     const zip = zipSync({
       'a.ts': strToU8('x'),
       [MANIFEST_ENTRY]: strToU8('{}'),
       '__issue_assets__/img.png': new Uint8Array([1, 2, 3]),
     });
 
-    expect([...readResultParcel(zip).keys()]).toEqual(['a.ts']);
+    expect([...(await readResultParcel(zip)).keys()]).toEqual(['a.ts']);
+  });
+
+  it('does not block the event loop while building a multi-MB parcel', async () => {
+    let seed = 1;
+    const big = Array.from({ length: 40 }, (_, i) => {
+      const bytes = new Uint8Array(200 * 1024);
+
+      for (let j = 0; j < bytes.length; j++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        bytes[j] = 97 + (seed % 26);
+      }
+
+      return { path: `f${i}.txt`, bytes };
+    });
+    const order: string[] = [];
+
+    setImmediate(() => order.push('immediate'));
+    await buildIssueParcel(big, issue).then(() => order.push('parcel'));
+
+    expect(order).toEqual(['immediate', 'parcel']);
   });
 });
