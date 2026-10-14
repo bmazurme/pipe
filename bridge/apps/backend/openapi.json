@@ -1939,6 +1939,27 @@
         }
       }
     },
+    "/api/v1/improve/pr-merge": {
+      "post": {
+        "operationId": "ImproveController_startPrMerge",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPrMergeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs/{id}/cancel": {
       "post": {
         "operationId": "ImproveController_cancelRun",
@@ -4799,6 +4820,18 @@
           "prNumber",
           "instruction",
           "model"
+        ]
+      },
+      "StartPrMergeDto": {
+        "type": "object",
+        "properties": {
+          "prNumber": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "prNumber"
         ]
       },
       "StartAnalysisDto": {
