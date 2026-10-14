@@ -12,6 +12,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./resolveInDir": {
+      "types": "./dist/resolveInDir.d.ts",
+      "default": "./dist/resolveInDir.js"
+    },
     "./manifest": {
       "types": "./dist/manifest.d.ts",
       "default": "./dist/manifest.js"

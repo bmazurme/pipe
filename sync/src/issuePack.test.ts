@@ -115,3 +115,26 @@ describe('extractIssue', () => {
     assert.equal(existsSync(path.join(projectPath, 'issue-images/shot.png')), true);
   });
 });
+
+describe('extractIssue path containment', () => {
+  it('rejects an asset path that escapes the project dir and writes nothing', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'issue-escape-'));
+    const project = path.join(root, 'project');
+    const manifest = {
+      issueId: '1',
+      issueIid: '42',
+      issueTitle: 't',
+      issueDescription: 'd',
+      projectId: 1,
+      branch: 'b',
+      contentHash: 'h',
+    } as unknown as Parameters<typeof extractIssue>[1];
+    const assets = [{ relPath: '../evil.png', base64: Buffer.from('x').toString('base64') }] as Parameters<
+      typeof extractIssue
+    >[4];
+
+    assert.throws(() => extractIssue(project, manifest, {}, 1, assets), /escapes/);
+    assert.equal(existsSync(path.join(root, 'evil.png')), false);
+    assert.equal(existsSync(path.join(project, ISSUE_FILE_NAME)), false);
+  });
+});

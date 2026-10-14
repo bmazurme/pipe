@@ -9,6 +9,7 @@ import {
   type PackedFile,
   type PackedAsset,
 } from '@pipe/protocol';
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { type Dictionary, toLocal } from './dictionary.js';
 
@@ -75,11 +76,11 @@ export function extractIssue(
   const description = toLocal(dictionary, manifest.issueDescription);
 
   const imagePaths = assets.map((asset) => asset.relPath);
-  for (const asset of assets) {
-    const destination = path.join(projectPath, asset.relPath);
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
-  }
+  const assetDestinations = assets.map((asset) => resolveInDir(projectPath, asset.relPath));
+  assets.forEach((asset, i) => {
+    mkdirSync(path.dirname(assetDestinations[i]), { recursive: true });
+    writeFileSync(assetDestinations[i], Buffer.from(asset.base64, 'base64'));
+  });
 
   const destination = path.join(projectPath, ISSUE_FILE_NAME);
   writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId), 'utf-8');

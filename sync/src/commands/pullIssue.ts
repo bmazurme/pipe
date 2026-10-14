@@ -1,7 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import { notify } from '@pipe/protocol/notify';
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
@@ -11,6 +11,7 @@ import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
 import { resolveFromRoot } from '../paths.js';
 import { log } from '../log.js';
+import { writeParcelFiles } from '../writeParcelFiles.js';
 
 // Returns true once a parcel was found and pulled, false when there's
 // nothing on bridge yet — the shape --watch below polls on.
@@ -61,13 +62,11 @@ async function tryPullOnce(
     buffer = decryptBuffer(downloaded, readFileSync(resolveFromRoot(project.privateKeyPath), 'utf-8'));
   }
 
-  const { manifest, files, legacyManifest } = extractIssueArchive(buffer);
+  const { manifest, files, assets, legacyManifest } = extractIssueArchive(buffer);
 
-  for (const file of files) {
-    const destination = path.join(project.path, file.relPath);
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(destination, toLocal(dictionary, file.content), 'utf-8');
-  }
+  // Validate asset paths up front too, so a bad parcel writes nothing at all.
+  for (const asset of assets) resolveInDir(project.path, asset.relPath);
+  writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
 
   if (legacyManifest) {
     log.info(
