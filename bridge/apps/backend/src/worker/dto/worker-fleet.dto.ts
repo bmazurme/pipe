@@ -52,6 +52,13 @@ class WorkerSettingsDto {
   @IsOptional()
   @IsBoolean()
   chatEnabled?: boolean;
+
+  // The stored Claude token this worker uses when a job picked none; null = the account's first.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  claudeCredentialId?: number | null;
 }
 
 export class CreateWorkerDto extends WorkerSettingsDto {
@@ -121,6 +128,8 @@ export class WorkerResponseDto {
   jobTimeoutSec: number;
   proxyUrl: string | null;
   chatEnabled: boolean;
+  // The Claude token this worker uses by default, or null (the account's first).
+  claudeCredentialId: number | null;
   keyPrefix: string | null;
   // The one-time code is still valid (shown only when it was issued, never listed).
   enrollmentPending: boolean;
@@ -162,6 +171,7 @@ export class WorkerResponseDto {
       jobTimeoutSec: worker.jobTimeoutSec,
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
+      claudeCredentialId: worker.claudeCredentialId ?? null,
       keyPrefix: worker.keyPrefix,
       enrollmentPending:
         !enrolled &&
@@ -199,6 +209,7 @@ export class WorkerResponseDto {
       enrollmentExpiresAt: null,
       createdAt: null,
       claudeLimits: null,
+      claudeCredentialId: null,
     };
   }
 }

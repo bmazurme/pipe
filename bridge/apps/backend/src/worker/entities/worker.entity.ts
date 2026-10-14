@@ -71,6 +71,11 @@ export class Worker extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   chatEnabled: boolean;
 
+  // The stored Claude token this worker runs jobs and chat turns with when a job picked none; null = the account's
+  // first one. ON DELETE SET NULL in the migration, like jobs.claudeCredentialId.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  claudeCredentialId: number | null;
+
   // The Claude plan limits last reported by a run on this worker (claude-limits.ts).
   @Column({ type: 'jsonb', nullable: true })
   claudeLimits: ClaudeLimits | null;

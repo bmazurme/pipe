@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Alert, Checkbox, Dialog, NumberInput, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Checkbox, Dialog, NumberInput, Select, Switch, Text, TextInput } from '@gravity-ui/uikit';
 
-import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
+import { type FleetWorker, useListClaudeCredentialsQuery, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS } from './constants';
 
@@ -12,6 +12,8 @@ interface WorkerSettingsDialogProps {
 
 const MIN_TIMEOUT_MIN = 1;
 const MAX_TIMEOUT_MIN = 240;
+// Select values are strings; this one is "no token set for the worker".
+const DEFAULT_TOKEN = '';
 
 // Everything here applies to a running worker within one poll interval — nothing is restarted or redeployed.
 export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogProps) {
@@ -21,6 +23,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [timeoutMin, setTimeoutMin] = useState<number | null>(Math.round(worker.jobTimeoutSec / 60));
   const [proxyUrl, setProxyUrl] = useState(worker.proxyUrl ?? '');
   const [chatEnabled, setChatEnabled] = useState(worker.chatEnabled);
+  const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
+  const { data: credentials } = useListClaudeCredentialsQuery();
   const [error, setError] = useState<string | null>(null);
   const [updateWorker, { isLoading }] = useUpdateWorkerMutation();
 
@@ -47,6 +51,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         jobTimeoutSec: (timeoutMin as number) * 60,
         proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim(),
         chatEnabled,
+        claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),
       }).unwrap();
       onClose();
     } catch (err) {
@@ -117,6 +122,25 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
               />
             </label>
           </div>
+
+          <label className={styles.dialogForm}>
+            <Text variant="body-2" color="secondary">
+              Claude-токен этого worker&apos;а
+            </Text>
+            <Select
+              value={[tokenId]}
+              onUpdate={(value) => setTokenId(value[0] ?? DEFAULT_TOKEN)}
+              options={[
+                { value: DEFAULT_TOKEN, content: 'Первый из списка токенов' },
+                ...(credentials ?? []).map((credential) => ({ value: String(credential.id), content: credential.name })),
+              ]}
+              width="max"
+              aria-label="Claude-токен worker'а"
+            />
+            <Text variant="caption-2" color="secondary">
+              Для задач и чата на Sonnet/Opus, если в задаче токен не выбран явно. Выбранный в задаче токен главнее.
+            </Text>
+          </label>
 
           <label className={styles.dialogForm}>
             <Text variant="body-2" color="secondary">

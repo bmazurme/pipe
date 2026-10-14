@@ -31,6 +31,8 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     enrollmentPending: false,
     enrollmentExpiresAt: null,
     createdAt: NOW,
+    claudeLimits: null,
+    claudeCredentialId: null,
     ...over,
   };
 }
@@ -73,6 +75,7 @@ beforeEach(() => {
 
       if (custom) return custom;
       if (recorded.method === 'GET' && recorded.path === '/workers') return json(workers);
+      if (recorded.method === 'GET' && recorded.path === '/worker/claude-credentials') return json([]);
 
       return json({});
     }),
@@ -417,6 +420,50 @@ describe('WorkersTab — settings', () => {
       chatEnabled: true,
     });
     expect(body.proxyUrl).toBeNull();
+  });
+
+  it('binds the worker to one of the Claude tokens, or back to the first one', async () => {
+    const user = userEvent.setup();
+
+    respond = (request) =>
+      request.method === 'GET' && request.path === '/worker/claude-credentials'
+        ? json([
+            { id: 5, name: 'personal', createdAt: NOW, limits: null },
+            { id: 6, name: 'team', createdAt: NOW, limits: null },
+          ])
+        : undefined;
+    workers = [fleetWorker({ id: 1, claudeCredentialId: 5 })];
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    // The current binding is shown by its name.
+    expect(await within(dialog).findByText('personal')).toBeTruthy();
+
+    await user.click(within(dialog).getByText('personal'));
+    await user.click(await screen.findByText('team'));
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+    expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ claudeCredentialId: 6 });
+  });
+
+  it('saves "the first token" as null when no token is set for the worker', async () => {
+    const user = userEvent.setup();
+
+    workers = [fleetWorker({ id: 1, claudeCredentialId: null })];
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText('Первый из списка токенов')).toBeTruthy();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+    expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ claudeCredentialId: null });
   });
 
   it('restricting the models sends exactly those', async () => {

@@ -444,6 +444,73 @@ describe('Worker fleet (e2e)', () => {
     });
   });
 
+  describe('the Claude token a worker runs with', () => {
+    const newToken = async (accessToken: string, name: string, token: string) =>
+      (
+        await as(
+          request(server()).post('/api/v1/worker/claude-credentials'),
+          accessToken,
+        )
+          .send({ name, token })
+          .expect(201)
+      ).body as { id: number };
+    const claimToken = async (key: string) =>
+      (
+        await request(server())
+          .post('/api/v1/worker/jobs/claim')
+          .set('Authorization', `Bearer ${key}`)
+          .send({})
+          .expect(200)
+      ).body.claudeToken as string | null;
+
+    it('each worker uses the token set in its settings; a token picked for the job wins; unset = the first token', async () => {
+      const { accessToken, userId } = await owner();
+      const first = await newToken(accessToken, 'first', 'tok-first');
+      const second = await newToken(accessToken, 'second', 'tok-second');
+      const a = await addWorker(accessToken, 'bound-a', {
+        claudeCredentialId: second.id,
+      });
+      const b = await addWorker(accessToken, 'unbound-b');
+      const keyA = (await enroll(a.enrollCode)).key;
+      const keyB = (await enroll(b.enrollCode)).key;
+
+      await job(userId, accessToken, { targetWorkerId: a.worker.id });
+      expect(await claimToken(keyA)).toBe('tok-second');
+
+      await job(userId, accessToken, {
+        targetWorkerId: a.worker.id,
+        claudeCredentialId: first.id,
+      });
+      expect(await claimToken(keyA)).toBe('tok-first');
+
+      await job(userId, accessToken, { targetWorkerId: b.worker.id });
+      expect(await claimToken(keyB)).toBe('tok-first');
+    });
+
+    it('can be changed and cleared in the settings, and only to a token of the owner', async () => {
+      const { accessToken } = await owner();
+      const other = await owner();
+      const mine = await newToken(accessToken, 'mine', 'tok-mine');
+      const theirs = await newToken(other.accessToken, 'theirs', 'tok-theirs');
+      const w = await addWorker(accessToken, 'settings');
+      const patch = (body: object) =>
+        as(
+          request(server()).patch(`/api/v1/workers/${w.worker.id}`),
+          accessToken,
+        ).send(body);
+
+      expect(
+        (await patch({ claudeCredentialId: mine.id }).expect(200)).body
+          .claudeCredentialId,
+      ).toBe(mine.id);
+      await patch({ claudeCredentialId: theirs.id }).expect(400);
+      expect(
+        (await patch({ claudeCredentialId: null }).expect(200)).body
+          .claudeCredentialId,
+      ).toBeNull();
+    });
+  });
+
   describe('stored API keys for gpt / deepseek / qwen', () => {
     it('are kept encrypted, listed without the key, and handed only to the worker that claims the job', async () => {
       const { accessToken, userId } = await owner();

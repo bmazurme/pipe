@@ -32,6 +32,7 @@ function worker(over: Partial<FleetWorker> = {}): FleetWorker {
     enrollmentExpiresAt: null,
     createdAt: '2026-10-14T11:00:00Z',
     claudeLimits: null,
+    claudeCredentialId: null,
     ...over,
   };
 }

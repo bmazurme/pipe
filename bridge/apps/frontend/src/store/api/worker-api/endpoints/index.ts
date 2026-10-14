@@ -127,6 +127,8 @@ export interface FleetWorker {
   enrollmentPending: boolean;
   enrollmentExpiresAt: string | null;
   createdAt: string | null;
+  /** The Claude token this worker uses by default (null = the account's first). */
+  claudeCredentialId: number | null;
   /** The Claude plan limits the last run on this worker reported, or null before any run did. */
   claudeLimits: ClaudeLimits | null;
 }
@@ -143,6 +145,8 @@ export interface WorkerSettings {
   pollIntervalSec?: number;
   jobTimeoutSec?: number;
   proxyUrl?: string | null;
+  /** The stored Claude token this worker uses when a job picked none; null = the account's first. */
+  claudeCredentialId?: number | null;
   chatEnabled?: boolean;
 }
 

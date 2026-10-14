@@ -91,6 +91,31 @@ describe('ClaudeCredentialsService', () => {
       expect(repository.findOne).toHaveBeenCalledTimes(1);
     });
 
+    it("uses the worker's own token when the job picked none", async () => {
+      repository.findOne!.mockResolvedValueOnce({ token: 'worker-token' });
+
+      await expect(service.resolveForRun(1, null, 4)).resolves.toBe(
+        'worker-token',
+      );
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { id: 4, userId: 1 },
+      });
+    });
+
+    it("prefers what the job picked over the worker's token", async () => {
+      repository.findOne!.mockResolvedValueOnce({ token: 'picked' });
+
+      await expect(service.resolveForRun(1, 7, 4)).resolves.toBe('picked');
+    });
+
+    it("falls to the first token when the worker's was deleted", async () => {
+      repository
+        .findOne!.mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ token: 'first' });
+
+      await expect(service.resolveForRun(1, null, 4)).resolves.toBe('first');
+    });
+
     it("falls back to the account's first token when none was picked", async () => {
       repository.findOne!.mockResolvedValueOnce({ token: 'first' });
 
