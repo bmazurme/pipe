@@ -121,6 +121,25 @@ const reportsApi = createApi({
       transformResponse: unwrap<{ skippedYears: string[] }>('Не удалось импортировать настройки'),
       invalidatesTags: ['Settings', 'ProjectDict', 'SubscriptionConfig', 'Counts'],
     }),
+    pushSettingsToBridge: builder.mutation<{ updatedAt: string }, void>({
+      query: () => ({
+        url: 'settings/bridge-sync/push',
+        method: 'POST',
+      }),
+      transformResponse: unwrap<{ updatedAt: string }>('Не удалось отправить настройки в bridge'),
+    }),
+    pullSettingsFromBridge: builder.mutation<
+      { skippedYears: string[] },
+      { bridgeApiUrl?: string; bridgeApiKey?: string }
+    >({
+      query: (body) => ({
+        url: 'settings/bridge-sync/pull',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap<{ skippedYears: string[] }>('Не удалось импортировать настройки из bridge'),
+      invalidatesTags: ['Settings', 'ProjectDict', 'SubscriptionConfig', 'Counts'],
+    }),
     getProjectDict: builder.query<ProjectDictType, void>({
       query: () => 'project-dict',
       transformResponse: unwrap<ProjectDictType>('Не удалось загрузить коды проектов'),
@@ -304,6 +323,8 @@ export const {
   useSetSettingsMutation,
   useLazyExportSettingsBundleQuery,
   useImportSettingsBundleMutation,
+  usePushSettingsToBridgeMutation,
+  usePullSettingsFromBridgeMutation,
   useGetProjectDictQuery,
   useAddProjectCodeMutation,
   useRemoveProjectCodeMutation,

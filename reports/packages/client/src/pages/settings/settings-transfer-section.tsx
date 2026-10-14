@@ -1,12 +1,18 @@
 import { useRef, useState } from 'react';
 import {
-  Button, Icon, Text, useToaster,
+  Button, Icon, Text, TextInput, useToaster,
   Dialog, DialogHeader, DialogBody, DialogFooter,
 } from '@gravity-ui/uikit';
-import { ArrowDownToLine, ArrowUpFromLine } from '@gravity-ui/icons';
+import { ArrowDownToLine, ArrowUpFromLine, ArrowDownToSquare, ArrowUpFromSquare } from '@gravity-ui/icons';
 import type { SettingsBundleType } from '@reports/shared';
 
-import { useLazyExportSettingsBundleQuery, useImportSettingsBundleMutation } from '../../store/api';
+import {
+  useLazyExportSettingsBundleQuery,
+  useImportSettingsBundleMutation,
+  useGetSettingsQuery,
+  usePushSettingsToBridgeMutation,
+  usePullSettingsFromBridgeMutation,
+} from '../../store/api';
 import { describeError } from '../../utils/describe-error';
 
 import style from './settings.module.css';
@@ -23,9 +29,14 @@ function isSettingsBundle(value: unknown): value is SettingsBundleType {
 // comment for what's deliberately left out (bridge-sourced calendar data).
 function SettingsTransferSection() {
   const toaster = useToaster();
+  const { data: settings } = useGetSettingsQuery();
   const [triggerExport, { isFetching: isExporting }] = useLazyExportSettingsBundleQuery();
   const [importBundle, { isLoading: isImporting }] = useImportSettingsBundleMutation();
+  const [pushToBridge, { isLoading: isPushing }] = usePushSettingsToBridgeMutation();
+  const [pullFromBridge, { isLoading: isPulling }] = usePullSettingsFromBridgeMutation();
   const [pendingBundle, setPendingBundle] = useState<SettingsBundleType | null>(null);
+  const [isBridgeImportOpen, setIsBridgeImportOpen] = useState(false);
+  const [bridgeForm, setBridgeForm] = useState({ bridgeApiUrl: '', bridgeApiKey: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
@@ -66,6 +77,59 @@ function SettingsTransferSection() {
         name: 'settings-import-parse-error',
         theme: 'danger',
         title: 'Не удалось прочитать файл',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+
+  const handlePushToBridge = async () => {
+    try {
+      await pushToBridge().unwrap();
+      toaster.add({
+        name: 'settings-bridge-push-success',
+        theme: 'success',
+        title: 'Настройки отправлены в bridge',
+        autoHiding: 3000,
+      });
+    } catch (error) {
+      toaster.add({
+        name: 'settings-bridge-push-error',
+        theme: 'danger',
+        title: 'Не удалось отправить настройки в bridge',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleOpenBridgeImport = () => {
+    setBridgeForm({ bridgeApiUrl: settings?.bridgeApiUrl ?? '', bridgeApiKey: '' });
+    setIsBridgeImportOpen(true);
+  };
+
+  const handleConfirmBridgeImport = async () => {
+    try {
+      const { skippedYears } = await pullFromBridge({
+        bridgeApiUrl: bridgeForm.bridgeApiUrl || undefined,
+        bridgeApiKey: bridgeForm.bridgeApiKey || undefined,
+      }).unwrap();
+
+      setIsBridgeImportOpen(false);
+      toaster.add({
+        name: 'settings-bridge-pull-success',
+        theme: 'success',
+        title: 'Настройки импортированы из bridge',
+        content: skippedYears.length > 0
+          ? `Отгулы за ${skippedYears.join(', ')} пропущены — на этой машине ещё нет календаря на эти годы`
+          : undefined,
+        autoHiding: skippedYears.length > 0 ? false : 3000,
+      });
+    } catch (error) {
+      toaster.add({
+        name: 'settings-bridge-pull-error',
+        theme: 'danger',
+        title: 'Не удалось импортировать настройки из bridge',
         content: describeError(error),
         isClosable: true,
       });
@@ -120,6 +184,14 @@ function SettingsTransferSection() {
           <Icon data={ArrowUpFromLine} size={16} />
           Импорт
         </Button>
+        <Button view="outlined" size="m" onClick={() => void handlePushToBridge()} loading={isPushing}>
+          <Icon data={ArrowUpFromSquare} size={16} />
+          Экспорт в Bridge
+        </Button>
+        <Button view="outlined" size="m" onClick={handleOpenBridgeImport}>
+          <Icon data={ArrowDownToSquare} size={16} />
+          Импорт из Bridge
+        </Button>
         <input
           ref={fileInputRef}
           type="file"
@@ -145,6 +217,37 @@ function SettingsTransferSection() {
           textButtonApply="Импортировать"
           textButtonCancel="Отмена"
           propsButtonApply={{ view: 'outlined-danger', loading: isImporting }}
+        />
+      </Dialog>
+
+      <Dialog open={isBridgeImportOpen} onClose={() => setIsBridgeImportOpen(false)}>
+        <DialogHeader caption="Импортировать настройки из Bridge?" />
+        <DialogBody>
+          <Text variant="body-2" color="warning" as="p">
+            Основные настройки, Subscription, коды проектов и отгулы будут заменены последним бэкапом с bridge.
+            Действие нельзя отменить.
+          </Text>
+          <div className={style.codeForm}>
+            <TextInput
+              label="Адрес bridge"
+              placeholder="https://bridge.example.com"
+              value={bridgeForm.bridgeApiUrl}
+              onUpdate={(bridgeApiUrl) => setBridgeForm((prev) => ({ ...prev, bridgeApiUrl }))}
+            />
+            <TextInput
+              label="API-ключ bridge"
+              placeholder="оставьте пустым, чтобы использовать сохранённый ключ"
+              value={bridgeForm.bridgeApiKey}
+              onUpdate={(bridgeApiKey) => setBridgeForm((prev) => ({ ...prev, bridgeApiKey }))}
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter
+          onClickButtonCancel={() => setIsBridgeImportOpen(false)}
+          onClickButtonApply={() => void handleConfirmBridgeImport()}
+          textButtonApply="Импортировать"
+          textButtonCancel="Отмена"
+          propsButtonApply={{ view: 'outlined-danger', loading: isPulling, disabled: !bridgeForm.bridgeApiUrl }}
         />
       </Dialog>
     </section>

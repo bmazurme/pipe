@@ -10,6 +10,8 @@ export {
   useSetSettingsMutation,
   useLazyExportSettingsBundleQuery,
   useImportSettingsBundleMutation,
+  usePushSettingsToBridgeMutation,
+  usePullSettingsFromBridgeMutation,
   useGetProjectDictQuery,
   useAddProjectCodeMutation,
   useRemoveProjectCodeMutation,

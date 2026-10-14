@@ -3,11 +3,9 @@ import type { SettingsBundleType, SettingsType, StreamEvent } from '@reports/sha
 
 import { getSettings, setSettings } from './props';
 import { redactSettings, restoreMaskedSecrets } from './redact';
-import { getSubscriptionConfig, setSubscriptionConfig } from '../subscription/config-props';
-import { getProjectDict, setProjectDict } from '../reports/project-dict-props';
-import { addOffDays, getAllOffDaysByYear } from '../counts/props';
-
-const SETTINGS_BUNDLE_VERSION = 1;
+import { buildSettingsBundle, applySettingsBundle } from './bundle';
+import { getSubscriptionConfig } from '../subscription/config-props';
+import { getProjectDict } from '../reports/project-dict-props';
 
 export async function handleGetSettings(req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -39,16 +37,7 @@ export async function handleExportSettingsBundle(req: Request, res: Response) {
   };
 
   try {
-    const bundle: SettingsBundleType = {
-      version: SETTINGS_BUNDLE_VERSION,
-      exportedAt: new Date().toISOString(),
-      settings: getSettings(),
-      subscriptionConfig: getSubscriptionConfig(),
-      projectDict: getProjectDict(),
-      offDaysByYear: getAllOffDaysByYear(),
-    };
-
-    sendEvent({ type: 'message', data: bundle });
+    sendEvent({ type: 'message', data: buildSettingsBundle() });
     res.end();
   } catch (error) {
     console.error('Export settings bundle error:', error);
@@ -70,30 +59,7 @@ export async function handleImportSettingsBundle(req: Request, res: Response) {
 
   try {
     const bundle = req.body as SettingsBundleType;
-
-    if (!bundle || typeof bundle !== 'object' || !bundle.settings || !bundle.subscriptionConfig) {
-      throw new Error('Файл не похож на экспорт настроек reports');
-    }
-
-    setSettings(bundle.settings);
-    setSubscriptionConfig(bundle.subscriptionConfig);
-    setProjectDict(bundle.projectDict ?? {});
-
-    // Years the bundle carries off-days for but this machine doesn't have a
-    // calendar entry for yet (a fresh checkout of a future year, say) are
-    // skipped with a warning rather than failing the whole import.
-    const skippedYears: string[] = [];
-    const existingYears = new Set(Object.keys(getAllOffDaysByYear()));
-
-    for (const [year, offDays] of Object.entries(bundle.offDaysByYear ?? {})) {
-      if (!existingYears.has(year)) {
-        skippedYears.push(year);
-        continue;
-      }
-      if (offDays.length > 0) {
-        addOffDays(year, offDays);
-      }
-    }
+    const { skippedYears } = applySettingsBundle(bundle);
 
     sendEvent({
       type: 'message',

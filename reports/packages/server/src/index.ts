@@ -9,6 +9,7 @@ import cors from 'cors';
 import { handleCounts, handleAddOffDay, handleRemoveOffDay, handleImportDayOffs } from './counts/handler';
 import { handleReport, handlePushReport } from './reports/handler';
 import { handleGetSettings, handleSetSettings, handleExportSettingsBundle, handleImportSettingsBundle } from './settings/handler';
+import { handlePushSettingsToBridge, handlePullSettingsFromBridge } from './settings/bridge-sync-handler';
 import { handleGetProjectDict, handleAddProjectCode, handleRemoveProjectCode } from './reports/project-dict-handler';
 import {
   handleListSubscriptionIssues,
@@ -42,6 +43,18 @@ import { startAutopilot } from './subscription/autopilot';
 import { corsOrigin, localOnly } from './security/local-only';
 import { setupProxy } from './utils/setup-proxy';
 import { codeStatus } from './utils/stale-code';
+
+const envPath = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
+
+if (!existsSync(envPath)) {
+  console.warn(
+    [
+      '⚠️  Файл .env не найден в packages/server — сервер запущен с настройками по умолчанию.',
+      '    Скопируйте packages/server/.env.example в packages/server/.env и заполните нужные переменные',
+      '    (GITHUB_TOKEN для GitHub-репозиториев, HTTPS_PROXY/HTTP_PROXY за корпоративным прокси и т.д.).',
+    ].join('\n'),
+  );
+}
 
 setupProxy();
 
@@ -83,6 +96,8 @@ app.get('/api/settings', handleGetSettings);
 app.post('/api/settings', handleSetSettings);
 app.get('/api/settings/export', handleExportSettingsBundle);
 app.post('/api/settings/import', handleImportSettingsBundle);
+app.post('/api/settings/bridge-sync/push', handlePushSettingsToBridge);
+app.post('/api/settings/bridge-sync/pull', handlePullSettingsFromBridge);
 app.get('/api/project-dict', handleGetProjectDict);
 app.post('/api/project-dict', handleAddProjectCode);
 app.delete('/api/project-dict/:code', handleRemoveProjectCode);
