@@ -7,6 +7,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { describePublishError, ImproveService } from './improve.service';
+import * as parcel from './parcel';
 import { MANIFEST_ENTRY, sha256 } from './parcel';
 
 const BASE = { 'a.ts': 'one', 'b.ts': 'two' };
@@ -1035,6 +1036,60 @@ describe('ImproveService zipball reuse', () => {
     }
 
     expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ImproveService snapshot baseline reuse', () => {
+  let hash: jest.SpyInstance;
+  beforeEach(() => {
+    hash = jest.spyOn(parcel, 'snapshotBaseline');
+  });
+  afterEach(() => hash.mockRestore());
+
+  const storedBaselines = (runs: Record<string, jest.Mock>) =>
+    runs.create.mock.calls.map(
+      ([run]) => (run as { baseline: string }).baseline,
+    );
+
+  it('hashes the snapshot once for several issues on the same base SHA', async () => {
+    const { service, runs } = setup();
+
+    await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(hash).toHaveBeenCalledTimes(1);
+    expect(storedBaselines(runs)).toEqual([
+      baselineOf(BASE),
+      baselineOf(BASE),
+      baselineOf(BASE),
+    ]);
+  });
+
+  it('hashes again when the base SHA changes', async () => {
+    const { service, github } = setup();
+    github.getBranchSha
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValue('sha-2');
+
+    await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(hash).toHaveBeenCalledTimes(2);
+  });
+
+  it('hashes again once the cached entry is older than the TTL', async () => {
+    const { service } = setup();
+    const t0 = Date.now();
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(t0);
+      await service.startRun(3, 1, 'sonnet');
+      now.mockReturnValue(t0 + 11 * 60 * 1000);
+      await service.startRun(3, 2, 'sonnet');
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(hash).toHaveBeenCalledTimes(2);
   });
 });
 
