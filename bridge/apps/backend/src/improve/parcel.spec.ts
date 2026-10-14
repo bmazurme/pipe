@@ -1,9 +1,13 @@
-import { strToU8, zipSync } from 'fflate';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import {
   buildIssueParcel,
   diffResult,
   MANIFEST_ENTRY,
+  PARCEL_SCHEMA_VERSION,
   readResultParcel,
   readZipball,
   selectParcelFiles,
@@ -79,6 +83,28 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     expect(read.has(MANIFEST_ENTRY)).toBe(false);
     expect(baseline['a.ts']).toBe(sha256(strToU8('one')));
     expect(Object.keys(baseline)).toHaveLength(3);
+  });
+
+  it('stamps the manifest with the current schemaVersion', () => {
+    const { buffer } = buildIssueParcel(files, issue);
+    const manifest = JSON.parse(
+      strFromU8(unzipSync(buffer)[MANIFEST_ENTRY]),
+    ) as { schemaVersion?: number };
+
+    expect(manifest.schemaVersion).toBe(2);
+  });
+
+  it('keeps PARCEL_SCHEMA_VERSION in step with packages/protocol', () => {
+    const source = readFileSync(
+      join(__dirname, '../../../../../packages/protocol/src/manifest.ts'),
+      'utf8',
+    );
+    const match = /export const PROTOCOL_SCHEMA_VERSION\s*=\s*(\d+)/.exec(
+      source,
+    );
+
+    expect(match).not.toBeNull();
+    expect(PARCEL_SCHEMA_VERSION).toBe(Number(match![1]));
   });
 
   it('classifies modified, added and deleted files against the baseline', () => {
