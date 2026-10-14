@@ -84,7 +84,11 @@ describe('StoragePage polling', () => {
       expect(listCalls()).toBe(before);
 
       store.dispatch(storageApi.internalActions.onFocus());
-      await vi.advanceTimersByTimeAsync(5000);
+      // Resumes on the next poll tick; step the clock (rather than one fixed
+      // jump) so a slow runner can't land between the tick and its fetch.
+      for (let i = 0; i < 10 && listCalls() <= before; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
       expect(listCalls()).toBeGreaterThan(before);
     } finally {
       store.dispatch(storageApi.internalActions.onFocus());
