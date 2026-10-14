@@ -5,7 +5,8 @@
   "description": "Standalone service (installs on an Ubuntu server): polls bridge for worker jobs, runs the assigned AI model (Claude via the claude CLI, or GPT/DeepSeek/Qwen via a minimal OpenAI-compatible tool-calling loop) against the job's parcel, and reports status/logs/result back to bridge.",
   "type": "module",
   "bin": {
-    "pipe-worker": "./dist/index.js"
+    "pipe-worker": "./dist/index.js",
+    "pipe-worker-enroll": "./dist/enrollCli.js"
   },
   "scripts": {
     "build": "tsc -b",

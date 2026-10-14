@@ -51,17 +51,39 @@ export type OpenAiCompatibleConfig = { tool: 'openai-compatible'; baseUrl: strin
 // an env file) or whitespace counts as unset.
 const nonEmpty = (v?: string) => v?.trim() || undefined;
 
+// The key (and optional endpoint / model) bridge hands over with a claimed job or chat turn, taken from the account's
+// stored provider keys — so nothing has to be set in this worker's environment.
+export interface ProviderOverride {
+  apiKey: string;
+  baseUrl?: string | null;
+  model?: string | null;
+}
+
 // Shared by resolveProvider (jobs) and chatProviders.ts's resolveChatProvider
 // (chat turns) — gpt/deepseek/qwen need identical setup for both.
 export function resolveOpenAiCompatibleConfig(
   model: OpenAiCompatibleModel,
   env: NodeJS.ProcessEnv,
+  override?: ProviderOverride | null,
 ): OpenAiCompatibleConfig {
   const defaults = OPENAI_COMPATIBLE_DEFAULTS[model];
+
+  // What bridge sent wins; the environment is the fallback (a worker that has not been moved to stored keys yet).
+  if (nonEmpty(override?.apiKey)) {
+    return {
+      tool: 'openai-compatible',
+      baseUrl: nonEmpty(override?.baseUrl ?? undefined) ?? nonEmpty(env[defaults.baseUrlEnv]) ?? defaults.defaultBaseUrl,
+      apiKey: override!.apiKey.trim(),
+      model: nonEmpty(override?.model ?? undefined) ?? nonEmpty(env[defaults.modelEnv]) ?? defaults.defaultModel,
+    };
+  }
+
   const apiKey = nonEmpty(env[defaults.apiKeyEnv]);
 
   if (!apiKey) {
-    throw new Error(`${defaults.apiKeyEnv} is not set — required to use the "${model}" model`);
+    throw new Error(
+      `No API key for the "${model}" model — add one in Worker → Keys (or set ${defaults.apiKeyEnv} on this worker)`,
+    );
   }
 
   return {
@@ -75,10 +97,14 @@ export function resolveOpenAiCompatibleConfig(
 // Resolved lazily (per job), not eagerly at startup, so worker can still run
 // with only some providers configured — a job for an unconfigured provider
 // fails with a clear message instead of the whole process refusing to start.
-export function resolveProvider(model: JobModel, env: NodeJS.ProcessEnv = process.env): ProviderConfig {
+export function resolveProvider(
+  model: JobModel,
+  env: NodeJS.ProcessEnv = process.env,
+  override?: ProviderOverride | null,
+): ProviderConfig {
   if (model === 'sonnet' || model === 'opus') {
     return { tool: 'claude', claudeModel: model };
   }
 
-  return resolveOpenAiCompatibleConfig(model, env);
+  return resolveOpenAiCompatibleConfig(model, env, override);
 }

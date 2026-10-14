@@ -24,6 +24,8 @@ import { User } from '../users/entities/user.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
 import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
 import { Job } from '../worker/entities/job.entity';
+import { ProviderCredential } from '../worker/entities/provider-credential.entity';
+import { Worker } from '../worker/entities/worker.entity';
 import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
 
 // Every entity the app uses, in one place. Both the app's DataSource
@@ -42,6 +44,8 @@ export const ENTITIES = [
   DayOff,
   TimeReportEntry,
   Job,
+  Worker,
+  ProviderCredential,
   Chat,
   ChatMessage,
   ChatAttachment,

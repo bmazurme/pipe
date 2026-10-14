@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Text } from '@gravity-ui/uikit';
+import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
-import { useListJobsQuery } from '../store/api';
+import { useTabParam } from '../shared/hooks/useTabParam';
+import { useListJobsQuery, useListWorkersQuery } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
 import { ClaudeCredentialsCard } from './worker/ClaudeCredentialsCard';
-import { isActive, JOB_IDLE_POLL_INTERVAL_MS, JOB_POLL_INTERVAL_MS } from './worker/constants';
+import { isActive, JOB_IDLE_POLL_INTERVAL_MS, JOB_POLL_INTERVAL_MS, WORKER_STATUS_POLL_INTERVAL_MS } from './worker/constants';
 import { JobDetailDialog } from './worker/JobDetailDialog';
 import { JobList } from './worker/JobList';
 import { NewJobForm } from './worker/NewJobForm';
+import { ProviderCredentialsCard } from './worker/ProviderCredentialsCard';
 import { VpnConnectionSelector } from './worker/VpnConnectionSelector';
+import { WorkerFleetSummary } from './worker/WorkerFleetSummary';
 import { WorkerHelpCard } from './worker/WorkerHelpCard';
-import { WorkerSecretsCard } from './worker/WorkerSecretsCard';
-import { WorkerStatusCard } from './worker/WorkerStatusCard';
+import { WorkersTab } from './worker/WorkersTab';
 import styles from './WorkerPage.module.css';
 
+const TABS = ['jobs', 'workers', 'keys'] as const;
+
+// Three tabs instead of one long scroll: what you do every day (start a task, watch it), the machines that do it, and the
+// set-once keys and connections. The summary above stays visible on all of them.
 export function WorkerPage() {
+  const [activeTab, setActiveTab] = useTabParam(TABS, 'jobs');
+
   // Fast while something is queued or running, slow otherwise, and paused
   // entirely while the tab is in the background.
   const [pollingInterval, setPollingInterval] = useState(JOB_POLL_INTERVAL_MS);
@@ -24,6 +32,10 @@ export function WorkerPage() {
     isError: isJobsError,
   } = useListJobsQuery(undefined, {
     pollingInterval,
+    skipPollingIfUnfocused: true,
+  });
+  const { data: workers, isLoading: isLoadingWorkers } = useListWorkersQuery(undefined, {
+    pollingInterval: WORKER_STATUS_POLL_INTERVAL_MS,
     skipPollingIfUnfocused: true,
   });
   const jobs = jobsData ?? [];
@@ -42,28 +54,48 @@ export function WorkerPage() {
         description="Запуск ИИ-агента над посылкой из Storage — Claude, GPT, DeepSeek или Qwen."
       />
 
-      <WorkerStatusCard jobs={jobs} />
+      <WorkerFleetSummary workers={workers} isLoading={isLoadingWorkers} jobs={jobs} />
 
-      <NewJobForm onCreated={setOpenJobId} />
+      <TabProvider value={activeTab} onUpdate={setActiveTab}>
+        <TabList aria-label="Разделы страницы Worker">
+          <Tab value="jobs">Задачи</Tab>
+          <Tab value="workers">Worker&apos;ы{workers && workers.length > 0 ? ` (${workers.length})` : ''}</Tab>
+          <Tab value="keys">Ключи и подключения</Tab>
+        </TabList>
 
-      <JobList
-        jobs={jobs}
-        isLoading={isLoadingJobs}
-        isError={isJobsError}
-        onOpenJob={setOpenJobId}
-      />
+        {/* Only the open tab is mounted: the others would poll and hold form state for nothing. */}
+        <TabPanel value="jobs" className={styles.tabPanel}>
+          {activeTab === 'jobs' && (
+            <>
+              <NewJobForm onCreated={setOpenJobId} onOpenWorkers={() => setActiveTab('workers')} />
 
-      <Text variant="subheader-3" color="secondary" className={styles.settingsHeading}>
-        Подключения и ключи
-      </Text>
+              <JobList
+                jobs={jobs}
+                isLoading={isLoadingJobs}
+                isError={isJobsError}
+                onOpenJob={setOpenJobId}
+                workers={workers}
+              />
+            </>
+          )}
+        </TabPanel>
 
-      <VpnConnectionSelector />
+        <TabPanel value="workers">{activeTab === 'workers' && <WorkersTab jobs={jobs} onOpenJob={setOpenJobId} />}</TabPanel>
 
-      <ClaudeCredentialsCard />
+        <TabPanel value="keys" className={styles.tabPanel}>
+          {activeTab === 'keys' && (
+            <>
+              <ClaudeCredentialsCard />
 
-      <WorkerSecretsCard />
+              <ProviderCredentialsCard />
 
-      <WorkerHelpCard />
+              <VpnConnectionSelector />
+
+              <WorkerHelpCard />
+            </>
+          )}
+        </TabPanel>
+      </TabProvider>
 
       {openJobId !== null && (
         <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />

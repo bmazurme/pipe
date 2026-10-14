@@ -5,7 +5,7 @@ import baseQuery from '../../base-query-with-reauth';
 const workerApi = createApi({
   reducerPath: 'workerApi',
   baseQuery,
-  tagTypes: ['WorkerJob', 'ClaudeCredential'],
+  tagTypes: ['WorkerJob', 'ClaudeCredential', 'Worker', 'ProviderCredential'],
   endpoints: () => ({}),
 });
 

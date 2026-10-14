@@ -1,4 +1,4 @@
-import { resolveOpenAiCompatibleConfig, type OpenAiCompatibleConfig } from './providers.js';
+import { resolveOpenAiCompatibleConfig, type OpenAiCompatibleConfig, type ProviderOverride } from './providers.js';
 
 export type ChatModel = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 
@@ -11,10 +11,14 @@ export type ChatProviderConfig =
 // same resolveProvider('sonnet'|'opus') shape as providers.ts, no API key of
 // its own to check here, since the CLI handles its own auth. gpt/deepseek/qwen
 // reuse the exact same OpenAI-compatible config jobs already use, unmodified.
-export function resolveChatProvider(model: ChatModel, env: NodeJS.ProcessEnv = process.env): ChatProviderConfig {
+export function resolveChatProvider(
+  model: ChatModel,
+  env: NodeJS.ProcessEnv = process.env,
+  override?: ProviderOverride | null,
+): ChatProviderConfig {
   if (model === 'sonnet' || model === 'opus') {
     return { tool: 'claude', claudeModel: model };
   }
 
-  return resolveOpenAiCompatibleConfig(model, env);
+  return resolveOpenAiCompatibleConfig(model, env, override);
 }

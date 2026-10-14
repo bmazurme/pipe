@@ -74,8 +74,8 @@ describe('resolveProvider', () => {
   });
 
   it('treats an empty or whitespace-only API key as unset', () => {
-    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '' }), /OPENAI_API_KEY is not set/);
-    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '   ' }), /OPENAI_API_KEY is not set/);
+    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '' }), /No API key for the "gpt" model/);
+    assert.throws(() => resolveProvider('gpt', { OPENAI_API_KEY: '   ' }), /No API key for the "gpt" model/);
   });
 
   it('trims explicit values', () => {
@@ -92,3 +92,53 @@ describe('resolveProvider', () => {
     });
   });
 });
+
+describe('resolveProvider with a key stored in bridge', () => {
+  it('uses the key bridge handed over — nothing needs to be set in the environment', () => {
+    const config = resolveProvider('gpt', {}, { apiKey: 'sk-stored' });
+
+    assert.deepEqual(config, {
+      tool: 'openai-compatible',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-stored',
+      model: 'gpt-4o',
+    });
+  });
+
+  it('takes the endpoint and model from the stored key when it has them', () => {
+    const config = resolveProvider('deepseek', {}, { apiKey: 'sk-d', baseUrl: 'https://gw.example/v1', model: 'deepseek-reasoner' });
+
+    assert.deepEqual(config, {
+      tool: 'openai-compatible',
+      baseUrl: 'https://gw.example/v1',
+      apiKey: 'sk-d',
+      model: 'deepseek-reasoner',
+    });
+  });
+
+  it('the stored key wins over the environment’s, but an endpoint it does not set falls back to the environment', () => {
+    const config = resolveProvider('qwen', { QWEN_API_KEY: 'env-key', QWEN_BASE_URL: 'https://env.example/v1' }, { apiKey: 'stored-key' });
+
+    assert.equal(config.tool === 'openai-compatible' && config.apiKey, 'stored-key');
+    assert.equal(config.tool === 'openai-compatible' && config.baseUrl, 'https://env.example/v1');
+  });
+
+  it('falls back to the environment when bridge sent none (a worker not moved to stored keys yet)', () => {
+    const config = resolveProvider('gpt', { OPENAI_API_KEY: 'env-key' }, null);
+
+    assert.equal(config.tool === 'openai-compatible' && config.apiKey, 'env-key');
+  });
+
+  it('a blank stored key does not count', () => {
+    assert.throws(() => resolveProvider('gpt', {}, { apiKey: '   ' }), /No API key for the "gpt" model/);
+  });
+
+  it('says where to add a key when there is none anywhere', () => {
+    assert.throws(() => resolveProvider('gpt', {}), /Worker → Keys/);
+  });
+
+  it('Claude models never need a provider key', () => {
+    assert.deepEqual(resolveProvider('sonnet', {}, { apiKey: 'ignored' }), { tool: 'claude', claudeModel: 'sonnet' });
+  });
+});
+

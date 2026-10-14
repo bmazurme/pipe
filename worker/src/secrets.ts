@@ -32,6 +32,7 @@ export function resolveFileSecrets(env: NodeJS.ProcessEnv, keys: string[]): void
 
 export const SECRET_ENV_KEYS = [
   'BRIDGE_API_KEY',
+  'WORKER_ENROLL_CODE',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'OPENAI_API_KEY',
   'DEEPSEEK_API_KEY',

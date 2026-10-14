@@ -21,6 +21,8 @@ export interface ClaimedChatTurn {
   messageId: number;
   chatId: number;
   model: 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+  // The stored API key for a gpt/deepseek/qwen turn; null/absent = this worker's own environment.
+  provider?: { apiKey: string; baseUrl?: string | null; model?: string | null } | null;
   history: ChatHistoryEntry[];
 }
 

@@ -64,6 +64,12 @@ If the worker's replies hang, check the tunnel first: `FINGERPRINT=firefox ./vle
 in series; direct connects to the VPN server were fine) and `firefox` passed 48 of 48. `vpn-client` also uses
 `endpoint_mode: dnsrr` — the Swarm virtual IP added no value for a single task.
 
+**Worker added in the UI (no secrets in the stack).** `./deploy-worker.sh --managed [ghcr [tag]]` deploys `worker-managed-pi.yml` instead:
+no bridge API key and no Claude token among the secrets — the worker keeps its own key in the `worker_state` volume, and its settings,
+Claude tokens and provider API keys come from bridge (Worker page → Worker'ы / Ключи). Add the worker on that page, then, from your workstation,
+`infra/bridge-pi/enroll-worker.sh <code>` hands it the one-time code (over stdin — nothing on a command line). Moving the existing worker:
+add it on the page, `./deploy-worker.sh --managed ghcr stable`, `enroll-worker.sh <code>`, check it shows as idle, delete the old `pi-worker` row.
+
 The three values become Docker secrets (encrypted in the Swarm raft store); `deploy-worker.sh` writes them to a 0700
 temp directory and removes it on exit. The worker should then show up on bridge's Worker page as `pi-worker`.
 

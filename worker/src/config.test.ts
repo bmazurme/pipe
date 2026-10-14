@@ -8,8 +8,32 @@ describe('loadConfig', () => {
     assert.throws(() => loadConfig({ BRIDGE_API_KEY: 'x' }), /BRIDGE_API_URL/);
   });
 
-  it('throws a clear error when BRIDGE_API_KEY is missing', () => {
-    assert.throws(() => loadConfig({ BRIDGE_API_URL: 'http://x' }), /BRIDGE_API_KEY/);
+  // A worker added in the UI has no API key in its environment at all: it enrols with a one-time code.
+  it('does not require BRIDGE_API_KEY — the key is optional (legacy) and absent for an enrolled worker', () => {
+    const config = loadConfig({ BRIDGE_API_URL: 'http://x' });
+    assert.equal(config.bridgeApiKey, undefined);
+    assert.equal(config.enrollCode, undefined);
+  });
+
+  it('reads the optional personal API key and the one-time enrollment code, trimmed, blank = unset', () => {
+    const config = loadConfig({
+      BRIDGE_API_URL: 'http://x',
+      BRIDGE_API_KEY: ' brk_k ',
+      WORKER_ENROLL_CODE: '  brn_code  ',
+    });
+    assert.equal(config.bridgeApiKey, 'brk_k');
+    assert.equal(config.enrollCode, 'brn_code');
+
+    const blank = loadConfig({ BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: '  ', WORKER_ENROLL_CODE: '' });
+    assert.equal(blank.bridgeApiKey, undefined);
+    assert.equal(blank.enrollCode, undefined);
+  });
+
+  it('keeps the key in a state directory of its own, apart from the per-job work directory', () => {
+    const config = loadConfig({ BRIDGE_API_URL: 'http://x' });
+    assert.ok(config.stateDir.endsWith('.worker-state'));
+    assert.notEqual(config.stateDir, config.workDir);
+    assert.equal(loadConfig({ BRIDGE_API_URL: 'http://x', WORKER_STATE_DIR: '/state' }).stateDir, '/state');
   });
 
   it('strips a trailing slash from the bridge URL', () => {

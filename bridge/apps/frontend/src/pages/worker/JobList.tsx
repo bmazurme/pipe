@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { ArrowDownToLine, FaceRobot } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Label, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { jobDuration } from '../../shared/lib/formatDuration';
-import { WorkerJob } from '../../store/api';
+import type { FleetWorker, WorkerJob } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
@@ -23,16 +23,44 @@ interface JobListProps {
   isLoading: boolean;
   isError?: boolean;
   onOpenJob: (jobId: number) => void;
+  /** For naming the worker a queued job is pinned to. */
+  workers?: FleetWorker[];
+}
+
+type JobFilter = 'all' | 'active' | 'failed';
+
+function matches(job: WorkerJob, filter: JobFilter): boolean {
+  if (filter === 'active') return isActive(job.status);
+  if (filter === 'failed') return job.status === 'failed';
+
+  return true;
+}
+
+// Who is doing the job, or who it is waiting for.
+function whoLine(job: WorkerJob, workers: FleetWorker[] | undefined): string | null {
+  if (job.workerName) return `на ${job.workerName}`;
+
+  if (job.status === 'queued' && job.targetWorkerId !== null) {
+    const target = workers?.find((worker) => worker.id === job.targetWorkerId);
+
+    return target ? `ждёт ${target.name}` : 'ждёт выбранный worker';
+  }
+
+  return null;
 }
 
 // Jobs accumulate forever; the page should open on what is recent, with the
 // rest one click away instead of an ever-longer scroll above the settings.
 const INITIAL_VISIBLE_JOBS = 8;
 
-export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobListProps) {
+export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }: JobListProps) {
   const [showAll, setShowAll] = useState(false);
-  const visibleJobs = showAll ? jobs : jobs.slice(0, INITIAL_VISIBLE_JOBS);
-  const hiddenCount = jobs.length - visibleJobs.length;
+  const [filter, setFilter] = useState<JobFilter>('all');
+  const filtered = jobs.filter((job) => matches(job, filter));
+  const visibleJobs = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE_JOBS);
+  const hiddenCount = filtered.length - visibleJobs.length;
+  const activeCount = jobs.filter((job) => isActive(job.status)).length;
+  const failedCount = jobs.filter((job) => job.status === 'failed').length;
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -40,6 +68,25 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobList
         title="Задачи"
         meta={jobs.length > 0 ? String(jobs.length) : undefined}
       />
+
+      {jobs.length > 0 && (
+        <div className={styles.filterRow}>
+          <SegmentedRadioGroup
+            size="m"
+            value={filter}
+            onUpdate={(value) => {
+              setFilter(value as JobFilter);
+              setShowAll(false);
+            }}
+            aria-label="Фильтр задач"
+            options={[
+              { value: 'all', content: 'Все' },
+              { value: 'active', content: activeCount > 0 ? `Активные (${activeCount})` : 'Активные' },
+              { value: 'failed', content: failedCount > 0 ? `С ошибкой (${failedCount})` : 'С ошибкой' },
+            ]}
+          />
+        </div>
+      )}
 
       {jobs.length === 0 && isLoading ? (
         <div className={styles.jobListLoader} role="status">
@@ -53,10 +100,17 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobList
           title="Задач ещё нет"
           description="Выберите посылку и модель выше, чтобы запустить первую."
         />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={FaceRobot}
+          title={filter === 'active' ? 'Активных задач нет' : 'Задач с ошибкой нет'}
+          description="Выберите «Все», чтобы увидеть остальные."
+        />
       ) : (
         <ul className={styles.jobList}>
           {visibleJobs.map((job: WorkerJob) => {
             const duration = jobDuration(job);
+            const who = whoLine(job, workers);
 
             return (
               <li key={job.id} className={styles.jobItem}>
@@ -73,6 +127,7 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob }: JobList
                       {' · '}
                       {formatRelativeTime(job.createdAt)}
                       {duration && ` · ${duration}`}
+                      {who && ` · ${who}`}
                     </Text>
                     {job.status === 'failed' && job.errorMessage && (
                       <Text

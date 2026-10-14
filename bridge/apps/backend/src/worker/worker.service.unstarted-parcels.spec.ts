@@ -38,6 +38,8 @@ function setup(result: Partial<StoredFile>[] = []) {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
+    {} as never,
   );
 
   return { service, manager, conditions, subQuery, builder };
