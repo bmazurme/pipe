@@ -47,6 +47,11 @@ import { WorkersService } from './workers.service';
     ProviderCredentialsService,
     WorkerHeartbeatService,
   ],
-  exports: [WorkerService, WorkersService, ProviderCredentialsService],
+  exports: [
+    WorkerService,
+    WorkersService,
+    ProviderCredentialsService,
+    ClaudeCredentialsService,
+  ],
 })
 export class WorkerModule {}

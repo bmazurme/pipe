@@ -37,6 +37,7 @@ import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
+import { JobModel } from './entities/job.entity';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { WorkerService } from './worker.service';
@@ -125,10 +126,10 @@ export class WorkerController {
     // (worker falls back to its own inherited env var) rather than failing
     // the claim.
     const claudeToken =
-      job.claudeCredentialId !== null
-        ? await this.claudeCredentialsService.resolveToken(
-            job.claudeCredentialId,
+      job.model === JobModel.Sonnet || job.model === JobModel.Opus
+        ? await this.claudeCredentialsService.resolveForRun(
             currentUser.id,
+            job.claudeCredentialId,
           )
         : null;
 

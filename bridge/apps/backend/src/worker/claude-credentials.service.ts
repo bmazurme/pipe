@@ -45,6 +45,27 @@ export class ClaudeCredentialsService {
     }
   }
 
+  // The token a Claude run uses: the one the job picked, else (also when that one was deleted) the account's
+  // first — what the Claude-tokens card promises. null only when the account has none; the worker then falls back
+  // to its own login, which a worker added in the UI does not have.
+  async resolveForRun(
+    userId: number,
+    credentialId: number | null,
+  ): Promise<string | null> {
+    if (credentialId !== null) {
+      const picked = await this.resolveToken(credentialId, userId);
+
+      if (picked) return picked;
+    }
+
+    const first = await this.repository.findOne({
+      where: { userId },
+      order: { id: 'ASC' },
+    });
+
+    return first?.token ?? null;
+  }
+
   // The one place the raw token value leaves this service — called only by
   // WorkerService.claim() to hand it to the worker process, scoped to the
   // owning user so one account can never pull another's credential by id.

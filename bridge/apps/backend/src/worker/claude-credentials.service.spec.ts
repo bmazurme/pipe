@@ -83,6 +83,39 @@ describe('ClaudeCredentialsService', () => {
     });
   });
 
+  describe('resolveForRun', () => {
+    it('uses the credential the job picked', async () => {
+      repository.findOne!.mockResolvedValueOnce({ token: 'picked' });
+
+      await expect(service.resolveForRun(1, 7)).resolves.toBe('picked');
+      expect(repository.findOne).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to the account's first token when none was picked", async () => {
+      repository.findOne!.mockResolvedValueOnce({ token: 'first' });
+
+      await expect(service.resolveForRun(1, null)).resolves.toBe('first');
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { userId: 1 },
+        order: { id: 'ASC' },
+      });
+    });
+
+    it('falls back to the first one when the picked credential was deleted', async () => {
+      repository
+        .findOne!.mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ token: 'first' });
+
+      await expect(service.resolveForRun(1, 7)).resolves.toBe('first');
+    });
+
+    it('is null for an account with no tokens at all', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.resolveForRun(1, null)).resolves.toBeNull();
+    });
+  });
+
   describe('resolveToken', () => {
     it('returns null when no matching credential exists for this user', async () => {
       repository.findOne!.mockResolvedValue(null);
