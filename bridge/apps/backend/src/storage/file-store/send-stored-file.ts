@@ -78,3 +78,20 @@ async function streamRemote(
     finish(error instanceof Error ? error : new Error(String(error)));
   }
 }
+
+// The failure half of a download: res.download's callback is the only place a missing file surfaces, and without
+// a response the request hangs. headersSent guards a mid-stream failure (nothing valid can follow the first bytes).
+export function respondDownloadError(
+  res: Response,
+  file: { id: number; storedName: string },
+  err: Error,
+  logger: { warn(message: string): void },
+): void {
+  logger.warn(
+    `Failed to send file ${file.id} (${file.storedName}): ${err.message}`,
+  );
+
+  if (!res.headersSent) {
+    res.status(404).json({ message: 'File is missing on disk' });
+  }
+}
