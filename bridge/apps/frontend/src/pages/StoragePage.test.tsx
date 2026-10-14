@@ -66,6 +66,37 @@ beforeEach(() => {
   });
 });
 
+describe('StoragePage polling', () => {
+  it('does not poll the file list while the tab is unfocused', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByText('Выбрать файлы');
+      const listCalls = () =>
+        vi.mocked(fetch).mock.calls.filter(([i]) => (i instanceof Request ? i.url : String(i)).includes('/storage')).length;
+
+      store.dispatch(storageApi.internalActions.onFocusLost());
+      // Let any fetch already in flight (or a poll timer armed before the
+      // tab lost focus) land before taking the baseline.
+      await vi.advanceTimersByTimeAsync(4500);
+      const before = listCalls();
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(listCalls()).toBe(before);
+
+      store.dispatch(storageApi.internalActions.onFocus());
+      // Resumes on the next poll tick; step the clock (rather than one fixed
+      // jump) so a slow runner can't land between the tick and its fetch.
+      for (let i = 0; i < 10 && listCalls() <= before; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(listCalls()).toBeGreaterThan(before);
+    } finally {
+      store.dispatch(storageApi.internalActions.onFocus());
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('StoragePage', () => {
   it('uploads a clean file immediately, without a confirmation dialog', async () => {
     renderPage();
