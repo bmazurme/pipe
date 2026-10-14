@@ -234,6 +234,7 @@ describe('WorkerPage', () => {
     expect(screen.getByText('work')).toBeTruthy();
 
     await user.click(screen.getByLabelText('Удалить токен: personal'));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deletedId).toBe(1));
   });

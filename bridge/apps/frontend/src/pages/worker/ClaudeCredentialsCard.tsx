@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Dialog, Icon, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
   ClaudeCredential,
@@ -12,13 +12,15 @@ import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 
 export function ClaudeCredentialsCard() {
-  const { data: credentials, isLoading } = useListClaudeCredentialsQuery();
+  const { data: credentials, isLoading, isError, refetch } = useListClaudeCredentialsQuery();
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
   const [createClaudeCredential, { isLoading: isCreating }] = useCreateClaudeCredentialMutation();
   const [deleteClaudeCredential] = useDeleteClaudeCredentialMutation();
   const [createError, setCreateErrorState] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ClaudeCredential | null>(null);
 
   const handleCreate = async () => {
     if (!name.trim() || !token.trim()) return;
@@ -33,10 +35,13 @@ export function ClaudeCredentialsCard() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    setDeletingId(id);
+  const handleDelete = async (credential: ClaudeCredential) => {
+    setDeleteError(null);
+    setDeletingId(credential.id);
     try {
-      await deleteClaudeCredential(id).unwrap();
+      await deleteClaudeCredential(credential.id).unwrap();
+    } catch {
+      setDeleteError(`Не удалось удалить токен «${credential.name}»`);
     } finally {
       setDeletingId(null);
     }
@@ -53,6 +58,25 @@ export function ClaudeCredentialsCard() {
 
       {isLoading && <Skeleton height={40} />}
 
+      {isError && (
+        <Alert
+          theme="danger"
+          view="filled"
+          message="Не удалось загрузить список токенов"
+          actions={
+            <Button view="outlined" size="s" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && credentials && credentials.length === 0 && (
+        <Text color="secondary" variant="body-2">
+          Токенов пока нет — добавьте первый ниже.
+        </Text>
+      )}
+
       {credentials && credentials.length > 0 && (
         <ul className={styles.jobList}>
           {credentials.map((credential: ClaudeCredential) => (
@@ -63,7 +87,10 @@ export function ClaudeCredentialsCard() {
                 size="s"
                 aria-label={`Удалить токен: ${credential.name}`}
                 loading={deletingId === credential.id}
-                onClick={() => void handleDelete(credential.id)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setPendingDelete(credential);
+                }}
               >
                 <Icon data={TrashBin} size={16} />
               </Button>
@@ -92,6 +119,32 @@ export function ClaudeCredentialsCard() {
       </div>
 
       {createError && <Alert theme="danger" view="filled" message={createError} />}
+      {deleteError && <Alert theme="danger" view="filled" message={deleteError} />}
+
+      <Dialog
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        maxWidth="s"
+        aria-labelledby="delete-claude-credential-title"
+      >
+        <Dialog.Header caption="Удалить токен?" id="delete-claude-credential-title" />
+        <Dialog.Body>
+          <Text color="secondary">
+            Токен «{pendingDelete?.name}» будет удалён без возможности восстановления.
+          </Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          preset="danger"
+          textButtonCancel="Отмена"
+          textButtonApply="Удалить"
+          onClickButtonCancel={() => setPendingDelete(null)}
+          onClickButtonApply={() => {
+            const target = pendingDelete;
+            setPendingDelete(null);
+            if (target) void handleDelete(target);
+          }}
+        />
+      </Dialog>
     </Card>
   );
 }
