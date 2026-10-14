@@ -1985,6 +1985,7 @@ export interface components {
             jobTimeoutSec: number;
             proxyUrl: string | null;
             chatEnabled: boolean;
+            claudeCredentialId: number | null;
             keyPrefix: string | null;
             enrollmentPending: boolean;
             /** Format: date-time */
@@ -1994,6 +1995,7 @@ export interface components {
         };
         CreateWorkerDto: {
             models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            claudeCredentialId?: number | null;
             name: string;
             pollIntervalSec?: number;
             jobTimeoutSec?: number;
@@ -2028,6 +2030,7 @@ export interface components {
         };
         UpdateWorkerDto: {
             models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            claudeCredentialId?: number | null;
             name?: string;
             enabled?: boolean;
             pollIntervalSec?: number;

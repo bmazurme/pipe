@@ -51,9 +51,11 @@ describe('WorkerController', () => {
       claudeCredentialId,
     });
     let credentials: { resolveForRun: jest.Mock };
+    let boundTokenId: number | null;
     let claimController: WorkerController;
 
     beforeEach(async () => {
+      boundTokenId = 4;
       credentials = { resolveForRun: jest.fn().mockResolvedValue('tok') };
       (workerService as Record<string, jest.Mock>).claim = jest.fn();
       (workerService as Record<string, jest.Mock>).resolveProvider = jest
@@ -65,7 +67,13 @@ describe('WorkerController', () => {
         providers: [
           { provide: WorkerService, useValue: workerService },
           { provide: ClaudeCredentialsService, useValue: credentials },
-          { provide: WorkersService, useValue: workersService },
+          {
+            provide: WorkersService,
+            useValue: {
+              ...workersService,
+              claudeCredentialIdOf: jest.fn(async () => boundTokenId),
+            },
+          },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)
@@ -93,13 +101,27 @@ describe('WorkerController', () => {
     it("hands a sonnet job the token it picked, or the account's first when it picked none", async () => {
       const res = await claim(job('sonnet', null));
 
-      expect(credentials.resolveForRun).toHaveBeenCalledWith(7, null);
+      expect(credentials.resolveForRun).toHaveBeenCalledWith(7, null, 4);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ claudeToken: 'tok' }),
       );
 
       await claim(job('opus', 9));
-      expect(credentials.resolveForRun).toHaveBeenLastCalledWith(7, 9);
+      expect(credentials.resolveForRun).toHaveBeenLastCalledWith(7, 9, 4);
+    });
+
+    it('a worker that is not enrolled (a personal API key) has no token of its own', async () => {
+      (workerService as Record<string, jest.Mock>).claim.mockResolvedValue(
+        job('sonnet', null),
+      );
+
+      await claimController.claim(
+        { workerName: 'w' },
+        { id: 7 },
+        response() as never,
+      );
+
+      expect(credentials.resolveForRun).toHaveBeenCalledWith(7, null, null);
     });
 
     it('gives no Claude token to a gpt/deepseek/qwen job', async () => {

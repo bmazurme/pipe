@@ -130,6 +130,11 @@ export class WorkerController {
         ? await this.claudeCredentialsService.resolveForRun(
             currentUser.id,
             job.claudeCredentialId,
+            currentUser.workerId === undefined
+              ? null
+              : await this.workersService.claudeCredentialIdOf(
+                  currentUser.workerId,
+                ),
           )
         : null;
 

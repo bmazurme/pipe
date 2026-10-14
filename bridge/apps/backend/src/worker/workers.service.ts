@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -22,6 +23,7 @@ import {
   WorkerConfigResponseDto,
   WorkerResponseDto,
 } from './dto/worker-fleet.dto';
+import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
 import {
@@ -44,8 +46,32 @@ export class WorkersService {
     private readonly workers: Repository<Worker>,
     @InjectRepository(Job)
     private readonly jobs: Repository<Job>,
+    @InjectRepository(ClaudeCredential)
+    private readonly credentials: Repository<ClaudeCredential>,
     private readonly heartbeats: WorkerHeartbeatService,
   ) {}
+
+  // A worker can only be bound to one of the owner's own tokens.
+  private async assertCredentialOwned(
+    userId: number,
+    credentialId: number | null | undefined,
+  ): Promise<void> {
+    if (credentialId === null || credentialId === undefined) return;
+
+    if (!(await this.credentials.existsBy({ id: credentialId, userId }))) {
+      throw new BadRequestException('Claude token not found');
+    }
+  }
+
+  // The token a worker was bound to in its settings (null = none).
+  async claudeCredentialIdOf(workerId: number): Promise<number | null> {
+    const worker = await this.workers.findOne({
+      where: { id: workerId },
+      select: { id: true, claudeCredentialId: true },
+    });
+
+    return worker?.claudeCredentialId ?? null;
+  }
 
   private isOnline(lastSeenAt: Date | null, now = Date.now()): boolean {
     return lastSeenAt !== null && now - lastSeenAt.getTime() < STALE_AFTER_MS;
@@ -146,6 +172,7 @@ export class WorkersService {
     const name = dto.name.trim();
 
     await this.assertNameFree(userId, name);
+    await this.assertCredentialOwned(userId, dto.claudeCredentialId);
 
     const { code, hash } = generateEnrollCode();
     const expires = new Date(Date.now() + ENROLL_TTL_MS);
@@ -163,6 +190,7 @@ export class WorkersService {
         jobTimeoutSec: dto.jobTimeoutSec ?? 1800,
         proxyUrl: dto.proxyUrl?.trim() || null,
         chatEnabled: dto.chatEnabled ?? true,
+        claudeCredentialId: dto.claudeCredentialId ?? null,
       }),
     );
 
@@ -195,6 +223,10 @@ export class WorkersService {
     if (dto.proxyUrl !== undefined)
       worker.proxyUrl = dto.proxyUrl?.trim() || null;
     if (dto.chatEnabled !== undefined) worker.chatEnabled = dto.chatEnabled;
+    if (dto.claudeCredentialId !== undefined) {
+      await this.assertCredentialOwned(userId, dto.claudeCredentialId);
+      worker.claudeCredentialId = dto.claudeCredentialId;
+    }
 
     const saved = await this.workers.save(worker);
     const counts = await this.activeJobCounts(userId);

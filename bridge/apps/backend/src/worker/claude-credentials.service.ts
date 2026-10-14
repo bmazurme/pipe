@@ -45,17 +45,20 @@ export class ClaudeCredentialsService {
     }
   }
 
-  // The token a Claude run uses: the one the job picked, else (also when that one was deleted) the account's
-  // first — what the Claude-tokens card promises. null only when the account has none; the worker then falls back
+  // The token a Claude run uses: the one the job picked, else the one the worker is set to use, else (also when
+  // those were deleted) the account's first — what the Claude-tokens card promises. null only when the account has none; the worker then falls back
   // to its own login, which a worker added in the UI does not have.
   async resolveForRun(
     userId: number,
     credentialId: number | null,
+    workerCredentialId: number | null = null,
   ): Promise<string | null> {
-    if (credentialId !== null) {
-      const picked = await this.resolveToken(credentialId, userId);
+    for (const id of [credentialId, workerCredentialId]) {
+      if (id === null) continue;
 
-      if (picked) return picked;
+      const token = await this.resolveToken(id, userId);
+
+      if (token) return token;
     }
 
     const first = await this.repository.findOne({
