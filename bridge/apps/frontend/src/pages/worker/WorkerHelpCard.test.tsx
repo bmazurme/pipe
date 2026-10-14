@@ -49,9 +49,9 @@ describe('WorkerHelpCard', () => {
     expect(external.getAttribute('href')).toBe('https://platform.openai.com/api-keys');
     expect(external.getAttribute('rel')).toContain('noreferrer');
 
-    await user.click(screen.getByRole('button', { name: /Ключ доступа worker к bridge/ }));
+    await user.click(screen.getByRole('button', { name: /Подключение worker'а к bridge/ }));
 
-    expect(screen.getByRole('link', { name: 'Профиль → API-ключи' }).getAttribute('href')).toBe('/profile');
+    expect(screen.getByRole('link', { name: "Вкладка «Worker'ы»" }).getAttribute('href')).toBe('/?tab=workers');
   });
 });
 
@@ -59,7 +59,7 @@ describe('help topics', () => {
   it('cover one topic per key field on the page, with steps and a destination', () => {
     const ids = HELP_TOPICS.map((topic) => topic.id);
 
-    expect(ids).toEqual(expect.arrayContaining(['claude', 'openai', 'deepseek', 'qwen']));
+    expect(ids).toEqual(expect.arrayContaining(['claude', 'openai', 'deepseek', 'qwen', 'worker']));
     for (const topic of HELP_TOPICS) {
       expect(topic.steps.length).toBeGreaterThan(0);
       expect(topic.whereToPut.length).toBeGreaterThan(0);
@@ -71,5 +71,12 @@ describe('help topics', () => {
 
     expect(text).not.toMatch(/sk-ant-oat01-[A-Za-z0-9_-]{20,}/);
     expect(text).not.toMatch(/sk-proj-[A-Za-z0-9_-]{20,}/);
+  });
+
+  it('no longer sends anyone to put a key in a GitHub secret or an environment variable', () => {
+    const text = JSON.stringify(HELP_TOPICS);
+
+    expect(text).not.toMatch(/GitHub Secrets|WORKER_BRIDGE_API_KEY|передеплой worker \(~15/);
+    expect(text).not.toContain('Ключи worker');
   });
 });

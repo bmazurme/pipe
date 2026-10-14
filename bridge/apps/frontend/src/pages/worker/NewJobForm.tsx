@@ -12,6 +12,8 @@ import {
   useGetJobHistoryPreviewQuery,
   useListContextsQuery,
   useListFilesQuery,
+  useListProviderCredentialsQuery,
+  useListWorkersQuery,
   usePeekFileMutation,
 } from '../../store/api';
 import { decryptParcel, isEncryptedFile, stripEncryptedSuffix } from '../../shared/lib/parcelCrypto';
@@ -21,10 +23,14 @@ import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import { uploadWithProgress } from '../storage/uploadWithProgress';
 import styles from '../WorkerPage.module.css';
-import { MODEL_OPTIONS } from './constants';
+import { MODEL_OPTIONS, WORKER_STATUS_POLL_INTERVAL_MS } from './constants';
+import { describeAvailability, modelName, pinnableWorkers, WORKER_STATE_LABEL } from './fleet';
 
 const LAST_MODEL_KEY = 'worker.lastModel';
 const NO_CONTEXT = 'none';
+const ANY_WORKER = 'any';
+
+const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
 
 // A per-viewer convenience only — storage can be blocked or throw, and the
 // form must work identically without it.
@@ -48,12 +54,19 @@ function rememberModel(model: WorkerJobModel): void {
 
 interface NewJobFormProps {
   onCreated: (jobId: number) => void;
+  /** Take the owner to the Worker'ы tab (there is nobody to run the job yet). */
+  onOpenWorkers?: () => void;
 }
 
-export function NewJobForm({ onCreated }: NewJobFormProps) {
+export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   const { data: filesData, isLoading: isLoadingFiles } = useListFilesQuery();
   const { data: claudeCredentialsData } = useListClaudeCredentialsQuery();
   const { data: contextsData } = useListContextsQuery();
+  const { data: workers } = useListWorkersQuery(undefined, {
+    pollingInterval: WORKER_STATUS_POLL_INTERVAL_MS,
+    skipPollingIfUnfocused: true,
+  });
+  const { data: providerCredentialsData } = useListProviderCredentialsQuery();
   const [createJob, { isLoading: isCreating }] = useCreateJobMutation();
   const [peekFile] = usePeekFileMutation();
   const accessToken = useAppSelector((state) => state.auth.accessToken);
@@ -63,6 +76,10 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
   const [sourceFileId, setSourceFileId] = useState<number | undefined>(undefined);
   const [model, setModel] = useState<WorkerJobModel | undefined>(readLastModel);
   const [claudeCredentialId, setClaudeCredentialId] = useState<number | undefined>(undefined);
+  // gpt/deepseek/qwen: which stored API key; undefined = the account's first one for that provider.
+  const [providerCredentialId, setProviderCredentialId] = useState<number | undefined>(undefined);
+  // undefined = any free worker (the default); a number pins the job to that worker.
+  const [targetWorkerId, setTargetWorkerId] = useState<number | undefined>(undefined);
   // Deliberately never defaulted or remembered: a job runs without a context unless the
   // owner attaches one for this launch.
   const [contextId, setContextId] = useState<number | undefined>(undefined);
@@ -80,6 +97,27 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
   const earlierRuns = historyPreview?.count ?? 0;
 
   const isClaudeModel = model === 'sonnet' || model === 'opus';
+  const isProviderModel = model !== undefined && PROVIDER_MODELS.includes(model);
+  const providerKeys = useMemo(
+    () => (providerCredentialsData ?? []).filter((credential) => credential.provider === model),
+    [providerCredentialsData, model],
+  );
+  const pinChoices = useMemo(() => pinnableWorkers(workers ?? [], model), [workers, model]);
+  const availability = workers ? describeAvailability(workers, model, targetWorkerId) : null;
+
+  // Another model may be one the pinned worker cannot run (or the worker was deleted): back to "any free worker".
+  useEffect(() => {
+    if (targetWorkerId !== undefined && !pinChoices.some((worker) => worker.id === targetWorkerId)) {
+      setTargetWorkerId(undefined);
+    }
+  }, [pinChoices, targetWorkerId]);
+
+  // A key of another provider does not apply to this model.
+  useEffect(() => {
+    if (providerCredentialId !== undefined && !providerKeys.some((credential) => credential.id === providerCredentialId)) {
+      setProviderCredentialId(undefined);
+    }
+  }, [providerKeys, providerCredentialId]);
 
   // Defaults to the first (oldest-added) credential the moment the list
   // loads — only while nothing has been explicitly picked yet, so a
@@ -128,6 +166,8 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
         sourceFileId: actualSourceFileId,
         model,
         ...(isClaudeModel && claudeCredentialId ? { claudeCredentialId } : {}),
+        ...(isProviderModel && providerCredentialId ? { providerCredentialId } : {}),
+        ...(targetWorkerId ? { targetWorkerId } : {}),
         ...(contextId ? { contextId } : {}),
         ...(includeHistory ? { includeHistory: true } : {}),
       }).unwrap();
@@ -191,6 +231,34 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
                 width="max"
               />
             )}
+            {isProviderModel && providerKeys.length > 0 && (
+              <Select
+                placeholder={`API-ключ ${model ? modelName(model) : ''}`}
+                value={[providerCredentialId ? String(providerCredentialId) : 'default']}
+                onUpdate={([value]) => setProviderCredentialId(value && value !== 'default' ? Number(value) : undefined)}
+                options={[
+                  { value: 'default', content: 'Ключ по умолчанию (первый)' },
+                  ...providerKeys.map((credential) => ({
+                    value: String(credential.id),
+                    content: `${credential.name} ${credential.keyHint}`,
+                  })),
+                ]}
+                width="max"
+              />
+            )}
+            <Select
+              placeholder="Worker"
+              value={[targetWorkerId ? String(targetWorkerId) : ANY_WORKER]}
+              onUpdate={([value]) => setTargetWorkerId(value && value !== ANY_WORKER ? Number(value) : undefined)}
+              options={[
+                { value: ANY_WORKER, content: 'Любой свободный worker' },
+                ...pinChoices.map((worker) => ({
+                  value: String(worker.id),
+                  content: `${worker.name} — ${WORKER_STATE_LABEL[worker.state].toLowerCase()}`,
+                })),
+              ]}
+              width="max"
+            />
             <Select
               placeholder="Контекст"
               value={[contextId ? String(contextId) : NO_CONTEXT]}
@@ -224,6 +292,34 @@ export function NewJobForm({ onCreated }: NewJobFormProps) {
                 : 'Подмешать итоги прошлых запусков'
             }
           />
+
+          {isProviderModel && providerCredentialsData && providerKeys.length === 0 && (
+            <Alert
+              theme="warning"
+              view="outlined"
+              message={
+                <>
+                  Для {model ? modelName(model) : 'этой модели'} нет сохранённого API-ключа — worker возьмёт ключ из своей среды, если он там
+                  есть, иначе задача завершится ошибкой. <Link to="?tab=keys">Добавить ключ</Link>
+                </>
+              }
+            />
+          )}
+
+          {availability && (
+            <Alert
+              theme={availability.tone}
+              view="outlined"
+              message={availability.text}
+              actions={
+                workers && workers.length === 0 && onOpenWorkers ? (
+                  <Button size="s" view="action" onClick={onOpenWorkers}>
+                    Добавить worker
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
 
           <Text variant="caption-2" color="secondary">
             {contextId || includeHistory

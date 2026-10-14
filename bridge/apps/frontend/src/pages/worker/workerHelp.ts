@@ -31,7 +31,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       'Команда выведет долгоживущий токен вида sk-ant-oat01-… Скопируйте его сразу — повторно он не показывается.',
     ],
     whereToPut:
-      'Лучше в «Claude-токены» ниже: имя + токен, хранятся на bridge в зашифрованном виде и применяются к задаче без передеплоя. Либо в «Ключи worker» → «Claude Code OAuth Token» — общий токен по умолчанию, но сохранение запускает передеплой worker.',
+      'Вкладка «Ключи и подключения» → «Claude-токены»: имя + токен. Хранится в bridge в зашифрованном виде и выдаётся worker\'у вместе с задачей — в переменных среды worker\'а токен не нужен, передеплой не требуется.',
     links: [{ label: 'Документация Claude Code', href: 'https://docs.claude.com/en/docs/claude-code', external: true }],
     note: 'Токен даёт доступ к вашей подписке — не публикуйте его и не коммитьте.',
   },
@@ -44,7 +44,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       'Billing → пополните баланс: без него API-запросы не проходят.',
       'API keys → Create new secret key, дайте имя и скопируйте ключ вида sk-proj-… — он показывается один раз.',
     ],
-    whereToPut: '«Ключи worker» → «OpenAI API Key». Сохранение запускает передеплой worker (~15 минут).',
+    whereToPut: 'Вкладка «Ключи и подключения» → «API-ключи моделей»: провайдер, название и ключ. Выдаётся worker\'у вместе с задачей, передеплой не нужен.',
     links: [{ label: 'platform.openai.com/api-keys', href: 'https://platform.openai.com/api-keys', external: true }],
   },
   {
@@ -56,7 +56,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       'Top up — пополните баланс.',
       'API keys → Create new API key, скопируйте ключ вида sk-… — он показывается один раз.',
     ],
-    whereToPut: '«Ключи worker» → «DeepSeek API Key». Сохранение запускает передеплой worker (~15 минут).',
+    whereToPut: 'Вкладка «Ключи и подключения» → «API-ключи моделей»: провайдер, название и ключ. Выдаётся worker\'у вместе с задачей, передеплой не нужен.',
     links: [{ label: 'platform.deepseek.com/api_keys', href: 'https://platform.deepseek.com/api_keys', external: true }],
   },
   {
@@ -66,22 +66,24 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       'Откройте Alibaba Cloud Model Studio (DashScope) и войдите.',
       'Раздел API-KEY → создайте ключ и скопируйте его (вида sk-…).',
-      'Ключ работает только в своём регионе. По умолчанию worker обращается к dashscope.aliyuncs.com; для международной консоли в окружении worker задают QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1.',
+      'Ключ работает только в своём регионе. По умолчанию worker обращается к dashscope.aliyuncs.com; для международной консоли в блоке «Свой адрес или модель» при добавлении ключа укажите https://dashscope-intl.aliyuncs.com/compatible-mode/v1.',
     ],
-    whereToPut: '«Ключи worker» → «Qwen API Key». Сохранение запускает передеплой worker (~15 минут).',
+    whereToPut: 'Вкладка «Ключи и подключения» → «API-ключи моделей»: провайдер, название и ключ. Выдаётся worker\'у вместе с задачей, передеплой не нужен.',
     links: [{ label: 'Alibaba Cloud Model Studio', href: 'https://www.alibabacloud.com/help/en/model-studio/get-api-key', external: true }],
   },
   {
-    id: 'bridge',
-    title: 'Ключ доступа worker к bridge',
-    usedFor: 'Сам процесс worker: по нему он забирает задачи и отправляет результат',
+    id: 'worker',
+    title: 'Подключение worker\'а к bridge',
+    usedFor: 'Сам процесс worker: он забирает задачи и отправляет результат',
     steps: [
-      'Откройте профиль → «API-ключи» → создайте ключ (например, «worker»).',
-      'Скопируйте его сразу — после закрытия окна ключ не показывается.',
-      'Сохраните его как секрет WORKER_BRIDGE_API_KEY в GitHub Actions репозитория и запустите деплой.',
+      'Откройте вкладку «Worker\'ы» и нажмите «Добавить worker», введите название.',
+      'Скопируйте одноразовый код и команду из подсказки (код действует 30 минут и подходит один раз).',
+      'Выполните команду на сервере, где будет работать worker. Он сам получит собственный ключ и появится в списке как «Свободен».',
     ],
-    whereToPut: 'GitHub → Settings → Secrets and variables → Actions → WORKER_BRIDGE_API_KEY. На этой странице он не вводится.',
-    links: [{ label: 'Профиль → API-ключи', href: '/profile' }],
+    whereToPut:
+      'Вкладка «Worker\'ы». Никаких ключей bridge в переменных среды worker\'а не нужно: он хранит свой ключ у себя (том), а настройки — пауза, модели, таймаут, прокси — меняются здесь без перезапуска.',
+    links: [{ label: 'Вкладка «Worker\'ы»', href: '?tab=workers' }],
+    note: 'Удалить worker здесь значит отозвать его ключ сразу.',
   },
   {
     id: 'vpn',
@@ -89,9 +91,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     usedFor: 'Если с сервера worker провайдеры недоступны напрямую',
     steps: [
       'Добавьте подключение к VPN-панели на странице VPN (адрес панели и её API-токен).',
-      'Вернитесь сюда и выберите это подключение в блоке «VPN».',
+      'Вернитесь сюда и выберите это подключение в блоке «VPN» (вкладка «Ключи и подключения»).',
     ],
-    whereToPut: 'Страница VPN, затем выбор подключения в блоке «VPN» на этой странице.',
+    whereToPut: 'Страница VPN, затем выбор подключения в блоке «VPN» на вкладке «Ключи и подключения».',
     links: [{ label: 'Страница VPN', href: '/vpn' }],
   },
 ];
