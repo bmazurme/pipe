@@ -24,6 +24,10 @@ export interface WorkerJob {
   resultFileId: number | null;
   model: WorkerJobModel;
   claudeCredentialId: number | null;
+  providerCredentialId: number | null;
+  /** The worker that took the job, and the one it was pinned to (null = any free worker). */
+  workerId: number | null;
+  targetWorkerId: number | null;
   /** The attached context's name, or null — the default. */
   contextName: string | null;
   /** How many earlier runs' outcomes were mixed in, or null when none were. */
@@ -50,6 +54,63 @@ export interface ClaudeCredential {
   id: number;
   name: string;
   createdAt: string;
+}
+
+export type ProviderModel = 'gpt' | 'deepseek' | 'qwen';
+
+/** A stored API key — never carries the key itself, only a hint (its last 4 characters). */
+export interface ProviderCredential {
+  id: number;
+  provider: ProviderModel;
+  name: string;
+  keyHint: string;
+  baseUrl: string | null;
+  model: string | null;
+  createdAt: string;
+}
+
+/**
+ * pending: created, its one-time code not used yet · offline: enrolled, not heard from lately · idle: ready ·
+ * busy: running a job · paused: switched off by the owner.
+ */
+export type FleetWorkerState = 'pending' | 'offline' | 'idle' | 'busy' | 'paused';
+
+export interface FleetWorker {
+  /** null for a legacy worker (a personal API key in its environment): known only by name. */
+  id: number | null;
+  name: string;
+  kind: 'managed' | 'legacy';
+  state: FleetWorkerState;
+  enabled: boolean;
+  lastSeenAt: string | null;
+  activeJobs: number;
+  hostname: string | null;
+  version: string | null;
+  /** null = all models. */
+  models: WorkerJobModel[] | null;
+  pollIntervalSec: number;
+  jobTimeoutSec: number;
+  proxyUrl: string | null;
+  chatEnabled: boolean;
+  keyPrefix: string | null;
+  enrollmentPending: boolean;
+  enrollmentExpiresAt: string | null;
+  createdAt: string | null;
+}
+
+/** Returned once, when a worker is created or its enrolment code is renewed. */
+export interface CreatedFleetWorker {
+  worker: FleetWorker;
+  enrollCode: string;
+  enrollExpiresAt: string;
+}
+
+export interface WorkerSettings {
+  models?: WorkerJobModel[] | null;
+  pollIntervalSec?: number;
+  jobTimeoutSec?: number;
+  proxyUrl?: string | null;
+  chatEnabled?: boolean;
 }
 
 export interface WorkerHeartbeat {
@@ -103,7 +164,16 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     }),
     createJob: builder.mutation<
       WorkerJob,
-      { sourceFileId: number; model: WorkerJobModel; claudeCredentialId?: number; contextId?: number; includeHistory?: boolean }
+      {
+        sourceFileId: number;
+        model: WorkerJobModel;
+        claudeCredentialId?: number;
+        providerCredentialId?: number;
+        /** Pin the job to one worker; absent = any free worker that can run the model. */
+        targetWorkerId?: number;
+        contextId?: number;
+        includeHistory?: boolean;
+      }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),
       invalidatesTags: ['WorkerJob'],
@@ -167,6 +237,60 @@ const workerApiEndpoints = workerApi.injectEndpoints({
       query: (id) => ({ url: `worker/claude-credentials/${id}`, method: 'DELETE' }),
       invalidatesTags: ['ClaudeCredential'],
     }),
+    // The workers added in the UI plus the ones still on a personal API key. Polled: a worker's state moves by itself.
+    listWorkers: builder.query<FleetWorker[], void>({
+      query: () => 'workers',
+      providesTags: ['Worker'],
+    }),
+    createWorker: builder.mutation<CreatedFleetWorker, { name: string } & WorkerSettings>({
+      query: (body) => ({ url: 'workers', method: 'POST', body }),
+      invalidatesTags: ['Worker'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string | string[] } | undefined)?.message;
+        return (Array.isArray(message) ? message[0] : message) ?? 'Не удалось добавить worker';
+      },
+    }),
+    updateWorker: builder.mutation<FleetWorker, { id: number; name?: string; enabled?: boolean } & WorkerSettings>({
+      query: ({ id, ...body }) => ({ url: `workers/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['Worker'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string | string[] } | undefined)?.message;
+        return (Array.isArray(message) ? message[0] : message) ?? 'Не удалось сохранить настройки';
+      },
+    }),
+    // A new one-time code: connects a worker that has not enrolled yet, or reconnects one (its old key stops working).
+    renewWorkerEnrollment: builder.mutation<CreatedFleetWorker, number>({
+      query: (id) => ({ url: `workers/${id}/enroll-code`, method: 'POST' }),
+      invalidatesTags: ['Worker'],
+    }),
+    // Revokes the key at once; what the worker was running fails, jobs pinned to it become free for any worker.
+    deleteWorker: builder.mutation<{ failedJobs: number }, number>({
+      query: (id) => ({ url: `workers/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Worker', 'WorkerJob'],
+    }),
+    forgetLegacyWorker: builder.mutation<void, string>({
+      query: (name) => ({ url: `workers/legacy/${encodeURIComponent(name)}`, method: 'DELETE' }),
+      invalidatesTags: ['Worker'],
+    }),
+    listProviderCredentials: builder.query<ProviderCredential[], void>({
+      query: () => 'worker/provider-credentials',
+      providesTags: ['ProviderCredential'],
+    }),
+    createProviderCredential: builder.mutation<
+      ProviderCredential,
+      { provider: ProviderModel; name: string; apiKey: string; baseUrl?: string; model?: string }
+    >({
+      query: (body) => ({ url: 'worker/provider-credentials', method: 'POST', body }),
+      invalidatesTags: ['ProviderCredential'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string | string[] } | undefined)?.message;
+        return (Array.isArray(message) ? message[0] : message) ?? 'Не удалось сохранить ключ';
+      },
+    }),
+    deleteProviderCredential: builder.mutation<void, number>({
+      query: (id) => ({ url: `worker/provider-credentials/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['ProviderCredential'],
+    }),
     // Raw bytes, no auto-save — backs the "download encrypted" flow, which
     // needs to encrypt the result client-side before it ever touches disk.
     peekJobResult: builder.mutation<Blob, number>({
@@ -225,5 +349,14 @@ export const {
   useListClaudeCredentialsQuery,
   useCreateClaudeCredentialMutation,
   useDeleteClaudeCredentialMutation,
+  useListWorkersQuery,
+  useCreateWorkerMutation,
+  useUpdateWorkerMutation,
+  useRenewWorkerEnrollmentMutation,
+  useDeleteWorkerMutation,
+  useForgetLegacyWorkerMutation,
+  useListProviderCredentialsQuery,
+  useCreateProviderCredentialMutation,
+  useDeleteProviderCredentialMutation,
 } = workerApiEndpoints;
 export { workerApiEndpoints };

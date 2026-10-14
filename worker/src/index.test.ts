@@ -46,6 +46,7 @@ function fakeConfig(workDir: string): WorkerConfig {
   return {
     bridgeApiUrl: 'https://bridge.example.com',
     bridgeApiKey: 'test-api-key',
+    stateDir: path.join(workDir, '.state'),
     pollIntervalSec: 10,
     workDir,
     workerName: 'test-worker',

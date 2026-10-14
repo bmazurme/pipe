@@ -66,7 +66,10 @@ COPY --from=builder /app/worker/dist ./dist
 # old file: dependency).
 COPY --from=builder /app/packages/protocol /app/node_modules/@pipe/protocol
 
-RUN mkdir -p /app/.worker-work && chown -R pipe-worker:pipe-worker /app
+# .worker-state holds the key a worker added in the UI receives at enrolment — mount a volume there so a restart or a new
+# image keeps it (the named volume inherits this directory's ownership).
+RUN mkdir -p /app/.worker-work /app/.worker-state && chown -R pipe-worker:pipe-worker /app
+ENV WORKER_STATE_DIR=/app/.worker-state
 USER pipe-worker
 
 CMD ["node", "dist/index.js"]

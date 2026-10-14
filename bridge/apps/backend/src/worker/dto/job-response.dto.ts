@@ -6,6 +6,10 @@ export class JobResponseDto {
   resultFileId: number | null;
   model: JobModel;
   claudeCredentialId: number | null;
+  providerCredentialId: number | null;
+  // The worker that took it, and the one it was pinned to (null = any).
+  workerId: number | null;
+  targetWorkerId: number | null;
   // The attached context's name, or null — never its text (see ClaimedJobResponseDto).
   contextName: string | null;
   // How many earlier runs' outcomes were mixed in, or null when none were.
@@ -31,6 +35,9 @@ export class JobResponseDto {
       resultFileId: job.resultFileId,
       model: job.model,
       claudeCredentialId: job.claudeCredentialId,
+      providerCredentialId: job.providerCredentialId ?? null,
+      workerId: job.workerId ?? null,
+      targetWorkerId: job.targetWorkerId ?? null,
       contextName: job.contextName ?? null,
       historyCount: job.historyCount ?? null,
       status: job.status,

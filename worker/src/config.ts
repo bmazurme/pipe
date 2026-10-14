@@ -5,7 +5,13 @@ import { parseChatToolsMode, type ChatToolsMode } from './chatTools.js';
 
 export interface WorkerConfig {
   bridgeApiUrl: string;
-  bridgeApiKey: string;
+  // A personal API key from the environment — the legacy way. Absent for a worker added in the UI: it enrols with a
+  // one-time code and keeps its own key in stateDir (see credentials.ts).
+  bridgeApiKey?: string;
+  // Where an enrolled worker keeps its key (a volume in Docker); never the work directory, which is wiped per job.
+  stateDir: string;
+  // A one-time code from the Worker page; only used while the worker has no stored key.
+  enrollCode?: string;
   pollIntervalSec: number;
   workDir: string;
   workerName: string;
@@ -52,7 +58,9 @@ function pollInterval(env: NodeJS.ProcessEnv): number {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   return {
     bridgeApiUrl: required(env, 'BRIDGE_API_URL').replace(/\/$/, ''),
-    bridgeApiKey: required(env, 'BRIDGE_API_KEY'),
+    bridgeApiKey: env.BRIDGE_API_KEY?.trim() || undefined,
+    stateDir: env.WORKER_STATE_DIR ?? path.join(process.cwd(), '.worker-state'),
+    enrollCode: env.WORKER_ENROLL_CODE?.trim() || undefined,
     pollIntervalSec: pollInterval(env),
     workDir: env.WORKER_WORK_DIR ?? path.join(process.cwd(), '.worker-work'),
     // Purely informational (shown in bridge's job list) — falls back to the

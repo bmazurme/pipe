@@ -12,6 +12,8 @@ import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { Worker } from './entities/worker.entity';
+import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
 
@@ -58,6 +60,14 @@ describe('WorkerService', () => {
   >;
   let appLogs: { record: jest.Mock };
   let contextService: { findOwned: jest.Mock };
+  let workerRepository: {
+    findOneBy: jest.Mock;
+    update: jest.Mock;
+  };
+  let providerCredentials: {
+    existsFor: jest.Mock;
+    resolveForJob: jest.Mock;
+  };
 
   beforeEach(async () => {
     repository = createMockRepository();
@@ -80,6 +90,14 @@ describe('WorkerService', () => {
     };
     appLogs = { record: jest.fn() };
     contextService = { findOwned: jest.fn() };
+    workerRepository = {
+      findOneBy: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    providerCredentials = {
+      existsFor: jest.fn().mockResolvedValue(true),
+      resolveForJob: jest.fn().mockResolvedValue(null),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,6 +111,11 @@ describe('WorkerService', () => {
         { provide: WorkerHeartbeatService, useValue: heartbeatService },
         { provide: AppLogService, useValue: appLogs },
         { provide: ContextService, useValue: contextService },
+        { provide: getRepositoryToken(Worker), useValue: workerRepository },
+        {
+          provide: ProviderCredentialsService,
+          useValue: providerCredentials,
+        },
       ],
     }).compile();
 
@@ -286,6 +309,8 @@ describe('WorkerService', () => {
         sourceFileId: 1,
         model: JobModel.Deepseek,
         claudeCredentialId: null,
+        providerCredentialId: null,
+        targetWorkerId: null,
         taskKey: 'file:1',
         contextName: null,
         contextText: null,
@@ -559,7 +584,7 @@ describe('WorkerService', () => {
 
       expect(repository.query).toHaveBeenCalledWith(
         expect.stringContaining('FOR UPDATE SKIP LOCKED'),
-        [JobStatus.Claimed, 'worker-host-1', JobStatus.Queued, 7],
+        [JobStatus.Claimed, 'worker-host-1', JobStatus.Queued, 7, null],
       );
       expect(repository.findOneBy).toHaveBeenCalledWith({ id: 42 });
       expect(job).toMatchObject({ id: 42, status: JobStatus.Claimed });
@@ -1336,6 +1361,247 @@ describe('WorkerService', () => {
 
         expect(result.status).toBe(JobStatus.Succeeded);
         expect(result.resultFileId).toBe(99);
+      });
+    });
+  });
+
+  describe('workers added in the UI', () => {
+    const managed = (over: Record<string, unknown> = {}) => ({
+      id: 5,
+      userId: 7,
+      name: 'green',
+      enabled: true,
+      models: null,
+      ...over,
+    });
+    const claimSql = () =>
+      (repository.query as jest.Mock).mock.calls
+        .map((call: unknown[]) => call[0] as string)
+        .find((sql) => sql.includes('SKIP LOCKED')) ?? '';
+    const claimParams = () =>
+      ((repository.query as jest.Mock).mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes('SKIP LOCKED'),
+      ) ?? [])[1] as unknown[];
+
+    beforeEach(() => {
+      repository.query!.mockResolvedValue([[], 0]);
+    });
+
+    describe('claim', () => {
+      it('a legacy worker (personal API key) never takes a job pinned to a specific worker', async () => {
+        await service.claim(7, 'old-worker');
+
+        expect(claimSql()).toContain('"targetWorkerId" IS NULL');
+        expect(claimSql()).not.toContain('"targetWorkerId" = $5');
+      });
+
+      it('a managed worker takes unpinned jobs and the ones pinned to it, and records which worker claimed', async () => {
+        workerRepository.findOneBy.mockResolvedValue(managed());
+
+        await service.claim(7, undefined, 5);
+
+        expect(claimSql()).toContain(
+          '("targetWorkerId" IS NULL OR "targetWorkerId" = $5)',
+        );
+        expect(claimSql()).toContain('"workerId" = $5');
+        expect(claimParams()).toEqual([
+          JobStatus.Claimed,
+          'green',
+          JobStatus.Queued,
+          7,
+          5,
+        ]);
+      });
+
+      it('a managed worker uses the name stored for it, not one it reports', async () => {
+        workerRepository.findOneBy.mockResolvedValue(managed());
+
+        await service.claim(7, 'something-else', 5);
+
+        expect(claimParams()[1]).toBe('green');
+        expect(heartbeatService.record).not.toHaveBeenCalled();
+      });
+
+      it('only takes the models it is set up for', async () => {
+        workerRepository.findOneBy.mockResolvedValue(
+          managed({ models: [JobModel.Gpt, JobModel.Qwen] }),
+        );
+
+        await service.claim(7, undefined, 5);
+
+        expect(claimSql()).toContain('model::text = ANY($6::text[])');
+        expect(claimParams()[5]).toEqual([JobModel.Gpt, JobModel.Qwen]);
+      });
+
+      it('takes any model when none were restricted', async () => {
+        workerRepository.findOneBy.mockResolvedValue(managed());
+
+        await service.claim(7, undefined, 5);
+
+        expect(claimSql()).not.toContain('ANY(');
+      });
+
+      it('a paused worker is given nothing — and nothing is claimed', async () => {
+        workerRepository.findOneBy.mockResolvedValue(
+          managed({ enabled: false }),
+        );
+
+        await expect(service.claim(7, undefined, 5)).resolves.toBeNull();
+        expect(claimSql()).toBe('');
+      });
+
+      it('a worker that was deleted in the meantime is given nothing', async () => {
+        workerRepository.findOneBy.mockResolvedValue(null);
+
+        await expect(service.claim(7, undefined, 5)).resolves.toBeNull();
+        expect(claimSql()).toBe('');
+      });
+
+      it('asking for work proves the worker is idle: what it still held is failed at once, and it shows as alive', async () => {
+        workerRepository.findOneBy.mockResolvedValue(managed());
+
+        await service.claim(7, undefined, 5);
+
+        expect(workerRepository.update).toHaveBeenCalledWith(5, {
+          lastSeenAt: expect.any(Date) as Date,
+        });
+        const sweep = (repository.query as jest.Mock).mock.calls.find(
+          (call: unknown[]) => (call[0] as string).includes('"workerId" ='),
+        ) as [string, unknown[]] | undefined;
+
+        expect(sweep?.[0]).toContain('SET status');
+        expect(sweep?.[1]).toContain(5);
+      });
+    });
+
+    describe('create', () => {
+      beforeEach(() => {
+        storageService.findOwned!.mockResolvedValue({
+          id: 1,
+          originalName: '402-6.subscription.zip',
+        });
+        repository.save!.mockImplementation((job) =>
+          Promise.resolve({ id: 10, ...job }),
+        );
+      });
+
+      it('pins a job to a worker that is the owner’s, switched on and able to run the model', async () => {
+        workerRepository.findOneBy.mockResolvedValue(managed());
+
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+          targetWorkerId: 5,
+        });
+
+        expect(workerRepository.findOneBy).toHaveBeenCalledWith({
+          id: 5,
+          userId: 7,
+        });
+        expect(job).toMatchObject({ targetWorkerId: 5 });
+      });
+
+      it('refuses a worker that does not exist or belongs to someone else', async () => {
+        workerRepository.findOneBy.mockResolvedValue(null);
+
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Sonnet,
+            targetWorkerId: 5,
+          }),
+        ).rejects.toThrow('Worker not found');
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+
+      it('refuses a paused worker — the job would wait for ever', async () => {
+        workerRepository.findOneBy.mockResolvedValue(
+          managed({ enabled: false }),
+        );
+
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Sonnet,
+            targetWorkerId: 5,
+          }),
+        ).rejects.toThrow('is paused');
+      });
+
+      it('refuses a worker that is not set up for the model', async () => {
+        workerRepository.findOneBy.mockResolvedValue(
+          managed({ models: [JobModel.Gpt] }),
+        );
+
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Opus,
+            targetWorkerId: 5,
+          }),
+        ).rejects.toThrow('not set up to run opus');
+      });
+
+      it('without a pin the job is for any free worker', async () => {
+        const job = await service.create(7, {
+          sourceFileId: 1,
+          model: JobModel.Sonnet,
+        });
+
+        expect(workerRepository.findOneBy).not.toHaveBeenCalled();
+        expect(job).toMatchObject({ targetWorkerId: null });
+      });
+
+      it('accepts a stored API key of the right provider and refuses one that is not', async () => {
+        providerCredentials.existsFor.mockResolvedValueOnce(true);
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Gpt,
+            providerCredentialId: 3,
+          }),
+        ).resolves.toMatchObject({ providerCredentialId: 3 });
+
+        providerCredentials.existsFor.mockResolvedValueOnce(false);
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Gpt,
+            providerCredentialId: 4,
+          }),
+        ).rejects.toThrow('Provider credential not found');
+      });
+
+      it('refuses a provider key for a Claude model', async () => {
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Sonnet,
+            providerCredentialId: 3,
+          }),
+        ).rejects.toThrow('Provider credential not found');
+      });
+    });
+
+    describe('assertHeldBy', () => {
+      it('lets a personal API key through (account-wide reach)', async () => {
+        await expect(
+          service.assertHeldBy(1, 7, undefined),
+        ).resolves.toBeUndefined();
+        expect(repository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('lets a worker touch the job it holds, and nobody else’s', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+        await expect(service.assertHeldBy(1, 7, 5)).resolves.toBeUndefined();
+
+        await expect(service.assertHeldBy(1, 7, 6)).rejects.toThrow(
+          'not held by this worker',
+        );
       });
     });
   });

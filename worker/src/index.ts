@@ -20,29 +20,15 @@ import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
+import { runLoop } from './loop.js';
+import { waitForSession } from './session.js';
+import { sleep } from './sleep.js';
+import { workerVersion } from './version.js';
+import { buildLoopDeps } from './wiring.js';
 import { requireShell } from './shell.js';
 import { withContext } from './taskContext.js';
 import { resolveInDir } from './resolveInDir.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
-
-// Resolves early when `signal` aborts, so an idle worker exits promptly on SIGTERM.
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const onAbort = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
 
 export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
 
@@ -205,7 +191,8 @@ export async function processJob(
     }
 
     const prompt = withContext(describeTask(parcel), job.context, job.history);
-    const provider = resolveProvider(job.model);
+    // The key stored in bridge for this account wins; the environment is the fallback for a worker not moved yet.
+    const provider = resolveProvider(job.model, process.env, job.provider);
 
     if (job.context?.trim()) log('Attached context: yes\n');
     if (job.history?.trim()) log('Attached context: outcomes of earlier runs\n');
@@ -299,11 +286,11 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
   const clog = chatLogger(turn.messageId);
 
   try {
-    const provider = resolveChatProvider(turn.model);
+    const provider = resolveChatProvider(turn.model, process.env, turn.provider);
 
     const reply = provider.tool === 'claude'
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId))
-      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey, config.chatTools));
+      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools));
 
     await client.complete(turn.messageId, reply);
     clog.info('succeeded');
@@ -321,12 +308,10 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
 
 async function main(): Promise<void> {
   resolveFileSecrets(process.env, SECRET_ENV_KEYS);
-  const config = loadConfig();
-  const client = new WorkerBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
-  const chatClient = new ChatBridgeClient(config.bridgeApiUrl, config.bridgeApiKey);
+  const baseConfig = loadConfig();
 
   logger.info(
-    { workerName: config.workerName, bridgeApiUrl: config.bridgeApiUrl, pollIntervalSec: config.pollIntervalSec },
+    { bridgeApiUrl: baseConfig.bridgeApiUrl, stateDir: baseConfig.stateDir, mode: baseConfig.bridgeApiKey ? 'api-key (legacy)' : 'enrolment' },
     'pipe-worker starting',
   );
 
@@ -337,38 +322,22 @@ async function main(): Promise<void> {
     });
   }
 
-  while (!shutdown.signal.aborted) {
-    let job: RemoteJob | null = null;
+  const sessionDeps = { version: workerVersion(), log: logger };
+  const waitForEnrolment = () => waitForSession(baseConfig, sessionDeps, sleep, shutdown.signal);
 
-    try {
-      job = await client.claim(config.workerName);
-    } catch (error) {
-      logger.error({ err: error }, 'job poll failed');
-    }
-
-    if (job) {
-      await processJob(client, job, config, { shutdown: shutdown.signal });
-      continue;
-    }
-
-    if (shutdown.signal.aborted) break;
-
-    let turn: ClaimedChatTurn | null = null;
-
-    try {
-      turn = await chatClient.claim();
-    } catch (error) {
-      logger.error({ err: error }, 'chat poll failed');
-    }
-
-    if (turn) {
-      const claimedTurn = turn;
-
-      await withHeartbeat(client, config.workerName, () => processChatTurn(chatClient, claimedTurn, config));
-    } else {
-      await sleep(config.pollIntervalSec * 1000, shutdown.signal);
-    }
-  }
+  await runLoop(
+    buildLoopDeps({
+      baseConfig,
+      signal: shutdown.signal,
+      initialSession: await waitForEnrolment(),
+      waitForEnrolment,
+      processJob: (client, job, config, signal) => processJob(client, job, config, { shutdown: signal }),
+      processChatTurn,
+      withHeartbeat,
+      sleep,
+      log: logger,
+    }),
+  );
 
   logger.info('pipe-worker stopped');
   process.exit(0);

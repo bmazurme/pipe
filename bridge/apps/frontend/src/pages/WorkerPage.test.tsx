@@ -64,11 +64,11 @@ const CLAUDE_CREDENTIALS = [
   { id: 2, name: 'work', createdAt: '2026-09-30T08:00:00.000Z' },
 ];
 
-function renderPage() {
+function renderPage(path = '/') {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
           <WorkerPage />
         </MemoryRouter>
       </ThemeProvider>
@@ -137,8 +137,8 @@ describe('WorkerPage', () => {
       }),
     );
 
-    renderPage();
-    await screen.findByText('Задача #1');
+    renderPage('/?tab=keys');
+    await screen.findByText('primary');
 
     expect(screen.getByText('primary')).toBeTruthy();
 
@@ -148,42 +148,65 @@ describe('WorkerPage', () => {
     await waitFor(() => expect(activatedId).toBe(2));
   });
 
-  it('saves a worker provider key', async () => {
+  it('stores a provider API key in bridge — no environment variable, no redeploy', async () => {
     const user = userEvent.setup();
-    let secretBody: unknown;
+    let createdBody: unknown;
 
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
-        if (url.endsWith('/vpn/worker-secrets') && request.method === 'POST') {
-          secretBody = JSON.parse(await request.clone().text());
-          return new Response(null, { status: 204 });
+        if (url.endsWith('/worker/provider-credentials') && request.method === 'POST') {
+          createdBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ id: 1, provider: 'gpt', name: 'work', keyHint: '…1234', baseUrl: null, model: null, createdAt: '2026-10-14T00:00:00.000Z' });
         }
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
         if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
-        if (url.includes('/storage')) return jsonResponse(FILES);
         return jsonResponse([]);
       }),
     );
 
-    renderPage();
-    await screen.findByText('Задача #1');
+    renderPage('/?tab=keys');
 
-    await user.click(screen.getByText('Настроить'));
-    const input = screen.getByPlaceholderText('sk-proj-...');
-    await user.type(input, 'sk-test-key');
+    await user.type(await screen.findByPlaceholderText('Название ключа (например, рабочий)'), 'work');
+    await user.type(screen.getByPlaceholderText('API-ключ'), 'sk-proj-test-1234');
+    await user.click(screen.getByRole('button', { name: 'Добавить ключ' }));
 
-    // TextInput also renders its own built-in "Clear" icon button ahead of
-    // ours in DOM order — a plain querySelector('button') would grab that
-    // one instead, so this scopes to the field and matches by visible text.
-    const openAiField = input.closest('label');
-    if (!openAiField) throw new Error('field wrapper not found');
-    await user.click(within(openAiField).getByText('Сохранить'));
+    await waitFor(() => expect(createdBody).toEqual({ provider: 'gpt', name: 'work', apiKey: 'sk-proj-test-1234' }));
+  });
 
-    await waitFor(() =>
-      expect(secretBody).toEqual({ name: 'WORKER_OPENAI_API_KEY', value: 'sk-test-key', confirm: true }),
+  it('lists stored provider keys by a hint only, and deletes one', async () => {
+    const user = userEvent.setup();
+    let deletedId: number | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/worker/provider-credentials')) {
+          return jsonResponse([
+            { id: 4, provider: 'deepseek', name: 'team', keyHint: '…9f2a', baseUrl: 'https://gw.example/v1', model: null, createdAt: '2026-10-14T00:00:00.000Z' },
+          ]);
+        }
+        if (url.includes('/worker/provider-credentials/') && request.method === 'DELETE') {
+          deletedId = Number(url.split('/').pop());
+          return new Response(null, { status: 204 });
+        }
+        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        return jsonResponse([]);
+      }),
     );
+
+    renderPage('/?tab=keys');
+
+    expect(await screen.findByText(/DeepSeek · team/)).toBeTruthy();
+    expect(screen.getByText(/…9f2a/)).toBeTruthy();
+    expect(screen.getByText(/gw\.example/)).toBeTruthy();
+
+    await user.click(screen.getByLabelText('Удалить ключ: team'));
+
+    await waitFor(() => expect(deletedId).toBe(4));
   });
 
   it('lists Claude credentials and deletes one', async () => {
@@ -206,7 +229,7 @@ describe('WorkerPage', () => {
       }),
     );
 
-    renderPage();
+    renderPage('/?tab=keys');
     await screen.findByText('personal');
     expect(screen.getByText('work')).toBeTruthy();
 
@@ -235,10 +258,9 @@ describe('WorkerPage', () => {
       }),
     );
 
-    renderPage();
-    await screen.findByText('Задача #1');
+    renderPage('/?tab=keys');
 
-    await user.type(screen.getByPlaceholderText('Название (например, личный)'), 'personal');
+    await user.type(await screen.findByPlaceholderText('Название (например, личный)'), 'personal');
     await user.type(screen.getByPlaceholderText('claude token'), 'sk-ant-oat-test');
     await user.click(screen.getByText('Добавить'));
 
@@ -284,45 +306,79 @@ describe('WorkerPage', () => {
     );
   });
 
-  it('keeps worker secret fields collapsed until "Настроить" is clicked', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByText('Задача #1');
+  describe('the worker summary strip', () => {
+    const stubWorkers = (workers: unknown[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          const url = request.url;
+          if (url.endsWith('/workers')) return jsonResponse(workers);
+          if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+          if (url.includes('/storage')) return jsonResponse(FILES);
+          if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
+          return jsonResponse([]);
+        }),
+      );
+    const fleetWorker = (over: Record<string, unknown>) => ({
+      id: 1,
+      name: 'green',
+      kind: 'managed',
+      state: 'idle',
+      enabled: true,
+      lastSeenAt: new Date().toISOString(),
+      activeJobs: 0,
+      hostname: 'box',
+      version: '1.0.0',
+      models: null,
+      pollIntervalSec: 10,
+      jobTimeoutSec: 1800,
+      proxyUrl: null,
+      chatEnabled: true,
+      keyPrefix: 'brw_AAAAAAAA',
+      enrollmentPending: false,
+      enrollmentExpiresAt: null,
+      createdAt: '2026-10-14T00:00:00.000Z',
+      ...over,
+    });
 
-    expect(screen.queryByPlaceholderText('sk-proj-...')).toBeNull();
+    it('says no worker has been added yet', async () => {
+      stubWorkers([]);
+      renderPage();
 
-    await user.click(screen.getByText('Настроить'));
-    expect(screen.getByPlaceholderText('sk-proj-...')).toBeTruthy();
+      expect(await screen.findByText('Не добавлены')).toBeTruthy();
+    });
 
-    await user.click(screen.getByText('Скрыть'));
-    expect(screen.queryByPlaceholderText('sk-proj-...')).toBeNull();
-  });
+    it('counts the workers that are connected and how many are free', async () => {
+      stubWorkers([
+        fleetWorker({ id: 1, state: 'idle' }),
+        fleetWorker({ id: 2, name: 'blue', state: 'busy', activeJobs: 1 }),
+        fleetWorker({ id: 3, name: 'red', state: 'offline' }),
+      ]);
+      renderPage();
 
-  it('shows the worker as down when no recent heartbeat exists', async () => {
-    renderPage();
-    expect(await screen.findByText('Не отвечает')).toBeTruthy();
-  });
+      expect(await screen.findByText('На связи: 2 из 3')).toBeTruthy();
+      expect(screen.getByText(/свободно: 1/)).toBeTruthy();
+      expect(screen.getByText(/заняты: 1/)).toBeTruthy();
+    });
 
-  it('shows the worker as up when the backend reports a recent heartbeat', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (request: Request) => {
-        const url = request.url;
-        if (url.endsWith('/worker/status')) {
-          return jsonResponse({
-            isUp: true,
-            workers: [{ name: 'worker-host-1', lastSeenAt: new Date().toISOString(), isUp: true }],
-          });
-        }
-        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
-        if (url.includes('/storage')) return jsonResponse(FILES);
-        if (url.endsWith('/vpn/connections')) return jsonResponse(VPN_CONNECTIONS);
-        return jsonResponse([]);
-      }),
-    );
+    it('shows them as not answering when none is connected', async () => {
+      stubWorkers([fleetWorker({ state: 'offline' })]);
+      renderPage();
 
-    renderPage();
-    expect(await screen.findByText('Работает')).toBeTruthy();
+      expect(await screen.findByText('Не отвечают')).toBeTruthy();
+    });
+
+    it('mentions paused workers and the ones waiting to be connected', async () => {
+      stubWorkers([
+        fleetWorker({ id: 1 }),
+        fleetWorker({ id: 2, name: 'napper', state: 'paused', enabled: false }),
+        fleetWorker({ id: 3, name: 'new', state: 'pending', lastSeenAt: null }),
+      ]);
+      renderPage();
+
+      expect(await screen.findByText(/на паузе: 1/)).toBeTruthy();
+      expect(screen.getByText(/ждут подключения: 1/)).toBeTruthy();
+    });
   });
 
   it('shows the task state as idle when there are no jobs at all', async () => {
@@ -518,7 +574,7 @@ describe('WorkerPage', () => {
     await user.click(await screen.findByText('Задача #1'));
 
     expect(await screen.findByText('starting up')).toBeTruthy();
-    expect(screen.getByText(/worker-host-1/)).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText(/worker-host-1/)).toBeTruthy();
   });
 
   it('offers a download action for a succeeded job but not a running one', async () => {

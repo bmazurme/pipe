@@ -6,19 +6,26 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { WorkerController } from './worker.controller';
 import { WorkerService } from './worker.service';
+import { WorkersService } from './workers.service';
 
 describe('WorkerController', () => {
   let controller: WorkerController;
-  let workerService: { recordHeartbeat: jest.Mock };
+  let workerService: { recordHeartbeat: jest.Mock; assertHeldBy: jest.Mock };
+  let workersService: { touch: jest.Mock };
 
   beforeEach(async () => {
-    workerService = { recordHeartbeat: jest.fn().mockResolvedValue(undefined) };
+    workerService = {
+      recordHeartbeat: jest.fn().mockResolvedValue(undefined),
+      assertHeldBy: jest.fn().mockResolvedValue(undefined),
+    };
+    workersService = { touch: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WorkerController],
       providers: [
         { provide: WorkerService, useValue: workerService },
         { provide: ClaudeCredentialsService, useValue: {} },
+        { provide: WorkersService, useValue: workersService },
       ],
     })
       .overrideGuard(JwtOrApiKeyGuard)
@@ -26,6 +33,57 @@ describe('WorkerController', () => {
       .compile();
 
     controller = module.get(WorkerController);
+  });
+
+  describe('heartbeat', () => {
+    it('a personal API key reports by name (legacy worker)', async () => {
+      await controller.heartbeat({ workerName: 'old-worker' }, { id: 7 });
+
+      expect(workerService.recordHeartbeat).toHaveBeenCalledWith(
+        7,
+        'old-worker',
+      );
+      expect(workersService.touch).not.toHaveBeenCalled();
+    });
+
+    it('a worker added in the UI is known by its key, whatever name it passes', async () => {
+      await controller.heartbeat(
+        { workerName: 'anything' },
+        { id: 7, workerId: 5 },
+      );
+
+      expect(workersService.touch).toHaveBeenCalledWith(5);
+      expect(workerService.recordHeartbeat).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a worker only touches the job it holds', () => {
+    it('asks the service before reporting a job’s cancel state', async () => {
+      (workerService as Record<string, jest.Mock>).getCancelState = jest
+        .fn()
+        .mockResolvedValue({
+          id: 5,
+          status: 'running',
+          cancelRequestedAt: null,
+        });
+
+      await controller.cancelState(5, { id: 7, workerId: 3 });
+
+      expect(workerService.assertHeldBy).toHaveBeenCalledWith(5, 7, 3);
+    });
+
+    it('does not report anything when the job is held by another worker', async () => {
+      workerService.assertHeldBy.mockRejectedValue(new Error('not held'));
+      const getCancelState = jest.fn();
+
+      (workerService as Record<string, jest.Mock>).getCancelState =
+        getCancelState;
+
+      await expect(
+        controller.cancelState(5, { id: 7, workerId: 3 }),
+      ).rejects.toThrow('not held');
+      expect(getCancelState).not.toHaveBeenCalled();
+    });
   });
 
   describe('cancelState', () => {
@@ -88,6 +146,7 @@ describe('WorkerController', () => {
         providers: [
           { provide: WorkerService, useValue: workerService },
           { provide: ClaudeCredentialsService, useValue: {} },
+          { provide: WorkersService, useValue: workersService },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)
@@ -113,7 +172,7 @@ describe('WorkerController', () => {
     });
 
     it('returns only the log after logsFrom, plus logsLength', async () => {
-      const result = await controller.get(5, { id: 7 }, 12);
+      const result = await controller.get(5, { id: 7 }, '12');
 
       expect(
         (workerService as Record<string, jest.Mock>).findOwnedWithLogsFrom,

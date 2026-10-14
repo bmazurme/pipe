@@ -7,6 +7,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { describePublishError, ImproveService } from './improve.service';
+import * as parcel from './parcel';
 import { MANIFEST_ENTRY, sha256 } from './parcel';
 
 const BASE = { 'a.ts': 'one', 'b.ts': 'two' };
@@ -367,6 +368,71 @@ describe('ImproveService.publish', () => {
     expect(github.createTree).toHaveBeenCalledWith('tree-sha', [
       { path: 'b.ts', mode: '100644', type: 'blob', sha: null },
     ]);
+  });
+
+  describe('concurrent blob creation', () => {
+    const many = (n: number) =>
+      Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [`f${i}.ts`, `v${i}`]),
+      );
+
+    it('keeps the input order with added, modified and deleted changes', async () => {
+      const { service, github } = withResult({
+        'a.ts': 'ONE', // modified
+        'new.ts': 'n', // added
+      }); // b.ts deleted
+      // later blobs finish first
+      github.createBlob.mockImplementation(async (bytes: Uint8Array) => {
+        const text = Buffer.from(bytes).toString();
+        await new Promise((r) => setTimeout(r, text === 'ONE' ? 20 : 1));
+
+        return `blob:${text}`;
+      });
+
+      await service.publish(run() as never, 5);
+
+      expect(github.createBlob).toHaveBeenCalledTimes(2);
+      expect(github.createTree).toHaveBeenCalledWith('tree-sha', [
+        { path: 'a.ts', mode: '100644', type: 'blob', sha: 'blob:ONE' },
+        { path: 'b.ts', mode: '100644', type: 'blob', sha: null },
+        { path: 'new.ts', mode: '100644', type: 'blob', sha: 'blob:n' },
+      ]);
+    });
+
+    it('runs blobs concurrently but never more than the cap at once', async () => {
+      const { service, github } = withResult({ ...many(20) });
+      let inFlight = 0;
+      let peak = 0;
+      github.createBlob.mockImplementation(async (bytes: Uint8Array) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+
+        return `blob:${Buffer.from(bytes).toString()}`;
+      });
+
+      await service.publish(run() as never, 5);
+
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(8);
+      expect(github.createBlob).toHaveBeenCalledTimes(20);
+    });
+
+    it('aborts before createTree when a blob is rejected', async () => {
+      const { service, github } = withResult({ 'a.ts': 'X', 'b.ts': 'Y' });
+      github.createBlob.mockRejectedValueOnce(new Error('GitHub 500: boom'));
+      const r = run();
+
+      await service.publish(r as never, 5);
+
+      expect(github.createTree).not.toHaveBeenCalled();
+      expect(github.createCommit).not.toHaveBeenCalled();
+      expect(r).toMatchObject({
+        status: ImproveRunStatus.Failed,
+        error: expect.stringContaining('boom'),
+      });
+    });
   });
 
   it('never proposes a change to a protected path', async () => {
@@ -970,6 +1036,60 @@ describe('ImproveService zipball reuse', () => {
     }
 
     expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ImproveService snapshot baseline reuse', () => {
+  let hash: jest.SpyInstance;
+  beforeEach(() => {
+    hash = jest.spyOn(parcel, 'snapshotBaseline');
+  });
+  afterEach(() => hash.mockRestore());
+
+  const storedBaselines = (runs: Record<string, jest.Mock>) =>
+    runs.create.mock.calls.map(
+      ([run]) => (run as { baseline: string }).baseline,
+    );
+
+  it('hashes the snapshot once for several issues on the same base SHA', async () => {
+    const { service, runs } = setup();
+
+    await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(hash).toHaveBeenCalledTimes(1);
+    expect(storedBaselines(runs)).toEqual([
+      baselineOf(BASE),
+      baselineOf(BASE),
+      baselineOf(BASE),
+    ]);
+  });
+
+  it('hashes again when the base SHA changes', async () => {
+    const { service, github } = setup();
+    github.getBranchSha
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValueOnce('sha-1')
+      .mockResolvedValue('sha-2');
+
+    await service.startMany(3, [1, 2, 3], 'sonnet');
+
+    expect(hash).toHaveBeenCalledTimes(2);
+  });
+
+  it('hashes again once the cached entry is older than the TTL', async () => {
+    const { service } = setup();
+    const t0 = Date.now();
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(t0);
+      await service.startRun(3, 1, 'sonnet');
+      now.mockReturnValue(t0 + 11 * 60 * 1000);
+      await service.startRun(3, 2, 'sonnet');
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(hash).toHaveBeenCalledTimes(2);
   });
 });
 

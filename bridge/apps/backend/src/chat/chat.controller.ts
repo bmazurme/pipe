@@ -20,11 +20,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
+import { WorkersService } from '../worker/workers.service';
 import { ChatService } from './chat.service';
 import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
@@ -48,7 +51,11 @@ const AttachmentMulterExceptionFilter = multerExceptionFilterFor(
 @Controller('api/v1/chat')
 @UseGuards(JwtOrApiKeyGuard)
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly workersService: WorkersService,
+    private readonly providerCredentials: ProviderCredentialsService,
+  ) {}
 
   @Get('chats')
   async listChats(
@@ -198,11 +205,18 @@ export class ChatController {
   // Worker-only from here down.
 
   @Post('turns/claim')
+  @WorkerKeyAllowed()
   async claim(
-    @CurrentUser() currentUser: { id: number },
+    @CurrentUser() currentUser: { id: number; workerId?: number },
     @Res() res: Response,
   ): Promise<void> {
-    const claimed = await this.chatService.claim(currentUser.id);
+    // A worker added in the UI may be paused or have chat switched off — then it is simply given nothing.
+    const mayTake =
+      currentUser.workerId === undefined ||
+      (await this.workersService.mayTakeChatTurn(currentUser.workerId));
+    const claimed = mayTake
+      ? await this.chatService.claim(currentUser.id)
+      : null;
 
     // A bare `return null` sends a genuinely empty body (no content-type,
     // nothing for .json() to parse) rather than the JSON text "null" —
@@ -217,6 +231,11 @@ export class ChatController {
       messageId: claimed.message.id,
       chatId: claimed.chat.id,
       model: claimed.chat.model,
+      provider: await this.providerCredentials.resolveForJob(
+        currentUser.id,
+        claimed.chat.model,
+        null,
+      ),
       history: claimed.history,
     };
 
@@ -225,6 +244,7 @@ export class ChatController {
 
   // The worker fetches each file of a turn's history here, one request per file.
   @Get('turns/:messageId/attachments/:attachmentId')
+  @WorkerKeyAllowed()
   async turnAttachment(
     @Param('messageId', ParseIntPipe) messageId: number,
     @Param('attachmentId', ParseIntPipe) attachmentId: number,
@@ -241,6 +261,7 @@ export class ChatController {
   }
 
   @Post('turns/:messageId/complete')
+  @WorkerKeyAllowed()
   async completeTurn(
     @Param('messageId', ParseIntPipe) messageId: number,
     @Body() dto: CompleteTurnDto,
@@ -255,6 +276,7 @@ export class ChatController {
   }
 
   @Post('turns/:messageId/fail')
+  @WorkerKeyAllowed()
   async failTurn(
     @Param('messageId', ParseIntPipe) messageId: number,
     @Body() dto: FailTurnDto,

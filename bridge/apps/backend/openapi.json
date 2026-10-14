@@ -374,6 +374,61 @@
         }
       }
     },
+    "/api/v1/users/me": {
+      "get": {
+        "operationId": "UsersController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat/chats": {
       "get": {
         "operationId": "ChatController_listChats",
@@ -848,6 +903,740 @@
         "responses": {
           "200": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs": {
+      "get": {
+        "operationId": "WorkerController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "WorkerController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/claim": {
+      "post": {
+        "operationId": "WorkerController_claim",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/heartbeat": {
+      "post": {
+        "operationId": "WorkerController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/history": {
+      "get": {
+        "operationId": "WorkerController_history",
+        "parameters": [
+          {
+            "name": "sourceFileId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}": {
+      "get": {
+        "operationId": "WorkerController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "logsFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "WorkerController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/cancel-state": {
+      "get": {
+        "operationId": "WorkerController_cancelState",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/parcel": {
+      "get": {
+        "operationId": "WorkerController_downloadParcel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result/download": {
+      "get": {
+        "operationId": "WorkerController_downloadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "WorkerController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/retry": {
+      "post": {
+        "operationId": "WorkerController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/status": {
+      "post": {
+        "operationId": "WorkerController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJobStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/logs": {
+      "post": {
+        "operationId": "WorkerController_appendLog",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendJobLogDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/jobs/{id}/result": {
+      "post": {
+        "operationId": "WorkerController_uploadResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials": {
+      "get": {
+        "operationId": "ClaudeCredentialsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ClaudeCredentialsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClaudeCredentialDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/claude-credentials/{id}": {
+      "delete": {
+        "operationId": "ClaudeCredentialsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/provider-credentials": {
+      "get": {
+        "operationId": "ProviderCredentialsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderCredentialResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ProviderCredentialsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProviderCredentialDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderCredentialResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worker/provider-credentials/{id}": {
+      "delete": {
+        "operationId": "ProviderCredentialsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/worker/status": {
+      "get": {
+        "operationId": "WorkerStatusController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerStatusResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workers": {
+      "get": {
+        "operationId": "WorkersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkerResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "WorkersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedWorkerResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workers/enroll": {
+      "post": {
+        "operationId": "WorkersController_enroll",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollWorkerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrolledWorkerResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workers/me/config": {
+      "get": {
+        "operationId": "WorkersController_config",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerConfigResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workers/legacy/{name}": {
+      "delete": {
+        "operationId": "WorkersController_forgetLegacy",
+        "parameters": [
+          {
+            "name": "name",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/workers/{id}": {
+      "patch": {
+        "operationId": "WorkersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "WorkersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedWorkerResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workers/{id}/enroll-code": {
+      "post": {
+        "operationId": "WorkersController_renewEnrollment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedWorkerResponseDto"
+                }
+              }
+            }
           }
         }
       }
@@ -1441,526 +2230,6 @@
         "responses": {
           "204": {
             "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs": {
-      "get": {
-        "operationId": "WorkerController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/JobResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "WorkerController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/claim": {
-      "post": {
-        "operationId": "WorkerController_claim",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClaimJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/heartbeat": {
-      "post": {
-        "operationId": "WorkerController_heartbeat",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HeartbeatDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/history": {
-      "get": {
-        "operationId": "WorkerController_history",
-        "parameters": [
-          {
-            "name": "sourceFileId",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}": {
-      "get": {
-        "operationId": "WorkerController_get",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "logsFrom",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "WorkerController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/cancel-state": {
-      "get": {
-        "operationId": "WorkerController_cancelState",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/parcel": {
-      "get": {
-        "operationId": "WorkerController_downloadParcel",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/result/download": {
-      "get": {
-        "operationId": "WorkerController_downloadResult",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/cancel": {
-      "post": {
-        "operationId": "WorkerController_cancel",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CancelJobDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/retry": {
-      "post": {
-        "operationId": "WorkerController_retry",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/status": {
-      "post": {
-        "operationId": "WorkerController_updateStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateJobStatusDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/logs": {
-      "post": {
-        "operationId": "WorkerController_appendLog",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AppendJobLogDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/jobs/{id}/result": {
-      "post": {
-        "operationId": "WorkerController_uploadResult",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/claude-credentials": {
-      "get": {
-        "operationId": "ClaudeCredentialsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "ClaudeCredentialsController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateClaudeCredentialDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worker/claude-credentials/{id}": {
-      "delete": {
-        "operationId": "ClaudeCredentialsController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/worker/status": {
-      "get": {
-        "operationId": "WorkerStatusController_getStatus",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkerStatusResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/me": {
-      "get": {
-        "operationId": "UsersController_getMe",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MeResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/{id}": {
-      "patch": {
-        "operationId": "UsersController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponseDto"
-                }
-              }
-            }
           }
         }
       }
@@ -3178,6 +3447,57 @@
           "timezone"
         ]
       },
+      "MeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "username": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "status"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "email": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "status"
+        ]
+      },
       "ChatResponseDto": {
         "type": "object",
         "properties": {
@@ -3434,6 +3754,691 @@
             ]
           }
         }
+      },
+      "JobResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "sourceFileId": {
+            "type": "number",
+            "nullable": true
+          },
+          "resultFileId": {
+            "type": "number",
+            "nullable": true
+          },
+          "model": {
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ],
+            "type": "string"
+          },
+          "claudeCredentialId": {
+            "type": "number",
+            "nullable": true
+          },
+          "providerCredentialId": {
+            "type": "number",
+            "nullable": true
+          },
+          "workerId": {
+            "type": "number",
+            "nullable": true
+          },
+          "targetWorkerId": {
+            "type": "number",
+            "nullable": true
+          },
+          "contextName": {
+            "type": "string",
+            "nullable": true
+          },
+          "historyCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "claimed",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "logs": {
+            "type": "string"
+          },
+          "logsLength": {
+            "type": "number"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "workerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "claimedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "cancelRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceFileId",
+          "resultFileId",
+          "model",
+          "claudeCredentialId",
+          "providerCredentialId",
+          "workerId",
+          "targetWorkerId",
+          "contextName",
+          "historyCount",
+          "status",
+          "logs",
+          "errorMessage",
+          "workerName",
+          "claimedAt",
+          "startedAt",
+          "finishedAt",
+          "cancelRequestedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateJobDto": {
+        "type": "object",
+        "properties": {
+          "sourceFileId": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
+          },
+          "claudeCredentialId": {
+            "type": "number"
+          },
+          "providerCredentialId": {
+            "type": "number"
+          },
+          "targetWorkerId": {
+            "type": "number"
+          },
+          "contextId": {
+            "type": "number"
+          },
+          "includeHistory": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sourceFileId",
+          "model"
+        ]
+      },
+      "ClaimJobDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      },
+      "HeartbeatDto": {
+        "type": "object",
+        "properties": {
+          "workerName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "workerName"
+        ]
+      },
+      "CancelJobDto": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateJobStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "errorMessage": {
+            "type": "string",
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "AppendJobLogDto": {
+        "type": "object",
+        "properties": {
+          "chunk": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        },
+        "required": [
+          "chunk"
+        ]
+      },
+      "ClaudeCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt"
+        ]
+      },
+      "CreateClaudeCredentialDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "token"
+        ]
+      },
+      "ProviderCredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "provider": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "keyHint": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "keyHint",
+          "baseUrl",
+          "model",
+          "createdAt"
+        ]
+      },
+      "CreateProviderCredentialDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "apiKey": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "baseUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "pattern": "/^https?:\\/\\/\\S+$/"
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "provider",
+          "name",
+          "apiKey"
+        ]
+      },
+      "WorkerHeartbeatStatusDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "isUp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "lastSeenAt",
+          "isUp"
+        ]
+      },
+      "WorkerStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "isUp": {
+            "type": "boolean"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkerHeartbeatStatusDto"
+            }
+          }
+        },
+        "required": [
+          "isUp",
+          "workers"
+        ]
+      },
+      "WorkerResponseDto": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "gpt",
+                "deepseek",
+                "qwen"
+              ]
+            }
+          },
+          "id": {
+            "type": "number",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "object"
+          },
+          "state": {
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "lastSeenAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "activeJobs": {
+            "type": "number"
+          },
+          "hostname": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
+          },
+          "pollIntervalSec": {
+            "type": "number"
+          },
+          "jobTimeoutSec": {
+            "type": "number"
+          },
+          "proxyUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "chatEnabled": {
+            "type": "boolean"
+          },
+          "keyPrefix": {
+            "type": "string",
+            "nullable": true
+          },
+          "enrollmentPending": {
+            "type": "boolean"
+          },
+          "enrollmentExpiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "models",
+          "id",
+          "name",
+          "kind",
+          "state",
+          "enabled",
+          "lastSeenAt",
+          "activeJobs",
+          "hostname",
+          "version",
+          "pollIntervalSec",
+          "jobTimeoutSec",
+          "proxyUrl",
+          "chatEnabled",
+          "keyPrefix",
+          "enrollmentPending",
+          "enrollmentExpiresAt",
+          "createdAt"
+        ]
+      },
+      "CreateWorkerDto": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "gpt",
+                "deepseek",
+                "qwen"
+              ]
+            }
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "/^[\\p{L}\\p{N}][\\p{L}\\p{N} ._-]*$/u"
+          },
+          "pollIntervalSec": {
+            "type": "number",
+            "minimum": 2,
+            "maximum": 300
+          },
+          "jobTimeoutSec": {
+            "type": "number",
+            "minimum": 60,
+            "maximum": 14400
+          },
+          "proxyUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "pattern": "/^(https?:\\/\\/\\S+)?$/"
+          },
+          "chatEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreatedWorkerResponseDto": {
+        "type": "object",
+        "properties": {
+          "worker": {
+            "$ref": "#/components/schemas/WorkerResponseDto"
+          },
+          "enrollCode": {
+            "type": "string"
+          },
+          "enrollExpiresAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "worker",
+          "enrollCode",
+          "enrollExpiresAt"
+        ]
+      },
+      "EnrollWorkerDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "hostname": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "EnrolledWorkerResponseDto": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workerId",
+          "name",
+          "key"
+        ]
+      },
+      "WorkerConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "gpt",
+                "deepseek",
+                "qwen"
+              ]
+            }
+          },
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "pollIntervalSec": {
+            "type": "number"
+          },
+          "jobTimeoutSec": {
+            "type": "number"
+          },
+          "proxyUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "chatEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "models",
+          "id",
+          "name",
+          "enabled",
+          "pollIntervalSec",
+          "jobTimeoutSec",
+          "proxyUrl",
+          "chatEnabled"
+        ]
+      },
+      "UpdateWorkerDto": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "gpt",
+                "deepseek",
+                "qwen"
+              ]
+            }
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "/^[\\p{L}\\p{N}][\\p{L}\\p{N} ._-]*$/u"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "pollIntervalSec": {
+            "type": "number",
+            "minimum": 2,
+            "maximum": 300
+          },
+          "jobTimeoutSec": {
+            "type": "number",
+            "minimum": 60,
+            "maximum": 14400
+          },
+          "proxyUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "pattern": "/^(https?:\\/\\/\\S+)?$/"
+          },
+          "chatEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DeletedWorkerResponseDto": {
+        "type": "object",
+        "properties": {
+          "failedJobs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "failedJobs"
+        ]
       },
       "ContextSummaryDto": {
         "type": "object",
@@ -3947,334 +4952,6 @@
           "name",
           "type",
           "taskKey"
-        ]
-      },
-      "JobResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "sourceFileId": {
-            "type": "number",
-            "nullable": true
-          },
-          "resultFileId": {
-            "type": "number",
-            "nullable": true
-          },
-          "model": {
-            "enum": [
-              "sonnet",
-              "opus",
-              "gpt",
-              "deepseek",
-              "qwen"
-            ],
-            "type": "string"
-          },
-          "claudeCredentialId": {
-            "type": "number",
-            "nullable": true
-          },
-          "contextName": {
-            "type": "string",
-            "nullable": true
-          },
-          "historyCount": {
-            "type": "number",
-            "nullable": true
-          },
-          "status": {
-            "enum": [
-              "queued",
-              "claimed",
-              "running",
-              "succeeded",
-              "failed",
-              "cancelled"
-            ],
-            "type": "string"
-          },
-          "logs": {
-            "type": "string"
-          },
-          "logsLength": {
-            "type": "number"
-          },
-          "errorMessage": {
-            "type": "string",
-            "nullable": true
-          },
-          "workerName": {
-            "type": "string",
-            "nullable": true
-          },
-          "claimedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "startedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "finishedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "cancelRequestedAt": {
-            "format": "date-time",
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "sourceFileId",
-          "resultFileId",
-          "model",
-          "claudeCredentialId",
-          "contextName",
-          "historyCount",
-          "status",
-          "logs",
-          "errorMessage",
-          "workerName",
-          "claimedAt",
-          "startedAt",
-          "finishedAt",
-          "cancelRequestedAt",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateJobDto": {
-        "type": "object",
-        "properties": {
-          "sourceFileId": {
-            "type": "number"
-          },
-          "model": {
-            "type": "string",
-            "enum": [
-              "sonnet",
-              "opus",
-              "gpt",
-              "deepseek",
-              "qwen"
-            ]
-          },
-          "claudeCredentialId": {
-            "type": "number"
-          },
-          "contextId": {
-            "type": "number"
-          },
-          "includeHistory": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "sourceFileId",
-          "model"
-        ]
-      },
-      "ClaimJobDto": {
-        "type": "object",
-        "properties": {
-          "workerName": {
-            "type": "string",
-            "maxLength": 255
-          }
-        }
-      },
-      "HeartbeatDto": {
-        "type": "object",
-        "properties": {
-          "workerName": {
-            "type": "string",
-            "maxLength": 255
-          }
-        },
-        "required": [
-          "workerName"
-        ]
-      },
-      "CancelJobDto": {
-        "type": "object",
-        "properties": {
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
-      "UpdateJobStatusDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "running",
-              "succeeded",
-              "failed",
-              "cancelled"
-            ]
-          },
-          "errorMessage": {
-            "type": "string",
-            "maxLength": 8192
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "AppendJobLogDto": {
-        "type": "object",
-        "properties": {
-          "chunk": {
-            "type": "string",
-            "maxLength": 65536
-          }
-        },
-        "required": [
-          "chunk"
-        ]
-      },
-      "ClaudeCredentialResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "createdAt"
-        ]
-      },
-      "CreateClaudeCredentialDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "token"
-        ]
-      },
-      "WorkerHeartbeatStatusDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "lastSeenAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "isUp": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "lastSeenAt",
-          "isUp"
-        ]
-      },
-      "WorkerStatusResponseDto": {
-        "type": "object",
-        "properties": {
-          "isUp": {
-            "type": "boolean"
-          },
-          "workers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkerHeartbeatStatusDto"
-            }
-          }
-        },
-        "required": [
-          "isUp",
-          "workers"
-        ]
-      },
-      "MeResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "username": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "username",
-          "status"
-        ]
-      },
-      "UpdateUserDto": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "UserResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "email": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "email",
-          "status"
         ]
       },
       "AppLog": {
