@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 
 import { UPLOAD_DIR } from './config/multer.config';
 import { ListFilesQueryDto } from './dto/list-files-query.dto';
@@ -11,6 +12,9 @@ import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
 import { StoredFile } from './entities/stored-file.entity';
 import { FILE_STORE, type FileStore } from './file-store/file-store';
 import { type SendDone, sendStoredFile } from './file-store/send-stored-file';
+
+const PRUNE_BATCH_SIZE = 100;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class StorageService {
@@ -148,5 +152,57 @@ export class StorageService {
     } catch (error) {
       this.logger.warn(`Failed to remove file ${file.storedName}: ${error}`);
     }
+  }
+
+  // Opt-in retention (STORAGE_RETENTION_DAYS; unset or 0 = keep everything): drops files nobody ever
+  // downloaded. Walks by id so a row whose delete keeps failing cannot stall the batches after it.
+  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  async pruneStale(): Promise<number> {
+    const days = Number(process.env.STORAGE_RETENTION_DAYS);
+
+    if (!Number.isFinite(days) || days <= 0) {
+      return 0;
+    }
+
+    const cutoff = new Date(Date.now() - days * DAY_MS);
+    let lastId = 0;
+    let pruned = 0;
+
+    try {
+      for (;;) {
+        const batch = await this.storedFileRepository.find({
+          where: { createdAt: LessThan(cutoff), id: MoreThan(lastId) },
+          order: { id: 'ASC' },
+          take: PRUNE_BATCH_SIZE,
+        });
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        for (const file of batch) {
+          lastId = file.id;
+
+          try {
+            await this.delete(file);
+            pruned++;
+          } catch (error) {
+            this.logger.warn(
+              `Failed to prune stored file ${file.id}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Stored file prune failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (pruned > 0) {
+      this.logger.log(`Pruned ${pruned} stored files older than ${days}d`);
+    }
+
+    return pruned;
   }
 }
