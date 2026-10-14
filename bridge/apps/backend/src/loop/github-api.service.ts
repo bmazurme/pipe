@@ -41,6 +41,9 @@ export interface PullInfo {
   mergeable: boolean | null;
   baseRef: string;
   headSha: string;
+  // The branch the PR is made from, and the repository it lives in (a fork's PR cannot be pushed to).
+  headRef: string;
+  headRepo: string | null;
   labels: string[];
   htmlUrl: string;
 }
@@ -104,7 +107,7 @@ export class GithubApiService {
       draft: boolean;
       mergeable: boolean | null;
       base: { ref: string };
-      head: { sha: string };
+      head: { sha: string; ref: string; repo: { full_name: string } | null };
       labels: Array<{ name: string }>;
       html_url: string;
     };
@@ -118,6 +121,8 @@ export class GithubApiService {
       mergeable: pr.mergeable,
       baseRef: pr.base.ref,
       headSha: pr.head.sha,
+      headRef: pr.head.ref,
+      headRepo: pr.head.repo?.full_name ?? null,
       labels: pr.labels.map((label) => label.name),
       htmlUrl: pr.html_url,
     };

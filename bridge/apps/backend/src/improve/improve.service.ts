@@ -38,7 +38,7 @@ import {
   pickOnePerCategory,
 } from './analysis';
 import { withDefinitionOfDone } from './definition-of-done';
-import { MAX_REPAIRS_PER_PR, repairBody } from './repair';
+import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import {
   buildIssueParcel,
@@ -242,7 +242,7 @@ export class ImproveService {
 
     const attempt =
       (await this.runs.count({
-        where: { kind: 'repair', prNumber: pull.number },
+        where: { kind: 'repair', prNumber: pull.number, trigger: 'ci' },
       })) + 1;
     const { job, baseSha, baseline, fileCount } = await this.handToWorker(
       parent.userId,
@@ -289,6 +289,95 @@ export class ImproveService {
       'improve.repair_started',
       `Run ${run.id}: CI repair ${attempt}/${MAX_REPAIRS_PER_PR} for PR #${pull.number} → job ${job.id} (${parent.model})`,
       { runId: run.id, jobId: job.id, prNumber: pull.number, files: fileCount },
+    );
+
+    return run;
+  }
+
+  // "Fix this PR", asked for from the chat and confirmed by the person there: a worker gets the PR's
+  // branch as it is now and the request in front of it; its result becomes a new commit on that same
+  // branch (publishRepair path), never a new PR and never a force-push. Protected paths are dropped
+  // at publish like for every other run.
+  async startPrFix(
+    userId: number,
+    prNumber: number,
+    instruction: string,
+    model: string,
+  ): Promise<ImproveRun> {
+    this.requireConfigured();
+    this.requireModel(model);
+
+    const active = await this.runs.count({
+      where: {
+        kind: 'repair',
+        prNumber,
+        status: In(ACTIVE_RUN_STATUSES),
+      },
+    });
+
+    if (active > 0) {
+      throw new ConflictException(`PR #${prNumber} уже исправляется`);
+    }
+
+    const pull = await this.github.getPull(prNumber);
+
+    if (pull.state !== 'open' || pull.merged) {
+      throw new BadRequestException(`PR #${prNumber} не открыт`);
+    }
+
+    if (!pull.headRepo || pull.headRepo !== this.github.repoName()) {
+      throw new BadRequestException(
+        `PR #${prNumber} из другого репозитория — в его ветку нельзя отправить изменения`,
+      );
+    }
+
+    const attempt =
+      (await this.runs.count({
+        where: { kind: 'repair', prNumber, trigger: 'chat' },
+      })) + 1;
+    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
+      userId,
+      model,
+      {
+        number: `pr-${prNumber}`,
+        title: `Change PR #${prNumber}: ${pull.title}`,
+        body: withDefinitionOfDone(
+          prFixBody({
+            prNumber,
+            prTitle: pull.title,
+            branch: pull.headRef,
+            instruction,
+          }),
+        ),
+      },
+      `improve:pr-${prNumber}:chat:${attempt}`,
+      `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
+      { sha: pull.headSha, branch: pull.headRef },
+    );
+    const run = await this.runs.save(
+      this.runs.create({
+        userId,
+        kind: 'repair',
+        issueNumber: null,
+        issueTitle: pull.title.slice(0, 255),
+        model,
+        trigger: 'chat',
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        baseSha,
+        baseline: JSON.stringify(baseline),
+        branch: pull.headRef,
+        prNumber,
+        prUrl: pull.htmlUrl,
+        note: `Правка PR из чата: ${instruction.replace(/\s+/g, ' ').trim().slice(0, 150)}`,
+      }),
+    );
+
+    this.log(
+      'info',
+      'improve.pr_fix_started',
+      `Run ${run.id}: chat change of PR #${prNumber} → job ${job.id} (${model})`,
+      { runId: run.id, jobId: job.id, prNumber, files: fileCount },
     );
 
     return run;
@@ -680,7 +769,7 @@ export class ImproveService {
   private async commitRepair(run: ImproveRun, changes: Change[]) {
     const headSha = run.baseSha as string;
     const commit = await this.github.createCommit(
-      `Fix CI on PR #${run.prNumber}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}): ${describeChanges(changes)}.`,
+      `${run.trigger === 'chat' ? 'Update' : 'Fix CI on'} PR #${run.prNumber}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}): ${describeChanges(changes)}.`,
       await this.createTreeFor(headSha, changes),
       headSha,
     );

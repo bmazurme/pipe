@@ -962,6 +962,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/pr-fix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_startPrFix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/runs/{id}/cancel": {
         parameters: {
             query?: never;
@@ -2011,6 +2027,11 @@ export interface components {
         };
         StartRunDto: {
             issueNumber: number;
+            model: string;
+        };
+        StartPrFixDto: {
+            prNumber: number;
+            instruction: string;
             model: string;
         };
         StartAnalysisDto: {
@@ -3785,6 +3806,29 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StartRunDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_startPrFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartPrFixDto"];
             };
         };
         responses: {

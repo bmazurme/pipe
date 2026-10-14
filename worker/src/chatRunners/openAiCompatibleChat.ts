@@ -1,4 +1,5 @@
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
+import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { CHAT_TOOLS_SYSTEM_PROMPT, type ChatToolset } from '../chatTools.js';
 import { resolveDispatcher } from '../proxyAgent.js';
 
@@ -36,7 +37,10 @@ export async function openAiCompatibleChat(
   toolset?: ChatToolset | null,
 ): Promise<string> {
   const messages: ChatCompletionMessage[] = [
-    ...(toolset ? [{ role: 'system', content: CHAT_TOOLS_SYSTEM_PROMPT }] : []),
+    {
+      role: 'system',
+      content: toolset ? `${CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION,
+    },
     ...history.map((entry) => ({ role: entry.role, content: entry.content })),
   ];
 

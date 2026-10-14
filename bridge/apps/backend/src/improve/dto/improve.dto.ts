@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { ALL_CATEGORIES } from '../analysis';
 
@@ -23,6 +24,20 @@ export class StartRunDto {
   @IsInt()
   @Min(1)
   issueNumber: number;
+
+  @IsString()
+  model: string;
+}
+
+export class StartPrFixDto {
+  @IsInt()
+  @Min(1)
+  prNumber: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(4000)
+  instruction: string;
 
   @IsString()
   model: string;

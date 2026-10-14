@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
+import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
 
 // `claude -p` is a single-shot, stateless invocation — there's no session to
@@ -23,7 +24,7 @@ export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<num
     .join('\n\n');
   const hasFiles = staged.size > 0;
 
-  return `${transcript}\n\n${
+  return `${CHAT_ACTIONS_INSTRUCTION}\n\n${transcript}\n\n${
     hasFiles
       ? 'Files the user attached are in the ./attachments directory, at the paths shown in brackets. Open them with your file tools (images included) when they are relevant to the question.\n\n'
       : ''
