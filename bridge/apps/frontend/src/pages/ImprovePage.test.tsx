@@ -194,6 +194,7 @@ describe('ImprovePage', () => {
     expect(sent).toContainEqual({ method: 'POST', path: 'improve/schedules/1/run', body: undefined });
 
     await user.click(screen.getByRole('button', { name: 'Удалить: Ночной запуск' }));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
     await waitFor(() => expect(sent).toContainEqual({ method: 'DELETE', path: 'improve/schedules/1', body: undefined }));
   });
 });
