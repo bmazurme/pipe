@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { LogViewerGuard } from '../logs/log-viewer.guard';
+import { AuthModule } from '../auth/auth.module';
 import { LoopModule } from '../loop/loop.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -23,13 +23,9 @@ import { ImproveService } from './improve.service';
     TelegramModule,
     WorkerModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [ImproveController],
-  providers: [
-    LogViewerGuard,
-    ImproveService,
-    ImproveCiService,
-    ImproveScheduleService,
-  ],
+  providers: [ImproveService, ImproveCiService, ImproveScheduleService],
 })
 export class ImproveModule {}

@@ -34,6 +34,9 @@ const ANALYSIS_RUN = {
   finishedAt: null,
 };
 
+// The list leaves `result` out; the run by id has it.
+const LISTED_RUN = { ...ANALYSIS_RUN, result: undefined };
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
@@ -61,7 +64,7 @@ beforeEach(() => {
 
       if (request.method !== 'GET') sent.push({ method: request.method, path, body });
       if (path === 'improve/status') return json(STATUS);
-      if (path === 'improve/runs' && request.method === 'GET') return json([ANALYSIS_RUN]);
+      if (path === 'improve/runs' && request.method === 'GET') return json([{ ...LISTED_RUN, hasResult: true }]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
       if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null });
 
@@ -90,6 +93,10 @@ describe('ImprovePage analysis', () => {
   it('shows proposals and files them as issues', async () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');
+
+    expect(screen.queryByText(/Add rate limit/)).toBeNull();
+
+    await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
 
     expect(await screen.findByText(/Add rate limit/)).toBeTruthy();
 

@@ -17,7 +17,7 @@ import {
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
-import { LogViewerGuard } from '../logs/log-viewer.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import { ALL_CATEGORIES, AnalysisCategory, isCategory } from './analysis';
 import {
   CreateIssuesDto,
@@ -36,7 +36,7 @@ import { ImproveService } from './improve.service';
 // it is not reachable with a machine API key. Improve is system-wide, so it is
 // also owner-only (the EMAILS list when set, otherwise the first account).
 @Controller('api/v1/improve')
-@UseGuards(JwtGuard, LogViewerGuard)
+@UseGuards(JwtGuard, OwnerGuard)
 export class ImproveController {
   constructor(
     private readonly improve: ImproveService,
@@ -56,6 +56,11 @@ export class ImproveController {
   @Get('runs')
   runs(@Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number) {
     return this.improve.listRuns(limit);
+  }
+
+  @Get('runs/:id')
+  run(@Param('id', ParseIntPipe) id: number) {
+    return this.improve.getRun(id);
   }
 
   @Post('runs')

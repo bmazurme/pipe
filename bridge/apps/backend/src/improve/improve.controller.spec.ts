@@ -6,7 +6,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
-import { LogViewerGuard } from '../logs/log-viewer.guard';
+import { DeploymentAccessService } from '../auth/deployment-access';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import { UsersService } from '../users/users.service';
 
 import { ALL_CATEGORIES } from './analysis';
@@ -110,10 +111,10 @@ describe('ImproveController', () => {
 });
 
 describe('ImproveController access', () => {
-  it('is guarded by JwtGuard and LogViewerGuard', () => {
+  it('is guarded by JwtGuard and OwnerGuard', () => {
     const guards = Reflect.getMetadata('__guards__', ImproveController);
 
-    expect(guards).toEqual([JwtGuard, LogViewerGuard]);
+    expect(guards).toEqual([JwtGuard, OwnerGuard]);
   });
 
   it('answers 403 to a non-owner on POST /improve/runs', async () => {
@@ -122,14 +123,16 @@ describe('ImproveController access', () => {
       ImproveController,
     ) as unknown[];
 
-    expect(guards).toContain(LogViewerGuard);
+    expect(guards).toContain(OwnerGuard);
 
-    const guard = new LogViewerGuard(
-      {
-        findOwner: jest.fn().mockResolvedValue({ id: 1 }),
-        findById: jest.fn().mockResolvedValue({ id: 2, email: 'x@y.z' }),
-      } as unknown as UsersService,
-      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+    const guard = new OwnerGuard(
+      new DeploymentAccessService(
+        {
+          findOwner: jest.fn().mockResolvedValue({ id: 1 }),
+          findById: jest.fn().mockResolvedValue({ id: 2, email: 'x@y.z' }),
+        } as unknown as UsersService,
+        { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+      ),
     );
     const context = {
       switchToHttp: () => ({ getRequest: () => ({ user: { id: 2 } }) }),

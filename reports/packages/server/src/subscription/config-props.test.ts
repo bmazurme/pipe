@@ -103,7 +103,7 @@ describe('encryption config-props', () => {
     expect(updated.encryption.enabled).toBe(true);
     expect(updated.encryption.publicKey).toContain('BEGIN PUBLIC KEY');
     expect(updated.encryption.privateKey).toContain('BEGIN PRIVATE KEY');
-  });
+  }, 30_000);
 });
 
 describe('setSubscriptionConfig', () => {

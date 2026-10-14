@@ -2,6 +2,7 @@ import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 
+import { DeploymentAccessService } from '../auth/deployment-access';
 import { AuthService } from '../auth/auth.service';
 import { IdentitiesService } from '../auth/identities.service';
 import { SessionsService } from '../auth/sessions.service';
@@ -22,6 +23,7 @@ export class OauthService {
     private readonly authService: AuthService,
     private readonly sessionsService: SessionsService,
     private readonly configService: ConfigService,
+    private readonly deploymentAccess: DeploymentAccessService,
   ) {}
 
   private getTargetUrl(): string {
@@ -31,20 +33,6 @@ export class OauthService {
       throw new Error('BRIDGE_TARGET_URL is not configured');
     }
     return targetUrl;
-  }
-
-  private isAllowed(email: string): boolean {
-    const allowedEmails = this.configService.get<string>('EMAILS');
-
-    if (!allowedEmails) {
-      return true;
-    }
-
-    return allowedEmails
-      .split(',')
-      .map((e) => e.trim())
-      .filter(Boolean)
-      .includes(email);
   }
 
   private fail(response: Response, reason: OauthFailure): void {
@@ -95,7 +83,7 @@ export class OauthService {
         );
         return this.fail(response, 'unverified');
       }
-      if (!this.isAllowed(email)) {
+      if (!this.deploymentAccess.isAllowedToSignIn(email)) {
         this.logger.warn(
           `Blocked OAuth attempt for unregistered email: ${email}`,
         );
