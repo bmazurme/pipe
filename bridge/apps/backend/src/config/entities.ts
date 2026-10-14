@@ -14,6 +14,7 @@ import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
 import { LoopEvent } from '../loop/entities/loop-event.entity';
 import { LoopRun } from '../loop/entities/loop-run.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
+import { ReportsSettingsBackup } from '../reports-settings/entities/reports-settings-backup.entity';
 import { Secret } from '../secrets/entities/secret.entity';
 import { NotificationSettings } from '../telegram/entities/notification-settings.entity';
 import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
@@ -54,6 +55,7 @@ export const ENTITIES = [
   VpnConnection,
   WorkerHeartbeat,
   Secret,
+  ReportsSettingsBackup,
   LoopRun,
   LoopEvent,
   ClientHeartbeat,

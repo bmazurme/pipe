@@ -15,6 +15,8 @@ import { LogsModule } from './logs/logs.module';
 import { LoopModule } from './loop/loop.module';
 import { OauthModule } from './oauth/oauth.module';
 import { PurgeModule } from './purge/purge.module';
+import { ReportsReleaseModule } from './reports-release/reports-release.module';
+import { ReportsSettingsModule } from './reports-settings/reports-settings.module';
 import { SecretsModule } from './secrets/secrets.module';
 import { StorageModule } from './storage/storage.module';
 import { TimeModule } from './time/time.module';
@@ -49,6 +51,8 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     LoopModule,
     OauthModule,
     PurgeModule,
+    ReportsReleaseModule,
+    ReportsSettingsModule,
     SecretsModule,
     StorageModule,
     TimeModule,

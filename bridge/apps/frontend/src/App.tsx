@@ -35,6 +35,9 @@ const KeysPage = lazy(() =>
 const PurgePage = lazy(() =>
   import('./pages/PurgePage').then((m) => ({ default: m.PurgePage })),
 );
+const ReportsPage = lazy(() =>
+  import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
 const SecretsPage = lazy(() =>
   import('./pages/SecretsPage').then((m) => ({ default: m.SecretsPage })),
 );
@@ -68,6 +71,7 @@ export function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/storage" element={<StoragePage />} />
                 <Route path="/purge" element={<PurgePage />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/improve" element={<ImprovePage />} />
                 <Route path="/context" element={<ContextPage />} />
                 <Route path="/keys" element={<KeysPage />} />
