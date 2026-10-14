@@ -347,6 +347,50 @@ export class WorkerService {
     });
   }
 
+  // The newest job started over the same parcel after each of the given ones — what the Worker page's
+  // "retry" creates (a new job, the old one stays as history). Keyed by the old job's id.
+  async findRetriesOf(ids: number[]): Promise<Map<number, JobStatusRow>> {
+    const retries = new Map<number, JobStatusRow>();
+
+    if (ids.length === 0) return retries;
+
+    const olds = await this.jobRepository.find({
+      where: { id: In(ids) },
+      select: ['id', 'userId', 'sourceFileId'],
+    });
+    const sources = olds.flatMap((job) =>
+      job.sourceFileId === null ? [] : [job.sourceFileId],
+    );
+
+    if (sources.length === 0) return retries;
+
+    const candidates = await this.jobRepository.find({
+      where: { sourceFileId: In(sources) },
+      select: [
+        'id',
+        'userId',
+        'status',
+        'resultFileId',
+        'errorMessage',
+        'sourceFileId',
+      ],
+      order: { id: 'DESC' },
+    });
+
+    for (const old of olds) {
+      const newer = candidates.find(
+        (job) =>
+          job.sourceFileId === old.sourceFileId &&
+          job.userId === old.userId &&
+          job.id > old.id,
+      );
+
+      if (newer) retries.set(old.id, newer);
+    }
+
+    return retries;
+  }
+
   async findOwned(id: number, userId: number): Promise<Job> {
     const job = await this.jobRepository.findOne({ where: { id, userId } });
 

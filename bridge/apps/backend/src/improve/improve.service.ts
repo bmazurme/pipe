@@ -7,7 +7,15 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, LessThan, Not, Repository } from 'typeorm';
+import {
+  DataSource,
+  In,
+  IsNull,
+  LessThan,
+  MoreThan,
+  Not,
+  Repository,
+} from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService, TreeEntry } from '../loop/github-api.service';
@@ -71,6 +79,8 @@ interface AnalysisResult {
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 const LOG_DIGEST_DAYS = 7;
 const ADVANCE_EVERY_MS = 15_000;
+// How long after failing a run still follows a retry of its job from the Worker page.
+const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
 // A run claimed for publishing and untouched this long was lost to a restart.
 const PUBLISHING_STALE_MS = 10 * 60_000;
 const PUBLISH_ABANDONED_ERROR =
@@ -475,6 +485,12 @@ export class ImproveService {
         ),
       );
 
+      await this.followRetriedJobs().catch((error) =>
+        this.logger.warn(
+          `Retried jobs could not be followed: ${message(error)}`,
+        ),
+      );
+
       const active = await this.runs.find({
         where: {
           status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
@@ -499,6 +515,60 @@ export class ImproveService {
       }
     } finally {
       this.advancing = false;
+    }
+  }
+
+  // A run whose job failed (a worker restart, a crash) is over — but the Worker page's "retry" starts a
+  // NEW job over the same parcel, and when that one succeeds nothing pointed at it: the job read "done",
+  // the run still read "error". So a recently failed run whose job failed or was stopped follows the
+  // retry: it is queued again on the newer job, and advances from there as usual.
+  private async followRetriedJobs(): Promise<void> {
+    const failed = await this.runs.find({
+      where: {
+        status: ImproveRunStatus.Failed,
+        jobId: Not(IsNull()),
+        finishedAt: MoreThan(new Date(Date.now() - RETRY_FOLLOW_MS)),
+      },
+      order: { id: 'ASC' },
+    });
+
+    if (failed.length === 0) return;
+
+    const oldIds = failed.map((run) => run.jobId as number);
+    const olds = new Map(
+      (await this.workers.findStatuses(oldIds)).map((job) => [job.id, job]),
+    );
+    // Only a failure that came from the job itself: a succeeded job whose publishing failed has "retry publish".
+    const stopped = oldIds.filter((id) => {
+      const status = olds.get(id)?.status;
+
+      return status === JobStatus.Failed || status === JobStatus.Cancelled;
+    });
+    const retries = await this.workers.findRetriesOf(stopped);
+
+    for (const run of failed) {
+      const retry = retries.get(run.jobId as number);
+
+      if (!retry || retry.userId !== run.userId) continue;
+
+      const moved = await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Failed },
+        {
+          jobId: retry.id,
+          status: ImproveRunStatus.Queued,
+          error: null,
+          finishedAt: null,
+        },
+      );
+
+      if (moved.affected === 1) {
+        this.log(
+          'info',
+          'improve.job_retried',
+          `Run ${run.id} (issue #${run.issueNumber}): follows the retried job ${retry.id} (was ${run.jobId})`,
+          { runId: run.id, jobId: retry.id },
+        );
+      }
     }
   }
 

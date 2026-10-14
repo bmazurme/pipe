@@ -162,6 +162,31 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('findRetriesOf', () => {
+    it('finds the newest later job over the same parcel and the same owner', async () => {
+      repository
+        .find!.mockResolvedValueOnce([
+          { id: 102, userId: 3, sourceFileId: 50 },
+          { id: 90, userId: 3, sourceFileId: null },
+        ])
+        .mockResolvedValueOnce([
+          { id: 105, userId: 3, sourceFileId: 50 },
+          { id: 104, userId: 9, sourceFileId: 50 },
+          { id: 102, userId: 3, sourceFileId: 50 },
+        ]);
+
+      const retries = await service.findRetriesOf([102, 90]);
+
+      expect(retries.get(102)?.id).toBe(105);
+      expect(retries.has(90)).toBe(false);
+    });
+
+    it('skips the queries for no ids', async () => {
+      await expect(service.findRetriesOf([])).resolves.toEqual(new Map());
+      expect(repository.find).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findOwnedWithLogsFrom', () => {
     function mockSelectBuilder(result: {
       entities: Partial<Job>[];

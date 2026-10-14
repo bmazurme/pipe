@@ -90,6 +90,7 @@ function setup(
     findUnstartedIssueParcels: jest.fn().mockResolvedValue([]),
     findOwned: jest.fn(),
     findStatuses: jest.fn().mockResolvedValue([]),
+    findRetriesOf: jest.fn().mockResolvedValue(new Map()),
     cancel: jest.fn().mockResolvedValue(undefined),
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
@@ -1110,7 +1111,9 @@ describe('ImproveService.advance — stale publishing runs', () => {
     async ({ where }: { where: { status: unknown } }) =>
       where.status === ImproveRunStatus.Publishing
         ? publishingRuns
-        : activeRuns;
+        : where.status === ImproveRunStatus.Failed
+          ? []
+          : activeRuns;
 
   it('fails a run stuck in publishing, with an explanation', async () => {
     const stuck = publishing();
@@ -1261,5 +1264,189 @@ describe('ImproveService.cancelRun', () => {
 
     expect(res.status).toBe(ImproveRunStatus.Publishing);
     expect(workers.cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImproveService change of a PR from the chat', () => {
+  const open = {
+    number: 304,
+    title: 'Allowlist',
+    state: 'open',
+    merged: false,
+    headSha: 'head-sha',
+    headRef: 'improve/issue-297-run-78',
+    headRepo: 'o/r',
+    htmlUrl: 'https://gh/pr/304',
+  };
+
+  const start = (pull: object, runs: Record<string, unknown> = {}) => {
+    return setup({
+      runs: { count: jest.fn().mockResolvedValue(0), ...runs },
+      github: { getPull: jest.fn().mockResolvedValue(pull) },
+    });
+  };
+
+  it('hands the PR branch and the request to a worker, as a repair run that is not a CI one', async () => {
+    const { service, github, storage, runs } = start(open);
+
+    const run = await service.startPrFix(3, 304, 'Rename the helper', 'sonnet');
+
+    expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
+
+    const manifest = strFromU8(
+      unzipSync(new Uint8Array(storage.createFromBuffer.mock.calls[0][1]))[
+        MANIFEST_ENTRY
+      ],
+    );
+
+    expect(manifest).toContain('Rename the helper');
+    expect(manifest).toContain('Definition of done');
+    expect(run).toMatchObject({
+      kind: 'repair',
+      trigger: 'chat',
+      issueNumber: null,
+      prNumber: 304,
+      branch: 'improve/issue-297-run-78',
+      baseSha: 'head-sha',
+      prUrl: 'https://gh/pr/304',
+    });
+    expect(runs.save).toHaveBeenCalled();
+  });
+
+  it('refuses a closed or merged PR', async () => {
+    await expect(
+      start({ ...open, state: 'closed' }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/не открыт/);
+    await expect(
+      start({ ...open, merged: true }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/не открыт/);
+  });
+
+  it('refuses a PR from a fork — its branch cannot be pushed to', async () => {
+    await expect(
+      start({ ...open, headRepo: 'someone/r' }).service.startPrFix(
+        3,
+        304,
+        'x y z',
+        'sonnet',
+      ),
+    ).rejects.toThrow(/другого репозитория/);
+  });
+
+  it('refuses while another change of the same PR is running', async () => {
+    const ctx = start(open, { count: jest.fn().mockResolvedValue(1) });
+
+    await expect(
+      ctx.service.startPrFix(3, 304, 'x y z', 'sonnet'),
+    ).rejects.toThrow(/уже исправляется/);
+    expect(ctx.workers.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImproveService following a retried job', () => {
+  const failedRun = {
+    id: 99,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 312,
+    status: ImproveRunStatus.Failed,
+    jobId: 102,
+    error:
+      'Worker was stopped (SIGTERM) before the job finished — start it again',
+    finishedAt: new Date(),
+  };
+
+  const start = (oldStatus: string, retry?: object) => {
+    const ctx = setup({
+      runs: {
+        find: jest.fn(async ({ where }: { where: { status: unknown } }) =>
+          where.status === ImproveRunStatus.Failed ? [failedRun] : [],
+        ),
+      },
+    });
+
+    ctx.workers.findStatuses.mockResolvedValue([
+      { id: 102, userId: 3, status: oldStatus },
+    ]);
+    ctx.workers.findRetriesOf.mockResolvedValue(
+      retry ? new Map([[102, retry]]) : new Map(),
+    );
+
+    return ctx;
+  };
+
+  it('queues the run again on the new job when a failed job was retried from the Worker page', async () => {
+    const { service, runs, workers } = start('failed', {
+      id: 103,
+      userId: 3,
+      status: 'running',
+    });
+
+    await service.advance();
+
+    expect(workers.findRetriesOf).toHaveBeenCalledWith([102]);
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 99, status: ImproveRunStatus.Failed },
+      {
+        jobId: 103,
+        status: ImproveRunStatus.Queued,
+        error: null,
+        finishedAt: null,
+      },
+    );
+  });
+
+  it('does the same for a stopped job', async () => {
+    const { service, runs } = start('cancelled', {
+      id: 103,
+      userId: 3,
+      status: 'queued',
+    });
+
+    await service.advance();
+
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 99, status: ImproveRunStatus.Failed },
+      expect.objectContaining({ jobId: 103 }),
+    );
+  });
+
+  it('leaves a run alone when its job succeeded (that is a publishing failure, with its own retry)', async () => {
+    const { service, runs, workers } = start('succeeded');
+
+    await service.advance();
+
+    expect(workers.findRetriesOf).toHaveBeenCalledWith([]);
+    expect(runs.update).not.toHaveBeenCalled();
+  });
+
+  it('leaves a run alone when its job was not retried', async () => {
+    const { service, runs } = start('failed');
+
+    await service.advance();
+
+    expect(runs.update).not.toHaveBeenCalled();
+  });
+
+  it('never follows a job that belongs to someone else', async () => {
+    const { service, runs } = start('failed', {
+      id: 103,
+      userId: 9,
+      status: 'running',
+    });
+
+    await service.advance();
+
+    expect(runs.update).not.toHaveBeenCalled();
   });
 });
