@@ -67,5 +67,39 @@
 
   .container :global(.g-aikit-chat-container__content) {
     min-height: 240px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* Gutters shrink so a reply keeps most of a 390px screen; whatever is still wider (a long
+     link, a code line, a table) wraps or scrolls inside its own block, never past the card. */
+  .container :global(.g-aikit-message-list) {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .container :global(.g-aikit-message-list__messages),
+  .container :global(.g-aikit-base-message) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .container :global(.g-aikit-markdown-renderer) {
+    overflow-wrap: anywhere;
+  }
+
+  .container :global(.g-aikit-markdown-renderer pre),
+  .container :global(.g-aikit-markdown-renderer table) {
+    overflow-wrap: normal;
+  }
+
+  .container :global(.g-aikit-markdown-renderer__table-wrap),
+  .container :global(.g-aikit-markdown-renderer pre) {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .modelPicker {
+    flex-wrap: wrap;
   }
 }
