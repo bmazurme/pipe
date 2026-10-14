@@ -28,9 +28,11 @@ export function StoragePage() {
   const dispatch = useAppDispatch();
   // Picks up files uploaded from another open device/tab — RTK Query's
   // structural sharing means a poll that finds nothing new doesn't cause a
-  // re-render on its own.
+  // re-render on its own. Polling pauses while the tab is unfocused and
+  // resumes (with a refetch) on focus.
   const { isLoading } = useListFilesQuery(undefined, {
     pollingInterval: FILES_POLL_INTERVAL_MS,
+    skipPollingIfUnfocused: true,
   });
   const files = useAppSelector(storageFilesSelector);
   const accessToken = useAppSelector((state) => state.auth.accessToken);

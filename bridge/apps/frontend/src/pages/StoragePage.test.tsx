@@ -66,6 +66,30 @@ beforeEach(() => {
   });
 });
 
+describe('StoragePage polling', () => {
+  it('does not poll the file list while the tab is unfocused', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByText('Выбрать файлы');
+      const listCalls = () =>
+        vi.mocked(fetch).mock.calls.filter(([i]) => (i instanceof Request ? i.url : String(i)).includes('/storage')).length;
+      const before = listCalls();
+
+      store.dispatch(storageApi.internalActions.onFocusLost());
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(listCalls()).toBe(before);
+
+      store.dispatch(storageApi.internalActions.onFocus());
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(listCalls()).toBeGreaterThan(before);
+    } finally {
+      store.dispatch(storageApi.internalActions.onFocus());
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('StoragePage', () => {
   it('uploads a clean file immediately, without a confirmation dialog', async () => {
     renderPage();

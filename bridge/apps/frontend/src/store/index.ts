@@ -1,4 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
+import { setupListeners } from '@reduxjs/toolkit/query';
 
 import {
   apiKeysApi,
@@ -69,6 +70,10 @@ export const store = configureStore({
       contextApi.middleware,
     ),
 });
+
+// Tracks window focus/visibility — without it RTK Query always treats the tab
+// as focused and `skipPollingIfUnfocused` never pauses anything.
+setupListeners(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
