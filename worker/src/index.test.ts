@@ -9,7 +9,7 @@ import { ASSET_PREFIX, buildArchive } from '@pipe/protocol';
 
 import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
-import { processJob, withHeartbeat } from './index.js';
+import { processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './index.js';
 
 const originalFetch = globalThis.fetch;
 const originalOpenAiKey = process.env.OPENAI_API_KEY;
@@ -410,5 +410,41 @@ describe('withHeartbeat (chat turns)', () => {
 
     release('still fine');
     assert.equal(await running, 'still fine');
+  });
+});
+
+describe('processJob worker shutdown', () => {
+  it('reports "failed" with the SIGTERM reason, flushes logs and never reports "cancelled"', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-shutdown-'));
+    const shutdown = new AbortController();
+    // The model "hangs" until the worker aborts the request; the signal fires once it is running.
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
+      setTimeout(() => shutdown.abort(), 20);
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    }) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    client.isCancelRequested = async () => false;
+    const job: RemoteJob = { id: 22, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const keepAlive = setTimeout(() => {}, 10_000);
+
+    try {
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 1000, shutdown: shutdown.signal });
+    } finally {
+      clearTimeout(keepAlive);
+    }
+
+    assert.deepEqual(
+      client.updateStatus.calls.map((call) => call[1]),
+      ['running', 'failed'],
+    );
+    assert.equal(client.updateStatus.calls[1][2], SHUTDOWN_FAILURE_MESSAGE);
+    assert.equal(client.uploadResult.calls.length, 0);
+    assert.deepEqual(readdirSync(workDir), []);
+    assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Claimed job 22')));
+
+    rmSync(workDir, { recursive: true, force: true });
   });
 });
