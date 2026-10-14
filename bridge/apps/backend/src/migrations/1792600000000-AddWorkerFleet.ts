@@ -79,9 +79,7 @@ export class AddWorkerFleet1792600000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "workers" DROP CONSTRAINT "FK_workers_userId"`,
     );
-    await queryRunner.query(
-      `DROP INDEX "public"."IDX_workers_enrollCodeHash"`,
-    );
+    await queryRunner.query(`DROP INDEX "public"."IDX_workers_enrollCodeHash"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_workers_keyHash"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_workers_userId_name"`);
     await queryRunner.query(`DROP INDEX "public"."IDX_workers_userId"`);
