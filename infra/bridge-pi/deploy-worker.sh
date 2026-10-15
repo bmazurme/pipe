@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# Deploys worker + vpn-client (stack `bridgew`). Run on white, after the core stack works:
+# Deploys worker + vpn-client (stack `bridgew`, or WORKER_STACK — see below). Run on white, after the core stack
+# works — it reads ~/.pipe/bridge.env locally, and that file only exists there; WORKER_NODE_HOSTNAME (see below)
+# decides which board the containers actually land on, not the host this script runs on.
 #
 #   ./secrets.sh set WORKER_BRIDGE_API_KEY       # a personal API key made in bridge: Profile → Access → API keys (brk_…)
 #   ./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN     # `claude setup-token` on a machine where you are logged in to Claude
@@ -15,19 +17,35 @@
 #                                                #  --legacy goes back to the environment-key worker)
 #   infra/bridge-pi/enroll-worker.sh <code>      # from your workstation, with the code the Worker page showed
 #
+# A second worker on another board: set WORKER_STACK (anything but the default `bridgew`) and WORKER_NODE_HOSTNAME
+# (the new board's hostname) before any of the commands above — each is then scoped to that stack: its own
+# worker-mode/xray-client files here, its own placement constraint in the stack file, its own `worker_state`
+# volume and Swarm services. Nothing else (this board's existing worker, bridge.env, the core stack) is touched.
+# Not redeployed by autodeploy yet — a second stack needs a manual re-run of the commands above for a new release.
+#
+#   OUT=~/.pipe/xray-client-bridgew2.json ./vless-to-xray.sh   # OUT must match deploy-worker.sh's own derived path below
+#   WORKER_STACK=bridgew2 WORKER_NODE_HOSTNAME=ubuntu-red ./deploy-worker.sh --managed
+#
 # The values become Docker secrets (encrypted in the Swarm raft store, mounted as files); the temporary files
 # this script writes live in a 0700 directory and are removed on exit.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$HOME/.pipe/bridge.env"
-XRAY="$HOME/.pipe/xray-client.json"
-STACK=bridgew
+STACK="${WORKER_STACK:-bridgew}"
+export WORKER_NODE_HOSTNAME="${WORKER_NODE_HOSTNAME:-ubuntu-green}"
+# Only the default stack keeps the original, unsuffixed filenames — autodeploy and every existing board already
+# expect those exact paths; a second stack gets its own so the two never collide.
+SUFFIX=""; [ "$STACK" = bridgew ] || SUFFIX="-$STACK"
+XRAY="$HOME/.pipe/xray-client$SUFFIX.json"
+MODE_FILE="$HOME/.pipe/worker-mode$SUFFIX"
+# The primary stack's vpn-client answers backend's own TELEGRAM_PROXY_URL (http://vpn-client:1080) on the shared
+# telegram-proxy-net — only it may claim that alias. Any other stack gets a harmless one of its own.
+export TELEGRAM_PROXY_ALIAS="${TELEGRAM_PROXY_ALIAS:-vpn-client$SUFFIX}"
 
 # Which kind of worker this board runs is remembered, so the automatic deploy of a release (autodeploy calls this
 # script with no flag) redeploys the SAME kind instead of silently putting the environment-key worker back:
 #   --managed → a worker added in the UI · --legacy → the older worker with a bridge API key in the environment.
-MODE_FILE="$HOME/.pipe/worker-mode"
 MANAGED=0
 if [ "$(cat "$MODE_FILE" 2>/dev/null || true)" = managed ]; then MANAGED=1; fi
 case "${1:-}" in
@@ -47,7 +65,7 @@ other="$(docker node ls -q 2>/dev/null | xargs -r docker node inspect --format '
 [ -z "$other" ] || { echo "a failover to $other is active — refusing to deploy from $(hostname). Failback is a deliberate procedure: infra/failover/README.md" >&2; exit 1; }
 
 [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE" >&2; exit 1; }
-[ -s "$XRAY" ] || { echo "missing $XRAY (the Xray client config for your VPN server)" >&2; exit 1; }
+[ -s "$XRAY" ] || { echo "missing $XRAY (the Xray client config for your VPN server) — OUT=$XRAY ./vless-to-xray.sh" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"

@@ -59,6 +59,39 @@ The link comes from your VPN panel, from the VPN page in bridge (copy the connec
 saved connections yet) or from a VPN app on your phone. It contains the server address, your client UUID and the Reality keys,
 so treat it as a secret. (Hand-writing the file works too: `bridge/deploy/swarm/xray-client-config.example.json`.)
 
+### A second worker on another board
+
+A worker added in the UI (recommended — no bridge API key or Claude token touch any board at all). Run this from
+**white** — `deploy-worker.sh` reads `~/.pipe/bridge.env` locally (`API_HOST`, …), and that file only exists there;
+the placement constraint, not the host you run the command from, decides the new worker actually lands on the
+other board:
+
+```bash
+ssh -t pi@192.168.50.11   # white — not the new board
+cd ~/bridge-pi
+
+OUT=~/.pipe/xray-client-bridgew2.json ./vless-to-xray.sh     # a fresh vless://… link — don't reuse the first worker's
+
+WORKER_STACK=bridgew2 WORKER_NODE_HOSTNAME=ubuntu-red \
+  ./deploy-worker.sh --managed ghcr stable
+```
+
+- `WORKER_STACK` (anything but `bridgew`) and `WORKER_NODE_HOSTNAME` (the new board's Swarm hostname — `docker node
+  ls` lists them) scope everything to this one worker: its own `worker-mode`/`xray-client` files on disk, its own
+  placement constraint, its own `worker_state` volume and Swarm services (`bridgew2_worker`, `bridgew2_vpn-client`,
+  …) — the first worker, `~/.pipe/bridge.env`, and the core stack are untouched.
+- Then: https://bridge.ntlstl.dev/worker?tab=workers → **Добавить** → copy the one-time code → from your
+  **workstation** (not any board — `enroll-worker.sh` SSHes into the board itself, it never runs on one), naming
+  both the stack and the new board's address (it defaults to green otherwise):
+  `WORKER_STACK=bridgew2 infra/bridge-pi/enroll-worker.sh <code> 192.168.50.13` (white/red/blue/green are
+  `.11`/`.12`/`.13`/`.14` — infra/pi/README.md has the full table). Watch it come up: `WORKER_STACK=bridgew2
+  ./deploy-worker.sh status`.
+- **Not kept up to date by `pipe-autodeploy`** — it only knows about the one `bridgew` stack today. A second one
+  needs the `./deploy-worker.sh` command above run again by hand for each new release (`./deploy-worker.sh status`
+  on the new board shows what it's currently running).
+- A fresh vless:// link, not the first worker's: two Xray clients sharing one Reality client UUID is extra load on
+  that one VPN connection for no reason — add a second connection on the VPN page (or your panel) instead.
+
 If the worker's replies hang, check the tunnel first: `FINGERPRINT=firefox ./vless-to-xray.sh <link-or-json>` then
 `./deploy-worker.sh`. Here the default `chrome` fingerprint was throttled by the network (≈80 % of connections stalled
 in series; direct connects to the VPN server were fine) and `firefox` passed 48 of 48. `vpn-client` also uses

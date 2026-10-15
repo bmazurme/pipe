@@ -118,6 +118,14 @@ export class ImproveService {
     baseline: Record<string, string>;
     at: number;
   } | null = null;
+  // The snapshot being built right now, so concurrent starts on one SHA share a single download.
+  private zipPending: {
+    sha: string;
+    promise: Promise<{
+      files: SnapshotFile[];
+      baseline: Record<string, string>;
+    }>;
+  } | null = null;
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -483,12 +491,25 @@ export class ImproveService {
     ) {
       return { files: cached.files, baseline: cached.baseline };
     }
-    const files = selectParcelFiles(
-      await readZipball(await this.github.downloadZipball(sha)),
-    );
-    const baseline = snapshotBaseline(files);
-    this.zipCache = { sha, files, baseline, at: Date.now() };
-    return { files, baseline };
+    if (this.zipPending?.sha === sha) return this.zipPending.promise;
+
+    const promise = (async () => {
+      const files = selectParcelFiles(
+        await readZipball(await this.github.downloadZipball(sha)),
+      );
+      const baseline = snapshotBaseline(files);
+      this.zipCache = { sha, files, baseline, at: Date.now() };
+
+      return { files, baseline };
+    })();
+    const pending = { sha, promise };
+    this.zipPending = pending;
+
+    try {
+      return await promise;
+    } finally {
+      if (this.zipPending === pending) this.zipPending = null;
+    }
   }
 
   // Base-branch SHA + parcel files; independent of the task, so it can start early.
@@ -1332,18 +1353,26 @@ export class ImproveService {
     let started = 0;
     const failed: string[] = [];
 
-    for (const [index, item] of stored.items.entries()) {
-      if (only && !only.includes(index)) continue;
-      if (!item.issueNumber || item.started) continue;
+    const todo = stored.items.filter(
+      (item, index) =>
+        (!only || only.includes(index)) && item.issueNumber && !item.started,
+    );
+    const outcomes = await this.startEach(
+      run.userId,
+      todo.map((item) => item.issueNumber as number),
+      model,
+    );
 
-      try {
-        await this.startRun(run.userId, item.issueNumber, model);
+    todo.forEach((item, i) => {
+      const outcome = outcomes[i];
+
+      if (outcome.ok) {
         item.started = true;
         started += 1;
-      } catch (error) {
-        failed.push(`#${item.issueNumber}: ${message(error)}`);
+      } else {
+        failed.push(`#${item.issueNumber}: ${outcome.error}`);
       }
-    }
+    });
 
     run.result = JSON.stringify(stored);
     await this.runs.save(run);
@@ -1375,6 +1404,28 @@ export class ImproveService {
     return this.runs.save(run);
   }
 
+  // Starts runs a few at a time; one failing start never stops the others. Outcomes keep input order.
+  private startEach(
+    userId: number,
+    numbers: number[],
+    model: string,
+  ): Promise<
+    (
+      | { ok: true; number: number }
+      | { ok: false; number: number; error: string }
+    )[]
+  > {
+    return mapInBatches(numbers, START_CONCURRENCY, async (number) => {
+      try {
+        await this.startRun(userId, number, model);
+
+        return { ok: true as const, number };
+      } catch (error) {
+        return { ok: false as const, number, error: message(error) };
+      }
+    });
+  }
+
   // Several issues into work at once; each is independent.
   async startMany(
     userId: number,
@@ -1384,16 +1435,13 @@ export class ImproveService {
     this.requireConfigured();
     this.requireModel(model);
 
+    const outcomes = await this.startEach(userId, issueNumbers, model);
     const started: number[] = [];
     const skipped: string[] = [];
 
-    for (const number of issueNumbers) {
-      try {
-        await this.startRun(userId, number, model);
-        started.push(number);
-      } catch (error) {
-        skipped.push(`#${number}: ${message(error)}`);
-      }
+    for (const outcome of outcomes) {
+      if (outcome.ok) started.push(outcome.number);
+      else skipped.push(`#${outcome.number}: ${outcome.error}`);
     }
 
     return { started, skipped };
@@ -1448,6 +1496,8 @@ export class ImproveService {
 // GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
 // about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
 // Maps in order, at most `size` calls in flight; the first rejection rejects the whole map.
+const START_CONCURRENCY = 3;
+
 async function mapInBatches<T, R>(
   items: T[],
   size: number,
