@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -7,13 +8,15 @@ import { issueKey, loadAgentState, recordOwnOutput } from '../agentState.js';
 import { BridgeClient } from '../bridgeClient.js';
 import { buildIssuePrompt, runClaude } from '../claudeRunner.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
+import { loadCredentialsOrEmpty } from '../credentials.js';
 import { decryptBuffer, encryptBuffer } from '../encryption.js';
 import { addTaskWorktree, commitAll, pushBranch, removeTaskWorktree } from '../gitWorktree.js';
 import { buildIssueArchive, extractIssue, extractIssueArchive, updateIssueFile } from '../issuePack.js';
+import { findOwnCredentials } from '../ownCredentials.js';
 import { AGENT_WORK_DIR, resolveFromRoot } from '../paths.js';
 import { contentHash, readAndTransform } from '../pack.js';
 import { reviewIssueBeforeDispatch } from '../reviewPrompt.js';
-import type { ProjectConfig, StoredFileResponse } from '../types.js';
+import type { Credentials, ProjectConfig, StoredFileResponse } from '../types.js';
 import { walkProjectFiles } from '../walk.js';
 import { issueParcelName } from './pushIssue.js';
 import { log } from '../log.js';
@@ -59,6 +62,35 @@ export function findCandidates(files: StoredFileResponse[], gitlabProjectId: str
   }
 
   return [...newestByIssue.values()];
+}
+
+// True when the worktree is clean. On a hit, logs the offending file names
+// (never the values) and returns false so the caller skips commit/push/upload.
+export async function resultIsFreeOfOwnCredentials(
+  worktreeDir: string,
+  project: ProjectConfig,
+  credentials: Partial<Credentials>,
+  key: string,
+): Promise<boolean> {
+  // Everything `git add -A` would commit (incl. dotfiles and non-code files)
+  // plus everything the result parcel would contain.
+  const gitFiles = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    cwd: worktreeDir,
+    encoding: 'utf-8',
+    maxBuffer: 256 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  const parcelFiles = await walkProjectFiles(worktreeDir, projectInclude(project), projectExclude(project));
+  const relPaths = [...new Set([...gitFiles, ...parcelFiles])];
+  const leaked = findOwnCredentials(worktreeDir, relPaths, credentials);
+  if (leaked.length === 0) return true;
+
+  log.error(
+    `Aborting ${key}: the agent's result contains sync-cli's own stored credentials in: ${leaked.join(', ')}.\n` +
+      `Nothing was committed, pushed or uploaded. The worktree was left in place for inspection: ${worktreeDir}`,
+  );
+  return false;
 }
 
 async function processCandidate(
@@ -157,6 +189,10 @@ async function processCandidate(
 
   const prompt = buildIssuePrompt(title, description);
   const { exitCode } = await runClaude(worktreeDir, prompt, model);
+
+  if (!(await resultIsFreeOfOwnCredentials(worktreeDir, project, loadCredentialsOrEmpty(), key))) {
+    return;
+  }
 
   commitAll(
     worktreeDir,

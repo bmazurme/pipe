@@ -1,8 +1,13 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 
 import type { StoredFileResponse } from '../types.js';
-import { findCandidates } from './agentRunner.js';
+import { log } from '../log.js';
+import { findCandidates, resultIsFreeOfOwnCredentials } from './agentRunner.js';
 
 function file(overrides: Partial<StoredFileResponse> = {}): StoredFileResponse {
   return {
@@ -81,5 +86,40 @@ describe('findCandidates', () => {
 
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0]?.file.id, 2);
+  });
+});
+
+describe('resultIsFreeOfOwnCredentials', () => {
+  const project = { name: 'p', path: '.' } as never;
+
+  it('aborts, naming the file but never the value, when a result file holds a stored token', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'agent-guard-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    const errors = mock.method(log, 'error', () => undefined);
+    try {
+      writeFileSync(path.join(dir, 'NOTES.md'), 'leak: glpat-secret-value');
+      writeFileSync(path.join(dir, 'ok.md'), 'fine');
+
+      const ok = await resultIsFreeOfOwnCredentials(dir, project, { gitlabToken: 'glpat-secret-value' }, '1:2');
+
+      assert.equal(ok, false);
+      const logged = errors.mock.calls.map((c) => String(c.arguments[0])).join('\n');
+      assert.match(logged, /NOTES\.md/);
+      assert.ok(!logged.includes('glpat-secret-value'));
+    } finally {
+      errors.mock.restore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('passes a clean result', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'agent-guard-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    try {
+      writeFileSync(path.join(dir, 'ok.md'), 'fine');
+      assert.equal(await resultIsFreeOfOwnCredentials(dir, project, { gitlabToken: 'glpat-x' }, '1:2'), true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
