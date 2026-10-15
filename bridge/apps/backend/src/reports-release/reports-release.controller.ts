@@ -2,16 +2,17 @@ import { Controller, Get, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import {
   ReportsReleaseInfo,
   ReportsReleaseService,
 } from './reports-release.service';
 
-// Browser-only (JwtGuard, no API-key fallback) — a button on a bridge page,
-// not something any machine client (sync/reports/worker) calls. Same guard
-// choice as PurgeController/SecretsController for the same reason.
+// Browser-only (JwtGuard, no API-key fallback) and owner-only: the zip is the
+// private repo source, fetched with the server-side LOOP_GITHUB_TOKEN. Same
+// guard pair as DashboardController.
 @Controller('api/v1/reports-release')
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, OwnerGuard)
 export class ReportsReleaseController {
   constructor(private readonly reportsReleaseService: ReportsReleaseService) {}
 
@@ -29,6 +30,7 @@ export class ReportsReleaseController {
       'Content-Disposition',
       'attachment; filename="reports-latest.zip"',
     );
-    res.send(Buffer.from(bytes));
+    res.setHeader('Content-Length', bytes.byteLength);
+    res.end(bytes);
   }
 }

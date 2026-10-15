@@ -124,6 +124,10 @@ any required variable is missing: `STORAGE_DRIVER=s3 needs S3_BUCKET, ...`
 (the error lists the missing names). The `S3_*` variables are ignored with
 `local`. Setting up a Garage cluster: [infra/garage/README.md](../infra/garage/README.md).
 
+### Dashboard
+
+bridge backend reads `DOCKER_PROXY_URL` (default `http://docker-proxy:2375`, a read-only `NODES=1` docker-socket-proxy) and `BACKUP_S3_ENDPOINT` / `BACKUP_S3_BUCKET` / `BACKUP_S3_REGION` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` for the owner-only Dashboard page. All are optional; defaults, behaviour when unset and the hard-coded node list are in [bridge/README.md](../bridge/README.md#dashboard).
+
 ### Self-improvement loop
 
 Variables added for the self-improvement loop (see

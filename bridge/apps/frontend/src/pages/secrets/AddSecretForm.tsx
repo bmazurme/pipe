@@ -52,6 +52,7 @@ export function AddSecretForm() {
           onUpdate={setName}
           onKeyDown={handleKeyDown}
           placeholder="Имя"
+          controlProps={{ 'aria-label': 'Имя секрета' }}
           size="l"
         />
         <TextInput
@@ -59,6 +60,7 @@ export function AddSecretForm() {
           onUpdate={setValue}
           onKeyDown={handleKeyDown}
           placeholder="Значение"
+          controlProps={{ 'aria-label': 'Значение секрета' }}
           type="password"
           hasClear
           size="l"
@@ -68,6 +70,7 @@ export function AddSecretForm() {
           onUpdate={setDescription}
           onKeyDown={handleKeyDown}
           placeholder="Описание (опционально)"
+          controlProps={{ 'aria-label': 'Описание секрета' }}
           size="l"
         />
         <Button view="action" size="l" loading={isSaving} disabled={!canSubmit} onClick={() => void handleCreate()}>

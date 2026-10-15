@@ -58,19 +58,30 @@ export function SecretRow({
     return (
       <li className={styles.entryRow}>
         <div className={styles.entryEditFields}>
-          <TextInput value={editName} onUpdate={onEditNameChange} onKeyDown={onEditKeyDown} placeholder="Имя" autoFocus size="s" />
+          <TextInput
+            value={editName}
+            onUpdate={onEditNameChange}
+            onKeyDown={onEditKeyDown}
+            placeholder="Имя"
+            controlProps={{ 'aria-label': `Имя секрета ${secret.name}` }}
+            autoFocus
+            size="s"
+          />
           <TextInput
             value={editDescription}
             onUpdate={onEditDescriptionChange}
             onKeyDown={onEditKeyDown}
             placeholder="Описание (опционально)"
+            controlProps={{ 'aria-label': `Описание секрета ${secret.name}` }}
             size="s"
           />
           <TextInput
             value={editValue}
             onUpdate={onEditValueChange}
             onKeyDown={onEditKeyDown}
-            placeholder="Новое значение — оставьте пустым, чтобы не менять"
+            placeholder="Новое значение"
+            controlProps={{ 'aria-label': `Новое значение для ${secret.name}` }}
+            note="Оставьте пустым, чтобы не менять"
             type="password"
             hasClear
             size="s"
