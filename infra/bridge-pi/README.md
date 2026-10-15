@@ -89,6 +89,28 @@ worker stays isolated. Updates arrive by long polling — only one consumer per 
 Chat id: after you have written "hi" to the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser with
 your VPN on — `"chat":{"id":123456789,…}`. (The page shows the token in the URL: do it on your own machine only.)
 
+## GitHub: Improve and the repo webhook
+
+Improve (issue → worker → PR, CI repairs) and the repo webhook need a token and a shared secret; unset, Improve answers
+«GitHub не настроен» and every webhook delivery gets 503 (the top failure in the request log).
+
+```bash
+./secrets.sh set LOOP_GITHUB_TOKEN        # fine-grained, this repo only — permissions: bridge/README.md (LOOP_GITHUB_TOKEN row)
+openssl rand -hex 32                       # copy the output …
+./secrets.sh set GITHUB_WEBHOOK_SECRET    # … and paste it here
+```
+
+Then GitHub → the repo → Settings → Webhooks → Add webhook:
+
+- Payload URL: `https://api.bridge.ntlstl.dev/api/v1/github/webhook`
+- Content type: `application/json`
+- Secret: the same value as `GITHUB_WEBHOOK_SECRET`
+- Events: *Let me select individual events* → **Pull requests** and **Workflow runs**
+
+Run `./deploy.sh`, then open the webhook's «Recent deliveries» (redeliver an old one if none is new): it should show **200**.
+**503** = `GITHUB_WEBHOOK_SECRET` is not set in the backend (`./secrets.sh check`, then `./deploy.sh`); **401** = the secret on GitHub
+differs from the stored one. `GITHUB_BASE_BRANCH` (default `main`) is optional.
+
 ## Images from GHCR (no more loading from the Mac)
 
 `.github/workflows/publish-images.yml` (manual: Actions → Publish images → Run workflow) builds the backend, frontend and worker
