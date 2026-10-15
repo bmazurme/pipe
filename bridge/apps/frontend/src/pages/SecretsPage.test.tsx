@@ -80,8 +80,8 @@ describe('SecretsPage', () => {
     renderPage();
     await screen.findByText('Секретов пока нет');
 
-    await user.type(screen.getByPlaceholderText('Имя'), 'new-secret');
-    await user.type(screen.getByPlaceholderText('Значение'), 'super-secret-value');
+    await user.type(screen.getByLabelText('Имя секрета'), 'new-secret');
+    await user.type(screen.getByLabelText('Значение секрета'), 'super-secret-value');
     await user.click(screen.getByText('Добавить'));
 
     await waitFor(() =>
@@ -160,7 +160,7 @@ describe('SecretsPage', () => {
     await screen.findByText('api-key');
 
     await user.click(screen.getByLabelText('Изменить api-key'));
-    const nameInput = screen.getByDisplayValue('api-key');
+    const nameInput = screen.getByLabelText('Имя секрета api-key');
     await user.clear(nameInput);
     await user.type(nameInput, 'renamed-key');
     await user.click(screen.getByLabelText('Сохранить'));
@@ -168,5 +168,25 @@ describe('SecretsPage', () => {
     await waitFor(() =>
       expect(updatedBody).toEqual({ name: 'renamed-key', description: '' }),
     );
+  });
+
+  it('keeps the "leave empty" hint visible while typing a new value', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('api-key');
+
+    await user.click(screen.getByLabelText('Изменить api-key'));
+    await user.type(screen.getByLabelText('Новое значение для api-key'), 'abc');
+
+    expect(screen.getByText('Оставьте пустым, чтобы не менять')).toBeTruthy();
   });
 });
