@@ -5,6 +5,7 @@ import {
   canRun,
   describeAvailability,
   describeModels,
+  containerName,
   enrollSnippets,
   fleetCounts,
   isOnline,
@@ -33,6 +34,7 @@ function worker(over: Partial<FleetWorker> = {}): FleetWorker {
     createdAt: '2026-10-14T11:00:00Z',
     claudeLimits: null,
     claudeCredentialId: null,
+    vpnHost: null,
     ...over,
   };
 }
@@ -180,7 +182,29 @@ describe('enrollSnippets', () => {
     expect(snippets.exec).toBe('echo brn_code | docker exec -i pipe-worker node dist/enrollCli.js -');
   });
 
+  it('docker: replaces a leftover container of the same name and always pulls the current image', () => {
+    expect(snippets.docker).toContain('docker rm -f pipe-worker >/dev/null 2>&1; docker run -d --name pipe-worker --pull always');
+  });
+
+  it('a worker with a name gets its own container and state volume, so one machine can run several', () => {
+    const named = enrollSnippets('https://api.example.com', 'brn_code', 'img', 'Green Pi 5');
+
+    expect(named.docker).toContain('--name pipe-worker-green-pi-5');
+    expect(named.docker).toContain('-v pipe-worker-green-pi-5-state:/app/.worker-state');
+    expect(named.exec).toBe('echo brn_code | docker exec -i pipe-worker-green-pi-5 node dist/enrollCli.js -');
+  });
+
   it('node: for a checkout, no Docker', () => {
     expect(snippets.node).toContain('export WORKER_ENROLL_CODE=brn_code');
+  });
+});
+
+describe('containerName', () => {
+  it('is a safe docker name made from the worker name, or the plain default', () => {
+    expect(containerName('green')).toBe('pipe-worker-green');
+    expect(containerName('  Мой worker #2! ')).toBe('pipe-worker-worker-2');
+    expect(containerName('Зелёный')).toBe('pipe-worker');
+    expect(containerName(undefined)).toBe('pipe-worker');
+    expect(containerName('a'.repeat(100)).length).toBeLessThanOrEqual('pipe-worker-'.length + 40);
   });
 });

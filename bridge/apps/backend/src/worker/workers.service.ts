@@ -23,6 +23,7 @@ import {
   WorkerConfigResponseDto,
   WorkerResponseDto,
 } from './dto/worker-fleet.dto';
+import { parseVlessLink } from './vless-link';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
@@ -61,6 +62,23 @@ export class WorkersService {
     if (!(await this.credentials.existsBy({ id: credentialId, userId }))) {
       throw new BadRequestException('Claude token not found');
     }
+  }
+
+  // '' or null clears; anything else must be a link the worker can run a tunnel with.
+  private normalizeVpnLink(raw: string | null | undefined): string | null {
+    const link = raw?.trim() ?? '';
+
+    if (link === '') return null;
+
+    try {
+      parseVlessLink(link);
+    } catch (error) {
+      throw new BadRequestException(
+        `VPN: ${error instanceof Error ? error.message : 'неверная ссылка'}`,
+      );
+    }
+
+    return link;
   }
 
   // The token a worker was bound to in its settings (null = none).
@@ -191,6 +209,7 @@ export class WorkersService {
         proxyUrl: dto.proxyUrl?.trim() || null,
         chatEnabled: dto.chatEnabled ?? true,
         claudeCredentialId: dto.claudeCredentialId ?? null,
+        vpnLink: this.normalizeVpnLink(dto.vpnLink),
       }),
     );
 
@@ -226,6 +245,9 @@ export class WorkersService {
     if (dto.claudeCredentialId !== undefined) {
       await this.assertCredentialOwned(userId, dto.claudeCredentialId);
       worker.claudeCredentialId = dto.claudeCredentialId;
+    }
+    if (dto.vpnLink !== undefined) {
+      worker.vpnLink = this.normalizeVpnLink(dto.vpnLink);
     }
 
     const saved = await this.workers.save(worker);
@@ -344,6 +366,7 @@ export class WorkersService {
       jobTimeoutSec: worker.jobTimeoutSec,
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
+      vpnLink: worker.vpnLink ?? null,
     };
   }
 

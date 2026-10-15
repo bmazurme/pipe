@@ -4465,6 +4465,10 @@
             "type": "number",
             "nullable": true
           },
+          "vpnHost": {
+            "type": "string",
+            "nullable": true
+          },
           "keyPrefix": {
             "type": "string",
             "nullable": true
@@ -4500,6 +4504,7 @@
           "proxyUrl",
           "chatEnabled",
           "claudeCredentialId",
+          "vpnHost",
           "keyPrefix",
           "enrollmentPending",
           "enrollmentExpiresAt",
@@ -4527,6 +4532,11 @@
             "type": "number",
             "nullable": true,
             "minimum": 1
+          },
+          "vpnLink": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 4000
           },
           "name": {
             "type": "string",
@@ -4654,6 +4664,10 @@
           },
           "chatEnabled": {
             "type": "boolean"
+          },
+          "vpnLink": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -4664,7 +4678,8 @@
           "pollIntervalSec",
           "jobTimeoutSec",
           "proxyUrl",
-          "chatEnabled"
+          "chatEnabled",
+          "vpnLink"
         ]
       },
       "UpdateWorkerDto": {
@@ -4688,6 +4703,11 @@
             "type": "number",
             "nullable": true,
             "minimum": 1
+          },
+          "vpnLink": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 4000
           },
           "name": {
             "type": "string",

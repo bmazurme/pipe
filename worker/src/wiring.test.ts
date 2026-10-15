@@ -28,7 +28,7 @@ const baseConfig: WorkerConfig = {
   chatTools: 'off',
 };
 
-function build() {
+function build(vpn?: { apply: (link: string | null | undefined) => Promise<string | null> }) {
   const calls: string[] = [];
   const controller = new AbortController();
   const deps = buildLoopDeps({
@@ -47,6 +47,7 @@ function build() {
       calls.push(`sleep:${ms}:${signal === controller.signal}`);
     },
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    vpn,
   });
 
   return { deps, calls, controller };
@@ -89,6 +90,31 @@ describe('buildLoopDeps', () => {
 
     assert.equal(seenUrl, 'https://bridge.example.com/api/v1/workers/me/config');
     assert.equal(seenAuth, 'Bearer brw_k');
+  });
+
+  it('routes through the worker’s own VPN tunnel when one is set on the page, whatever proxy address it carries', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ id: 1, proxyUrl: 'http://manual:1', vpnLink: 'vless://link' }), { status: 200 })) as typeof fetch;
+    const applied: unknown[] = [];
+
+    const remote = await build({
+      apply: async (link) => {
+        applied.push(link);
+
+        return 'http://127.0.0.1:18080';
+      },
+    }).deps.fetchRemoteConfig('brw_k');
+
+    assert.deepEqual(applied, ['vless://link']);
+    assert.equal(remote.proxyUrl, 'http://127.0.0.1:18080');
+  });
+
+  it('keeps the proxy settings when there is no tunnel (none set, or it did not come up)', async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ id: 1, proxyUrl: 'http://manual:1' }), { status: 200 })) as typeof fetch;
+
+    const remote = await build({ apply: async () => null }).deps.fetchRemoteConfig('brw_k');
+
+    assert.equal(remote.proxyUrl, 'http://manual:1');
   });
 
   it('forgetting a revoked key erases it from the state directory', async () => {

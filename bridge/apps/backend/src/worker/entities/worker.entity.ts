@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
+import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { User } from '../../users/entities/user.entity';
 import type { ClaudeLimits } from '../claude-limits';
 import { JobModel } from './job.entity';
@@ -75,6 +76,11 @@ export class Worker extends BaseEntity {
   // first one. ON DELETE SET NULL in the migration, like jobs.claudeCredentialId.
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
+
+  // The vless:// Reality link of this worker's own VPN tunnel (the worker runs Xray with it), encrypted at rest. It is a
+  // secret: only the worker itself ever receives it back; the owner's views get a host:port summary.
+  @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
+  vpnLink: string | null;
 
   // The Claude plan limits last reported by a run on this worker (claude-limits.ts).
   @Column({ type: 'jsonb', nullable: true })

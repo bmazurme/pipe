@@ -165,16 +165,35 @@ export interface EnrollSnippets {
   node: string;
 }
 
-export function enrollSnippets(apiUrl: string, code: string, image: string = WORKER_IMAGE): EnrollSnippets {
+/** The container (and state volume) name for a worker: one machine can run several, each with its own key. */
+export function containerName(workerName?: string): string {
+  const slug = (workerName ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+
+  return slug ? `pipe-worker-${slug}` : 'pipe-worker';
+}
+
+export function enrollSnippets(
+  apiUrl: string,
+  code: string,
+  image: string = WORKER_IMAGE,
+  workerName?: string,
+): EnrollSnippets {
+  const name = containerName(workerName);
+
   return {
     docker: [
-      'docker run -d --name pipe-worker --restart unless-stopped \\',
-      '  -v pipe-worker-state:/app/.worker-state \\',
+      // A leftover container of the same name (a reconnect) is replaced; its state volume — and so nothing else — stays.
+      `docker rm -f ${name} >/dev/null 2>&1; docker run -d --name ${name} --pull always --restart unless-stopped \\`,
+      `  -v ${name}-state:/app/.worker-state \\`,
       `  -e BRIDGE_API_URL=${apiUrl} \\`,
       `  -e WORKER_ENROLL_CODE=${code} \\`,
       `  ${image}`,
     ].join('\n'),
-    exec: `echo ${code} | docker exec -i pipe-worker node dist/enrollCli.js -`,
+    exec: `echo ${code} | docker exec -i ${name} node dist/enrollCli.js -`,
     node: [`export BRIDGE_API_URL=${apiUrl}`, `export WORKER_ENROLL_CODE=${code}`, 'npm start --workspace=worker'].join(
       '\n',
     ),

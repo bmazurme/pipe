@@ -310,3 +310,7 @@ Worker-задачу (или Improve-запуск) заново.
 Два экземпляра worker не должны использовать один `WORKER_NAME`: после claim одного
 из них bridge сочтёт задачу второго потерянной, как только она промолчит 10 минут
 (а в паузах между логами она может молчать долго).
+
+## VPN of a worker added in the UI
+
+Settings → VPN takes a `vless://` Reality link. The worker starts its own Xray client with it (`xray` ships in the image; `XRAY_BIN` overrides the path) on `127.0.0.1:18080` and sends Claude/AI traffic through it; the link is stored encrypted in bridge and only this worker ever receives it back. Changing or removing the link applies within one poll interval. If the tunnel does not come up the worker keeps polling and logs `vpn tunnel did not come up` — jobs then go out as they did before.

@@ -67,7 +67,7 @@ export function EnrollInstructions({ workerId, workerName, code, expiresAt, onRe
   }, [isConnected]);
   const left = minutesLeft(expiresAt, now);
   const isExpired = left <= 0;
-  const snippets = enrollSnippets(API_URL, code);
+  const snippets = enrollSnippets(API_URL, code, undefined, workerName);
 
   const handleRenew = async () => {
     setRenewError(null);

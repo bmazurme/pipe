@@ -16,6 +16,8 @@ export interface WiringInput {
   withHeartbeat: LoopDeps['withHeartbeat'];
   sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   log: LoopDeps['log'];
+  /** The worker's own VPN tunnel; absent when this image has none. */
+  vpn?: { apply: (link: string | null | undefined) => Promise<string | null> };
 }
 
 // Joins the loop to the real bridge: clients carry the session's key and the base URL, settings come from that same
@@ -32,7 +34,13 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
       client: new WorkerBridgeClient(baseConfig.bridgeApiUrl, session.key),
       chatClient: new ChatBridgeClient(baseConfig.bridgeApiUrl, session.key),
     }),
-    fetchRemoteConfig: (key) => fetchRemoteConfig(baseConfig.bridgeApiUrl, key),
+    fetchRemoteConfig: async (key) => {
+      const remote = await fetchRemoteConfig(baseConfig.bridgeApiUrl, key);
+      // The VPN set on the page wins over a proxy address; no working tunnel leaves the proxy settings as they were.
+      const tunnelProxy = input.vpn ? await input.vpn.apply(remote.vpnLink) : null;
+
+      return tunnelProxy ? { ...remote, proxyUrl: tunnelProxy } : remote;
+    },
     forgetRevokedKey: () => forgetRevokedKey(baseConfig),
     processJob: (client, job, config) => input.processJob(client, job, config, signal),
     processChatTurn: input.processChatTurn,

@@ -12,6 +12,8 @@ export interface RemoteWorkerConfig {
   jobTimeoutSec: number;
   proxyUrl: string | null;
   chatEnabled: boolean;
+  // The worker's own VPN (a vless:// Reality link), run as a local Xray tunnel — see vpn/tunnel.ts. Absent/null: none.
+  vpnLink?: string | null;
 }
 
 // bridge no longer accepts this worker's key: it was deleted (or re-enrolled) on the Worker page.

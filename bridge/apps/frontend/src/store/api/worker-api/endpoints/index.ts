@@ -131,6 +131,8 @@ export interface FleetWorker {
   createdAt: string | null;
   /** The Claude token this worker uses by default (null = the account's first). */
   claudeCredentialId: number | null;
+  /** host:port of the worker's VPN server, or null — the link itself is never shown again. */
+  vpnHost: string | null;
   /** The Claude plan limits the last run on this worker reported, or null before any run did. */
   claudeLimits: ClaudeLimits | null;
 }
@@ -149,6 +151,8 @@ export interface WorkerSettings {
   proxyUrl?: string | null;
   /** The stored Claude token this worker uses when a job picked none; null = the account's first. */
   claudeCredentialId?: number | null;
+  /** The worker's own VPN: a vless:// Reality link; '' or null removes it, omitted leaves it. */
+  vpnLink?: string | null;
   chatEnabled?: boolean;
 }
 
