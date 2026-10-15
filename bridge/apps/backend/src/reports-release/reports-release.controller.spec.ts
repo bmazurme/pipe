@@ -18,7 +18,7 @@ describe('ReportsReleaseController download', () => {
     const service = {
       downloadReportsZip: jest.fn().mockResolvedValue(new Uint8Array([1, 2])),
     };
-    const res = { setHeader: jest.fn(), send: jest.fn() };
+    const res = { setHeader: jest.fn(), end: jest.fn() };
     const controller = new ReportsReleaseController(
       service as unknown as ReportsReleaseService,
     );
@@ -33,6 +33,7 @@ describe('ReportsReleaseController download', () => {
       'Content-Disposition',
       'attachment; filename="reports-latest.zip"',
     );
-    expect(res.send).toHaveBeenCalledWith(Buffer.from([1, 2]));
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Length', 2);
+    expect(res.end).toHaveBeenCalledWith(new Uint8Array([1, 2]));
   });
 });
