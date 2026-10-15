@@ -1,10 +1,20 @@
 # APP_HOST / API_HOST come from the container environment (bridge-pi.yml).
+#
+# lb_try_*: while a service is being replaced (or restarts) there is a moment with no healthy task behind the
+# name; Caddy holds the request and retries for up to a minute instead of answering 502, so a release costs a
+# slow request, not an error.
 {$APP_HOST} {
 	encode gzip
-	reverse_proxy frontend:80
+	reverse_proxy frontend:80 {
+		lb_try_duration 60s
+		lb_try_interval 500ms
+	}
 }
 
 {$API_HOST} {
 	encode gzip
-	reverse_proxy backend:3000
+	reverse_proxy backend:3000 {
+		lb_try_duration 60s
+		lb_try_interval 500ms
+	}
 }

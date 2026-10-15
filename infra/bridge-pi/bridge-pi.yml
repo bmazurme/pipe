@@ -129,8 +129,14 @@ services:
       replicas: 1
       placement:
         constraints: [node.labels.bridge-primary == true]
+      # start-first: the new backend boots (and runs its migrations) next to the old one, and the old one is
+      # stopped only once the new one passes its healthcheck — with stop-first the API was down for the whole
+      # boot of a Pi (tens of seconds) on every release. Safe because: the schedulers' work is claimed
+      # atomically (two ticks cannot both take a run), the Telegram poller backs off on the 409 it gets while
+      # the old one still polls, and migrations are additive (see infra/autodeploy) so the old backend keeps
+      # working on the migrated schema. A release that fails its healthcheck is rolled back, the old one never stopped.
       update_config:
-        order: stop-first      # one backend only: it holds schedulers and the Telegram long poll
+        order: start-first
         failure_action: rollback
         monitor: 60s
       restart_policy:
@@ -164,6 +170,10 @@ services:
       replicas: 1
       placement:
         constraints: [node.labels.bridge-primary == true]
+      # stateless static files: the new one is up before the old one goes
+      update_config:
+        order: start-first
+        failure_action: rollback
       restart_policy:
         condition: on-failure
         delay: 5s
