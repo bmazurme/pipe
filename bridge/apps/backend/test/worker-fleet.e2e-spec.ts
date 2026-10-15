@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -508,6 +509,73 @@ describe('Worker fleet (e2e)', () => {
         (await patch({ claudeCredentialId: null }).expect(200)).body
           .claudeCredentialId,
       ).toBeNull();
+    });
+  });
+
+  describe("a worker's own VPN link", () => {
+    const LINK =
+      'vless://3f1c2d4e-0000-4000-8000-000000000001@vpn.example.com:8443?security=reality&type=tcp&pbk=PUBKEY-SECRET&sni=www.example.org&fp=firefox&sid=ab12';
+
+    it('is stored encrypted, shown only as host:port, and handed only to that worker; "" removes it', async () => {
+      const { accessToken } = await owner();
+      const w = await addWorker(accessToken, 'vpn-w', { vpnLink: LINK });
+      const { key } = await enroll(w.enrollCode);
+
+      expect(JSON.stringify(w)).not.toContain('PUBKEY-SECRET');
+      expect((w.worker as unknown as { vpnHost: string }).vpnHost).toBe(
+        'vpn.example.com:8443',
+      );
+
+      const listed = await as(
+        request(server()).get('/api/v1/workers'),
+        accessToken,
+      ).expect(200);
+
+      expect(JSON.stringify(listed.body)).not.toContain('PUBKEY-SECRET');
+
+      const raw = await app
+        .get(DataSource)
+        .query('SELECT "vpnLink" FROM workers WHERE id = $1', [w.worker.id]);
+
+      expect(String(raw[0].vpnLink)).not.toContain('vpn.example.com');
+
+      const config = await request(server())
+        .get('/api/v1/workers/me/config')
+        .set('Authorization', `Bearer ${key}`)
+        .expect(200);
+
+      expect(config.body.vpnLink).toBe(LINK);
+
+      await as(
+        request(server()).patch(`/api/v1/workers/${w.worker.id}`),
+        accessToken,
+      )
+        .send({ vpnLink: '' })
+        .expect(200);
+
+      const cleared = await request(server())
+        .get('/api/v1/workers/me/config')
+        .set('Authorization', `Bearer ${key}`)
+        .expect(200);
+
+      expect(cleared.body.vpnLink).toBeNull();
+    });
+
+    it('refuses a link the worker could not use', async () => {
+      const { accessToken } = await owner();
+      const w = await addWorker(accessToken, 'vpn-bad');
+
+      for (const vpnLink of [
+        'hello',
+        'vless://u@h:1?security=tls&pbk=k&sni=s',
+      ]) {
+        await as(
+          request(server()).patch(`/api/v1/workers/${w.worker.id}`),
+          accessToken,
+        )
+          .send({ vpnLink })
+          .expect(400);
+      }
     });
   });
 

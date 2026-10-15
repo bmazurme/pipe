@@ -2099,6 +2099,7 @@ export interface components {
             proxyUrl: string | null;
             chatEnabled: boolean;
             claudeCredentialId: number | null;
+            vpnHost: string | null;
             keyPrefix: string | null;
             enrollmentPending: boolean;
             /** Format: date-time */
@@ -2109,6 +2110,7 @@ export interface components {
         CreateWorkerDto: {
             models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
+            vpnLink?: string | null;
             name: string;
             pollIntervalSec?: number;
             jobTimeoutSec?: number;
@@ -2140,10 +2142,12 @@ export interface components {
             jobTimeoutSec: number;
             proxyUrl: string | null;
             chatEnabled: boolean;
+            vpnLink: string | null;
         };
         UpdateWorkerDto: {
             models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
+            vpnLink?: string | null;
             name?: string;
             enabled?: boolean;
             pollIntervalSec?: number;

@@ -24,6 +24,7 @@ import { runLoop } from './loop.js';
 import { waitForSession } from './session.js';
 import { sleep } from './sleep.js';
 import { workerVersion } from './version.js';
+import { VpnTunnel } from './vpn/tunnel.js';
 import { buildLoopDeps } from './wiring.js';
 import { requireShell } from './shell.js';
 import { withContext } from './taskContext.js';
@@ -330,6 +331,8 @@ async function main(): Promise<void> {
     });
   }
 
+  // The worker's own VPN, when one is set on the Worker page (needs the xray binary the image ships).
+  const vpn = new VpnTunnel({ dir: baseConfig.stateDir, xrayBin: process.env.XRAY_BIN, log: logger });
   const sessionDeps = { version: workerVersion(), log: logger };
   const waitForEnrolment = () => waitForSession(baseConfig, sessionDeps, sleep, shutdown.signal);
 
@@ -344,9 +347,11 @@ async function main(): Promise<void> {
       withHeartbeat,
       sleep,
       log: logger,
+      vpn,
     }),
   );
 
+  vpn.stop();
   logger.info('pipe-worker stopped');
   process.exit(0);
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Alert, Checkbox, Dialog, NumberInput, Select, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Checkbox, Dialog, NumberInput, Switch, Text, TextInput } from '@gravity-ui/uikit';
 
-import { type FleetWorker, useListClaudeCredentialsQuery, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
+import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS } from './constants';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField } from './WorkerAccessFields';
 
 interface WorkerSettingsDialogProps {
   worker: FleetWorker;
@@ -12,8 +13,6 @@ interface WorkerSettingsDialogProps {
 
 const MIN_TIMEOUT_MIN = 1;
 const MAX_TIMEOUT_MIN = 240;
-// Select values are strings; this one is "no token set for the worker".
-const DEFAULT_TOKEN = '';
 
 // Everything here applies to a running worker within one poll interval — nothing is restarted or redeployed.
 export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogProps) {
@@ -24,7 +23,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [proxyUrl, setProxyUrl] = useState(worker.proxyUrl ?? '');
   const [chatEnabled, setChatEnabled] = useState(worker.chatEnabled);
   const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
-  const { data: credentials } = useListClaudeCredentialsQuery();
+  // undefined = the VPN is left as it is, null = removed, a string = replaced
+  const [vpnChange, setVpnChange] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [updateWorker, { isLoading }] = useUpdateWorkerMutation();
 
@@ -32,7 +32,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const timeoutValid = timeoutMin !== null && timeoutMin >= MIN_TIMEOUT_MIN && timeoutMin <= MAX_TIMEOUT_MIN;
   const pollValid = pollIntervalSec !== null && pollIntervalSec >= 2 && pollIntervalSec <= 300;
   const proxyValid = proxyUrl.trim() === '' || /^https?:\/\/\S+$/.test(proxyUrl.trim());
-  const canSave = name.trim() !== '' && models.length > 0 && timeoutValid && pollValid && proxyValid;
+  const vpnValid = typeof vpnChange !== 'string' || isVlessLink(vpnChange);
+  const canSave = name.trim() !== '' && models.length > 0 && timeoutValid && pollValid && proxyValid && vpnValid;
 
   const toggleModel = (model: WorkerJobModel, checked: boolean) =>
     setModels((current) => (checked ? [...current, model] : current.filter((candidate) => candidate !== model)));
@@ -52,6 +53,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim(),
         chatEnabled,
         claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),
+        ...(vpnChange !== undefined ? { vpnLink: vpnChange } : {}),
       }).unwrap();
       onClose();
     } catch (err) {
@@ -123,24 +125,9 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
             </label>
           </div>
 
-          <label className={styles.dialogForm}>
-            <Text variant="body-2" color="secondary">
-              Claude-токен этого worker&apos;а
-            </Text>
-            <Select
-              value={[tokenId]}
-              onUpdate={(value) => setTokenId(value[0] ?? DEFAULT_TOKEN)}
-              options={[
-                { value: DEFAULT_TOKEN, content: 'Первый из списка токенов' },
-                ...(credentials ?? []).map((credential) => ({ value: String(credential.id), content: credential.name })),
-              ]}
-              width="max"
-              aria-label="Claude-токен worker'а"
-            />
-            <Text variant="caption-2" color="secondary">
-              Для задач и чата на Sonnet/Opus, если в задаче токен не выбран явно. Выбранный в задаче токен главнее.
-            </Text>
-          </label>
+          <ClaudeTokenField value={tokenId} onChange={setTokenId} />
+
+          <VpnLinkField currentHost={worker.vpnHost} onChange={setVpnChange} />
 
           <label className={styles.dialogForm}>
             <Text variant="body-2" color="secondary">

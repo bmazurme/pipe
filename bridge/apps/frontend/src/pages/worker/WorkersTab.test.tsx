@@ -33,6 +33,7 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     createdAt: NOW,
     claudeLimits: null,
     claudeCredentialId: null,
+    vpnHost: null,
     ...over,
   };
 }
@@ -150,6 +151,66 @@ describe('WorkersTab — adding a worker', () => {
     expect(within(dialog).getByText(/Ждём, пока worker подключится/)).toBeTruthy();
   });
 
+  it('takes the token and the VPN already when the worker is added, and the command is for that worker only', async () => {
+    const user = userEvent.setup();
+
+    respond = (r) => {
+      if (r.method === 'GET' && r.path === '/worker/claude-credentials') {
+        return json([{ id: 5, name: 'personal', createdAt: NOW, limits: null }]);
+      }
+
+      return r.method === 'POST' && r.path === '/workers'
+        ? json(
+            {
+              worker: fleetWorker({ id: 7, name: 'green', state: 'pending', lastSeenAt: null, vpnHost: 'vpn.example.com:443' }),
+              enrollCode: 'brn_Y',
+              enrollExpiresAt: new Date(Date.now() + 29 * 60_000).toISOString(),
+            },
+            201,
+          )
+        : undefined;
+    };
+    renderTab();
+
+    await user.click((await screen.findAllByRole('button', { name: /Добавить worker/ }))[0]);
+    const dialog = await screen.findByRole('dialog');
+
+    await user.type(within(dialog).getByPlaceholderText(/Например, green/), 'green');
+    await user.click(within(dialog).getByText('Первый из списка токенов'));
+    await user.click(await screen.findByText('personal'));
+    await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), 'vless://u@vpn.example.com:443?security=reality&pbk=k&sni=s');
+    await user.click(within(dialog).getByRole('button', { name: 'Создать и получить код' }));
+    await within(dialog).findByText('brn_Y');
+
+    expect(sent('POST', '/workers')[0].body).toEqual({
+      name: 'green',
+      claudeCredentialId: 5,
+      vpnLink: 'vless://u@vpn.example.com:443?security=reality&pbk=k&sni=s',
+    });
+
+    const command = within(dialog).getByLabelText('Команда подключения').textContent ?? '';
+
+    expect(command).toContain('--name pipe-worker-green');
+    expect(command).toContain('-v pipe-worker-green-state:/app/.worker-state');
+    // the secrets travel through the page, never through the command
+    expect(command).not.toContain('vless://');
+  });
+
+  it('will not create a worker with a VPN link that is not vless://', async () => {
+    const user = userEvent.setup();
+
+    renderTab();
+
+    await user.click((await screen.findAllByRole('button', { name: /Добавить worker/ }))[0]);
+    const dialog = await screen.findByRole('dialog');
+
+    await user.type(within(dialog).getByPlaceholderText(/Например, green/), 'green');
+    await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), 'http://not-a-vpn');
+
+    expect(within(dialog).getByText('Нужна ссылка vless://… (Reality)')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Создать и получить код' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('offers the other ways to hand over the code', async () => {
     const user = userEvent.setup();
 
@@ -181,7 +242,7 @@ describe('WorkersTab — adding a worker', () => {
     await user.click(within(dialog).getByText('Уже запущен'));
 
     expect(within(dialog).getByLabelText('Команда подключения').textContent).toBe(
-      'echo brn_X | docker exec -i pipe-worker node dist/enrollCli.js -',
+      'echo brn_X | docker exec -i pipe-worker-laptop node dist/enrollCli.js -',
     );
   });
 
@@ -464,6 +525,81 @@ describe('WorkersTab — settings', () => {
 
     await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
     expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ claudeCredentialId: null });
+  });
+
+  describe('the worker VPN', () => {
+    const LINK = 'vless://u@new.example.com:443?security=reality&pbk=k&sni=s';
+
+    it('shows only the host of the VPN that is set, and replaces it with a new link', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: 'vpn.example.com:8443' })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      expect(within(dialog).getByText('Настроен: vpn.example.com:8443')).toBeTruthy();
+      expect(within(dialog).queryByLabelText("VPN-ссылка worker'а")).toBeNull();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Заменить' }));
+      await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), LINK);
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ vpnLink: LINK });
+    });
+
+    it('removes it, and can take that back', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: 'vpn.example.com:8443' })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByRole('button', { name: 'Убрать' }));
+      expect(within(dialog).getByText('VPN будет удалён')).toBeTruthy();
+      await user.click(within(dialog).getByRole('button', { name: 'Не удалять' }));
+      expect(within(dialog).getByText('Настроен: vpn.example.com:8443')).toBeTruthy();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Убрать' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ vpnLink: null });
+    });
+
+    it('leaves the VPN alone (sends nothing about it) when it was not touched', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: 'vpn.example.com:8443' })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).not.toHaveProperty('vpnLink');
+    });
+
+    it('a worker without a VPN gets the link field straight away, and the card shows the host when there is one', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: null })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      expect(within(await screen.findByRole('dialog')).getByLabelText("VPN-ссылка worker'а")).toBeTruthy();
+    });
+
+    it('the card shows which VPN server the worker uses', async () => {
+      workers = [fleetWorker({ id: 1, vpnHost: 'vpn.example.com:8443' })];
+      renderTab();
+
+      expect(await screen.findByText('VPN: vpn.example.com:8443')).toBeTruthy();
+    });
   });
 
   it('restricting the models sends exactly those', async () => {

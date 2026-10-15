@@ -105,6 +105,11 @@ export function WorkerCard({ worker, activeJob, onOpenJob, onSettings, onReconne
           <Text variant="caption-2" color="secondary">
             Опрос: {worker.pollIntervalSec} с
           </Text>
+          {worker.vpnHost && (
+            <Text variant="caption-2" color="secondary">
+              VPN: {worker.vpnHost}
+            </Text>
+          )}
           {worker.proxyUrl && (
             <Text variant="caption-2" color="secondary">
               Прокси: {worker.proxyUrl}

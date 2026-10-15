@@ -4,6 +4,7 @@ import { Alert, Dialog, Text, TextInput } from '@gravity-ui/uikit';
 import { type CreatedFleetWorker, useCreateWorkerMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { EnrollInstructions } from './EnrollInstructions';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField } from './WorkerAccessFields';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -17,11 +18,15 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
   const [name, setName] = useState('');
   const [created, setCreated] = useState<CreatedFleetWorker | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [tokenId, setTokenId] = useState(DEFAULT_TOKEN);
+  const [vpnLink, setVpnLink] = useState<string | null | undefined>(undefined);
   const [createWorker, { isLoading }] = useCreateWorkerMutation();
   const shown = created ?? existing;
 
   const handleClose = () => {
     setName('');
+    setTokenId(DEFAULT_TOKEN);
+    setVpnLink(undefined);
     setCreated(undefined);
     setError(null);
     onClose();
@@ -32,7 +37,13 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
     setError(null);
 
     try {
-      setCreated(await createWorker({ name: name.trim() }).unwrap());
+      setCreated(
+        await createWorker({
+          name: name.trim(),
+          ...(tokenId !== DEFAULT_TOKEN ? { claudeCredentialId: Number(tokenId) } : {}),
+          ...(typeof vpnLink === 'string' ? { vpnLink } : {}),
+        }).unwrap(),
+      );
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Не удалось добавить worker');
     }
@@ -59,8 +70,9 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
             }}
           >
             <Text color="secondary">
-              Worker подключается одноразовым кодом: ни ключей, ни токенов в его переменных среды не нужно. Ключи
-              моделей и остальные настройки задаются здесь, в интерфейсе.
+              После создания вы получите одну команду для ноды: она запускает worker и подключает его одноразовым кодом.
+              Ни ключей, ни токенов в его переменных среды не нужно — токен, VPN и остальные настройки задаются здесь, в
+              интерфейсе, и меняются позже в «Настройках».
             </Text>
             <label className={styles.dialogForm}>
               <Text variant="body-2" color="secondary">
@@ -68,6 +80,8 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
               </Text>
               <TextInput value={name} onUpdate={setName} placeholder="Например, green или ноутбук" autoFocus hasClear />
             </label>
+            <ClaudeTokenField value={tokenId} onChange={setTokenId} />
+            <VpnLinkField currentHost={null} onChange={setVpnLink} />
             {error && <Alert theme="danger" view="filled" message={error} />}
           </form>
         )}
@@ -79,7 +93,7 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
           textButtonCancel="Отмена"
           textButtonApply="Создать и получить код"
           loading={isLoading}
-          propsButtonApply={{ disabled: !name.trim() }}
+          propsButtonApply={{ disabled: !name.trim() || (typeof vpnLink === 'string' && !isVlessLink(vpnLink)) }}
           onClickButtonCancel={handleClose}
           onClickButtonApply={() => void handleCreate()}
         />

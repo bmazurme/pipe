@@ -56,6 +56,11 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN apk add --no-cache bash git ripgrep \
  && bash --version >/dev/null && git --version >/dev/null && rg --version >/dev/null
 
+# The worker's own VPN (Worker page → settings → VPN): a vless:// Reality link becomes a local Xray tunnel run by the worker
+# itself, so no separate vpn-client container is needed next to it. One static binary from the official image (pinned;
+# multi-arch), nothing else from it.
+COPY --from=ghcr.io/xtls/xray-core:26.3.27 /usr/local/bin/xray /usr/local/bin/xray
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/worker/package.json ./package.json
 COPY --from=builder /app/worker/dist ./dist

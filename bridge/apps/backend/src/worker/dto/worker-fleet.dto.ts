@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 
 import type { ClaudeLimits } from '../claude-limits';
+import { describeVless } from '../vless-link';
 import { JobModel } from '../entities/job.entity';
 import { Worker } from '../entities/worker.entity';
 
@@ -59,6 +60,14 @@ class WorkerSettingsDto {
   @IsInt()
   @Min(1)
   claudeCredentialId?: number | null;
+
+  // The worker's own VPN: a vless:// Reality link; empty string or null = no VPN. Never returned by any route but the
+  // worker's own settings fetch.
+  @ApiPropertyOptional({ type: String, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  vpnLink?: string | null;
 }
 
 export class CreateWorkerDto extends WorkerSettingsDto {
@@ -130,6 +139,8 @@ export class WorkerResponseDto {
   chatEnabled: boolean;
   // The Claude token this worker uses by default, or null (the account's first).
   claudeCredentialId: number | null;
+  // host:port of the worker's VPN server, or null — the link itself is never shown again.
+  vpnHost: string | null;
   keyPrefix: string | null;
   // The one-time code is still valid (shown only when it was issued, never listed).
   enrollmentPending: boolean;
@@ -172,6 +183,7 @@ export class WorkerResponseDto {
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
       claudeCredentialId: worker.claudeCredentialId ?? null,
+      vpnHost: describeVless(worker.vpnLink),
       keyPrefix: worker.keyPrefix,
       enrollmentPending:
         !enrolled &&
@@ -210,6 +222,7 @@ export class WorkerResponseDto {
       createdAt: null,
       claudeLimits: null,
       claudeCredentialId: null,
+      vpnHost: null,
     };
   }
 }
@@ -239,6 +252,8 @@ export class WorkerConfigResponseDto {
   jobTimeoutSec: number;
   proxyUrl: string | null;
   chatEnabled: boolean;
+  // The VPN link, for this worker only (its key authenticates the fetch): the worker starts its own tunnel with it.
+  vpnLink: string | null;
 }
 
 export class DeletedWorkerResponseDto {
