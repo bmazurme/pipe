@@ -14,6 +14,7 @@ import { ProviderCredentialsController } from './provider-credentials.controller
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeat } from './entities/worker-heartbeat.entity';
 import { WorkerController } from './worker.controller';
+import { JobSweepService } from './job-sweep.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
 import { WorkerStatusController } from './worker-status.controller';
@@ -42,6 +43,7 @@ import { WorkersService } from './workers.service';
   ],
   providers: [
     WorkerService,
+    JobSweepService,
     WorkersService,
     ClaudeCredentialsService,
     ProviderCredentialsService,
