@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Deploys worker + vpn-client (stack `bridgew`, or WORKER_STACK — see below). Run on white (or any manager), after
-# the core stack works:
+# Deploys worker + vpn-client (stack `bridgew`, or WORKER_STACK — see below). Run on white, after the core stack
+# works — it reads ~/.pipe/bridge.env locally, and that file only exists there; WORKER_NODE_HOSTNAME (see below)
+# decides which board the containers actually land on, not the host this script runs on.
 #
 #   ./secrets.sh set WORKER_BRIDGE_API_KEY       # a personal API key made in bridge: Profile → Access → API keys (brk_…)
 #   ./secrets.sh set CLAUDE_CODE_OAUTH_TOKEN     # `claude setup-token` on a machine where you are logged in to Claude
