@@ -29,6 +29,7 @@ export class ReportsReleaseController {
       'Content-Disposition',
       'attachment; filename="reports-latest.zip"',
     );
-    res.send(Buffer.from(bytes));
+    res.setHeader('Content-Length', bytes.byteLength);
+    res.end(bytes);
   }
 }

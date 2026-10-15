@@ -36,6 +36,10 @@ function zipAsync(entries: Zippable): Promise<Uint8Array> {
 
 @Injectable()
 export class ReportsReleaseService {
+  // Single-entry cache: the output depends only on the base SHA.
+  private cached: { sha: string; bytes: Uint8Array } | null = null;
+  private inFlight: { sha: string; promise: Promise<Uint8Array> } | null = null;
+
   constructor(private readonly githubApi: GithubApiService) {}
 
   private assertConfigured(): void {
@@ -65,6 +69,30 @@ export class ReportsReleaseService {
     this.assertConfigured();
 
     const sha = await this.githubApi.getBranchSha(BASE_BRANCH);
+
+    if (this.cached?.sha === sha) return this.cached.bytes;
+
+    if (this.inFlight?.sha === sha) return this.inFlight.promise;
+
+    const promise = this.buildReportsZip(sha).then((bytes) => {
+      this.cached = { sha, bytes };
+
+      return bytes;
+    });
+    const entry = { sha, promise };
+
+    this.inFlight = entry;
+
+    const clear = (): void => {
+      if (this.inFlight === entry) this.inFlight = null;
+    };
+
+    promise.then(clear, clear);
+
+    return promise;
+  }
+
+  private async buildReportsZip(sha: string): Promise<Uint8Array> {
     const zipball = await this.githubApi.downloadZipball(sha);
     const unzipped = await unzipAsync(zipball);
     const paths = Object.keys(unzipped);
