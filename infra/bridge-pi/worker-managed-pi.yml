@@ -12,7 +12,9 @@
 # arbitrary code against task content, so its blast radius must stop at the container. The AI providers are
 # blocked from Russia (403), so their traffic goes out through the Xray client — a plain HTTP proxy on worker-net.
 #
-# Placement: green, a plain worker node — keeps job load off white (database, backend, TLS).
+# Placement: WORKER_NODE_HOSTNAME (default green, a plain worker node — keeps job load off white's database,
+# backend, TLS). Set it, and WORKER_STACK to a name other than the default `bridgew`, to run a second worker on
+# another board — see deploy-worker.sh's own header comment.
 version: '3.8'
 
 services:
@@ -20,9 +22,11 @@ services:
     image: ghcr.io/xtls/xray-core:latest
     networks:
       worker-net: {}
-      # bridge's backend reaches Telegram through this proxy; the alias makes `vpn-client` resolve on the shared network
+      # bridge's backend reaches Telegram through the PRIMARY stack's vpn-client (TELEGRAM_PROXY_ALIAS defaults to
+      # "vpn-client" there); a second worker stack gets its own, harmless alias here so the two never collide on
+      # this shared network — nothing resolves it, this stack's own traffic never needs it.
       telegram-proxy-net:
-        aliases: [vpn-client]
+        aliases: [${TELEGRAM_PROXY_ALIAS:-vpn-client}]
     secrets:
       - source: xray_client_config
         target: /usr/local/etc/xray/config.json
@@ -35,7 +39,7 @@ services:
       endpoint_mode: dnsrr
       replicas: 1
       placement:
-        constraints: [node.hostname == ubuntu-green]
+        constraints: [node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}]
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -62,7 +66,7 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: [node.hostname == ubuntu-green]
+        constraints: [node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}]
       restart_policy:
         condition: on-failure
         delay: 5s
