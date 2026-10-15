@@ -69,6 +69,15 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      # Dashboard page's backup-status tile: reads bridge-backups/LATEST straight
+      # from Garage (infra/backup/mirror-s3.sh writes it) — a separate bucket from
+      # the one above, so a separate key. Values: /etc/garage/keys/bridge-backups.env
+      # on this node. Empty leaves that tile showing "not configured".
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-garage}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-bridge-backups}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
       YANDEX_ID: ${YANDEX_ID:-}
       YANDEX_SECRET: ${YANDEX_SECRET:-}
       BRIDGE_YANDEX_REDIRECT: https://${API_HOST:-api.bridge.ntlstl.dev}/api/v1/oauth/yandex/redirect
@@ -198,6 +207,34 @@ services:
         delay: 5s
       resources:
         limits: { cpus: '0.50', memory: 128M }
+
+  # Read-only Docker API access for the Dashboard page's node-status tile
+  # (bridge's src/dashboard/nodes.service.ts) — bridge's backend has no Docker
+  # socket access of its own, by design, same as every other service here.
+  # tecnativa/docker-socket-proxy with only NODES=1 set exposes exactly
+  # `GET /nodes` (every other resource type — containers, services, exec,
+  # secrets, … — defaults to disabled in that image); it binds the real
+  # socket read-only, on the internal network only, no published port.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    networks:
+      - internal
+    environment:
+      NODES: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.bridge-primary == true]
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits: { cpus: '0.10', memory: 64M }
 
 networks:
   # attachable: a one-off `docker run --network bridge_internal` can reach postgres by name

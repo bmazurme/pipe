@@ -174,6 +174,7 @@ describe('DashboardPage', () => {
     renderPage();
 
     expect(await screen.findByText('Не настроено')).toBeTruthy();
+    expect(screen.getByText('Задайте BACKUP_S3_* на backend')).toBeTruthy();
   });
 
   it('flags a stale backup as danger', async () => {

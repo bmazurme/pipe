@@ -37,6 +37,22 @@
   margin-right: 2px;
 }
 
+.nodeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+
+.nodeCell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: var(--g-color-base-generic-ultralight);
+}
+
 .statusSkeleton {
   width: 90px;
   height: 20px;
