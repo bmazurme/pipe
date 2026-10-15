@@ -23,7 +23,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
-import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { Job, JobStatus } from './entities/job.entity';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
 import { Worker } from './entities/worker.entity';
@@ -613,15 +613,6 @@ export class WorkerService {
     if (job.workerId !== workerId) {
       throw new ForbiddenException('This job is not held by this worker');
     }
-  }
-
-  // The key a claimed gpt/deepseek/qwen job runs with (see ProviderCredentialsService.resolveForJob).
-  resolveProvider(userId: number, job: Job) {
-    return this.providerCredentialsService.resolveForJob(
-      userId,
-      job.model as JobModel,
-      job.providerCredentialId,
-    );
   }
 
   async getSourceFile(id: number, userId: number): Promise<StoredFile> {

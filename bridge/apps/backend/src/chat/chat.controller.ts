@@ -26,8 +26,7 @@ import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
-import { ClaudeCredentialsService } from '../worker/claude-credentials.service';
-import { ProviderCredentialsService } from '../worker/provider-credentials.service';
+import { RunCredentialsService } from '../worker/run-credentials.service';
 import { WorkersService } from '../worker/workers.service';
 import { ChatService } from './chat.service';
 import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
@@ -55,8 +54,7 @@ export class ChatController {
   constructor(
     private readonly chatService: ChatService,
     private readonly workersService: WorkersService,
-    private readonly providerCredentials: ProviderCredentialsService,
-    private readonly claudeCredentials: ClaudeCredentialsService,
+    private readonly runCredentials: RunCredentialsService,
   ) {}
 
   @Get('chats')
@@ -229,29 +227,18 @@ export class ChatController {
       return;
     }
 
+    const { claudeToken, provider } = await this.runCredentials.resolve(
+      currentUser.id,
+      currentUser.workerId,
+      claimed.chat.model,
+    );
+
     const payload: ClaimedTurnResponseDto = {
       messageId: claimed.message.id,
       chatId: claimed.chat.id,
       model: claimed.chat.model,
-      provider: await this.providerCredentials.resolveForJob(
-        currentUser.id,
-        claimed.chat.model,
-        null,
-      ),
-      claudeToken:
-        claimed.chat.model === 'sonnet' || claimed.chat.model === 'opus'
-          ? ((
-              await this.claudeCredentials.resolveForRun(
-                currentUser.id,
-                null,
-                currentUser.workerId === undefined
-                  ? null
-                  : await this.workersService.claudeCredentialIdOf(
-                      currentUser.workerId,
-                    ),
-              )
-            )?.token ?? null)
-          : null,
+      provider,
+      claudeToken,
       history: claimed.history,
     };
 
