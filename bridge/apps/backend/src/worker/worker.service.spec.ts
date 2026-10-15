@@ -13,6 +13,7 @@ import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
+import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
@@ -104,6 +105,7 @@ describe('WorkerService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkerService,
+        JobSweepService,
         { provide: getRepositoryToken(Job), useValue: repository },
         { provide: StorageService, useValue: storageService },
         {
@@ -578,43 +580,6 @@ describe('WorkerService', () => {
       expect(repository.query!.mock.calls[0][0]).not.toContain('errorMessage');
     });
 
-    it('sweeps jobs silent for hours, whichever worker held them', async () => {
-      repository.query!.mockResolvedValue([
-        [stale({ workerName: 'gone-worker', status: JobStatus.Failed })],
-        1,
-      ]);
-
-      await service.sweepLostJobs();
-
-      const [sql, params] = repository.query!.mock.calls[0] as [
-        string,
-        unknown[],
-      ];
-      expect(sql).not.toContain('"workerName" =');
-      expect(sql).not.toContain('"userId" =');
-      expect(params).toHaveLength(6);
-      expect(appLogs.record).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not report or modify a job that finished before the update ran', async () => {
-      // The conditional UPDATE matches nothing: the job is already succeeded.
-      repository.query!.mockResolvedValue([[], 0]);
-
-      await service.sweepLostJobs();
-
-      expect(repository.query!.mock.calls[0][0]).toContain(
-        'WHERE status IN ($5, $6)',
-      );
-      expect(repository.save).not.toHaveBeenCalled();
-      expect(appLogs.record).not.toHaveBeenCalled();
-    });
-
-    it('swallows a failing sweep instead of crashing the scheduler', async () => {
-      repository.query!.mockRejectedValue(new Error('db down'));
-
-      await expect(service.sweepLostJobs()).resolves.toBeUndefined();
-    });
-
     it('still claims from the queue when the orphan sweep throws', async () => {
       repository.query!.mockRejectedValueOnce(new Error('db hiccup'));
       repository.query!.mockResolvedValueOnce([[{ id: 42 }], 1]);
@@ -627,48 +592,6 @@ describe('WorkerService', () => {
 
       expect(job).toMatchObject({ id: 42, status: JobStatus.Claimed });
       expect(repository.query).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('claim orphan-sweep throttle', () => {
-    const sweepCalls = () =>
-      repository.query!.mock.calls.filter(([sql]) =>
-        (sql as string).includes('errorMessage'),
-      ).length;
-
-    beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-      repository.query!.mockResolvedValue([[], 0]);
-    });
-
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    it('sweeps on the first claim and skips a second one within 60 s', async () => {
-      await service.claim(7, 'swarm-worker');
-      jest.advanceTimersByTime(30_000);
-      await service.claim(7, 'swarm-worker');
-
-      expect(sweepCalls()).toBe(1);
-      // Both polls still reach the claim query.
-      expect(repository.query).toHaveBeenCalledTimes(3);
-    });
-
-    it('sweeps again on the first claim after the window', async () => {
-      await service.claim(7, 'swarm-worker');
-      jest.advanceTimersByTime(60_000);
-      await service.claim(7, 'swarm-worker');
-
-      expect(sweepCalls()).toBe(2);
-    });
-
-    it('sweeps on the first claim of a new worker name', async () => {
-      await service.claim(7, 'swarm-worker');
-      await service.claim(7, 'other-worker');
-
-      expect(sweepCalls()).toBe(2);
     });
   });
 

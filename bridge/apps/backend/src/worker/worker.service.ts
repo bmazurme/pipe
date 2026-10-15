@@ -8,7 +8,6 @@ import {
   Optional,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -25,6 +24,8 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { logJobOutcome } from './job-outcome-log';
+import { JobSweepService } from './job-sweep.service';
 import { Worker } from './entities/worker.entity';
 import {
   isProviderModel,
@@ -44,20 +45,6 @@ function taskKeyOf(sourceFile: { id: number; taskKey: string | null }): string {
   return sourceFile.taskKey ?? `file:${sourceFile.id}`;
 }
 
-// A worker handles one job at a time and only asks for the next one when it is
-// idle. So when it claims, any job still marked claimed/running under its name is
-// a run that no longer exists (the process was restarted or killed mid-job) — but
-// only once it has been silent this long, so a sibling replica that happens to
-// share the name and is genuinely working (it logs and heartbeats) is left alone.
-const ORPHAN_SILENCE_MS = 10 * 60_000;
-// Backstop for a worker that never comes back: nothing legitimate stays this
-// silent (the worker's own job deadline is 30 minutes by default).
-const LOST_JOB_SILENCE_MS = 3 * 60 * 60_000;
-const SWEEP_EVERY_MS = 5 * 60_000;
-const ORPHAN_SWEEP_THROTTLE_MS = 60_000;
-const LOST_MESSAGE =
-  'Worker was restarted or lost while this job was running — the run did not finish';
-
 export type JobStatusRow = Pick<
   Job,
   'id' | 'userId' | 'status' | 'resultFileId' | 'errorMessage'
@@ -66,8 +53,6 @@ export type JobStatusRow = Pick<
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
-  // `userId:workerName` → when claim() last ran the orphan sweep for it.
-  private readonly lastOrphanSweep = new Map<string, number>();
 
   constructor(
     @InjectRepository(Job)
@@ -79,6 +64,7 @@ export class WorkerService {
     @InjectRepository(Worker)
     private readonly workerRepository: Repository<Worker>,
     private readonly providerCredentialsService: ProviderCredentialsService,
+    private readonly jobSweep: JobSweepService,
     @Optional() private readonly appLogs?: AppLogService,
   ) {}
 
@@ -487,66 +473,6 @@ export class WorkerService {
   // FOR UPDATE SKIP LOCKED is what makes this safe against two worker
   // processes polling the same account at once (each gets a different row,
   // or nothing, never the same one).
-  // Marks held-but-dead jobs failed so they stop showing as "running" forever.
-  private async failLostJobs(
-    where: { userId?: number; workerName?: string; workerId?: number },
-    silenceMs: number,
-  ): Promise<number> {
-    const params: unknown[] = [
-      JobStatus.Failed,
-      LOST_MESSAGE,
-      `\n[${LOST_MESSAGE}]\n`,
-      new Date(Date.now() - silenceMs),
-      JobStatus.Claimed,
-      JobStatus.Running,
-    ];
-    let filters = '';
-
-    if (where.userId !== undefined) {
-      params.push(where.userId);
-      filters += ` AND "userId" = $${params.length}`;
-    }
-
-    if (where.workerName !== undefined) {
-      params.push(where.workerName);
-      filters += ` AND "workerName" = $${params.length}`;
-    }
-
-    if (where.workerId !== undefined) {
-      params.push(where.workerId);
-      filters += ` AND "workerId" = $${params.length}`;
-    }
-
-    // One conditional statement instead of find + save: the status/silence check and
-    // the write are atomic, so a job the worker finished in between is never touched.
-    // (Raw query result is [rows, affectedCount] — see claim().)
-    const [rows]: [Job[], number] = await this.jobRepository.query(
-      `UPDATE jobs SET status = $1, "errorMessage" = $2, "finishedAt" = now(),
-         logs = COALESCE(logs, '') || $3, "updatedAt" = now()
-       WHERE status IN ($5, $6) AND "updatedAt" < $4${filters}
-       RETURNING *`,
-      params,
-    );
-
-    for (const job of rows) {
-      this.logJobOutcome(job);
-    }
-
-    return rows.length;
-  }
-
-  // Backstop for jobs whose worker never returned.
-  @Interval(SWEEP_EVERY_MS)
-  async sweepLostJobs(): Promise<void> {
-    try {
-      await this.failLostJobs({}, LOST_JOB_SILENCE_MS);
-    } catch (error) {
-      this.logger.warn(
-        `Lost-job sweep failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
   // `workerId` is set when the caller is a worker added in the UI (it authenticates with its own key); a worker on a
   // personal API key has none and is known only by the name it reports. Who may take what:
   //  - a managed worker: only while switched on, only the models it is set up for, jobs pinned to it or not pinned at
@@ -571,13 +497,7 @@ export class WorkerService {
 
       // It is asking for work, so it is idle: whatever it still "holds" is lost (the process was restarted).
       // Immediately — unlike a legacy name, a key belongs to exactly one process.
-      try {
-        await this.failLostJobs({ userId, workerId: worker.id }, 0);
-      } catch (error) {
-        this.logger.warn(
-          `Lost-job sweep failed during claim: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      await this.jobSweep.sweepManagedWorker(userId, worker.id);
 
       if (!worker.enabled) return null;
     } else if (workerName) {
@@ -585,26 +505,7 @@ export class WorkerService {
       // WorkerHeartbeatService): a worker polling an empty queue still proves
       // it's alive here even though nothing below changes a single Job row.
       await this.heartbeatService.record(userId, workerName);
-      // It is asking for work, so it is idle: whatever it still "holds" is lost.
-      // A failing sweep must not stop the worker from taking new work.
-      // Throttled per worker: the threshold is minutes, so sweeping on every ~10 s
-      // poll is needless row-locking. A worker's first claim after process start
-      // always sweeps (no entry yet).
-      const sweepKey = `${userId}:${workerName}`;
-      const lastSweep = this.lastOrphanSweep.get(sweepKey);
-      try {
-        if (
-          lastSweep === undefined ||
-          Date.now() - lastSweep >= ORPHAN_SWEEP_THROTTLE_MS
-        ) {
-          await this.failLostJobs({ userId, workerName }, ORPHAN_SILENCE_MS);
-          this.lastOrphanSweep.set(sweepKey, Date.now());
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Orphan sweep failed during claim: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      await this.jobSweep.sweepOrphansFor(userId, workerName);
     }
 
     // node-postgres's driver (via TypeORM's Repository.query) returns
@@ -754,7 +655,7 @@ export class WorkerService {
 
       // One conditional statement instead of load + save: a log chunk the worker
       // appended meanwhile is kept, and a job it just finished is never overwritten.
-      // (Raw query result is [rows, affectedCount] — see failLostJobs().)
+      // (Raw query result is [rows, affectedCount] — see claim().)
       const [rows]: [Job[], number] = await this.jobRepository.query(
         `UPDATE jobs SET status = $1, "finishedAt" = now(),
            "cancelRequestedAt" = COALESCE("cancelRequestedAt", now()),
@@ -851,7 +752,7 @@ export class WorkerService {
     const saved = await this.jobRepository.save(job);
 
     if (dto.status === JobStatus.Failed) {
-      this.logJobOutcome(saved);
+      logJobOutcome(this.appLogs, saved);
     }
 
     if (dto.status === JobStatus.Cancelled) {
@@ -859,26 +760,6 @@ export class WorkerService {
     }
 
     return saved;
-  }
-
-  // One row per finished job — the raw material for success rate, durations
-  // and the most common failure reasons. Never awaited for its result.
-  private logJobOutcome(job: Job): void {
-    const failed = job.status === JobStatus.Failed;
-    const durationMs =
-      job.startedAt && job.finishedAt
-        ? job.finishedAt.getTime() - job.startedAt.getTime()
-        : undefined;
-
-    void this.appLogs?.record({
-      level: failed ? 'error' : 'info',
-      source: 'job',
-      event: failed ? 'job.failed' : 'job.succeeded',
-      message: failed
-        ? `Job ${job.id} failed: ${job.errorMessage ?? 'no error message'}`
-        : `Job ${job.id} succeeded`,
-      meta: { jobId: job.id, model: job.model, durationMs },
-    });
   }
 
   async appendLog(id: number, userId: number, chunk: string): Promise<void> {
@@ -957,7 +838,7 @@ export class WorkerService {
 
     const saved = await this.jobRepository.save(job);
 
-    this.logJobOutcome(saved);
+    logJobOutcome(this.appLogs, saved);
 
     if (consumed) {
       try {
