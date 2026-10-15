@@ -86,15 +86,19 @@ export interface ImproveSchedule {
   categories: string | null;
   autoCreateIssues: boolean;
   autoStartIssues: boolean;
+  /** A saved Context attached to every run of this schedule, or null. */
+  contextId: number | null;
   lastRunAt: string | null;
   lastResult: string | null;
 }
 
-export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues'> & {
+export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues' | 'contextId'> & {
   kind?: 'issues' | 'analysis';
   categories?: string[];
   autoCreateIssues?: boolean;
   autoStartIssues?: boolean;
+  /** null detaches the context; omitted leaves none/keeps the server's value on create. */
+  contextId?: number | null;
 };
 
 function errorMessage(fallback: string) {

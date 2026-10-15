@@ -42,6 +42,15 @@ describe('validateScheduleForm', () => {
     expect(validateScheduleForm(form)).toEqual({ name: 'Ночной', enabled: true, hour: 2, minute: 0, timezone: 'UTC', count: 5, model: 'sonnet' });
   });
 
+  it('carries a chosen context, or null when it was cleared, and nothing when untouched', async () => {
+    const { validateScheduleForm, ALL_CATEGORIES } = await import('./improveLabels');
+
+    expect(validateScheduleForm({ ...form, contextId: '4' })).toMatchObject({ contextId: 4 });
+    expect(validateScheduleForm({ ...form, contextId: '' })).toMatchObject({ contextId: null });
+    expect(validateScheduleForm({ ...form })).not.toHaveProperty('contextId');
+    expect(validateScheduleForm({ ...form, kind: 'analysis', categories: ALL_CATEGORIES.slice(0, 1), contextId: '3' })).toMatchObject({ kind: 'analysis', contextId: 3 });
+  });
+
   it('names the first problem', async () => {
     const { validateScheduleForm } = await import('./improveLabels');
 

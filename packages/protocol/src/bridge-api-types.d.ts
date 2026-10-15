@@ -2248,6 +2248,7 @@ export interface components {
             categories: string | null;
             autoCreateIssues: boolean;
             autoStartIssues: boolean;
+            contextId: number | null;
             count: number;
             model: string;
             label: string;
@@ -2262,6 +2263,7 @@ export interface components {
             updatedAt: string;
         };
         SaveScheduleDto: {
+            contextId?: number | null;
             name: string;
             enabled: boolean;
             hour: number;

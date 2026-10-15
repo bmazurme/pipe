@@ -66,14 +66,26 @@ function setup() {
     dataSource as never,
     appLogs as never,
   );
+  const contexts = { findOwned: jest.fn().mockResolvedValue({ id: 4 }) };
   const service = new ImproveScheduleService(
     schedules as never,
     improve,
     github as never,
     notifier as never,
+    contexts as never,
   );
 
-  return { service, runs, schedules, github, notifier, qbExecute };
+  return {
+    service,
+    improve,
+    workers,
+    contexts,
+    runs,
+    schedules,
+    github,
+    notifier,
+    qbExecute,
+  };
 }
 
 describe('schedules', () => {
@@ -181,5 +193,137 @@ describe('schedules', () => {
     await expect(
       service.saveSchedule(3, { ...input, timezone: 'UTC', model: 'x' }),
     ).rejects.toThrow(/Неизвестная модель/);
+  });
+
+  describe('an attached context', () => {
+    const base = {
+      id: 1,
+      userId: 3,
+      name: 'night',
+      count: 1,
+      model: 'sonnet',
+      label: 'loop',
+    };
+
+    it('goes with the nightly analysis', async () => {
+      const { service, improve } = setup();
+      const startAnalysis = jest
+        .spyOn(improve, 'startAnalysis')
+        .mockResolvedValue({ id: 7 } as never);
+
+      await service.fire({
+        ...base,
+        kind: 'analysis',
+        categories: null,
+        autoCreateIssues: false,
+        autoStartIssues: false,
+        contextId: 4,
+      } as never);
+
+      expect(startAnalysis).toHaveBeenCalledWith(
+        3,
+        'sonnet',
+        expect.any(Array),
+        false,
+        'schedule',
+        1,
+        false,
+        4,
+      );
+    });
+
+    it('is not sent when the schedule has none', async () => {
+      const { service, improve } = setup();
+      const startAnalysis = jest
+        .spyOn(improve, 'startAnalysis')
+        .mockResolvedValue({ id: 7 } as never);
+
+      await service.fire({
+        ...base,
+        kind: 'analysis',
+        categories: null,
+        autoCreateIssues: false,
+        autoStartIssues: false,
+        contextId: null,
+      } as never);
+
+      expect(startAnalysis.mock.calls[0][7]).toBeNull();
+    });
+
+    it('goes into the worker job of every issue run too', async () => {
+      const { service, github, workers } = setup();
+
+      github.listOpenIssues.mockResolvedValue([
+        { number: 6, title: 't', body: '', state: 'open', labels: [] },
+      ]);
+      github.getIssue.mockResolvedValue({
+        number: 6,
+        title: 't',
+        body: '',
+        state: 'open',
+        isPull: false,
+        labels: [],
+      });
+
+      await service.fire({ ...base, kind: 'issues', contextId: 4 } as never);
+
+      expect(workers.create).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ model: 'sonnet', contextId: 4 }),
+      );
+    });
+
+    it("is saved after checking it is the owner's, and can be cleared", async () => {
+      const { service, contexts, schedules } = setup();
+      const input = {
+        name: 'n',
+        hour: 2,
+        minute: 0,
+        timezone: 'UTC',
+        count: 1,
+        model: 'sonnet',
+        enabled: true,
+        kind: 'analysis' as const,
+      };
+
+      schedules.findOne.mockResolvedValue(undefined);
+      (schedules as unknown as { create: jest.Mock; save: jest.Mock }).create =
+        jest.fn((value: object) => ({ ...value }));
+      (schedules as unknown as { save: jest.Mock }).save = jest.fn(
+        async (value: object) => value,
+      );
+
+      const saved = await service.saveSchedule(3, { ...input, contextId: 4 });
+
+      expect(contexts.findOwned).toHaveBeenCalledWith(4, 3);
+      expect(saved.contextId).toBe(4);
+
+      contexts.findOwned.mockClear();
+      expect(
+        (await service.saveSchedule(3, { ...input, contextId: null }))
+          .contextId,
+      ).toBeNull();
+      expect((await service.saveSchedule(3, input)).contextId).toBeNull();
+      expect(contexts.findOwned).not.toHaveBeenCalled();
+    });
+
+    it("refuses a context that is not the owner's", async () => {
+      const { service, contexts } = setup();
+
+      contexts.findOwned.mockRejectedValue(new Error('Context not found'));
+
+      await expect(
+        service.saveSchedule(3, {
+          name: 'n',
+          hour: 2,
+          minute: 0,
+          timezone: 'UTC',
+          count: 1,
+          model: 'sonnet',
+          enabled: true,
+          contextId: 99,
+        }),
+      ).rejects.toThrow('Context not found');
+    });
   });
 });

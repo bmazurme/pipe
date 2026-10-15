@@ -8,6 +8,7 @@ import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { ContextService } from '../context/context.service';
 import { GithubApiService } from '../loop/github-api.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -29,6 +30,7 @@ export class ImproveScheduleService {
     private readonly improve: ImproveService,
     private readonly github: GithubApiService,
     private readonly notifier: NotifyService,
+    private readonly contexts: ContextService,
   ) {}
 
   listSchedules(): Promise<ImproveSchedule[]> {
@@ -46,6 +48,7 @@ export class ImproveScheduleService {
       categories?: string[];
       autoCreateIssues?: boolean;
       autoStartIssues?: boolean;
+      contextId?: number | null;
     },
     id?: number,
   ): Promise<ImproveSchedule> {
@@ -55,6 +58,11 @@ export class ImproveScheduleService {
       throw new BadRequestException(
         `Неизвестный часовой пояс: ${input.timezone}`,
       );
+    }
+
+    // Only one of the owner's own contexts can be attached (404 otherwise).
+    if (input.contextId !== undefined && input.contextId !== null) {
+      await this.contexts.findOwned(input.contextId, userId);
     }
 
     const schedule = id
@@ -76,6 +84,7 @@ export class ImproveScheduleService {
       categories: categories.length ? categories.join(',') : null,
       autoCreateIssues: input.autoCreateIssues ?? true,
       autoStartIssues: input.autoStartIssues ?? false,
+      contextId: input.contextId ?? null,
     });
 
     return this.schedules.save(schedule);
@@ -161,6 +170,7 @@ export class ImproveScheduleService {
           'schedule',
           schedule.id,
           schedule.autoStartIssues,
+          schedule.contextId ?? null,
         );
 
         started.push(run.id);
@@ -189,6 +199,7 @@ export class ImproveScheduleService {
           schedule.model,
           'schedule',
           schedule.id,
+          schedule.contextId ?? null,
         );
         started.push(issue.number);
       } catch (error) {

@@ -67,6 +67,32 @@ describe('ImproveService analysis', () => {
     expect(runs.save).toHaveBeenCalled();
   });
 
+  it('attaches a saved context to the worker job, and none by default', async () => {
+    const withContext = setup();
+
+    await withContext.service.startAnalysis(
+      3,
+      'sonnet',
+      undefined,
+      false,
+      'schedule',
+      1,
+      false,
+      4,
+    );
+    expect(withContext.workers.create).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ contextId: 4 }),
+    );
+
+    const without = setup();
+
+    await without.service.startAnalysis(3, 'sonnet');
+    expect(without.workers.create.mock.calls[0][1]).not.toHaveProperty(
+      'contextId',
+    );
+  });
+
   it('refuses a second analysis while one is active', async () => {
     const { service } = setup({
       findOne: jest.fn().mockResolvedValue({ id: 2 }),
