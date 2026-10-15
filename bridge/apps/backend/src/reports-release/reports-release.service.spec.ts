@@ -94,6 +94,65 @@ describe('ReportsReleaseService', () => {
     await expect(service.downloadReportsZip()).rejects.toThrow('reports/');
   });
 
+  describe('caching', () => {
+    async function validZipball(): Promise<Uint8Array> {
+      return zipAsync({
+        'owner-pipe-abc1234/reports/package.json': strToU8('{}'),
+        'owner-pipe-abc1234/packages/protocol/package.json': strToU8('{}'),
+      });
+    }
+
+    it('builds once for the same sha and again for a new one', async () => {
+      const zipball = await validZipball();
+      const downloadZipball = jest.fn(async () => zipball);
+      let sha = 'sha-1';
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha: async () => sha, downloadZipball }),
+      );
+
+      const first = await service.downloadReportsZip();
+      const second = await service.downloadReportsZip();
+
+      expect(second).toBe(first);
+      expect(downloadZipball).toHaveBeenCalledTimes(1);
+
+      sha = 'sha-2';
+      await service.downloadReportsZip();
+
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one build between concurrent calls', async () => {
+      const zipball = await validZipball();
+      const downloadZipball = jest.fn(async () => zipball);
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball }),
+      );
+
+      await Promise.all([
+        service.downloadReportsZip(),
+        service.downloadReportsZip(),
+      ]);
+
+      expect(downloadZipball).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a failed build', async () => {
+      const zipball = await validZipball();
+      const downloadZipball = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(zipball);
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball }),
+      );
+
+      await expect(service.downloadReportsZip()).rejects.toThrow('boom');
+      await expect(service.downloadReportsZip()).resolves.toBeDefined();
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('errors when the branch has no packages/protocol/ folder', async () => {
     const fakeZipball = await zipAsync({
       'owner-pipe-abc1234/reports/package.json': strToU8('{}'),
