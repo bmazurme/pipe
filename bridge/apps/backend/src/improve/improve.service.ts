@@ -217,7 +217,12 @@ export class ImproveService {
       );
     }
 
-    const issue = await this.github.getIssue(issueNumber);
+    // The base snapshot does not depend on the issue: fetch both together. A
+    // not-open issue is still rejected before any file or job is created.
+    const [issue, prepared] = await Promise.all([
+      this.github.getIssue(issueNumber),
+      this.prepareSnapshot(),
+    ]);
 
     if (issue.isPull || issue.state !== 'open') {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
@@ -233,6 +238,8 @@ export class ImproveService {
       },
       `improve:${issue.number}`,
       `improve-${issue.number}.subscription.zip`,
+      undefined,
+      prepared,
     );
 
     const run = await this.runs.save(
@@ -450,6 +457,16 @@ export class ImproveService {
     return { files, baseline };
   }
 
+  // Base-branch SHA + parcel files; independent of the task, so it can start early.
+  private async prepareSnapshot(branch?: string) {
+    const baseSha = await this.github.getBranchSha(
+      branch ?? this.github.baseBranch(),
+    );
+    const { files, baseline } = await this.snapshotFiles(baseSha);
+
+    return { baseSha, files, baseline };
+  }
+
   // Snapshot of the base branch → parcel with this task as its manifest → Storage →
   // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
   // description is the prompt).
@@ -461,11 +478,17 @@ export class ImproveService {
     fileName: string,
     // A CI repair works on the PR's branch as it is now, not on the base branch.
     snapshot?: { sha: string; branch: string },
+    prepared?: Awaited<ReturnType<ImproveService['prepareSnapshot']>>,
   ) {
     const baseBranch = snapshot?.branch ?? this.github.baseBranch();
-    const baseSha =
-      snapshot?.sha ?? (await this.github.getBranchSha(baseBranch));
-    const { files, baseline } = await this.snapshotFiles(baseSha);
+    const { baseSha, files, baseline } =
+      prepared ??
+      (snapshot
+        ? {
+            baseSha: snapshot.sha,
+            ...(await this.snapshotFiles(snapshot.sha)),
+          }
+        : await this.prepareSnapshot(baseBranch));
     const { buffer } = await buildIssueParcel(
       files,
       {
@@ -998,9 +1021,18 @@ export class ImproveService {
       throw new ConflictException('Анализ уже выполняется');
     }
 
-    const titles = (await this.github.listIssueTitles()).map(
-      (issue) => issue.title,
-    );
+    const started = Date.now();
+    const timed = async <T>(work: Promise<T>) => {
+      const value = await work;
+
+      return { value, ms: Date.now() - started };
+    };
+    const [titlesStep, digestStep, prepStep] = await Promise.all([
+      timed(this.github.listIssueTitles()),
+      timed(this.logDigest()),
+      timed(this.prepareSnapshot()),
+    ]);
+    const titles = titlesStep.value.map((issue) => issue.title);
     const date = new Date().toISOString().slice(0, 10);
     const { job, baseSha, fileCount } = await this.handToWorker(
       userId,
@@ -1008,10 +1040,12 @@ export class ImproveService {
       {
         number: `analysis-${date}`,
         title: `Analysis ${date}`,
-        body: buildAnalysisPrompt(titles, categories, await this.logDigest()),
+        body: buildAnalysisPrompt(titles, categories, digestStep.value),
       },
       'improve:analysis',
       `improve-analysis-${date}.subscription.zip`,
+      undefined,
+      prepStep.value,
     );
     const run = await this.runs.save(
       this.runs.create({
@@ -1045,6 +1079,12 @@ export class ImproveService {
         runId: run.id,
         jobId: job.id,
         files: fileCount,
+        phaseMs: {
+          titles: titlesStep.ms,
+          logDigest: digestStep.ms,
+          snapshot: prepStep.ms,
+          total: Date.now() - started,
+        },
       },
     );
 
