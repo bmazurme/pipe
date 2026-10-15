@@ -50,6 +50,11 @@ export function DictionaryEntryRow({
     : 'Подтвердить удаление записи';
 
   if (isEditing) {
+    const errorId = editError ? `purge-entry-${entry.id}-edit-error` : undefined;
+    const editControlProps = (label: string) => ({
+      'aria-label': label,
+      'aria-describedby': errorId,
+    });
     return (
       <li className={styles.entryRow}>
         <div className={styles.entryEditPair}>
@@ -58,6 +63,8 @@ export function DictionaryEntryRow({
             onUpdate={onEditKeyChange}
             onKeyDown={onEditKeyDown}
             type={showKeys ? 'text' : 'password'}
+            controlProps={editControlProps('Новый ключ')}
+            validationState={editError ? 'invalid' : undefined}
             autoFocus
             size="s"
           />
@@ -66,6 +73,8 @@ export function DictionaryEntryRow({
             value={editValue}
             onUpdate={onEditValueChange}
             onKeyDown={onEditKeyDown}
+            controlProps={editControlProps('Новое значение')}
+            validationState={editError ? 'invalid' : undefined}
             size="s"
           />
         </div>
@@ -92,7 +101,7 @@ export function DictionaryEntryRow({
           </Button>
         </div>
         {editError && (
-          <Text color="danger" className={styles.editError}>
+          <Text id={errorId} color="danger" className={styles.editError}>
             {editError}
           </Text>
         )}

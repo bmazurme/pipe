@@ -231,6 +231,7 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
             }}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Вставьте текст"
+            controlProps={{ 'aria-label': 'Текст для очистки' }}
             // Hugs short text instead of always showing a 10-row box; still
             // grows unbounded for long pastes, same as before.
             minRows={4}

@@ -96,6 +96,7 @@ export function EntryListCard({ showKeys, onToggleShowKeys }: EntryListCardProps
           value={searchQuery}
           onUpdate={setSearchQuery}
           placeholder="Поиск по ключу или значению"
+          controlProps={{ 'aria-label': 'Поиск по словарю' }}
           size="m"
           hasClear
           startContent={<Icon data={Magnifier} size={16} className={styles.searchIcon} />}
