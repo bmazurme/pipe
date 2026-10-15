@@ -227,6 +227,7 @@ describe('ImproveService analysis', () => {
   it('lists issues of any label when asked for all', async () => {
     const { service, github } = setup();
     const listOpenIssues = jest.fn().mockResolvedValue([]);
+
     Object.assign(github, { listOpenIssues });
 
     await service.listIssues(undefined, true);
@@ -360,5 +361,54 @@ describe('ImproveService partial issue filing', () => {
     expect(github2.createIssue).toHaveBeenCalledTimes(1);
     expect(startRun).toHaveBeenCalledWith(3, 41, 'opus');
     expect(startRun).toHaveBeenCalledWith(3, 42, 'opus');
+  });
+});
+
+describe('ImproveService start concurrency', () => {
+  it('starts the titles lookup and the base-SHA lookup before either resolves', async () => {
+    const { service, github } = setup();
+    let releaseTitles!: (v: unknown[]) => void;
+    let releaseSha!: (v: string) => void;
+
+    github.listIssueTitles.mockReturnValue(
+      new Promise((resolve) => (releaseTitles = resolve)),
+    );
+    github.getBranchSha.mockReturnValue(
+      new Promise((resolve) => (releaseSha = resolve)),
+    );
+
+    const started = service.startAnalysis(3, 'sonnet');
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(github.listIssueTitles).toHaveBeenCalledTimes(1);
+    expect(github.getBranchSha).toHaveBeenCalledTimes(1);
+
+    releaseTitles([]);
+    releaseSha('base-sha');
+
+    await expect(started).resolves.toMatchObject({ jobId: 321 });
+  });
+
+  it('fetches the issue and the base SHA together and creates nothing for a closed issue', async () => {
+    const { service, github, storage, workers } = setup();
+    let releaseIssue!: (v: unknown) => void;
+
+    const getIssue = jest.fn(
+      () => new Promise((resolve) => (releaseIssue = resolve)),
+    );
+
+    Object.assign(github, { getIssue });
+
+    const started = service.startRun(3, 7, 'sonnet');
+    const assertion = expect(started).rejects.toThrow('не открытая задача');
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(getIssue).toHaveBeenCalledTimes(1);
+    expect(github.getBranchSha).toHaveBeenCalledTimes(1);
+
+    releaseIssue({ number: 7, title: 't', body: '', state: 'closed' });
+    await assertion;
+    expect(storage.createFromBuffer).not.toHaveBeenCalled();
+    expect(workers.create).not.toHaveBeenCalled();
   });
 });
