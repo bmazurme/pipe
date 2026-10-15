@@ -1347,3 +1347,27 @@ describe('ImproveService change of a PR from the chat', () => {
     expect(ctx.workers.create).not.toHaveBeenCalled();
   });
 });
+
+describe('ImproveService.startMany concurrency', () => {
+  it('runs starts a few at a time, keeps input order and isolates failures', async () => {
+    const { service } = setup();
+    let inFlight = 0;
+    let peak = 0;
+    jest.spyOn(service, 'startRun').mockImplementation(async (_u, n) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+      if (n === 2) throw new Error('boom');
+
+      return {} as never;
+    });
+
+    const result = await service.startMany(3, [5, 2, 4, 1, 3], 'sonnet');
+
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(3);
+    expect(result.started).toEqual([5, 4, 1, 3]);
+    expect(result.skipped).toEqual(['#2: boom']);
+  });
+});
