@@ -26,7 +26,7 @@ beforeEach(() => {
       const url = request.url;
 
       if (url.endsWith('/vpn/status')) return statusResponse();
-      if (url.endsWith('/vpn/connections/2/status')) return checkResponse();
+      if (url.includes('/vpn/connections/2/status')) return checkResponse();
       if (url.endsWith('/vpn/connections')) return json(CONNECTIONS);
 
       return json({});

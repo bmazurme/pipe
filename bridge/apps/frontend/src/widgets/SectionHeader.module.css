@@ -13,6 +13,12 @@
   min-width: 0;
 }
 
+.icon {
+  align-self: center;
+  color: var(--g-color-text-secondary);
+  flex-shrink: 0;
+}
+
 .title {
   margin: 0;
 }

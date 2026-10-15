@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
@@ -69,12 +70,18 @@ export class VpnConnectionsController {
     await this.vpnConnectionsService.activate(id);
   }
 
-  // Live-checks this one specific connection, active or not — backs the
-  // "Проверить" button on each row of the list, independent of the
-  // auto-polling top status card (which only ever reflects the active one).
+  // Checks this one specific connection, active or not. `force=1` (the
+  // "Проверить" button) always hits the panel fresh; anyone polling this
+  // route periodically (the Dashboard, one connection at a time) leaves it
+  // off and gets the same short-lived cache /vpn/status already uses for
+  // the active connection — otherwise a dashboard tile would hit every
+  // stored VPN panel on every poll.
   @Get(':id/status')
-  async getStatus(@Param('id', ParseIntPipe) id: number): Promise<VpnStatus> {
-    return this.vpnService.checkConnectionStatus(id, true);
+  async getStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('force') force?: string,
+  ): Promise<VpnStatus> {
+    return this.vpnService.checkConnectionStatus(id, force === '1');
   }
 
   @Get(':id/connection-link')

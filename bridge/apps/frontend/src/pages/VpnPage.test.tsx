@@ -139,7 +139,7 @@ describe('VpnPage', () => {
         const url = request.url;
         if (url.endsWith('/vpn/status')) return jsonResponse(STATUS);
         if (url.endsWith('/vpn/connections')) return jsonResponse(CONNECTIONS);
-        if (url.endsWith('/vpn/connections/2/status')) return jsonResponse(STATUS);
+        if (url.includes('/vpn/connections/2/status')) return jsonResponse(STATUS);
         return jsonResponse({});
       }),
     );

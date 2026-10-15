@@ -5,6 +5,13 @@
   max-width: var(--ntlstl-page-max);
 }
 
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--ntlstl-page-gap);
+  align-items: start;
+}
+
 .card {
   display: flex;
   flex-direction: column;
@@ -12,17 +19,22 @@
   padding: var(--ntlstl-card-padding, 20px);
 }
 
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.nodeGrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
+.rowName {
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .statusSkeleton {

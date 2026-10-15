@@ -5355,7 +5355,9 @@ export interface operations {
     };
     VpnConnectionsController_getStatus: {
         parameters: {
-            query?: never;
+            query: {
+                force: string;
+            };
             header?: never;
             path: {
                 id: number;

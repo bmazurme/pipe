@@ -16,6 +16,10 @@ const VPN_UP = {
   port: 443,
 };
 
+const ONE_ACTIVE_CONNECTION = [
+  { id: 1, name: 'primary', serverAddress: '203.0.113.5', isActive: true, createdAt: '2026-09-30T07:00:00.000Z' },
+];
+
 const NODES_ALL_READY = {
   nodes: [
     { hostname: 'ubuntu-white', label: 'white', state: 'ready', availability: 'active' },
@@ -56,6 +60,7 @@ describe('DashboardPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
         if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
         if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
         return jsonResponse({});
@@ -65,16 +70,29 @@ describe('DashboardPage', () => {
     renderPage();
 
     expect(await screen.findByText('активно')).toBeTruthy();
+    expect(screen.getByText('primary')).toBeTruthy();
     expect(screen.getByText('white')).toBeTruthy();
     expect(screen.getAllByText('в строю')).toHaveLength(4);
     expect(screen.getByText(/час.*назад/)).toBeTruthy();
+    expect(await screen.findByText('Всё в порядке')).toBeTruthy();
   });
 
-  it('shows VPN down when there is no recent handshake', async () => {
+  it('shows the status of every stored VPN connection, not just the active one', async () => {
+    const connections = [
+      { id: 1, name: 'primary', serverAddress: '203.0.113.5', isActive: true, createdAt: '2026-09-30T07:00:00.000Z' },
+      { id: 2, name: 'backup', serverAddress: '203.0.113.6', isActive: false, createdAt: '2026-09-30T08:00:00.000Z' },
+    ];
+    const requestedUrls: string[] = [];
+
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
-        if (request.url.endsWith('/vpn/status')) return jsonResponse({ ...VPN_UP, lastOnline: null });
+        requestedUrls.push(request.url);
+        if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(connections);
+        if (request.url.endsWith('/vpn/connections/2/status')) {
+          return jsonResponse({ ...VPN_UP, lastOnline: null });
+        }
         if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
         if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
         return jsonResponse({});
@@ -83,7 +101,31 @@ describe('DashboardPage', () => {
 
     renderPage();
 
+    await screen.findByText('primary');
+    expect(screen.getByText('backup')).toBeTruthy();
+    expect(screen.getByText('активное')).toBeTruthy();
+    expect(screen.getByText('активно')).toBeTruthy();
     expect(await screen.findByText('нет связи')).toBeTruthy();
+    // The inactive connection is polled without `force` (the cached path) —
+    // never with the "Проверить" button's force=1.
+    expect(requestedUrls.some((url) => url.endsWith('/vpn/connections/2/status'))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes('/vpn/connections/2/status?force=1'))).toBe(false);
+  });
+
+  it('shows "Нет подключений" when no VPN connection is stored', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse([]);
+        if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
+        if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
+        return new Response(JSON.stringify({ message: 'not found' }), { status: 404 });
+      }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('Нет подключений')).toBeTruthy();
   });
 
   it('marks a board missing from the live list as down, not ready', async () => {
@@ -91,6 +133,7 @@ describe('DashboardPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
         if (request.url.endsWith('/dashboard/nodes')) {
           return jsonResponse({
             nodes: [
@@ -111,6 +154,7 @@ describe('DashboardPage', () => {
     await screen.findByText('red');
     expect(screen.getByText('недоступен')).toBeTruthy();
     expect(screen.getByText('неизвестно')).toBeTruthy();
+    expect(await screen.findByText('Проблем: 1')).toBeTruthy();
   });
 
   it('shows "Не настроено" when backup status is not set up', async () => {
@@ -118,6 +162,7 @@ describe('DashboardPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
         if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
         if (request.url.endsWith('/dashboard/backups')) {
           return jsonResponse({ configured: false, lastBackupAt: null, rawBytes: null });
@@ -142,6 +187,7 @@ describe('DashboardPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+        if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
         if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
         if (request.url.endsWith('/dashboard/backups')) return jsonResponse(staleBackup);
         return jsonResponse({});
