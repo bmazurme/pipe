@@ -206,6 +206,24 @@ describe('WorkerService', () => {
       );
     });
 
+    it('records the limits on the fallback token the job ran on', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: null,
+        usedClaudeCredentialId: 12,
+      });
+
+      await service.recordClaudeReport(3, 5, { jobId: 7, limits, usage }, now);
+
+      expect(claudeCredentialsService.recordLimits).toHaveBeenCalledWith(
+        12,
+        3,
+        expect.objectContaining({ status: 'allowed_warning' }),
+      );
+    });
+
     it('for a chat turn (no job) only updates the worker', async () => {
       await service.recordClaudeReport(3, 5, { limits }, now);
 

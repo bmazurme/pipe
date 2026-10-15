@@ -4022,6 +4022,10 @@
             "type": "number",
             "nullable": true
           },
+          "usedClaudeCredentialName": {
+            "type": "string",
+            "nullable": true
+          },
           "providerCredentialId": {
             "type": "number",
             "nullable": true
@@ -4103,6 +4107,7 @@
           "resultFileId",
           "model",
           "claudeCredentialId",
+          "usedClaudeCredentialName",
           "providerCredentialId",
           "workerId",
           "targetWorkerId",

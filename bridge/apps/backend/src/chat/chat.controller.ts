@@ -240,15 +240,17 @@ export class ChatController {
       ),
       claudeToken:
         claimed.chat.model === 'sonnet' || claimed.chat.model === 'opus'
-          ? await this.claudeCredentials.resolveForRun(
-              currentUser.id,
-              null,
-              currentUser.workerId === undefined
-                ? null
-                : await this.workersService.claudeCredentialIdOf(
-                    currentUser.workerId,
-                  ),
-            )
+          ? ((
+              await this.claudeCredentials.resolveForRun(
+                currentUser.id,
+                null,
+                currentUser.workerId === undefined
+                  ? null
+                  : await this.workersService.claudeCredentialIdOf(
+                      currentUser.workerId,
+                    ),
+              )
+            )?.token ?? null)
           : null,
       history: claimed.history,
     };

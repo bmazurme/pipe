@@ -56,8 +56,12 @@ describe('WorkerController', () => {
 
     beforeEach(async () => {
       boundTokenId = 4;
-      credentials = { resolveForRun: jest.fn().mockResolvedValue('tok') };
+      credentials = {
+        resolveForRun: jest.fn().mockResolvedValue({ id: 4, token: 'tok' }),
+      };
       (workerService as Record<string, jest.Mock>).claim = jest.fn();
+      (workerService as Record<string, jest.Mock>).recordUsedCredential =
+        jest.fn();
       (workerService as Record<string, jest.Mock>).resolveProvider = jest
         .fn()
         .mockResolvedValue(null);
@@ -108,6 +112,14 @@ describe('WorkerController', () => {
 
       await claim(job('opus', 9));
       expect(credentials.resolveForRun).toHaveBeenLastCalledWith(7, 9, 4);
+    });
+
+    it('records which token the claimed job actually runs on', async () => {
+      await claim(job('sonnet', null));
+
+      expect(
+        (workerService as Record<string, jest.Mock>).recordUsedCredential,
+      ).toHaveBeenCalledWith(5, 7, 4);
     });
 
     it('a worker that is not enrolled (a personal API key) has no token of its own', async () => {

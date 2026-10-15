@@ -9,6 +9,8 @@ export class JobResponseDto {
   resultFileId: number | null;
   model: JobModel;
   claudeCredentialId: number | null;
+  // The stored token the run actually used (also a fallback one), or null.
+  usedClaudeCredentialName: string | null;
   providerCredentialId: number | null;
   // The worker that took it, and the one it was pinned to (null = any).
   workerId: number | null;
@@ -41,6 +43,7 @@ export class JobResponseDto {
       resultFileId: job.resultFileId,
       model: job.model,
       claudeCredentialId: job.claudeCredentialId,
+      usedClaudeCredentialName: job.usedClaudeCredentialName ?? null,
       providerCredentialId: job.providerCredentialId ?? null,
       workerId: job.workerId ?? null,
       targetWorkerId: job.targetWorkerId ?? null,

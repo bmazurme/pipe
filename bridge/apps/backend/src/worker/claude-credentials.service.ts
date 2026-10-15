@@ -52,13 +52,13 @@ export class ClaudeCredentialsService {
     userId: number,
     credentialId: number | null,
     workerCredentialId: number | null = null,
-  ): Promise<string | null> {
+  ): Promise<{ id: number; token: string } | null> {
     for (const id of [credentialId, workerCredentialId]) {
       if (id === null) continue;
 
       const token = await this.resolveToken(id, userId);
 
-      if (token) return token;
+      if (token) return { id, token };
     }
 
     const first = await this.repository.findOne({
@@ -66,7 +66,16 @@ export class ClaudeCredentialsService {
       order: { id: 'ASC' },
     });
 
-    return first?.token ?? null;
+    return first ? { id: first.id, token: first.token } : null;
+  }
+
+  async nameOf(id: number, userId: number): Promise<string | null> {
+    const credential = await this.repository.findOne({
+      where: { id, userId },
+      select: { id: true, name: true },
+    });
+
+    return credential?.name ?? null;
   }
 
   // The one place the raw token value leaves this service — called only by

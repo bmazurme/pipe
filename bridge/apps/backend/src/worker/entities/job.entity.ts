@@ -60,6 +60,14 @@ export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
 
+  // The stored token the run actually used, set at claim. claudeCredentialId is only what the user pinned (retry()
+  // copies that); this also covers the worker's / the account's first token it fell back to. The name is a snapshot.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  usedClaudeCredentialId: number | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  usedClaudeCredentialName: string | null;
+
   // Tokens and cost of the Claude run, as the worker reported them (claude-limits.ts); null for other models.
   @Column({ type: 'jsonb', nullable: true })
   usage: ClaudeRunUsage | null;
