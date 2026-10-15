@@ -73,6 +73,60 @@ beforeEach(() => {
   );
 });
 
+describe('ImprovePage analysis loading and errors', () => {
+  function stubFetch(handler: (path: string, method: string) => Response | Promise<Response> | undefined) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const path = new URL(request.url).pathname.replace('/api/v1/', '');
+        const custom = handler(path, request.method);
+
+        if (custom) return custom;
+        if (path === 'improve/status') return json(STATUS);
+        if (path === 'improve/schedules') return json([]);
+        if (path === 'improve/settings') return json({ autoStartModel: null });
+
+        return json([]);
+      }),
+    );
+  }
+  const failure = () => new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } });
+
+  it('shows a loader, not the empty state, while the list loads', async () => {
+    stubFetch((path) => (path === 'improve/runs' ? new Promise<Response>(() => {}) : undefined));
+    renderPage('/improve?tab=analysis');
+
+    await screen.findByRole('button', { name: 'Запустить анализ' });
+    expect(document.querySelector('.g-loader')).not.toBeNull();
+    expect(screen.queryByText('Анализов ещё не было')).toBeNull();
+  });
+
+  it('shows an error with retry and disables the start button when the list fails', async () => {
+    stubFetch((path) => (path === 'improve/runs' ? failure() : undefined));
+    renderPage('/improve?tab=analysis');
+
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.queryByText('Анализов ещё не было')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Запустить анализ' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows an error text when the run detail fails to load', async () => {
+    const user = userEvent.setup();
+    stubFetch((path, method) => {
+      if (path === 'improve/runs' && method === 'GET') return json([{ ...LISTED_RUN, hasResult: true }]);
+      if (path === 'improve/runs/20') return failure();
+
+      return undefined;
+    });
+    renderPage('/improve?tab=analysis');
+
+    await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+
+    expect(await screen.findByText('Не удалось загрузить предложения')).toBeTruthy();
+    expect(screen.queryByText('Загрузка…')).toBeNull();
+  });
+});
+
 describe('ImprovePage analysis', () => {
   it('starts an analysis for the chosen directions', async () => {
     const user = userEvent.setup();
