@@ -6,6 +6,7 @@ import {
   authApi,
   chatApi,
   contextApi,
+  dashboardApi,
   improveApi,
   logsApi,
   purgeApi,
@@ -55,6 +56,7 @@ export const store = configureStore({
     [logsApi.reducerPath]: logsApi.reducer,
     [improveApi.reducerPath]: improveApi.reducer,
     [contextApi.reducerPath]: contextApi.reducer,
+    [dashboardApi.reducerPath]: dashboardApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -74,6 +76,7 @@ export const store = configureStore({
       logsApi.middleware,
       improveApi.middleware,
       contextApi.middleware,
+      dashboardApi.middleware,
     ),
 });
 

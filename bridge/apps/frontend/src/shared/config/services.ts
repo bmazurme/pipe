@@ -9,6 +9,7 @@ import {
   Key,
   Lock,
   MagicWand,
+  Pulse,
   Rocket,
   ShieldKeyhole,
   TrashBin,
@@ -30,6 +31,13 @@ export interface ServiceLink {
  * shows up in every entry point at once instead of being added to each by hand.
  */
 export const SERVICES: ServiceLink[] = [
+  {
+    id: 'dashboard',
+    title: 'Дашборд',
+    description: 'Состояние инфраструктуры: туннель, узлы кластера и бэкапы — на одной странице.',
+    icon: Pulse,
+    path: '/dashboard',
+  },
   {
     id: 'storage',
     title: 'Storage',

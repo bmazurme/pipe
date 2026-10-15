@@ -1789,6 +1789,42 @@
         }
       }
     },
+    "/api/v1/dashboard/nodes": {
+      "get": {
+        "operationId": "DashboardController_getNodes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/backups": {
+      "get": {
+        "operationId": "DashboardController_getBackups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/status": {
       "get": {
         "operationId": "ImproveController_status",
