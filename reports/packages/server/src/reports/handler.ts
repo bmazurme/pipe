@@ -91,9 +91,20 @@ export async function handleReport(req: Request, res: Response) {
       };
     });
 
-    exportToCsv(filename, issues);
   } catch (error) {
     console.error('Ошибка при получении задач:', error);
+    sendEvent({
+      type: 'error',
+      data: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.end();
+    return;
+  }
+
+  try {
+    await exportToCsv(filename, issues);
+  } catch (error) {
+    console.error('Ошибка при сохранении CSV:', error);
   }
 
   try {
