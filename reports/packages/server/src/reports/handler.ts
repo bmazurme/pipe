@@ -13,6 +13,7 @@ import { mockReports } from './mock-data';
 import { pushReportToBridge } from './push-to-bridge';
 import { getSettings } from '../settings/props';
 import { getProjectDict } from './project-dict-props';
+import { fetchAllPages } from './fetch-all-pages';
 
 const GITLAB_TIMEOUT_MS = 30_000;
 
@@ -48,22 +49,9 @@ export async function handleReport(req: Request, res: Response) {
   const openUrl = `${GITLAB_URL}/issues?assignee_id=${USER_ID}&scope=all&state=opened`;
 
   try {
-    const [closedResponse, openResponse] = await Promise.all([
-      fetch(closedUrl, fetchConfig),
-      fetch(openUrl, fetchConfig),
-    ]);
-
-    if (!closedResponse.ok) {
-      throw new Error(`Ошибка HTTP для закрытых задач: ${closedResponse.status}`);
-    }
-
-    if (!openResponse.ok) {
-      throw new Error(`Ошибка HTTP для открытых задач: ${openResponse.status}`);
-    }
-
     const [closedIssues, openedIssues] = await Promise.all([
-      closedResponse.json() as Promise<IssueResponse>,
-      openResponse.json()  as Promise<IssueResponse>,
+      fetchAllPages<IssueResponse[number]>(closedUrl, fetchConfig, GITLAB_TIMEOUT_MS, 'закрытых задач'),
+      fetchAllPages<IssueResponse[number]>(openUrl, fetchConfig, GITLAB_TIMEOUT_MS, 'открытых задач'),
     ]);
     const allIssues = [...closedIssues, ...openedIssues];
     const result: ResultType[] = [];
