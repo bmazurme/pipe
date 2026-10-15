@@ -59,7 +59,7 @@ describe('handleReport', () => {
   it('still sends the report when the CSV write fails', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [issue] }),
+      vi.fn().mockResolvedValue({ ok: true, status: 200, headers: new Headers(), json: async () => [issue] }),
     );
     exportToCsv.mockRejectedValue(new Error('disk full'));
     const { res, raw, events } = makeRes();
