@@ -94,7 +94,14 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     }),
     // Not a query — triggered on demand by each row's own "Проверить"
     // button, not auto-fetched for every stored connection on page load.
+    // force=1: always hits the panel fresh, bypassing the short-lived cache.
     checkVpnConnectionStatus: builder.mutation<VpnStatus, number>({
+      query: (id) => `vpn/connections/${id}/status?force=1`,
+    }),
+    // Same route, no force — the Dashboard polls every stored connection
+    // (not just the active one), getting the cached result each time
+    // instead of hitting every panel on every poll.
+    getVpnConnectionStatus: builder.query<VpnStatus, number>({
       query: (id) => `vpn/connections/${id}/status`,
     }),
     getVpnConnectionLink: builder.mutation<{ link: string }, number>({
@@ -114,6 +121,7 @@ export const {
   useDeleteVpnConnectionMutation,
   useActivateVpnConnectionMutation,
   useCheckVpnConnectionStatusMutation,
+  useGetVpnConnectionStatusQuery,
   useGetVpnConnectionLinkMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

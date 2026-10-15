@@ -3415,6 +3415,14 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "force",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
