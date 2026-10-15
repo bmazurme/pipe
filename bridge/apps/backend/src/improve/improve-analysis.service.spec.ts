@@ -264,3 +264,101 @@ describe('ImproveService analysis', () => {
     expect(summary).toContain('Issues: write');
   });
 });
+
+describe('ImproveService partial issue filing', () => {
+  const twoItems = (extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      categories: ['security', 'performance'],
+      autoCreate: false,
+      ...extra,
+      items: [
+        { category: 'security', title: 'First', risk: 'low', body: 'x' },
+        { category: 'performance', title: 'Second', risk: 'low', body: 'y' },
+      ],
+    });
+
+  const failSecond = (github: { createIssue: jest.Mock }) => {
+    github.createIssue
+      .mockResolvedValueOnce({ number: 41, missingLabels: [] })
+      .mockRejectedValueOnce(new Error('403 rate limit'));
+  };
+
+  it('keeps the issues already filed when GitHub fails midway', async () => {
+    const run = { id: 1, userId: 3, result: twoItems() };
+    const { service, github, runs } = setup();
+    failSecond(github);
+
+    await expect(service.createIssuesFromRun(run as never)).rejects.toThrow(
+      /Second.*403 rate limit.*уже создано: 1/,
+    );
+
+    const stored = JSON.parse(run.result);
+    expect(stored.items[0].issueNumber).toBe(41);
+    expect(stored.items[1].issueNumber).toBeUndefined();
+    expect(runs.save).toHaveBeenCalledWith(run);
+  });
+
+  it('finishes an auto-create analysis as Analyzed when filing fails', async () => {
+    const run = {
+      id: 1,
+      userId: 3,
+      status: ImproveRunStatus.Running,
+      result: JSON.stringify({
+        categories: ['security', 'performance'],
+        autoCreate: true,
+      }),
+    } as Record<string, unknown>;
+    const { service, github, storage } = setup();
+    const backlog = JSON.parse(twoItems());
+    Object.assign(storage, {
+      delete: jest.fn().mockResolvedValue(undefined),
+      findOwned: jest.fn().mockResolvedValue({ id: 7 }),
+      readBytes: jest.fn().mockResolvedValue(
+        zipSync({
+          'loop-backlog.json': strToU8(JSON.stringify(backlog)),
+        }),
+      ),
+    });
+    failSecond(github);
+
+    await service.finishAnalysis(run as never, 7);
+
+    expect(run.status).toBe(ImproveRunStatus.Analyzed);
+    expect(run.error).toBeUndefined();
+    expect(run.note).toContain('403 rate limit');
+    expect(JSON.parse(run.result as string).items[0].issueNumber).toBe(41);
+  });
+
+  it('files only the remaining items on retry and starts the filed one', async () => {
+    const run = { id: 1, userId: 3, model: 'sonnet', result: twoItems() };
+    const { service, github } = setup({
+      findOne: jest.fn().mockResolvedValue({
+        ...run,
+        status: ImproveRunStatus.Analyzed,
+      }),
+    });
+    failSecond(github);
+    await expect(service.createIssuesFromRun(run as never)).rejects.toThrow();
+
+    const analyzed = {
+      ...run,
+      status: ImproveRunStatus.Analyzed,
+    };
+    const { service: retry, github: github2 } = setup({
+      findOne: jest.fn().mockResolvedValue(analyzed),
+    });
+    github2.createIssue.mockResolvedValueOnce({
+      number: 42,
+      missingLabels: [],
+    });
+    const startRun = jest
+      .spyOn(retry, 'startRun')
+      .mockResolvedValue({} as never);
+
+    await retry.startItems(1, 'opus');
+
+    expect(github2.createIssue).toHaveBeenCalledTimes(1);
+    expect(startRun).toHaveBeenCalledWith(3, 41, 'opus');
+    expect(startRun).toHaveBeenCalledWith(3, 42, 'opus');
+  });
+});

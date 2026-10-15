@@ -1104,9 +1104,27 @@ export class ImproveService {
 
       run.result = JSON.stringify({ ...stored, items });
 
-      let summary = stored.autoCreate
-        ? await this.createIssuesFromRun(run)
-        : null;
+      let summary: string | null = null;
+
+      if (stored.autoCreate) {
+        try {
+          summary = await this.createIssuesFromRun(run);
+        } catch (error) {
+          // The proposals exist; only the filing failed — the manual button can finish it.
+          const note = `${items.length} предложений ждут проверки; автосоздание issues прервано: ${message(error)}`;
+
+          await this.finish(run, ImproveRunStatus.Analyzed, {
+            result: run.result,
+            note,
+          });
+          await this.storage.delete(file).catch(() => undefined);
+          await this.notifier.send(
+            `⚠️ Анализ завершён, но issues созданы не все: ${message(error).slice(0, 200)}`,
+          );
+
+          return;
+        }
+      }
 
       if (summary && stored.autoStart) {
         summary += `; ${await this.startFiled(run)}`;
@@ -1143,6 +1161,7 @@ export class ImproveService {
     let created = 0;
     let duplicates = 0;
     const unlabelled: number[] = [];
+    let failure: Error | null = null;
 
     for (const [index, item] of stored.items.entries()) {
       if (only && !only.includes(index)) continue;
@@ -1156,11 +1175,20 @@ export class ImproveService {
         continue;
       }
 
-      const issue = await this.github.createIssue({
-        title: item.title,
-        body: issueBody(item),
-        labels: [PR_LABEL, `risk:${item.risk}`, `category:${item.category}`],
-      });
+      let issue: { number: number; missingLabels?: string[] };
+
+      try {
+        issue = await this.github.createIssue({
+          title: item.title,
+          body: issueBody(item),
+          labels: [PR_LABEL, `risk:${item.risk}`, `category:${item.category}`],
+        });
+      } catch (error) {
+        failure = new Error(
+          `Не удалось создать issue для «${item.title}» (предложение ${index + 1}): ${message(error)}; уже создано: ${created}`,
+        );
+        break;
+      }
 
       item.issueNumber = issue.number;
       existing.set(normalizeTitle(item.title), issue.number);
@@ -1171,6 +1199,10 @@ export class ImproveService {
       }
     }
 
+    // Keep whatever was filed, even when a later proposal failed.
+    run.result = JSON.stringify(stored);
+    await this.runs.save(run);
+
     if (unlabelled.length > 0) {
       this.log(
         'warn',
@@ -1180,8 +1212,7 @@ export class ImproveService {
       );
     }
 
-    run.result = JSON.stringify(stored);
-    await this.runs.save(run);
+    if (failure) throw failure;
 
     return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}${unlabelled.length ? `; ⚠ без метки ${PR_LABEL}: ${unlabelled.map((n) => `#${n}`).join(', ')} — проверьте права токена (Issues: write)` : ''}`;
   }
