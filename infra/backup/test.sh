@@ -177,7 +177,7 @@ if command -v rsync >/dev/null && command -v rclone >/dev/null; then
   SRCU="$T/primary-uploads"; UP="$T/uploads-mirror"; UBUCKET="$T/uploads-bucket"
   mkdir -p "$SRCU/chat" "$UBUCKET"
   for i in $(seq 1 12); do echo "parcel $i" > "$SRCU/f$i.zip"; done; echo "attachment" > "$SRCU/chat/a.png"
-  upl() { BACKUP_DIR="$UP" SOURCE="$SRCU/" RCLONE=rclone DEST="$UBUCKET" "$HERE/uploads-pull.sh" "$@" >"$T/out" 2>&1; }
+  upl() { MAX_DELETE_FILES=10 BACKUP_DIR="$UP" SOURCE="$SRCU/" RCLONE=rclone DEST="$UBUCKET" "$HERE/uploads-pull.sh" "$@" >"$T/out" 2>&1; }
 
   upl; check "uploads: first pull succeeds" $?
   diff -r "$SRCU" "$UP/current" >/dev/null; check "uploads: the copy equals the source, subfolders included" $?
@@ -212,7 +212,7 @@ if command -v rsync >/dev/null && command -v rclone >/dev/null; then
   # 9b. the other direction: bridge writes to the bucket, this is its backup (UPLOADS_FROM=s3)
   BK="$T/s3-bucket"; MR="$T/s3-mirror"; mkdir -p "$BK/chat" "$MR"
   for i in $(seq 1 12); do echo "obj $i" > "$BK/o$i.zip"; done; echo "att" > "$BK/chat/c.png"
-  s3pull() { UPLOADS_FROM=s3 BACKUP_DIR="$MR" RCLONE=rclone DEST="$BK" "$HERE/uploads-pull.sh" "$@" >"$T/out" 2>&1; }
+  s3pull() { MAX_DELETE_FILES=10 UPLOADS_FROM=s3 BACKUP_DIR="$MR" RCLONE=rclone DEST="$BK" "$HERE/uploads-pull.sh" "$@" >"$T/out" 2>&1; }
   s3pull; check "uploads (s3): first pull from the bucket succeeds without SOURCE" $?
   diff -r "$BK" "$MR/current" >/dev/null; check "uploads (s3): the copy equals the bucket, subfolders included" $?
   echo "new object" > "$BK/o99.zip"; rm -f "$BK/o2.zip"
@@ -227,6 +227,12 @@ if command -v rsync >/dev/null && command -v rclone >/dev/null; then
   s3pull; [ $? -ne 0 ] && grep -q "would delete" "$T/out"; check "uploads (s3): a bucket that lost almost everything is refused" $?
   rm -rf "$BK"; mv "$T/s3-bucket-saved" "$BK"
   s3pull; check "uploads (s3): back to normal" $?
+  # the real incident: a mailbox with 15 files, 11 of them downloaded (deleted) in a day — normal, not an emergency
+  rm -rf "$BK" "$MR"; mkdir -p "$BK" "$MR"; for i in $(seq 1 15); do echo "m$i" > "$BK/m$i.zip"; done
+  s3pull; check "uploads (s3): a small mailbox, first pull" $?
+  for i in $(seq 1 11); do rm -f "$BK/m$i.zip"; done
+  UPLOADS_FROM=s3 BACKUP_DIR="$MR" RCLONE=rclone DEST="$BK" "$HERE/uploads-pull.sh" >"$T/out" 2>&1; check "uploads (s3): deleting 11 of 15 files (a mailbox emptied by downloads) is NOT refused with the default floor" $?
+  [ "$(find "$MR/current" -type f | wc -l | tr -d ' ')" = 4 ] && [ -f "$MR/deleted/$(date -u +%F)/m1.zip" ]; check "uploads (s3): …the copy follows and the deleted ones are kept in deleted/<date>" $?
 else
   echo "skip uploads tests (rsync and rclone are needed)"
 fi
