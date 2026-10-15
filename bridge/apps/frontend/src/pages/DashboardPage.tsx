@@ -150,13 +150,13 @@ export function DashboardPage() {
           {nodes.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
           ) : (
-            <div className={styles.list}>
+            <div className={styles.nodeGrid}>
               {nodesList.map((node) => (
-                <div key={node.hostname} className={styles.row}>
-                  <Text variant="body-2" className={styles.rowName}>
-                    {node.label}
-                  </Text>
-                  <Label theme={NODE_THEME[node.state]}>{NODE_LABEL[node.state]}</Label>
+                <div key={node.hostname} className={styles.nodeCell}>
+                  <Text variant="body-2">{node.label}</Text>
+                  <Label theme={NODE_THEME[node.state]} size="xs">
+                    {NODE_LABEL[node.state]}
+                  </Label>
                 </div>
               ))}
             </div>
@@ -168,7 +168,12 @@ export function DashboardPage() {
           {backups.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
           ) : !backups.data?.configured ? (
-            <Label theme="warning">Не настроено</Label>
+            <div className={styles.row}>
+              <Label theme="warning">Не настроено</Label>
+              <Text color="secondary" variant="caption-2">
+                Задайте BACKUP_S3_* на backend
+              </Text>
+            </div>
           ) : (
             <div className={styles.row}>
               <Label theme={backupIssue ? 'danger' : 'success'}>

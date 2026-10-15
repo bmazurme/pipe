@@ -111,6 +111,24 @@ Run `./deploy.sh`, then open the webhook's «Recent deliveries» (redeliver an o
 **503** = `GITHUB_WEBHOOK_SECRET` is not set in the backend (`./secrets.sh check`, then `./deploy.sh`); **401** = the secret on GitHub
 differs from the stored one. `GITHUB_BASE_BRANCH` (default `main`) is optional.
 
+## Dashboard page
+
+bridge's Dashboard shows the Swarm cluster's node status and the last backup's age. The node tile needs nothing set —
+it talks to the `docker-proxy` service (`bridge-pi.yml`, read-only `NODES=1` access to the Docker API, no secrets involved).
+The backup tile reads `bridge-backups/LATEST` straight from Garage S3 and needs that bucket's own key:
+
+```bash
+sudo cat /etc/garage/keys/bridge-backups.env        # S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
+./secrets.sh set BACKUP_S3_ENDPOINT                 # same S3_ENDPOINT value as above
+./secrets.sh set BACKUP_S3_ACCESS_KEY_ID
+./secrets.sh set BACKUP_S3_SECRET_ACCESS_KEY
+./deploy.sh
+```
+
+(`BACKUP_S3_REGION`/`BACKUP_S3_BUCKET` default to `garage`/`bridge-backups` already — only set them with `./secrets.sh set`
+if this board's key uses different ones.) Left unset, that tile just shows "not configured", same as a missing
+`GITHUB_WEBHOOK_SECRET` above — not a deploy failure.
+
 ## Images from GHCR (no more loading from the Mac)
 
 `.github/workflows/publish-images.yml` (manual: Actions → Publish images → Run workflow) builds the backend, frontend and worker
