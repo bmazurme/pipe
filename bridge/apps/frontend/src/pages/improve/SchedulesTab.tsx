@@ -185,7 +185,7 @@ export function SchedulesTab() {
             <Text variant="body-2">{schedule.name}</Text>
             <Text variant="caption-2" color="secondary">
               {describeSchedule(schedule)}
-              {schedule.contextId !== null && ` · контекст: ${(Array.isArray(contexts) ? contexts : []).find((context) => context.id === schedule.contextId)?.name ?? `#${schedule.contextId}`}`}
+              {typeof schedule.contextId === 'number' && ` · контекст: ${(Array.isArray(contexts) ? contexts : []).find((context) => context.id === schedule.contextId)?.name ?? `#${schedule.contextId}`}`}
             </Text>
             {schedule.lastRunAt && (
               <Text variant="caption-2" color="secondary">
