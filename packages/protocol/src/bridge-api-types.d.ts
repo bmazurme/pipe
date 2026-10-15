@@ -1977,6 +1977,7 @@ export interface components {
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId: number | null;
+            usedClaudeCredentialName: string | null;
             providerCredentialId: number | null;
             workerId: number | null;
             targetWorkerId: number | null;

@@ -575,13 +575,30 @@ export class WorkerService {
 
     if (usage) await this.jobRepository.update(job.id, { usage });
 
-    if (limits && job.claudeCredentialId !== null) {
+    const limitsCredentialId =
+      job.claudeCredentialId ?? job.usedClaudeCredentialId ?? null;
+
+    if (limits && limitsCredentialId !== null) {
       await this.claudeCredentialsService.recordLimits(
-        job.claudeCredentialId,
+        limitsCredentialId,
         userId,
         limits,
       );
     }
+  }
+
+  async recordUsedCredential(
+    jobId: number,
+    userId: number,
+    credentialId: number,
+  ): Promise<void> {
+    await this.jobRepository.update(jobId, {
+      usedClaudeCredentialId: credentialId,
+      usedClaudeCredentialName: await this.claudeCredentialsService.nameOf(
+        credentialId,
+        userId,
+      ),
+    });
   }
 
   async assertHeldBy(

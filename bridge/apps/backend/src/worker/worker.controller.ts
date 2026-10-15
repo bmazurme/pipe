@@ -125,7 +125,7 @@ export class WorkerController {
     // credential removed after the job picked it just degrades to null
     // (worker falls back to its own inherited env var) rather than failing
     // the claim.
-    const claudeToken =
+    const resolved =
       job.model === JobModel.Sonnet || job.model === JobModel.Opus
         ? await this.claudeCredentialsService.resolveForRun(
             currentUser.id,
@@ -137,6 +137,18 @@ export class WorkerController {
                 ),
           )
         : null;
+    const claudeToken = resolved?.token ?? null;
+
+    // Remember which stored token the run actually uses (also when it fell
+    // back to the worker's or the account's first), so its limits and an auth
+    // failure can be traced to it.
+    if (resolved) {
+      await this.workerService.recordUsedCredential(
+        job.id,
+        currentUser.id,
+        resolved.id,
+      );
+    }
 
     const provider = await this.workerService.resolveProvider(
       currentUser.id,

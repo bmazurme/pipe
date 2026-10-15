@@ -51,6 +51,8 @@ export interface WorkerJob {
   resultFileId: number | null;
   model: WorkerJobModel;
   claudeCredentialId: number | null;
+  /** The stored token the run actually used (also a fallback one), or null. */
+  usedClaudeCredentialName?: string | null;
   providerCredentialId: number | null;
   /** The worker that took the job, and the one it was pinned to (null = any free worker). */
   workerId: number | null;
