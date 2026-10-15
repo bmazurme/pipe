@@ -5102,6 +5102,10 @@
           "autoStartIssues": {
             "type": "boolean"
           },
+          "contextId": {
+            "type": "number",
+            "nullable": true
+          },
           "count": {
             "type": "number"
           },
@@ -5147,6 +5151,7 @@
           "categories",
           "autoCreateIssues",
           "autoStartIssues",
+          "contextId",
           "count",
           "model",
           "label",
@@ -5161,6 +5166,11 @@
       "SaveScheduleDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "name": {
             "type": "string",
             "maxLength": 100

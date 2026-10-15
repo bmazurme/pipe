@@ -41,6 +41,11 @@ export class ImproveSchedule extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   autoStartIssues: boolean;
 
+  // A saved Context attached to every run this schedule starts (analysis and issues alike); null = none. The job keeps
+  // its own snapshot of the text. ON DELETE SET NULL in the migration: deleting the context detaches it.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  contextId: number | null;
+
   // How many issues to start per run (issue schedules).
   @Column({ type: 'smallint' })
   count: number;

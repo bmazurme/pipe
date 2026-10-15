@@ -11,6 +11,7 @@ import {
   ImproveSchedule,
   useDeleteImproveScheduleMutation,
   useGetImproveSettingsQuery,
+  useListContextsQuery,
   useListImproveSchedulesQuery,
   useRunImproveScheduleNowMutation,
   useSaveImproveScheduleMutation,
@@ -37,8 +38,11 @@ function toForm(schedule: ImproveSchedule): Form {
     categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : ALL_CATEGORIES,
     autoCreateIssues: schedule.autoCreateIssues,
     autoStartIssues: schedule.autoStartIssues,
+    contextId: schedule.contextId === null ? '' : String(schedule.contextId),
   };
 }
+
+const NO_CONTEXT = '';
 
 function AutoStartCard() {
   const { data } = useGetImproveSettingsQuery();
@@ -93,6 +97,7 @@ export function SchedulesTab() {
   const [saveSchedule, { isLoading: isSaving }] = useSaveImproveScheduleMutation();
   const [deleteSchedule] = useDeleteImproveScheduleMutation();
   const [runNow] = useRunImproveScheduleNowMutation();
+  const { data: contexts } = useListContextsQuery();
   const [runningId, setRunningId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ImproveSchedule | null>(null);
@@ -178,7 +183,10 @@ export function SchedulesTab() {
         <div key={schedule.id} className={styles.row}>
           <div className={styles.rowMain}>
             <Text variant="body-2">{schedule.name}</Text>
-            <Text variant="caption-2" color="secondary">{describeSchedule(schedule)}</Text>
+            <Text variant="caption-2" color="secondary">
+              {describeSchedule(schedule)}
+              {schedule.contextId !== null && ` · контекст: ${(Array.isArray(contexts) ? contexts : []).find((context) => context.id === schedule.contextId)?.name ?? `#${schedule.contextId}`}`}
+            </Text>
             {schedule.lastRunAt && (
               <Text variant="caption-2" color="secondary">
                 последний запуск {formatRelativeTime(schedule.lastRunAt)}{schedule.lastResult && ` · ${schedule.lastResult}`}
@@ -248,6 +256,16 @@ export function SchedulesTab() {
                 width="max"
               />
               <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
+              <Select
+                label="Контекст"
+                value={[editing.form.contextId ?? NO_CONTEXT]}
+                onUpdate={([contextId]) => update({ contextId: contextId ?? NO_CONTEXT })}
+                options={[{ value: NO_CONTEXT, content: 'Без контекста' }, ...(Array.isArray(contexts) ? contexts : []).map((context) => ({ value: String(context.id), content: context.name }))]}
+                width="max"
+              />
+              <Text variant="caption-2" color="secondary">
+                Сохранённый контекст со страницы Context (договорённости, что не предлагать, о чём уже думали) прикладывается к каждому ночному запуску: worker получает его текст перед задачей. Контекст копируется в задачу в момент запуска.
+              </Text>
               {editing.form.kind === 'analysis' && (
                 <>
                   <Select

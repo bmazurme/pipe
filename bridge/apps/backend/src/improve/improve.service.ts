@@ -211,6 +211,7 @@ export class ImproveService {
     model: string,
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
+    contextId: number | null = null,
   ): Promise<ImproveRun> {
     const key = `issue:${issueNumber}`;
 
@@ -227,6 +228,7 @@ export class ImproveService {
         model,
         trigger,
         scheduleId,
+        contextId,
       );
     } finally {
       this.starting.delete(key);
@@ -239,6 +241,7 @@ export class ImproveService {
     model: string,
     trigger: ImproveTrigger,
     scheduleId: number | null,
+    contextId: number | null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireModel(model);
@@ -282,6 +285,7 @@ export class ImproveService {
       `improve-${issue.number}.subscription.zip`,
       undefined,
       prepared,
+      contextId,
     );
 
     const run = await this.runs.save(
@@ -534,6 +538,8 @@ export class ImproveService {
     // A CI repair works on the PR's branch as it is now, not on the base branch.
     snapshot?: { sha: string; branch: string },
     prepared?: Awaited<ReturnType<ImproveService['prepareSnapshot']>>,
+    // A saved Context (Context page) the run's worker job carries as background text; the job keeps its own snapshot.
+    contextId: number | null = null,
   ) {
     const baseBranch = snapshot?.branch ?? this.github.baseBranch();
     const { baseSha, files, baseline } =
@@ -569,6 +575,7 @@ export class ImproveService {
     const job = await this.workers.create(userId, {
       sourceFileId: stored.id,
       model: model as JobModel,
+      ...(contextId !== null ? { contextId } : {}),
     });
 
     return { job, baseSha, baseline, fileCount: files.length };
@@ -1058,6 +1065,7 @@ export class ImproveService {
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
     autoStart = false,
+    contextId: number | null = null,
   ): Promise<ImproveRun> {
     if (this.starting.has('analysis')) {
       throw new ConflictException('Анализ уже выполняется');
@@ -1074,6 +1082,7 @@ export class ImproveService {
         trigger,
         scheduleId,
         autoStart,
+        contextId,
       );
     } finally {
       this.starting.delete('analysis');
@@ -1088,6 +1097,7 @@ export class ImproveService {
     trigger: ImproveTrigger,
     scheduleId: number | null,
     autoStart: boolean,
+    contextId: number | null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireModel(model);
@@ -1131,6 +1141,7 @@ export class ImproveService {
       `improve-analysis-${date}.subscription.zip`,
       undefined,
       prepStep.value,
+      contextId,
     );
     const run = await this.runs.save(
       this.runs.create({

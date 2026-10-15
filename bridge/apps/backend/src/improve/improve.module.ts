@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module';
+import { ContextModule } from '../context/context.module';
 import { LoopModule } from '../loop/loop.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -25,6 +26,7 @@ import { ImproveService } from './improve.service';
     WorkerModule,
     UsersModule,
     AuthModule,
+    ContextModule,
   ],
   controllers: [ImproveController],
   providers: [

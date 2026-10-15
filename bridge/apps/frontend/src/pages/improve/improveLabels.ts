@@ -105,12 +105,15 @@ export interface ScheduleForm {
   categories?: AnalysisCategory[];
   autoCreateIssues?: boolean;
   autoStartIssues?: boolean;
+  /** A saved Context id as the Select's string value; '' = none. Left out = untouched. */
+  contextId?: string;
 }
 
 /** The API input, or the first problem to show the user. */
 export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput | string {
   const time = parseTime(form.time);
   const count = Number(form.count);
+  const context = form.contextId === undefined ? {} : { contextId: form.contextId ? Number(form.contextId) : null };
 
   if (!form.name.trim()) return 'Укажите название';
   if (!time) return 'Укажите время в формате ЧЧ:ММ';
@@ -129,9 +132,10 @@ export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput |
       categories: form.categories,
       autoCreateIssues: form.autoCreateIssues ?? true,
       autoStartIssues: form.autoStartIssues ?? false,
+      ...context,
     };
   }
   if (!Number.isInteger(count) || count < 1 || count > 20) return 'Количество задач — от 1 до 20';
 
-  return { name: form.name.trim(), enabled: form.enabled, hour: time.hour, minute: time.minute, timezone: form.timezone, count, model: form.model };
+  return { name: form.name.trim(), enabled: form.enabled, hour: time.hour, minute: time.minute, timezone: form.timezone, count, model: form.model, ...context };
 }

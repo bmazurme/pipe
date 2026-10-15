@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -22,11 +22,24 @@ const makeSchedule = (id: number, name: string) => ({
   categories: null,
   autoCreateIssues: true,
   autoStartIssues: false,
+  contextId: null as number | null,
   lastRunAt: null,
   lastResult: null,
 });
 
-const SCHEDULES = [makeSchedule(1, 'Первое'), makeSchedule(2, 'Второе')];
+const CONTEXTS = [
+  { id: 3, name: 'Договорённости', createdAt: 'x', updatedAt: 'x' },
+  { id: 4, name: 'Что уже пробовали', createdAt: 'x', updatedAt: 'x' },
+];
+const makeAnalysis = (id: number, name: string, contextId: number | null) => ({
+  ...makeSchedule(id, name),
+  kind: 'analysis',
+  categories: null,
+  contextId,
+});
+
+let schedules: unknown[];
+let sent: { method: string; path: string; body: unknown }[];
 
 let calls: string[];
 let listFails: boolean;
@@ -48,6 +61,8 @@ function renderTab() {
 
 beforeEach(() => {
   calls = [];
+  sent = [];
+  schedules = [makeSchedule(1, 'Первое'), makeSchedule(2, 'Второе')];
   listFails = false;
   deleteFails = false;
   releaseRun = () => undefined;
@@ -57,9 +72,15 @@ beforeEach(() => {
     vi.fn(async (request: Request) => {
       const path = new URL(request.url).pathname.replace('/api/v1/', '');
 
-      if (request.method !== 'GET') calls.push(`${request.method} ${path}`);
+      if (request.method !== 'GET') {
+        calls.push(`${request.method} ${path}`);
+        const text = await request.clone().text();
+
+        sent.push({ method: request.method, path, body: text ? JSON.parse(text) : undefined });
+      }
+      if (path === 'contexts' && request.method === 'GET') return json(CONTEXTS);
       if (path === 'improve/schedules' && request.method === 'GET') {
-        return listFails ? json({ message: 'boom' }, 500) : json(SCHEDULES);
+        return listFails ? json({ message: 'boom' }, 500) : json(schedules);
       }
       if (path === 'improve/settings') return json({ autoStartModel: null, autoRepairCi: true });
       if (request.method === 'DELETE') return deleteFails ? json({ message: 'nope' }, 500) : new Response(null, { status: 200 });
@@ -131,5 +152,62 @@ describe('SchedulesTab', () => {
 
     expect(await screen.findByText('Не удалось загрузить расписания')).toBeInTheDocument();
     expect(screen.queryByText('Расписаний нет')).not.toBeInTheDocument();
+  });
+
+  describe('an attached context', () => {
+    it('shows which context a schedule carries', async () => {
+      schedules = [makeAnalysis(1, 'Ночной анализ', 4), makeAnalysis(2, 'Без контекста', null)];
+      renderTab();
+
+      expect(await screen.findByText(/контекст: Что уже пробовали/)).toBeInTheDocument();
+      expect(screen.getAllByText(/контекст:/)).toHaveLength(1);
+    });
+
+    it('attaches a context to a new nightly analysis', async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Новое расписание/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByText('Задачи из issues'));
+      await user.click(await screen.findByText('Анализ (по 1 задаче на направление)'));
+      await user.click(within(dialog).getByText('Без контекста'));
+      await user.click(await screen.findByText('Договорённости'));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent.some((call) => call.path === 'improve/schedules')).toBe(true));
+
+      const body = sent.find((call) => call.path === 'improve/schedules')?.body as Record<string, unknown>;
+
+      expect(body).toMatchObject({ kind: 'analysis', contextId: 3 });
+    });
+
+    it('shows the attached context when editing and can detach it', async () => {
+      schedules = [makeAnalysis(1, 'Ночной анализ', 4)];
+      const user = userEvent.setup();
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: 'Изменить: Ночной анализ' }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByText('Что уже пробовали'));
+      await user.click(await screen.findByText('Без контекста'));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+      expect(sent.find((call) => call.method === 'PUT')?.body).toMatchObject({ contextId: null });
+    });
+
+    it('does not send a context at all for a schedule that never had one', async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Новое расписание/ }));
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent.some((call) => call.path === 'improve/schedules')).toBe(true));
+      expect(sent.find((call) => call.path === 'improve/schedules')?.body).not.toHaveProperty('contextId');
+    });
   });
 });

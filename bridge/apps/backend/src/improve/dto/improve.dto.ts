@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -104,6 +105,13 @@ export class SaveScheduleDto {
   @IsOptional()
   @IsBoolean()
   autoStartIssues?: boolean;
+
+  // A saved Context to attach to every run; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class StartAnalysisDto {
