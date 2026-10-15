@@ -30,6 +30,7 @@ import {
   StartPrMergeDto,
   StartRunDto,
 } from './dto/improve.dto';
+import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
@@ -42,6 +43,7 @@ export class ImproveController {
   constructor(
     private readonly improve: ImproveService,
     private readonly scheduleService: ImproveScheduleService,
+    private readonly autoStart: ImproveAutoStartService,
   ) {}
 
   @Get('status')
@@ -183,7 +185,7 @@ export class ImproveController {
 
   @Get('settings')
   async settings(@CurrentUser() user: { id: number }) {
-    const settings = await this.improve.getSettings(user.id);
+    const settings = await this.autoStart.getSettings(user.id);
 
     return {
       autoStartModel: settings?.autoStartModel ?? null,
@@ -196,8 +198,8 @@ export class ImproveController {
     @Body() dto: SaveSettingsDto,
     @CurrentUser() user: { id: number },
   ) {
-    const current = await this.improve.getSettings(user.id);
-    const saved = await this.improve.saveSettings(
+    const current = await this.autoStart.getSettings(user.id);
+    const saved = await this.autoStart.saveSettings(
       user.id,
       // Each of the two switches is saved on its own: a missing field keeps what is stored.
       dto.autoStartModel === undefined

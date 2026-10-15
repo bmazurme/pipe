@@ -39,7 +39,6 @@ function setup(runOverrides: Record<string, unknown> = {}) {
   };
   const service = new ImproveService(
     runs as never,
-    {} as never,
     github as never,
     {} as never,
     storage as never,
