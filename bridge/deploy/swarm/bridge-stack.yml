@@ -83,6 +83,17 @@ services:
       # (merge), Checks R. Empty = no merge button is ever offered. Distinct
       # from GITHUB_TOKEN above, which only has the VPN page's scopes.
       LOOP_GITHUB_TOKEN: ${LOOP_GITHUB_TOKEN:-}
+      # The Dashboard page (src/dashboard/): Swarm node status via the
+      # docker-proxy sidecar below, and backup status read straight from
+      # Garage S3. Empty BACKUP_S3_* leaves that tile showing "not configured"
+      # rather than failing — see docker-proxy's own comment for why node
+      # status has no equivalent "empty" env var (it always has a default).
+      DOCKER_PROXY_URL: http://docker-proxy:2375
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
     ports:
       - target: 3000
         published: ${BACKEND_PUBLISHED_PORT:-3300}
@@ -239,6 +250,45 @@ services:
       labels:
         app: bridge
         component: vpn-client
+
+  # Read-only Docker API access for the Dashboard page's node-status tile
+  # (src/dashboard/nodes.service.ts) — bridge's backend has no Docker socket
+  # access of its own, by design, same as every other service in this stack.
+  # tecnativa/docker-socket-proxy with only NODES=1 set exposes exactly
+  # `GET /nodes` (every other resource type — containers, services, exec,
+  # secrets, … — defaults to disabled in that image); it binds the real
+  # socket read-only and is reachable only from the `bridge` overlay network
+  # backend is already on, with no published port.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    networks:
+      - bridge
+    environment:
+      NODES: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+      labels:
+        app: bridge
+        component: docker-proxy
 
   # Runs Worker jobs and chat turns. Deliberately on its own network with no
   # path to backend/frontend or Postgres — worker talks to bridge only via

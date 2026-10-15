@@ -10,6 +10,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { ChatModule } from './chat/chat.module';
 import { ContextModule } from './context/context.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { ImproveModule } from './improve/improve.module';
 import { LogsModule } from './logs/logs.module';
 import { LoopModule } from './loop/loop.module';
@@ -46,6 +47,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     AuthModule,
     ChatModule,
     ContextModule,
+    DashboardModule,
     ImproveModule,
     LogsModule,
     LoopModule,

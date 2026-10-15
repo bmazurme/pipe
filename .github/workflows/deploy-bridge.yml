@@ -337,6 +337,15 @@ jobs:
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           LOOP_GITHUB_WEBHOOK_SECRET: ${{ secrets.LOOP_GITHUB_WEBHOOK_SECRET }}
           LOOP_GITHUB_TOKEN: ${{ secrets.LOOP_GITHUB_TOKEN }}
+          # Dashboard page's backup-status tile (see bridge-stack.yml's own
+          # comment on the backend service) — values come from the
+          # bridge-backups Garage key (/etc/garage/keys/bridge-backups.env on
+          # white). Empty leaves that tile showing "not configured".
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
         # WORKER_*_FILE/_HASH for the five worker secrets come from the
         # "Write worker secrets" step above via $GITHUB_ENV — already in this
         # step's environment, not redeclared here.
