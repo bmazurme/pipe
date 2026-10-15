@@ -8,7 +8,9 @@
 #
 # A mirror that follows deletions is a trap — an accidental wipe on the primary would wipe the copy at the next run. So:
 #   - files the primary deleted are not removed here but moved to deleted/<date>/ (kept KEEP_DELETED_DAYS, default 14);
-#   - a run that would delete more than half of the files (and more than 10) is refused and alerted (FORCE=1 overrides);
+#   - a run that would delete more than half of the files (and more than MAX_DELETE_FILES, default 50) is refused and alerted
+#     (FORCE=1 overrides). The floor is not small on purpose: parcels are a mailbox — a downloaded file is deleted — so a handful of
+#     files can all legitimately go in one day, and a refusal blocks every later copy (the freshness alert then fires for days);
 #   - the Garage mirror then follows the local copy (rclone sync, --max-delete 50).
 #
 # Two sources. UPLOADS_FROM=primary (default): rsync from the primary's volume, then mirror to Garage as above. UPLOADS_FROM=s3: bridge
@@ -23,6 +25,7 @@
 #   SSH_KEY           default /root/.ssh/pull_uploads
 #   KEEP_DELETED_DAYS default 14
 #   MAX_AGE_HOURS     default 26 (--check)
+#   MAX_DELETE_FILES  default 50 — see the mass-delete guard above
 #   S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY   optional; with them the copy is mirrored to Garage
 #   RCLONE, DEST      override for tests (a native rclone command and a destination path)
 #   ALERT_CMD         optional, run with the message as $1
@@ -32,6 +35,7 @@ BACKUP_DIR="${BACKUP_DIR:-/srv/uploads-mirror}"
 SSH_KEY="${SSH_KEY:-/root/.ssh/pull_uploads}"
 KEEP_DELETED_DAYS="${KEEP_DELETED_DAYS:-14}"
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-26}"
+MAX_DELETE_FILES="${MAX_DELETE_FILES:-50}"
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 alert() { log "ALERT: $1" >&2; if [ -n "${ALERT_CMD:-}" ]; then $ALERT_CMD "$1" || true; fi; }
@@ -79,7 +83,7 @@ if [ -z "$remote_files" ] && [ "$have" -gt 0 ] && [ -z "${FORCE:-}" ]; then
   fail "the bucket looks EMPTY while the local copy has $have files — refused (FORCE=1 if the bucket really was emptied)"
 fi
 deleting="$(comm -13 <(printf '%s\n' "$remote_files") <(cd "$CURRENT" && find . -type f | sed 's#^\./##' | sort) | wc -l | tr -d ' ')"
-if [ "$deleting" -gt 10 ] && [ "$deleting" -gt $(( have / 2 )) ] && [ -z "${FORCE:-}" ]; then
+if [ "$deleting" -gt "$MAX_DELETE_FILES" ] && [ "$deleting" -gt $(( have / 2 )) ] && [ -z "${FORCE:-}" ]; then
   fail "this run would delete $deleting of $have files — refused (set FORCE=1 if that is really what happened in the bucket)"
 fi
 log "pulling the bucket"
@@ -93,7 +97,7 @@ SSH_CMD="ssh -i $SSH_KEY -o BatchMode=yes -o ConnectTimeout=20"
 plan="$(rsync -a --delete --dry-run --itemize-changes -e "$SSH_CMD" "$SOURCE" "$CURRENT/" 2>&1)" || fail "rsync (dry run): $(printf '%s' "$plan" | tail -c 200)"
 deleting="$(printf '%s\n' "$plan" | grep -c '^\*deleting' || true)"
 have="$(find "$CURRENT" -type f | wc -l | tr -d ' ')"
-if [ "$deleting" -gt 10 ] && [ "$deleting" -gt $(( have / 2 )) ] && [ -z "${FORCE:-}" ]; then
+if [ "$deleting" -gt "$MAX_DELETE_FILES" ] && [ "$deleting" -gt $(( have / 2 )) ] && [ -z "${FORCE:-}" ]; then
   fail "this run would delete $deleting of $have files — refused (set FORCE=1 if that is really what happened on the primary)"
 fi
 
