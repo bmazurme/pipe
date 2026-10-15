@@ -61,11 +61,14 @@ so treat it as a secret. (Hand-writing the file works too: `bridge/deploy/swarm/
 
 ### A second worker on another board
 
-A worker added in the UI (recommended — no bridge API key or Claude token touch this board at all):
+A worker added in the UI (recommended — no bridge API key or Claude token touch any board at all). Run this from
+**white** — `deploy-worker.sh` reads `~/.pipe/bridge.env` locally (`API_HOST`, …), and that file only exists there;
+the placement constraint, not the host you run the command from, decides the new worker actually lands on the
+other board:
 
 ```bash
-ssh -t pi@192.168.50.11   # or whichever board already has docker + is in the Swarm
-cd ~/bridge-pi            # scp -r infra/bridge-pi pi@<board>:~/ first if it isn't there yet
+ssh -t pi@192.168.50.11   # white — not the new board
+cd ~/bridge-pi
 
 OUT=~/.pipe/xray-client-bridgew2.json ./vless-to-xray.sh     # a fresh vless://… link — don't reuse the first worker's
 
@@ -77,10 +80,11 @@ WORKER_STACK=bridgew2 WORKER_NODE_HOSTNAME=ubuntu-red \
   ls` lists them) scope everything to this one worker: its own `worker-mode`/`xray-client` files on disk, its own
   placement constraint, its own `worker_state` volume and Swarm services (`bridgew2_worker`, `bridgew2_vpn-client`,
   …) — the first worker, `~/.pipe/bridge.env`, and the core stack are untouched.
-- `docker stack deploy` can run from **any manager** (white, red or blue), not only white — placement constraints
-  decide which board the containers actually land on, not where you ran the command from.
 - Then: https://bridge.ntlstl.dev/worker?tab=workers → **Добавить** → copy the one-time code → from your
-  workstation, `infra/bridge-pi/enroll-worker.sh <code>`. Watch it come up: `WORKER_STACK=bridgew2
+  **workstation** (not any board — `enroll-worker.sh` SSHes into the board itself, it never runs on one), naming
+  both the stack and the new board's address (it defaults to green otherwise):
+  `WORKER_STACK=bridgew2 infra/bridge-pi/enroll-worker.sh <code> 192.168.50.13` (white/red/blue/green are
+  `.11`/`.12`/`.13`/`.14` — infra/pi/README.md has the full table). Watch it come up: `WORKER_STACK=bridgew2
   ./deploy-worker.sh status`.
 - **Not kept up to date by `pipe-autodeploy`** — it only knows about the one `bridgew` stack today. A second one
   needs the `./deploy-worker.sh` command above run again by hand for each new release (`./deploy-worker.sh status`
