@@ -102,6 +102,10 @@ export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
   private advancing = false;
   private autoStarting = false;
+  // Keys of starts in flight ('analysis', `issue:${n}`). The DB check for an
+  // active run happens long before the run row is saved, so concurrent starts
+  // would all pass it. In-process only: this relies on a single bridge replica.
+  private readonly starting = new Set<string>();
   // One repo snapshot, reused by consecutive launches on the same base SHA.
   // The baseline hashes are cached with it: hashing the whole repo is synchronous.
   private zipCache: {
@@ -197,6 +201,34 @@ export class ImproveService {
     model: string,
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
+  ): Promise<ImproveRun> {
+    const key = `issue:${issueNumber}`;
+
+    if (this.starting.has(key)) {
+      throw new ConflictException(`Задача #${issueNumber} уже выполняется`);
+    }
+
+    this.starting.add(key);
+
+    try {
+      return await this.startRunReserved(
+        userId,
+        issueNumber,
+        model,
+        trigger,
+        scheduleId,
+      );
+    } finally {
+      this.starting.delete(key);
+    }
+  }
+
+  private async startRunReserved(
+    userId: number,
+    issueNumber: number,
+    model: string,
+    trigger: ImproveTrigger,
+    scheduleId: number | null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireModel(model);
@@ -1003,6 +1035,36 @@ export class ImproveService {
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
     autoStart = false,
+  ): Promise<ImproveRun> {
+    if (this.starting.has('analysis')) {
+      throw new ConflictException('Анализ уже выполняется');
+    }
+
+    this.starting.add('analysis');
+
+    try {
+      return await this.startAnalysisReserved(
+        userId,
+        model,
+        categories,
+        autoCreate,
+        trigger,
+        scheduleId,
+        autoStart,
+      );
+    } finally {
+      this.starting.delete('analysis');
+    }
+  }
+
+  private async startAnalysisReserved(
+    userId: number,
+    model: string,
+    categories: AnalysisCategory[],
+    autoCreate: boolean,
+    trigger: ImproveTrigger,
+    scheduleId: number | null,
+    autoStart: boolean,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireModel(model);

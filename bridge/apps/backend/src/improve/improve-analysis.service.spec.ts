@@ -412,3 +412,66 @@ describe('ImproveService start concurrency', () => {
     expect(workers.create).not.toHaveBeenCalled();
   });
 });
+
+describe('ImproveService in-process start guard', () => {
+  const openIssue = (number: number) => ({
+    number,
+    title: 't',
+    body: '',
+    state: 'open',
+    isPull: false,
+  });
+
+  it('lets only one of two concurrent analyses reach the worker', async () => {
+    const { service, github, workers } = setup();
+    let release!: (v: Uint8Array) => void;
+
+    github.downloadZipball.mockReturnValue(
+      new Promise<Uint8Array>((resolve) => (release = resolve)),
+    );
+
+    const first = service.startAnalysis(3, 'sonnet');
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await expect(service.startAnalysis(3, 'sonnet')).rejects.toThrow(
+      'Анализ уже выполняется',
+    );
+
+    release(zipSync({ 'o-r-sha/a.ts': strToU8('one') }));
+    await first;
+    expect(workers.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets only one of two concurrent runs for the same issue through, but not for different issues', async () => {
+    const { service, github, workers } = setup();
+    let release!: (v: Uint8Array) => void;
+
+    Object.assign(github, {
+      getIssue: jest.fn(async (n: number) => openIssue(n)),
+    });
+    github.downloadZipball.mockReturnValue(
+      new Promise<Uint8Array>((resolve) => (release = resolve)),
+    );
+
+    const a = service.startRun(3, 7, 'sonnet');
+    const b = service.startRun(3, 8, 'sonnet');
+
+    await new Promise((resolve) => setImmediate(resolve));
+    await expect(service.startRun(3, 7, 'sonnet')).rejects.toThrow(
+      'уже выполняется',
+    );
+
+    release(zipSync({ 'o-r-sha/a.ts': strToU8('one') }));
+    await Promise.all([a, b]);
+    expect(workers.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases the key after a failure', async () => {
+    const { service, github, workers } = setup();
+
+    github.downloadZipball.mockRejectedValueOnce(new Error('boom'));
+    await expect(service.startAnalysis(3, 'sonnet')).rejects.toThrow('boom');
+    await expect(service.startAnalysis(3, 'sonnet')).resolves.toBeDefined();
+    expect(workers.create).toHaveBeenCalledTimes(1);
+  });
+});
