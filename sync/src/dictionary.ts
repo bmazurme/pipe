@@ -29,7 +29,11 @@ function parseDictionaryFile(raw: string, path: string): Dictionary {
   }
 
   if (parsed && typeof parsed === 'object') {
-    return parsed as Dictionary;
+    const dictionary: Dictionary = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') dictionary[key] = value;
+    }
+    return dictionary;
   }
 
   throw new Error(
