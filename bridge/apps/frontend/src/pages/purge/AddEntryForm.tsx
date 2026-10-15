@@ -76,6 +76,7 @@ export function AddEntryForm({ showKeys }: AddEntryFormProps) {
           onUpdate={handleKeyChange}
           onKeyDown={handleAddFormKeyDown}
           placeholder="Ключ"
+          controlProps={{ 'aria-label': 'Ключ' }}
           type={showKeys ? 'text' : 'password'}
           size="l"
         />
@@ -87,6 +88,7 @@ export function AddEntryForm({ showKeys }: AddEntryFormProps) {
           }}
           onKeyDown={handleAddFormKeyDown}
           placeholder="Значение"
+          controlProps={{ 'aria-label': 'Значение' }}
           size="l"
         />
         <Button
