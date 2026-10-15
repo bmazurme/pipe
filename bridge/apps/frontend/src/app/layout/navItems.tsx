@@ -1,35 +1,66 @@
 import { AsideHeaderItem, MobileMenuItem } from '@gravity-ui/navigation';
 import { NavigateFunction } from 'react-router-dom';
 
-import { HOME_LINK, SERVICES, SOON_SERVICES } from '../../shared/config/services';
+import { HOME_LINK, NAV_GROUP_ORDER, SERVICES, SOON_SERVICES, type ServiceLink } from '../../shared/config/services';
 import { isCurrentPath, isModifiedClick, soonTitle } from './layoutUtils';
+import { StatusDot } from './StatusDot';
+import styles from './AppLayout.module.css';
 
-export const NAV_ITEMS = [HOME_LINK, ...SERVICES];
+/** Every page the sidebar links to, flat — Home, then the sections in their order. */
+export const NAV_ITEMS = [
+  HOME_LINK,
+  ...NAV_GROUP_ORDER.flatMap((group) => SERVICES.filter((item) => item.group === group)),
+];
 
-export function buildMenuItems(pathname: string, navigate: NavigateFunction): AsideHeaderItem[] {
+/** The same list split into sections (Home alone first), for the dividers between them. */
+export function navSections(): (typeof HOME_LINK | ServiceLink)[][] {
+  return [[HOME_LINK], ...NAV_GROUP_ORDER.map((group) => SERVICES.filter((item) => item.group === group))].filter(
+    (section) => section.length > 0,
+  );
+}
+
+/** Live state shown on rows: `up` is undefined until it is known (nothing is drawn then). */
+export interface NavStatus {
+  workerUp?: boolean;
+}
+
+export function buildMenuItems(
+  pathname: string,
+  navigate: NavigateFunction,
+  status: NavStatus = {},
+): AsideHeaderItem[] {
+  const items: AsideHeaderItem[] = [];
+
+  navSections().forEach((section, index) => {
+    if (index > 0) items.push({ id: `divider-${index}`, title: '', type: 'divider' as const });
+
+    for (const item of section) {
+      items.push({
+        id: item.id,
+        title: item.title,
+        icon: item.icon,
+        current: isCurrentPath(pathname, item.path),
+        // An href makes each row a real <a>: middle-click and ⌘/Ctrl+click open
+        // the service in a new tab, and the target shows in the status bar on
+        // hover. A plain click is still routed client-side.
+        href: item.path,
+        onItemClick: (_item: AsideHeaderItem, _collapsed: boolean, event: React.MouseEvent<HTMLElement>) => {
+          if (isModifiedClick(event)) {
+            return;
+          }
+
+          event.preventDefault();
+          navigate(item.path);
+        },
+        ...(item.id === 'worker' && status.workerUp !== undefined
+          ? { rightAdornment: <StatusDot up={status.workerUp} subject="Worker" /> }
+          : {}),
+      });
+    }
+  });
+
   return [
-    ...NAV_ITEMS.map((item) => ({
-      id: item.id,
-      title: item.title,
-      icon: item.icon,
-      current: isCurrentPath(pathname, item.path),
-      // An href makes each row a real <a>: middle-click and ⌘/Ctrl+click open
-      // the service in a new tab, and the target shows in the status bar on
-      // hover. A plain click is still routed client-side.
-      href: item.path,
-      onItemClick: (
-        _item: AsideHeaderItem,
-        _collapsed: boolean,
-        event: React.MouseEvent<HTMLElement>,
-      ) => {
-        if (isModifiedClick(event)) {
-          return;
-        }
-
-        event.preventDefault();
-        navigate(item.path);
-      },
-    })),
+    ...items,
     { id: 'soon-divider', title: '', type: 'divider' as const },
     ...SOON_SERVICES.map((item) => ({
       id: item.id,
@@ -44,15 +75,38 @@ export function buildMenuItems(pathname: string, navigate: NavigateFunction): As
   ];
 }
 
-export function buildBurgerItems(pathname: string, navigate: NavigateFunction): MobileMenuItem[] {
+export function buildBurgerItems(
+  pathname: string,
+  navigate: NavigateFunction,
+  status: NavStatus = {},
+): MobileMenuItem[] {
+  const items: MobileMenuItem[] = [];
+
+  navSections().forEach((section, index) => {
+    if (index > 0) items.push({ id: `divider-${index}`, title: '', type: 'divider' as const });
+
+    for (const item of section) {
+      items.push({
+        id: item.id,
+        // The burger has no right-hand slot, so the state goes into the title itself.
+        title:
+          item.id === 'worker' && status.workerUp !== undefined ? (
+            <span className={styles.rowWithDot}>
+              {item.title}
+              <StatusDot up={status.workerUp} subject="Worker" />
+            </span>
+          ) : (
+            item.title
+          ),
+        icon: item.icon,
+        current: isCurrentPath(pathname, item.path),
+        onItemClick: () => navigate(item.path),
+      });
+    }
+  });
+
   return [
-    ...NAV_ITEMS.map((item) => ({
-      id: item.id,
-      title: item.title,
-      icon: item.icon,
-      current: isCurrentPath(pathname, item.path),
-      onItemClick: () => navigate(item.path),
-    })),
+    ...items,
     { id: 'soon-divider', title: '', type: 'divider' as const },
     ...SOON_SERVICES.map((item) => ({
       id: item.id,

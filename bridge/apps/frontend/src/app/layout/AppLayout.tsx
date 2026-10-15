@@ -7,6 +7,7 @@ import {
 } from '@gravity-ui/navigation';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { useGetWorkerStatusQuery } from '../../store/api';
 import { useAuth } from '../providers/AuthProvider';
 import { useAppTheme } from '../providers/ThemeProvider';
 import { useIsMobile } from '../../shared/lib/useIsMobile';
@@ -16,10 +17,12 @@ import { createInitialIcon, getInitial } from '../../shared/ui/InitialIcon';
 import { AsideFooter } from './AsideFooter';
 import { BurgerFooter } from './BurgerFooter';
 import { COMPACT_HOTKEY, COMPACT_STORAGE_KEY, isModifiedClick, MAIN_CONTENT_ID } from './layoutUtils';
-import { buildBurgerItems, buildMenuItems } from './navItems';
+import { buildBurgerItems, buildMenuItems, type NavStatus } from './navItems';
 import { THEME_ORDER } from './theme';
 import { useCompactHotkey } from './useCompactHotkey';
 import styles from './AppLayout.module.css';
+
+const WORKER_STATUS_POLL_MS = 30_000;
 
 export function AppLayout() {
   const [compact, setCompact] = useLocalStorage(COMPACT_STORAGE_KEY, false);
@@ -52,8 +55,16 @@ export function AppLayout() {
     [closeBurger, navigate],
   );
 
-  const menuItems = buildMenuItems(location.pathname, navigate);
-  const burgerItems = buildBurgerItems(location.pathname, navigate);
+  // Whether worker answers, drawn as a dot on its row: the one thing worth knowing from any page (a job sent to a dead
+  // worker just sits in the queue). Not shown until it is known, and never polled in a hidden tab.
+  const { data: workerStatus } = useGetWorkerStatusQuery(undefined, {
+    pollingInterval: WORKER_STATUS_POLL_MS,
+    skipPollingIfUnfocused: true,
+  });
+  const navStatus: NavStatus = { workerUp: typeof workerStatus?.isUp === 'boolean' ? workerStatus.isUp : undefined };
+
+  const menuItems = buildMenuItems(location.pathname, navigate, navStatus);
+  const burgerItems = buildBurgerItems(location.pathname, navigate, navStatus);
 
   // The logo keeps its href so it behaves like a real home link, but a plain
   // click has to be routed — left alone, the bare href reloaded the whole

@@ -16,6 +16,14 @@ import {
 } from '@gravity-ui/icons';
 import type { IconData } from '@gravity-ui/uikit';
 
+/**
+ * Sidebar sections, top to bottom: what is used all day first (the AI agent), then data, then the working tools, and the
+ * operations pages last. Only the sidebar and the burger group by it; the home page keeps its own order.
+ */
+export type NavGroup = 'agent' | 'data' | 'work' | 'system';
+
+export const NAV_GROUP_ORDER: NavGroup[] = ['agent', 'data', 'work', 'system'];
+
 export interface ServiceLink {
   id: string;
   title: string;
@@ -23,6 +31,7 @@ export interface ServiceLink {
   description: string;
   icon: IconData;
   path: string;
+  group: NavGroup;
 }
 
 /**
@@ -37,6 +46,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Состояние инфраструктуры: туннель, узлы кластера и бэкапы — на одной странице.',
     icon: Pulse,
     path: '/dashboard',
+    group: 'system',
   },
   {
     id: 'storage',
@@ -44,6 +54,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Быстрый обмен файлами между вашими устройствами.',
     icon: Bucket,
     path: '/storage',
+    group: 'data',
   },
   {
     id: 'purge',
@@ -51,6 +62,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Замена слов в тексте по словарю «ключ — значение».',
     icon: TrashBin,
     path: '/purge',
+    group: 'data',
   },
   {
     id: 'time',
@@ -58,6 +70,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Рабочий календарь, дни отдыха и отчёты по задачам.',
     icon: Clock,
     path: '/time',
+    group: 'work',
   },
   {
     id: 'worker',
@@ -65,6 +78,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Запуск ИИ-агента (Claude, GPT, DeepSeek, Qwen) над посылкой из общего файлового хранилища.',
     icon: FaceRobot,
     path: '/worker',
+    group: 'agent',
   },
   {
     id: 'chat',
@@ -72,6 +86,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Диалог с моделью (Claude, GPT, DeepSeek, Qwen) напрямую, без посылки и без редактирования файлов.',
     icon: Comments,
     path: '/chat',
+    group: 'agent',
   },
   {
     id: 'vpn',
@@ -79,6 +94,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Статус туннеля worker → AI-провайдеры, его настройка и ключи worker.',
     icon: ShieldKeyhole,
     path: '/vpn',
+    group: 'system',
   },
   {
     id: 'improve',
@@ -86,6 +102,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Самоулучшение: задачи из GitHub issues уходят в worker, результат — PR; запуск вручную или по расписанию.',
     icon: Rocket,
     path: '/improve',
+    group: 'agent',
   },
   {
     id: 'context',
@@ -93,6 +110,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Сохранённый контекст для задач ИИ-агента: заметки о проекте и правила, которые можно прикрепить при запуске.',
     icon: BookOpen,
     path: '/context',
+    group: 'agent',
   },
   {
     id: 'keys',
@@ -100,6 +118,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Пары RSA-ключей для шифрования посылок: генерация в браузере, приватный ключ остаётся у вас.',
     icon: Lock,
     path: '/keys',
+    group: 'data',
   },
   {
     id: 'secrets',
@@ -107,6 +126,7 @@ export const SERVICES: ServiceLink[] = [
     description: 'Личное хранилище секретов — пары «имя — значение», зашифрованные на сервере.',
     icon: Key,
     path: '/secrets',
+    group: 'data',
   },
   {
     id: 'reports',
@@ -114,11 +134,12 @@ export const SERVICES: ServiceLink[] = [
     description: 'Скачать последнюю версию reports с GitHub и синхронизировать его настройки с bridge.',
     icon: FileZipper,
     path: '/reports',
+    group: 'work',
   },
 ];
 
 /** Announced but not built yet — rendered inert wherever services are listed. */
-export const SOON_SERVICES: Omit<ServiceLink, 'path'>[] = [
+export const SOON_SERVICES: Omit<ServiceLink, 'path' | 'group'>[] = [
   {
     id: 'rag',
     title: 'RAG',

@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { AppThemeProvider } from '../providers/ThemeProvider';
 import { store } from '../../store';
+import { workerApi } from '../../store/api';
 
 /** Drives useIsMobile, which reads the 767px media query. */
 function setViewport(isMobile: boolean) {
@@ -95,6 +96,27 @@ describe('AppLayout', () => {
     // A bare href would have left the router untouched (and, in a browser,
     // thrown away every cached query on the way to the same page).
     expect(await screen.findByText('главная')).toBeTruthy();
+  });
+
+  it('shows in the menu whether worker answers', async () => {
+    setViewport(true);
+    // an earlier test cached the status from its empty reply
+    store.dispatch(workerApi.util.resetApiState());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) =>
+        new Response(request.url.endsWith('/worker/status') ? JSON.stringify({ isUp: false, workers: [] }) : '{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderLayout(layoutRoutes);
+
+    await user.click(screen.getByRole('button', { name: 'Открыть меню' }));
+
+    expect(await screen.findByRole('img', { name: 'Worker: не отвечает' })).toBeTruthy();
   });
 
   it('closes the burger when a footer action navigates away', async () => {

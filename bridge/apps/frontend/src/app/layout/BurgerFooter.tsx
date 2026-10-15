@@ -36,25 +36,22 @@ export function BurgerFooter({ pathname, username, goTo, closeBurger, logout }: 
         <Icon data={ChevronRight} size={16} className={styles.userRowChevron} />
       </button>
 
-      <div className={styles.themeRow}>
-        <Text color="secondary" variant="caption-2">
-          Тема
-        </Text>
+      {/* Theme and logout share one row: the footer used to take a third of a phone screen and pushed the last
+          menu rows (Dashboard, VPN) under it. */}
+      <div className={styles.footerActions}>
         <ThemeSwitcher />
+        <Button
+          view="flat-danger"
+          size="m"
+          onClick={() => {
+            closeBurger();
+            void logout();
+          }}
+        >
+          <Icon data={ArrowRightFromSquare} size={16} />
+          Выйти
+        </Button>
       </div>
-
-      <Button
-        view="flat-danger"
-        size="l"
-        width="max"
-        onClick={() => {
-          closeBurger();
-          void logout();
-        }}
-      >
-        <Icon data={ArrowRightFromSquare} size={16} />
-        Выйти
-      </Button>
     </div>
   );
 }

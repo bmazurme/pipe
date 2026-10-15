@@ -54,12 +54,21 @@
   color: var(--g-color-text-danger);
 }
 
+/* Theme switcher on the left, logout on the right. */
+.footerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+}
+
 .burgerFooter {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px calc(12px + env(safe-area-inset-left))
-    calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-right));
+  gap: 4px;
+  padding: 8px calc(12px + env(safe-area-inset-left))
+    calc(8px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-right));
   border-top: 1px solid var(--g-color-line-generic);
 }
 
@@ -68,8 +77,8 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  /* 44px+ tall including the avatar — a comfortable thumb target. */
-  padding: 10px 8px;
+  /* 44px tall including the avatar — still a comfortable thumb target. */
+  padding: 6px 8px;
   border: none;
   border-radius: var(--g-border-radius-m);
   background: transparent;
@@ -99,16 +108,6 @@
 .userRowChevron {
   flex-shrink: 0;
   color: var(--g-color-text-hint);
-}
-
-/* Grid, not flex: the switcher is width="max", so it needs a column that
-   actually bounds it — otherwise it either overflows or collapses. */
-.themeRow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 4px 8px;
 }
 
 /* Holds the height of a typical page header while a route chunk loads, so
@@ -154,4 +153,28 @@
   font-size: 11px;
   font-weight: 400;
   color: var(--g-color-text-secondary);
+}
+
+/* A live-state marker on a menu row (Worker: answering or not). */
+.statusDot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.statusUp {
+  background: var(--g-color-text-positive);
+}
+
+.statusDown {
+  background: var(--g-color-text-danger);
+}
+
+.rowWithDot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
