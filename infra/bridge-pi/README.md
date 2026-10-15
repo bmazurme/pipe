@@ -154,7 +154,7 @@ docker service update --force bridge_backend        # restart
 docker service scale bridge_caddy=0                 # take the public entry down
 ```
 
-- Update: `build-images.sh` (new tag) then `./deploy.sh` — the backend update is stop-first on purpose (one instance).
+- Update: `build-images.sh` (new tag) then `./deploy.sh` — the backend and frontend updates are start-first: the new task boots next to the old one and the old one stops only after the new one is healthy (a failing release is rolled back with the old one still serving), and Caddy holds requests for up to a minute (`lb_try_duration`) instead of answering 502 during the switch. Migrations therefore must stay additive: for those seconds the old backend runs on the migrated schema. Caddy itself is the one piece that still restarts (host-mode ports 80/443 cannot overlap) — only when the Caddyfile changes, for a couple of seconds.
 - Backups: `infra/backup` (PR #223) with `DATABASE_URL=postgres://bridge:<password>@postgres:5432/ntlstl-db` and
   `PG_DUMP="docker run --rm --network bridge_internal postgres:16-alpine pg_dump"` — the `internal` network is
   attachable for exactly this. Until that timer is enabled there is **no backup of this database**.
