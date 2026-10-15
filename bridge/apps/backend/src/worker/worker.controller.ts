@@ -29,7 +29,6 @@ import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerConfig } from '../storage/config/multer.config';
 import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
 import { respondDownloadError } from '../storage/file-store/send-stored-file';
-import { ClaudeCredentialsService } from './claude-credentials.service';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
 import { CancelJobDto } from './dto/cancel-job.dto';
@@ -37,9 +36,9 @@ import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
-import { JobModel } from './entities/job.entity';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
+import { RunCredentialsService } from './run-credentials.service';
 import { WorkerService } from './worker.service';
 import { WorkersService } from './workers.service';
 
@@ -71,7 +70,7 @@ export class WorkerController {
 
   constructor(
     private readonly workerService: WorkerService,
-    private readonly claudeCredentialsService: ClaudeCredentialsService,
+    private readonly runCredentials: RunCredentialsService,
     private readonly workersService: WorkersService,
   ) {}
 
@@ -125,35 +124,27 @@ export class WorkerController {
     // credential removed after the job picked it just degrades to null
     // (worker falls back to its own inherited env var) rather than failing
     // the claim.
-    const resolved =
-      job.model === JobModel.Sonnet || job.model === JobModel.Opus
-        ? await this.claudeCredentialsService.resolveForRun(
-            currentUser.id,
-            job.claudeCredentialId,
-            currentUser.workerId === undefined
-              ? null
-              : await this.workersService.claudeCredentialIdOf(
-                  currentUser.workerId,
-                ),
-          )
-        : null;
-    const claudeToken = resolved?.token ?? null;
+    const { claudeToken, claudeCredentialId, provider } =
+      await this.runCredentials.resolve(
+        currentUser.id,
+        currentUser.workerId,
+        job.model,
+        {
+          claudeCredentialId: job.claudeCredentialId,
+          providerCredentialId: job.providerCredentialId,
+        },
+      );
 
     // Remember which stored token the run actually uses (also when it fell
     // back to the worker's or the account's first), so its limits and an auth
     // failure can be traced to it.
-    if (resolved) {
+    if (claudeCredentialId !== null) {
       await this.workerService.recordUsedCredential(
         job.id,
         currentUser.id,
-        resolved.id,
+        claudeCredentialId,
       );
     }
-
-    const provider = await this.workerService.resolveProvider(
-      currentUser.id,
-      job,
-    );
 
     res
       .status(HttpStatus.OK)

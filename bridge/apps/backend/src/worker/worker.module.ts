@@ -12,6 +12,7 @@ import { ProviderCredential } from './entities/provider-credential.entity';
 import { Worker } from './entities/worker.entity';
 import { ProviderCredentialsController } from './provider-credentials.controller';
 import { ProviderCredentialsService } from './provider-credentials.service';
+import { RunCredentialsService } from './run-credentials.service';
 import { WorkerHeartbeat } from './entities/worker-heartbeat.entity';
 import { WorkerController } from './worker.controller';
 import { JobSweepService } from './job-sweep.service';
@@ -47,6 +48,7 @@ import { WorkersService } from './workers.service';
     WorkersService,
     ClaudeCredentialsService,
     ProviderCredentialsService,
+    RunCredentialsService,
     WorkerHeartbeatService,
   ],
   exports: [
@@ -54,6 +56,7 @@ import { WorkersService } from './workers.service';
     WorkersService,
     ProviderCredentialsService,
     ClaudeCredentialsService,
+    RunCredentialsService,
   ],
 })
 export class WorkerModule {}

@@ -4,6 +4,8 @@ import request from 'supertest';
 
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ClaudeCredentialsService } from './claude-credentials.service';
+import { ProviderCredentialsService } from './provider-credentials.service';
+import { RunCredentialsService } from './run-credentials.service';
 import { WorkerController } from './worker.controller';
 import { WorkerService } from './worker.service';
 import { WorkersService } from './workers.service';
@@ -24,7 +26,7 @@ describe('WorkerController', () => {
       controllers: [WorkerController],
       providers: [
         { provide: WorkerService, useValue: workerService },
-        { provide: ClaudeCredentialsService, useValue: {} },
+        { provide: RunCredentialsService, useValue: {} },
         { provide: WorkersService, useValue: workersService },
       ],
     })
@@ -62,15 +64,17 @@ describe('WorkerController', () => {
       (workerService as Record<string, jest.Mock>).claim = jest.fn();
       (workerService as Record<string, jest.Mock>).recordUsedCredential =
         jest.fn();
-      (workerService as Record<string, jest.Mock>).resolveProvider = jest
-        .fn()
-        .mockResolvedValue(null);
 
       const module = await Test.createTestingModule({
         controllers: [WorkerController],
         providers: [
           { provide: WorkerService, useValue: workerService },
+          RunCredentialsService,
           { provide: ClaudeCredentialsService, useValue: credentials },
+          {
+            provide: ProviderCredentialsService,
+            useValue: { resolveForJob: jest.fn().mockResolvedValue(null) },
+          },
           {
             provide: WorkersService,
             useValue: {
@@ -256,7 +260,7 @@ describe('WorkerController', () => {
         controllers: [WorkerController],
         providers: [
           { provide: WorkerService, useValue: workerService },
-          { provide: ClaudeCredentialsService, useValue: {} },
+          { provide: RunCredentialsService, useValue: {} },
           { provide: WorkersService, useValue: workersService },
         ],
       })

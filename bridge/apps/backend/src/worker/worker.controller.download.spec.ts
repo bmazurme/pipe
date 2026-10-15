@@ -1,6 +1,6 @@
 import { Response } from 'express';
 
-import { ClaudeCredentialsService } from './claude-credentials.service';
+import { RunCredentialsService } from './run-credentials.service';
 import { WorkerController } from './worker.controller';
 import { WorkerService } from './worker.service';
 import { WorkersService } from './workers.service';
@@ -22,7 +22,7 @@ describe('WorkerController download routes', () => {
     };
     const controller = new WorkerController(
       workerService as unknown as WorkerService,
-      {} as unknown as ClaudeCredentialsService,
+      {} as unknown as RunCredentialsService,
       {} as unknown as WorkersService,
     );
     const warn = jest
