@@ -13,6 +13,7 @@ import { UsersService } from '../users/users.service';
 import { ALL_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
 import { ImproveController } from './improve.controller';
+import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
@@ -20,6 +21,8 @@ describe('ImproveController', () => {
   const user = { id: 7 };
   let service: {
     startAnalysis: jest.Mock;
+  };
+  let autoStart: {
     getSettings: jest.Mock;
     saveSettings: jest.Mock;
   };
@@ -28,6 +31,8 @@ describe('ImproveController', () => {
   beforeEach(() => {
     service = {
       startAnalysis: jest.fn().mockResolvedValue({ id: 1 }),
+    };
+    autoStart = {
       getSettings: jest.fn().mockResolvedValue(null),
       saveSettings: jest.fn().mockResolvedValue({
         autoStartModel: null,
@@ -38,6 +43,7 @@ describe('ImproveController', () => {
     controller = new ImproveController(
       service as unknown as ImproveService,
       {} as unknown as ImproveScheduleService,
+      autoStart as unknown as ImproveAutoStartService,
     );
   });
 
@@ -92,20 +98,20 @@ describe('ImproveController', () => {
 
   describe('saveSettings', () => {
     it('keeps the stored model when only autoRepairCi is sent', async () => {
-      service.getSettings.mockResolvedValue({
+      autoStart.getSettings.mockResolvedValue({
         autoStartModel: 'opus',
         autoRepairCi: true,
       });
 
       await controller.saveSettings({ autoRepairCi: false }, user);
 
-      expect(service.saveSettings).toHaveBeenCalledWith(7, 'opus', false);
+      expect(autoStart.saveSettings).toHaveBeenCalledWith(7, 'opus', false);
     });
 
     it('switches the model off with an empty string', async () => {
       await controller.saveSettings({ autoStartModel: '' }, user);
 
-      expect(service.saveSettings).toHaveBeenCalledWith(7, null, undefined);
+      expect(autoStart.saveSettings).toHaveBeenCalledWith(7, null, undefined);
     });
   });
 });

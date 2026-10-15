@@ -29,11 +29,6 @@ function setup() {
       return qb;
     }),
   };
-  const settings = {
-    find: jest.fn().mockResolvedValue([]),
-    findOne: jest.fn().mockResolvedValue(null),
-    save: jest.fn(async (s: object) => s),
-  };
   const github = {
     isReady: jest.fn().mockReturnValue(true),
     repoName: jest.fn().mockReturnValue('o/r'),
@@ -63,7 +58,6 @@ function setup() {
   const appLogs = { record: jest.fn() };
   const improve = new ImproveService(
     runs as never,
-    settings as never,
     github as never,
     {} as never,
     storage as never,

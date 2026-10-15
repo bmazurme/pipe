@@ -10,6 +10,7 @@ import { WorkerModule } from '../worker/worker.module';
 import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
+import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveCiService } from './improve-ci.service';
 import { ImproveController } from './improve.controller';
@@ -26,6 +27,11 @@ import { ImproveService } from './improve.service';
     AuthModule,
   ],
   controllers: [ImproveController],
-  providers: [ImproveService, ImproveCiService, ImproveScheduleService],
+  providers: [
+    ImproveService,
+    ImproveCiService,
+    ImproveScheduleService,
+    ImproveAutoStartService,
+  ],
 })
 export class ImproveModule {}

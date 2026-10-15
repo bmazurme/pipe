@@ -48,7 +48,6 @@ import {
 } from './analysis';
 import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
-import { ImproveSettings } from './entities/improve-settings.entity';
 import {
   buildIssueParcel,
   Change,
@@ -78,15 +77,21 @@ interface AnalysisResult {
 }
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
+
+export function requireImproveModel(model: string): void {
+  if (!IMPROVE_MODELS.includes(model)) {
+    throw new BadRequestException(`Неизвестная модель: ${model}`);
+  }
+}
 const LOG_DIGEST_DAYS = 7;
-const ADVANCE_EVERY_MS = 15_000;
+export const ADVANCE_EVERY_MS = 15_000;
 // How long after failing a run still follows a retry of its job from the Worker page.
 const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
 // A run claimed for publishing and untouched this long was lost to a restart.
 const PUBLISHING_STALE_MS = 10 * 60_000;
 const PUBLISH_ABANDONED_ERROR =
   'Публикация прервана (bridge перезапускался); запустите задачу заново';
-const AUTOSTART_MIN_AGE_SECONDS = 10;
+export const AUTOSTART_MIN_AGE_SECONDS = 10;
 export const PR_LABEL = 'loop';
 
 // The loop run on bridge itself: pick a GitHub issue, hand the repository snapshot
@@ -101,7 +106,6 @@ const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
   private advancing = false;
-  private autoStarting = false;
   // Keys of starts in flight ('analysis', `issue:${n}`). The DB check for an
   // active run happens long before the run row is saved, so concurrent starts
   // would all pass it. In-process only: this relies on a single bridge replica.
@@ -118,8 +122,6 @@ export class ImproveService {
   constructor(
     @InjectRepository(ImproveRun)
     private readonly runs: Repository<ImproveRun>,
-    @InjectRepository(ImproveSettings)
-    private readonly settings: Repository<ImproveSettings>,
     private readonly github: GithubApiService,
     private readonly mergeService: MergeService,
     private readonly storage: StorageService,
@@ -1413,92 +1415,6 @@ export class ImproveService {
     return this.runs.save(run);
   }
 
-  // ----------------------------------------- reports pushes → worker at once
-
-  async getSettings(userId: number): Promise<ImproveSettings | null> {
-    return this.settings.findOne({ where: { userId } });
-  }
-
-  async saveSettings(
-    userId: number,
-    autoStartModel: string | null,
-    autoRepairCi?: boolean,
-  ): Promise<ImproveSettings> {
-    if (autoStartModel) this.requireModel(autoStartModel);
-
-    const existing = await this.getSettings(userId);
-    const enabling = autoStartModel && !existing?.autoStartModel;
-
-    return this.settings.save({
-      userId,
-      autoStartModel,
-      // Left alone when the caller did not send it (the page saves the two settings separately).
-      autoRepairCi: autoRepairCi ?? existing?.autoRepairCi ?? true,
-      autoStartSince: autoStartModel
-        ? enabling
-          ? new Date()
-          : (existing?.autoStartSince ?? new Date())
-        : null,
-    });
-  }
-
-  // A parcel pushed from Subscription (channel "issue", outbound, unencrypted) that no
-  // job has picked up yet, for an account that switched auto-start on, starts a job.
-  @Interval(ADVANCE_EVERY_MS)
-  async autoStartParcels(): Promise<void> {
-    if (this.autoStarting) return;
-
-    this.autoStarting = true;
-
-    try {
-      const accounts = await this.settings.find({
-        where: { autoStartModel: Not(IsNull()) },
-      });
-      const rows: Array<{ fileId: number; userId: number; model: string }> = [];
-
-      for (const account of accounts) {
-        if (!account.autoStartModel || !account.autoStartSince) continue;
-
-        const parcels = await this.workers.findUnstartedIssueParcels(
-          account.userId,
-          account.autoStartSince,
-          AUTOSTART_MIN_AGE_SECONDS,
-          'improve:',
-        );
-        for (const parcel of parcels) {
-          rows.push({
-            fileId: parcel.id,
-            userId: account.userId,
-            model: account.autoStartModel,
-          });
-        }
-      }
-
-      for (const row of rows) {
-        await this.workers
-          .create(row.userId, {
-            sourceFileId: row.fileId,
-            model: row.model as JobModel,
-          })
-          .then((job) =>
-            this.log(
-              'info',
-              'improve.auto_started',
-              `Parcel ${row.fileId} → job ${job.id} (${row.model})`,
-              { fileId: row.fileId, jobId: job.id },
-            ),
-          )
-          .catch((error) =>
-            this.logger.warn(
-              `Auto-start of parcel ${row.fileId} failed: ${message(error)}`,
-            ),
-          );
-      }
-    } finally {
-      this.autoStarting = false;
-    }
-  }
-
   // ---------------------------------------------------------------- helpers
 
   requireConfigured(): void {
@@ -1510,9 +1426,7 @@ export class ImproveService {
   }
 
   requireModel(model: string): void {
-    if (!IMPROVE_MODELS.includes(model)) {
-      throw new BadRequestException(`Неизвестная модель: ${model}`);
-    }
+    requireImproveModel(model);
   }
 
   private log(
@@ -1559,6 +1473,6 @@ export function describePublishError(error: unknown): string {
     : text;
 }
 
-function message(error: unknown): string {
+export function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
