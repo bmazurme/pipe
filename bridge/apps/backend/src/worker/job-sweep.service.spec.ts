@@ -69,6 +69,28 @@ describe('JobSweepService', () => {
     });
   });
 
+  describe('onJobsLost', () => {
+    it('hands the failed rows to the registered hook', async () => {
+      const job = stale();
+      const hook = jest.fn().mockResolvedValue(undefined);
+      service.onJobsLost = hook;
+      repository.query.mockResolvedValueOnce([[job], 1]);
+
+      await service.sweepOrphansFor(7, 'swarm-worker');
+
+      expect(hook).toHaveBeenCalledWith([job]);
+    });
+
+    it('survives a failing hook', async () => {
+      service.onJobsLost = jest.fn().mockRejectedValue(new Error('boom'));
+      repository.query.mockResolvedValueOnce([[stale()], 1]);
+
+      await expect(
+        service.sweepOrphansFor(7, 'swarm-worker'),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('sweepOrphansFor throttle', () => {
     const sweepCalls = () => repository.query.mock.calls.length;
 

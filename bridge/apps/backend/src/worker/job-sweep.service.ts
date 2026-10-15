@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { Job, JobStatus } from './entities/job.entity';
+import { LOST_MESSAGE } from './infra-failure';
 import { logJobOutcome } from './job-outcome-log';
 
 // A worker handles one job at a time and only asks for the next one when it is
@@ -18,14 +19,15 @@ const ORPHAN_SILENCE_MS = 10 * 60_000;
 const LOST_JOB_SILENCE_MS = 3 * 60 * 60_000;
 const SWEEP_EVERY_MS = 5 * 60_000;
 const ORPHAN_SWEEP_THROTTLE_MS = 60_000;
-const LOST_MESSAGE =
-  'Worker was restarted or lost while this job was running — the run did not finish';
 
 @Injectable()
 export class JobSweepService {
   private readonly logger = new Logger(JobSweepService.name);
   // `userId:workerName` → when claim() last ran the orphan sweep for it.
   private readonly lastOrphanSweep = new Map<string, number>();
+  // Set by WorkerService (which depends on this class, not the other way round):
+  // called with the jobs a sweep has just failed, so they can be re-queued.
+  onJobsLost?: (jobs: Job[]) => Promise<void>;
 
   constructor(
     @InjectRepository(Job)
@@ -76,6 +78,14 @@ export class JobSweepService {
 
     for (const job of rows) {
       logJobOutcome(this.appLogs, job);
+    }
+
+    try {
+      await this.onJobsLost?.(rows);
+    } catch (error) {
+      this.logger.warn(
+        `Re-queueing lost jobs failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     return rows.length;

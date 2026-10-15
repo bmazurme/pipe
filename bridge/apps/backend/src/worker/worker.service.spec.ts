@@ -1194,6 +1194,107 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('retryAfterInfraFailure', () => {
+    const lost = (over = {}) =>
+      ({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Failed,
+        errorMessage: LOST_MESSAGE_TEXT,
+        ...over,
+      }) as Job;
+
+    beforeEach(() => {
+      repository.count = jest.fn().mockResolvedValue(0);
+      repository.findOne!.mockResolvedValue(lost());
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.subscription.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 6, ...job }),
+      );
+    });
+
+    it('queues one new job on the same parcel, model and credential', async () => {
+      const retried = await service.retryAfterInfraFailure(lost());
+
+      expect(retried).toMatchObject({
+        id: 6,
+        sourceFileId: 11,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Queued,
+      });
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.auto_retried' }),
+      );
+    });
+
+    it('retries a job the worker reported as stopped by SIGTERM', async () => {
+      const shutdown =
+        'Worker was stopped (SIGTERM) before the job finished — start it again';
+      repository.findOne!.mockResolvedValue(
+        lost({ status: JobStatus.Running, errorMessage: null }),
+      );
+
+      await service.updateStatus(5, 7, {
+        status: JobStatus.Failed,
+        errorMessage: shutdown,
+      });
+
+      expect(repository.save).toHaveBeenCalledTimes(2);
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job.auto_retried' }),
+      );
+    });
+
+    it('never retries a job that failed for another reason', async () => {
+      const retried = await service.retryAfterInfraFailure(
+        lost({ errorMessage: 'claude exited with code 1' }),
+      );
+
+      expect(retried).toBeNull();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('does not retry twice for the same parcel', async () => {
+      repository.count!.mockResolvedValue(1);
+
+      const retried = await service.retryAfterInfraFailure(lost());
+
+      expect(retried).toBeNull();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('skips quietly when the parcel is gone', async () => {
+      const retried = await service.retryAfterInfraFailure(
+        lost({ sourceFileId: null }),
+      );
+
+      expect(retried).toBeNull();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('re-queues a job the sweep failed when a worker asks for work', async () => {
+      repository.query!.mockResolvedValueOnce([[lost()], 1]);
+      repository.query!.mockResolvedValueOnce([[], 0]);
+
+      await service.claim(7, 'swarm-worker');
+
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceFileId: 11,
+          status: JobStatus.Queued,
+        }),
+      );
+    });
+  });
+
   describe('retry', () => {
     const failed = (over = {}) => ({
       id: 5,

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
@@ -24,6 +24,7 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { INFRA_FAILURE_MESSAGES } from './infra-failure';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
 import { Worker } from './entities/worker.entity';
@@ -66,7 +67,58 @@ export class WorkerService {
     private readonly providerCredentialsService: ProviderCredentialsService,
     private readonly jobSweep: JobSweepService,
     @Optional() private readonly appLogs?: AppLogService,
-  ) {}
+  ) {
+    this.jobSweep.onJobsLost = async (jobs) => {
+      for (const job of jobs) {
+        await this.retryAfterInfraFailure(job);
+      }
+    };
+  }
+
+  // A job lost to a worker stop/restart says nothing about the task, so it is queued
+  // once more automatically — but only once per parcel (an earlier infrastructure
+  // failure on the same parcel means this already was the retry), so a crash-looping
+  // worker cannot requeue forever. Never throws; returns the new job, if any.
+  async retryAfterInfraFailure(job: Job): Promise<Job | null> {
+    if (
+      job.status !== JobStatus.Failed ||
+      job.sourceFileId === null ||
+      job.errorMessage === null ||
+      !INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
+    ) {
+      return null;
+    }
+
+    try {
+      const earlier = await this.jobRepository.count({
+        where: {
+          sourceFileId: job.sourceFileId,
+          errorMessage: In(INFRA_FAILURE_MESSAGES),
+          id: Not(job.id),
+        },
+      });
+
+      if (earlier > 0) return null;
+
+      const retried = await this.retry(job.id, job.userId);
+
+      void this.appLogs?.record({
+        level: 'info',
+        source: 'job',
+        event: 'job.auto_retried',
+        message: `Job ${job.id} was lost to a worker stop and re-queued as job ${retried.id}`,
+        meta: { jobId: job.id, retryJobId: retried.id, model: job.model },
+      });
+
+      return retried;
+    } catch (error) {
+      this.logger.warn(
+        `Automatic retry of job ${job.id} skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return null;
+    }
+  }
 
   // Outbound "issue" parcels of one account that no job has picked up yet: unencrypted
   // (the only kind create() accepts), created on/after `since` and at least
@@ -753,6 +805,7 @@ export class WorkerService {
 
     if (dto.status === JobStatus.Failed) {
       logJobOutcome(this.appLogs, saved);
+      await this.retryAfterInfraFailure(saved);
     }
 
     if (dto.status === JobStatus.Cancelled) {
