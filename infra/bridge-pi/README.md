@@ -81,7 +81,10 @@ WORKER_STACK=bridgew2 WORKER_NODE_HOSTNAME=ubuntu-red \
   placement constraint, its own `worker_state` volume and Swarm services (`bridgew2_worker`, `bridgew2_vpn-client`,
   …) — the first worker, `~/.pipe/bridge.env`, and the core stack are untouched.
 - Then: https://bridge.ntlstl.dev/worker?tab=workers → **Добавить** → copy the one-time code → from your
-  workstation, `infra/bridge-pi/enroll-worker.sh <code>`. Watch it come up: `WORKER_STACK=bridgew2
+  **workstation** (not any board — `enroll-worker.sh` SSHes into the board itself, it never runs on one), naming
+  both the stack and the new board's address (it defaults to green otherwise):
+  `WORKER_STACK=bridgew2 infra/bridge-pi/enroll-worker.sh <code> 192.168.50.13` (white/red/blue/green are
+  `.11`/`.12`/`.13`/`.14` — infra/pi/README.md has the full table). Watch it come up: `WORKER_STACK=bridgew2
   ./deploy-worker.sh status`.
 - **Not kept up to date by `pipe-autodeploy`** — it only knows about the one `bridgew` stack today. A second one
   needs the `./deploy-worker.sh` command above run again by hand for each new release (`./deploy-worker.sh status`
