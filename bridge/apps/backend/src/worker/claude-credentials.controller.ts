@@ -12,22 +12,24 @@ import {
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtGuard } from '../auth/guards/jwt.guard';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ClaudeCredentialResponseDto } from './dto/claude-credential-response.dto';
 import { CreateClaudeCredentialDto } from './dto/create-claude-credential.dto';
 
-// Same guard as WorkerController — managed from the Worker page by a
-// browser session, read by the worker process's own claim call (see
-// WorkerController.claim), never anything else.
+// Writes (create, remove) need a browser session: a personal API key lives on
+// disk in sync's and reports' config and must not be able to plant or wipe the
+// account's Claude tokens. harness (--live) reads the list with an API key, so
+// only that route accepts one.
 @Controller('api/v1/worker/claude-credentials')
-@UseGuards(JwtOrApiKeyGuard)
 export class ClaudeCredentialsController {
   constructor(
     private readonly claudeCredentialsService: ClaudeCredentialsService,
   ) {}
 
   @Get()
+  @UseGuards(JwtOrApiKeyGuard)
   async list(
     @CurrentUser() currentUser: { id: number },
   ): Promise<ClaudeCredentialResponseDto[]> {
@@ -39,6 +41,7 @@ export class ClaudeCredentialsController {
   }
 
   @Post()
+  @UseGuards(JwtGuard)
   async create(
     @Body() dto: CreateClaudeCredentialDto,
     @CurrentUser() currentUser: { id: number },
@@ -53,6 +56,7 @@ export class ClaudeCredentialsController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(
     @Param('id', ParseIntPipe) id: number,
