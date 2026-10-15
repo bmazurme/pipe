@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Magnifier } from '@gravity-ui/icons';
-import { Alert, Button, Checkbox, Label, Select, Switch, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Checkbox, Label, Loader, Select, Switch, Text } from '@gravity-ui/uikit';
 
 import {
   AnalysisCategory,
@@ -23,7 +23,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   // Fetched only once the user opens the run, and polled only while it is active.
-  const { data: detail } = useGetImproveRunQuery(run.id, {
+  const { data: detail, isError: detailError } = useGetImproveRunQuery(run.id, {
     skip: !open,
     pollingInterval: isActiveRun(run) ? 5000 : 0,
   });
@@ -54,7 +54,8 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
     <div className={styles.row}>
       <div className={styles.rowMain}>
         <Text variant="body-2">{run.issueTitle}</Text>
-        {open && !detail && <Text variant="caption-2" color="secondary">Загрузка…</Text>}
+        {open && !detail && !detailError && <Text variant="caption-2" color="secondary">Загрузка…</Text>}
+        {open && !detail && detailError && <Text variant="caption-2" color="danger">Не удалось загрузить предложения</Text>}
         {items.map((item) => (
           <Text key={item.title} variant="caption-2" color="secondary">
             {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
@@ -90,7 +91,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
 }
 
 export function AnalysisTab({ configured }: { configured: boolean }) {
-  const { data: runs } = useListImproveRunsQuery(undefined, { pollingInterval: 10000, skipPollingIfUnfocused: true });
+  const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval: 10000, skipPollingIfUnfocused: true });
   const [start, { isLoading }] = useStartImproveAnalysisMutation();
   const [model, setModel] = useState('sonnet');
   const [categories, setCategories] = useState<AnalysisCategory[]>(ALL_CATEGORIES);
@@ -128,13 +129,26 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={MODEL_OPTIONS} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />
         <Switch checked={autoStart} onUpdate={setAutoStart} content="И сразу взять в работу" />
-        <Button view="action" size="m" loading={isLoading} disabled={!configured || busy || categories.length === 0} onClick={() => void handleStart()}>
+        <Button view="action" size="m" loading={isLoading} disabled={!configured || !runs || busy || categories.length === 0} onClick={() => void handleStart()}>
           Запустить анализ
         </Button>
       </div>
       {error && <Alert theme="danger" view="filled" message={error} />}
 
-      {analyses.length === 0 && (
+      {isListLoading && <Loader size="m" />}
+      {isListError && (
+        <Alert
+          theme="danger"
+          view="filled"
+          message={getErrorMessage(listError, 'Не удалось загрузить анализы')}
+          actions={
+            <Button view="outlined" size="s" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+      {runs && analyses.length === 0 && (
         <EmptyState icon={Magnifier} title="Анализов ещё не было" description="Запустите анализ вручную или добавьте расписание." />
       )}
       {analyses.map((run) => (
