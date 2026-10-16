@@ -24,6 +24,9 @@ export enum ChatMessageStatus {
 
 @Entity({ name: 'chat_messages' })
 @Index(['chatId'])
+@Index('IDX_chat_messages_pending', ['createdAt'], {
+  where: "status = 'pending'",
+})
 export class ChatMessage extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: false })
   chatId: number;
