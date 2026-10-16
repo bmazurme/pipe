@@ -10,29 +10,44 @@ params:
   wall_thickness_mm: 2.4
   hull_material: pla
 
-  motor_power_w: 180
-  drivetrain_efficiency: 0.55
-  # Crouch's planing-speed constant — ~120 for a fast non-stepped runabout hull
-  # (this one). ~150+ is a stepped racing hydroplane, ~70-90 a displacement/semi-
-  # displacement cruiser. See lab/domains/boat/calculators.py.
-  planing_constant_c: 120
   water_density_kg_m3: 1000
+
+  # Longitudinal centre of gravity, mm from the bow — a placeholder (not measured
+  # from a real BOM-with-positions, which Lab doesn't have yet): 63% of length,
+  # the same fraction boat-rc's own real, weighed "Формула 450" came out at.
+  # hydrostatics()/planing_speed() both need this; see lab/domains/boat/calculators.py.
+  lcg_mm: 380
+
+  # No redan/step — planing_speed() falls back to a single planing surface (the
+  # ordinary Savitsky case). boat-rc's project.yaml (formula-450) sets redan_x_mm
+  # and exercises the two-surface moment-balance path instead.
+
+  # Motor/ESC/battery — a real catalog small-boat powertrain (Hobbywing SeaKing
+  # 2040SL V2 4000KV + 30A V4 ESC), reused from boat-rc's own speed_powertrain.py
+  # rather than invented numbers.
+  motor_kv: 4000
+  motor_no_load_current_a: 0.9
+  motor_resistance_ohm: 0.060
+  esc_resistance_ohm: 0.0030
+  motor_max_current_a: 28
+  battery_voltage_v: 12.0
+  battery_resistance_ohm: 0.03
 
 targets:
   target_speed_kmh: 35
   budget_rub: 3000
 
 purchased_bom:
-  - part: "Мотор бесколлекторный 2845"
+  - part: "Мотор бесколлекторный Hobbywing SeaKing 2040SL V2 4000KV"
     source: purchased
     qty: 1
     unit_cost_rub: 950
-    unit_mass_kg: 0.075
-  - part: "Регулятор оборотов (ESC) 30A"
+    unit_mass_kg: 0.073
+  - part: "Регулятор оборотов (ESC) Hobbywing SeaKing 30A V4"
     source: purchased
     qty: 1
     unit_cost_rub: 650
-    unit_mass_kg: 0.030
+    unit_mass_kg: 0.034
   - part: "Аккумулятор LiPo 3S 1300mAh"
     source: purchased
     qty: 1

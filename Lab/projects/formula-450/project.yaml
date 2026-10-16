@@ -1,0 +1,124 @@
+# Real project, not a toy demo — every number below is sourced from an actual RC boat
+# ("Формула 450", repo `boat-rc`, not part of `pipe`), not invented for Lab:
+#   - geometry/mass/LCG/redan position: cad/v6/hull_v13_analysis/{cg_v13,hydrostatics_v13,planing_v13}.py
+#   - powertrain: cad/v6/hull_v13_analysis/speed_powertrain.py, variant A (the one actually installed)
+#   - BOM masses: cg_v13.py's own item table (the 2200mAh/180g battery configuration that
+#     table's "Итого 849 г" matches — BOM.md documents a later, heavier 4000mAh/290g battery
+#     from a different point in the project's revision history; mixing the two would make the
+#     849g/LCG=284.3mm/31.3mm-draft comparison below internally inconsistent)
+#
+# Lab's own hull geometry (lab/domains/boat/geometry.py) is a simple 5-station V-bottom loft —
+# it does NOT reproduce the real hull's redan, varying deadrise or auto-roll deck crown. This
+# project exists to check the PORTED CALCULATIONS (hydrostatics, Savitsky+powertrain) against
+# boat-rc's own already on-water-checked numbers, sized/massed/centred the same — not to claim
+# Lab can regenerate this hull's actual shape. See Lab/IMPLEMENTATION_PLAN.md.
+name: "Формула 450 (реальный проект boat-rc, для сверки портированных расчётов)"
+domain: boat
+
+params:
+  length_mm: 450
+  beam_mm: 139          # measured bbox width of cad/v6/boat_no-flood_v6.step's hull solid (±69.48)
+  height_mm: 62          # measured bbox height of the same hull solid (0..61.82)
+  deadrise_deg: 17        # real deadrise varies 15–26° along the hull; Lab's generator takes one value — see note above
+  wall_thickness_mm: 2.4
+  hull_material: asa
+  water_density_kg_m3: 998   # matches hydrostatics_v13.py's own RHO=0.998
+
+  lcg_mm: 284.3           # cg_v13.py's own computed result (real BOM-with-positions)
+  redan_x_mm: 286          # planing_v13.py's X_STEP
+  stern_cp_x_mm: 425       # planing_v13.py's X_CPA
+  planing_halfbeam_mm: 68.5   # planing_v13.py's b — chine half-beam at the bow planing surface
+  planing_deadrise_deg: 17    # planing_v13.py's beta
+  planing_trim_deg: 3.0       # speed_powertrain.py's own default tau
+
+  # Powertrain actually installed (speed_powertrain.py's variant A: SeaKing 2850SL V2 3600KV +
+  # SeaKing 60A V4 ESC) — not the smaller variant B used in Lab's own rc-boat-demo.
+  motor_kv: 3600
+  motor_no_load_current_a: 3.7
+  motor_resistance_ohm: 0.020
+  esc_resistance_ohm: 0.0015
+  motor_max_current_a: 45
+  battery_voltage_v: 12.0
+  battery_resistance_ohm: 0.030
+
+targets:
+  # What boat-rc itself has already measured/computed for this exact configuration — the
+  # point of running this project is to see how close the ported calculators land, not to hit
+  # a design target.
+  reference_level_keel_draft_mm: 31.3   # hydrostatics_v13.py, mass=850g, trim=0
+  reference_lcb_at_level_keel_mm: 278.6
+  reference_vmax_kmh_at_45a: 74.8        # speed_powertrain.py, variant A, Imax=45A, 850g
+  reference_note: >
+    74.8 км/ч — это предсказание той же модели (мощность/привод/Savitsky), а не замеренная
+    на воде скорость: реальные заезды (cad/v5/stat/COMPARISON.md) показали лишь 8–18 км/ч
+    из-за диагностированного проскальзывания винта (направление вращения/калибровка ESC),
+    не из-за мощности или массы — см. документ.
+
+purchased_bom:
+  - part: "Мотор SeaKing 2850SL V2 3600KV + водяная рубашка"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 1800
+    unit_mass_kg: 0.146
+  - part: "Муфта вала"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 150
+    unit_mass_kg: 0.008
+  - part: "Гибкий вал (тросовый)"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 300
+    unit_mass_kg: 0.020
+  - part: "Дейдвуд (латунная труба + подшипник)"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 400
+    unit_mass_kg: 0.025
+  - part: "Винт D31 литой + гайка"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 350
+    unit_mass_kg: 0.008
+  - part: "ESC SeaKing 60A V4"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 1800
+    unit_mass_kg: 0.065
+  - part: "АКБ LiPo 3S 2200мА·ч 50C+"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 1200
+    unit_mass_kg: 0.180
+  - part: "Серва MG90S"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 250
+    unit_mass_kg: 0.013
+  - part: "Приёмник Radiolink R8FG"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 1500
+    unit_mass_kg: 0.009
+  - part: "Руль, тяга, штуцеры, шланг охлаждения"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 500
+    unit_mass_kg: 0.025
+  - part: "Провода, крепёж, герметик"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 300
+    unit_mass_kg: 0.030
+  # Напечатанные детали, которые Lab пока не моделирует отдельно (домен строит только один
+  # именованный узел "hull") — учтены массой/стоимостью как есть, не геометрией.
+  - part: "Крышка люка + прокладка (печать)"
+    source: printed
+    qty: 1
+    unit_cost_rub: 150
+    unit_mass_kg: 0.050
+  - part: "Лотки, моторама, крепления (печать)"
+    source: printed
+    qty: 1
+    unit_cost_rub: 200
+    unit_mass_kg: 0.040

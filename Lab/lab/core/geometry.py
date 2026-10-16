@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from build123d import Drawing, ExportDXF, LineType, Unit, export_step, export_stl
+from build123d import Drawing, ExportDXF, Keep, LineType, Plane, Unit, export_step, export_stl, section
 
 from . import materials
 from .domain import PartSpec
@@ -119,3 +119,73 @@ def export_drawing(spec: PartSpec, out_dir: Path, name: str, views: Sequence[Dra
     exporter.write(str(path))
 
     return str(path)
+
+
+@dataclass(frozen=True)
+class StationAreaProfile:
+    """Submerged cross-sectional area (mm²) at one station along a hull's length, sampled at
+    `z_samples_mm` (interpolated linearly in between) — the precomputed, CAD-kernel-expensive
+    half of a trim-solving hydrostatics calculation. Measured once per station, from this
+    project's real hull: a live 3D split per solver trial costs ~70ms (unworkable for the
+    ~1,000-trial nested bisection a draft+trim solve needs — see
+    `domains/boat/calculators.py`); a 2D split of a precomputed cross-section costs ~1ms.
+    This mirrors boat-rc's own approach (a half-width table ray-cast once in Fusion, then pure
+    Python math against it) — just built from a live solid instead of a ray-cast.
+    """
+
+    x_mm: float
+    z_samples_mm: tuple[float, ...]
+    area_mm2: tuple[float, ...]
+
+    def area_at(self, z_mm: float) -> float:
+        if z_mm <= self.z_samples_mm[0]:
+            return 0.0
+        if z_mm >= self.z_samples_mm[-1]:
+            return self.area_mm2[-1]
+
+        for i in range(1, len(self.z_samples_mm)):
+            z1 = self.z_samples_mm[i]
+            if z_mm <= z1:
+                z0 = self.z_samples_mm[i - 1]
+                a0, a1 = self.area_mm2[i - 1], self.area_mm2[i]
+                t = (z_mm - z0) / (z1 - z0) if z1 > z0 else 0.0
+
+                return a0 + (a1 - a0) * t
+
+        return self.area_mm2[-1]  # pragma: no cover — z_mm < z_samples_mm[-1] already handled above
+
+
+def station_area_profiles(
+    part, x_stations_mm: Sequence[float], z_max_mm: float, z_samples: int = 25
+) -> list[StationAreaProfile]:
+    """Builds the table `StationAreaProfile`/a trim solve needs: one 2D cross-section per
+    station (`section`), each sliced at `z_samples` heights (`split` + `.area`). A station
+    outside the part's own extent along its sectioning axis yields an empty cross-section —
+    recorded as all-zero area rather than raising, so a caller can pick stations without first
+    checking the part's own bounding box.
+    """
+
+    z_grid = tuple(z_max_mm * i / (z_samples - 1) for i in range(z_samples))
+    profiles: list[StationAreaProfile] = []
+
+    for x in x_stations_mm:
+        try:
+            cross_section = section(part, section_by=Plane.YZ.offset(x))
+        except Exception:
+            cross_section = None
+
+        areas: list[float] = []
+        for z in z_grid:
+            if cross_section is None or z <= 0:
+                areas.append(0.0)
+                continue
+
+            try:
+                below = cross_section.split(Plane.XY.offset(z), keep=Keep.BOTTOM)
+                areas.append(below.area if below else 0.0)
+            except Exception:
+                areas.append(areas[-1] if areas else 0.0)
+
+        profiles.append(StationAreaProfile(x_mm=x, z_samples_mm=z_grid, area_mm2=tuple(areas)))
+
+    return profiles
