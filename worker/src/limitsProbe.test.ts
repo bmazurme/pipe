@@ -24,9 +24,9 @@ const config = (over: Partial<RemoteWorkerConfig> = {}): RemoteWorkerConfig =>
     ...over,
   }) as RemoteWorkerConfig;
 
-function setup(opts: { limits?: boolean; fail?: boolean } = {}) {
+function setup(opts: { limits?: boolean; fail?: boolean; failModels?: string[] } = {}) {
   const clock = { now: NOW };
-  const runs: { token: string; proxy: string | undefined }[] = [];
+  const runs: { token: string; proxy: string | undefined; model: string }[] = [];
   const sent: { apiUrl: string; key: string; report: unknown }[] = [];
   const logs: string[] = [];
   const probe = new LimitsProbe({
@@ -34,9 +34,9 @@ function setup(opts: { limits?: boolean; fail?: boolean } = {}) {
     workDir: '/tmp/w',
     now: () => clock.now,
     log: { info: (_o, m) => logs.push(`info:${m}`), warn: (_o, m) => logs.push(`warn:${m}`) },
-    run: async (_cwd, token, proxy) => {
-      runs.push({ token, proxy });
-      if (opts.fail) throw new Error('claude exploded');
+    run: async (_cwd, token, proxy, model) => {
+      runs.push({ token, proxy, model });
+      if (opts.fail || opts.failModels?.includes(model)) throw new Error('claude exploded');
 
       return { exitCode: 0, output: '', ...(opts.limits === false ? {} : { report: { limits: LIMITS } }) };
     },
@@ -64,7 +64,7 @@ describe('LimitsProbe', () => {
     probe.consider(config({ limitsRefreshRequestedAt: requested, proxyUrl: 'http://127.0.0.1:18080' }), 'brw_key');
     await wait();
 
-    assert.deepEqual(runs, [{ token: 'tok', proxy: 'http://127.0.0.1:18080' }]);
+    assert.deepEqual(runs, [{ token: 'tok', proxy: 'http://127.0.0.1:18080', model: 'haiku' }]);
     assert.deepEqual(sent, [{ apiUrl: 'https://bridge.example', key: 'brw_key', report: { limits: LIMITS, probe: true } }]);
 
     // the same request is not served again on the next poll
@@ -136,7 +136,9 @@ describe('LimitsProbe', () => {
     await wait();
 
     assert.ok(failing.logs.includes('warn:limits probe failed'));
-    assert.equal(failing.runs.length, 1);
+    assert.ok(failing.logs.includes('warn:limits probe: no model answered'));
+    // every model was tried once, in that one probe — and not retried in a loop on the next poll
+    assert.deepEqual(failing.runs.map((r) => r.model), ['haiku', 'sonnet']);
 
     const silent = setup({ limits: false });
 
@@ -145,5 +147,34 @@ describe('LimitsProbe', () => {
 
     assert.equal(silent.sent.length, 0);
     assert.ok(silent.logs.includes('warn:limits probe: the CLI reported no limits'));
+  });
+
+  it('falls back to the next model when the cheapest one does not answer, and remembers the one that worked', async () => {
+    const { probe, runs, sent, clock } = setup({ failModels: ['haiku'] });
+
+    probe.consider(config({ limitsRefreshMin: 15 }), 'k');
+    await wait();
+
+    assert.deepEqual(runs.map((r) => r.model), ['haiku', 'sonnet']);
+    assert.equal(sent.length, 1);
+
+    // the next probe starts with sonnet — no waiting for haiku to fail again
+    clock.now += 16 * 60_000;
+    probe.consider(config({ limitsRefreshMin: 15 }), 'k');
+    await wait();
+
+    assert.deepEqual(runs.map((r) => r.model), ['haiku', 'sonnet', 'sonnet']);
+  });
+
+  it('keeps using the cheapest model while it works', async () => {
+    const { probe, runs, clock } = setup();
+
+    probe.consider(config({ limitsRefreshMin: 15 }), 'k');
+    await wait();
+    clock.now += 16 * 60_000;
+    probe.consider(config({ limitsRefreshMin: 15 }), 'k');
+    await wait();
+
+    assert.deepEqual(runs.map((r) => r.model), ['haiku', 'haiku']);
   });
 });
