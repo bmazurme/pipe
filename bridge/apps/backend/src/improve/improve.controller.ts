@@ -18,7 +18,7 @@ import {
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
-import { ALL_CATEGORIES, AnalysisCategory, isCategory } from './analysis';
+import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import {
   CreateIssuesDto,
   SaveScheduleDto,
@@ -111,7 +111,9 @@ export class ImproveController {
     @Body() dto: StartAnalysisDto,
     @CurrentUser() user: { id: number },
   ) {
-    const categories = dto.categories?.length ? dto.categories : ALL_CATEGORIES;
+    const categories = dto.categories?.length
+      ? dto.categories
+      : DEFAULT_CATEGORIES;
 
     if (!categories.every(isCategory)) {
       throw new BadRequestException('Неизвестное направление анализа');

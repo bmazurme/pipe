@@ -13,6 +13,15 @@ describe('improve labels', () => {
     expect(describeSchedule({ ...base, count: 21 })).toContain('21 задача');
   });
 
+  it('names the analysis directions of a schedule, including new features when they are chosen', () => {
+    const base = { hour: 2, minute: 0, timezone: 'UTC', model: 'sonnet', count: 5, kind: 'analysis' as const };
+
+    // never chose directions = the improvement directions, no features
+    expect(describeSchedule({ ...base, categories: null })).toContain('анализ: 5 направлений');
+    expect(describeSchedule({ ...base, categories: 'tests,features' })).toContain('анализ: Тесты, Новые фичи');
+    expect(describeSchedule({ ...base, categories: 'general,uiux,security,performance,reliability,tests,docs,architecture,features' })).toContain('Новые фичи');
+  });
+
   it('formats and parses times', () => {
     expect(formatTime(2, 5)).toBe('02:05');
     expect(parseTime('02:05')).toEqual({ hour: 2, minute: 5 });

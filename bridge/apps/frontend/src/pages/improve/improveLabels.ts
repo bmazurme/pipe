@@ -44,9 +44,13 @@ export const CATEGORY_LABEL: Record<AnalysisCategory, string> = {
   tests: 'Тесты',
   docs: 'Документация',
   architecture: 'Архитектура',
+  features: 'Новые фичи',
 };
 
 export const ALL_CATEGORIES = Object.keys(CATEGORY_LABEL) as AnalysisCategory[];
+
+/** Ticked by default (and what an analysis without a choice covers): the improvement directions. New features are opt-in. */
+export const DEFAULT_CATEGORIES: AnalysisCategory[] = ALL_CATEGORIES.filter((category) => category !== 'features');
 
 /** The proposals stored on an analysis run, or [] when there are none yet. */
 export function analysisItems(run: Pick<ImproveRun, 'result'>): AnalysisItem[] {
@@ -70,8 +74,8 @@ export function describeSchedule(
   schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'count' | 'model'> & Partial<Pick<ImproveSchedule, 'kind' | 'categories'>>,
 ): string {
   if (schedule.kind === 'analysis') {
-    const chosen = schedule.categories ? schedule.categories.split(',').filter((c): c is AnalysisCategory => c in CATEGORY_LABEL) : ALL_CATEGORIES;
-    const what = chosen.length === ALL_CATEGORIES.length ? 'анализ: 5 направлений' : `анализ: ${chosen.map((c) => CATEGORY_LABEL[c]).join(', ')}`;
+    const chosen = schedule.categories ? schedule.categories.split(',').filter((c): c is AnalysisCategory => c in CATEGORY_LABEL) : DEFAULT_CATEGORIES;
+    const what = chosen.length === DEFAULT_CATEGORIES.length && !chosen.includes('features') ? 'анализ: 5 направлений' : `анализ: ${chosen.map((c) => CATEGORY_LABEL[c]).join(', ')}`;
 
     return `каждый день в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${what} · ${modelLabel(schedule.model)}`;
   }

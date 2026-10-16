@@ -58,12 +58,25 @@ export const ANALYSIS_CATEGORIES = [
     guidance:
       'A structural problem in how the code is organised: a module that knows too much about another (a layering or dependency-direction violation), logic duplicated across packages that belongs in one place, a god-class or a file doing several jobs, a leaky or inconsistent abstraction, an import cycle, or a boundary the architecture notes in CLAUDE.md describe but the code does not keep. Propose one concrete, incremental refactor — name the files and the target shape — not a rewrite.',
   },
+  {
+    id: 'features',
+    label: 'Новые фичи',
+    guidance:
+      'A NEW feature that fits THIS project — a capability it does not have yet, not a fix. Ground it in the project\'s own context: what CLAUDE.md, the READMEs and the existing pages/commands say the product is for, who uses it and which workflows it already supports. Propose one user-visible capability that closes a real gap in those workflows or naturally extends something that already exists — name the existing module/page it builds on and where the new code goes. Not a generic "nice to have": say what the user does today instead and what they would do after. Take the smallest useful first slice that ships on its own, and do not propose something the project explicitly decided against or already has.',
+  },
 ] as const;
 
 export type AnalysisCategory = (typeof ANALYSIS_CATEGORIES)[number]['id'];
 
 export const ALL_CATEGORIES: AnalysisCategory[] = ANALYSIS_CATEGORIES.map(
   (category) => category.id,
+);
+
+// What an analysis covers when nobody picked directions (a new analysis, a schedule that never chose, an old stored run):
+// the improvement directions. "New features" is opt-in — a checkbox on the Analysis tab, a choice in a schedule — so an
+// existing nightly analysis does not start proposing features by itself.
+export const DEFAULT_CATEGORIES: AnalysisCategory[] = ALL_CATEGORIES.filter(
+  (id) => id !== 'features',
 );
 
 export function isCategory(value: unknown): value is AnalysisCategory {
@@ -160,7 +173,7 @@ export function buildLogDigest(
 
 export function buildAnalysisPrompt(
   existingTitles: string[],
-  categories: AnalysisCategory[] = ALL_CATEGORIES,
+  categories: AnalysisCategory[] = DEFAULT_CATEGORIES,
   logDigest = '',
 ): string {
   const wanted = ANALYSIS_CATEGORIES.filter((category) =>
@@ -255,7 +268,7 @@ export function parseBacklog(raw: string): BacklogItem[] {
 // One item per requested direction — the first valid one; extras are ignored.
 export function pickOnePerCategory(
   items: BacklogItem[],
-  categories: AnalysisCategory[] = ALL_CATEGORIES,
+  categories: AnalysisCategory[] = DEFAULT_CATEGORIES,
 ): BacklogItem[] {
   return categories
     .map((category) => items.find((item) => item.category === category))

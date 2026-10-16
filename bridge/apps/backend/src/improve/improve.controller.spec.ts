@@ -10,7 +10,7 @@ import { DeploymentAccessService } from '../auth/deployment-access';
 import { OwnerGuard } from '../auth/guards/owner.guard';
 import { UsersService } from '../users/users.service';
 
-import { ALL_CATEGORIES } from './analysis';
+import { DEFAULT_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveController } from './improve.controller';
@@ -56,16 +56,30 @@ describe('ImproveController', () => {
         user,
       );
 
-    it('uses every category when none are given', async () => {
+    it('uses the improvement directions (not new features) when none are given', async () => {
       await start({});
 
-      expect(service.startAnalysis.mock.calls[0][2]).toEqual(ALL_CATEGORIES);
+      expect(service.startAnalysis.mock.calls[0][2]).toEqual(
+        DEFAULT_CATEGORIES,
+      );
+      expect(service.startAnalysis.mock.calls[0][2]).not.toContain('features');
     });
 
-    it('uses every category when the list is empty', async () => {
+    it('uses them when the list is empty', async () => {
       await start({ categories: [] });
 
-      expect(service.startAnalysis.mock.calls[0][2]).toEqual(ALL_CATEGORIES);
+      expect(service.startAnalysis.mock.calls[0][2]).toEqual(
+        DEFAULT_CATEGORIES,
+      );
+    });
+
+    it('passes the new-features direction through when it is ticked', async () => {
+      await start({ categories: ['general', 'features'] });
+
+      expect(service.startAnalysis.mock.calls[0][2]).toEqual([
+        'general',
+        'features',
+      ]);
     });
 
     it('rejects an unknown category without calling the service', () => {

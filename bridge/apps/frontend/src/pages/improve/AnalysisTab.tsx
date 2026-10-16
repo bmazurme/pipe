@@ -15,7 +15,7 @@ import {
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
-import { ALL_CATEGORIES, analysisItems, CATEGORY_LABEL, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
+import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
@@ -94,7 +94,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
   const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval: 10000, skipPollingIfUnfocused: true });
   const [start, { isLoading }] = useStartImproveAnalysisMutation();
   const [model, setModel] = useState('sonnet');
-  const [categories, setCategories] = useState<AnalysisCategory[]>(ALL_CATEGORIES);
+  const [categories, setCategories] = useState<AnalysisCategory[]>(DEFAULT_CATEGORIES);
   const [autoCreate, setAutoCreate] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +125,10 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
           <Checkbox key={category} checked={categories.includes(category)} onUpdate={(on) => toggle(category, on)} content={CATEGORY_LABEL[category]} />
         ))}
       </div>
+      <Text color="secondary" variant="caption-2">
+        «Новые фичи» — не исправление, а предложение новой возможности в рамках этого проекта: worker опирается на CLAUDE.md, README и то, что уже есть в
+        приложении, и называет модуль, который он расширяет. По умолчанию выключено.
+      </Text>
       <div className={styles.toolbar}>
         <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={MODEL_OPTIONS} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />

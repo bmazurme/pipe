@@ -33,7 +33,7 @@ import {
   ImproveTrigger,
 } from './entities/improve-run.entity';
 import {
-  ALL_CATEGORIES,
+  DEFAULT_CATEGORIES,
   AnalysisCategory,
   BACKLOG_FILE,
   buildAnalysisPrompt,
@@ -1061,7 +1061,7 @@ export class ImproveService {
   async startAnalysis(
     userId: number,
     model: string,
-    categories: AnalysisCategory[] = ALL_CATEGORIES,
+    categories: AnalysisCategory[] = DEFAULT_CATEGORIES,
     autoCreate = false,
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
@@ -1226,7 +1226,7 @@ export class ImproveService {
       const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
       const items = pickOnePerCategory(
         parseBacklog(utf8Text(raw)),
-        stored.categories ?? ALL_CATEGORIES,
+        stored.categories ?? DEFAULT_CATEGORIES,
       );
 
       if (items.length === 0) {
