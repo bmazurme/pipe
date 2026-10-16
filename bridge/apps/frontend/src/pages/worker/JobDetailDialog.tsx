@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Label, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Button, Dialog, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
 
 import {
+  getErrorMessage,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
   useGetJobQuery,
@@ -27,7 +28,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   // Keeps polling while the job is still moving on its own — the worker
   // process updates status/logs server-side, nothing here pushes to us.
   const [pollingInterval, setPollingInterval] = useState(JOB_POLL_INTERVAL_MS);
-  const { data: job } = useGetJobQuery(jobId, {
+  const { data: job, isLoading, isError, error: loadError } = useGetJobQuery(jobId, {
     pollingInterval,
     skipPollingIfUnfocused: true,
   });
@@ -55,12 +56,28 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const [downloadResult, { isLoading: isDownloading }] = useDownloadJobResultMutation();
   const [peekJobResult] = usePeekJobResultMutation();
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const [encryptKey, setEncryptKey] = useState('');
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [encryptError, setEncryptError] = useState<string | null>(null);
 
-  if (!job) return null;
+  // Bridge can take a while to answer, and the job may be gone (deleted in another tab):
+  // show the dialog straight away rather than letting the click look like it did nothing.
+  if (!job) {
+    return (
+      <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="job-detail-title">
+        <Dialog.Header caption={`Задача #${jobId}`} id="job-detail-title" />
+        <Dialog.Body>
+          {isLoading && <Loader size="m" />}
+          {isError && (
+            <Alert theme="danger" view="filled" message={getErrorMessage(loadError, 'Не удалось загрузить задачу')} />
+          )}
+        </Dialog.Body>
+        <Dialog.Footer textButtonCancel="Закрыть" onClickButtonCancel={onClose} />
+      </Dialog>
+    );
+  }
 
   const duration = jobDuration(job);
 
@@ -79,9 +96,22 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const handleDelete = async () => {
     try {
       await deleteJob(job.id).unwrap();
+      setConfirmingDelete(false);
       onClose();
     } catch (err) {
-      setError((err as { data?: { message?: string } })?.data?.message ?? 'Не удалось удалить задачу');
+      // The endpoint's transformErrorResponse already reduced the error to a message.
+      setConfirmingDelete(false);
+      setError(typeof err === 'string' ? err : 'Не удалось удалить задачу');
+    }
+  };
+
+  const handleDownloadResult = async () => {
+    setError(null);
+
+    try {
+      await downloadResult(job).unwrap();
+    } catch {
+      setError('Не удалось скачать результат');
     }
   };
 
@@ -163,19 +193,36 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         {...(job.status === 'succeeded' && {
           textButtonApply: 'Скачать результат',
           propsButtonApply: { loading: isDownloading },
-          onClickButtonApply: () => void downloadResult(job),
+          onClickButtonApply: () => void handleDownloadResult(),
         })}
         onClickButtonCancel={onClose}
       >
         <CancelJobButton job={job} />
         <RetryJobButton job={job} />
         {canDelete && (
-          <Button view="outlined-danger" onClick={() => void handleDelete()} loading={isDeleting}>
+          <Button view="outlined-danger" onClick={() => setConfirmingDelete(true)}>
             <Icon data={TrashBin} size={16} />
             Удалить
           </Button>
         )}
       </Dialog.Footer>
+
+      <Dialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        maxWidth="s"
+        aria-labelledby="delete-job-title"
+      >
+        <Dialog.Header caption={`Удалить задачу #${job.id}?`} id="delete-job-title" />
+        <Dialog.Body>Логи и результат задачи будут удалены вместе с ней.</Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Удалить"
+          propsButtonApply={{ view: 'outlined-danger', loading: isDeleting }}
+          onClickButtonCancel={() => setConfirmingDelete(false)}
+          onClickButtonApply={() => void handleDelete()}
+        />
+      </Dialog>
     </Dialog>
   );
 }
