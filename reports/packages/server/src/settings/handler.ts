@@ -4,8 +4,6 @@ import type { SettingsBundleType, SettingsType, StreamEvent } from '@reports/sha
 import { getSettings, setSettings } from './props';
 import { redactSettings, restoreMaskedSecrets } from './redact';
 import { buildSettingsBundle, applySettingsBundle } from './bundle';
-import { getSubscriptionConfig } from '../subscription/config-props';
-import { getProjectDict } from '../reports/project-dict-props';
 
 export async function handleGetSettings(req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -63,12 +61,7 @@ export async function handleImportSettingsBundle(req: Request, res: Response) {
 
     sendEvent({
       type: 'message',
-      data: {
-        settings: getSettings(),
-        subscriptionConfig: getSubscriptionConfig(),
-        projectDict: getProjectDict(),
-        skippedYears,
-      },
+      data: { skippedYears },
     });
     res.end();
   } catch (error) {

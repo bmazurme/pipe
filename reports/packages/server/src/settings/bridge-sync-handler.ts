@@ -3,8 +3,6 @@ import type { SettingsBundleType, StreamEvent } from '@reports/shared';
 
 import { getSettings } from './props';
 import { buildSettingsBundle, applySettingsBundle } from './bundle';
-import { getSubscriptionConfig } from '../subscription/config-props';
-import { getProjectDict } from '../reports/project-dict-props';
 import { describeFetchError } from '../utils/describe-fetch-error';
 
 const BRIDGE_TIMEOUT_MS = 20_000;
@@ -112,12 +110,7 @@ export async function handlePullSettingsFromBridge(req: Request, res: Response) 
 
     sendEvent({
       type: 'message',
-      data: {
-        settings: getSettings(),
-        subscriptionConfig: getSubscriptionConfig(),
-        projectDict: getProjectDict(),
-        skippedYears,
-      },
+      data: { skippedYears },
     });
     res.end();
   } catch (error) {
