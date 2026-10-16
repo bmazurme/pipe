@@ -58,6 +58,18 @@ function parseLogsFrom(raw: string | undefined): number | undefined {
   return value;
 }
 
+function parseUpdatedAfter(raw: string | undefined): Date | undefined {
+  if (raw === undefined) return undefined;
+
+  const value = new Date(raw);
+
+  if (Number.isNaN(value.getTime())) {
+    throw new BadRequestException('updatedAfter must be a valid date');
+  }
+
+  return value;
+}
+
 // One controller, one guard, for both audiences — JwtOrApiKeyGuard already
 // accepts a browser session OR a personal API key (the same "unified
 // machine auth" sync/reports already use), exactly like storage's own
@@ -77,10 +89,15 @@ export class WorkerController {
   ) {}
 
   @Get()
+  @ApiQuery({ name: 'updatedAfter', required: false })
   async list(
     @CurrentUser() currentUser: { id: number },
+    @Query('updatedAfter') updatedAfterRaw?: string,
   ): Promise<JobResponseDto[]> {
-    const jobs = await this.workerService.findAllByUser(currentUser.id);
+    const jobs = await this.workerService.findAllByUser(
+      currentUser.id,
+      parseUpdatedAfter(updatedAfterRaw),
+    );
 
     return jobs.map(JobResponseDto.fromEntity);
   }

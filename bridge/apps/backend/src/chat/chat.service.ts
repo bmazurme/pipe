@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression, Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 
 import {
   isAllowedAttachment,
@@ -99,11 +99,23 @@ export class ChatService {
     await Promise.all(attachments.map((a) => this.deleteFile(a)));
   }
 
-  async listMessages(chatId: number, userId: number): Promise<ChatMessage[]> {
+  // `updatedAfter` lets a page that already has the thread poll for only what changed since
+  // (a new message, or an existing one whose `progress`/`status`/`content` moved) instead of the
+  // whole history every second (see chatApi's listMessages) — every write to a message bumps its
+  // `updatedAt`, so nothing changed can be missed; messages are never individually deleted (only
+  // a whole chat, cascading), so there is no "gone but still cached" case to handle on top of it.
+  async listMessages(
+    chatId: number,
+    userId: number,
+    updatedAfter?: Date,
+  ): Promise<ChatMessage[]> {
     await this.findOwnedChat(chatId, userId);
 
     return this.messageRepository.find({
-      where: { chatId },
+      where: {
+        chatId,
+        ...(updatedAfter ? { updatedAt: MoreThan(updatedAfter) } : {}),
+      },
       order: { createdAt: 'ASC' },
     });
   }

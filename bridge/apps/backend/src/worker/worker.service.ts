@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
+import { In, MoreThan, Not, Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
@@ -362,7 +362,13 @@ export class WorkerService {
     return { count: history?.count ?? 0 };
   }
 
-  async findAllByUser(userId: number): Promise<Job[]> {
+  // `updatedAfter` lets the frontend poll for only what changed since its last fetch instead of
+  // the whole (ever-growing) history every few seconds — it merges the delta into what it already
+  // has (see workerApi's listJobs). A job's `updatedAt` is bumped on every status/log/usage write
+  // (plain .save()/.update() do this automatically; the few raw UPDATEs set it explicitly), so
+  // nothing that changed can be missed; a hard-deleted job is handled by the frontend removing it
+  // from its cache directly on delete, since a row that no longer exists can't appear in any filter.
+  async findAllByUser(userId: number, updatedAfter?: Date): Promise<Job[]> {
     // `logs` is unbounded and appended on every worker flush, and a context or history
     // can be tens of KB — the list view needs none of them, so they are left out of the
     // SELECT (GET :id returns the logs; the context/history text only ever goes to the worker).
@@ -375,7 +381,10 @@ export class WorkerService {
 
     return this.jobRepository.find({
       select: columns,
-      where: { userId },
+      where: {
+        userId,
+        ...(updatedAfter ? { updatedAt: MoreThan(updatedAfter) } : {}),
+      },
       order: { createdAt: 'DESC' },
     });
   }

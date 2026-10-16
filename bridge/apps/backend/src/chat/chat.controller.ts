@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseFilters,
@@ -44,6 +45,18 @@ const AttachmentMulterExceptionFilter = multerExceptionFilterFor(
   MAX_ATTACHMENT_BYTES,
   (mb) => `Файл больше ${mb} МБ`,
 );
+
+function parseUpdatedAfter(raw: string | undefined): Date | undefined {
+  if (raw === undefined) return undefined;
+
+  const value = new Date(raw);
+
+  if (Number.isNaN(value.getTime())) {
+    throw new BadRequestException('updatedAfter must be a valid date');
+  }
+
+  return value;
+}
 
 // One controller, one guard, for both audiences — same reasoning as
 // WorkerController: JwtOrApiKeyGuard already accepts a browser session or
@@ -102,8 +115,13 @@ export class ChatController {
   async listMessages(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
+    @Query('updatedAfter') updatedAfterRaw?: string,
   ): Promise<ChatMessageResponseDto[]> {
-    const messages = await this.chatService.listMessages(id, currentUser.id);
+    const messages = await this.chatService.listMessages(
+      id,
+      currentUser.id,
+      parseUpdatedAfter(updatedAfterRaw),
+    );
     const attachments = await this.chatService.listAttachments(id);
 
     return messages.map((message) =>
