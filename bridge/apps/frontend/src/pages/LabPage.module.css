@@ -13,14 +13,46 @@
   min-width: 0;
 }
 
-.statusRow {
+.urlRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.list {
+.urlRow > :first-child {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--g-color-line-generic);
+}
+
+.table th {
+  color: var(--g-color-text-secondary);
+  font-weight: 500;
+}
+
+.metricName {
+  font-family: var(--g-font-family-monospace, monospace);
+  font-size: 12px;
+}
+
+.diffCell {
+  font-weight: 500;
+}
+
+.historyList {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -29,13 +61,29 @@
   list-style: none;
 }
 
-.listItem {
+.historyItem {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
+.historyMetrics {
+  font-family: var(--g-font-family-monospace, monospace);
+  word-break: break-word;
+}
+
 .path {
   font-family: var(--g-font-family-monospace, monospace);
   font-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .table {
+    font-size: 12px;
+  }
+
+  .table th,
+  .table td {
+    padding: 4px 5px;
+  }
 }

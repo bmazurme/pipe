@@ -22,7 +22,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 HISTORY_FILE = "history.jsonl"
 
@@ -90,6 +90,46 @@ def record_predicted(project_dir: Path, results: dict[str, Any]) -> StatsRecord:
     _append(project_dir, record)
 
     return record
+
+
+def parse_assignments(lines: Iterable[str]) -> dict[str, float]:
+    """`key=value` lines (the CLI's `lab measure` argv, or one per line from the web form's
+    textarea) into a metrics dict — one parser, so a typo message reads the same whether it
+    came from a terminal or a phone's browser. Blank lines are skipped, not an error, since a
+    textarea naturally has them.
+    """
+
+    metrics: dict[str, float] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        key, sep, raw_value = line.partition("=")
+        if not sep:
+            raise ValueError(f"Ожидался key=value, получено {line!r}")
+
+        try:
+            metrics[key.strip()] = float(raw_value.strip())
+        except ValueError as exc:
+            raise ValueError(f"Значение {raw_value.strip()!r} для {key.strip()!r} не число") from exc
+
+    return metrics
+
+
+def coerce_metrics(raw: dict[str, Any]) -> dict[str, float]:
+    """A JSON request body already hands over `{key: value}` typed, not `key=value` lines —
+    this is `parse_assignments`'s counterpart for that path (the web API), checking every
+    value is actually numeric rather than parsing text.
+    """
+
+    metrics: dict[str, float] = {}
+    for key, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"Значение {value!r} для {key!r} не число")
+        metrics[str(key)] = float(value)
+
+    return metrics
 
 
 def record_measured(project_dir: Path, metrics: dict[str, float], note: str = "") -> StatsRecord:

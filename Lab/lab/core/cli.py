@@ -91,17 +91,24 @@ def measure(project_dir: Path, assignments: list[str], note: str) -> stats.Stats
     a "measured" observation — see core/stats.py.
     """
 
-    metrics: dict[str, float] = {}
-    for assignment in assignments:
-        key, sep, raw_value = assignment.partition("=")
-        if not sep:
-            raise ValueError(f"Ожидался key=value, получено {assignment!r}")
-        try:
-            metrics[key] = float(raw_value)
-        except ValueError as exc:
-            raise ValueError(f"Значение {raw_value!r} для {key!r} не число") from exc
+    return stats.record_measured(project_dir, stats.parse_assignments(assignments), note)
 
-    return stats.record_measured(project_dir, metrics, note)
+
+def serve(project_dir: Path, host: str, port: int) -> None:
+    """`lab serve` — a local JSON API (core/webui.py) for bridge's `/lab` page to call: that
+    page is the actual interface now, Lab only ever hands over data. Flask is a lazy, optional
+    import here specifically so `run`/`measure`/`stats` work without it installed.
+    """
+
+    try:
+        from . import webui
+    except ImportError as exc:
+        raise SystemExit("`lab serve` нужен Flask: pip install -e '.[web]'") from exc
+
+    if host == "0.0.0.0":  # noqa: S104 — the default is deliberate, see webui.py's docstring
+        print(f"Адрес для страницы bridge /lab (в той же сети): http://{webui.local_network_ip()}:{port}")
+    print(f"На этом компьютере: http://localhost:{port}  (Ctrl+C — остановить)")
+    webui.run_server(project_dir, host, port)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -119,6 +126,13 @@ def main(argv: list[str] | None = None) -> int:
     stats_parser = sub.add_parser("stats", help="Показать историю расчётов/замеров проекта: расчёт vs факт по каждой метрике")
     stats_parser.add_argument("project_dir", type=Path, help="Папка проекта")
 
+    serve_parser = sub.add_parser(
+        "serve", help="Локальный JSON API для страницы /lab в bridge (нужен Flask: pip install -e '.[web]')"
+    )
+    serve_parser.add_argument("project_dir", type=Path, help="Папка проекта")
+    serve_parser.add_argument("--host", default="0.0.0.0", help="По умолчанию слушает всю сеть, чтобы страница /lab в bridge достучалась с другого устройства — см. предупреждение в core/webui.py")
+    serve_parser.add_argument("--port", type=int, default=8765)
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -135,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Записано ({record.timestamp}): {record.metrics}" + (f" — {record.note}" if record.note else ""))
     elif args.command == "stats":
         print(report.format_stats(args.project_dir, stats.summarize(args.project_dir)))
+    elif args.command == "serve":
+        serve(args.project_dir, args.host, args.port)
 
     return 0
 
