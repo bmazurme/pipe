@@ -88,17 +88,16 @@ def run(project_dir: Path) -> dict:
 
 def measure(project_dir: Path, assignments: list[str], note: str) -> stats.StatsRecord:
     """Parses `key=value` pairs from the command line into a metrics dict and records them as
-    a "measured" observation — see core/stats.py. Shares its parser with the `serve` web
-    form's textarea (`stats.parse_assignments`), so a typo reads the same either way.
+    a "measured" observation — see core/stats.py.
     """
 
     return stats.record_measured(project_dir, stats.parse_assignments(assignments), note)
 
 
 def serve(project_dir: Path, host: str, port: int) -> None:
-    """`lab serve` — a local web form for recording test observations (see core/webui.py's
-    docstring for why this exists and its security caveat). Flask is a lazy, optional import
-    here specifically so `run`/`measure`/`stats` work without it installed.
+    """`lab serve` — a local JSON API (core/webui.py) for bridge's `/lab` page to call: that
+    page is the actual interface now, Lab only ever hands over data. Flask is a lazy, optional
+    import here specifically so `run`/`measure`/`stats` work without it installed.
     """
 
     try:
@@ -107,8 +106,8 @@ def serve(project_dir: Path, host: str, port: int) -> None:
         raise SystemExit("`lab serve` нужен Flask: pip install -e '.[web]'") from exc
 
     if host == "0.0.0.0":  # noqa: S104 — the default is deliberate, see webui.py's docstring
-        print(f"Открыть с телефона в той же сети: http://{webui.local_network_ip()}:{port}")
-    print(f"Открыть на этом компьютере: http://localhost:{port}  (Ctrl+C — остановить)")
+        print(f"Адрес для страницы bridge /lab (в той же сети): http://{webui.local_network_ip()}:{port}")
+    print(f"На этом компьютере: http://localhost:{port}  (Ctrl+C — остановить)")
     webui.run_server(project_dir, host, port)
 
 
@@ -128,10 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     stats_parser.add_argument("project_dir", type=Path, help="Папка проекта")
 
     serve_parser = sub.add_parser(
-        "serve", help="Локальная веб-страница для записи замеров с телефона/планшета (нужен Flask: pip install -e '.[web]')"
+        "serve", help="Локальный JSON API для страницы /lab в bridge (нужен Flask: pip install -e '.[web]')"
     )
     serve_parser.add_argument("project_dir", type=Path, help="Папка проекта")
-    serve_parser.add_argument("--host", default="0.0.0.0", help="По умолчанию слушает всю сеть, чтобы телефон достучался — см. предупреждение в core/webui.py")
+    serve_parser.add_argument("--host", default="0.0.0.0", help="По умолчанию слушает всю сеть, чтобы страница /lab в bridge достучалась с другого устройства — см. предупреждение в core/webui.py")
     serve_parser.add_argument("--port", type=int, default=8765)
 
     args = parser.parse_args(argv)

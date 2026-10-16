@@ -117,6 +117,21 @@ def parse_assignments(lines: Iterable[str]) -> dict[str, float]:
     return metrics
 
 
+def coerce_metrics(raw: dict[str, Any]) -> dict[str, float]:
+    """A JSON request body already hands over `{key: value}` typed, not `key=value` lines —
+    this is `parse_assignments`'s counterpart for that path (the web API), checking every
+    value is actually numeric rather than parsing text.
+    """
+
+    metrics: dict[str, float] = {}
+    for key, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"Значение {value!r} для {key!r} не число")
+        metrics[str(key)] = float(value)
+
+    return metrics
+
+
 def record_measured(project_dir: Path, metrics: dict[str, float], note: str = "") -> StatsRecord:
     """`lab measure <project_dir> key=value [key=value ...] [--note TEXT]` — a human-entered
     real observation, same metric-key namespace as `record_predicted` (e.g.
