@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Alert, Dialog, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { Alert, Button, Dialog, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { scanForLeaks, type LeakFinding } from '@pipe/protocol/leakScan';
 
 import {
   getErrorMessage,
@@ -11,6 +12,7 @@ import {
   useUpdateContextMutation,
 } from '../../store/api';
 import styles from '../ContextPage.module.css';
+import { isTextFile } from '../storage/textFiles';
 
 interface ContextDialogProps {
   /** The context being edited, or null to create a new one. */
@@ -45,6 +47,34 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
   const [name, setName] = useState(context?.name ?? '');
   const [content, setContent] = useState(context?.content ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  const [notice, setNotice] = useState<string | null>(null);
+  const [leaks, setLeaks] = useState<LeakFinding[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setNotice(null);
+    setLeaks([]);
+
+    if (!isTextFile(file.name)) {
+      setError(`Файл «${file.name}» не текстовый — загрузите .md, .txt или другой текстовый файл`);
+      return;
+    }
+
+    setError(null);
+    const text = await file.text();
+    const truncated = text.length > MAX_CONTEXT_LENGTH;
+    const loaded = truncated ? text.slice(0, MAX_CONTEXT_LENGTH) : text;
+
+    if (!name.trim()) setName(file.name.replace(/\.[^.]*$/, '').slice(0, MAX_CONTEXT_NAME_LENGTH));
+    setContent(loaded);
+    if (truncated) setNotice(`Файл обрезан до ${MAX_CONTEXT_LENGTH.toLocaleString('ru-RU')} символов`);
+    setLeaks(scanForLeaks([{ source: file.name, content: loaded }]));
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return setError('Укажите название');
@@ -85,6 +115,35 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
           <Text variant="caption-2" color="secondary" className={styles.counter}>
             {content.length} / {MAX_CONTEXT_LENGTH}
           </Text>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".md,.mdx,.txt,.json,.yml,.yaml,.xml,.html,.css,.sql,.sh,.js,.ts"
+            aria-label="Файл с текстом контекста"
+            hidden
+            onChange={(event) => void handleFile(event)}
+          />
+          <div>
+            <Button view="outlined" onClick={() => fileInput.current?.click()}>
+              Загрузить из файла
+            </Button>
+          </div>
+          {notice && <Alert theme="warning" message={notice} />}
+          {leaks.length > 0 && (
+            <Alert
+              theme="warning"
+              title="В файле найдено похожее на секреты — проверьте текст перед сохранением"
+              message={
+                <ul>
+                  {leaks.map((finding) => (
+                    <li key={`${finding.kind}:${finding.line}:${finding.match}`}>
+                      строка {finding.line}: {finding.kind} — {finding.match}
+                    </li>
+                  ))}
+                </ul>
+              }
+            />
+          )}
           {error && <Alert theme="danger" view="filled" message={error} />}
         </div>
       </Dialog.Body>
