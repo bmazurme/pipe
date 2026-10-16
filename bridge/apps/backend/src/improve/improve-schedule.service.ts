@@ -15,7 +15,8 @@ import { NotifyService } from '../telegram/notify.service';
 import { localMinutes } from '../telegram/quiet-hours';
 import { ALL_CATEGORIES, AnalysisCategory, isCategory } from './analysis';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
-import { ImproveService, PR_LABEL } from './improve.service';
+import { PR_LABEL } from './improve-shared';
+import { ImproveService } from './improve.service';
 
 const SCHEDULE_TICK_MS = 60_000;
 

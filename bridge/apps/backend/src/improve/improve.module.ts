@@ -12,6 +12,7 @@ import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import { ImproveAutoStartService } from './improve-auto-start.service';
+import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveCiService } from './improve-ci.service';
 import { ImproveController } from './improve.controller';
@@ -34,6 +35,7 @@ import { ImproveService } from './improve.service';
     ImproveCiService,
     ImproveScheduleService,
     ImproveAutoStartService,
+    ImproveIssueFilingService,
   ],
 })
 export class ImproveModule {}

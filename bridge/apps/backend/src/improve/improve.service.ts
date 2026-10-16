@@ -36,16 +36,15 @@ import {
   ALL_CATEGORIES,
   AnalysisCategory,
   BACKLOG_FILE,
-  BacklogItem,
   buildAnalysisPrompt,
   buildLogDigest,
   categoryLabel,
   isCategory,
-  issueBody,
-  normalizeTitle,
   parseBacklog,
   pickOnePerCategory,
 } from './analysis';
+import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { AnalysisResult, message, PR_LABEL } from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
 import {
@@ -63,19 +62,6 @@ import {
   utf8Text,
 } from './parcel';
 
-interface AnalysisResult {
-  categories: AnalysisCategory[];
-  autoCreate: boolean;
-  autoStart?: boolean;
-  items: Array<
-    BacklogItem & {
-      issueNumber?: number;
-      duplicateOf?: number;
-      started?: boolean;
-    }
-  >;
-}
-
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 
 export function requireImproveModel(model: string): void {
@@ -92,7 +78,6 @@ const PUBLISHING_STALE_MS = 10 * 60_000;
 const PUBLISH_ABANDONED_ERROR =
   'Публикация прервана (bridge перезапускался); запустите задачу заново';
 export const AUTOSTART_MIN_AGE_SECONDS = 10;
-export const PR_LABEL = 'loop';
 
 // The loop run on bridge itself: pick a GitHub issue, hand the repository snapshot
 // and the issue to a worker, and turn what comes back into a branch and a pull
@@ -137,6 +122,7 @@ export class ImproveService {
     private readonly notifier: NotifyService,
     private readonly dataSource: DataSource,
     private readonly appLogs: AppLogService,
+    private readonly issueFiling: ImproveIssueFilingService,
   ) {}
 
   // ---------------------------------------------------------------- status
@@ -1244,7 +1230,7 @@ export class ImproveService {
 
       if (stored.autoCreate) {
         try {
-          summary = await this.createIssuesFromRun(run);
+          summary = await this.issueFiling.fileProposals(run);
         } catch (error) {
           // The proposals exist; only the filing failed — the manual button can finish it.
           const note = `${items.length} предложений ждут проверки; автосоздание issues прервано: ${message(error)}`;
@@ -1282,75 +1268,6 @@ export class ImproveService {
         `🔴 Анализ не удался: ${message(error).slice(0, 200)}`,
       );
     }
-  }
-
-  // Files the run's proposals as issues, skipping any whose title matches an existing
-  // issue. Records each item's outcome on the run and returns a one-line summary.
-  async createIssuesFromRun(run: ImproveRun, only?: number[]): Promise<string> {
-    const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
-    const existing = new Map(
-      (await this.github.listIssueTitles()).map((issue) => [
-        normalizeTitle(issue.title),
-        issue.number,
-      ]),
-    );
-    let created = 0;
-    let duplicates = 0;
-    const unlabelled: number[] = [];
-    let failure: Error | null = null;
-
-    for (const [index, item] of stored.items.entries()) {
-      if (only && !only.includes(index)) continue;
-      if (item.issueNumber || item.duplicateOf) continue;
-
-      const duplicate = existing.get(normalizeTitle(item.title));
-
-      if (duplicate) {
-        item.duplicateOf = duplicate;
-        duplicates += 1;
-        continue;
-      }
-
-      let issue: { number: number; missingLabels?: string[] };
-
-      try {
-        issue = await this.github.createIssue({
-          title: item.title,
-          body: issueBody(item),
-          labels: [PR_LABEL, `risk:${item.risk}`, `category:${item.category}`],
-        });
-      } catch (error) {
-        failure = new Error(
-          `Не удалось создать issue для «${item.title}» (предложение ${index + 1}): ${message(error)}; уже создано: ${created}`,
-        );
-        break;
-      }
-
-      item.issueNumber = issue.number;
-      existing.set(normalizeTitle(item.title), issue.number);
-      created += 1;
-
-      if ((issue.missingLabels ?? []).includes(PR_LABEL)) {
-        unlabelled.push(issue.number);
-      }
-    }
-
-    // Keep whatever was filed, even when a later proposal failed.
-    run.result = JSON.stringify(stored);
-    await this.runs.save(run);
-
-    if (unlabelled.length > 0) {
-      this.log(
-        'warn',
-        'improve.labels_missing',
-        `Issues ${unlabelled.map((n) => `#${n}`).join(', ')} were created without the "${PR_LABEL}" label`,
-        { runId: run.id },
-      );
-    }
-
-    if (failure) throw failure;
-
-    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}${unlabelled.length ? `; ⚠ без метки ${PR_LABEL}: ${unlabelled.map((n) => `#${n}`).join(', ')} — проверьте права токена (Issues: write)` : ''}`;
   }
 
   // Starts a run for each filed proposal that has not been started yet. One
@@ -1407,7 +1324,7 @@ export class ImproveService {
       throw new ConflictException('Анализ ещё не завершён');
     }
 
-    const filed = await this.createIssuesFromRun(run, indices);
+    const filed = await this.issueFiling.fileProposals(run, indices);
 
     // Use the model the user picked now, not the one the analysis ran with.
     run.note = `${filed}; ${await this.startFiled(run, indices, model)}`;
@@ -1456,22 +1373,6 @@ export class ImproveService {
     }
 
     return { started, skipped };
-  }
-
-  // The manual path for a reviewed analysis: file the chosen proposals.
-  async createIssues(id: number, indices?: number[]): Promise<ImproveRun> {
-    this.requireConfigured();
-
-    const run = await this.runs.findOne({ where: { id, kind: 'analysis' } });
-
-    if (!run) throw new NotFoundException('Analysis run not found');
-    if (run.status !== ImproveRunStatus.Analyzed) {
-      throw new ConflictException('Анализ ещё не завершён');
-    }
-
-    run.note = await this.createIssuesFromRun(run, indices);
-
-    return this.runs.save(run);
   }
 
   // ---------------------------------------------------------------- helpers
@@ -1534,6 +1435,4 @@ export function describePublishError(error: unknown): string {
     : text;
 }
 
-export function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+export { message, PR_LABEL };

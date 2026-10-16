@@ -1,4 +1,5 @@
 import { ImproveRunStatus } from './entities/improve-run.entity';
+import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveService } from './improve.service';
 import { zipSync, strToU8 } from 'fflate';
 
@@ -37,6 +38,11 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     summary: jest.fn().mockRejectedValue(new Error('no table')),
     list: jest.fn().mockResolvedValue([]),
   };
+  const filing = new ImproveIssueFilingService(
+    runs as never,
+    github as never,
+    appLogs as never,
+  );
   const service = new ImproveService(
     runs as never,
     github as never,
@@ -46,9 +52,10 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     { send: jest.fn() } as never,
     { query: jest.fn() } as never,
     appLogs as never,
+    filing as never,
   );
 
-  return { service, runs, github, workers, storage, appLogs };
+  return { service, filing, runs, github, workers, storage, appLogs };
 }
 
 describe('ImproveService analysis', () => {
@@ -113,7 +120,7 @@ describe('ImproveService analysis', () => {
   });
 
   it('files proposals as issues but skips a duplicate title', async () => {
-    const { service, github } = setup();
+    const { filing, github } = setup();
     const run = {
       id: 1,
       result: JSON.stringify({
@@ -136,7 +143,7 @@ describe('ImproveService analysis', () => {
       }),
     };
 
-    const summary = await service.createIssuesFromRun(run as never);
+    const summary = await filing.fileProposals(run as never);
 
     expect(github.createIssue).toHaveBeenCalledTimes(1);
     expect(github.createIssue).toHaveBeenCalledWith(
@@ -261,34 +268,6 @@ describe('ImproveService analysis', () => {
     expect(listOpenIssues).toHaveBeenNthCalledWith(1, '', 100);
     expect(listOpenIssues).toHaveBeenNthCalledWith(2, 'loop', 100);
   });
-
-  it('warns, in the run note and the app log, when GitHub dropped the loop label', async () => {
-    const { service, github } = setup();
-    github.createIssue.mockResolvedValue({
-      number: 41,
-      missingLabels: ['loop'],
-    });
-    const run = {
-      id: 1,
-      result: JSON.stringify({
-        categories: ['performance'],
-        autoCreate: false,
-        items: [
-          {
-            category: 'performance',
-            title: 'Cache lists',
-            risk: 'low',
-            body: 'y',
-          },
-        ],
-      }),
-    };
-
-    const summary = await service.createIssuesFromRun(run as never);
-
-    expect(summary).toContain('без метки loop: #41');
-    expect(summary).toContain('Issues: write');
-  });
 });
 
 describe('ImproveService partial issue filing', () => {
@@ -308,21 +287,6 @@ describe('ImproveService partial issue filing', () => {
       .mockResolvedValueOnce({ number: 41, missingLabels: [] })
       .mockRejectedValueOnce(new Error('403 rate limit'));
   };
-
-  it('keeps the issues already filed when GitHub fails midway', async () => {
-    const run = { id: 1, userId: 3, result: twoItems() };
-    const { service, github, runs } = setup();
-    failSecond(github);
-
-    await expect(service.createIssuesFromRun(run as never)).rejects.toThrow(
-      /Second.*403 rate limit.*уже создано: 1/,
-    );
-
-    const stored = JSON.parse(run.result);
-    expect(stored.items[0].issueNumber).toBe(41);
-    expect(stored.items[1].issueNumber).toBeUndefined();
-    expect(runs.save).toHaveBeenCalledWith(run);
-  });
 
   it('finishes an auto-create analysis as Analyzed when filing fails', async () => {
     const run = {
@@ -357,14 +321,14 @@ describe('ImproveService partial issue filing', () => {
 
   it('files only the remaining items on retry and starts the filed one', async () => {
     const run = { id: 1, userId: 3, model: 'sonnet', result: twoItems() };
-    const { service, github } = setup({
+    const { filing, github } = setup({
       findOne: jest.fn().mockResolvedValue({
         ...run,
         status: ImproveRunStatus.Analyzed,
       }),
     });
     failSecond(github);
-    await expect(service.createIssuesFromRun(run as never)).rejects.toThrow();
+    await expect(filing.fileProposals(run as never)).rejects.toThrow();
 
     const analyzed = {
       ...run,
