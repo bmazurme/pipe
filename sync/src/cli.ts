@@ -12,6 +12,7 @@ import { pullCommand } from './commands/pull.js';
 import { pushIssueCommand } from './commands/pushIssue.js';
 import { pullIssueCommand } from './commands/pullIssue.js';
 import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
+import { inboxCommand } from './commands/inbox.js';
 import { log, setVerbose } from './log.js';
 import { setupProxy } from './setupProxy.js';
 
@@ -104,6 +105,14 @@ program
   .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
   .option('--strict', 'skip (instead of just warning on) an issue whose leak scan finds something')
   .action((name, options) => gitlabWorkerCommand(name, options));
+
+program
+  .command('inbox')
+  .description('List parcels waiting in bridge storage without downloading (and so without deleting) them')
+  .option('--channel <channel>', 'only this channel, e.g. "issue"')
+  .option('--direction <direction>', 'only "result" or "outbound" parcels')
+  .option('--json', 'print the raw list as JSON')
+  .action((options) => inboxCommand(options));
 
 program
   .command('generate-keys <name>')
