@@ -3,7 +3,7 @@ import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Card, Dialog, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 import { Clock } from '@gravity-ui/icons';
 
-import { ALL_CATEGORIES, CATEGORY_LABEL } from './improveLabels';
+import { ALL_CATEGORIES, CATEGORY_LABEL, DEFAULT_CATEGORIES } from './improveLabels';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { listTimeZones } from '../../shared/lib/timeZones';
 import {
@@ -35,7 +35,7 @@ function toForm(schedule: ImproveSchedule): Form {
     count: String(schedule.count),
     model: schedule.model,
     kind: schedule.kind,
-    categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : ALL_CATEGORIES,
+    categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : DEFAULT_CATEGORIES,
     autoCreateIssues: schedule.autoCreateIssues,
     autoStartIssues: schedule.autoStartIssues,
     contextId: schedule.contextId === null ? '' : String(schedule.contextId),
@@ -235,7 +235,7 @@ export function SchedulesTab() {
                 label="Что запускать"
                 value={[editing.form.kind ?? 'issues']}
                 onUpdate={([kind]) =>
-                  update(kind === 'analysis' ? { kind: 'analysis', categories: editing.form.categories ?? ALL_CATEGORIES, autoCreateIssues: editing.form.autoCreateIssues ?? true } : { kind: 'issues' })
+                  update(kind === 'analysis' ? { kind: 'analysis', categories: editing.form.categories ?? DEFAULT_CATEGORIES, autoCreateIssues: editing.form.autoCreateIssues ?? true } : { kind: 'issues' })
                 }
                 options={[
                   { value: 'issues', content: 'Задачи из issues' },

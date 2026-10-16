@@ -144,6 +144,47 @@ describe('ImprovePage analysis', () => {
     );
   });
 
+  it('has a "Новые фичи" checkbox that is off by default and sends the direction when ticked', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    const features = (await screen.findByLabelText('Новые фичи')) as HTMLInputElement;
+
+    expect(features.checked).toBe(false);
+    expect(screen.getByText(/не исправление, а предложение новой возможности в рамках этого проекта/)).toBeTruthy();
+
+    await user.click(features);
+    await user.click(screen.getByRole('button', { name: 'Запустить анализ' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({
+        method: 'POST',
+        path: 'improve/analysis',
+        body: {
+          model: 'sonnet',
+          categories: ['general', 'uiux', 'security', 'performance', 'reliability', 'tests', 'docs', 'architecture', 'features'],
+          autoCreate: false,
+          autoStart: false,
+        },
+      }),
+    );
+  });
+
+  it('can run new features on their own', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    for (const label of ['Общий анализ', 'UI/UX', 'Безопасность', 'Производительность', 'Надёжность', 'Тесты', 'Документация', 'Архитектура']) {
+      await user.click(await screen.findByLabelText(label));
+    }
+    await user.click(screen.getByLabelText('Новые фичи'));
+    await user.click(screen.getByRole('button', { name: 'Запустить анализ' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/analysis', body: { model: 'sonnet', categories: ['features'], autoCreate: false, autoStart: false } }),
+    );
+  });
+
   it('shows proposals and files them as issues', async () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');

@@ -1,6 +1,7 @@
 import { PROTECTED_PATHS } from '../loop/protected-paths';
 import {
   ALL_CATEGORIES,
+  DEFAULT_CATEGORIES,
   BACKLOG_FILE,
   buildAnalysisPrompt,
   issueBody,
@@ -20,9 +21,9 @@ describe('buildAnalysisPrompt', () => {
   it('asks for exactly one item per direction and names every direction id', () => {
     const prompt = buildAnalysisPrompt([]);
 
-    expect(prompt).toContain(`exactly ${ALL_CATEGORIES.length} small`);
+    expect(prompt).toContain(`exactly ${DEFAULT_CATEGORIES.length} small`);
     expect(ALL_CATEGORIES).toEqual(expect.arrayContaining(['tests', 'docs']));
-    for (const id of ALL_CATEGORIES) expect(prompt).toContain(`"${id}"`);
+    for (const id of DEFAULT_CATEGORIES) expect(prompt).toContain(`"${id}"`);
     expect(prompt).toContain(BACKLOG_FILE);
   });
 
@@ -32,6 +33,30 @@ describe('buildAnalysisPrompt', () => {
     expect(prompt).toContain('exactly 2 small');
     expect(prompt).toContain('testing gap');
     expect(prompt).toContain('documentation gap');
+  });
+
+  it("asks for new features only when that direction is chosen, anchored in the project's own context", () => {
+    expect(DEFAULT_CATEGORIES).not.toContain('features');
+    expect(ALL_CATEGORIES).toContain('features');
+    expect(buildAnalysisPrompt([])).not.toContain('"features"');
+
+    const prompt = buildAnalysisPrompt([], ['features']);
+
+    expect(prompt).toContain('exactly 1 small');
+    expect(prompt).toContain('"features" — Новые фичи');
+    expect(prompt).toContain('NEW feature that fits THIS project');
+    expect(prompt).toContain(
+      'CLAUDE.md, the READMEs and the existing pages/commands',
+    );
+    expect(prompt).toContain('smallest useful first slice');
+  });
+
+  it('can combine the features direction with the usual ones', () => {
+    const prompt = buildAnalysisPrompt([], ['tests', 'features']);
+
+    expect(prompt).toContain('exactly 2 small');
+    expect(prompt).toContain('"tests"');
+    expect(prompt).toContain('"features"');
   });
 
   it('has an architecture direction, with its own guidance', () => {

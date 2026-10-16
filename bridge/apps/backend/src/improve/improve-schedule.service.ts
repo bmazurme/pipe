@@ -13,7 +13,7 @@ import { GithubApiService } from '../loop/github-api.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { localMinutes } from '../telegram/quiet-hours';
-import { ALL_CATEGORIES, AnalysisCategory, isCategory } from './analysis';
+import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveService, PR_LABEL } from './improve.service';
 
@@ -158,7 +158,7 @@ export class ImproveScheduleService {
         ? (schedule.categories
             .split(',')
             .filter(isCategory) as AnalysisCategory[])
-        : ALL_CATEGORIES;
+        : DEFAULT_CATEGORIES;
       let summary: string;
 
       try {
