@@ -55,7 +55,7 @@ export class UsersService {
 
   async update(
     id: number,
-    updateFields: Partial<User>,
+    updateFields: { status?: string },
   ): Promise<UserResponseDto> {
     const user = await this.userRepository.findOneOrFail({ where: { id } });
     const updatedUser = await this.userRepository.save({

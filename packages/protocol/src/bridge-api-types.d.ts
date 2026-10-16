@@ -1893,7 +1893,7 @@ export interface components {
             status: string;
         };
         UpdateUserDto: {
-            status: string;
+            status?: string;
         };
         UserResponseDto: {
             id: number;
