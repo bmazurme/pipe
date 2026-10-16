@@ -234,6 +234,7 @@ describe('WorkerController', () => {
       claudeCredentialId: null,
       contextName: null,
       historyCount: null,
+      taskKey: '173:628',
       status: 'running',
       logs: 'first chunk\nsecond chunk\n',
       errorMessage: null,
@@ -284,6 +285,15 @@ describe('WorkerController', () => {
       ).toHaveBeenCalledWith(5, 7);
       expect(result.logs).toBe('first chunk\nsecond chunk\n');
       expect(result).not.toHaveProperty('logsLength');
+    });
+
+    it('returns the taskKey, and null when the job has none', async () => {
+      const mocks = workerService as Record<string, jest.Mock>;
+
+      expect((await controller.get(5, { id: 7 })).taskKey).toBe('173:628');
+
+      mocks.findOwned.mockResolvedValueOnce({ ...job, taskKey: undefined });
+      expect((await controller.get(5, { id: 7 })).taskKey).toBeNull();
     });
 
     it('returns only the log after logsFrom, plus logsLength', async () => {

@@ -4043,6 +4043,10 @@
             "type": "number",
             "nullable": true
           },
+          "taskKey": {
+            "type": "string",
+            "nullable": true
+          },
           "status": {
             "enum": [
               "queued",
@@ -4110,6 +4114,7 @@
           "targetWorkerId",
           "contextName",
           "historyCount",
+          "taskKey",
           "status",
           "logs",
           "errorMessage",

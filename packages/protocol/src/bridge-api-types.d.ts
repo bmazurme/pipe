@@ -1983,6 +1983,7 @@ export interface components {
             targetWorkerId: number | null;
             contextName: string | null;
             historyCount: number | null;
+            taskKey: string | null;
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
