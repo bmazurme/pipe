@@ -288,3 +288,61 @@ describe('ChatPage — opening an existing chat from history', () => {
     expect(await screen.findByText('Здравствуйте!')).toBeTruthy();
   });
 });
+
+describe('ChatPage — downloading a chat as Markdown', () => {
+  it('downloads the whole chat as <title>.md from the header menu', async () => {
+    const user = userEvent.setup();
+    const blobs: Blob[] = [];
+    const downloads: string[] = [];
+    const createObjectURL = vi.fn((blob: Blob) => {
+      blobs.push(blob);
+      return 'blob:chat';
+    });
+    const revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        const method = request.method;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([CHAT]);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(MESSAGES);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    try {
+      renderPage();
+      await screen.findByText('Chat');
+
+      const historyButton = document.querySelector('[data-qa="header-action-history"]');
+      if (!historyButton) throw new Error('history button not found');
+      await user.click(historyButton);
+      await user.click(await screen.findByText(CHAT.title));
+
+      await screen.findByText('Привет');
+
+      const menuButton = document.querySelector('[data-qa="header-menu-button"]');
+      if (!menuButton) throw new Error('header menu button not found');
+      await user.click(menuButton);
+      await user.click(await screen.findByText('Скачать как Markdown'));
+
+      expect(downloads).toEqual([`${CHAT.title}.md`]);
+      expect(blobs).toHaveLength(1);
+      expect(blobs[0].type).toBe('text/markdown');
+      const markdown = await blobs[0].text();
+      expect(markdown.startsWith(`# ${CHAT.title}\n`)).toBe(true);
+      expect(markdown).toContain('**Пользователь:** Привет\n\n**GPT:** Здравствуйте!');
+    } finally {
+      click.mockRestore();
+      Object.assign(URL, original);
+    }
+  });
+});
