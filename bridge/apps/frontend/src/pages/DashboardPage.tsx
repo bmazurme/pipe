@@ -3,6 +3,7 @@ import { Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
+  getErrorMessage,
   NodeStatus,
   useGetDashboardBackupsQuery,
   useGetDashboardNodesQuery,
@@ -24,6 +25,17 @@ const VPN_RECENT_THRESHOLD_MS = 5 * 60 * 1000;
 // Matches infra/backup/backup.sh --check's own freshness threshold, so this
 // tile agrees with the system that already alerts on a stale backup.
 const BACKUP_STALE_THRESHOLD_MS = 26 * 60 * 60 * 1000;
+
+function LoadError({ error }: { error: unknown }) {
+  return (
+    <div className={styles.row}>
+      <Label theme="danger">Не удалось загрузить</Label>
+      <Text color="secondary" variant="caption-2">
+        {getErrorMessage(error, 'Ошибка запроса')}
+      </Text>
+    </div>
+  );
+}
 
 const NODE_THEME: Record<NodeStatus['state'], 'success' | 'danger' | 'warning'> = {
   ready: 'success',
@@ -106,10 +118,10 @@ export function DashboardPage() {
   const nodesList = nodes.data?.nodes ?? [];
   const nodesDownCount = nodesList.filter((node) => node.state !== 'ready').length;
   const backupAge = backups.data?.lastBackupAt ? Date.now() - new Date(backups.data.lastBackupAt).getTime() : null;
-  const backupIssue = !backups.data?.configured || backupAge === null || backupAge > BACKUP_STALE_THRESHOLD_MS || Boolean(backups.data?.error);
+  const backupIssue = backups.isError || !backups.data?.configured || backupAge === null || backupAge > BACKUP_STALE_THRESHOLD_MS || Boolean(backups.data?.error);
 
-  const issues = [vpnDown, nodesDownCount > 0, backupIssue].filter(Boolean).length;
-  const summaryReady = !vpnActive.isLoading && !nodes.isLoading && !backups.isLoading;
+  const issues = [vpnDown, nodes.isError || nodesDownCount > 0, backupIssue, vpnConnections.isError].filter(Boolean).length;
+  const summaryReady = !vpnActive.isLoading && !nodes.isLoading && !backups.isLoading && !vpnConnections.isLoading;
 
   return (
     <div className={styles.page}>
@@ -134,6 +146,8 @@ export function DashboardPage() {
           />
           {vpnConnections.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
+          ) : vpnConnections.isError ? (
+            <LoadError error={vpnConnections.error} />
           ) : !vpnConnections.data?.length ? (
             <Label theme="warning">Нет подключений</Label>
           ) : (
@@ -149,6 +163,8 @@ export function DashboardPage() {
           <SectionHeader title="Узлы" icon={Server} meta={nodesList.length ? `${nodesList.length - nodesDownCount} из ${nodesList.length}` : undefined} />
           {nodes.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
+          ) : nodes.isError ? (
+            <LoadError error={nodes.error} />
           ) : (
             <div className={styles.nodeGrid}>
               {nodesList.map((node) => (
@@ -167,6 +183,8 @@ export function DashboardPage() {
           <SectionHeader title="Бэкапы" icon={Database} />
           {backups.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
+          ) : backups.isError ? (
+            <LoadError error={backups.error} />
           ) : !backups.data?.configured ? (
             <div className={styles.row}>
               <Label theme="warning">Не настроено</Label>
