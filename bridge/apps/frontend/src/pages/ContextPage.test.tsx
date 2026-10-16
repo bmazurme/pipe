@@ -150,3 +150,75 @@ describe('ContextPage', () => {
     await waitFor(() => expect(sent).toContainEqual({ method: 'DELETE', path: 'contexts/1', body: undefined }));
   });
 });
+
+describe('ContextDialog file upload', () => {
+  const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /Новый контекст/ }));
+    await screen.findByLabelText('Название контекста');
+  };
+  const pick = (file: File) =>
+    userEvent.upload(screen.getByLabelText('Файл с текстом контекста') as HTMLInputElement, file, { applyAccept: false });
+  const textValue = () => (screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value;
+
+  it('fills the name and text from a small .md file and saves them', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+    expect(screen.getByRole('button', { name: 'Загрузить из файла' })).toBeTruthy();
+
+    await pick(new File(['# Rules\nUse pnpm.'], 'CLAUDE.md', { type: 'text/markdown' }));
+
+    await waitFor(() => expect(textValue()).toBe('# Rules\nUse pnpm.'));
+    expect((screen.getByLabelText('Название контекста') as HTMLInputElement).value).toBe('CLAUDE');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'contexts', body: { name: 'CLAUDE', content: '# Rules\nUse pnpm.' } }));
+  });
+
+  it('keeps a name that was already typed', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+    await user.type(screen.getByLabelText('Название контекста'), 'Mine');
+
+    await pick(new File(['text'], 'README.md'));
+
+    await waitFor(() => expect(textValue()).toBe('text'));
+    expect((screen.getByLabelText('Название контекста') as HTMLInputElement).value).toBe('Mine');
+  });
+
+  it('truncates an oversize file with a warning and still saves', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+
+    await pick(new File(['a'.repeat(20_050)], 'big.txt'));
+
+    expect(await screen.findByText(/Файл обрезан до/)).toBeTruthy();
+    expect(textValue()).toHaveLength(20_000);
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+  });
+
+  it('warns about secret-looking text without blocking the save', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+
+    await pick(new File(['contact: someone@example.com\n'], 'notes.md'));
+
+    expect(await screen.findByText(/найдено похожее на секреты/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+  });
+
+  it('refuses a non-text file', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+
+    await pick(new File(['x'], 'image.png', { type: 'image/png' }));
+
+    expect(await screen.findByText(/не текстовый/)).toBeTruthy();
+    expect(textValue()).toBe('');
+    expect(sent).toEqual([]);
+  });
+});
