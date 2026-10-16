@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDownToLine, FaceRobot } from '@gravity-ui/icons';
 import { Alert, Button, Card, Icon, Label, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
 
@@ -68,6 +68,19 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
   const visibleJobs = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE_JOBS);
   const hiddenCount = filtered.length - visibleJobs.length;
   const activeCount = jobs.filter((job) => isActive(job.status)).length;
+
+  // The running time of an unfinished job counts up on screen, so a long job visibly lives (it used to freeze between the
+  // page's polls).
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (activeCount === 0) return undefined;
+
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+
+    return () => clearInterval(timer);
+  }, [activeCount]);
   const failedCount = jobs.filter((job) => job.status === 'failed').length;
 
   return (
@@ -136,7 +149,7 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
       ) : (
         <ul className={styles.jobList}>
           {visibleJobs.map((job: WorkerJob) => {
-            const duration = jobDuration(job);
+            const duration = jobDuration(job, now);
             const who = whoLine(job, workers);
 
             return (
@@ -177,11 +190,12 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
                   )}
                 </button>
                 {/* A sibling, not a child: a button cannot be nested in the row button. */}
-                {job.taskKey && (
+                {job.taskKey ? (
                   <Button
                     view="flat-secondary"
                     size="s"
-                    title="Показать все запуски этой задачи"
+                    className={styles.jobTaskChip}
+                    title={`Показать все запуски этой задачи: ${taskLabel(job.taskKey)}`}
                     onClick={() => {
                       setTaskFilter(job.taskKey ?? null);
                       setShowAll(false);
@@ -189,9 +203,13 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
                   >
                     {taskLabel(job.taskKey)}
                   </Button>
+                ) : (
+                  <span />
                 )}
-                <CancelJobButton job={job} compact />
-                <RetryJobButton job={job} compact />
+                <span className={styles.jobActions}>
+                  <CancelJobButton job={job} compact />
+                  <RetryJobButton job={job} compact />
+                </span>
               </li>
             );
           })}

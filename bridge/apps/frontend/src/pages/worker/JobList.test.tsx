@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkerJob } from '../../store/api';
 import { JobList } from './JobList';
@@ -93,5 +93,78 @@ describe('JobList task filter', () => {
     fireEvent.click(screen.getByText(/С ошибкой/));
     expect(screen.getByText('Задача #1')).toBeInTheDocument();
     expect(screen.queryByText('Задача #2')).not.toBeInTheDocument();
+  });
+});
+
+describe('JobList running time', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('counts up on screen for a running job, once a second, and stops for finished ones', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-16T12:00:30.000Z'));
+
+    const running = {
+      ...job,
+      id: 1,
+      status: 'running',
+      startedAt: '2026-10-16T12:00:00.000Z',
+      finishedAt: null,
+    } as unknown as WorkerJob;
+    const done = {
+      ...job,
+      id: 2,
+      status: 'succeeded',
+      startedAt: '2026-10-16T11:00:00.000Z',
+      finishedAt: '2026-10-16T11:01:00.000Z',
+    } as unknown as WorkerJob;
+
+    renderList({ jobs: [running, done] });
+    expect(screen.getByText(/30 с/)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.getByText(/35 с/)).toBeInTheDocument();
+    // the finished job keeps its own fixed duration
+    expect(screen.getAllByText(/1 мин 00 с/)).toHaveLength(1);
+  });
+
+  it('does not tick when nothing is running', () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(globalThis, 'setInterval');
+
+    renderList({ jobs: [job] });
+
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('JobList row layout', () => {
+  it('gives every row a task chip cell and an actions cell, so rows line up even without a task', () => {
+    const withTask = { ...job, id: 1, taskKey: 'improve:481' } as unknown as WorkerJob;
+    const withoutTask = { ...job, id: 2, taskKey: null } as unknown as WorkerJob;
+
+    renderList({ jobs: [withTask, withoutTask] });
+
+    for (const item of screen.getAllByRole('listitem')) {
+      // row button, chip (or its placeholder), actions
+      expect(item.children).toHaveLength(3);
+    }
+    expect(screen.getByTitle(/Показать все запуски этой задачи: improve:481/)).toBeInTheDocument();
+  });
+
+  it('keeps the whole error text available on a failed row', () => {
+    const failed = {
+      ...job,
+      id: 3,
+      status: 'failed',
+      errorMessage: 'API Error: No response from API (waited 3m, then 10m on the retry)',
+    } as unknown as WorkerJob;
+
+    renderList({ jobs: [failed] });
+
+    expect(screen.getByTitle(failed.errorMessage as string)).toBeInTheDocument();
   });
 });
