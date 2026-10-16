@@ -302,28 +302,37 @@ export class WorkersService {
 
   // The worker presents the code it was given; in return it gets its own key, once. The code is single-use.
   async enroll(dto: EnrollWorkerDto): Promise<EnrolledWorkerResponseDto> {
-    const worker = await this.workers.findOneBy({
-      enrollCodeHash: hashSecret(dto.code.trim()),
-    });
+    const { key, prefix, hash } = generateWorkerKey();
+    const hostname = dto.hostname?.trim();
+    const version = dto.version?.trim();
 
-    if (
-      !worker ||
-      worker.enrollExpiresAt === null ||
-      worker.enrollExpiresAt.getTime() <= Date.now()
-    ) {
+    // One conditional UPDATE (compare-and-set): of two concurrent redemptions of the same code
+    // only one matches the row, the other updates nothing and is refused.
+    const result = await this.workers
+      .createQueryBuilder()
+      .update(Worker)
+      .set({
+        keyHash: hash,
+        keyPrefix: prefix,
+        enrollCodeHash: null,
+        enrollExpiresAt: null,
+        lastSeenAt: new Date(),
+        ...(hostname ? { hostname } : {}),
+        ...(version ? { version } : {}),
+      })
+      .where('"enrollCodeHash" = :codeHash AND "enrollExpiresAt" > now()', {
+        codeHash: hashSecret(dto.code.trim()),
+      })
+      .returning(['id', 'name'])
+      .execute();
+
+    const worker = (
+      result.raw as { id: number; name: string }[] | undefined
+    )?.[0];
+
+    if (!result.affected || !worker) {
       throw new UnauthorizedException('Invalid or expired enrollment code');
     }
-
-    const { key, prefix, hash } = generateWorkerKey();
-
-    worker.keyHash = hash;
-    worker.keyPrefix = prefix;
-    worker.enrollCodeHash = null;
-    worker.enrollExpiresAt = null;
-    worker.hostname = dto.hostname?.trim() || worker.hostname;
-    worker.version = dto.version?.trim() || worker.version;
-    worker.lastSeenAt = new Date();
-    await this.workers.save(worker);
 
     return { workerId: worker.id, name: worker.name, key };
   }
