@@ -3,7 +3,7 @@ import { ChatBridgeClient, type ClaimedChatTurn } from './chatBridgeClient.js';
 import type { WorkerConfig } from './config.js';
 import { forgetRevokedKey } from './session.js';
 import type { LoopDeps } from './loop.js';
-import { fetchRemoteConfig, type RemoteWorkerConfig } from './remoteConfig.js';
+import { applyRemoteConfig, fetchRemoteConfig, type RemoteWorkerConfig } from './remoteConfig.js';
 import type { Session } from './session.js';
 
 export interface WiringInput {
@@ -44,8 +44,13 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
       const effective = tunnelProxy ? { ...remote, proxyUrl: tunnelProxy } : remote;
 
       // Never waits for the probe: it runs beside the polling, and must not delay or break it.
+      // The proxy a run really goes through: the VPN tunnel or the page's address, else the one from the worker's environment
+      // (a Swarm stack's vpn-client). Without that last fallback a probe on such a worker went out directly — and hung, the
+      // provider being unreachable from there.
       try {
-        input.limitsProbe?.consider(effective, key);
+        const runsThrough = applyRemoteConfig(baseConfig, effective).proxyUrl ?? null;
+
+        input.limitsProbe?.consider({ ...effective, proxyUrl: runsThrough }, key);
       } catch {
         // a probe problem must never break the poll
       }
