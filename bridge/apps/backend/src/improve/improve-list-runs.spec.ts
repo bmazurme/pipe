@@ -8,6 +8,7 @@ import {
 import { getMetadataArgsStorage } from 'typeorm';
 
 import { ImproveRun } from './entities/improve-run.entity';
+import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 
 describe('ImproveService.listRuns leaves out result', () => {
@@ -33,6 +34,7 @@ describe('ImproveService.listRuns leaves out result', () => {
     };
     const service = new ImproveService(
       repo as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -89,6 +91,7 @@ describe('ImproveService.getRun', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return { findOne, service };
@@ -134,14 +137,10 @@ describe('GET /improve/runs limit pipes', () => {
 describe('ImproveService list queries leave out baseline', () => {
   it('publish loads the baseline when the run came without it', async () => {
     const findOne = jest.fn().mockResolvedValue({ id: 1, baseline: '{}' });
-    const service = new ImproveService(
+    const service = new ImprovePublishService(
       { findOne, update: jest.fn(), save: jest.fn() } as never,
-      { send: jest.fn() } as never,
-      { send: jest.fn() } as never,
-      { send: jest.fn() } as never,
-      { send: jest.fn() } as never,
-      { send: jest.fn() } as never,
-      { send: jest.fn() } as never,
+      {} as never,
+      {} as never,
       { send: jest.fn() } as never,
       {} as never,
     );
@@ -206,6 +205,7 @@ describe('ImproveService.listIssues latest run', () => {
     const service = new ImproveService(
       repo as never,
       github as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
