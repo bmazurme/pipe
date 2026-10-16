@@ -1,4 +1,5 @@
 import workerApi from '..';
+import { deltaSince } from '../../incrementalSince';
 
 export type WorkerJobModel = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 export type WorkerJobStatus =
@@ -183,7 +184,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         const since = cached?.length ? newestUpdatedAt(cached) : undefined;
 
         if (cached && since !== undefined) {
-          const delta = await baseQuery(`worker/jobs?updatedAfter=${encodeURIComponent(since)}`);
+          const delta = await baseQuery(`worker/jobs?updatedAfter=${encodeURIComponent(deltaSince(since))}`);
           if (delta.error) return { error: delta.error };
 
           return { data: mergeJobs(cached, delta.data as WorkerJob[]) };

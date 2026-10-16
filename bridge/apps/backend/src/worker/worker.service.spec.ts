@@ -139,6 +139,31 @@ describe('WorkerService', () => {
       expect(options.select).toContain('status');
       expect(options.select).not.toContain('logs');
     });
+
+    it('with updatedAfter asks only for the jobs that changed since then', async () => {
+      const since = new Date('2026-10-16T12:00:00.000Z');
+
+      await service.findAllByUser(7, since);
+
+      const options = repository.find!.mock.calls[0][0] as {
+        where: { userId: number; updatedAt: { _type: string; _value: Date } };
+      };
+
+      expect(options.where.userId).toBe(7);
+      expect(options.where.updatedAt._type).toBe('moreThan');
+      expect(options.where.updatedAt._value).toEqual(since);
+    });
+
+    it('without it adds no time condition', async () => {
+      await service.findAllByUser(7);
+
+      expect(repository.find!.mock.calls[0][0]).toMatchObject({
+        where: { userId: 7 },
+      });
+      expect(
+        (repository.find!.mock.calls[0][0] as { where: object }).where,
+      ).not.toHaveProperty('updatedAt');
+    });
   });
 
   describe('findStatuses', () => {

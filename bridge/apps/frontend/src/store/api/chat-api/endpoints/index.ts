@@ -1,4 +1,5 @@
 import chatApi from '..';
+import { deltaSince } from '../../incrementalSince';
 
 export type ChatModelId = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 
@@ -71,7 +72,7 @@ const chatApiEndpoints = chatApi.injectEndpoints({
 
         if (cached && since !== undefined) {
           const delta = await baseQuery(
-            `chat/chats/${chatId}/messages?updatedAfter=${encodeURIComponent(since)}`,
+            `chat/chats/${chatId}/messages?updatedAfter=${encodeURIComponent(deltaSince(since))}`,
           );
           if (delta.error) return { error: delta.error };
 

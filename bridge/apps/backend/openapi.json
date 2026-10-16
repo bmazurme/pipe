@@ -542,6 +542,14 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "updatedAfter",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -940,7 +948,16 @@
     "/api/v1/worker/jobs": {
       "get": {
         "operationId": "WorkerController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "updatedAfter",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
