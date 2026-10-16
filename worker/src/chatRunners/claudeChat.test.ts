@@ -76,3 +76,26 @@ describe('claudeChat', () => {
     assert.equal(reports.length, 1);
   });
 });
+
+describe('claudeChat failure', () => {
+  const originalPath = process.env.PATH;
+
+  after(() => {
+    process.env.PATH = originalPath;
+  });
+
+  it('bounds the failure message of a run that exits non-zero, keeping the tail', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-fail-'));
+    const script = path.join(dir, 'claude');
+
+    writeFileSync(script, ['#!/usr/bin/env node', "console.log('x'.repeat(100000) + 'REAL-CAUSE');", 'process.exit(1);', ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+
+    await assert.rejects(
+      claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work),
+      (error: Error) => error.message.length <= 560 && error.message.endsWith('REAL-CAUSE'),
+    );
+  });
+});

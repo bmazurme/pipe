@@ -3999,7 +3999,8 @@
         "type": "object",
         "properties": {
           "errorMessage": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           }
         }
       },
