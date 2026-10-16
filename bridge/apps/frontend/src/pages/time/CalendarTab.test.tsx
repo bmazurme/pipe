@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -38,7 +38,7 @@ describe('CalendarTab list failure', () => {
     expect(screen.queryByText('январь')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Повторить' }));
 
+    await waitFor(() => expect(screen.queryByText('Не удалось загрузить дни отдыха')).toBeNull());
     await screen.findByText('Сегодня');
-    expect(screen.queryByText('Не удалось загрузить дни отдыха')).toBeNull();
   });
 });
