@@ -82,6 +82,15 @@ export class Worker extends BaseEntity {
   @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
   vpnLink: string | null;
 
+  // How often (minutes) this worker probes the Claude plan limits when idle, so the numbers on its card do not go stale
+  // between runs; 0 = only when the owner presses "refresh". A probe is one tiny call (~4k tokens), not free.
+  @Column({ type: 'smallint', default: 0 })
+  limitsRefreshMin: number;
+
+  // The owner pressed "refresh limits": the worker sees it on its next settings fetch and probes once.
+  @Column({ type: 'timestamp', nullable: true })
+  limitsRefreshRequestedAt: Date | null;
+
   // The Claude plan limits last reported by a run on this worker (claude-limits.ts).
   @Column({ type: 'jsonb', nullable: true })
   claudeLimits: ClaudeLimits | null;

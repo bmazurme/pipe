@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -18,6 +19,8 @@ import type { ClaudeLimits } from '../claude-limits';
 import { describeVless } from '../vless-link';
 import { JobModel } from '../entities/job.entity';
 import { Worker } from '../entities/worker.entity';
+
+export const LIMITS_REFRESH_OPTIONS = [0, 15, 30, 60, 120];
 
 // What the owner can set for a worker; every field is optional on update and applies the next time the worker polls.
 class WorkerSettingsDto {
@@ -68,6 +71,11 @@ class WorkerSettingsDto {
   @IsString()
   @MaxLength(4000)
   vpnLink?: string | null;
+
+  // Minutes between automatic probes of the Claude plan limits; 0 = only on request.
+  @IsOptional()
+  @IsIn(LIMITS_REFRESH_OPTIONS)
+  limitsRefreshMin?: number;
 }
 
 export class CreateWorkerDto extends WorkerSettingsDto {
@@ -141,6 +149,9 @@ export class WorkerResponseDto {
   claudeCredentialId: number | null;
   // host:port of the worker's VPN server, or null — the link itself is never shown again.
   vpnHost: string | null;
+  limitsRefreshMin: number;
+  // When the owner last asked for a refresh (null = never) — the card shows "requested" until a newer report arrives.
+  limitsRefreshRequestedAt: Date | null;
   keyPrefix: string | null;
   // The one-time code is still valid (shown only when it was issued, never listed).
   enrollmentPending: boolean;
@@ -184,6 +195,8 @@ export class WorkerResponseDto {
       chatEnabled: worker.chatEnabled,
       claudeCredentialId: worker.claudeCredentialId ?? null,
       vpnHost: describeVless(worker.vpnLink),
+      limitsRefreshMin: worker.limitsRefreshMin ?? 0,
+      limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       keyPrefix: worker.keyPrefix,
       enrollmentPending:
         !enrolled &&
@@ -223,6 +236,8 @@ export class WorkerResponseDto {
       claudeLimits: null,
       claudeCredentialId: null,
       vpnHost: null,
+      limitsRefreshMin: 0,
+      limitsRefreshRequestedAt: null,
     };
   }
 }
@@ -254,6 +269,11 @@ export class WorkerConfigResponseDto {
   chatEnabled: boolean;
   // The VPN link, for this worker only (its key authenticates the fetch): the worker starts its own tunnel with it.
   vpnLink: string | null;
+  // Probing the plan limits: the interval (0 = only on request), the last request, and — only while a probe is due — the token
+  // to probe with (this worker's own, resolved like for a job). Absent/null when there is nothing to do.
+  limitsRefreshMin: number;
+  limitsRefreshRequestedAt: Date | null;
+  limitProbe: { claudeToken: string } | null;
 }
 
 export class DeletedWorkerResponseDto {

@@ -138,6 +138,9 @@ export interface FleetWorker {
   vpnHost: string | null;
   /** The Claude plan limits the last run on this worker reported, or null before any run did. */
   claudeLimits: ClaudeLimits | null;
+  /** Minutes between automatic probes of the plan limits (0 = only on request), and when the owner last asked for one. */
+  limitsRefreshMin: number;
+  limitsRefreshRequestedAt: string | null;
 }
 
 /** Returned once, when a worker is created or its enrolment code is renewed. */
@@ -156,6 +159,8 @@ export interface WorkerSettings {
   claudeCredentialId?: number | null;
   /** The worker's own VPN: a vless:// Reality link; '' or null removes it, omitted leaves it. */
   vpnLink?: string | null;
+  /** Minutes between automatic probes of the Claude plan limits; 0 = only on request. */
+  limitsRefreshMin?: number;
   chatEnabled?: boolean;
 }
 
@@ -341,6 +346,16 @@ const workerApiEndpoints = workerApi.injectEndpoints({
       query: (id) => ({ url: `workers/${id}/enroll-code`, method: 'POST' }),
       invalidatesTags: ['Worker'],
     }),
+    // "Refresh limits": the worker probes the plan limits once (on its next settings fetch) and reports them.
+    refreshWorkerLimits: builder.mutation<void, number>({
+      query: (id) => ({ url: `workers/${id}/refresh-limits`, method: 'POST' }),
+      invalidatesTags: ['Worker'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+
+        return message ?? 'Не удалось запросить обновление лимитов';
+      },
+    }),
     // Revokes the key at once; what the worker was running fails, jobs pinned to it become free for any worker.
     deleteWorker: builder.mutation<{ failedJobs: number }, number>({
       query: (id) => ({ url: `workers/${id}`, method: 'DELETE' }),
@@ -455,6 +470,7 @@ export const {
   useCreateWorkerMutation,
   useUpdateWorkerMutation,
   useRenewWorkerEnrollmentMutation,
+  useRefreshWorkerLimitsMutation,
   useDeleteWorkerMutation,
   useForgetLegacyWorkerMutation,
   useListProviderCredentialsQuery,

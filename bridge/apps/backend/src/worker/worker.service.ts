@@ -633,7 +633,32 @@ export class WorkerService {
     }
 
     if (dto.jobId === undefined) {
-      return limits ? { limits, credentialId: null } : null;
+      if (!limits) return null;
+
+      // A probe runs on the token the worker's jobs use (its own, else the account's first): the limits are that token's.
+      if (dto.probe === true && workerId !== undefined) {
+        const worker = await this.workerRepository.findOneBy({
+          id: workerId,
+          userId,
+        });
+        const token = await this.claudeCredentialsService.resolveForRun(
+          userId,
+          null,
+          worker?.claudeCredentialId ?? null,
+        );
+
+        if (token) {
+          await this.claudeCredentialsService.recordLimits(
+            token.id,
+            userId,
+            limits,
+          );
+
+          return { limits, credentialId: token.id };
+        }
+      }
+
+      return { limits, credentialId: null };
     }
 
     await this.assertHeldBy(dto.jobId, userId, workerId);

@@ -512,6 +512,140 @@ describe('Worker fleet (e2e)', () => {
     });
   });
 
+  describe('refreshing the plan limits', () => {
+    const limits = {
+      status: 'allowed',
+      rateLimitType: null,
+      isUsingOverage: false,
+      windows: { five_hour: { utilization: 0.31, resetsAt: 1900000000 } },
+    };
+
+    async function enrolled(name: string, extra: Record<string, unknown> = {}) {
+      const { accessToken, userId } = await owner();
+      const token = (
+        await as(
+          request(server()).post('/api/v1/worker/claude-credentials'),
+          accessToken,
+        )
+          .send({ name: 'probe-token', token: 'tok-probe' })
+          .expect(201)
+      ).body as { id: number };
+      const w = await addWorker(accessToken, name, extra);
+      const { key } = await enroll(w.enrollCode);
+
+      return { accessToken, userId, token, w, key };
+    }
+
+    const configOf = (key: string) =>
+      request(server())
+        .get('/api/v1/workers/me/config')
+        .set('Authorization', `Bearer ${key}`)
+        .expect(200);
+
+    it('hands the worker the token to probe with only while a probe is due (asked for, or an interval is set)', async () => {
+      const { accessToken, w, key } = await enrolled('probe-a');
+
+      // nothing asked: no token in the settings
+      expect((await configOf(key)).body.limitProbe).toBeNull();
+
+      await as(
+        request(server()).post(`/api/v1/workers/${w.worker.id}/refresh-limits`),
+        accessToken,
+      ).expect(204);
+
+      const asked = (await configOf(key)).body;
+
+      expect(asked.limitProbe).toEqual({ claudeToken: 'tok-probe' });
+      expect(asked.limitsRefreshRequestedAt).toBeTruthy();
+
+      // the owner's own views never carry a token
+      const listed = await as(
+        request(server()).get('/api/v1/workers'),
+        accessToken,
+      ).expect(200);
+
+      expect(JSON.stringify(listed.body)).not.toContain('tok-probe');
+    });
+
+    it('also does it every time when an interval is chosen in the settings, which is validated', async () => {
+      const { accessToken, w, key } = await enrolled('probe-b');
+      const patch = (body: object) =>
+        as(
+          request(server()).patch(`/api/v1/workers/${w.worker.id}`),
+          accessToken,
+        ).send(body);
+
+      await patch({ limitsRefreshMin: 7 }).expect(400);
+      expect(
+        (await patch({ limitsRefreshMin: 30 }).expect(200)).body
+          .limitsRefreshMin,
+      ).toBe(30);
+      expect((await configOf(key)).body).toMatchObject({
+        limitsRefreshMin: 30,
+        limitProbe: { claudeToken: 'tok-probe' },
+      });
+
+      await patch({ limitsRefreshMin: 0 }).expect(200);
+      expect((await configOf(key)).body.limitProbe).toBeNull();
+    });
+
+    it("cannot be requested for a worker that is not connected yet, nor for someone else's", async () => {
+      const { accessToken } = await owner();
+      const pending = await addWorker(accessToken, 'probe-pending');
+
+      await as(
+        request(server()).post(
+          `/api/v1/workers/${pending.worker.id}/refresh-limits`,
+        ),
+        accessToken,
+      ).expect(409);
+
+      const other = await owner();
+
+      await as(
+        request(server()).post(
+          `/api/v1/workers/${pending.worker.id}/refresh-limits`,
+        ),
+        other.accessToken,
+      ).expect(404);
+    });
+
+    it('a probe report puts the limits on the worker and on the token its jobs use', async () => {
+      const { accessToken, token, w, key } = await enrolled('probe-c');
+
+      await request(server())
+        .post('/api/v1/worker/jobs/usage')
+        .set('Authorization', `Bearer ${key}`)
+        .send({ probe: true, limits })
+        .expect(204);
+
+      const workers = await as(
+        request(server()).get('/api/v1/workers'),
+        accessToken,
+      ).expect(200);
+      const mine = (
+        workers.body as {
+          id: number;
+          claudeLimits: {
+            windows: Record<string, { utilization: number }>;
+          } | null;
+        }[]
+      ).find((row) => row.id === w.worker.id);
+
+      expect(mine?.claudeLimits?.windows.five_hour.utilization).toBe(0.31);
+
+      const credentials = await as(
+        request(server()).get('/api/v1/worker/claude-credentials'),
+        accessToken,
+      ).expect(200);
+      const stored = (
+        credentials.body as { id: number; limits: { windows: object } | null }[]
+      ).find((row) => row.id === token.id);
+
+      expect(stored?.limits?.windows).toHaveProperty('five_hour');
+    });
+  });
+
   describe("a worker's own VPN link", () => {
     const LINK =
       'vless://3f1c2d4e-0000-4000-8000-000000000001@vpn.example.com:8443?security=reality&type=tcp&pbk=PUBKEY-SECRET&sni=www.example.org&fp=firefox&sid=ab12';

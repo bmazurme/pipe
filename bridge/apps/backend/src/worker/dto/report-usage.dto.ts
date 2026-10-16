@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsObject, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsObject, IsOptional, Min } from 'class-validator';
 
 // Sent by a worker after a Claude run: the plan limits the CLI reported and, for a job, what the run cost.
 // Both are best-effort and checked field by field on the way in (claude-limits.ts).
@@ -10,6 +10,12 @@ export class ReportUsageDto {
   @IsInt()
   @Min(1)
   jobId?: number;
+
+  // True for a limits probe (no job): the limits then belong to the token the worker's jobs use.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  probe?: boolean;
 
   @ApiProperty({
     type: 'object',

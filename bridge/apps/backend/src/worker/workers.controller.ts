@@ -27,6 +27,8 @@ import {
   WorkerConfigResponseDto,
   WorkerResponseDto,
 } from './dto/worker-fleet.dto';
+import { limitProbeWanted } from './limit-probe';
+import { RunCredentialsService } from './run-credentials.service';
 import { WorkersService } from './workers.service';
 
 // The workers the owner manages from the Worker page (browser session only), plus the two calls a worker makes about
@@ -34,7 +36,10 @@ import { WorkersService } from './workers.service';
 // fetching its settings (its own key).
 @Controller('api/v1/workers')
 export class WorkersController {
-  constructor(private readonly workersService: WorkersService) {}
+  constructor(
+    private readonly workersService: WorkersService,
+    private readonly runCredentials: RunCredentialsService,
+  ) {}
 
   @Get()
   @UseGuards(JwtGuard)
@@ -66,10 +71,23 @@ export class WorkersController {
   @Get('me/config')
   @UseGuards(JwtOrApiKeyGuard)
   @WorkerKeyAllowed()
-  config(
+  async config(
     @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<WorkerConfigResponseDto> {
-    return this.workersService.configForPrincipal(currentUser);
+    const config = await this.workersService.configForPrincipal(currentUser);
+
+    // The token to probe the plan limits with goes to the worker only while a probe is due, and is the one its jobs use.
+    if (limitProbeWanted(config)) {
+      const { claudeToken } = await this.runCredentials.resolve(
+        currentUser.id,
+        currentUser.workerId,
+        'sonnet',
+      );
+
+      config.limitProbe = claudeToken ? { claudeToken } : null;
+    }
+
+    return config;
   }
 
   @Delete('legacy/:name')
@@ -100,6 +118,17 @@ export class WorkersController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<CreatedWorkerResponseDto> {
     return this.workersService.renewEnrollment(id, currentUser.id);
+  }
+
+  // "Refresh limits" on a worker's card: the worker probes the plan limits once and reports them.
+  @Post(':id/refresh-limits')
+  @UseGuards(JwtGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async refreshLimits(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.workersService.requestLimitsRefresh(id, currentUser.id);
   }
 
   @Delete(':id')

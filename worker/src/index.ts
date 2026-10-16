@@ -24,6 +24,7 @@ import { runLoop } from './loop.js';
 import { waitForSession } from './session.js';
 import { sleep } from './sleep.js';
 import { workerVersion } from './version.js';
+import { LimitsProbe } from './limitsProbe.js';
 import { VpnTunnel } from './vpn/tunnel.js';
 import { buildLoopDeps } from './wiring.js';
 import { requireShell } from './shell.js';
@@ -353,6 +354,7 @@ async function main(): Promise<void> {
       sleep,
       log: logger,
       vpn,
+      limitsProbe: new LimitsProbe({ apiUrl: baseConfig.bridgeApiUrl, workDir: baseConfig.workDir, log: logger }),
     }),
   );
 

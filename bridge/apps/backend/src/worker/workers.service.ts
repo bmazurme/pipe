@@ -246,6 +246,9 @@ export class WorkersService {
       await this.assertCredentialOwned(userId, dto.claudeCredentialId);
       worker.claudeCredentialId = dto.claudeCredentialId;
     }
+    if (dto.limitsRefreshMin !== undefined) {
+      worker.limitsRefreshMin = dto.limitsRefreshMin;
+    }
     if (dto.vpnLink !== undefined) {
       worker.vpnLink = this.normalizeVpnLink(dto.vpnLink);
     }
@@ -259,6 +262,18 @@ export class WorkersService {
       this.isOnline(saved.lastSeenAt),
       new Date(),
     );
+  }
+
+  // "Refresh limits": the worker notices on its next settings fetch and probes once. Only an enrolled worker can answer.
+  async requestLimitsRefresh(id: number, userId: number): Promise<void> {
+    const worker = await this.findOwned(id, userId);
+
+    if (worker.keyHash === null) {
+      throw new ConflictException('The worker is not connected yet');
+    }
+
+    worker.limitsRefreshRequestedAt = new Date();
+    await this.workers.save(worker);
   }
 
   // Connect (or reconnect) a worker: a new one-time code. If the worker was already enrolled its old key stops working
@@ -367,6 +382,9 @@ export class WorkersService {
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
       vpnLink: worker.vpnLink ?? null,
+      limitsRefreshMin: worker.limitsRefreshMin ?? 0,
+      limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
+      limitProbe: null,
     };
   }
 
