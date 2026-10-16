@@ -145,6 +145,24 @@ describe('ChatService', () => {
         order: { createdAt: 'ASC' },
       });
     });
+
+    it('with updatedAfter returns only the messages that changed since then, in the same order', async () => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.find!.mockResolvedValue([]);
+      const since = new Date('2026-10-16T12:00:00.000Z');
+
+      await service.listMessages(1, 7, since);
+
+      const options = messageRepository.find!.mock.calls[0][0] as {
+        where: { chatId: number; updatedAt: { _type: string; _value: Date } };
+        order: object;
+      };
+
+      expect(options.where.chatId).toBe(1);
+      expect(options.where.updatedAt._type).toBe('moreThan');
+      expect(options.where.updatedAt._value).toEqual(since);
+      expect(options.order).toEqual({ createdAt: 'ASC' });
+    });
   });
 
   describe('sendMessage', () => {

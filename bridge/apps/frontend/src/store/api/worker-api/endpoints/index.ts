@@ -1,4 +1,5 @@
 import workerApi from '..';
+import { deltaSince } from '../../incrementalSince';
 
 export type WorkerJobModel = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 export type WorkerJobStatus =
@@ -171,8 +172,29 @@ export interface WorkerStatus {
 
 const workerApiEndpoints = workerApi.injectEndpoints({
   endpoints: (builder) => ({
+    // Polled every few seconds (WorkerPage) for as long as the tab is open, so a job's whole
+    // history gets re-fetched on every tick unless this stays incremental. Once a list is cached,
+    // only jobs updated since the newest `updatedAt` already held are fetched and merged in — any
+    // write bumps a job's `updatedAt` (see WorkerService.findAllByUser), so nothing changed is
+    // missed; a deleted job is removed from the cache directly by deleteJob instead, since it can
+    // never appear in a fetch again to signal its own absence.
     listJobs: builder.query<WorkerJob[], void>({
-      query: () => 'worker/jobs',
+      async queryFn(_arg, api, _extraOptions, baseQuery) {
+        const cached = cachedJobs(api.getState);
+        const since = cached?.length ? newestUpdatedAt(cached) : undefined;
+
+        if (cached && since !== undefined) {
+          const delta = await baseQuery(`worker/jobs?updatedAfter=${encodeURIComponent(deltaSince(since))}`);
+          if (delta.error) return { error: delta.error };
+
+          return { data: mergeJobs(cached, delta.data as WorkerJob[]) };
+        }
+
+        const whole = await baseQuery('worker/jobs');
+        if (whole.error) return { error: whole.error };
+
+        return { data: whole.data as WorkerJob[] };
+      },
       providesTags: ['WorkerJob'],
     }),
     getWorkerStatus: builder.query<WorkerStatus, void>({
@@ -256,6 +278,17 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     deleteJob: builder.mutation<void, number>({
       query: (id) => ({ url: `worker/jobs/${id}`, method: 'DELETE' }),
       invalidatesTags: ['WorkerJob'],
+      // listJobs only ever fetches what changed since its cache, so a row that stopped
+      // existing would never come back around to tell it to disappear — removed here instead.
+      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+        await queryFulfilled;
+        dispatch(
+          workerApiEndpoints.util.updateQueryData('listJobs', undefined, (draft) => {
+            const index = draft.findIndex((job) => job.id === id);
+            if (index !== -1) draft.splice(index, 1);
+          }),
+        );
+      },
       transformErrorResponse: (response) => {
         const message = (response.data as { message?: string } | undefined)
           ?.message;
@@ -373,6 +406,30 @@ function cachedJob(getState: () => unknown, id: number): WorkerJob | undefined {
   type State = Parameters<ReturnType<typeof workerApiEndpoints.endpoints.getJob.select>>[0];
 
   return workerApiEndpoints.endpoints.getJob.select(id)(getState() as State).data;
+}
+
+function cachedJobs(getState: () => unknown): WorkerJob[] | undefined {
+  type State = Parameters<ReturnType<typeof workerApiEndpoints.endpoints.listJobs.select>>[0];
+
+  return workerApiEndpoints.endpoints.listJobs.select()(getState() as State).data;
+}
+
+function newestUpdatedAt(jobs: WorkerJob[]): string | undefined {
+  return jobs.reduce<string | undefined>(
+    (latest, job) => (latest === undefined || job.updatedAt > latest ? job.updatedAt : latest),
+    undefined,
+  );
+}
+
+// `createdAt` never changes, so sorting by it keeps the list in the same order the server
+// returns it in (newest first) no matter how many times an existing row is merged in-place.
+function mergeJobs(cached: WorkerJob[], delta: WorkerJob[]): WorkerJob[] {
+  if (delta.length === 0) return cached;
+
+  const byId = new Map(cached.map((job) => [job.id, job]));
+  for (const job of delta) byId.set(job.id, job);
+
+  return Array.from(byId.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 // Counts code points, like the server's CHAR_LENGTH — not UTF-16 units like .length.

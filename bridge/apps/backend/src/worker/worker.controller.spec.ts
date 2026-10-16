@@ -155,6 +155,36 @@ describe('WorkerController', () => {
     });
   });
 
+  describe('list — updatedAfter', () => {
+    beforeEach(() => {
+      (workerService as Record<string, jest.Mock>).findAllByUser = jest
+        .fn()
+        .mockResolvedValue([]);
+    });
+
+    it('passes a valid date on to the service as a Date', async () => {
+      await controller.list({ id: 7 }, '2026-10-16T12:00:00.000Z');
+
+      expect(
+        (workerService as Record<string, jest.Mock>).findAllByUser,
+      ).toHaveBeenCalledWith(7, new Date('2026-10-16T12:00:00.000Z'));
+    });
+
+    it('lists everything when it is absent', async () => {
+      await controller.list({ id: 7 });
+
+      expect(
+        (workerService as Record<string, jest.Mock>).findAllByUser,
+      ).toHaveBeenCalledWith(7, undefined);
+    });
+
+    it('answers 400 for something that is not a date', async () => {
+      await expect(controller.list({ id: 7 }, 'yesterday')).rejects.toThrow(
+        /updatedAfter must be a valid date/,
+      );
+    });
+  });
+
   describe('reportUsage — limit alerts', () => {
     const limits = {
       status: 'allowed_warning',

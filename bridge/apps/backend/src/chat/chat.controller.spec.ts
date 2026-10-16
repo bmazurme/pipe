@@ -1,59 +1,48 @@
-import type { Response } from 'express';
-
-import { RunCredentialsService } from '../worker/run-credentials.service';
-import { WorkersService } from '../worker/workers.service';
 import { ChatController } from './chat.controller';
-import { ChatService } from './chat.service';
 
-describe('ChatController.claim', () => {
-  const claimed = {
-    message: { id: 11 },
-    chat: { id: 3, model: 'sonnet' },
-    history: [],
+// Only the list route's query handling is under test: the controller is built without the rest of its dependencies.
+function controllerWith(chatService: object): ChatController {
+  return Object.assign(Object.create(ChatController.prototype), {
+    chatService,
+  }) as ChatController;
+}
+
+describe('ChatController listMessages — updatedAfter', () => {
+  const make = () => {
+    const chatService = {
+      listMessages: jest.fn().mockResolvedValue([]),
+      listAttachments: jest.fn().mockResolvedValue([]),
+    };
+
+    return { chatService, controller: controllerWith(chatService) };
   };
 
-  function setup(resolve: jest.Mock) {
-    const chatService = {
-      claim: jest.fn().mockResolvedValue(claimed),
-      failTurn: jest.fn().mockResolvedValue({}),
-    };
-    const controller = new ChatController(
-      chatService as unknown as ChatService,
-      {} as WorkersService,
-      { resolve } as unknown as RunCredentialsService,
-    );
-    const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-      end: jest.fn(),
-    };
+  it('passes a valid date on to the service as a Date', async () => {
+    const { chatService, controller } = make();
 
-    return { chatService, controller, res: res as unknown as Response };
-  }
+    await controller.listMessages(1, { id: 7 }, '2026-10-16T12:00:00.000Z');
 
-  it('fails the turn and rethrows when credentials cannot be resolved', async () => {
-    const error = new Error('no token stored');
-    const { chatService, controller, res } = setup(
-      jest.fn().mockRejectedValue(error),
-    );
-
-    await expect(controller.claim({ id: 7 }, res)).rejects.toBe(error);
-
-    expect(chatService.failTurn).toHaveBeenCalledWith(
-      11,
+    expect(chatService.listMessages).toHaveBeenCalledWith(
+      1,
       7,
-      expect.stringContaining('no token stored'),
+      new Date('2026-10-16T12:00:00.000Z'),
     );
   });
 
-  it('does not fail the turn when credentials resolve', async () => {
-    const { chatService, controller, res } = setup(
-      jest.fn().mockResolvedValue({ claudeToken: 't', provider: null }),
-    );
+  it('returns the whole thread when it is absent', async () => {
+    const { chatService, controller } = make();
 
-    await controller.claim({ id: 7 }, res);
+    await controller.listMessages(1, { id: 7 });
 
-    expect(chatService.failTurn).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalled();
+    expect(chatService.listMessages).toHaveBeenCalledWith(1, 7, undefined);
+  });
+
+  it('answers 400 for something that is not a date', async () => {
+    const { chatService, controller } = make();
+
+    await expect(
+      controller.listMessages(1, { id: 7 }, 'yesterday'),
+    ).rejects.toThrow(/updatedAfter must be a valid date/);
+    expect(chatService.listMessages).not.toHaveBeenCalled();
   });
 });

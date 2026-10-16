@@ -2959,7 +2959,9 @@ export interface operations {
     };
     ChatController_listMessages: {
         parameters: {
-            query?: never;
+            query: {
+                updatedAfter: string;
+            };
             header?: never;
             path: {
                 id: number;
@@ -3275,7 +3277,9 @@ export interface operations {
     };
     WorkerController_list: {
         parameters: {
-            query?: never;
+            query?: {
+                updatedAfter?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -1,4 +1,5 @@
 import chatApi from '..';
+import { deltaSince } from '../../incrementalSince';
 
 export type ChatModelId = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
 
@@ -58,8 +59,31 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: ({ id, title }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { title } }),
       invalidatesTags: ['Chat'],
     }),
+    // Polled every second while a reply is pending (ChatPage), so the whole thread would be
+    // re-fetched on every tick unless this stays incremental. Once a chat's messages are cached,
+    // only what's changed since the newest `updatedAt` already held is fetched and merged in —
+    // a reply's `progress` ticking up, a status flip, or a brand-new message all bump it, so
+    // nothing is missed. Messages are never individually deleted (only a whole chat, which drops
+    // its own cache entry with it), so there's no removal case to handle on top of this.
     listMessages: builder.query<ChatMessageMeta[], number>({
-      query: (chatId) => `chat/chats/${chatId}/messages`,
+      async queryFn(chatId, api, _extraOptions, baseQuery) {
+        const cached = cachedMessages(api.getState, chatId);
+        const since = cached?.length ? newestUpdatedAt(cached) : undefined;
+
+        if (cached && since !== undefined) {
+          const delta = await baseQuery(
+            `chat/chats/${chatId}/messages?updatedAfter=${encodeURIComponent(deltaSince(since))}`,
+          );
+          if (delta.error) return { error: delta.error };
+
+          return { data: mergeMessages(cached, delta.data as ChatMessageMeta[]) };
+        }
+
+        const whole = await baseQuery(`chat/chats/${chatId}/messages`);
+        if (whole.error) return { error: whole.error };
+
+        return { data: whole.data as ChatMessageMeta[] };
+      },
       providesTags: (_result, _error, chatId) => [{ type: 'ChatMessages', id: chatId }],
     }),
     sendMessage: builder.mutation<
@@ -75,6 +99,30 @@ const chatApiEndpoints = chatApi.injectEndpoints({
     }),
   }),
 });
+
+function cachedMessages(getState: () => unknown, chatId: number): ChatMessageMeta[] | undefined {
+  type State = Parameters<ReturnType<typeof chatApiEndpoints.endpoints.listMessages.select>>[0];
+
+  return chatApiEndpoints.endpoints.listMessages.select(chatId)(getState() as State).data;
+}
+
+function newestUpdatedAt(messages: ChatMessageMeta[]): string | undefined {
+  return messages.reduce<string | undefined>(
+    (latest, message) => (latest === undefined || message.updatedAt > latest ? message.updatedAt : latest),
+    undefined,
+  );
+}
+
+// `createdAt` never changes, so sorting by it keeps the thread in the same order no matter how
+// many times an existing message (its `progress`/`status`/`content`) is merged in-place.
+function mergeMessages(cached: ChatMessageMeta[], delta: ChatMessageMeta[]): ChatMessageMeta[] {
+  if (delta.length === 0) return cached;
+
+  const byId = new Map(cached.map((message) => [message.id, message]));
+  for (const message of delta) byId.set(message.id, message);
+
+  return Array.from(byId.values()).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+}
 
 export const {
   useListChatsQuery,
