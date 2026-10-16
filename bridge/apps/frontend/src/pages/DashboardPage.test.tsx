@@ -177,6 +177,52 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Задайте BACKUP_S3_* на backend')).toBeTruthy();
   });
 
+  describe('request errors', () => {
+    function stubWithFailure(failing: string) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          if (request.url.endsWith(failing)) {
+            return new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } });
+          }
+          if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+          if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
+          if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
+          if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
+          return jsonResponse({});
+        }),
+      );
+    }
+
+    it('shows an error and counts an issue when /dashboard/nodes fails', async () => {
+      stubWithFailure('/dashboard/nodes');
+      renderPage();
+
+      expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
+      expect(await screen.findByText('Проблем: 1')).toBeTruthy();
+      expect(screen.queryByText('Всё в порядке')).toBeNull();
+    });
+
+    it('never shows "Нет подключений" when the VPN connections list fails', async () => {
+      stubWithFailure('/vpn/connections');
+      renderPage();
+
+      expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
+      expect(screen.queryByText('Нет подключений')).toBeNull();
+      expect(await screen.findByText('Проблем: 1')).toBeTruthy();
+    });
+
+    it('never shows "Не настроено" when /dashboard/backups fails', async () => {
+      stubWithFailure('/dashboard/backups');
+      renderPage();
+
+      expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
+      expect(screen.queryByText('Не настроено')).toBeNull();
+      expect(screen.queryByText('Задайте BACKUP_S3_* на backend')).toBeNull();
+      expect(await screen.findByText('Проблем: 1')).toBeTruthy();
+    });
+  });
+
   it('flags a stale backup as danger', async () => {
     const staleBackup = {
       configured: true,
