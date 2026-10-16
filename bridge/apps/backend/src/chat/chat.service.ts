@@ -9,7 +9,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron, CronExpression, Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThan, Repository } from 'typeorm';
 
@@ -37,6 +37,11 @@ import {
 } from './entities/chat-message.entity';
 
 // Chat attachments live under chat/ in the store (apart from Storage's mailbox, see attachment-multer.config.ts).
+// A turn that has been Running longer than this is assumed lost (worker died or the claim response never arrived).
+export const STALE_TURN_MS = 30 * 60 * 1000;
+export const STALE_TURN_MESSAGE =
+  'Воркер не завершил ответ — отправьте сообщение ещё раз';
+
 const chatKey = (storedName: string) => `chat/${storedName}`;
 
 @Injectable()
@@ -275,6 +280,35 @@ export class ChatService {
       this.logger.warn(
         `Chat attachment prune failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  // Nothing else ever leaves Running except completeTurn/failTurn, so a turn
+  // whose worker died would otherwise stay "thinking" forever.
+  @Interval(5 * 60 * 1000)
+  async failStaleTurns(): Promise<number> {
+    try {
+      const cutoff = new Date(Date.now() - STALE_TURN_MS);
+      const [, count]: [unknown, number] = await this.messageRepository.query(
+        `UPDATE chat_messages SET status = $1, "errorMessage" = $2, "updatedAt" = now()
+         WHERE status = $3 AND "updatedAt" < $4`,
+        [
+          ChatMessageStatus.Failed,
+          STALE_TURN_MESSAGE,
+          ChatMessageStatus.Running,
+          cutoff,
+        ],
+      );
+
+      if (count > 0) this.logger.log(`Failed ${count} stale chat turns`);
+
+      return count;
+    } catch (error) {
+      this.logger.warn(
+        `Stale chat turn sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return 0;
     }
   }
 
