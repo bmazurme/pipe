@@ -36,6 +36,7 @@ import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
+import { LimitAlertsService } from './limit-alerts.service';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { RunCredentialsService } from './run-credentials.service';
@@ -72,6 +73,7 @@ export class WorkerController {
     private readonly workerService: WorkerService,
     private readonly runCredentials: RunCredentialsService,
     private readonly workersService: WorkersService,
+    private readonly limitAlerts: LimitAlertsService,
   ) {}
 
   @Get()
@@ -179,11 +181,21 @@ export class WorkerController {
     @Body() dto: ReportUsageDto,
     @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<void> {
-    await this.workerService.recordClaudeReport(
+    const recorded = await this.workerService.recordClaudeReport(
       currentUser.id,
       currentUser.workerId,
       dto,
     );
+
+    // Tell the owner when a plan window is running out. Awaited only to keep it in order with the response; it never throws.
+    if (recorded) {
+      await this.limitAlerts.check({
+        userId: currentUser.id,
+        workerId: currentUser.workerId,
+        credentialId: recorded.credentialId,
+        limits: recorded.limits,
+      });
+    }
   }
 
   // How many earlier runs of a parcel's task could be mixed in at launch. Declared before
