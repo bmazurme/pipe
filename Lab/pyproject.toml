@@ -12,5 +12,12 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+# `lab run`/`measure`/`stats` never import flask — only `lab serve` does, lazily, with a
+# clear error naming this extra if it's missing. Optional because most of Lab's value (the
+# calc/BOM/export pipeline) has nothing to do with a web form, and most of its dependency
+# weight (build123d/OCP) already comes from that, not from this.
+[project.optional-dependencies]
+web = ["flask>=3.0"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["lab"]
