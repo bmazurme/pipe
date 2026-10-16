@@ -30,6 +30,7 @@ import { PageHeader } from '../widgets/PageHeader';
 import { AttachButton } from './chat/AttachButton';
 import { attachmentProblem, deleteChatAttachment, isClaudeModel, uploadChatAttachment } from './chat/chatAttachments';
 import { extractChatAction } from './chat/chatActions';
+import { hasStreamedText, pendingBubbleText } from './chat/chatProgress';
 import { MergePrCard } from './chat/MergePrCard';
 import { PrFixCard } from './chat/PrFixCard';
 import { buildContextDraft, ContextDraft } from './chat/chatContext';
@@ -38,7 +39,8 @@ import { useAttachmentUrls } from './chat/useAttachmentUrls';
 import styles from './ChatPage.module.css';
 
 // Fast while a reply is on its way, off otherwise — an idle chat has nothing to fetch.
-const MESSAGES_POLL_INTERVAL_MS = 2000;
+// While a reply is awaited the page asks every second: the worker reports the partial reply about as often, so it reads as streaming.
+const MESSAGES_POLL_INTERVAL_MS = 1000;
 const NO_REPLY_PENDING_POLL_MS = 0;
 
 // AIKit's own defaults are English, unlabeled-enough to be untestable by
@@ -85,7 +87,7 @@ function toChatType(chat: ChatMeta): ChatType {
 // instead of using AIKit's single top-level error/onRetry (this chat can
 // in principle have more than one non-complete message at a time, which a
 // single container-level error slot doesn't model well).
-function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, string>): TChatMessage {
+function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, string>, now: number): TChatMessage {
   const id = String(message.id);
   const timestamp = message.createdAt;
 
@@ -108,9 +110,13 @@ function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, strin
     };
   }
 
+  // A reply still being produced shows its progress — the text so far, or how long it has been waited for — instead of an
+  // empty bubble next to a loader.
   const content = message.status === 'failed'
     ? `⚠️ ${message.errorMessage ?? 'Не удалось получить ответ'}`
-    : extractChatAction(message.content).text;
+    : message.status === 'pending' || message.status === 'running'
+      ? pendingBubbleText(message, now)
+      : extractChatAction(message.content).text;
 
   return { role: 'assistant', id, timestamp, content };
 }
@@ -140,7 +146,9 @@ export function ChatPage() {
   const chats = useMemo(() => (chatsData ?? []).map(toChatType), [chatsData]);
   const activeChat = chats.find((chat) => chat.id === String(activeChatId)) ?? null;
   const imageUrls = useAttachmentUrls(messagesData ?? [], accessToken);
-  const messages = useMemo(() => (messagesData ?? []).map((message) => toChatMessage(message, imageUrls)), [messagesData, imageUrls]);
+  // Ticks once a second while a reply is awaited, so the waiting time on its bubble visibly counts.
+  const [now, setNow] = useState(() => Date.now());
+  const messages = useMemo(() => (messagesData ?? []).map((message) => toChatMessage(message, imageUrls, now)), [messagesData, imageUrls, now]);
 
   // The model's proposal to change a pull request, from its latest finished reply — offered as a card to
   // confirm, once; the person's decision is remembered per message.
@@ -154,7 +162,17 @@ export function ChatPage() {
   const hasPendingReply = (messagesData ?? []).some(
     (message) => message.status === 'pending' || message.status === 'running',
   );
-  const status: ChatStatus = hasPendingReply ? 'submitted' : 'ready';
+  const isStreaming = (messagesData ?? []).some((message) => hasStreamedText(message));
+  const status: ChatStatus = isStreaming ? 'streaming' : hasPendingReply ? 'submitted' : 'ready';
+
+  useEffect(() => {
+    if (!hasPendingReply) return undefined;
+
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+
+    return () => clearInterval(timer);
+  }, [hasPendingReply]);
 
   useEffect(() => {
     setPollingInterval(hasPendingReply ? MESSAGES_POLL_INTERVAL_MS : NO_REPLY_PENDING_POLL_MS);

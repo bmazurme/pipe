@@ -35,6 +35,7 @@ import {
   ChatMessageRole,
   ChatMessageStatus,
 } from './entities/chat-message.entity';
+import { MAX_PROGRESS_LENGTH } from './chat.limits';
 
 // Chat attachments live under chat/ in the store (apart from Storage's mailbox, see attachment-multer.config.ts).
 // A turn that has been Running longer than this is assumed lost (worker died or the claim response never arrived).
@@ -497,6 +498,28 @@ export class ChatService {
     return message;
   }
 
+  // What the model has written so far, from the worker, while the turn runs. Only a Running turn takes it (a late report
+  // after the turn finished is dropped, not an error to the worker), and it counts as a sign of life for the stale sweep.
+  async reportProgress(
+    messageId: number,
+    userId: number,
+    text: string,
+  ): Promise<void> {
+    const message = await this.findOwnedMessage(messageId, userId);
+
+    if (
+      message.role !== ChatMessageRole.Assistant ||
+      message.status !== ChatMessageStatus.Running
+    ) {
+      return;
+    }
+
+    await this.messageRepository.update(
+      { id: messageId, status: ChatMessageStatus.Running },
+      { progress: text.slice(0, MAX_PROGRESS_LENGTH) },
+    );
+  }
+
   async completeTurn(
     messageId: number,
     userId: number,
@@ -505,6 +528,7 @@ export class ChatService {
     const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.content = content;
+    message.progress = null;
     message.status = ChatMessageStatus.Complete;
 
     return this.messageRepository.save(message);
@@ -519,6 +543,7 @@ export class ChatService {
 
     message.status = ChatMessageStatus.Failed;
     message.errorMessage = errorMessage ?? null;
+    message.progress = null;
 
     return this.messageRepository.save(message);
   }

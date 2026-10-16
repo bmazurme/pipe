@@ -71,6 +71,7 @@ describe('runClaude stream-json', () => {
     assert.equal(result.output, 'The answer');
     assert.ok(chunks.join('').includes('thinking out loud'));
     assert.ok(chunks.join('').includes('ARG') && chunks.join('').includes('stream-json'));
+    assert.ok(chunks.join('').includes('--include-partial-messages'));
     assert.equal(result.report?.limits?.windows.five_hour?.utilization, 0.2);
     assert.equal(result.report?.usage?.costUsd, 0.5);
   });

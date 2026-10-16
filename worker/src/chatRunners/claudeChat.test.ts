@@ -43,6 +43,7 @@ describe('claudeChat', () => {
       script,
       [
         '#!/usr/bin/env node',
+        "for (const t of ['Par', 'tial ', 'reply']) console.log(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: t } } }));",
         "console.log(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.1, resetsAt: 1 } } } }));",
         "console.log(JSON.stringify({ type: 'result', result: `token=${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ''}` }));",
         '',
@@ -51,6 +52,18 @@ describe('claudeChat', () => {
     chmodSync(script, 0o755);
     process.env.PATH = `${dir}:${originalPath}`;
   }
+
+  it('reports the reply as it is written, and asks the CLI for partial messages', async () => {
+    fakeClaude();
+    const progress: string[] = [];
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+
+    await claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work, undefined, undefined, undefined, undefined, (text) => void progress.push(text));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.ok(progress.length >= 1);
+    assert.ok(progress.every((text) => 'Partial reply'.startsWith(text) || text.startsWith('Par')));
+  });
 
   it('runs the turn on the token bridge handed over and passes the plan limits on', async () => {
     fakeClaude();

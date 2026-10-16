@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 import { CancelledError } from '../cancelled.js';
-import { ClaudeStreamParser, type ClaudeReport } from './claudeUsage.js';
+import { ClaudeStreamParser, type ClaudeReport, type StreamDelta } from './claudeUsage.js';
 
 export interface RunResult {
   exitCode: number;
@@ -58,6 +58,8 @@ export function runClaude(
   timeoutMs?: number,
   killGraceMs = DEFAULT_KILL_GRACE_MS,
   signal?: AbortSignal,
+  // The reply as it is written (text and any reasoning) — for a chat that shows progress.
+  onDelta?: (delta: StreamDelta) => void,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // Already asked to stop before there was anything to stop.
@@ -67,8 +69,9 @@ export function runClaude(
     }
 
     // stream-json (which needs --verbose) is what carries the plan-limit and cost events; the reply text is
-    // read back out of it, so callers still see the same text as with the plain format.
-    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel, '--output-format', 'stream-json', '--verbose'];
+    // read back out of it, so callers still see the same text as with the plain format. The partial-message chunks
+    // only feed `onDelta`; they never reach the job log.
+    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel, '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
     // The CLI is a closed-source binary — worker can't control its HTTP
     // client directly, only hope it honors the standard proxy env vars (most
     // tools built on common HTTP libraries do). Set whichever flavor it
@@ -83,7 +86,7 @@ export function runClaude(
       if (output.length > MAX_OUTPUT_CHARS) output = output.slice(-MAX_OUTPUT_CHARS);
       onOutput(text);
     };
-    const stream = new ClaudeStreamParser(collect);
+    const stream = new ClaudeStreamParser(collect, onDelta);
     child.stdout?.on('data', (chunk: Buffer) => stream.push(chunk.toString('utf-8')));
     // stderr carries the real failure cause (auth, rate limit, bad model), so
     // it goes into the result's tail too, not just the streamed log.

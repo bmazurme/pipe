@@ -33,6 +33,7 @@ import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ChatResponseDto } from './dto/chat-response.dto';
 import { ClaimedTurnResponseDto } from './dto/claimed-turn-response.dto';
+import { ReportProgressDto } from './dto/report-progress.dto';
 import { CompleteTurnDto } from './dto/complete-turn.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { FailTurnDto } from './dto/fail-turn.dto';
@@ -277,6 +278,18 @@ export class ChatController {
     );
 
     this.sendAttachment(res, attachment);
+  }
+
+  // The worker's live report of the reply so far; the chat page polls it.
+  @Post('turns/:messageId/progress')
+  @WorkerKeyAllowed()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async reportProgress(
+    @Param('messageId', ParseIntPipe) messageId: number,
+    @Body() dto: ReportProgressDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.chatService.reportProgress(messageId, currentUser.id, dto.text);
   }
 
   @Post('turns/:messageId/complete')

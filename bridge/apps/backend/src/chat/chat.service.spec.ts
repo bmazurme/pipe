@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
+import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ChatService } from './chat.service';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -334,6 +335,89 @@ describe('ChatService', () => {
 
       await expect(call(99)).resolves.toMatchObject({ id: 99 });
       expect(messageRepository.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('reportProgress', () => {
+    const running = {
+      id: 99,
+      chatId: 1,
+      role: ChatMessageRole.Assistant,
+      content: '',
+      status: ChatMessageStatus.Running,
+    };
+
+    it('stores the partial reply of a running turn', async () => {
+      messageRepository.findOne!.mockResolvedValue(running);
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.update = jest.fn().mockResolvedValue({ affected: 1 });
+
+      await service.reportProgress(99, 7, 'So far…');
+
+      expect(messageRepository.update).toHaveBeenCalledWith(
+        { id: 99, status: ChatMessageStatus.Running },
+        { progress: 'So far…' },
+      );
+    });
+
+    it.each([
+      ChatMessageStatus.Pending,
+      ChatMessageStatus.Complete,
+      ChatMessageStatus.Failed,
+    ])(
+      'drops a late or early report for a %s message without an error',
+      async (status) => {
+        messageRepository.findOne!.mockResolvedValue({ ...running, status });
+        chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+        messageRepository.update = jest.fn();
+
+        await expect(
+          service.reportProgress(99, 7, 'x'),
+        ).resolves.toBeUndefined();
+        expect(messageRepository.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it("never takes a report for another user's message", async () => {
+      messageRepository.findOne!.mockResolvedValue(running);
+      chatRepository.findOne!.mockResolvedValue(null);
+      messageRepository.update = jest.fn();
+
+      await expect(service.reportProgress(99, 8, 'x')).rejects.toThrow();
+      expect(messageRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('is cleared when the turn completes or fails', async () => {
+      messageRepository.findOne!.mockResolvedValue({
+        ...running,
+        progress: 'half',
+      });
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+
+      expect((await service.completeTurn(99, 7, 'done')).progress).toBeNull();
+
+      messageRepository.findOne!.mockResolvedValue({
+        ...running,
+        progress: 'half',
+      });
+      expect((await service.failTurn(99, 7, 'boom')).progress).toBeNull();
+    });
+
+    it('is shown to the page only while the turn is running', () => {
+      const dto = (status: ChatMessageStatus) =>
+        ChatMessageResponseDto.fromEntity({
+          ...running,
+          status,
+          progress: 'half',
+          errorMessage: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as never);
+
+      expect(dto(ChatMessageStatus.Running).progress).toBe('half');
+      expect(dto(ChatMessageStatus.Complete).progress).toBeNull();
+      expect(dto(ChatMessageStatus.Pending).progress).toBeNull();
     });
   });
 

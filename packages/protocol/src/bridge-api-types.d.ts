@@ -434,6 +434,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/turns/{messageId}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChatController_reportProgress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/chat/turns/{messageId}/complete": {
         parameters: {
             query?: never;
@@ -1933,6 +1949,7 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "running" | "complete" | "failed";
             errorMessage: string | null;
+            progress: string | null;
             attachments: components["schemas"]["ChatAttachmentResponseDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -1942,6 +1959,9 @@ export interface components {
         SendMessageDto: {
             content: string;
             attachmentIds?: number[];
+        };
+        ReportProgressDto: {
+            text: string;
         };
         CompleteTurnDto: {
             content: string;
@@ -3069,6 +3089,29 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChatController_reportProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                messageId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportProgressDto"];
+            };
+        };
+        responses: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

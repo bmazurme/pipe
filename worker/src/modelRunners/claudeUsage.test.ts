@@ -89,6 +89,32 @@ describe('ClaudeStreamParser', () => {
     assert.deepEqual(texts, ['hi\n']);
   });
 
+  it('reports the reply as it is written, from partial-message events, without touching the log text', () => {
+    const texts: string[] = [];
+    const deltas: unknown[] = [];
+    const parser = new ClaudeStreamParser((text) => texts.push(text), (delta) => deltas.push(delta));
+    const delta = (inner: object) => line({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: inner } });
+
+    parser.push(line({ type: 'stream_event', event: { type: 'message_start' } }));
+    parser.push(delta({ type: 'thinking_delta', thinking: 'hmm' }));
+    parser.push(delta({ type: 'text_delta', text: 'Hel' }));
+    parser.push(delta({ type: 'text_delta', text: 'lo' }));
+    parser.push(delta({ type: 'input_json_delta', partial_json: '{' }));
+
+    assert.deepEqual(deltas, [
+      { kind: 'thinking', text: 'hmm' },
+      { kind: 'text', text: 'Hel' },
+      { kind: 'text', text: 'lo' },
+    ]);
+    assert.deepEqual(texts, []);
+  });
+
+  it('ignores partial-message events when nobody listens', () => {
+    const parser = new ClaudeStreamParser(() => undefined);
+
+    assert.doesNotThrow(() => parser.push(line({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'x' } } })));
+  });
+
   it('passes a line that is not JSON through unchanged', () => {
     const texts: string[] = [];
     const parser = new ClaudeStreamParser((text) => texts.push(text));
