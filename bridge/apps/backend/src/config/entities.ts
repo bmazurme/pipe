@@ -25,6 +25,7 @@ import { User } from '../users/entities/user.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
 import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
 import { Job } from '../worker/entities/job.entity';
+import { LimitAlertState } from '../worker/entities/limit-alert-state.entity';
 import { ProviderCredential } from '../worker/entities/provider-credential.entity';
 import { Worker } from '../worker/entities/worker.entity';
 import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
@@ -54,6 +55,7 @@ export const ENTITIES = [
   Context,
   VpnConnection,
   WorkerHeartbeat,
+  LimitAlertState,
   Secret,
   ReportsSettingsBackup,
   LoopRun,

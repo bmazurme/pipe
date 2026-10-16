@@ -1,5 +1,6 @@
 import { Response } from 'express';
 
+import { LimitAlertsService } from './limit-alerts.service';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkerController } from './worker.controller';
 import { WorkerService } from './worker.service';
@@ -24,6 +25,7 @@ describe('WorkerController download routes', () => {
       workerService as unknown as WorkerService,
       {} as unknown as RunCredentialsService,
       {} as unknown as WorkersService,
+      {} as unknown as LimitAlertsService,
     );
     const warn = jest
       .spyOn(

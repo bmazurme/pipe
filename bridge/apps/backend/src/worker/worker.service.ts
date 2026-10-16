@@ -18,7 +18,11 @@ import {
   StoredFile,
   StoredFileDirection,
 } from '../storage/entities/stored-file.entity';
-import { sanitizeLimits, sanitizeUsage } from './claude-limits';
+import {
+  type ClaudeLimits,
+  sanitizeLimits,
+  sanitizeUsage,
+} from './claude-limits';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ReportUsageDto } from './dto/report-usage.dto';
@@ -608,7 +612,7 @@ export class WorkerService {
     workerId: number | undefined,
     dto: ReportUsageDto,
     now = new Date(),
-  ): Promise<void> {
+  ): Promise<{ limits: ClaudeLimits; credentialId: number | null } | null> {
     const limits = sanitizeLimits(dto.limits, now);
     const usage = sanitizeUsage(dto.usage);
 
@@ -619,7 +623,9 @@ export class WorkerService {
       );
     }
 
-    if (dto.jobId === undefined) return;
+    if (dto.jobId === undefined) {
+      return limits ? { limits, credentialId: null } : null;
+    }
 
     await this.assertHeldBy(dto.jobId, userId, workerId);
 
@@ -637,6 +643,8 @@ export class WorkerService {
         limits,
       );
     }
+
+    return limits ? { limits, credentialId: limitsCredentialId } : null;
   }
 
   async recordUsedCredential(

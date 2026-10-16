@@ -4,10 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ContextModule } from '../context/context.module';
 import { StorageModule } from '../storage/storage.module';
+import { TelegramModule } from '../telegram/telegram.module';
 import { ClaudeCredentialsController } from './claude-credentials.controller';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job } from './entities/job.entity';
+import { LimitAlertState } from './entities/limit-alert-state.entity';
+import { LimitAlertsService } from './limit-alerts.service';
 import { ProviderCredential } from './entities/provider-credential.entity';
 import { Worker } from './entities/worker.entity';
 import { ProviderCredentialsController } from './provider-credentials.controller';
@@ -26,6 +29,7 @@ import { WorkersService } from './workers.service';
   imports: [
     AuthModule,
     ContextModule,
+    TelegramModule,
     StorageModule,
     TypeOrmModule.forFeature([
       Job,
@@ -33,6 +37,7 @@ import { WorkersService } from './workers.service';
       WorkerHeartbeat,
       Worker,
       ProviderCredential,
+      LimitAlertState,
     ]),
   ],
   controllers: [
@@ -47,6 +52,7 @@ import { WorkersService } from './workers.service';
     JobSweepService,
     WorkersService,
     ClaudeCredentialsService,
+    LimitAlertsService,
     ProviderCredentialsService,
     RunCredentialsService,
     WorkerHeartbeatService,
