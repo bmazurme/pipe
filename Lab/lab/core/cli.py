@@ -31,6 +31,7 @@ def run(project_dir: Path) -> dict:
         material_cost = geometry.material_cost_rub(spec, mass)
         print_estimate = printing.estimate(spec)
         exported = geometry.export_part(spec, out_dir, part_name)
+        exported["drawing"] = geometry.export_drawing(spec, out_dir, part_name)
 
         mass_kg[part_name] = mass
         cost_rub[part_name] = material_cost + (print_estimate.machine_cost_rub if print_estimate else 0.0)
