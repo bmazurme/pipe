@@ -186,6 +186,14 @@ describe('enrollSnippets', () => {
     expect(snippets.docker).toContain('docker rm -f pipe-worker >/dev/null 2>&1; docker run -d --name pipe-worker --pull always');
   });
 
+  it('docker: caps what the worker may take from the machine (half the cores, 4 GB, low priority)', () => {
+    expect(snippets.docker).toContain("--cpus \"$(docker info --format '{{.NCPU}}' | awk '{c=int($1/2); print (c<1?1:c)}')\"");
+    expect(snippets.docker).toContain('--memory 4g');
+    expect(snippets.docker).toContain('--cpu-shares 512');
+    // still one pasted command: every line but the last continues
+    expect(snippets.docker.split('\n').slice(0, -1).every((line) => line.endsWith('\\'))).toBe(true);
+  });
+
   it('a worker with a name gets its own container and state volume, so one machine can run several', () => {
     const named = enrollSnippets('https://api.example.com', 'brn_code', 'img', 'Green Pi 5');
 
