@@ -5,6 +5,7 @@ import {
   Comments,
   FaceRobot,
   FileZipper,
+  Flask,
   House,
   Key,
   Lock,
@@ -134,6 +135,14 @@ export const SERVICES: ServiceLink[] = [
     description: 'Скачать последнюю версию reports с GitHub и синхронизировать его настройки с bridge.',
     icon: FileZipper,
     path: '/reports',
+    group: 'work',
+  },
+  {
+    id: 'lab',
+    title: 'Lab',
+    description: 'CAD, расчёты и BOM для хардварных проектов (катер, самолёт, …) — пока отдельный Python CLI вне bridge.',
+    icon: Flask,
+    path: '/lab',
     group: 'work',
   },
 ];

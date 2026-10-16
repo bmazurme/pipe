@@ -1,0 +1,50 @@
+# MVP demo project — see Lab/README.md for how to run it and what every number means.
+name: "RC-катер — демо v1"
+domain: boat
+
+params:
+  length_mm: 600
+  beam_mm: 160
+  height_mm: 90
+  deadrise_deg: 12
+  wall_thickness_mm: 2.4
+  hull_material: pla
+
+  motor_power_w: 180
+  drivetrain_efficiency: 0.55
+  # Crouch's planing-speed constant — ~120 for a fast non-stepped runabout hull
+  # (this one). ~150+ is a stepped racing hydroplane, ~70-90 a displacement/semi-
+  # displacement cruiser. See lab/domains/boat/calculators.py.
+  planing_constant_c: 120
+  water_density_kg_m3: 1000
+
+targets:
+  target_speed_kmh: 35
+  budget_rub: 3000
+
+purchased_bom:
+  - part: "Мотор бесколлекторный 2845"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 950
+    unit_mass_kg: 0.075
+  - part: "Регулятор оборотов (ESC) 30A"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 650
+    unit_mass_kg: 0.030
+  - part: "Аккумулятор LiPo 3S 1300mAh"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 1100
+    unit_mass_kg: 0.130
+  - part: "Винт гребной, вал, дейдвудная труба"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 450
+    unit_mass_kg: 0.040
+  - part: "Сервопривод руля"
+    source: purchased
+    qty: 1
+    unit_cost_rub: 350
+    unit_mass_kg: 0.030

@@ -22,6 +22,7 @@ describe('the sidebar sections', () => {
       'secrets',
       'time',
       'reports',
+      'lab',
       'dashboard',
       'vpn',
     ]);

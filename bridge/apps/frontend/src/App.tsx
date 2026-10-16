@@ -56,6 +56,9 @@ const ChatPage = lazy(() =>
 const VpnPage = lazy(() =>
   import('./pages/VpnPage').then((m) => ({ default: m.VpnPage })),
 );
+const LabPage = lazy(() =>
+  import('./pages/LabPage').then((m) => ({ default: m.LabPage })),
+);
 const NotFoundPage = lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
 );
@@ -84,6 +87,7 @@ export function App() {
                 <Route path="/worker" element={<WorkerPage />} />
                 <Route path="/chat" element={<ChatPage />} />
                 <Route path="/vpn" element={<VpnPage />} />
+                <Route path="/lab" element={<LabPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Route>
