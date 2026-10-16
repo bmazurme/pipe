@@ -31,6 +31,7 @@ import {
   StartRunDto,
 } from './dto/improve.dto';
 import { ImproveAutoStartService } from './improve-auto-start.service';
+import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
@@ -44,6 +45,7 @@ export class ImproveController {
     private readonly improve: ImproveService,
     private readonly scheduleService: ImproveScheduleService,
     private readonly autoStart: ImproveAutoStartService,
+    private readonly issueFiling: ImproveIssueFilingService,
   ) {}
 
   @Get('status')
@@ -147,7 +149,7 @@ export class ImproveController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateIssuesDto,
   ) {
-    return this.improve.createIssues(id, dto.indices);
+    return this.issueFiling.createIssues(id, dto.indices);
   }
 
   @Get('schedules')

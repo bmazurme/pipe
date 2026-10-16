@@ -65,6 +65,7 @@ function setup() {
     notifier as never,
     dataSource as never,
     appLogs as never,
+    {} as never,
   );
   const contexts = { findOwned: jest.fn().mockResolvedValue({ id: 4 }) };
   const service = new ImproveScheduleService(

@@ -12,6 +12,7 @@ import { UsersService } from '../users/users.service';
 
 import { ALL_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
+import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveController } from './improve.controller';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -44,6 +45,7 @@ describe('ImproveController', () => {
       service as unknown as ImproveService,
       {} as unknown as ImproveScheduleService,
       autoStart as unknown as ImproveAutoStartService,
+      {} as unknown as ImproveIssueFilingService,
     );
   });
 

@@ -100,6 +100,7 @@ function setup(
     notifier as never,
     dataSource as never,
     appLogs as never,
+    {} as never,
   );
 
   return {
