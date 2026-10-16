@@ -90,7 +90,7 @@ function formatDate(date: string): string {
 
 export function DayOffsTab() {
   const year = useAppSelector(timeYearSelector);
-  const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
+  const { data: dayOffs = [], isLoading, isError, refetch } = useListDayOffsQuery(year);
   const [createDayOff] = useCreateDayOffMutation();
   const [deleteDayOff] = useDeleteDayOffMutation();
 
@@ -212,7 +212,16 @@ export function DayOffsTab() {
         )}
 
         {isError && !isLoading && (
-          <Alert theme="danger" view="filled" message="Не удалось загрузить дни отдыха" />
+          <Alert
+            theme="danger"
+            view="filled"
+            message="Не удалось загрузить дни отдыха"
+            actions={
+              <Button view="outlined" size="s" onClick={() => void refetch()}>
+                Повторить
+              </Button>
+            }
+          />
         )}
 
         {isLoading && (
@@ -221,7 +230,7 @@ export function DayOffsTab() {
           </div>
         )}
 
-        {!isLoading && dayOffs.length === 0 && (
+        {!isLoading && !isError && dayOffs.length === 0 && (
           <EmptyState
             icon={Calendar}
             title={`За ${year} год отгулов нет`}
@@ -229,7 +238,7 @@ export function DayOffsTab() {
           />
         )}
 
-        {!isLoading && dayOffs.length > 0 && (
+        {!isLoading && !isError && dayOffs.length > 0 && (
           <ul className={styles.dayOffList}>
             {dayOffGroups.map((group, groupIndex) => {
               const colorClass =

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Alert, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Loader, Text } from '@gravity-ui/uikit';
 import { dateTime, DateTime } from '@gravity-ui/date-utils';
 
 import { useListDayOffsQuery } from '../../store/api';
@@ -17,7 +17,7 @@ function lastDayOfMonth(year: number, month: number): number {
 
 export function CalendarTab() {
   const year = useAppSelector(timeYearSelector);
-  const { data: dayOffs = [], isLoading, isError } = useListDayOffsQuery(year);
+  const { data: dayOffs = [], isLoading, isError, refetch } = useListDayOffsQuery(year);
 
   const today = new Date();
   const currentMonth =
@@ -44,7 +44,16 @@ export function CalendarTab() {
       <YearSwitcher />
 
       {isError && (
-        <Alert theme="danger" view="filled" message="Не удалось загрузить дни отдыха" />
+        <Alert
+          theme="danger"
+          view="filled"
+          message="Не удалось загрузить дни отдыха"
+          actions={
+            <Button view="outlined" size="s" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
       )}
 
       {isLoading && (
@@ -53,7 +62,7 @@ export function CalendarTab() {
         </div>
       )}
 
-      {!isLoading && (
+      {!isLoading && !isError && (
         <div className={styles.grid}>
           {MONTHS.map((month) => {
             const minDate = dateTime({ input: `${year}-${String(month).padStart(2, '0')}-01`, format: 'YYYY-MM-DD' });
