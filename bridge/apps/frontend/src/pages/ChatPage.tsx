@@ -8,9 +8,10 @@ import type {
   TChatMessage,
   TSubmitData,
 } from '@gravity-ui/aikit';
-import { BookOpen, Pencil } from '@gravity-ui/icons';
+import { ArrowDownToLine, BookOpen, Pencil } from '@gravity-ui/icons';
 import { Alert, Dialog, Icon, Select, TextInput } from '@gravity-ui/uikit';
 
+import { triggerBlobDownload } from '../shared/lib/parcelCrypto';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useAppSelector } from '../store/hooks';
 import {
@@ -32,7 +33,7 @@ import { attachmentProblem, deleteChatAttachment, isClaudeModel, uploadChatAttac
 import { extractChatAction } from './chat/chatActions';
 import { MergePrCard } from './chat/MergePrCard';
 import { PrFixCard } from './chat/PrFixCard';
-import { buildContextDraft, ContextDraft } from './chat/chatContext';
+import { buildChatMarkdown, buildContextDraft, chatMarkdownFilename, ContextDraft } from './chat/chatContext';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
 import { useAttachmentUrls } from './chat/useAttachmentUrls';
 import styles from './ChatPage.module.css';
@@ -250,6 +251,14 @@ export function ChatPage() {
     setContextDraft(buildContextDraft(chat?.title ?? activeChat?.name ?? 'Чат', messagesData ?? [], modelLabel(activeModel)));
   };
 
+  const handleDownloadMarkdown = () => {
+    if (activeChatId === null) return;
+    const chat = chatsData?.find((entry) => entry.id === activeChatId);
+    const markdown = buildChatMarkdown(chat?.title ?? activeChat?.name ?? 'Чат', messagesData ?? [], modelLabel(activeModel));
+
+    triggerBlobDownload(new Blob([markdown], { type: 'text/markdown' }), chatMarkdownFilename(chat?.title ?? activeChat?.name, activeChatId));
+  };
+
   // Dialogs close only once their request succeeds, so a failure leaves the user's input in place.
   const handleCreateChat = async () => {
     if (isCreatingChat) return;
@@ -344,6 +353,12 @@ export function ChatPage() {
           label: 'Сохранить в Context',
           icon: <Icon data={BookOpen} size={16} />,
           onClick: handleSaveToContext,
+        },
+        {
+          id: 'download-markdown',
+          label: 'Скачать как Markdown',
+          icon: <Icon data={ArrowDownToLine} size={16} />,
+          onClick: handleDownloadMarkdown,
         },
       ]
     : undefined;

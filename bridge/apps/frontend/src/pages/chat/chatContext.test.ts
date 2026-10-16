@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChatMessageMeta } from '../../store/api';
-import { buildContextDraft } from './chatContext';
+import { buildChatMarkdown, buildContextDraft, chatMarkdownFilename } from './chatContext';
 
 const message = (id: number, role: 'user' | 'assistant', content: string, over: Partial<ChatMessageMeta> = {}): ChatMessageMeta => ({
   id,
@@ -58,5 +58,66 @@ describe('buildContextDraft', () => {
   it('bounds the name and falls back to a default for an empty title', () => {
     expect(buildContextDraft('я'.repeat(300), [], 'Claude').name.length).toBe(100);
     expect(buildContextDraft('  ', [], 'Claude').name).toBe('Чат');
+  });
+});
+
+describe('buildChatMarkdown', () => {
+  const at = new Date('2026-10-16T12:00:00Z');
+
+  it('starts with the title heading and the model, then who said what, in order', () => {
+    const markdown = buildChatMarkdown('Парсер', [message(1, 'user', 'Как разбирать даты?'), message(2, 'assistant', 'Используйте date-fns.')], 'Claude Sonnet', at);
+    const [heading, meta, ...blocks] = markdown.trimEnd().split('\n\n');
+
+    expect(heading).toBe('# Парсер');
+    expect(meta).toContain('Модель: Claude Sonnet');
+    expect(meta).toContain(at.toLocaleString('ru-RU'));
+    expect(blocks).toEqual(['**Пользователь:** Как разбирать даты?', '**Claude Sonnet:** Используйте date-fns.']);
+  });
+
+  it('never truncates a chat longer than the context limit', () => {
+    const many = Array.from({ length: 200 }, (_, i) => message(i + 1, i % 2 ? 'assistant' : 'user', `${i}: ${'слово '.repeat(40)}`));
+    const markdown = buildChatMarkdown('long', many, 'Claude', at);
+
+    expect(markdown.length).toBeGreaterThan(20_000);
+    expect(markdown).not.toContain('начало диалога опущено');
+    expect(markdown).toContain('**Пользователь:** 0:');
+    expect(markdown).toContain('199:');
+  });
+
+  it('leaves out pending, failed and empty messages', () => {
+    const markdown = buildChatMarkdown(
+      'x',
+      [message(1, 'user', 'hi'), message(2, 'assistant', '', { status: 'pending' }), message(3, 'assistant', '⚠️ boom', { status: 'failed' }), message(4, 'user', '   ')],
+      'Claude',
+      at,
+    );
+
+    expect(markdown.trimEnd().split('\n\n').slice(2)).toEqual(['**Пользователь:** hi']);
+  });
+
+  it('lists attached files by name', () => {
+    const markdown = buildChatMarkdown('x', [message(1, 'user', 'смотри', { attachments: [{ id: 1, name: 'err.png', size: 5, isImage: true, messageId: 1 }] })], 'Claude', at);
+
+    expect(markdown).toContain('(вложения: err.png)');
+  });
+
+  it('falls back to a default heading for an empty title', () => {
+    expect(buildChatMarkdown('  ', [], 'Claude', at).startsWith('# Чат\n')).toBe(true);
+  });
+});
+
+describe('chatMarkdownFilename', () => {
+  it('uses the chat title, without characters a file name cannot hold', () => {
+    expect(chatMarkdownFilename('Парсер: даты/время?', 7)).toBe('Парсер даты время.md');
+  });
+
+  it('falls back to chat-<id> when there is no usable title', () => {
+    expect(chatMarkdownFilename(null, 7)).toBe('chat-7.md');
+    expect(chatMarkdownFilename(' / ', 7)).toBe('chat-7.md');
+    expect(chatMarkdownFilename('..', 7)).toBe('chat-7.md');
+  });
+
+  it('bounds the length of a long title', () => {
+    expect(chatMarkdownFilename('я'.repeat(300), 1)).toBe(`${'я'.repeat(100)}.md`);
   });
 });
