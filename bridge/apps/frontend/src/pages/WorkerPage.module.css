@@ -65,15 +65,36 @@
   list-style: none;
 }
 
+/* Three fixed columns — the row, the task chip, the actions — so every row lines up (the chip used to sit wherever the
+   status label ended, a different place on each row). */
 .jobItem {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px 64px;
   align-items: center;
-  gap: 4px;
+  column-gap: 4px;
 }
 
-.jobItem > .jobRow {
-  flex: 1 1 auto;
+.jobTaskChip {
+  justify-self: end;
+  max-width: 100%;
   min-width: 0;
+}
+
+.jobTaskChip > :global(.g-button__text) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* The status label is never clipped to "Выполняется…" by a long error or title next to it. */
+.jobRow :global(.g-label) {
+  flex-shrink: 0;
 }
 
 .jobRow {
@@ -101,9 +122,12 @@
 }
 
 .jobRowError {
+  /* Two lines, not one clipped line: the cause of a failure is the thing one opens the row to read. The full text is in the title. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .logsHeader {
@@ -227,11 +251,23 @@
     flex: 1 1 100%;
   }
 
-  .jobRowError {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+  /* Row on top across the width; the task chip and the actions share the line below. */
+  .jobItem {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .jobItem > .jobRow {
+    grid-column: 1 / -1;
+  }
+
+  .jobTaskChip {
+    justify-self: start;
+    grid-column: 1;
+    max-width: 70vw;
+  }
+
+  .jobActions {
+    grid-column: 2;
   }
 
   .createForm > * {
@@ -472,6 +508,9 @@
 
 .limitBar {
   min-width: 0;
+  /* Gravity's Progress has no intrinsic width: as a grid item it collapsed to 0 and the bar never showed. */
+  width: 100%;
+  justify-self: stretch;
 }
 
 @media (max-width: 767px) {
