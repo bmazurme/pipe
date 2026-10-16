@@ -157,19 +157,33 @@ export class ImproveService {
     this.requireConfigured();
 
     const issues = await this.github.listOpenIssues(all ? '' : label, 100);
-    const runs = issues.length
-      ? await this.runs.find({
-          where: {
-            kind: 'issue',
-            issueNumber: In(issues.map((issue) => issue.number)),
-          },
-          order: { id: 'DESC' },
+    const latest = new Map<number, Omit<ImproveRun, 'result' | 'baseline'>>();
+
+    if (issues.length) {
+      // Only the newest run per issue, without the heavy `result`/`baseline`.
+      const columns = this.runs.metadata.columns
+        .filter((c) => !['result', 'baseline'].includes(c.propertyName))
+        .map((c) => `run.${c.propertyName}`);
+      const runs = await this.runs
+        .createQueryBuilder('run')
+        .select(columns)
+        .distinctOn(['run.issueNumber'])
+        .where('run.kind = :kind', { kind: 'issue' })
+        .andWhere('run.issueNumber IN (:...numbers)', {
+          numbers: issues.map((issue) => issue.number),
         })
-      : [];
+        .orderBy('run.issueNumber')
+        .addOrderBy('run.id', 'DESC')
+        .getMany();
+
+      for (const run of runs) {
+        if (run.issueNumber != null) latest.set(run.issueNumber, run);
+      }
+    }
 
     return issues.map((issue) => ({
       ...issue,
-      run: runs.find((run) => run.issueNumber === issue.number) ?? null,
+      run: latest.get(issue.number) ?? null,
     }));
   }
 
