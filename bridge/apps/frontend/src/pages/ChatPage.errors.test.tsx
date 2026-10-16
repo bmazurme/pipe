@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 import type { ChatType } from '@gravity-ui/aikit';
 
@@ -54,7 +55,9 @@ function renderPage() {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <ChatPage />
+        <MemoryRouter>
+          <ChatPage />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );
@@ -91,18 +94,6 @@ beforeEach(() => {
 });
 
 describe('ChatPage — chat management failures', () => {
-  it('keeps the create dialog open and shows an error when creating a chat fails', async () => {
-    const user = userEvent.setup();
-    stubFetch((url, method) => (url.endsWith('/chat/chats') && method === 'POST' ? serverError() : undefined));
-
-    renderPage();
-    await user.click(await screen.findByText('Новый чат (stub)'));
-    await user.click(await screen.findByRole('button', { name: 'Создать' }));
-
-    expect(await screen.findByText('Не удалось создать чат')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Создать' })).toBeTruthy();
-  });
-
   it('keeps the rename dialog open with the typed title and shows an error when renaming fails', async () => {
     const user = userEvent.setup();
     stubFetch((url, method) => (url.endsWith(`/chat/chats/${CHAT.id}`) && method === 'PATCH' ? serverError() : undefined));
@@ -125,6 +116,7 @@ describe('ChatPage — chat management failures', () => {
 
     renderPage();
     await user.click(await screen.findByText(`Удалить ${CHAT.title}`));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
 
     expect(await screen.findByText('Не удалось удалить чат')).toBeTruthy();
     expect(screen.getByText(`Удалить ${CHAT.title}`)).toBeTruthy();
@@ -132,28 +124,6 @@ describe('ChatPage — chat management failures', () => {
 });
 
 describe('ChatPage — chat dialogs while a request is in flight', () => {
-  it('disables «Создать» until the create request finishes', async () => {
-    const user = userEvent.setup();
-    let finishCreate: (response: Response) => void = () => undefined;
-    stubFetch((url, method) =>
-      url.endsWith('/chat/chats') && method === 'POST'
-        ? new Promise<Response>((resolve) => {
-            finishCreate = resolve;
-          })
-        : undefined,
-    );
-
-    renderPage();
-    await user.click(await screen.findByText('Новый чат (stub)'));
-    await user.click(await screen.findByRole('button', { name: 'Создать' }));
-
-    await waitFor(() => expect(isDisabled(screen.getByRole('button', { name: 'Создать' }))).toBe(true));
-
-    // Once it succeeds the new chat becomes the active one, so its header menu shows up.
-    finishCreate(jsonResponse(CHAT));
-    expect(await screen.findByText('Переименовать')).toBeTruthy();
-  });
-
   it('disables «Сохранить» until the rename request finishes', async () => {
     const user = userEvent.setup();
     let finishRename: (response: Response) => void = () => undefined;
@@ -177,14 +147,48 @@ describe('ChatPage — chat dialogs while a request is in flight', () => {
   });
 });
 
-describe('ChatPage — dialog accessible names', () => {
-  it('names the new-chat model picker', async () => {
+describe('ChatPage — deleting a chat', () => {
+  it('asks before deleting, and deletes nothing on «Отмена»', async () => {
     const user = userEvent.setup();
-    stubFetch(() => undefined);
+    let deleted = false;
+    stubFetch((url, method) => {
+      if (url.endsWith(`/chat/chats/${CHAT.id}`) && method === 'DELETE') {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
+
+      return undefined;
+    });
 
     renderPage();
-    await user.click(await screen.findByText('Новый чат (stub)'));
+    await user.click(await screen.findByText(`Удалить ${CHAT.title}`));
+    expect(await screen.findByText('Удалить чат?')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    expect(deleted).toBe(false);
 
-    expect(await screen.findByRole('combobox', { name: 'Модель' })).toBeTruthy();
+    await user.click(screen.getByText(`Удалить ${CHAT.title}`));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(deleted).toBe(true));
+  });
+});
+
+describe('ChatPage — new chat', () => {
+  it('«Новый чат» leaves the open chat for the empty composer without creating anything', async () => {
+    const user = userEvent.setup();
+    let created = false;
+    stubFetch((url, method) => {
+      if (url.endsWith('/chat/chats') && method === 'POST') created = true;
+
+      return undefined;
+    });
+
+    renderPage();
+    await user.click(await screen.findByText(`Открыть ${CHAT.title}`));
+    expect(await screen.findByText('Переименовать')).toBeTruthy();
+
+    await user.click(screen.getByText('Новый чат (stub)'));
+
+    await waitFor(() => expect(screen.queryByText('Переименовать')).toBeNull());
+    expect(created).toBe(false);
   });
 });
