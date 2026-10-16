@@ -41,6 +41,14 @@ export function normalizeError(message: string): string {
     .slice(0, 160);
 }
 
+// http.error / http.slow rows collapse identical repeats within a window: a row
+// with meta.repeated = N stands for itself plus N suppressed requests.
+function weightOf(meta: Record<string, unknown>): number {
+  return typeof meta.repeated === 'number' && meta.repeated > 0
+    ? 1 + meta.repeated
+    : 1;
+}
+
 function increment(map: Record<string, number>, key: string): void {
   map[key] = (map[key] ?? 0) + 1;
 }
@@ -78,7 +86,7 @@ export function summarize(
     if (row.event === 'job.failed' || row.event === 'http.error') {
       const key = normalizeError(row.message);
 
-      errors.set(key, (errors.get(key) ?? 0) + 1);
+      errors.set(key, (errors.get(key) ?? 0) + weightOf(meta));
     }
 
     if (
@@ -89,7 +97,7 @@ export function summarize(
       const target = row.event === 'http.slow' ? routes : failing;
       const entry = target.get(meta.route) ?? { count: 0, maxMs: 0 };
 
-      entry.count += 1;
+      entry.count += weightOf(meta);
       entry.maxMs = Math.max(entry.maxMs, meta.durationMs);
       target.set(meta.route, entry);
     }
