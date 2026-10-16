@@ -212,6 +212,7 @@ describe('ImproveService.listIssues latest run', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const requireConfigured = jest.spyOn(
       service as never as { requireConfigured: () => void },
