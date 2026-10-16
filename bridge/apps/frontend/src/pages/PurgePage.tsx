@@ -98,7 +98,7 @@ export function PurgePage() {
   useEffect(() => {
     let inFlight = false;
 
-    const interval = setInterval(() => {
+    const refetch = () => {
       if (inFlight || !draftLoadedRef.current || hasPendingSave) return;
 
       inFlight = true;
@@ -109,9 +109,24 @@ export function PurgePage() {
       ).finally(() => {
         inFlight = false;
       });
+    };
+
+    // A hidden tab doesn't poll (like the other pages' skipPollingIfUnfocused);
+    // coming back refetches once right away so another device's edits show up.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      refetch();
     }, DRAFT_POLL_INTERVAL_MS);
 
-    return () => clearInterval(interval);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refetch();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [dispatch, hasPendingSave]);
 
   return (
