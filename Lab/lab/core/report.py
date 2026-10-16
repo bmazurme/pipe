@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .stats import MetricSummary
+
 
 def write_json(results: dict, path: Path) -> None:
     path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
@@ -45,5 +47,23 @@ def format_console(results: dict) -> str:
         lines.append("-- Цели проекта --")
         for key, value in results["targets"].items():
             lines.append(f"  {key}: {value}")
+
+    return "\n".join(lines)
+
+
+def format_stats(project_dir: Path, summary: dict[str, MetricSummary]) -> str:
+    if not summary:
+        return f"Нет истории для {project_dir} — ни одного `lab run`/`lab measure` ещё не записано."
+
+    lines = [f"=== История: {project_dir} ==="]
+    header = f"  {'метрика':<40} {'прогонов':>9} {'замеров':>8} {'расчёт (посл.)':>16} {'факт (посл.)':>14} {'разница':>9}"
+    lines.append(header)
+
+    for key in sorted(summary):
+        row = summary[key]
+        predicted = f"{row.latest_predicted:.4g}" if row.latest_predicted is not None else "—"
+        measured = f"{row.latest_measured:.4g}" if row.latest_measured is not None else "—"
+        diff = f"{row.diff_pct:+.1f}%" if row.diff_pct is not None else "—"
+        lines.append(f"  {key:<40} {row.predicted_count:>9} {row.measured_count:>8} {predicted:>16} {measured:>14} {diff:>9}")
 
     return "\n".join(lines)

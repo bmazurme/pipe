@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import geometry, printing, project as project_module, registry, report
+from . import geometry, printing, project as project_module, registry, report, stats
 from .bom import BomRollup
 from .domain import CalcContext
 
@@ -81,8 +81,27 @@ def run(project_dir: Path) -> dict:
     }
 
     report.write_json(results, out_dir / "results.json")
+    stats.record_predicted(project_dir, results)
 
     return results
+
+
+def measure(project_dir: Path, assignments: list[str], note: str) -> stats.StatsRecord:
+    """Parses `key=value` pairs from the command line into a metrics dict and records them as
+    a "measured" observation — see core/stats.py.
+    """
+
+    metrics: dict[str, float] = {}
+    for assignment in assignments:
+        key, sep, raw_value = assignment.partition("=")
+        if not sep:
+            raise ValueError(f"Ожидался key=value, получено {assignment!r}")
+        try:
+            metrics[key] = float(raw_value)
+        except ValueError as exc:
+            raise ValueError(f"Значение {raw_value!r} для {key!r} не число") from exc
+
+    return stats.record_measured(project_dir, metrics, note)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,12 +111,30 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = sub.add_parser("run", help="Собрать геометрию, посчитать массу/стоимость и запустить расчёты проекта")
     run_parser.add_argument("project_dir", type=Path, help="Папка проекта с project.yaml")
 
+    measure_parser = sub.add_parser("measure", help="Записать реально измеренное значение (вес, скорость, ...) в историю проекта")
+    measure_parser.add_argument("project_dir", type=Path, help="Папка проекта")
+    measure_parser.add_argument("assignments", nargs="+", help="key=value, например total_mass_kg=0.82")
+    measure_parser.add_argument("--note", default="", help="Короткая заметка (например, «взвешено после печати»)")
+
+    stats_parser = sub.add_parser("stats", help="Показать историю расчётов/замеров проекта: расчёт vs факт по каждой метрике")
+    stats_parser.add_argument("project_dir", type=Path, help="Папка проекта")
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
         results = run(args.project_dir)
         print(report.format_console(results))
         print(f"\nЭкспорт и results.json: {args.project_dir / 'export'}")
+        print(f"История запуска записана: {args.project_dir / stats.HISTORY_FILE}")
+    elif args.command == "measure":
+        try:
+            record = measure(args.project_dir, args.assignments, args.note)
+        except ValueError as exc:
+            print(f"Ошибка: {exc}", file=sys.stderr)
+            return 1
+        print(f"Записано ({record.timestamp}): {record.metrics}" + (f" — {record.note}" if record.note else ""))
+    elif args.command == "stats":
+        print(report.format_stats(args.project_dir, stats.summarize(args.project_dir)))
 
     return 0
 
