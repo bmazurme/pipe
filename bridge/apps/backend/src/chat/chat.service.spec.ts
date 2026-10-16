@@ -432,6 +432,7 @@ describe('ChatService', () => {
 
       const before = Date.now();
       const count = await service.failStaleTurns();
+      const after = Date.now();
 
       expect(count).toBe(2);
       const [sql, params] = messageRepository.query!.mock.calls[0] as [
@@ -442,7 +443,12 @@ describe('ChatService', () => {
       expect(params[0]).toBe(ChatMessageStatus.Failed);
       expect(params[1]).toContain('Воркер не завершил ответ');
       expect(params[2]).toBe(ChatMessageStatus.Running);
-      expect(params[3].getTime()).toBeLessThanOrEqual(before - 30 * 60 * 1000);
+      // The cut-off is taken inside the call, so it lies between "30 min before the call started" and "30 min before it
+      // ended" — comparing with `before` alone failed whenever a millisecond ticked in between.
+      expect(params[3].getTime()).toBeGreaterThanOrEqual(
+        before - 30 * 60 * 1000,
+      );
+      expect(params[3].getTime()).toBeLessThanOrEqual(after - 30 * 60 * 1000);
     });
 
     it('does not throw when the query fails', async () => {

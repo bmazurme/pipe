@@ -211,7 +211,16 @@ export function ReportTab() {
         )}
 
         {isError && !isLoading && (
-          <Alert theme="danger" view="filled" message="Не удалось загрузить отчёт" />
+          <Alert
+            theme="danger"
+            view="filled"
+            message="Не удалось загрузить отчёт"
+            actions={
+              <Button view="outlined" size="s" onClick={() => void refetch()}>
+                Повторить
+              </Button>
+            }
+          />
         )}
 
         {isLoading && (
@@ -220,7 +229,7 @@ export function ReportTab() {
           </div>
         )}
 
-        {!isLoading && entries.length === 0 && (
+        {!isLoading && !isError && entries.length === 0 && (
           <EmptyState
             icon={LayoutHeaderCells}
             title={`За ${MONTH_NAMES[month - 1]} ${year} нет данных`}
@@ -228,7 +237,7 @@ export function ReportTab() {
           />
         )}
 
-        {!isLoading && entries.length > 0 && (
+        {!isLoading && !isError && entries.length > 0 && (
           <div className={styles.reportTableWrap}>
             <table className={styles.reportTable}>
               <thead>

@@ -6,6 +6,7 @@ import { ThemeProvider } from '@gravity-ui/uikit';
 
 import { ReportTab } from './ReportTab';
 import { store } from '../../store';
+import { timeApi } from '../../store/api';
 
 const ENTRIES = [
   { id: 1, year: 2026, month: 8, taskName: 'Задача 10', status: 'В работе', hours: 4 },
@@ -94,5 +95,31 @@ describe('ReportTab', () => {
         (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length,
       ).toBeGreaterThan(callsBefore),
     );
+  });
+});
+
+describe('ReportTab list failure', () => {
+  it('shows only the error alert, then the data after retry', async () => {
+    store.dispatch(timeApi.util.resetApiState());
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } }),
+        )
+        .mockResolvedValue(
+          new Response(JSON.stringify(ENTRIES), { status: 200, headers: { 'content-type': 'application/json' } }),
+        ),
+    );
+    const user = userEvent.setup();
+    renderTab();
+
+    await screen.findByText('Не удалось загрузить отчёт');
+    expect(screen.queryByText(/нет данных/)).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Повторить' }));
+    await screen.findByText('Задача 10');
   });
 });
