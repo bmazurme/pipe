@@ -54,7 +54,13 @@ export function parseVless(raw: string): VlessParams {
   };
 }
 
-export function buildXrayConfig(params: VlessParams, listenPort: number): object {
+// On the network these boards sit on the `chrome` TLS fingerprint was throttled — about 80% of connections through the tunnel
+// hung until the connect timeout while `firefox` passed 48 of 48 (see infra/bridge-pi/vless-to-xray.sh, which has the same
+// override). So the worker uses firefox whatever the link carries; WORKER_VPN_FINGERPRINT picks another one, and `link`
+// keeps the link's own.
+export const DEFAULT_FINGERPRINT = 'firefox';
+
+export function buildXrayConfig(params: VlessParams, listenPort: number, fingerprint: string = DEFAULT_FINGERPRINT): object {
   return {
     log: { loglevel: 'warning' },
     // Loopback only: the tunnel is for this worker's own processes, never for the network around it.
@@ -76,7 +82,7 @@ export function buildXrayConfig(params: VlessParams, listenPort: number): object
           security: 'reality',
           realitySettings: {
             serverName: params.serverName,
-            fingerprint: params.fingerprint,
+            fingerprint: fingerprint === 'link' ? params.fingerprint : fingerprint,
             publicKey: params.publicKey,
             shortId: params.shortId,
             spiderX: params.spiderX,

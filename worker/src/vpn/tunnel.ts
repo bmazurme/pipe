@@ -16,6 +16,8 @@ export interface TunnelOptions {
   dir: string;
   xrayBin?: string;
   port?: number;
+  /** TLS fingerprint for Reality: a name (firefox, chrome, safari, randomized…) or `link` for the one the link carries. */
+  fingerprint?: string;
   log?: TunnelLog;
   /** Test hooks. */
   spawnProcess?: (bin: string, args: string[]) => ChildProcess;
@@ -87,7 +89,7 @@ export class VpnTunnel {
     this.stop();
 
     try {
-      const config = buildXrayConfig(parseVless(wanted), this.port);
+      const config = buildXrayConfig(parseVless(wanted), this.port, this.options.fingerprint?.trim() || undefined);
 
       mkdirSync(this.options.dir, { recursive: true });
       writeFileSync(this.configPath, JSON.stringify(config), { mode: 0o600 });

@@ -332,7 +332,12 @@ async function main(): Promise<void> {
   }
 
   // The worker's own VPN, when one is set on the Worker page (needs the xray binary the image ships).
-  const vpn = new VpnTunnel({ dir: baseConfig.stateDir, xrayBin: process.env.XRAY_BIN, log: logger });
+  const vpn = new VpnTunnel({
+    dir: baseConfig.stateDir,
+    xrayBin: process.env.XRAY_BIN,
+    fingerprint: process.env.WORKER_VPN_FINGERPRINT,
+    log: logger,
+  });
   const sessionDeps = { version: workerVersion(), log: logger };
   const waitForEnrolment = () => waitForSession(baseConfig, sessionDeps, sleep, shutdown.signal);
 
