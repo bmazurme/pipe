@@ -28,7 +28,10 @@ const baseConfig: WorkerConfig = {
   chatTools: 'off',
 };
 
-function build(vpn?: { apply: (link: string | null | undefined) => Promise<string | null> }) {
+function build(
+  vpn?: { apply: (link: string | null | undefined) => Promise<string | null> },
+  limitsProbe?: { consider: (remote: never, key: string) => void },
+) {
   const calls: string[] = [];
   const controller = new AbortController();
   const deps = buildLoopDeps({
@@ -48,6 +51,7 @@ function build(vpn?: { apply: (link: string | null | undefined) => Promise<strin
     },
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
     vpn,
+    limitsProbe: limitsProbe as never,
   });
 
   return { deps, calls, controller };
@@ -115,6 +119,25 @@ describe('buildLoopDeps', () => {
     const remote = await build({ apply: async () => null }).deps.fetchRemoteConfig('brw_k');
 
     assert.equal(remote.proxyUrl, 'http://manual:1');
+  });
+
+  it('lets the limits probe look at every settings fetch — with the proxy the worker really uses — without waiting for it', async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ id: 1, proxyUrl: 'http://manual:1', vpnLink: 'vless://l' }), { status: 200 })) as typeof fetch;
+    const seen: { proxyUrl: unknown; key: string }[] = [];
+
+    const remote = await build(
+      { apply: async () => 'http://127.0.0.1:18080' },
+      {
+        consider: (config, key) => {
+          seen.push({ proxyUrl: (config as { proxyUrl: unknown }).proxyUrl, key });
+          throw new Error('a broken probe');
+        },
+      },
+    ).deps.fetchRemoteConfig('brw_k');
+
+    assert.deepEqual(seen, [{ proxyUrl: 'http://127.0.0.1:18080', key: 'brw_k' }]);
+    // the poll goes on with the settings, whatever the probe did
+    assert.equal(remote.proxyUrl, 'http://127.0.0.1:18080');
   });
 
   it('forgetting a revoked key erases it from the state directory', async () => {

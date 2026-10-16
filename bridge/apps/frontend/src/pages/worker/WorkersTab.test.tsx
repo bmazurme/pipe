@@ -34,6 +34,8 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     claudeLimits: null,
     claudeCredentialId: null,
     vpnHost: null,
+    limitsRefreshMin: 0,
+    limitsRefreshRequestedAt: null,
     ...over,
   };
 }
@@ -600,6 +602,23 @@ describe('WorkersTab — settings', () => {
 
       expect(await screen.findByText('VPN: vpn.example.com:8443')).toBeTruthy();
     });
+  });
+
+  it('chooses how often the worker refreshes its Claude limits by itself, off by default', async () => {
+    const user = userEvent.setup();
+
+    workers = [fleetWorker({ id: 1, limitsRefreshMin: 0 })];
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+    const dialog = await screen.findByRole('dialog');
+
+    await user.click(within(dialog).getByText('Выключено — по кнопке и после запусков'));
+    await user.click(await screen.findByText('Каждые 30 минут'));
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+    expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ limitsRefreshMin: 30 });
   });
 
   it('restricting the models sends exactly those', async () => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Checkbox, Dialog, NumberInput, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Checkbox, Dialog, NumberInput, Select, Switch, Text, TextInput } from '@gravity-ui/uikit';
 
 import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';
@@ -10,6 +10,14 @@ interface WorkerSettingsDialogProps {
   worker: FleetWorker;
   onClose: () => void;
 }
+
+const LIMITS_REFRESH_OPTIONS = [
+  { value: '0', content: 'Выключено — по кнопке и после запусков' },
+  { value: '15', content: 'Каждые 15 минут' },
+  { value: '30', content: 'Каждые 30 минут' },
+  { value: '60', content: 'Каждый час' },
+  { value: '120', content: 'Каждые 2 часа' },
+];
 
 const MIN_TIMEOUT_MIN = 1;
 const MAX_TIMEOUT_MIN = 240;
@@ -22,6 +30,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [timeoutMin, setTimeoutMin] = useState<number | null>(Math.round(worker.jobTimeoutSec / 60));
   const [proxyUrl, setProxyUrl] = useState(worker.proxyUrl ?? '');
   const [chatEnabled, setChatEnabled] = useState(worker.chatEnabled);
+  const [limitsRefreshMin, setLimitsRefreshMin] = useState(String(worker.limitsRefreshMin ?? 0));
   const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
   // undefined = the VPN is left as it is, null = removed, a string = replaced
   const [vpnChange, setVpnChange] = useState<string | null | undefined>(undefined);
@@ -52,6 +61,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         jobTimeoutSec: (timeoutMin as number) * 60,
         proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim(),
         chatEnabled,
+        limitsRefreshMin: Number(limitsRefreshMin),
         claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),
         ...(vpnChange !== undefined ? { vpnLink: vpnChange } : {}),
       }).unwrap();
@@ -141,6 +151,23 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
               validationState={proxyValid ? undefined : 'invalid'}
               errorMessage={proxyValid ? undefined : 'Нужен адрес http:// или https:// (SOCKS не поддерживается)'}
             />
+          </label>
+
+          <label className={styles.dialogForm}>
+            <Text variant="body-2" color="secondary">
+              Автообновление лимитов Claude
+            </Text>
+            <Select
+              value={[limitsRefreshMin]}
+              onUpdate={(value) => setLimitsRefreshMin(value[0] ?? '0')}
+              options={LIMITS_REFRESH_OPTIONS}
+              width="max"
+              aria-label="Автообновление лимитов"
+            />
+            <Text variant="caption-2" color="secondary">
+              Пока worker свободен, он сам делает один крошечный запрос к Claude (около 4 тысяч токенов) и обновляет полоски лимитов. По умолчанию выключено:
+              лимиты обновляются после запусков и по кнопке «Обновить лимиты».
+            </Text>
           </label>
 
           <Switch checked={chatEnabled} onUpdate={setChatEnabled} content="Отвечать на сообщения в чате" />

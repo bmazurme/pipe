@@ -523,3 +523,22 @@
     order: 3;
   }
 }
+
+.limitsBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.limitsActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.limitsStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

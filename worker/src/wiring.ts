@@ -3,7 +3,7 @@ import { ChatBridgeClient, type ClaimedChatTurn } from './chatBridgeClient.js';
 import type { WorkerConfig } from './config.js';
 import { forgetRevokedKey } from './session.js';
 import type { LoopDeps } from './loop.js';
-import { fetchRemoteConfig } from './remoteConfig.js';
+import { fetchRemoteConfig, type RemoteWorkerConfig } from './remoteConfig.js';
 import type { Session } from './session.js';
 
 export interface WiringInput {
@@ -18,6 +18,8 @@ export interface WiringInput {
   log: LoopDeps['log'];
   /** The worker's own VPN tunnel; absent when this image has none. */
   vpn?: { apply: (link: string | null | undefined) => Promise<string | null> };
+  /** Refreshes the Claude plan limits when the settings say a probe is due; absent when this image does not probe. */
+  limitsProbe?: { consider: (remote: RemoteWorkerConfig, key: string) => void };
 }
 
 // Joins the loop to the real bridge: clients carry the session's key and the base URL, settings come from that same
@@ -39,7 +41,16 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
       // The VPN set on the page wins over a proxy address; no working tunnel leaves the proxy settings as they were.
       const tunnelProxy = input.vpn ? await input.vpn.apply(remote.vpnLink) : null;
 
-      return tunnelProxy ? { ...remote, proxyUrl: tunnelProxy } : remote;
+      const effective = tunnelProxy ? { ...remote, proxyUrl: tunnelProxy } : remote;
+
+      // Never waits for the probe: it runs beside the polling, and must not delay or break it.
+      try {
+        input.limitsProbe?.consider(effective, key);
+      } catch {
+        // a probe problem must never break the poll
+      }
+
+      return effective;
     },
     forgetRevokedKey: () => forgetRevokedKey(baseConfig),
     processJob: (client, job, config) => input.processJob(client, job, config, signal),

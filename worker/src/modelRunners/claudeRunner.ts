@@ -51,7 +51,7 @@ export function buildClaudeEnv(
 export function runClaude(
   cwd: string,
   prompt: string,
-  claudeModel: 'sonnet' | 'opus',
+  claudeModel: string,
   onOutput: (chunk: string) => void,
   proxyUrl?: string,
   claudeToken?: string | null,
@@ -60,6 +60,8 @@ export function runClaude(
   signal?: AbortSignal,
   // The reply as it is written (text and any reasoning) — for a chat that shows progress.
   onDelta?: (delta: StreamDelta) => void,
+  // Extra CLI arguments appended as they are (the limits probe uses a bare system prompt and no tools).
+  extraArgs: string[] = [],
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // Already asked to stop before there was anything to stop.
@@ -71,7 +73,7 @@ export function runClaude(
     // stream-json (which needs --verbose) is what carries the plan-limit and cost events; the reply text is
     // read back out of it, so callers still see the same text as with the plain format. The partial-message chunks
     // only feed `onDelta`; they never reach the job log.
-    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel, '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
+    const args = ['-p', prompt, '--dangerously-skip-permissions', '--model', claudeModel, '--output-format', 'stream-json', '--verbose', '--include-partial-messages', ...extraArgs];
     // The CLI is a closed-source binary — worker can't control its HTTP
     // client directly, only hope it honors the standard proxy env vars (most
     // tools built on common HTTP libraries do). Set whichever flavor it

@@ -35,6 +35,8 @@ function worker(over: Partial<FleetWorker> = {}): FleetWorker {
     claudeLimits: null,
     claudeCredentialId: null,
     vpnHost: null,
+    limitsRefreshMin: 0,
+    limitsRefreshRequestedAt: null,
     ...over,
   };
 }

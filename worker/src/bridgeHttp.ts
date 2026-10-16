@@ -61,7 +61,7 @@ export async function readOptionalJson<T>(response: Response): Promise<T | null>
 export async function reportClaudeUsage(
   apiUrl: string,
   apiKey: string,
-  report: { limits?: unknown; usage?: unknown },
+  report: { limits?: unknown; usage?: unknown; probe?: boolean },
   jobId?: number,
 ): Promise<void> {
   if (!report.limits && !report.usage) return;

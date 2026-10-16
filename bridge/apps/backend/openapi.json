@@ -1709,6 +1709,26 @@
         }
       }
     },
+    "/api/v1/workers/{id}/refresh-limits": {
+      "post": {
+        "operationId": "WorkersController_refreshLimits",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/contexts": {
       "get": {
         "operationId": "ContextController_list",
@@ -4256,6 +4276,9 @@
             "type": "number",
             "minimum": 1
           },
+          "probe": {
+            "type": "boolean"
+          },
           "limits": {
             "type": "object",
             "additionalProperties": true
@@ -4535,6 +4558,14 @@
             "type": "string",
             "nullable": true
           },
+          "limitsRefreshMin": {
+            "type": "number"
+          },
+          "limitsRefreshRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
           "keyPrefix": {
             "type": "string",
             "nullable": true
@@ -4571,6 +4602,8 @@
           "chatEnabled",
           "claudeCredentialId",
           "vpnHost",
+          "limitsRefreshMin",
+          "limitsRefreshRequestedAt",
           "keyPrefix",
           "enrollmentPending",
           "enrollmentExpiresAt",
@@ -4627,6 +4660,16 @@
           },
           "chatEnabled": {
             "type": "boolean"
+          },
+          "limitsRefreshMin": {
+            "type": "number",
+            "enum": [
+              0,
+              15,
+              30,
+              60,
+              120
+            ]
           }
         },
         "required": [
@@ -4734,6 +4777,23 @@
           "vpnLink": {
             "type": "string",
             "nullable": true
+          },
+          "limitsRefreshMin": {
+            "type": "number"
+          },
+          "limitsRefreshRequestedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "limitProbe": {
+            "type": "object",
+            "properties": {
+              "claudeToken": {
+                "required": true,
+                "type": "string"
+              }
+            }
           }
         },
         "required": [
@@ -4745,7 +4805,10 @@
           "jobTimeoutSec",
           "proxyUrl",
           "chatEnabled",
-          "vpnLink"
+          "vpnLink",
+          "limitsRefreshMin",
+          "limitsRefreshRequestedAt",
+          "limitProbe"
         ]
       },
       "UpdateWorkerDto": {
@@ -4801,6 +4864,16 @@
           },
           "chatEnabled": {
             "type": "boolean"
+          },
+          "limitsRefreshMin": {
+            "type": "number",
+            "enum": [
+              0,
+              15,
+              30,
+              60,
+              120
+            ]
           }
         }
       },

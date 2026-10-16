@@ -14,6 +14,11 @@ export interface RemoteWorkerConfig {
   chatEnabled: boolean;
   // The worker's own VPN (a vless:// Reality link), run as a local Xray tunnel — see vpn/tunnel.ts. Absent/null: none.
   vpnLink?: string | null;
+  // Probing the Claude plan limits: every `limitsRefreshMin` minutes (0 = never by itself), once when the owner asked
+  // (`limitsRefreshRequestedAt`), with the token bridge hands over only while a probe is due. Absent on an older bridge.
+  limitsRefreshMin?: number;
+  limitsRefreshRequestedAt?: string | null;
+  limitProbe?: { claudeToken: string } | null;
 }
 
 // bridge no longer accepts this worker's key: it was deleted (or re-enrolled) on the Worker page.

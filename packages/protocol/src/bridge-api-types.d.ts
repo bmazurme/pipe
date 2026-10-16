@@ -946,6 +946,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workers/{id}/refresh-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkersController_refreshLimits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contexts": {
         parameters: {
             query?: never;
@@ -2041,6 +2057,7 @@ export interface components {
         };
         ReportUsageDto: {
             jobId?: number;
+            probe?: boolean;
             limits?: {
                 [key: string]: unknown;
             };
@@ -2121,6 +2138,9 @@ export interface components {
             chatEnabled: boolean;
             claudeCredentialId: number | null;
             vpnHost: string | null;
+            limitsRefreshMin: number;
+            /** Format: date-time */
+            limitsRefreshRequestedAt: string | null;
             keyPrefix: string | null;
             enrollmentPending: boolean;
             /** Format: date-time */
@@ -2137,6 +2157,8 @@ export interface components {
             jobTimeoutSec?: number;
             proxyUrl?: string | null;
             chatEnabled?: boolean;
+            /** @enum {number} */
+            limitsRefreshMin?: 0 | 15 | 30 | 60 | 120;
         };
         CreatedWorkerResponseDto: {
             worker: components["schemas"]["WorkerResponseDto"];
@@ -2164,6 +2186,12 @@ export interface components {
             proxyUrl: string | null;
             chatEnabled: boolean;
             vpnLink: string | null;
+            limitsRefreshMin: number;
+            /** Format: date-time */
+            limitsRefreshRequestedAt: string | null;
+            limitProbe: {
+                claudeToken?: string;
+            };
         };
         UpdateWorkerDto: {
             models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
@@ -2175,6 +2203,8 @@ export interface components {
             jobTimeoutSec?: number;
             proxyUrl?: string | null;
             chatEnabled?: boolean;
+            /** @enum {number} */
+            limitsRefreshMin?: 0 | 15 | 30 | 60 | 120;
         };
         DeletedWorkerResponseDto: {
             failedJobs: number;
@@ -3923,6 +3953,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CreatedWorkerResponseDto"];
                 };
+            };
+        };
+    };
+    WorkersController_refreshLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
