@@ -52,3 +52,11 @@ export function extractChatAction(content: string): { text: string; action: Chat
 
   return { text, action };
 }
+
+// A reply that is still being written may stop in the middle of an action block; show nothing from its opening on, so the
+// raw JSON never flashes in the bubble before the finished block becomes a card.
+export function hideActionTail(partial: string): string {
+  const start = partial.indexOf('```pipe-action');
+
+  return (start === -1 ? partial : partial.slice(0, start)).trimEnd();
+}

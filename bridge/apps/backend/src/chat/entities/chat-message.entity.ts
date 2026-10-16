@@ -46,4 +46,9 @@ export class ChatMessage extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
+
+  // What the model has written so far while the turn is running (the worker reports it every second or two), so the chat
+  // can show the reply growing instead of a bare loader. Cleared the moment the turn completes or fails.
+  @Column({ type: 'text', nullable: true })
+  progress: string | null;
 }

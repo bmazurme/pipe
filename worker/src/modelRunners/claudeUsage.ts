@@ -71,13 +71,23 @@ export function parseUsage(result: Record<string, unknown>): ClaudeRunUsage | un
 // Reads the CLI's stdout line by line. Text it can use (assistant replies) is passed to `onText`; a line that
 // is not JSON at all is passed through unchanged, so a CLI that ignores the format flag, or an error printed
 // as plain text, still ends up in the log exactly as before.
+export interface StreamDelta {
+  kind: 'text' | 'thinking';
+  text: string;
+}
+
 export class ClaudeStreamParser {
   readonly report: ClaudeReport = {};
   /** The final reply, from the CLI's own `result` event, when it sent one. */
   finalText: string | null = null;
   private buffer = '';
 
-  constructor(private readonly onText: (text: string) => void) {}
+  // `onDelta` hears the reply (and any reasoning the model shows) as it is written — only with the CLI's
+  // --include-partial-messages; it is what lets a chat show the answer growing instead of a bare loader.
+  constructor(
+    private readonly onText: (text: string) => void,
+    private readonly onDelta?: (delta: StreamDelta) => void,
+  ) {}
 
   push(chunk: string): void {
     this.buffer += chunk;
@@ -117,7 +127,16 @@ export class ClaudeStreamParser {
       return;
     }
 
-    if (event.type === 'rate_limit_event') {
+    if (event.type === 'stream_event') {
+      const inner = isObject(event.event) ? event.event : null;
+      const delta = inner && inner.type === 'content_block_delta' && isObject(inner.delta) ? inner.delta : null;
+
+      if (delta && delta.type === 'text_delta' && typeof delta.text === 'string') {
+        this.onDelta?.({ kind: 'text', text: delta.text });
+      } else if (delta && delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+        this.onDelta?.({ kind: 'thinking', text: delta.thinking });
+      }
+    } else if (event.type === 'rate_limit_event') {
       this.report.limits = parseLimits(event.rate_limit_info) ?? this.report.limits;
     } else if (event.type === 'result') {
       this.report.usage = parseUsage(event) ?? this.report.usage;

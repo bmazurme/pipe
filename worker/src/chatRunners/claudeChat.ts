@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
+import { createProgressReporter } from './progress.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 
@@ -47,6 +48,8 @@ export async function claudeChat(
   onReport?: (report: ClaudeReport) => void,
   // A stored Claude token handed over by bridge; absent: the CLI's own login.
   claudeToken?: string | null,
+  // Hears the reply as the model writes it; used to show progress in the chat.
+  onProgress?: (text: string) => void | Promise<void>,
 ): Promise<string> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
@@ -54,7 +57,19 @@ export async function claudeChat(
   try {
     const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
     const prompt = buildPrompt(history, staged);
-    const result = await runClaude(turnDir, prompt, claudeModel, () => {}, proxyUrl, claudeToken);
+    const progress = onProgress ? createProgressReporter(onProgress) : undefined;
+    const result = await runClaude(
+      turnDir,
+      prompt,
+      claudeModel,
+      () => {},
+      proxyUrl,
+      claudeToken,
+      undefined,
+      undefined,
+      undefined,
+      progress?.push,
+    ).finally(() => progress?.stop());
 
     if (result.report) onReport?.(result.report);
 

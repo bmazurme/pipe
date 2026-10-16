@@ -695,6 +695,36 @@
         }
       }
     },
+    "/api/v1/chat/turns/{messageId}/progress": {
+      "post": {
+        "operationId": "ChatController_reportProgress",
+        "parameters": [
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportProgressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/chat/turns/{messageId}/complete": {
       "post": {
         "operationId": "ChatController_completeTurn",
@@ -3856,6 +3886,10 @@
             "type": "string",
             "nullable": true
           },
+          "progress": {
+            "type": "string",
+            "nullable": true
+          },
           "attachments": {
             "type": "array",
             "items": {
@@ -3878,6 +3912,7 @@
           "content",
           "status",
           "errorMessage",
+          "progress",
           "attachments",
           "createdAt",
           "updatedAt"
@@ -3898,6 +3933,18 @@
         },
         "required": [
           "content"
+        ]
+      },
+      "ReportProgressDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 60000
+          }
+        },
+        "required": [
+          "text"
         ]
       },
       "CompleteTurnDto": {

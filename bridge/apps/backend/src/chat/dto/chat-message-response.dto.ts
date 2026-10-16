@@ -13,6 +13,8 @@ export class ChatMessageResponseDto {
   content: string;
   status: ChatMessageStatus;
   errorMessage: string | null;
+  // The partial reply of a running turn, or null.
+  progress: string | null;
   attachments: ChatAttachmentResponseDto[];
   createdAt: Date;
   updatedAt: Date;
@@ -28,6 +30,10 @@ export class ChatMessageResponseDto {
       content: message.content,
       status: message.status,
       errorMessage: message.errorMessage,
+      progress:
+        message.status === ChatMessageStatus.Running
+          ? (message.progress ?? null)
+          : null,
       attachments: attachments.map(ChatAttachmentResponseDto.fromEntity),
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,

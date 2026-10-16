@@ -69,6 +69,15 @@ export class ChatBridgeClient {
     return reportClaudeUsage(this.apiUrl, this.apiKey, report);
   }
 
+  // The reply so far, for the chat page to show while the turn runs. Best-effort: a failed report is just a missed update.
+  async reportProgress(messageId: number, text: string): Promise<void> {
+    try {
+      await this.post(`/${messageId}/progress`, `Reporting progress of chat turn ${messageId}`, { text });
+    } catch {
+      // the final reply goes through complete()
+    }
+  }
+
   async complete(messageId: number, content: string): Promise<void> {
     await this.post(`/${messageId}/complete`, `Completing chat turn ${messageId}`, { content });
   }
