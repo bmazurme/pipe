@@ -12,6 +12,10 @@ import { tap } from 'rxjs/operators';
 import { AppLogService } from './app-log.service';
 
 export const SLOW_REQUEST_MS = 2000;
+// Identical failures (same event, method, route, status) inside this window
+// are counted instead of stored; the next one after it carries `repeated`.
+export const DEDUPE_WINDOW_MS = 60_000;
+const MAX_DEDUPE_KEYS = 500;
 
 // Paths that are polled constantly or are the log reader itself — recording
 // them would be noise at best and a feedback loop at worst.
@@ -51,7 +55,40 @@ function routeOf(request: Request): string {
 
 @Injectable()
 export class RequestLogInterceptor implements NestInterceptor {
+  private readonly windows = new Map<
+    string,
+    { firstAt: number; suppressed: number }
+  >();
+
   constructor(private readonly logs: AppLogService) {}
+
+  // Returns null when the request is a repeat inside the window (suppressed),
+  // otherwise the number of repeats suppressed in the window that just ended.
+  private takeRepeated(key: string): number | null {
+    const now = Date.now();
+    const current = this.windows.get(key);
+
+    if (current && now - current.firstAt < DEDUPE_WINDOW_MS) {
+      current.suppressed += 1;
+
+      return null;
+    }
+
+    this.windows.delete(key);
+    if (this.windows.size >= MAX_DEDUPE_KEYS) {
+      for (const [k, v] of this.windows) {
+        if (now - v.firstAt >= DEDUPE_WINDOW_MS) this.windows.delete(k);
+      }
+      while (this.windows.size >= MAX_DEDUPE_KEYS) {
+        const oldest = this.windows.keys().next().value as string;
+
+        this.windows.delete(oldest);
+      }
+    }
+    this.windows.set(key, { firstAt: now, suppressed: 0 });
+
+    return current?.suppressed ?? 0;
+  }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== 'http') {
@@ -73,12 +110,20 @@ export class RequestLogInterceptor implements NestInterceptor {
       const verdict = classifyRequest(outcome);
 
       if (verdict) {
+        const repeated = this.takeRepeated(
+          [verdict.event, outcome.method, outcome.route, outcome.status].join(
+            '|',
+          ),
+        );
+
+        if (repeated === null) return;
+
         void this.logs.record({
           level: verdict.level,
           source: 'http',
           event: verdict.event,
           message: `${outcome.method} ${outcome.route} → ${outcome.status} in ${outcome.durationMs}ms`,
-          meta: { ...outcome },
+          meta: { ...outcome, ...(repeated > 0 ? { repeated } : {}) },
         });
       }
     };

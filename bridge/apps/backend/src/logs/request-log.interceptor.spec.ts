@@ -9,6 +9,7 @@ import { lastValueFrom, of, throwError } from 'rxjs';
 import { AppLogService } from './app-log.service';
 import {
   classifyRequest,
+  DEDUPE_WINDOW_MS,
   RequestLogInterceptor,
   SLOW_REQUEST_MS,
 } from './request-log.interceptor';
@@ -165,5 +166,62 @@ describe('RequestLogInterceptor.intercept', () => {
     await run({ handle: () => of('ok') });
 
     expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('RequestLogInterceptor repeat suppression', () => {
+  const build = () => {
+    const record = jest.fn();
+    const interceptor = new RequestLogInterceptor({
+      record,
+    } as unknown as AppLogService);
+    const run = (path: string, error: unknown = new Error('boom')) =>
+      lastValueFrom(
+        interceptor.intercept(
+          {
+            getType: () => 'http',
+            switchToHttp: () => ({
+              getRequest: () => ({ method: 'POST', path, route: { path } }),
+              getResponse: () => ({ statusCode: 200 }),
+            }),
+          } as unknown as ExecutionContext,
+          { handle: () => throwError(() => error) },
+        ),
+      ).catch(() => undefined);
+
+    return { record, run };
+  };
+
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-01-01')));
+  afterEach(() => jest.useRealTimers());
+
+  it('does not record a second identical failure inside the window', async () => {
+    const { record, run } = build();
+
+    for (let i = 0; i < 100; i += 1) await run('/hook');
+
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0][0].meta.repeated).toBeUndefined();
+  });
+
+  it('records one row carrying repeated after the window', async () => {
+    const { record, run } = build();
+
+    for (let i = 0; i < 100; i += 1) await run('/hook');
+    jest.setSystemTime(Date.now() + DEDUPE_WINDOW_MS + 1);
+    await run('/hook');
+
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record.mock.calls[1][0].meta.repeated).toBe(99);
+  });
+
+  it('keeps different routes and statuses independent', async () => {
+    const { record, run } = build();
+
+    await run('/a');
+    await run('/b');
+    await run('/a', new ServiceUnavailableException());
+
+    expect(record).toHaveBeenCalledTimes(3);
   });
 });

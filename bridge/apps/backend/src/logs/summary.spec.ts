@@ -109,3 +109,19 @@ describe('summarize', () => {
     expect(s.jobs.avgDurationMs).toBeNull();
   });
 });
+
+describe('summarize with repeated', () => {
+  it('counts a row with meta.repeated as itself plus the repeats', () => {
+    const row = {
+      level: 'error',
+      source: 'http',
+      event: 'http.error',
+      message: 'POST /hook → 500 in 5ms',
+      meta: JSON.stringify({ route: '/hook', durationMs: 5, repeated: 9 }),
+    } as unknown as AppLog;
+    const result = summarize([row], 7);
+
+    expect(result.failingRoutes[0].count).toBe(10);
+    expect(result.topErrors[0].count).toBe(10);
+  });
+});
