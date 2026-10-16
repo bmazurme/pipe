@@ -5,7 +5,7 @@ import { reportClaudeUsage } from './bridgeHttp.js';
 import { runClaude, type RunResult } from './modelRunners/claudeRunner.js';
 import type { RemoteWorkerConfig } from './remoteConfig.js';
 
-type Run = (cwd: string, token: string, proxyUrl: string | undefined) => Promise<RunResult>;
+type Run = (cwd: string, token: string, proxyUrl: string | undefined, model: string) => Promise<RunResult>;
 
 export interface ProbeLog {
   info: (obj: object, msg: string) => void;
@@ -14,15 +14,23 @@ export interface ProbeLog {
 
 // The owner's request is only honoured while it is fresh (bridge stops sending the token after the same time).
 const REQUEST_VALID_MS = 10 * 60 * 1000;
-const PROBE_TIMEOUT_MS = 90_000;
+// The cheapest model first; a token that cannot use it (or a network that stalls on it) must not leave the card without an answer, so
+// the next one is tried — and the one that worked is remembered for the later probes. Each attempt is short: a hung CLI is not waited for.
+export const PROBE_MODELS = ['haiku', 'sonnet'];
+const PROBE_TIMEOUT_MS = 45_000;
 
 // One tiny Claude call — a bare system prompt, no tools, the smallest model, about 4k tokens — whose only purpose is the plan-limit
 // event the CLI reports with every response. It is how a worker's numbers are refreshed without a job: when the owner presses
 // "refresh" on its card, and, if chosen in its settings, every N minutes.
-export async function runLimitsProbe(cwd: string, token: string, proxyUrl: string | undefined): Promise<RunResult> {
+export async function runLimitsProbe(
+  cwd: string,
+  token: string,
+  proxyUrl: string | undefined,
+  model: string = PROBE_MODELS[0],
+): Promise<RunResult> {
   mkdirSync(cwd, { recursive: true });
 
-  return runClaude(cwd, 'ok', 'haiku', () => undefined, proxyUrl, token, PROBE_TIMEOUT_MS, undefined, undefined, undefined, [
+  return runClaude(cwd, 'ok', model, () => undefined, proxyUrl, token, PROBE_TIMEOUT_MS, undefined, undefined, undefined, [
     '--system-prompt',
     'Reply with OK.',
     '--tools',
@@ -45,6 +53,8 @@ export class LimitsProbe {
   private running = false;
   private lastProbeAt = 0;
   private lastRequestHandled = 0;
+  // Index into PROBE_MODELS of the model that last worked (or 0 until one did).
+  private modelIndex = 0;
 
   constructor(private readonly options: LimitsProbeOptions) {}
 
@@ -83,23 +93,34 @@ export class LimitsProbe {
   }
 
   private async probe(token: string, proxyUrl: string | undefined, key: string, why: string): Promise<void> {
-    try {
-      const result = await (this.options.run ?? ((cwd, t, proxy) => runLimitsProbe(cwd, t, proxy)))(
-        path.join(this.options.workDir, 'limits-probe'),
-        token,
-        proxyUrl,
-      );
+    const run = this.options.run ?? ((cwd, t, proxy, model) => runLimitsProbe(cwd, t, proxy, model));
+    const cwd = path.join(this.options.workDir, 'limits-probe');
+    let failure: unknown;
 
-      if (!result.report?.limits) {
-        this.options.log?.warn({ exitCode: result.exitCode, why }, 'limits probe: the CLI reported no limits');
+    // Start with the model that worked last time, then try the others in order.
+    for (let step = 0; step < PROBE_MODELS.length; step += 1) {
+      const index = (this.modelIndex + step) % PROBE_MODELS.length;
+      const model = PROBE_MODELS[index];
 
-        return;
+      try {
+        const result = await run(cwd, token, proxyUrl, model);
+
+        if (result.report?.limits) {
+          this.modelIndex = index;
+          await (this.options.send ?? reportClaudeUsage)(this.options.apiUrl, key, { limits: result.report.limits, probe: true });
+          this.options.log?.info({ why, model }, 'limits probe: reported');
+
+          return;
+        }
+
+        failure = new Error(`the CLI reported no limits (exit ${result.exitCode})`);
+        this.options.log?.warn({ exitCode: result.exitCode, why, model }, 'limits probe: the CLI reported no limits');
+      } catch (error) {
+        failure = error;
+        this.options.log?.warn({ err: error, why, model }, 'limits probe failed');
       }
-
-      await (this.options.send ?? reportClaudeUsage)(this.options.apiUrl, key, { limits: result.report.limits, probe: true });
-      this.options.log?.info({ why }, 'limits probe: reported');
-    } catch (error) {
-      this.options.log?.warn({ err: error, why }, 'limits probe failed');
     }
+
+    this.options.log?.warn({ err: failure, why }, 'limits probe: no model answered');
   }
 }
