@@ -14,13 +14,26 @@ import styles from '../ReportsPage.module.css';
 
 export function ReportsSettingsBackupSection() {
   const { data: backup, isLoading, isError } = useGetReportsSettingsBackupQuery();
-  const [deleteBackup, { isLoading: isDeleting, error: deleteError }] = useDeleteReportsSettingsBackupMutation();
+  const [deleteBackup, { isLoading: isDeleting }] = useDeleteReportsSettingsBackupMutation();
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const openConfirm = () => {
+    setDeleteError(null);
+    setIsConfirmOpen(true);
+  };
 
   const handleDelete = async () => {
-    await deleteBackup();
-    setIsConfirmOpen(false);
+    try {
+      await deleteBackup().unwrap();
+      setIsConfirmOpen(false);
+    } catch (err) {
+      setDeleteError(describeApiError(err));
+    }
   };
+
+  const savedAt = backup ? new Date(backup.updatedAt) : null;
+  const savedAtText = savedAt && !Number.isNaN(savedAt.getTime()) ? savedAt.toLocaleString('ru-RU') : null;
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -33,14 +46,14 @@ export function ReportsSettingsBackupSection() {
         <div className={styles.row}>
           <Text variant="body-2" color="secondary">
             {backup
-              ? `Сохранён ${new Date(backup.updatedAt).toLocaleString('ru-RU')}`
+              ? (savedAtText ? `Сохранён ${savedAtText}` : 'Бэкап сохранён')
               : 'Бэкап ещё не сохранён — отправьте настройки со страницы Settings в reports'}
           </Text>
           <Button
             view="outlined-danger"
             size="m"
             disabled={!backup}
-            onClick={() => setIsConfirmOpen(true)}
+            onClick={openConfirm}
             aria-label="Удалить бэкап настроек"
           >
             <Icon data={TrashBin} size={16} />
@@ -49,12 +62,11 @@ export function ReportsSettingsBackupSection() {
         </div>
       )}
 
-      {deleteError && <Alert theme="danger" view="filled" message={describeApiError(deleteError)} />}
-
       <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)}>
         <DialogHeader caption="Удалить бэкап настроек?" />
         <DialogBody>
           Последний бэкап настроек reports будет удалён с bridge. Действие нельзя отменить.
+          {deleteError && <Alert theme="danger" view="filled" message={deleteError} />}
         </DialogBody>
         <DialogFooter
           onClickButtonCancel={() => setIsConfirmOpen(false)}
