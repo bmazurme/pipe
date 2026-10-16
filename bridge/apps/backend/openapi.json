@@ -3708,10 +3708,7 @@
             "minLength": 1,
             "maxLength": 100
           }
-        },
-        "required": [
-          "status"
-        ]
+        }
       },
       "UserResponseDto": {
         "type": "object",
