@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { walkProjectFiles } from './walk.js';
+import { DEFAULT_EXCLUDE, DEFAULT_INCLUDE, resolveProjectGlobs, walkProjectFiles } from './walk.js';
 
 describe('walkProjectFiles', () => {
   let root: string;
@@ -61,5 +61,36 @@ describe('walkProjectFiles', () => {
     assert.ok(!result.includes('src/link-to-file.ts'));
     assert.ok(!result.some((f) => f.startsWith('linked-dir/')));
     assert.deepEqual(result.sort(), ['README.md', 'src/a.ts', 'src/nested/b.ts']);
+  });
+});
+
+describe('resolveProjectGlobs', () => {
+  it('uses the project\'s own globs when it has them', () => {
+    assert.deepEqual(resolveProjectGlobs({ include: ['src/**'], exclude: ['**/x/**'] }), { include: ['src/**'], exclude: ['**/x/**'] });
+  });
+
+  it('falls back to the defaults for missing, null and EMPTY arrays alike', () => {
+    for (const project of [{}, { include: undefined, exclude: undefined }, { include: null, exclude: null }, { include: [], exclude: [] }]) {
+      assert.deepEqual(resolveProjectGlobs(project), { include: [...DEFAULT_INCLUDE], exclude: [...DEFAULT_EXCLUDE] });
+    }
+  });
+
+  it('decides each side on its own', () => {
+    assert.deepEqual(resolveProjectGlobs({ include: ['a/**'], exclude: [] }), { include: ['a/**'], exclude: [...DEFAULT_EXCLUDE] });
+    assert.deepEqual(resolveProjectGlobs({ include: [], exclude: ['b/**'] }), { include: [...DEFAULT_INCLUDE], exclude: ['b/**'] });
+  });
+
+  it('hands out copies, so a caller cannot change the defaults', () => {
+    const first = resolveProjectGlobs({});
+
+    first.include.push('**/*.evil');
+    first.exclude.length = 0;
+
+    assert.deepEqual(resolveProjectGlobs({}), { include: [...DEFAULT_INCLUDE], exclude: [...DEFAULT_EXCLUDE] });
+  });
+
+  it('keeps node_modules and .git out of the defaults\' parcel', () => {
+    assert.ok(DEFAULT_EXCLUDE.includes('**/node_modules/**'));
+    assert.ok(DEFAULT_EXCLUDE.includes('**/.git/**'));
   });
 });
