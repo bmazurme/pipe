@@ -140,6 +140,36 @@ describe('buildLoopDeps', () => {
     assert.equal(remote.proxyUrl, 'http://127.0.0.1:18080');
   });
 
+  it('gives the limits probe the proxy from the worker\'s environment when settings name none (a stack\'s vpn-client), and the tunnel or the page\'s one when they do', async () => {
+    const seen: unknown[] = [];
+    const probe = { consider: (config: { proxyUrl?: unknown }) => void seen.push(config.proxyUrl) };
+    const withEnvProxy = (limitsProbe: { consider: (remote: never, key: string) => void }, vpn?: { apply: () => Promise<string | null> }) =>
+      buildLoopDeps({
+        baseConfig: { ...baseConfig, proxyUrl: 'http://vpn-client:1080' },
+        signal: new AbortController().signal,
+        initialSession: { mode: 'managed', key: 'brw_k', name: 'green' },
+        waitForEnrolment: async () => null,
+        processJob: async () => undefined,
+        processChatTurn: async () => undefined,
+        withHeartbeat: async (_c, _n, work) => work(),
+        sleep: async () => undefined,
+        log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+        vpn,
+        limitsProbe: limitsProbe as never,
+      });
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({ id: 1, proxyUrl: null }), { status: 200 })) as typeof fetch;
+    await withEnvProxy(probe as never).fetchRemoteConfig('brw_k');
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({ id: 1, proxyUrl: 'http://page:8080' }), { status: 200 })) as typeof fetch;
+    await withEnvProxy(probe as never).fetchRemoteConfig('brw_k');
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({ id: 1, proxyUrl: 'http://page:8080', vpnLink: 'vless://l' }), { status: 200 })) as typeof fetch;
+    await withEnvProxy(probe as never, { apply: async () => 'http://127.0.0.1:18080' }).fetchRemoteConfig('brw_k');
+
+    assert.deepEqual(seen, ['http://vpn-client:1080', 'http://page:8080', 'http://127.0.0.1:18080']);
+  });
+
   it('forgetting a revoked key erases it from the state directory', async () => {
     saveCredentials(stateDir, {
       bridgeApiUrl: baseConfig.bridgeApiUrl,
