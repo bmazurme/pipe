@@ -1,19 +1,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 
-import { writeJsonFileSync } from '@pipe/protocol';
+import { resolveProjectGlobs, writeJsonFileSync } from '@pipe/protocol';
 
 import { CONFIG_PATH } from './paths.js';
 import type { ProjectConfig, SyncConfig } from './types.js';
-
-const DEFAULT_INCLUDE = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue', '**/*.json'];
-const DEFAULT_EXCLUDE = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/coverage/**',
-  '**/uploads/**',
-];
 
 const DEFAULT_CONFIG: SyncConfig = {
   bridge: { apiUrl: 'https://api.bridge.ntlstl.dev' },
@@ -44,10 +34,11 @@ export function findProject(config: SyncConfig, name: string): ProjectConfig {
   return project;
 }
 
+// The shared defaults live in @pipe/protocol/walk; an empty array falls back to them too (reports does the same).
 export function projectInclude(project: ProjectConfig): string[] {
-  return project.include ?? DEFAULT_INCLUDE;
+  return resolveProjectGlobs(project).include;
 }
 
 export function projectExclude(project: ProjectConfig): string[] {
-  return project.exclude ?? DEFAULT_EXCLUDE;
+  return resolveProjectGlobs(project).exclude;
 }
