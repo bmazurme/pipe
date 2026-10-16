@@ -22,6 +22,9 @@ def format_console(results: dict) -> str:
         lines.append(f"  {part:<16} {info['mass_kg']:.3f} кг   материал: {info['material']}   стоимость материала: {info['material_cost_rub']:.0f} ₽")
         if info.get("print_hours") is not None:
             lines.append(f"{'':18}печать: {info['print_hours']:.1f} ч   станко-время: {info['print_machine_cost_rub']:.0f} ₽")
+        drawing = info.get("export", {}).get("drawing")
+        if drawing:
+            lines.append(f"{'':18}чертёж (3 вида, DXF): {drawing}")
 
     lines.append("")
     lines.append("-- Расчёты --")

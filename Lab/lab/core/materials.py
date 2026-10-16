@@ -28,6 +28,7 @@ MATERIALS: dict[str, Material] = {
     "pla": Material("PLA", 1240, 1800, "fdm_print"),
     "petg": Material("PETG", 1270, 2200, "fdm_print"),
     "abs": Material("ABS", 1040, 2000, "fdm_print"),
+    "asa": Material("ASA", 1070, 2200, "fdm_print"),
     "nylon_cf": Material("Nylon-CF", 1100, 4500, "fdm_print"),
     "plywood_birch": Material("Фанера берёза", 650, 250, "cnc_mill"),
     "aluminum_6061": Material("Алюминий 6061", 2700, 350, "cnc_mill"),
