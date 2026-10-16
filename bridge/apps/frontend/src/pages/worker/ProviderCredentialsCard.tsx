@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Disclosure, Icon, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Dialog, Disclosure, Icon, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
   type ProviderCredential,
@@ -16,7 +16,7 @@ import { modelName } from './fleet';
 const PROVIDERS: ProviderModel[] = ['gpt', 'deepseek', 'qwen'];
 
 export function ProviderCredentialsCard() {
-  const { data: credentials, isLoading } = useListProviderCredentialsQuery();
+  const { data: credentials, isLoading, isError, refetch } = useListProviderCredentialsQuery();
   const [createCredential, { isLoading: isCreating }] = useCreateProviderCredentialMutation();
   const [deleteCredential] = useDeleteProviderCredentialMutation();
 
@@ -27,6 +27,7 @@ export function ProviderCredentialsCard() {
   const [model, setModel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProviderCredential | null>(null);
 
   const canSave = name.trim() !== '' && apiKey.trim() !== '';
 
@@ -51,11 +52,14 @@ export function ProviderCredentialsCard() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    setDeletingId(id);
+  const handleDelete = async (credential: ProviderCredential) => {
+    setError(null);
+    setDeletingId(credential.id);
 
     try {
-      await deleteCredential(id).unwrap();
+      await deleteCredential(credential.id).unwrap();
+    } catch {
+      setError(`Не удалось удалить ключ «${credential.name}»`);
     } finally {
       setDeletingId(null);
     }
@@ -74,6 +78,25 @@ export function ProviderCredentialsCard() {
       </Text>
 
       {isLoading && <Skeleton height={40} />}
+
+      {isError && (
+        <Alert
+          theme="danger"
+          view="filled"
+          message="Не удалось загрузить список ключей"
+          actions={
+            <Button view="outlined" size="s" onClick={() => void refetch()}>
+              Повторить
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && credentials && credentials.length === 0 && (
+        <Text color="secondary" variant="body-2">
+          Ключей пока нет — задачи будут использовать ключи из переменных среды worker&apos;а. Добавьте первый ниже.
+        </Text>
+      )}
 
       {credentials && credentials.length > 0 && (
         <ul className={styles.jobList}>
@@ -94,7 +117,10 @@ export function ProviderCredentialsCard() {
                 size="s"
                 aria-label={`Удалить ключ: ${credential.name}`}
                 loading={deletingId === credential.id}
-                onClick={() => void handleDelete(credential.id)}
+                onClick={() => {
+                  setError(null);
+                  setPendingDelete(credential);
+                }}
               >
                 <Icon data={TrashBin} size={16} />
               </Button>
@@ -115,13 +141,19 @@ export function ProviderCredentialsCard() {
             aria-label="Провайдер"
             width="max"
           />
-          <TextInput value={name} onUpdate={setName} placeholder="Название ключа (например, рабочий)" />
+          <TextInput
+            value={name}
+            onUpdate={setName}
+            placeholder="Название ключа (например, рабочий)"
+            controlProps={{ 'aria-label': 'Название ключа' }}
+          />
         </div>
         <TextInput
           type="password"
           value={apiKey}
           onUpdate={setApiKey}
           placeholder="API-ключ"
+          controlProps={{ 'aria-label': 'API-ключ' }}
           hasClear
           autoComplete="off"
         />
@@ -132,9 +164,9 @@ export function ProviderCredentialsCard() {
               value={baseUrl}
               onUpdate={setBaseUrl}
               placeholder="https://api.example.com/v1"
-              aria-label="Адрес API"
+              controlProps={{ 'aria-label': 'Адрес API' }}
             />
-            <TextInput value={model} onUpdate={setModel} placeholder="Модель, например gpt-4o" aria-label="Модель" />
+            <TextInput value={model} onUpdate={setModel} placeholder="Модель, например gpt-4o" controlProps={{ 'aria-label': 'Модель' }} />
           </div>
         </Disclosure>
 
@@ -146,6 +178,29 @@ export function ProviderCredentialsCard() {
       </div>
 
       {error && <Alert theme="danger" view="filled" message={error} />}
+
+      <Dialog
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        maxWidth="s"
+        aria-labelledby="delete-provider-credential-title"
+      >
+        <Dialog.Header caption="Удалить ключ?" id="delete-provider-credential-title" />
+        <Dialog.Body>
+          <Text color="secondary">Ключ «{pendingDelete?.name}» будет удалён без возможности восстановления.</Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          preset="danger"
+          textButtonCancel="Отмена"
+          textButtonApply="Удалить"
+          onClickButtonCancel={() => setPendingDelete(null)}
+          onClickButtonApply={() => {
+            const target = pendingDelete;
+            setPendingDelete(null);
+            if (target) void handleDelete(target);
+          }}
+        />
+      </Dialog>
     </Card>
   );
 }

@@ -205,6 +205,7 @@ describe('WorkerPage', () => {
     expect(screen.getByText(/gw\.example/)).toBeTruthy();
 
     await user.click(screen.getByLabelText('Удалить ключ: team'));
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deletedId).toBe(4));
   });
