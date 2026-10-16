@@ -145,6 +145,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
           </Text>
           {job.workerName && <Text color="secondary">· {job.workerName}</Text>}
           {job.contextName && <Text color="secondary">· Контекст: {job.contextName}</Text>}
+          {job.taskKey && <Text color="secondary">· Задача: {job.taskKey}</Text>}
           {job.historyCount ? <Text color="secondary">· Итоги прошлых запусков: {job.historyCount}</Text> : null}
           {duration && <Text color="secondary">· {duration}</Text>}
           {job.usage && <Text color="secondary">· {describeUsage(job.usage)}</Text>}

@@ -61,6 +61,8 @@ export interface WorkerJob {
   contextName: string | null;
   /** How many earlier runs' outcomes were mixed in, or null when none were. */
   historyCount: number | null;
+  /** The task the job works on (`173:628`, or `file:<id>`), null for older jobs. */
+  taskKey?: string | null;
   status: WorkerJobStatus;
   logs: string;
   /**

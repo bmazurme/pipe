@@ -29,6 +29,11 @@ interface JobListProps {
 
 type JobFilter = 'all' | 'active' | 'failed';
 
+// `file:<id>` is a plain upload; anything else is the parcel's own task key.
+function taskLabel(taskKey: string): string {
+  return taskKey.startsWith('file:') ? `файл #${taskKey.slice('file:'.length)}` : taskKey;
+}
+
 function matches(job: WorkerJob, filter: JobFilter): boolean {
   if (filter === 'active') return isActive(job.status);
   if (filter === 'failed') return job.status === 'failed';
@@ -56,7 +61,10 @@ const INITIAL_VISIBLE_JOBS = 8;
 export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }: JobListProps) {
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState<JobFilter>('all');
-  const filtered = jobs.filter((job) => matches(job, filter));
+  const [taskFilter, setTaskFilter] = useState<string | null>(null);
+  const filtered = jobs.filter(
+    (job) => matches(job, filter) && (taskFilter === null || job.taskKey === taskFilter),
+  );
   const visibleJobs = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE_JOBS);
   const hiddenCount = filtered.length - visibleJobs.length;
   const activeCount = jobs.filter((job) => isActive(job.status)).length;
@@ -85,6 +93,19 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
               { value: 'failed', content: failedCount > 0 ? `С ошибкой (${failedCount})` : 'С ошибкой' },
             ]}
           />
+          {taskFilter !== null && (
+            <Label
+              theme="info"
+              type="close"
+              closeButtonLabel="Сбросить фильтр по задаче"
+              onCloseClick={() => {
+                setTaskFilter(null);
+                setShowAll(false);
+              }}
+            >
+              Задача: {taskLabel(taskFilter)}
+            </Label>
+          )}
         </div>
       )}
 
@@ -103,7 +124,13 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={FaceRobot}
-          title={filter === 'active' ? 'Активных задач нет' : 'Задач с ошибкой нет'}
+          title={
+            filter === 'active'
+              ? 'Активных задач нет'
+              : filter === 'failed'
+                ? 'Задач с ошибкой нет'
+                : 'Задач с этим ключом нет'
+          }
           description="Выберите «Все», чтобы увидеть остальные."
         />
       ) : (
@@ -150,6 +177,19 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
                   )}
                 </button>
                 {/* A sibling, not a child: a button cannot be nested in the row button. */}
+                {job.taskKey && (
+                  <Button
+                    view="flat-secondary"
+                    size="s"
+                    title="Показать все запуски этой задачи"
+                    onClick={() => {
+                      setTaskFilter(job.taskKey ?? null);
+                      setShowAll(false);
+                    }}
+                  >
+                    {taskLabel(job.taskKey)}
+                  </Button>
+                )}
                 <CancelJobButton job={job} compact />
                 <RetryJobButton job={job} compact />
               </li>

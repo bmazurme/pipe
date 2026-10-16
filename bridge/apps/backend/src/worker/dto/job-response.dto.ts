@@ -19,6 +19,8 @@ export class JobResponseDto {
   contextName: string | null;
   // How many earlier runs' outcomes were mixed in, or null when none were.
   historyCount: number | null;
+  // The task the job works on (parcel taskKey, or `file:<id>`), or null for older jobs.
+  taskKey: string | null;
   status: JobStatus;
   logs: string;
   // Only with ?logsFrom=N: then `logs` holds just the characters after the first N,
@@ -49,6 +51,7 @@ export class JobResponseDto {
       targetWorkerId: job.targetWorkerId ?? null,
       contextName: job.contextName ?? null,
       historyCount: job.historyCount ?? null,
+      taskKey: job.taskKey ?? null,
       status: job.status,
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',
