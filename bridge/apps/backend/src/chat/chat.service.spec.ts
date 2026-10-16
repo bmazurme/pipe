@@ -425,4 +425,44 @@ describe('ChatService', () => {
       },
     );
   });
+
+  describe('failStaleTurns', () => {
+    it('fails only Running turns older than the cap with a readable message', async () => {
+      messageRepository.query!.mockResolvedValue([[], 2]);
+
+      const before = Date.now();
+      const count = await service.failStaleTurns();
+
+      expect(count).toBe(2);
+      const [sql, params] = messageRepository.query!.mock.calls[0] as [
+        string,
+        [string, string, string, Date],
+      ];
+      expect(sql).toContain('WHERE status = $3 AND "updatedAt" < $4');
+      expect(params[0]).toBe(ChatMessageStatus.Failed);
+      expect(params[1]).toContain('Воркер не завершил ответ');
+      expect(params[2]).toBe(ChatMessageStatus.Running);
+      expect(params[3].getTime()).toBeLessThanOrEqual(before - 30 * 60 * 1000);
+    });
+
+    it('does not throw when the query fails', async () => {
+      messageRepository.query!.mockRejectedValue(new Error('db down'));
+
+      await expect(service.failStaleTurns()).resolves.toBe(0);
+    });
+
+    it('rejects completeTurn on a swept (Failed) turn', async () => {
+      messageRepository.findOne!.mockResolvedValue({
+        id: 5,
+        chatId: 1,
+        role: ChatMessageRole.Assistant,
+        status: ChatMessageStatus.Failed,
+      });
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+
+      await expect(service.completeTurn(5, 7, 'late')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+  });
 });

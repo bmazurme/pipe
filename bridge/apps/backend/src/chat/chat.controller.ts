@@ -227,11 +227,27 @@ export class ChatController {
       return;
     }
 
-    const { claudeToken, provider } = await this.runCredentials.resolve(
-      currentUser.id,
-      currentUser.workerId,
-      claimed.chat.model,
-    );
+    let resolved: Awaited<ReturnType<RunCredentialsService['resolve']>>;
+
+    try {
+      resolved = await this.runCredentials.resolve(
+        currentUser.id,
+        currentUser.workerId,
+        claimed.chat.model,
+      );
+    } catch (error) {
+      // The row is already Running; without this it would stay "thinking" forever.
+      await this.chatService
+        .failTurn(
+          claimed.message.id,
+          currentUser.id,
+          `Не удалось получить доступ к модели: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        .catch(() => undefined);
+      throw error;
+    }
+
+    const { claudeToken, provider } = resolved;
 
     const payload: ClaimedTurnResponseDto = {
       messageId: claimed.message.id,
