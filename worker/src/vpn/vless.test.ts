@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildXrayConfig, parseVless } from './vless.js';
+import { buildXrayConfig, DEFAULT_FINGERPRINT, parseVless } from './vless.js';
 
 const LINK =
   'vless://3f1c2d4e-0000-4000-8000-000000000001@vpn.example.com:8443?security=reality&type=tcp&pbk=PUB&sni=www.example.org&fp=firefox&sid=ab12&flow=xtls-rprx-vision&spx=%2F#node';
@@ -53,5 +53,23 @@ describe('buildXrayConfig', () => {
     assert.equal(config.outbounds[0].settings.vnext[0].users[0].flow, 'xtls-rprx-vision');
     assert.equal(config.outbounds[0].streamSettings.security, 'reality');
     assert.equal(config.outbounds[0].streamSettings.realitySettings.publicKey, 'PUB');
+  });
+
+  const fingerprintOf = (config: object) =>
+    (config as { outbounds: { streamSettings: { realitySettings: { fingerprint: string } } }[] }).outbounds[0].streamSettings.realitySettings.fingerprint;
+
+  it('uses firefox whatever fingerprint the link carries (chrome hangs most connections on this network)', () => {
+    assert.equal(DEFAULT_FINGERPRINT, 'firefox');
+    // LINK carries fp=firefox; one that says chrome must not win
+    const chromeLink = LINK.replace('fp=firefox', 'fp=chrome');
+
+    assert.equal(fingerprintOf(buildXrayConfig(parseVless(chromeLink), 18080)), 'firefox');
+  });
+
+  it('can be told another fingerprint, or to keep the link\'s own', () => {
+    const chromeLink = LINK.replace('fp=firefox', 'fp=chrome');
+
+    assert.equal(fingerprintOf(buildXrayConfig(parseVless(chromeLink), 18080, 'safari')), 'safari');
+    assert.equal(fingerprintOf(buildXrayConfig(parseVless(chromeLink), 18080, 'link')), 'chrome');
   });
 });

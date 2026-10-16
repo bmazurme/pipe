@@ -31,13 +31,14 @@ class FakeChild extends EventEmitter {
   }
 }
 
-function setup(opts: { ready?: boolean } = {}) {
+function setup(opts: { ready?: boolean; fingerprint?: string } = {}) {
   const spawned: { bin: string; args: string[]; child: FakeChild }[] = [];
   const logs: string[] = [];
   const tunnel = new VpnTunnel({
     dir,
     xrayBin: 'xray-test',
     port: 19999,
+    fingerprint: opts.fingerprint,
     log: { info: (_o, m) => logs.push(`info:${m}`), warn: (_o, m) => logs.push(`warn:${m}`), error: (_o, m) => logs.push(`error:${m}`) },
     spawnProcess: (bin, args) => {
       const child = new FakeChild();
@@ -68,6 +69,24 @@ describe('VpnTunnel', () => {
 
     tunnel.stop();
     assert.equal(existsSync(configPath), false);
+  });
+
+  it('writes the firefox fingerprint into the config by default, and the configured one when set', async () => {
+    const fingerprintInConfig = (spawned: { args: string[] }[]) =>
+      JSON.parse(readFileSync(spawned[0].args[2], 'utf-8')).outbounds[0].streamSettings.realitySettings.fingerprint;
+    const chromeLink = LINK.replace('?', '?fp=chrome&');
+
+    const byDefault = setup();
+
+    await byDefault.tunnel.apply(chromeLink);
+    assert.equal(fingerprintInConfig(byDefault.spawned), 'firefox');
+    byDefault.tunnel.stop();
+
+    const custom = setup({ fingerprint: 'link' });
+
+    await custom.tunnel.apply(chromeLink);
+    assert.equal(fingerprintInConfig(custom.spawned), 'chrome');
+    custom.tunnel.stop();
   });
 
   it('keeps the running tunnel for the same link and restarts it for another', async () => {
