@@ -168,3 +168,65 @@ describe('ImproveRun.baseline column', () => {
     expect(column?.options.select).toBe(false);
   });
 });
+
+describe('ImproveService.listIssues latest run', () => {
+  it('queries only the newest run per issue, without result, and joins by issue', async () => {
+    const qb: Record<string, jest.Mock> = {};
+
+    for (const name of [
+      'select',
+      'distinctOn',
+      'where',
+      'andWhere',
+      'orderBy',
+      'addOrderBy',
+    ]) {
+      qb[name] = jest.fn().mockReturnValue(qb);
+    }
+
+    qb.getMany = jest.fn().mockResolvedValue([
+      { id: 9, issueNumber: 2, status: 'failed' },
+      { id: 5, issueNumber: 1, status: 'pr_open' },
+    ]);
+
+    const repo = {
+      metadata: {
+        columns: ['id', 'issueNumber', 'result', 'baseline'].map(
+          (propertyName) => ({ propertyName }),
+        ),
+      },
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+    const github = {
+      isReady: () => true,
+      listOpenIssues: jest
+        .fn()
+        .mockResolvedValue([{ number: 1 }, { number: 2 }, { number: 3 }]),
+    };
+    const service = new ImproveService(
+      repo as never,
+      github as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const requireConfigured = jest.spyOn(
+      service as never as { requireConfigured: () => void },
+      'requireConfigured',
+    );
+
+    requireConfigured.mockImplementation(() => undefined);
+
+    const issues = await service.listIssues();
+
+    expect(qb.select).toHaveBeenCalledWith(['run.id', 'run.issueNumber']);
+    expect(qb.distinctOn).toHaveBeenCalledWith(['run.issueNumber']);
+    expect(qb.addOrderBy).toHaveBeenCalledWith('run.id', 'DESC');
+    expect(
+      issues.map((i) => (i.run as { id: number } | null)?.id ?? null),
+    ).toEqual([5, 9, null]);
+  });
+});
