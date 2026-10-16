@@ -84,6 +84,7 @@ export function requireImproveModel(model: string): void {
   }
 }
 const LOG_DIGEST_DAYS = 7;
+const LOG_DIGEST_ROWS = 300;
 export const ADVANCE_EVERY_MS = 15_000;
 // How long after failing a run still follows a retry of its job from the Worker page.
 const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -1193,13 +1194,14 @@ export class ImproveService {
     try {
       const [summary, recent] = await Promise.all([
         this.appLogs.summary(LOG_DIGEST_DAYS),
-        this.appLogs.list({ days: LOG_DIGEST_DAYS, limit: 300 }),
+        this.appLogs.list({
+          days: LOG_DIGEST_DAYS,
+          levels: ['warn', 'error'],
+          limit: LOG_DIGEST_ROWS,
+        }),
       ]);
 
-      return buildLogDigest(
-        summary,
-        recent.filter((row) => row.level !== 'info'),
-      );
+      return buildLogDigest(summary, recent, LOG_DIGEST_ROWS);
     } catch (error) {
       this.logger.warn(`Log digest skipped: ${message(error)}`);
 

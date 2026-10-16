@@ -98,6 +98,7 @@ const MAX_DIGEST_LINES = 12;
 export function buildLogDigest(
   summary: LogSummary,
   recent: Pick<AppLog, 'event' | 'level' | 'message'>[],
+  cap?: number,
 ): string {
   if (summary.total === 0) return '';
 
@@ -132,6 +133,10 @@ export function buildLogDigest(
     lines.push(
       `Slow route ${route.route}: ${route.count} slow/failed requests, worst ${route.maxMs} ms`,
     );
+  }
+
+  if (cap !== undefined && recent.length >= cap) {
+    lines.push(`Counts below cover only the latest ${cap} warn/error events.`);
   }
 
   const grouped = new Map<string, { count: number; level: string }>();

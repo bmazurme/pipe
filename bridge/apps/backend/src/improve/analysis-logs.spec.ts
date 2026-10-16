@@ -64,3 +64,24 @@ describe('buildAnalysisPrompt with logs', () => {
     expect(withLogs).toContain('ERROR ×3 job.failed: x');
   });
 });
+
+describe('buildLogDigest row cap', () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, () => ({
+      level: 'warn' as const,
+      event: 'telegram.api_failed',
+      message: 'HTTP 502',
+    }));
+
+  it('says the counts cover only the latest events when the cap was hit', () => {
+    expect(buildLogDigest(summary(), rows(300), 300)).toContain(
+      'only the latest 300 warn/error events',
+    );
+  });
+
+  it('stays silent under the cap', () => {
+    expect(buildLogDigest(summary(), rows(10), 300)).not.toContain(
+      'latest 300',
+    );
+  });
+});

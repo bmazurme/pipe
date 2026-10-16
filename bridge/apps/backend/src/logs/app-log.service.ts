@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, MoreThanOrEqual, Repository } from 'typeorm';
+import { In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 
 import { AppLog, AppLogLevel, AppLogSource } from './entities/app-log.entity';
 import { redact, sanitizeMeta } from './redact';
@@ -21,6 +21,7 @@ export interface RecordInput {
 
 export interface LogQuery {
   level?: AppLogLevel;
+  levels?: AppLogLevel[];
   source?: AppLogSource;
   days?: number;
   limit?: number;
@@ -64,6 +65,7 @@ export class AppLogService {
       where: {
         createdAt: MoreThanOrEqual(since(query.days ?? 7)),
         ...(query.level ? { level: query.level } : {}),
+        ...(query.levels?.length ? { level: In(query.levels) } : {}),
         ...(query.source ? { source: query.source } : {}),
       },
       order: { id: 'DESC' },

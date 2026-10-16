@@ -185,6 +185,31 @@ describe('ImproveService analysis', () => {
     expect(text).toContain('Top failure ×3: claude exited with code N');
   });
 
+  it('asks for warn and error log rows instead of filtering in memory', async () => {
+    const { service, appLogs } = setup();
+
+    appLogs.summary.mockResolvedValue({
+      days: 7,
+      total: 1,
+      byLevel: { info: 1 },
+      bySource: {},
+      jobs: { succeeded: 0, failed: 0, successRate: null, avgDurationMs: null },
+      topErrors: [],
+      slowestRoutes: [],
+    });
+    appLogs.list.mockResolvedValue([
+      { level: 'info', event: 'http.ok', message: 'kept as given' },
+    ]);
+
+    await service.startAnalysis(3, 'sonnet');
+
+    expect(appLogs.list).toHaveBeenCalledWith({
+      days: 7,
+      levels: ['warn', 'error'],
+      limit: 300,
+    });
+  });
+
   it('starts many issues, reporting the ones that could not start', async () => {
     const { service } = setup();
     const startRun = jest
