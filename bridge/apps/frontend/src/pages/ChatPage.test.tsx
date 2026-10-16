@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 
 import { ChatPage } from './ChatPage';
@@ -43,7 +44,9 @@ function renderPage() {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <ChatPage />
+        <MemoryRouter>
+          <ChatPage />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );
@@ -145,7 +148,7 @@ describe('ChatPage', () => {
     await waitFor(() => expect(createBody).toEqual({ model: 'gpt' }));
   });
 
-  it('hides the composer model picker once a chat is active', async () => {
+  it('names the active chat\'s model instead of offering a picker', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
@@ -168,7 +171,8 @@ describe('ChatPage', () => {
     await user.click(await screen.findByText(CHAT.title));
 
     await screen.findByText('Привет');
-    expect(screen.queryByText('Модель:')).toBeNull();
+    expect(screen.getByText('Модель:')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Модель' })).toBeNull();
   });
 
   it('renders a failed assistant turn inline instead of leaving it blank', async () => {
@@ -344,5 +348,81 @@ describe('ChatPage — downloading a chat as Markdown', () => {
       click.mockRestore();
       Object.assign(URL, original);
     }
+  });
+});
+
+describe('ChatPage — sending', () => {
+  it('keeps the text of a message that could not be sent, and sends it again on request', async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    const sent: unknown[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const { url, method } = request;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([CHAT]);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(MESSAGES);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'POST') {
+          attempts += 1;
+          if (attempts === 1) return new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } });
+          sent.push(JSON.parse(await request.clone().text()));
+          return jsonResponse({ userMessage: MESSAGES[0], assistantMessage: MESSAGES[1] });
+        }
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await user.click(document.querySelector('[data-qa="header-action-history"]') as Element);
+    await user.click(await screen.findByText(CHAT.title));
+    await screen.findByText('Привет');
+
+    await user.type(input(), 'Важный вопрос{Enter}');
+
+    expect(await screen.findByText('«Важный вопрос»')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Отправить ещё раз' }));
+
+    await waitFor(() => expect(sent).toEqual([{ content: 'Важный вопрос' }]));
+    await waitFor(() => expect(screen.queryByText('«Важный вопрос»')).toBeNull());
+  });
+
+  it('lets the next message be written while a reply is awaited, and sends it once the reply is in', async () => {
+    const user = userEvent.setup();
+    const pending = { ...MESSAGES[1], content: '', status: 'pending', progress: null };
+    let messages: unknown[] = [MESSAGES[0], pending];
+    const sent: unknown[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const { url, method } = request;
+
+        if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([CHAT]);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(messages);
+        if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'POST') {
+          sent.push(JSON.parse(await request.clone().text()));
+          return jsonResponse({ userMessage: MESSAGES[0], assistantMessage: MESSAGES[1] });
+        }
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await user.click(document.querySelector('[data-qa="header-action-history"]') as Element);
+    await user.click(await screen.findByText(CHAT.title));
+    await screen.findByText(/Ждём свободный worker/);
+
+    expect(input().disabled).toBe(false);
+    await user.type(input(), 'И ещё{Enter}');
+
+    expect(await screen.findByText(/Отправится, когда придёт ответ/)).toBeTruthy();
+    expect(sent).toEqual([]);
+
+    messages = MESSAGES;
+    await waitFor(() => expect(sent).toEqual([{ content: 'И ещё' }]), { timeout: 3000 });
   });
 });

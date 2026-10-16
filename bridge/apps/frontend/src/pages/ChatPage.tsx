@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChatContainer } from '@gravity-ui/aikit';
 import type {
   ChatContainerTexts,
@@ -9,7 +10,7 @@ import type {
   TSubmitData,
 } from '@gravity-ui/aikit';
 import { ArrowDownToLine, BookOpen, Pencil } from '@gravity-ui/icons';
-import { Alert, Dialog, Icon, Select, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Dialog, Icon, Select, Text, TextInput } from '@gravity-ui/uikit';
 
 import { triggerBlobDownload } from '../shared/lib/parcelCrypto';
 import { useIsMobile } from '../shared/lib/useIsMobile';
@@ -74,12 +75,47 @@ function modelLabel(model: ChatModelId): string {
   return MODEL_OPTIONS.find((option) => option.value === model)?.content ?? model;
 }
 
+// History groups and orders chats by this date — the last activity, matching the server's own
+// "most recently active first" order, so a chat continued today sits under «Сегодня».
 function toChatType(chat: ChatMeta): ChatType {
   return {
     id: String(chat.id),
     name: chat.title ?? `${modelLabel(chat.model)} · #${chat.id}`,
-    createTime: chat.createdAt,
+    createTime: chat.updatedAt,
   };
+}
+
+// A message written while the previous reply is still on its way: it goes out on its own once that reply is in.
+interface QueuedMessage {
+  chatId: number;
+  content: string;
+  files: ChatAttachmentMeta[];
+}
+
+/** The open chat lives in the URL (`?chat=12`), so a reload or a shared link lands on it. */
+function useActiveChatParam(): [number | null, (id: number | null) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const parsed = Number(searchParams.get('chat'));
+  const activeChatId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+
+  const setActiveChatId = useCallback(
+    (id: number | null) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+
+          if (id === null) next.delete('chat');
+          else next.set('chat', String(id));
+
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  return [activeChatId, setActiveChatId];
 }
 
 // 'pending'/'running' render as an empty bubble — the container's own
@@ -125,21 +161,21 @@ function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, strin
 export function ChatPage() {
   const isMobile = useIsMobile();
   const { data: chatsData } = useListChatsQuery();
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [activeChatId, setActiveChatId] = useActiveChatParam();
   const [pollingInterval, setPollingInterval] = useState(MESSAGES_POLL_INTERVAL_MS);
-  const { data: messagesData } = useListMessagesQuery(activeChatId ?? 0, {
+  const { data: messagesData, error: messagesError } = useListMessagesQuery(activeChatId ?? 0, {
     skip: activeChatId === null,
     pollingInterval,
     skipPollingIfUnfocused: true,
   });
   const accessToken = useAppSelector((state) => state.auth.accessToken);
 
-  const [createChat, { isLoading: isCreatingChat }] = useCreateChatMutation();
-  const [deleteChat] = useDeleteChatMutation();
+  const [createChat] = useCreateChatMutation();
+  const [deleteChat, { isLoading: isDeletingChat }] = useDeleteChatMutation();
   const [renameChat, { isLoading: isRenamingChat }] = useRenameChatMutation();
   const [sendMessage] = useSendMessageMutation();
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<ChatType | null>(null);
   const [newChatModel, setNewChatModel] = useState<ChatModelId>('sonnet');
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -164,7 +200,14 @@ export function ChatPage() {
     (message) => message.status === 'pending' || message.status === 'running',
   );
   const isStreaming = (messagesData ?? []).some((message) => hasStreamedText(message));
-  const status: ChatStatus = isStreaming ? 'streaming' : hasPendingReply ? 'submitted' : 'ready';
+  // Waiting is 'streaming_loading', not 'submitted': AIKit locks the prompt for 'submitted', and a worker can take
+  // minutes — the next message can be written meanwhile (and is queued if sent before the reply is in).
+  const status: ChatStatus = isStreaming ? 'streaming' : hasPendingReply ? 'streaming_loading' : 'ready';
+
+  // A chat link that no longer leads anywhere (deleted, or someone else's) falls back to the empty composer.
+  useEffect(() => {
+    if (messagesError && 'status' in messagesError && messagesError.status === 404) setActiveChatId(null);
+  }, [messagesError, setActiveChatId]);
 
   useEffect(() => {
     if (!hasPendingReply) return undefined;
@@ -183,6 +226,9 @@ export function ChatPage() {
   const [pendingFiles, setPendingFiles] = useState<ChatAttachmentMeta[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  // The text of a message that could not be sent — AIKit has already cleared the composer, so it is kept here to resend.
+  const [failedDraft, setFailedDraft] = useState<string | null>(null);
+  const [queued, setQueued] = useState<QueuedMessage | null>(null);
   const [contextDraft, setContextDraft] = useState<ContextDraft | null>(null);
 
   // The composer is visible and enabled even with no chat selected yet
@@ -249,18 +295,71 @@ export function ChatPage() {
     void deleteChatAttachment(attachment.id, accessToken);
   };
 
-  const handleSendMessage = async (data: TSubmitData) => {
+  const deliver = async (content: string, files: ChatAttachmentMeta[], chatId?: number) => {
     setChatError(null);
+    setFailedDraft(null);
 
     try {
-      const chatId = await ensureChat();
+      const targetChatId = chatId ?? (await ensureChat());
 
-      await sendMessage({ chatId, content: data.content, attachmentIds: pendingFiles.map((file) => file.id) }).unwrap();
-      setPendingFiles([]);
+      await sendMessage({ chatId: targetChatId, content, attachmentIds: files.map((file) => file.id) }).unwrap();
+      setPendingFiles((current) => current.filter((file) => !files.some((sent) => sent.id === file.id)));
     } catch (error) {
-      // The draft stays attached: the user can send again once whatever failed is sorted out.
-      setChatError(typeof error === 'string' ? error : 'Не удалось отправить сообщение — попробуйте ещё раз');
+      // Text and files stay: the user can send again once whatever failed is sorted out.
+      setPendingFiles((current) => [...current, ...files.filter((file) => !current.some((kept) => kept.id === file.id))]);
+      setFailedDraft(content);
+      setChatError(typeof error === 'string' ? error : 'Не удалось отправить сообщение');
     }
+  };
+
+  const handleSendMessage = async (data: TSubmitData) => {
+    if (hasPendingReply && activeChatId !== null) {
+      const files = pendingFiles;
+
+      setPendingFiles([]);
+      setQueued((current) =>
+        current && current.chatId === activeChatId
+          ? { ...current, content: `${current.content}\n\n${data.content}`, files: [...current.files, ...files] }
+          : { chatId: activeChatId, content: data.content, files },
+      );
+
+      return;
+    }
+
+    await deliver(data.content, pendingFiles);
+  };
+
+  // Sends the queued message once the reply it waited for is in. A failed reply holds it back, so the question is not
+  // asked into a broken turn — it comes back as a draft to resend.
+  const lastReplyStatus = lastReply?.status;
+
+  useEffect(() => {
+    if (!queued || queued.chatId !== activeChatId || hasPendingReply || !messagesData) return;
+
+    setQueued(null);
+
+    if (lastReplyStatus === 'failed') {
+      setPendingFiles((current) => [...current, ...queued.files]);
+      setFailedDraft(queued.content);
+      setChatError('Предыдущий ответ не пришёл, поэтому сообщение не отправлено');
+
+      return;
+    }
+
+    void deliver(queued.content, queued.files, queued.chatId);
+    // deliver is recreated each render; the effect only has to react to the reply finishing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, activeChatId, hasPendingReply, messagesData, lastReplyStatus]);
+
+  const handleUnqueue = () => {
+    if (!queued) return;
+    setPendingFiles((current) => [...current, ...queued.files]);
+    setFailedDraft(queued.content);
+    setQueued(null);
+  };
+
+  const handleCopyDraft = () => {
+    if (failedDraft) void navigator.clipboard?.writeText(failedDraft).catch(() => undefined);
   };
 
   const handleSaveToContext = () => {
@@ -277,24 +376,24 @@ export function ChatPage() {
     triggerBlobDownload(new Blob([markdown], { type: 'text/markdown' }), chatMarkdownFilename(chat?.title ?? activeChat?.name, activeChatId));
   };
 
-  // Dialogs close only once their request succeeds, so a failure leaves the user's input in place.
-  const handleCreateChat = async () => {
-    if (isCreatingChat) return;
+  // «Новый чат» goes back to the empty composer, where the model is picked; the chat itself is created by the first
+  // message (or file), so no empty chats pile up in the history.
+  const handleNewChat = () => {
+    setActiveChatId(null);
+    setPendingFiles([]);
     setChatError(null);
-
-    try {
-      const chat = await createChat({ model: newChatModel }).unwrap();
-
-      setIsCreateDialogOpen(false);
-      setActiveChatId(chat.id);
-      setPendingFiles([]);
-    } catch {
-      setChatError('Не удалось создать чат');
-    }
+    setFailedDraft(null);
   };
 
+  // Deleting a whole conversation is a single click in AIKit's history — it is confirmed first.
   const handleDeleteChat = async (chat: ChatType) => {
-    const id = Number(chat.id);
+    setChatToDelete(chat);
+  };
+
+  // Dialogs close only once their request succeeds, so a failure leaves the user's input in place.
+  const handleConfirmDelete = async () => {
+    if (!chatToDelete || isDeletingChat) return;
+    const id = Number(chatToDelete.id);
     setChatError(null);
 
     try {
@@ -302,12 +401,15 @@ export function ChatPage() {
     } catch {
       setChatError('Не удалось удалить чат');
       return;
+    } finally {
+      setChatToDelete(null);
     }
 
     if (activeChatId === id) {
       setActiveChatId(null);
       setPendingFiles([]);
     }
+    setQueued((current) => (current?.chatId === id ? null : current));
   };
 
   const handleOpenRenameDialog = () => {
@@ -329,9 +431,6 @@ export function ChatPage() {
     }
   };
 
-  // Lets the user see/change which model their first message will go to
-  // before a chat exists. Once a chat is active its model is already fixed,
-  // so the picker disappears rather than implying it could still be changed.
   const attachButton = (
     <AttachButton
       disabled={!canAttach || isUploading || pendingFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE}
@@ -340,21 +439,27 @@ export function ChatPage() {
     />
   );
 
-  // AIKit drops its own attachment slot whenever a custom footer is given, so before a chat
-  // exists the paperclip sits beside the model picker in that custom footer instead.
-  const footerModelPicker = !activeChat ? (
+  // AIKit drops its own attachment slot whenever a custom footer is given, so the paperclip sits in it, beside the model.
+  // Before a chat exists the model can be picked here; once a chat is active its model is fixed, so it is only named —
+  // which also says why the paperclip is off in a GPT/DeepSeek/Qwen chat.
+  const composerFooter = (
     <div className={styles.modelPicker}>
       {attachButton}
       <span className={styles.modelPickerLabel}>Модель:</span>
-      <Select
-        size="s"
-        value={[newChatModel]}
-        onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
-        options={MODEL_OPTIONS}
-        width={150}
-      />
+      {activeChat ? (
+        <span className={styles.modelName}>{modelLabel(activeModel)}</span>
+      ) : (
+        <Select
+          size="s"
+          aria-label="Модель"
+          value={[newChatModel]}
+          onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
+          options={MODEL_OPTIONS}
+          width={150}
+        />
+      )}
     </div>
-  ) : undefined;
+  );
 
   // Only offered once a chat exists — renaming the "no chat selected" state
   // makes no sense, same reasoning as NewChat's header-action gating.
@@ -389,7 +494,32 @@ export function ChatPage() {
       />
 
       {chatError && (
-        <Alert theme="danger" view="filled" message={<span className={styles.errorText}>{chatError}</span>} onClose={() => setChatError(null)} />
+        <Alert
+          theme="danger"
+          view="filled"
+          message={
+            <span className={styles.errorText}>
+              {chatError}
+              {failedDraft && <span className={styles.draftPreview}>«{failedDraft}»</span>}
+            </span>
+          }
+          actions={
+            failedDraft ? (
+              <div className={styles.alertActions}>
+                <Button view="normal" size="s" onClick={() => void deliver(failedDraft, pendingFiles)} disabled={hasPendingReply}>
+                  Отправить ещё раз
+                </Button>
+                <Button view="flat" size="s" onClick={handleCopyDraft}>
+                  Скопировать текст
+                </Button>
+              </div>
+            ) : undefined
+          }
+          onClose={() => {
+            setChatError(null);
+            setFailedDraft(null);
+          }}
+        />
       )}
 
       {proposal && lastReply && activeChatId !== null && proposal.type === 'fix-pr' && (
@@ -422,17 +552,29 @@ export function ChatPage() {
             setActiveChatId(Number(chat.id));
             setPendingFiles([]);
             setChatError(null);
+            setFailedDraft(null);
           }}
-          onCreateChat={() => setIsCreateDialogOpen(true)}
+          onCreateChat={handleNewChat}
           onDeleteChat={handleDeleteChat}
           headerProps={{ menuItems: headerMenuItems }}
           // The files waiting to be sent, as chips in the composer; clicking one takes it back.
           contextItems={pendingFiles.map((file) => ({ id: String(file.id), content: file.name, onRemove: () => handleRemovePending(file) }))}
           promptInputProps={{
             view: 'full',
-            footerProps: {
-              bottomContent: footerModelPicker,
-              attachmentContent: attachButton,
+            footerProps: { bottomContent: composerFooter },
+            topPanel: {
+              isOpen: queued !== null && queued.chatId === activeChatId,
+              children: queued && (
+                <div className={styles.queued} role="status">
+                  <Text variant="caption-2" color="secondary" ellipsis className={styles.queuedText}>
+                    Отправится, когда придёт ответ: «{queued.content}»
+                    {queued.files.length > 0 ? ` + файлов: ${queued.files.length}` : ''}
+                  </Text>
+                  <Button view="flat-secondary" size="xs" onClick={handleUnqueue}>
+                    Не отправлять
+                  </Button>
+                </div>
+              ),
             },
           }}
         />
@@ -440,23 +582,17 @@ export function ChatPage() {
 
       {contextDraft && <SaveToContextDialog draft={contextDraft} onClose={() => setContextDraft(null)} />}
 
-      <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="s">
-        <Dialog.Header caption="Новый чат" />
+      <Dialog open={chatToDelete !== null} onClose={() => setChatToDelete(null)} maxWidth="s">
+        <Dialog.Header caption="Удалить чат?" />
         <Dialog.Body>
-          <Select
-            aria-label="Модель"
-            value={[newChatModel]}
-            onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
-            options={MODEL_OPTIONS}
-            width="max"
-          />
+          «{chatToDelete?.name}» и все его сообщения будут удалены без возможности восстановления.
         </Dialog.Body>
         <Dialog.Footer
           textButtonCancel="Отмена"
-          textButtonApply="Создать"
-          propsButtonApply={{ loading: isCreatingChat, disabled: isCreatingChat }}
-          onClickButtonCancel={() => setIsCreateDialogOpen(false)}
-          onClickButtonApply={() => void handleCreateChat()}
+          textButtonApply="Удалить"
+          propsButtonApply={{ view: 'outlined-danger', loading: isDeletingChat, disabled: isDeletingChat }}
+          onClickButtonCancel={() => setChatToDelete(null)}
+          onClickButtonApply={() => void handleConfirmDelete()}
         />
       </Dialog>
 

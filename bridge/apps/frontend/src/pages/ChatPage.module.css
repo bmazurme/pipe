@@ -103,3 +103,35 @@
     flex-wrap: wrap;
   }
 }
+
+.modelName {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.draftPreview {
+  margin-top: 4px;
+  opacity: 0.85;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.alertActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.queued {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.queuedText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
