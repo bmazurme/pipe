@@ -314,3 +314,7 @@ Worker-задачу (или Improve-запуск) заново.
 ## VPN of a worker added in the UI
 
 Settings → VPN takes a `vless://` Reality link. The worker starts its own Xray client with it (`xray` ships in the image; `XRAY_BIN` overrides the path) on `127.0.0.1:18080` and sends Claude/AI traffic through it; the link is stored encrypted in bridge and only this worker ever receives it back. The tunnel always uses the `firefox` TLS fingerprint whatever the link says (`chrome` hung most connections on this network); `WORKER_VPN_FINGERPRINT` picks another, `link` keeps the link's own. Changing or removing the link applies within one poll interval. If the tunnel does not come up the worker keeps polling and logs `vpn tunnel did not come up` — jobs then go out as they did before.
+
+## Resource limits of a worker started with the UI's command
+
+The `docker run` command the Add-worker dialog generates caps the container: `--cpus` = half the machine's cores (at least 1), `--memory 4g`, `--cpu-shares 512` (low priority). A job runs `npm ci`, the linter and the tests, which on a small board is several cores for minutes — enough to trip a load alarm or starve a Swarm manager running on the same machine. Edit the numbers in the command if the machine is dedicated to the worker.

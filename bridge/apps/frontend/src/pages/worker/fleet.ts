@@ -188,6 +188,10 @@ export function enrollSnippets(
     docker: [
       // A leftover container of the same name (a reconnect) is replaced; its state volume — and so nothing else — stays.
       `docker rm -f ${name} >/dev/null 2>&1; docker run -d --name ${name} --pull always --restart unless-stopped \\`,
+      // A job runs npm ci, the linter and the tests — on a small board that is several cores for minutes, enough to push
+      // the machine over its load alarm and to starve whatever else it runs (a Swarm manager, say). Half the cores (at
+      // least one), a memory ceiling, and a low priority against everything else on the machine; edit them to taste.
+      "  --cpus \"$(docker info --format '{{.NCPU}}' | awk '{c=int($1/2); print (c<1?1:c)}')\" --memory 4g --cpu-shares 512 \\",
       `  -v ${name}-state:/app/.worker-state \\`,
       `  -e BRIDGE_API_URL=${apiUrl} \\`,
       `  -e WORKER_ENROLL_CODE=${code} \\`,
