@@ -484,6 +484,7 @@ describe('WorkerService', () => {
         claudeCredentialId: null,
         providerCredentialId: null,
         targetWorkerId: null,
+        notBefore: null,
         notifyOnFinish: false,
         taskKey: 'file:1',
         contextName: null,
@@ -1442,6 +1443,67 @@ describe('WorkerService', () => {
           status: JobStatus.Queued,
         }),
       );
+    });
+  });
+
+  describe('delayed start (notBefore)', () => {
+    it('claim only picks queued jobs whose notBefore is empty or already past', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+
+      await service.claim(7, 'worker-host-1');
+
+      expect(repository.query).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '("notBefore" IS NULL OR "notBefore" <= now())',
+        ),
+        expect.any(Array),
+      );
+    });
+
+    it('retry copies notBefore to the new queued job', async () => {
+      const notBefore = new Date(Date.now() + 3_600_000);
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Failed,
+        errorMessage: "You've hit your session limit",
+      });
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) => Promise.resolve(job));
+
+      await expect(service.retry(5, 7, notBefore)).resolves.toMatchObject({
+        status: JobStatus.Queued,
+        notBefore,
+      });
+    });
+
+    it('retry without notBefore queues the job for right away', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Failed,
+        errorMessage: 'boom',
+      });
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) => Promise.resolve(job));
+
+      await expect(service.retry(5, 7)).resolves.toMatchObject({
+        notBefore: null,
+      });
     });
   });
 

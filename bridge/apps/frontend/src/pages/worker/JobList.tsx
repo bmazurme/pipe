@@ -41,6 +41,16 @@ function matches(job: WorkerJob, filter: JobFilter): boolean {
   return true;
 }
 
+// "запуск в HH:MM" for a retry held back until a limit resets (with the date when it is not today).
+function delayedLine(notBefore: string): string {
+  const at = new Date(notBefore);
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return at.toDateString() === new Date().toDateString()
+    ? `запуск в ${time}`
+    : `запуск ${at.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} в ${time}`;
+}
+
 // Who is doing the job, or who it is waiting for.
 function whoLine(job: WorkerJob, workers: FleetWorker[] | undefined): string | null {
   if (job.workerName) return `на ${job.workerName}`;
@@ -150,7 +160,8 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
         <ul className={styles.jobList}>
           {visibleJobs.map((job: WorkerJob) => {
             const duration = jobDuration(job, now);
-            const who = whoLine(job, workers);
+            const delayed = job.status === 'queued' && job.notBefore && new Date(job.notBefore).getTime() > Date.now() ? delayedLine(job.notBefore) : null;
+            const who = [whoLine(job, workers), delayed].filter(Boolean).join(' · ') || null;
 
             return (
               <li key={job.id} className={styles.jobItem}>

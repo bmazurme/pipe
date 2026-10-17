@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowRotateRight } from '@gravity-ui/icons';
+import { ArrowRotateRight, Clock } from '@gravity-ui/icons';
 import { Alert, Button, Dialog, Icon } from '@gravity-ui/uikit';
 
-import { getErrorMessage, useRetryJobMutation, WorkerJob } from '../../store/api';
+import { getErrorMessage, useListClaudeCredentialsQuery, useRetryJobMutation, WorkerJob } from '../../store/api';
+import { limitResetAt } from './claudeLimits';
 
 interface RetryJobButtonProps {
   job: WorkerJob;
@@ -16,14 +17,20 @@ interface RetryJobButtonProps {
 export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
   const [retryJob, { isLoading }] = useRetryJobMutation();
   const [error, setError] = useState<string | null>(null);
+  const failedOnLimit = job.status === 'failed' && /session limit/i.test(job.errorMessage ?? '');
+  // Only asked for when it matters: the snapshot of the token the job ran on.
+  const { data: credentials } = useListClaudeCredentialsQuery(undefined, { skip: !failedOnLimit });
 
   if (job.status !== 'failed' && job.status !== 'cancelled') return null;
 
-  const handleRetry = async () => {
+  const credential = credentials?.find((item) => item.id === job.claudeCredentialId || item.name === job.usedClaudeCredentialName);
+  const resetAt = limitResetAt(job.errorMessage, credential?.limits, Date.now());
+
+  const handleRetry = async (notBefore?: string) => {
     setError(null);
 
     try {
-      await retryJob(job.id).unwrap();
+      await retryJob({ id: job.id, notBefore }).unwrap();
     } catch (err) {
       // transformErrorResponse has already reduced the error to bridge's message.
       setError(typeof err === 'string' && err ? err : getErrorMessage(err, 'Не удалось перезапустить задачу'));
@@ -43,6 +50,20 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
         <Icon data={ArrowRotateRight} size={16} />
         {!compact && 'Перезапустить'}
       </Button>
+
+      {resetAt && (
+        <Button
+          view={compact ? 'flat-secondary' : 'outlined'}
+          size={compact ? 's' : 'm'}
+          loading={isLoading}
+          aria-label={`Перезапустить после сброса лимита: задача #${job.id}`}
+          title={`Перезапустить после сброса лимита (${new Date(resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
+          onClick={() => void handleRetry(resetAt)}
+        >
+          <Icon data={Clock} size={16} />
+          {!compact && 'Перезапустить после сброса лимита'}
+        </Button>
+      )}
 
       <Dialog open={error !== null} onClose={() => setError(null)} maxWidth="s" aria-labelledby={`retry-job-${job.id}`}>
         <Dialog.Header caption={`Не удалось перезапустить задачу #${job.id}`} id={`retry-job-${job.id}`} />

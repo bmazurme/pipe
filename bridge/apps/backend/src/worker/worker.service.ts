@@ -226,6 +226,7 @@ export class WorkerService {
     carried?: {
       context?: { name: string; text: string };
       history?: { text: string; count: number } | null;
+      notBefore?: Date;
     },
   ): Promise<Job> {
     const sourceFile = await this.storageService.findOwned(
@@ -316,6 +317,7 @@ export class WorkerService {
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
+      notBefore: carried?.notBefore ?? null,
       status: JobStatus.Queued,
     });
   }
@@ -324,7 +326,7 @@ export class WorkerService {
   // and credential — the original stays as history, so its log and error remain
   // readable. The parcel is only consumed when a job succeeds, so a failed job's
   // source is still there; if it was removed since, create() says so.
-  async retry(id: number, userId: number): Promise<Job> {
+  async retry(id: number, userId: number, notBefore?: Date): Promise<Job> {
     const job = await this.findOwned(id, userId);
 
     if (job.status !== JobStatus.Failed && job.status !== JobStatus.Cancelled) {
@@ -372,6 +374,7 @@ export class WorkerService {
           job.historyText !== null && job.historyCount !== null
             ? { text: job.historyText, count: job.historyCount }
             : null,
+        notBefore,
       },
     );
 
@@ -652,7 +655,7 @@ export class WorkerService {
     const [rows]: [{ id: number }[], number] = await this.jobRepository.query(
       `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "workerId" = $5, "updatedAt" = now()
        WHERE id = (
-         SELECT id FROM jobs WHERE status = $3 AND "userId" = $4${eligibility}
+         SELECT id FROM jobs WHERE status = $3 AND "userId" = $4 AND ("notBefore" IS NULL OR "notBefore" <= now())${eligibility}
          ORDER BY "createdAt" ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        )
        RETURNING id`,

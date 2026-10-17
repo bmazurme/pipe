@@ -38,6 +38,7 @@ import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { LimitAlertsService } from './limit-alerts.service';
 import { ReportUsageDto } from './dto/report-usage.dto';
+import { RetryJobDto } from './dto/retry-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkerService } from './worker.service';
@@ -343,8 +344,13 @@ export class WorkerController {
   async retry(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
+    @Body() dto: RetryJobDto,
   ): Promise<JobResponseDto> {
-    const job = await this.workerService.retry(id, currentUser.id);
+    const job = await this.workerService.retry(
+      id,
+      currentUser.id,
+      dto.notBefore,
+    );
 
     return JobResponseDto.fromEntity(job);
   }
