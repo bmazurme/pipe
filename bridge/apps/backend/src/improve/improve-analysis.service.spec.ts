@@ -1,5 +1,6 @@
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 import { zipSync, strToU8 } from 'fflate';
 
@@ -43,6 +44,13 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     github as never,
     appLogs as never,
   );
+  const publisher = new ImprovePublishService(
+    runs as never,
+    github as never,
+    storage as never,
+    { send: jest.fn() } as never,
+    appLogs as never,
+  );
   const service = new ImproveService(
     runs as never,
     github as never,
@@ -53,6 +61,7 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     { query: jest.fn() } as never,
     appLogs as never,
     filing as never,
+    publisher as never,
   );
 
   return { service, filing, runs, github, workers, storage, appLogs };
