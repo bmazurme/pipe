@@ -35,6 +35,8 @@ export class JobResponseDto {
   startedAt: Date | null;
   finishedAt: Date | null;
   cancelRequestedAt: Date | null;
+  // Queued job: not handed to a worker before this moment; null = right away.
+  notBefore: Date | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -62,6 +64,7 @@ export class JobResponseDto {
       startedAt: job.startedAt,
       finishedAt: job.finishedAt,
       cancelRequestedAt: job.cancelRequestedAt,
+      notBefore: job.notBefore ?? null,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

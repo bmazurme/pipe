@@ -115,6 +115,10 @@ export class Job extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   notifyOnFinish: boolean;
 
+  // A queued job is not handed to a worker before this moment (null = right away).
+  @Column({ type: 'timestamptz', nullable: true })
+  notBefore: Date | null;
+
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
 

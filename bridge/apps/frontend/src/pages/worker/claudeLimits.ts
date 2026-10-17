@@ -106,3 +106,36 @@ export function describeRecentUsage(usage: RecentClaudeUsage | null | undefined)
 
   return `За 7 дней: ${parts.join(' · ')}`;
 }
+
+const SESSION_LIMIT = /session limit/i;
+const MAX_DELAY_MS = 7 * 24 * 3600_000 - 60_000;
+
+export function isSessionLimitFailure(errorMessage: string | null | undefined): boolean {
+  return errorMessage != null && SESSION_LIMIT.test(errorMessage);
+}
+
+/**
+ * When a failed session-limit job can be run again: the reset of the window the CLI rejected on
+ * (else the earliest known upcoming reset) from the token's snapshot, as an ISO time a minute after it
+ * — or null when the failure is something else or no usable reset time is known.
+ */
+export function limitResetAt(
+  errorMessage: string | null | undefined,
+  limits: ClaudeLimits | null | undefined,
+  now: number,
+): string | null {
+  if (!isSessionLimitFailure(errorMessage) || !limits) return null;
+
+  const upcoming = (resetsAt: number | null | undefined) =>
+    typeof resetsAt === 'number' && resetsAt * 1000 > now && resetsAt * 1000 + 60_000 - now <= MAX_DELAY_MS
+      ? resetsAt
+      : null;
+  const rejected = limits.rateLimitType ? upcoming(limits.windows[limits.rateLimitType]?.resetsAt) : null;
+  const earliest = Object.values(limits.windows)
+    .map((window) => upcoming(window.resetsAt))
+    .filter((value): value is number => value !== null)
+    .sort((a, b) => a - b)[0];
+  const resetsAt = limits.status === 'rejected' ? (rejected ?? earliest) : earliest;
+
+  return resetsAt == null ? null : new Date(resetsAt * 1000 + 60_000).toISOString();
+}

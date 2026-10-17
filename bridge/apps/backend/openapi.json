@@ -1374,6 +1374,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryJobDto"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "",
@@ -4270,6 +4280,11 @@
             "type": "string",
             "nullable": true
           },
+          "notBefore": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4301,6 +4316,7 @@
           "startedAt",
           "finishedAt",
           "cancelRequestedAt",
+          "notBefore",
           "createdAt",
           "updatedAt"
         ]
@@ -4391,6 +4407,15 @@
         "properties": {
           "force": {
             "type": "boolean"
+          }
+        }
+      },
+      "RetryJobDto": {
+        "type": "object",
+        "properties": {
+          "notBefore": {
+            "format": "date-time",
+            "type": "string"
           }
         }
       },

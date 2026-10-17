@@ -80,6 +80,8 @@ export interface WorkerJob {
   finishedAt: string | null;
   /** Set once the owner asked to stop a job a worker holds; cleared by nothing — the job ends 'cancelled'. */
   cancelRequestedAt: string | null;
+  /** A queued job is not handed to a worker before this time; null = right away. */
+  notBefore?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -285,8 +287,8 @@ const workerApiEndpoints = workerApi.injectEndpoints({
       },
     }),
     // Queues a new job over a failed/stopped job's parcel, model and credential.
-    retryJob: builder.mutation<WorkerJob, number>({
-      query: (id) => ({ url: `worker/jobs/${id}/retry`, method: 'POST' }),
+    retryJob: builder.mutation<WorkerJob, { id: number; notBefore?: string }>({
+      query: ({ id, notBefore }) => ({ url: `worker/jobs/${id}/retry`, method: 'POST', body: notBefore ? { notBefore } : {} }),
       invalidatesTags: ['WorkerJob'],
       transformErrorResponse: (response) => {
         const message = (response.data as { message?: string } | undefined)?.message;

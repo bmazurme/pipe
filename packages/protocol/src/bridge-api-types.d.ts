@@ -2061,6 +2061,8 @@ export interface components {
             /** Format: date-time */
             cancelRequestedAt: string | null;
             /** Format: date-time */
+            notBefore: string | null;
+            /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
@@ -2091,6 +2093,10 @@ export interface components {
             usage?: {
                 [key: string]: unknown;
             };
+        };
+        RetryJobDto: {
+            /** Format: date-time */
+            notBefore?: string;
         };
         CancelJobDto: {
             force?: boolean;
@@ -3685,7 +3691,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryJobDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {
