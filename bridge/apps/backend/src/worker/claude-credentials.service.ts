@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 
 import type { ClaudeLimits } from './claude-limits';
 import { ClaudeCredential } from './entities/claude-credential.entity';
@@ -19,6 +19,26 @@ export class ClaudeCredentialsService {
     limits: ClaudeLimits,
   ): Promise<void> {
     await this.repository.update({ id, userId }, { limits });
+  }
+
+  // A job on this token was refused by Anthropic; best-effort like recordLimits.
+  async markAuthFailed(
+    id: number,
+    userId: number,
+    jobId: number,
+  ): Promise<void> {
+    await this.repository.update(
+      { id, userId },
+      { authFailedAt: new Date(), authFailedJobId: jobId },
+    );
+  }
+
+  // A later run on the token worked, so the rejected mark no longer holds.
+  async clearAuthFailed(id: number, userId: number): Promise<void> {
+    await this.repository.update(
+      { id, userId, authFailedAt: Not(IsNull()) },
+      { authFailedAt: null, authFailedJobId: null },
+    );
   }
 
   async create(

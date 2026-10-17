@@ -2083,6 +2083,9 @@ export interface components {
             limits: {
                 [key: string]: unknown;
             } | null;
+            /** Format: date-time */
+            authFailedAt: string | null;
+            authFailedJobId: number | null;
             id: number;
             name: string;
             /** Format: date-time */
