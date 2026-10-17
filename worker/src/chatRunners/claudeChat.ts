@@ -6,6 +6,7 @@ import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { buildExitFailureMessage } from '../failureMessage.js';
 import { createProgressReporter } from './progress.js';
+import { withContext } from '../taskContext.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 
@@ -13,7 +14,7 @@ import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 // resume across separate chat turns (worker keeps no state between turns;
 // bridge is the source of truth for history), so each call has to restate
 // the whole conversation itself.
-export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<number> = new Set()): string {
+export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<number> = new Set(), context?: string | null): string {
   const transcript = history
     .map((entry) => {
       const files = (entry.attachments ?? []).map((attachment) =>
@@ -27,11 +28,13 @@ export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<num
     .join('\n\n');
   const hasFiles = staged.size > 0;
 
-  return `${CHAT_ACTIONS_INSTRUCTION}\n\n${transcript}\n\n${
+  const prompt = `${CHAT_ACTIONS_INSTRUCTION}\n\n${transcript}\n\n${
     hasFiles
       ? 'Files the user attached are in the ./attachments directory, at the paths shown in brackets. Open them with your file tools (images included) when they are relevant to the question.\n\n'
       : ''
   }Continue the conversation. Reply with only the assistant's next message — no preamble, no restating the question.`;
+
+  return withContext(prompt, context);
 }
 
 // Sonnet/Opus chat turns run through the same claude CLI login Worker jobs
@@ -51,13 +54,15 @@ export async function claudeChat(
   claudeToken?: string | null,
   // Hears the reply as the model writes it; used to show progress in the chat.
   onProgress?: (text: string) => void | Promise<void>,
+  // Background text from the Context attached to the chat; absent or blank: nothing is added.
+  context?: string | null,
 ): Promise<string> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
 
   try {
     const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
-    const prompt = buildPrompt(history, staged);
+    const prompt = buildPrompt(history, staged, context);
     const progress = onProgress ? createProgressReporter(onProgress) : undefined;
     const result = await runClaude(
       turnDir,

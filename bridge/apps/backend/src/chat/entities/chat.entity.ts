@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 
+import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { BaseEntity } from '../../base.entity';
 
 // Same five values as worker/entities/job.entity.ts's JobModel — kept as a
@@ -26,4 +27,13 @@ export class Chat extends BaseEntity {
   // never auto-generated server-side (would need its own model call).
   @Column({ type: 'varchar', length: 255, nullable: true })
   title: string | null;
+
+  // Snapshot of the saved Context attached when the chat was created (later edits or
+  // deletion of the Context do not touch it). The text is only ever handed to the
+  // worker when it claims a turn; human-facing routes see the name.
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  contextName: string | null;
+
+  @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
+  contextText: string | null;
 }

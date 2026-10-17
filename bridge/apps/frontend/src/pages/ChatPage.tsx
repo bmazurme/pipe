@@ -23,6 +23,7 @@ import {
   useCreateChatMutation,
   useDeleteChatMutation,
   useListChatsQuery,
+  useListContextsQuery,
   useListMessagesQuery,
   useRenameChatMutation,
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -42,6 +43,8 @@ import styles from './ChatPage.module.css';
 
 // Fast while a reply is on its way, off otherwise — an idle chat has nothing to fetch.
 // While a reply is awaited the page asks every second: the worker reports the partial reply about as often, so it reads as streaming.
+const NO_CONTEXT = 'none';
+
 const MESSAGES_POLL_INTERVAL_MS = 1000;
 const NO_REPLY_PENDING_POLL_MS = 0;
 
@@ -177,6 +180,9 @@ export function ChatPage() {
 
   const [chatToDelete, setChatToDelete] = useState<ChatType | null>(null);
   const [newChatModel, setNewChatModel] = useState<ChatModelId>('sonnet');
+  // Like the model, fixed once the chat exists; never remembered between chats.
+  const [newChatContextId, setNewChatContextId] = useState<number | undefined>(undefined);
+  const { data: contextsData } = useListContextsQuery();
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
 
@@ -265,6 +271,7 @@ export function ChatPage() {
   // dialog — otherwise the first message of every implicit chat silently
   // goes to sonnet with no way to tell or change that in advance.
   const activeModel: ChatModelId = chatsData?.find((chat) => chat.id === activeChatId)?.model ?? newChatModel;
+  const activeContextName = chatsData?.find((chat) => chat.id === activeChatId)?.contextName ?? null;
   const canAttach = isClaudeModel(activeModel);
 
   // The chat must exist before a file can be uploaded to it, so attaching in the empty state
@@ -272,7 +279,7 @@ export function ChatPage() {
   const ensureChat = async (): Promise<number> => {
     if (activeChatId !== null) return activeChatId;
 
-    const chat = await createChat({ model: newChatModel }).unwrap();
+    const chat = await createChat({ model: newChatModel, contextId: newChatContextId }).unwrap();
     setActiveChatId(chat.id);
 
     return chat.id;
@@ -405,6 +412,7 @@ export function ChatPage() {
   // message (or file), so no empty chats pile up in the history.
   const handleNewChat = () => {
     setActiveChatId(null);
+    setNewChatContextId(undefined);
     setPendingFiles([]);
     setChatError(null);
     setFailedDraft(null);
@@ -482,6 +490,29 @@ export function ChatPage() {
           options={MODEL_OPTIONS}
           width={150}
         />
+      )}
+      {activeChat ? (
+        activeContextName && (
+          <>
+            <span className={styles.modelPickerLabel}>Контекст:</span>
+            <span className={styles.modelName}>{activeContextName}</span>
+          </>
+        )
+      ) : (
+        <>
+          <span className={styles.modelPickerLabel}>Контекст:</span>
+          <Select
+            size="s"
+            aria-label="Контекст"
+            value={[newChatContextId ? String(newChatContextId) : NO_CONTEXT]}
+            onUpdate={([value]) => setNewChatContextId(value && value !== NO_CONTEXT ? Number(value) : undefined)}
+            options={[
+              { value: NO_CONTEXT, content: 'Без контекста' },
+              ...(contextsData ?? []).map((context) => ({ value: String(context.id), content: context.name })),
+            ]}
+            width={170}
+          />
+        </>
       )}
     </div>
   );

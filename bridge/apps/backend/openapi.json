@@ -3820,6 +3820,10 @@
             "type": "string",
             "nullable": true
           },
+          "contextName": {
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -3833,6 +3837,7 @@
           "id",
           "model",
           "title",
+          "contextName",
           "createdAt",
           "updatedAt"
         ]
@@ -3849,6 +3854,9 @@
               "deepseek",
               "qwen"
             ]
+          },
+          "contextId": {
+            "type": "number"
           }
         },
         "required": [

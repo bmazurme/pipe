@@ -7,6 +7,8 @@ export interface ChatMeta {
   id: number;
   model: ChatModelId;
   title: string | null;
+  // Name of the saved Context attached at creation; the text itself never reaches the browser.
+  contextName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,7 +49,7 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: () => 'chat/chats',
       providesTags: ['Chat'],
     }),
-    createChat: builder.mutation<ChatMeta, { model: ChatModelId }>({
+    createChat: builder.mutation<ChatMeta, { model: ChatModelId; contextId?: number }>({
       query: (body) => ({ url: 'chat/chats', method: 'POST', body }),
       invalidatesTags: ['Chat'],
     }),
