@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, relative, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import type { Request, Response } from 'express';
 import type {
   CreateManualSubscriptionIssuePayload,
@@ -11,6 +11,7 @@ import type {
   SubscriptionStateEntryType,
 } from '@reports/shared';
 import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
@@ -377,6 +378,14 @@ function writeIfChanged(destination: string, content: string): void {
   writeFileSync(destination, content, 'utf-8');
 }
 
+function resolveParcelPath(projectRoot: string, relPath: string): string {
+  try {
+    return resolveInDir(projectRoot, relPath);
+  } catch (error) {
+    throw new Error(`Посылка содержит недопустимый путь: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 // Pulls the newest result parcel for one task into its local branch. Shared
 // by the UI's Pull button and the background autopilot — both need exactly
 // the same sequence (and the same keep-the-parcel-until-it-fully-worked
@@ -439,28 +448,23 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
   // instead of silently losing it.
   await checkoutTaskBranch(trackedProject.path, state.branch);
 
-  for (const file of files) {
-    const destination = resolve(projectRoot, file.relPath);
+  // Every path is checked before the first one is written: a refused parcel
+  // (one escaping the repo, or reaching into .git — the commit below would
+  // run its hooks/config) must leave the tree clean, or checkoutTaskBranch's
+  // dirty-tree guard would block every later pull.
+  const fileDestinations = files.map((file) => resolveParcelPath(projectRoot, file.relPath));
+  const assetDestinations = assets.map((asset) => resolveParcelPath(projectRoot, asset.relPath));
 
-    if (destination !== projectRoot && relative(projectRoot, destination).startsWith('..')) {
-      throw new Error(`Посылка содержит путь вне репозитория: ${file.relPath}`);
-    }
-
-    writeIfChanged(destination, applyDictionary(file.content, dictionary, 'toLocal'));
-  }
+  files.forEach((file, index) => {
+    writeIfChanged(fileDestinations[index], applyDictionary(file.content, dictionary, 'toLocal'));
+  });
 
   // Images extracted from the issue description — written next to the code
   // so a human picking up the branch can actually see what the issue showed.
-  for (const asset of assets) {
-    const destination = resolve(projectRoot, asset.relPath);
-
-    if (destination !== projectRoot && relative(projectRoot, destination).startsWith('..')) {
-      throw new Error(`Посылка содержит путь вне репозитория: ${asset.relPath}`);
-    }
-
-    mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
-  }
+  assets.forEach((asset, index) => {
+    mkdirSync(dirname(assetDestinations[index]), { recursive: true });
+    writeFileSync(assetDestinations[index], Buffer.from(asset.base64, 'base64'));
+  });
 
   // Commits and pushes the task branch only — never the target branch.
   // Getting this into the target branch is a deliberate manual step (open
