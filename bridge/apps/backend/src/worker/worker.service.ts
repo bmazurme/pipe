@@ -11,8 +11,10 @@ import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
+import { DeploymentAccessService } from '../auth/deployment-access';
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
+import { NotifyService } from '../telegram/notify.service';
 import { StorageService } from '../storage/storage.service';
 import {
   StoredFile,
@@ -75,12 +77,37 @@ export class WorkerService {
     private readonly providerCredentialsService: ProviderCredentialsService,
     private readonly jobSweep: JobSweepService,
     @Optional() private readonly appLogs?: AppLogService,
+    @Optional() private readonly notifyService?: NotifyService,
+    @Optional() private readonly deploymentAccess?: DeploymentAccessService,
   ) {
     this.jobSweep.onJobsLost = async (jobs) => {
       for (const job of jobs) {
         await this.retryAfterInfraFailure(job);
       }
     };
+  }
+
+  // Opt-in, per job: one Telegram message when a job ends. Telegram has a single recipient,
+  // so only the deployment owner's flag counts. Best-effort — never changes the outcome.
+  private async notifyFinished(job: Job): Promise<void> {
+    if (!job.notifyOnFinish || !this.notifyService || !this.deploymentAccess) {
+      return;
+    }
+
+    try {
+      if (!(await this.deploymentAccess.isOwner(job.userId))) return;
+
+      const text =
+        job.status === JobStatus.Succeeded
+          ? `✅ Задача #${job.id} (${job.model}) завершена`
+          : `🔴 Задача #${job.id} (${job.model}) не выполнена: ${(job.errorMessage ?? '').slice(0, 200)}`;
+
+      await this.notifyService.send(text);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to notify about job ${job.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private isInfraFailure(job: Job): boolean {
@@ -288,6 +315,7 @@ export class WorkerService {
       claudeCredentialId: dto.claudeCredentialId ?? null,
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
+      notifyOnFinish: dto.notifyOnFinish === true,
       status: JobStatus.Queued,
     });
   }
@@ -333,6 +361,7 @@ export class WorkerService {
           ? { providerCredentialId: job.providerCredentialId }
           : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
+        ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
       },
       {
         context:
@@ -910,7 +939,11 @@ export class WorkerService {
 
     if (dto.status === JobStatus.Failed) {
       logJobOutcome(this.appLogs, saved);
-      await this.retryAfterInfraFailure(saved);
+      const requeued = await this.retryAfterInfraFailure(saved);
+
+      if (!requeued) {
+        await this.notifyFinished(saved);
+      }
     }
 
     if (dto.status === JobStatus.Cancelled) {
@@ -997,6 +1030,7 @@ export class WorkerService {
     const saved = await this.jobRepository.save(job);
 
     logJobOutcome(this.appLogs, saved);
+    await this.notifyFinished(saved);
 
     if (consumed) {
       try {

@@ -4335,6 +4335,9 @@
           },
           "includeHistory": {
             "type": "boolean"
+          },
+          "notifyOnFinish": {
+            "type": "boolean"
           }
         },
         "required": [

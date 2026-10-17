@@ -484,6 +484,7 @@ describe('WorkerService', () => {
         claudeCredentialId: null,
         providerCredentialId: null,
         targetWorkerId: null,
+        notifyOnFinish: false,
         taskKey: 'file:1',
         contextName: null,
         contextText: null,

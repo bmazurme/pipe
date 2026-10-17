@@ -33,4 +33,9 @@ export class CreateJobDto {
   @IsOptional()
   @IsBoolean()
   includeHistory?: boolean;
+
+  // Send a Telegram message when the job ends. Off by default.
+  @IsOptional()
+  @IsBoolean()
+  notifyOnFinish?: boolean;
 }

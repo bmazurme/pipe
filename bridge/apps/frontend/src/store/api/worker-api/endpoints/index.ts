@@ -248,6 +248,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         targetWorkerId?: number;
         contextId?: number;
         includeHistory?: boolean;
+        notifyOnFinish?: boolean;
       }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),

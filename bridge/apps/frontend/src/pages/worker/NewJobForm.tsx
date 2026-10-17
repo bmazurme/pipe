@@ -84,6 +84,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   // owner attaches one for this launch.
   const [contextId, setContextId] = useState<number | undefined>(undefined);
   const [includeHistory, setIncludeHistory] = useState(false);
+  const [notifyOnFinish, setNotifyOnFinish] = useState(false);
   const [decryptKey, setDecryptKey] = useState('');
   const { keys: parcelKeys } = useParcelKeys();
   const [createError, setCreateError] = useState<string | null>(null);
@@ -170,6 +171,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         ...(targetWorkerId ? { targetWorkerId } : {}),
         ...(contextId ? { contextId } : {}),
         ...(includeHistory ? { includeHistory: true } : {}),
+        ...(notifyOnFinish ? { notifyOnFinish: true } : {}),
       }).unwrap();
       rememberModel(model);
       setSourceFileId(undefined);
@@ -292,6 +294,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
                 : 'Подмешать итоги прошлых запусков'
             }
           />
+
+          <Switch checked={notifyOnFinish} onUpdate={setNotifyOnFinish} content="Уведомить в Telegram, когда закончится" />
 
           {isProviderModel && providerCredentialsData && providerKeys.length === 0 && (
             <Alert
