@@ -180,7 +180,7 @@ function EncryptionSection() {
         <Dialog.Footer
           onClickButtonCancel={() => setConfirmOpen(false)}
           textButtonCancel="Отмена"
-          renderButtons={(buttonApply, buttonCancel) => (
+          renderButtons={(_buttonApply, buttonCancel) => (
             <>
               {buttonCancel}
               <Button view="outlined" size="l" onClick={handleExport}>
