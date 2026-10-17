@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Button, Icon, Switch, Text, useToaster } from '@gravity-ui/uikit';
+import { Button, Dialog, Icon, Switch, Text, useToaster } from '@gravity-ui/uikit';
 import { ArrowDownToLine, ArrowUpFromLine, Eye, EyeSlash, MagicWand } from '@gravity-ui/icons';
 import type { EncryptionSettingsType } from '@reports/shared';
 
@@ -25,6 +25,7 @@ function EncryptionSection() {
   const [keys, setKeys] = useState(emptyKeys);
   const [syncedKeys, setSyncedKeys] = useState(emptyKeys);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const persisted = encryption ? { publicKey: encryption.publicKey, privateKey: encryption.privateKey } : emptyKeys;
@@ -73,6 +74,14 @@ function EncryptionSection() {
       toaster.add({ name: 'encryption-generated', theme: 'success', title: 'Новая пара ключей сгенерирована', autoHiding: 3000 });
     } catch (error) {
       notifyError('Не удалось сгенерировать пару ключей', error);
+    }
+  };
+
+  const handleGenerateClick = () => {
+    if (keys.publicKey || keys.privateKey) {
+      setConfirmOpen(true);
+    } else {
+      void handleGenerate();
     }
   };
 
@@ -133,7 +142,7 @@ function EncryptionSection() {
       )}
 
       <div className={style.toolbar}>
-        <Button view="outlined" size="s" onClick={handleGenerate} loading={isGenerating}>
+        <Button view="outlined" size="s" onClick={handleGenerateClick} loading={isGenerating}>
           <Icon data={MagicWand} size={16} />
           Сгенерировать пару ключей
         </Button>
@@ -162,9 +171,42 @@ function EncryptionSection() {
         />
       </div>
 
+      <Dialog open={isConfirmOpen} onClose={() => setConfirmOpen(false)} size="s" aria-labelledby="encryption-replace-title">
+        <Dialog.Header caption="Заменить пару ключей?" id="encryption-replace-title" />
+        <Dialog.Body>
+          Текущий приватный ключ будет заменён — посылки, зашифрованные старым публичным ключом, больше нельзя будет
+          расшифровать. Сначала экспортируйте ключи.
+        </Dialog.Body>
+        <Dialog.Footer
+          onClickButtonCancel={() => setConfirmOpen(false)}
+          textButtonCancel="Отмена"
+          renderButtons={(_buttonApply, buttonCancel) => (
+            <>
+              {buttonCancel}
+              <Button view="outlined" size="l" onClick={handleExport}>
+                Экспортировать
+              </Button>
+              <Button
+                view="outlined-danger"
+                size="l"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  void handleGenerate();
+                }}
+              >
+                Заменить
+              </Button>
+            </>
+          )}
+        />
+      </Dialog>
+
       <div>
-        <Text variant="body-short">Публичный ключ (для push)</Text>
+        <Text variant="body-short" id="encryption-public-key-label">
+          Публичный ключ (для push)
+        </Text>
         <textarea
+          aria-labelledby="encryption-public-key-label"
           className={style.templateBody}
           value={keys.publicKey}
           onChange={(event) => setKeys((prev) => ({ ...prev, publicKey: event.target.value }))}
@@ -175,12 +217,15 @@ function EncryptionSection() {
 
       <div>
         <div className={style.keyLabelRow}>
-          <Text variant="body-short">Приватный ключ (для pull) — храните только локально</Text>
+          <Text variant="body-short" id="encryption-private-key-label">
+            Приватный ключ (для pull) — храните только локально
+          </Text>
           <Button view="flat" size="s" onClick={() => setShowPrivateKey((prev) => !prev)} aria-label={showPrivateKey ? 'Скрыть' : 'Показать'}>
             <Icon data={showPrivateKey ? EyeSlash : Eye} size={16} />
           </Button>
         </div>
         <textarea
+          aria-labelledby="encryption-private-key-label"
           className={`${style.templateBody} ${showPrivateKey ? '' : style.blurred}`}
           value={keys.privateKey}
           onChange={(event) => setKeys((prev) => ({ ...prev, privateKey: event.target.value }))}
