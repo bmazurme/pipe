@@ -54,9 +54,9 @@ Two additions to the same issue-parcel flow:
   `handlePushSubscriptionIssue`
   ([subscription/handler.ts](../reports/packages/server/src/subscription/handler.ts))
   and sync's `buildAndUploadIssueParcel`
-  ([commands/pushIssue.ts](../sync/src/commands/pushIssue.ts)) — call their own
-  `getIssueImages()` (mirrored in each product's `gitlab-client.ts`,
-  same duplication pattern as the rest of this flow) to pull `![]()` image
+  ([commands/pushIssue.ts](../sync/src/commands/pushIssue.ts)) — call the shared
+  `getIssueImages()` ([gitlabClient.ts](../packages/protocol/src/gitlabClient.ts);
+  each product's own GitLab client only wraps it to word the warnings) to pull `![]()` image
   refs out of the description
   ([markdownImages.ts](../packages/protocol/src/markdownImages.ts), pure
   parsing shared by both) and download whichever are relative or same-origin

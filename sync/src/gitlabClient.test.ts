@@ -55,64 +55,59 @@ describe('getIssue', () => {
   });
 });
 
+// The download logic itself is tested in @pipe/protocol's gitlabClient.test.ts —
+// these only cover what sync's wrapper adds: its English warning lines.
 describe('getIssueImages', () => {
   const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
 
-  it('returns nothing when the description has no image references', async () => {
-    let called = false;
-    globalThis.fetch = (async () => {
-      called = true;
-      throw new Error('should not be called');
-    }) as typeof fetch;
+  function captureWarnings(): { lines: unknown[][]; restore: () => void } {
+    const original = console.warn;
+    const lines: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      lines.push(args);
+    };
+    return { lines, restore: () => (console.warn = original) };
+  }
 
-    const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', 'no images here');
-
-    assert.deepEqual(images, []);
-    assert.equal(called, false);
-  });
-
-  it('downloads a relative /uploads/ image with the private-token header', async () => {
-    let capturedUrl: string | undefined;
-    let capturedHeaders: HeadersInit | undefined;
-    globalThis.fetch = (async (url: string, init?: RequestInit) => {
-      capturedUrl = url;
-      capturedHeaders = init?.headers;
-      return new Response(PNG_BYTES, { status: 200 });
-    }) as typeof fetch;
-
-    const images = await getIssueImages(
-      'https://gitlab.example.com/api/v4',
-      'tok',
-      '![shot](/uploads/abc/shot.png)',
-    );
-
-    assert.equal(capturedUrl, 'https://gitlab.example.com/uploads/abc/shot.png');
-    assert.deepEqual(capturedHeaders, { 'Private-Token': 'tok' });
-    assert.deepEqual(images, [{ relPath: 'issue-images/shot.png', base64: Buffer.from(PNG_BYTES).toString('base64') }]);
-  });
-
-  it('skips an image hosted on a different origin', async () => {
-    let called = false;
-    globalThis.fetch = (async () => {
-      called = true;
-      throw new Error('should not be called');
-    }) as typeof fetch;
-
-    const images = await getIssueImages(
-      'https://gitlab.example.com/api/v4',
-      'tok',
-      '![external](https://evil.example/tracker.png)',
-    );
-
-    assert.deepEqual(images, []);
-    assert.equal(called, false);
-  });
-
-  it('warns and continues when one download fails', async () => {
-    globalThis.fetch = (async () => new Response('nope', { status: 404 })) as typeof fetch;
+  it('downloads a relative /uploads/ image into issue-images/', async () => {
+    globalThis.fetch = (async () => new Response(PNG_BYTES, { status: 200 })) as typeof fetch;
 
     const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', '![shot](/uploads/abc/shot.png)');
 
-    assert.deepEqual(images, []);
+    assert.deepEqual(images, [{ relPath: 'issue-images/shot.png', base64: Buffer.from(PNG_BYTES).toString('base64') }]);
+  });
+
+  it('warns with the HTTP status and continues when one download fails', async () => {
+    globalThis.fetch = (async () => new Response('nope', { status: 404 })) as typeof fetch;
+    const warnings = captureWarnings();
+
+    try {
+      const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', '![shot](/uploads/abc/shot.png)');
+      assert.deepEqual(images, []);
+    } finally {
+      warnings.restore();
+    }
+
+    assert.deepEqual(warnings.lines, [
+      ['Could not download an image from the issue description (https://gitlab.example.com/uploads/abc/shot.png): HTTP 404'],
+    ]);
+  });
+
+  it('warns with the error itself on a network failure', async () => {
+    const failure = new TypeError('fetch failed');
+    globalThis.fetch = (async () => {
+      throw failure;
+    }) as typeof fetch;
+    const warnings = captureWarnings();
+
+    try {
+      await getIssueImages('https://gitlab.example.com/api/v4', 'tok', '![shot](/uploads/abc/shot.png)');
+    } finally {
+      warnings.restore();
+    }
+
+    assert.deepEqual(warnings.lines, [
+      ['Could not download an image from the issue description (https://gitlab.example.com/uploads/abc/shot.png):', failure],
+    ]);
   });
 });
