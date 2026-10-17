@@ -482,6 +482,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ContextController_list"];
+        put?: never;
+        post: operations["ContextController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contexts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ContextController_get"];
+        put?: never;
+        post?: never;
+        delete: operations["ContextController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["ContextController_update"];
+        trace?: never;
+    };
     "/api/v1/storage": {
         parameters: {
             query?: never;
@@ -960,38 +992,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/contexts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ContextController_list"];
-        put?: never;
-        post: operations["ContextController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/contexts/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ContextController_get"];
-        put?: never;
-        post?: never;
-        delete: operations["ContextController_remove"];
-        options?: never;
-        head?: never;
-        patch: operations["ContextController_update"];
         trace?: never;
     };
     "/api/v1/dashboard/nodes": {
@@ -1988,6 +1988,29 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        ContextSummaryDto: {
+            id: number;
+            name: string;
+            contentLength: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ContextResponseDto: {
+            id: number;
+            name: string;
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateContextDto: {
+            name: string;
+            content: string;
+        };
+        UpdateContextDto: Record<string, never>;
         StoredFileResponseDto: {
             id: number;
             originalName: string;
@@ -2218,29 +2241,6 @@ export interface components {
         DeletedWorkerResponseDto: {
             failedJobs: number;
         };
-        ContextSummaryDto: {
-            id: number;
-            name: string;
-            contentLength: number | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        ContextResponseDto: {
-            id: number;
-            name: string;
-            content: string;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        CreateContextDto: {
-            name: string;
-            content: string;
-        };
-        UpdateContextDto: Record<string, never>;
         ImproveRun: {
             userId: number;
             kind: Record<string, never>;
@@ -3211,6 +3211,113 @@ export interface operations {
             };
         };
     };
+    ContextController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextSummaryDto"][];
+                };
+            };
+        };
+    };
+    ContextController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateContextDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
+                };
+            };
+        };
+    };
+    ContextController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
+                };
+            };
+        };
+    };
+    ContextController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ContextController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateContextDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextResponseDto"];
+                };
+            };
+        };
+    };
     StorageController_list: {
         parameters: {
             query?: {
@@ -3981,113 +4088,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    ContextController_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContextSummaryDto"][];
-                };
-            };
-        };
-    };
-    ContextController_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateContextDto"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContextResponseDto"];
-                };
-            };
-        };
-    };
-    ContextController_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContextResponseDto"];
-                };
-            };
-        };
-    };
-    ContextController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ContextController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateContextDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContextResponseDto"];
-                };
             };
         };
     };
