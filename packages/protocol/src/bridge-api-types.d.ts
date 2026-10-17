@@ -2094,12 +2094,12 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        CancelJobDto: {
+            force?: boolean;
+        };
         RetryJobDto: {
             /** Format: date-time */
             notBefore?: string;
-        };
-        CancelJobDto: {
-            force?: boolean;
         };
         UpdateJobStatusDto: {
             /** @enum {string} */
