@@ -17,6 +17,7 @@ function createMockRepository(): MockRepository {
     find: jest.fn(),
     findOne: jest.fn(),
     delete: jest.fn(),
+    update: jest.fn(),
   };
 }
 
@@ -157,6 +158,26 @@ describe('ClaudeCredentialsService', () => {
       repository.findOne!.mockResolvedValue(null);
 
       await expect(service.resolveForRun(1, null)).resolves.toBeNull();
+    });
+  });
+
+  describe('auth failure mark', () => {
+    it('stamps the time and the job on the token', async () => {
+      await service.markAuthFailed(3, 7, 42);
+
+      expect(repository.update).toHaveBeenCalledWith(
+        { id: 3, userId: 7 },
+        { authFailedAt: expect.any(Date), authFailedJobId: 42 },
+      );
+    });
+
+    it('clears both fields, only when set', async () => {
+      await service.clearAuthFailed(3, 7);
+
+      expect(repository.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 3, userId: 7 }),
+        { authFailedAt: null, authFailedJobId: null },
+      );
     });
   });
 

@@ -55,6 +55,10 @@ export type JobStatusRow = Pick<
   'id' | 'userId' | 'status' | 'resultFileId' | 'errorMessage'
 >;
 
+// What a Claude run that Anthropic refused prints (e.g. "Failed to authenticate. API Error: 403 Request not allowed").
+const AUTH_FAILURE_PATTERN =
+  /Failed to authenticate|\b401\b|\b403\b.*Request not allowed/i;
+
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
@@ -653,6 +657,7 @@ export class WorkerService {
             userId,
             limits,
           );
+          await this.claudeCredentialsService.clearAuthFailed(token.id, userId);
 
           return { limits, credentialId: token.id };
         }
@@ -675,6 +680,14 @@ export class WorkerService {
         limitsCredentialId,
         userId,
         limits,
+      );
+    }
+
+    // Usage or limits only arrive from a run Anthropic accepted.
+    if ((limits || usage) && limitsCredentialId !== null) {
+      await this.claudeCredentialsService.clearAuthFailed(
+        limitsCredentialId,
+        userId,
       );
     }
 
@@ -852,6 +865,28 @@ export class WorkerService {
     }
 
     const saved = await this.jobRepository.save(job);
+
+    if (
+      dto.status === JobStatus.Failed &&
+      saved.usedClaudeCredentialId != null &&
+      AUTH_FAILURE_PATTERN.test(saved.errorMessage ?? '')
+    ) {
+      await this.claudeCredentialsService.markAuthFailed(
+        saved.usedClaudeCredentialId,
+        userId,
+        saved.id,
+      );
+    }
+
+    if (
+      dto.status === JobStatus.Succeeded &&
+      saved.usedClaudeCredentialId != null
+    ) {
+      await this.claudeCredentialsService.clearAuthFailed(
+        saved.usedClaudeCredentialId,
+        userId,
+      );
+    }
 
     if (dto.status === JobStatus.Failed) {
       logJobOutcome(this.appLogs, saved);

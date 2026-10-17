@@ -12,6 +12,7 @@ import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import type { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Worker } from './entities/worker.entity';
 import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
@@ -81,6 +82,8 @@ describe('WorkerService', () => {
     claudeCredentialsService = {
       resolveToken: jest.fn(),
       recordLimits: jest.fn(),
+      markAuthFailed: jest.fn(),
+      clearAuthFailed: jest.fn(),
     };
     heartbeatService = {
       record: jest.fn(),
@@ -206,6 +209,22 @@ describe('WorkerService', () => {
       cacheCreationTokens: 7,
     };
     const now = new Date('2026-10-14T12:00:00.000Z');
+
+    it('clears the rejected mark of the token a reporting job ran on', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: 11,
+      });
+
+      await service.recordClaudeReport(3, 5, { jobId: 7, usage }, now);
+
+      expect(claudeCredentialsService.clearAuthFailed).toHaveBeenCalledWith(
+        11,
+        3,
+      );
+    });
 
     it('keeps the limits on the worker, and the job usage and the token limits on the job it ran', async () => {
       repository.findOne!.mockResolvedValue({
@@ -679,6 +698,53 @@ describe('WorkerService', () => {
   });
 
   describe('updateStatus', () => {
+    describe('rejected Claude token', () => {
+      const run = (
+        status: UpdateJobStatusDto['status'],
+        errorMessage?: string,
+      ) => {
+        repository.findOne!.mockResolvedValue({
+          id: 4,
+          status: JobStatus.Running,
+          usedClaudeCredentialId: 12,
+        } as Job);
+        repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+        return service.updateStatus(4, 7, { status, errorMessage });
+      };
+
+      it('marks the token a job failed to authenticate on', async () => {
+        await run(
+          JobStatus.Failed,
+          'Model run exited with code 1: Failed to authenticate. API Error: 403 Request not allowed',
+        );
+
+        expect(claudeCredentialsService.markAuthFailed).toHaveBeenCalledWith(
+          12,
+          7,
+          4,
+        );
+      });
+
+      it('leaves the token alone for any other failure', async () => {
+        await run(
+          JobStatus.Failed,
+          'Model run exited with code 1: out of memory',
+        );
+
+        expect(claudeCredentialsService.markAuthFailed).not.toHaveBeenCalled();
+      });
+
+      it('clears the mark when a job on the token succeeds', async () => {
+        await run(JobStatus.Succeeded);
+
+        expect(claudeCredentialsService.clearAuthFailed).toHaveBeenCalledWith(
+          12,
+          7,
+        );
+      });
+    });
+
     it('sets startedAt when moving to running', async () => {
       const job: Job = {
         id: 1,
