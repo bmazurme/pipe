@@ -7,6 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { In } from 'typeorm';
 
 import { CHAT_UPLOAD_DIR } from './config/attachment-multer.config';
 import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
@@ -331,6 +332,69 @@ describe('ChatService attachments', () => {
       attachments.find.mockRejectedValue(new Error('db down'));
 
       await expect(service.pruneUnsentAttachments()).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('ChatService attachmentsByMessage', () => {
+  it('makes no query for no messages', async () => {
+    const { service, attachments } = await setup();
+
+    const result = await service.attachmentsByMessage([]);
+
+    expect(result.size).toBe(0);
+    expect(attachments.find).not.toHaveBeenCalled();
+  });
+
+  it('queries only the given message ids and groups the files per message', async () => {
+    const { service, attachments } = await setup();
+    attachments.find.mockResolvedValue([
+      { id: 3, messageId: 21 },
+      { id: 4, messageId: 23 },
+      { id: 5, messageId: 21 },
+    ]);
+
+    const result = await service.attachmentsByMessage([21, 22, 23]);
+
+    expect(attachments.find).toHaveBeenCalledWith({
+      where: { messageId: In([21, 22, 23]) },
+      order: { id: 'ASC' },
+    });
+    expect(result.get(21)?.map((a) => a.id)).toEqual([3, 5]);
+    expect(result.get(22)).toBeUndefined();
+    expect(result.get(23)?.map((a) => a.id)).toEqual([4]);
+  });
+
+  it('claim() asks only for the completed history messages’ files', async () => {
+    const { service, messages, chats, attachments } = await setup();
+    messages.query.mockResolvedValue([[{ id: 22 }], 1]);
+    messages.findOneByOrFail.mockResolvedValue({
+      id: 22,
+      chatId: 1,
+      role: ChatMessageRole.Assistant,
+      status: ChatMessageStatus.Running,
+    });
+    chats.findOneByOrFail.mockResolvedValue(claudeChat);
+    messages.find.mockResolvedValue([
+      {
+        id: 21,
+        role: ChatMessageRole.User,
+        content: 'a',
+        status: ChatMessageStatus.Complete,
+      },
+      {
+        id: 22,
+        role: ChatMessageRole.Assistant,
+        content: '',
+        status: ChatMessageStatus.Running,
+      },
+    ]);
+
+    await service.claim(7);
+
+    expect(attachments.find).toHaveBeenCalledWith({
+      where: { messageId: In([21]) },
+      order: { id: 'ASC' },
     });
   });
 });

@@ -3,7 +3,7 @@ import { Icon, Text } from '@gravity-ui/uikit';
 import { Link } from 'react-router-dom';
 
 import { useAuth } from '../app/providers/AuthProvider';
-import { SERVICES, SOON_SERVICES } from '../shared/config/services';
+import { SOON_SERVICES, visibleServices } from '../shared/config/services';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './HomePage.module.css';
 
@@ -18,7 +18,7 @@ export function HomePage() {
           and "open in new tab" all come for free, and the old copy pointed at
           a sidebar that doesn't exist on mobile. */}
       <div className={styles.grid}>
-        {SERVICES.map((service) => (
+        {visibleServices(user?.isOwner).map((service) => (
           <Link key={service.id} to={service.path} className={styles.card}>
             <span className={styles.cardIcon}>
               <Icon data={service.icon} size={20} />

@@ -19,6 +19,7 @@ import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
+import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
 import { runLoop } from './loop.js';
@@ -115,15 +116,20 @@ export async function processJob(
   let pendingLog = '';
   let flushed: Promise<void> = Promise.resolve();
 
+  // A burst (a large file read, a test run dump) can exceed what bridge accepts in one chunk, so it goes out as
+  // several capped pieces. Each piece is chained and caught on its own: one rejected piece leaves a single warning
+  // and the rest still arrive, instead of the whole batch silently disappearing.
   const flushLog = () => {
     if (!pendingLog) return;
-    const chunk = pendingLog;
+    const pieces = splitLogChunk(pendingLog);
     pendingLog = '';
-    flushed = flushed.then(() =>
-      client.appendLog(job.id, chunk).catch((error) => {
-        jlog.warn({ err: error }, 'failed to forward a log chunk to bridge');
-      }),
-    );
+    for (const piece of pieces) {
+      flushed = flushed.then(() =>
+        client.appendLog(job.id, piece).catch((error) => {
+          jlog.warn({ err: error, chars: piece.length }, 'failed to forward a log chunk to bridge');
+        }),
+      );
+    }
   };
 
   const log = (chunk: string) => {

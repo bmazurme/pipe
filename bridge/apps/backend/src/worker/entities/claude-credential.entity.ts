@@ -34,4 +34,12 @@ export class ClaudeCredential extends BaseEntity {
   // The plan limits last reported by a run on this token (claude-limits.ts), and when.
   @Column({ type: 'jsonb', nullable: true })
   limits: ClaudeLimits | null;
+
+  // Set when a job that ran on this token failed to authenticate (Anthropic no longer accepts it), and which
+  // job; cleared again when a later run or limits probe on the token succeeds.
+  @Column({ type: 'timestamp', nullable: true })
+  authFailedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  authFailedJobId: number | null;
 }

@@ -103,3 +103,36 @@ describe('getIssueImages', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('getIssueImages — refusing to send the token off-instance', () => {
+  it.each([
+    ['a look-alike host with the instance as a prefix', '![x](https://gitlab.example.com.evil.net/uploads/a.png)'],
+    ['the instance as userinfo in front of another host', '![x](https://gitlab.example.com@evil.net/uploads/a.png)'],
+    ['a same-instance path outside /uploads/', '![x](https://gitlab.example.com/api/v4/user)'],
+    ['a relative path outside /uploads/', '![x](/api/v4/user)'],
+  ])('makes no request for %s', async (_label, description) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const images = await getIssueImages(description);
+
+    expect(images).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not follow a redirect and skips the image', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 302, headers: { Location: 'https://evil.net/steal' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const images = await getIssueImages('![shot](/uploads/abc/shot.png)');
+
+    expect(images).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://gitlab.example.com/uploads/abc/shot.png',
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+  });
+});

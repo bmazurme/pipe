@@ -33,6 +33,8 @@ export interface ServiceLink {
   icon: IconData;
   path: string;
   group: NavGroup;
+  /** Every route behind it is limited to the deployment owner, so other accounts do not see it listed. */
+  ownerOnly?: true;
 }
 
 /**
@@ -48,6 +50,7 @@ export const SERVICES: ServiceLink[] = [
     icon: Pulse,
     path: '/dashboard',
     group: 'system',
+    ownerOnly: true,
   },
   {
     id: 'storage',
@@ -104,6 +107,7 @@ export const SERVICES: ServiceLink[] = [
     icon: Rocket,
     path: '/improve',
     group: 'agent',
+    ownerOnly: true,
   },
   {
     id: 'context',
@@ -146,6 +150,11 @@ export const SERVICES: ServiceLink[] = [
     group: 'work',
   },
 ];
+
+/** The services an account can actually use: owner-only ones are dropped once it is known not to be the owner. */
+export function visibleServices(isOwner?: boolean): ServiceLink[] {
+  return isOwner === false ? SERVICES.filter((service) => !service.ownerOnly) : SERVICES;
+}
 
 /** Announced but not built yet — rendered inert wherever services are listed. */
 export const SOON_SERVICES: Omit<ServiceLink, 'path' | 'group'>[] = [

@@ -34,4 +34,21 @@ describe('writeParcelFiles', () => {
     assert.equal(existsSync(path.join(base, 'abs.txt')), false);
     assert.equal(existsSync(path.join(root, 'ok.txt')), false);
   });
+
+  it('rejects an entry inside .git and writes nothing', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'parcel-git-'));
+    for (const bad of ['.git/config', 'sub/.GIT/hooks/pre-commit']) {
+      assert.throws(
+        () =>
+          writeParcelFiles(root, [
+            { relPath: 'ok.txt', content: 'fine' },
+            { relPath: bad, content: 'bad' },
+          ]),
+        /Path inside \.git is not allowed/,
+      );
+    }
+    assert.equal(existsSync(path.join(root, '.git')), false);
+    assert.equal(existsSync(path.join(root, 'sub')), false);
+    assert.equal(existsSync(path.join(root, 'ok.txt')), false);
+  });
 });

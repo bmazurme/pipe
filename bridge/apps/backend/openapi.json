@@ -3759,12 +3759,16 @@
           },
           "status": {
             "type": "string"
+          },
+          "isOwner": {
+            "type": "boolean"
           }
         },
         "required": [
           "id",
           "username",
-          "status"
+          "status",
+          "isOwner"
         ]
       },
       "UpdateUserDto": {
@@ -4346,6 +4350,15 @@
             "nullable": true,
             "additionalProperties": true
           },
+          "authFailedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "authFailedJobId": {
+            "type": "number",
+            "nullable": true
+          },
           "id": {
             "type": "number"
           },
@@ -4359,6 +4372,8 @@
         },
         "required": [
           "limits",
+          "authFailedAt",
+          "authFailedJobId",
           "id",
           "name",
           "createdAt"

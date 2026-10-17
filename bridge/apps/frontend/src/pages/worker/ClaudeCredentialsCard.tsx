@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Dialog, Icon, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Dialog, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
   ClaudeCredential,
@@ -8,6 +8,7 @@ import {
   useDeleteClaudeCredentialMutation,
   useListClaudeCredentialsQuery,
 } from '../../store/api';
+import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { ClaudeLimitsView } from './ClaudeLimitsView';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
@@ -84,6 +85,17 @@ export function ClaudeCredentialsCard() {
             <li key={credential.id} className={styles.credentialRow}>
               <div className={styles.credentialInfo}>
                 <Text variant="body-2">{credential.name}</Text>
+                {credential.authFailedAt && (
+                  <>
+                    <Label theme="danger">
+                      Отклонён Anthropic · задача #{credential.authFailedJobId} ·{' '}
+                      {formatRelativeTime(credential.authFailedAt)}
+                    </Label>
+                    <Text color="secondary" variant="caption-2">
+                      Токен больше не принимается — замените его новым.
+                    </Text>
+                  </>
+                )}
                 <ClaudeLimitsView limits={credential.limits} emptyText="Лимиты появятся после первого запуска на этом токене" />
               </div>
               <Button

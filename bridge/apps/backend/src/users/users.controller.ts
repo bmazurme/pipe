@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { DeploymentAccessService } from '../auth/deployment-access';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { MeResponseDto } from './dto/me-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,7 +19,10 @@ import { UsersService } from './users.service';
 
 @Controller('api/v1/users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly access: DeploymentAccessService,
+  ) {}
 
   @UseGuards(JwtGuard)
   @Get('me')
@@ -31,7 +35,9 @@ export class UsersController {
       throw new NotFoundException('User not found');
     }
 
-    return MeResponseDto.fromUser(user);
+    // The same check OwnerGuard makes, so the frontend can hide owner-only
+    // pages instead of letting them fail with 403.
+    return MeResponseDto.fromUser(user, await this.access.isOwner(user.id));
   }
 
   @UseGuards(JwtGuard)

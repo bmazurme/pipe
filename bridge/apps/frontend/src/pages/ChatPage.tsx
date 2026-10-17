@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChatContainer } from '@gravity-ui/aikit';
 import type {
@@ -185,7 +185,32 @@ export function ChatPage() {
   const imageUrls = useAttachmentUrls(messagesData ?? [], accessToken);
   // Ticks once a second while a reply is awaited, so the waiting time on its bubble visibly counts.
   const [now, setNow] = useState(() => Date.now());
-  const messages = useMemo(() => (messagesData ?? []).map((message) => toChatMessage(message, imageUrls, now)), [messagesData, imageUrls, now]);
+  // Finished messages are converted once and keep their identity from tick to tick (and across polls that did not
+  // change them); only a pending/running reply is rebuilt with `now`.
+  const convertedCache = useRef(new Map<string, { source: ChatMessageMeta; imageUrls: Record<number, string>; converted: TChatMessage }>());
+  const messages = useMemo(() => {
+    const cache = convertedCache.current;
+    const seen = new Set<string>();
+    const result = (messagesData ?? []).map((message) => {
+      if (message.status === 'pending' || message.status === 'running') return toChatMessage(message, imageUrls, now);
+
+      const key = String(message.id);
+      const cached = cache.get(key);
+
+      seen.add(key);
+      if (cached && cached.source === message && cached.imageUrls === imageUrls) return cached.converted;
+
+      const converted = toChatMessage(message, imageUrls, now);
+
+      cache.set(key, { source: message, imageUrls, converted });
+
+      return converted;
+    });
+
+    for (const key of cache.keys()) if (!seen.has(key)) cache.delete(key);
+
+    return result;
+  }, [messagesData, imageUrls, now]);
 
   // The model's proposal to change a pull request, from its latest finished reply — offered as a card to
   // confirm, once; the person's decision is remembered per message.
