@@ -442,6 +442,7 @@ describe('processJob worker shutdown', () => {
       ['running', 'failed'],
     );
     assert.equal(client.updateStatus.calls[1][2], SHUTDOWN_FAILURE_MESSAGE);
+    assert.equal(client.updateStatus.calls[1][3], 'shutdown');
     assert.equal(client.uploadResult.calls.length, 0);
     assert.deepEqual(readdirSync(workDir), []);
     assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Claimed job 22')));

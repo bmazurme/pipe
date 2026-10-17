@@ -53,6 +53,15 @@ describe('JobSweepService', () => {
       expect(appLogs.record).toHaveBeenCalledTimes(1);
     });
 
+    it("marks swept jobs with failureKind 'lost'", async () => {
+      repository.query.mockResolvedValue([[stale()], 1]);
+
+      await service.sweepLostJobs();
+
+      const [sql] = repository.query.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain(`"failureKind" = 'lost'`);
+    });
+
     it('does not report a job that finished before the update ran', async () => {
       await service.sweepLostJobs();
 

@@ -4312,6 +4312,12 @@
           "errorMessage": {
             "type": "string",
             "maxLength": 8192
+          },
+          "failureKind": {
+            "type": "string",
+            "enum": [
+              "shutdown"
+            ]
           }
         },
         "required": [
