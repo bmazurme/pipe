@@ -506,6 +506,22 @@ describe('ChatService', () => {
       expect(result.errorMessage).toBe('boom');
     });
 
+    it('keeps only the tail of an oversized error message', async () => {
+      messageRepository.findOne!.mockResolvedValue({
+        id: 99,
+        chatId: 1,
+        role: ChatMessageRole.Assistant,
+        status: ChatMessageStatus.Running,
+      });
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+
+      const result = await service.failTurn(99, 7, 'a'.repeat(5000) + 'END');
+
+      expect(result.errorMessage).toHaveLength(2000);
+      expect(result.errorMessage!.endsWith('END')).toBe(true);
+    });
+
     it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
       'throws ConflictException for a %s message',
       async (status) => {

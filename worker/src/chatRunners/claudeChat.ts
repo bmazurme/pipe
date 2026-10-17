@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
+import { buildExitFailureMessage } from '../failureMessage.js';
 import { createProgressReporter } from './progress.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
@@ -74,7 +75,7 @@ export async function claudeChat(
     if (result.report) onReport?.(result.report);
 
     if (result.exitCode !== 0) {
-      throw new Error(`claude exited with code ${result.exitCode}: ${result.output}`);
+      throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
 
     return result.output.trim();

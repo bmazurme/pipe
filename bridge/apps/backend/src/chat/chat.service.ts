@@ -35,7 +35,7 @@ import {
   ChatMessageRole,
   ChatMessageStatus,
 } from './entities/chat-message.entity';
-import { MAX_PROGRESS_LENGTH } from './chat.limits';
+import { MAX_ERROR_MESSAGE_LENGTH, MAX_PROGRESS_LENGTH } from './chat.limits';
 
 // Chat attachments live under chat/ in the store (apart from Storage's mailbox, see attachment-multer.config.ts).
 // A turn that has been Running longer than this is assumed lost (worker died or the claim response never arrived).
@@ -554,7 +554,10 @@ export class ChatService {
     const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.status = ChatMessageStatus.Failed;
-    message.errorMessage = errorMessage ?? null;
+    message.errorMessage =
+      errorMessage === undefined
+        ? null
+        : errorMessage.slice(-MAX_ERROR_MESSAGE_LENGTH);
     message.progress = null;
 
     return this.messageRepository.save(message);
