@@ -26,6 +26,8 @@ export class ClaimedTurnResponseDto {
   provider: ClaimedProviderDto | null;
   // The account's first stored Claude token for a sonnet/opus turn; null when there is none (the worker then uses its own login).
   claudeToken: string | null;
+  // Text of the Context snapshotted into the chat at creation; null when none was attached.
+  context: string | null;
   // Every message in the chat up to and including the user message this
   // pending reply answers — worker is stateless between turns, so it needs
   // full context each time, not just the latest message.

@@ -305,8 +305,8 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
     const reply = provider.tool === 'claude'
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
           reports.push(client.reportClaudeUsage(report));
-        }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text))
-      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools));
+        }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text), turn.context)
+      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context);
 
     await Promise.all(reports);
     await client.complete(turn.messageId, clipReply(reply));

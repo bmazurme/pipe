@@ -4,6 +4,7 @@ export class ChatResponseDto {
   id: number;
   model: ChatModel;
   title: string | null;
+  contextName: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -12,6 +13,7 @@ export class ChatResponseDto {
       id: chat.id,
       model: chat.model,
       title: chat.title,
+      contextName: chat.contextName ?? null,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
     };

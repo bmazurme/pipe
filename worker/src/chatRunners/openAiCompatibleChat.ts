@@ -1,6 +1,7 @@
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { CHAT_TOOLS_SYSTEM_PROMPT, type ChatToolset } from '../chatTools.js';
+import { withContext } from '../taskContext.js';
 import { resolveDispatcher } from '../proxyAgent.js';
 
 export interface OpenAiCompatibleChatOptions {
@@ -35,11 +36,15 @@ export async function openAiCompatibleChat(
   options: OpenAiCompatibleChatOptions,
   proxyUrl?: string,
   toolset?: ChatToolset | null,
+  // Background text from the Context attached to the chat; absent or blank: the system message is unchanged.
+  context?: string | null,
 ): Promise<string> {
+  const instructions = toolset ? `${CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION;
+  const contextBlock = withContext('', context).trim();
   const messages: ChatCompletionMessage[] = [
     {
       role: 'system',
-      content: toolset ? `${CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION,
+      content: contextBlock ? `${instructions}\n\n${contextBlock}` : instructions,
     },
     ...history.map((entry) => ({ role: entry.role, content: entry.content })),
   ];

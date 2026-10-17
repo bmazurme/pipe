@@ -279,6 +279,7 @@ export class ChatController {
       model: claimed.chat.model,
       provider,
       claudeToken,
+      context: claimed.chat.contextText ?? null,
       history: claimed.history,
     };
 
