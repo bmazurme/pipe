@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ClaudeLimits } from '../../store/api';
-import { describeUsage, formatResetIn, limitRows, limitTheme, windowLabel } from './claudeLimits';
+import { describeRecentUsage, describeUsage, formatResetIn, limitRows, limitTheme, windowLabel } from './claudeLimits';
 
 const NOW = Date.parse('2026-10-14T12:00:00Z');
 const sec = (iso: string) => Date.parse(iso) / 1000;
@@ -77,5 +77,22 @@ describe('describeUsage', () => {
   it('leaves the cost out when unknown and keeps tiny costs visible', () => {
     expect(describeUsage({ costUsd: null, inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheCreationTokens: 0 })).toBe('10 токенов');
     expect(describeUsage({ costUsd: 0.0025, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0 })).toContain('$0.0025');
+  });
+});
+
+describe('describeRecentUsage', () => {
+  it('shows runs, cost and tokens', () => {
+    expect(describeRecentUsage({ runs: 14, costUsd: 3.2, tokens: 1_200_000 })).toBe('За 7 дней: 14 запусков · $3.20 · 1.2M токенов');
+  });
+
+  it('declines the word for runs and leaves out an unknown cost', () => {
+    expect(describeRecentUsage({ runs: 1, costUsd: null, tokens: 900 })).toBe('За 7 дней: 1 запуск · 900 токенов');
+    expect(describeRecentUsage({ runs: 3, costUsd: null, tokens: 5000 })).toContain('3 запуска');
+    expect(describeRecentUsage({ runs: 12, costUsd: null, tokens: 5 })).toContain('12 запусков');
+  });
+
+  it('says there were no runs', () => {
+    expect(describeRecentUsage(null)).toBe('За 7 дней запусков не было');
+    expect(describeRecentUsage({ runs: 0, costUsd: null, tokens: 0 })).toBe('За 7 дней запусков не было');
   });
 });

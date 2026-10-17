@@ -84,6 +84,13 @@ export interface WorkerJob {
   updatedAt: string;
 }
 
+/** Runs, cost and tokens over the last 7 days; costUsd is null when no run reported one. */
+export interface RecentClaudeUsage {
+  runs: number;
+  costUsd: number | null;
+  tokens: number;
+}
+
 export interface ClaudeCredential {
   id: number;
   name: string;
@@ -93,6 +100,8 @@ export interface ClaudeCredential {
   /** When a job on this token last failed to authenticate; null while it looks healthy. */
   authFailedAt: string | null;
   authFailedJobId: number | null;
+  /** Last 7 days of runs on this token, summed from jobs.usage; null/absent when there were none. */
+  usage7d?: RecentClaudeUsage | null;
 }
 
 export type ProviderModel = 'gpt' | 'deepseek' | 'qwen';

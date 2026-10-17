@@ -21,6 +21,19 @@ export class ClaudeCredentialResponseDto {
   @ApiProperty({ type: 'number', nullable: true })
   authFailedJobId: number | null;
 
+  // Runs, cost and tokens over the last 7 days (summed from jobs.usage); only the list endpoint fills it.
+  @ApiProperty({
+    type: 'object',
+    nullable: true,
+    required: false,
+    properties: {
+      runs: { type: 'number' },
+      costUsd: { type: 'number', nullable: true },
+      tokens: { type: 'number' },
+    },
+  })
+  usage7d?: { runs: number; costUsd: number | null; tokens: number } | null;
+
   static fromEntity(credential: ClaudeCredential): ClaudeCredentialResponseDto {
     return {
       id: credential.id,

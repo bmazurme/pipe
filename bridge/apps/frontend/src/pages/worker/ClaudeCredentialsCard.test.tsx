@@ -118,3 +118,27 @@ describe('ClaudeCredentialsCard', () => {
     expect(await screen.findByText('Не удалось удалить токен «личный»')).toBeTruthy();
   });
 });
+
+describe('ClaudeCredentialsCard 7-day usage', () => {
+  it('shows the week of runs, cost and tokens under a token', async () => {
+    listReply = () =>
+      json([
+        {
+          id: 3,
+          name: 'личный',
+          createdAt: '2026-10-08T00:00:00Z',
+          usage7d: { runs: 14, costUsd: 3.2, tokens: 1_200_000 },
+        },
+      ]);
+    renderCard();
+
+    expect(await screen.findByText('За 7 дней: 14 запусков · $3.20 · 1.2M токенов')).toBeTruthy();
+  });
+
+  it('says there were no runs when the token has none', async () => {
+    listReply = () => json([{ id: 3, name: 'личный', createdAt: '2026-10-08T00:00:00Z', usage7d: null }]);
+    renderCard();
+
+    expect(await screen.findByText('За 7 дней запусков не было')).toBeTruthy();
+  });
+});

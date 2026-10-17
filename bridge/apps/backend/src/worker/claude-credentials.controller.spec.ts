@@ -26,3 +26,26 @@ describe('ClaudeCredentialsController guards', () => {
     expect(guardsOf(ClaudeCredentialsController)).toEqual([]);
   });
 });
+
+describe('ClaudeCredentialsController list usage7d', () => {
+  it('attaches the 7-day usage to each token, null when it has none', async () => {
+    const service = {
+      findAllByUser: jest.fn().mockResolvedValue([
+        { id: 1, name: 'a', createdAt: new Date() },
+        { id: 2, name: 'b', createdAt: new Date() },
+      ]),
+      recentUsage: jest
+        .fn()
+        .mockResolvedValue(
+          new Map([[1, { runs: 2, costUsd: 1.5, tokens: 10 }]]),
+        ),
+    };
+    const controller = new ClaudeCredentialsController(service as never);
+
+    const result = await controller.list({ id: 5 });
+
+    expect(result[0].usage7d).toEqual({ runs: 2, costUsd: 1.5, tokens: 10 });
+    expect(result[1].usage7d).toBeNull();
+    expect(service.recentUsage).toHaveBeenCalledWith(5, expect.any(Date));
+  });
+});
