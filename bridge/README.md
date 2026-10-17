@@ -88,6 +88,37 @@ docker-proxy должен быть доступен backend по `DOCKER_PROXY_U
 
 Список нод зашит в коде: `KNOWN_HOSTNAMES` в `apps/backend/src/dashboard/nodes.service.ts` (`ubuntu-white`, `ubuntu-red`, `ubuntu-green`, `ubuntu-blue`). Нода из списка, которой нет в ответе Swarm, тоже «неизвестно». Для другого кластера список нужно поправить в коде.
 
+## Тесты
+
+```bash
+npm test -w backend                  # Jest
+npm run test:e2e -w backend          # e2e, нужен Postgres с базой `ntlstl-db-test`
+npm test -w frontend                 # Vitest
+```
+
+### Интеграционный тест S3
+
+`apps/backend/src/storage/file-store/s3-file-store.integration.spec.ts`
+проверяет `S3FileStore` (`STORAGE_DRIVER=s3`) против настоящего S3 (Garage).
+Без `S3_TEST_ENDPOINT` он пропускается — в том числе в CI, поэтому перед
+изменением кода драйвера `s3` прогоните его вручную:
+
+| Переменная | Назначение |
+|---|---|
+| `S3_TEST_ENDPOINT` | адрес S3 API, например `http://localhost:3900`; задан — тест запускается |
+| `S3_TEST_BUCKET` | бакет для теста |
+| `S3_TEST_KEY_ID` | access key id |
+| `S3_TEST_SECRET` | secret access key |
+
+```bash
+S3_TEST_ENDPOINT=http://localhost:3900 S3_TEST_BUCKET=bridge-test \
+S3_TEST_KEY_ID=GK... S3_TEST_SECRET=... \
+  npm test -w backend -- s3-file-store.integration
+```
+
+Берите **одноразовые** бакет и ключ: тест пишет и удаляет объекты под
+префиксом `int/` — не направляйте его на рабочее хранилище.
+
 ## Worker: потерянные задачи
 
 Если worker перезапустили или он пропал посреди задачи, bridge сам завершает её с ошибкой «Worker was restarted or lost…» (через 10 минут или 3 часа тишины) и не повторяет — см. [worker/README.md](../worker/README.md#потерянные-задачи-рестарт-worker).
@@ -169,6 +200,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
 | `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | опционально: хранилище загруженных файлов — `local` (по умолчанию, том) или `s3`; при `s3` все, кроме `S3_REGION`, обязательны, иначе backend не стартует. Подробности: [docs/deploy.md](../docs/deploy.md#file-storage) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
+| `LIMIT_ALERTS` | опционально: `off` выключает Telegram-предупреждения о лимитах плана Claude (окно токена или worker'а перешло 80 % / 95 % или отклонено — одно сообщение на уровень и окно; тихие часы `NOTIFY_QUIET_HOURS` соблюдаются). По умолчанию включены |
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |
 | `GITHUB_CI_WORKFLOW`, `GITHUB_DEPLOY_WORKFLOW` | имена workflow (`name:`), на которые реагирует цикл; по умолчанию `CI` и `Deploy bridge` |
