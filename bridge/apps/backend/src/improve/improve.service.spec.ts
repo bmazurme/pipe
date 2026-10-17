@@ -283,6 +283,52 @@ describe('ImproveService.advanceOne', () => {
     expect(cancelledRun.status).toBe(ImproveRunStatus.Cancelled);
   });
 
+  it('moves straight onto the auto-retried job without failing the run', async () => {
+    const { service, runs, workers } = setup();
+    workers.findRetriesOf.mockResolvedValue(
+      new Map([[321, { id: 322, userId: 3, status: 'queued' }]]),
+    );
+    const retriedRun = run();
+
+    await service.advanceOne(
+      retriedRun as never,
+      {
+        id: 321,
+        userId: 3,
+        status: 'failed',
+        errorMessage: 'Worker was stopped (SIGTERM) before the job finished',
+      } as never,
+    );
+
+    expect(workers.findRetriesOf).toHaveBeenCalledWith([321]);
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, status: ImproveRunStatus.Queued },
+      {
+        jobId: 322,
+        status: ImproveRunStatus.Queued,
+        error: null,
+        finishedAt: null,
+      },
+    );
+    expect(runs.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('still fails the run with the job error when there is no retry', async () => {
+    const { service, workers } = setup();
+    workers.findRetriesOf.mockResolvedValue(new Map());
+    const failedRun = run();
+
+    await service.advanceOne(
+      failedRun as never,
+      { id: 321, userId: 3, status: 'failed', errorMessage: 'boom' } as never,
+    );
+
+    expect(failedRun).toMatchObject({
+      status: ImproveRunStatus.Failed,
+      error: 'boom',
+    });
+  });
+
   it('publishes only once even if two ticks overlap', async () => {
     const { service, runs, publisher } = setup();
     runs.update.mockResolvedValue({ affected: 0 }); // someone else already claimed it
