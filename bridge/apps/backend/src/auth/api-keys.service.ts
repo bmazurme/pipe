@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
@@ -22,6 +22,8 @@ export interface CreatedApiKey {
 
 @Injectable()
 export class ApiKeysService {
+  private readonly logger = new Logger(ApiKeysService.name);
+
   constructor(
     @InjectRepository(ApiKey)
     private readonly apiKeyRepository: Repository<ApiKey>,
@@ -80,7 +82,13 @@ export class ApiKeysService {
       return null;
     }
 
-    void this.apiKeyRepository.update(apiKey.id, { lastUsedAt: new Date() });
+    // Fire-and-forget: an unhandled rejection would terminate the process.
+    void this.apiKeyRepository
+      .update(apiKey.id, { lastUsedAt: new Date() })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Could not update API key lastUsedAt: ${message}`);
+      });
 
     return { userId: apiKey.userId };
   }

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createHash } from 'crypto';
@@ -98,6 +99,30 @@ describe('ApiKeysService', () => {
       expect(repository.update).toHaveBeenCalledWith(apiKey.id, {
         lastUsedAt: expect.any(Date),
       });
+    });
+
+    it('still resolves the user, logs a warning and raises no unhandled rejection when the lastUsedAt update fails', async () => {
+      const apiKey = baseApiKey({
+        keyHash: hash(`${API_KEY_PREFIX}real-token`),
+      });
+      repository.findOne!.mockResolvedValue(apiKey);
+      repository.update!.mockRejectedValue(new Error('db down'));
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      const unhandled = jest.fn();
+      process.on('unhandledRejection', unhandled);
+
+      const result = await service.validate(`${API_KEY_PREFIX}real-token`);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      process.off('unhandledRejection', unhandled);
+      expect(result).toEqual({ userId: apiKey.userId });
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+
+      warn.mockRestore();
     });
 
     it('rejects a token with no matching hash', async () => {
