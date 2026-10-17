@@ -4,22 +4,25 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
+import { configureBodyParsers } from './config/body-parser.config';
 import { configureCors } from './config/cors.config';
 import { swaggerConfig } from './config/swagger.config';
 import { resolveTrustProxy } from './config/trust-proxy';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // GitHub's webhook signature is an HMAC over the exact bytes it sent —
     // GithubWebhookController can't verify it from the re-serialized JSON body.
     rawBody: true,
   });
+  configureBodyParsers(app);
 
   // Production always sits behind a reverse proxy on the same host (see
   // deploy-bridge.yml's smoke-test comment: "proxy_pass must use 127.0.0.1,

@@ -8,6 +8,7 @@ import type { PackedAsset, PackedFile } from '@pipe/protocol';
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
+import { clipReply } from './chatReply.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { createChatToolset } from './chatTools.js';
@@ -302,7 +303,7 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
       : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools));
 
     await Promise.all(reports);
-    await client.complete(turn.messageId, reply);
+    await client.complete(turn.messageId, clipReply(reply));
     clog.info('succeeded');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
