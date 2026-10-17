@@ -122,12 +122,17 @@ export class ChatController {
       currentUser.id,
       parseUpdatedAfter(updatedAfterRaw),
     );
-    const attachments = await this.chatService.listAttachments(id);
+    // Most polls while a reply is pending return nothing new: then no attachment query at all.
+    if (messages.length === 0) return [];
+
+    const attachments = await this.chatService.attachmentsByMessage(
+      messages.map((m) => m.id),
+    );
 
     return messages.map((message) =>
       ChatMessageResponseDto.fromEntity(
         message,
-        attachments.filter((a) => a.messageId === message.id),
+        attachments.get(message.id) ?? [],
       ),
     );
   }
