@@ -15,7 +15,7 @@ import {
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
-import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
+import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
@@ -93,7 +93,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
 export function AnalysisTab({ configured }: { configured: boolean }) {
   const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval: 10000, skipPollingIfUnfocused: true });
   const [start, { isLoading }] = useStartImproveAnalysisMutation();
-  const [model, setModel] = useState('sonnet');
+  const [model, setModel] = useState(readStoredModel);
   const [categories, setCategories] = useState<AnalysisCategory[]>(DEFAULT_CATEGORIES);
   const [autoCreate, setAutoCreate] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
@@ -101,6 +101,11 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
 
   const analyses = runs?.filter((run) => run.kind === 'analysis') ?? [];
   const busy = analyses.some((run) => isActiveRun(run));
+
+  const handleModel = (value: string) => {
+    setModel(value);
+    storeModel(value);
+  };
 
   const toggle = (category: AnalysisCategory, on: boolean) =>
     setCategories(on ? [...categories, category] : categories.filter((c) => c !== category));
@@ -130,13 +135,23 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         приложении, и называет модуль, который он расширяет. По умолчанию выключено.
       </Text>
       <div className={styles.toolbar}>
-        <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={MODEL_OPTIONS} />
+        <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => handleModel(value)} options={MODEL_OPTIONS} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />
         <Switch checked={autoStart} onUpdate={setAutoStart} content="И сразу взять в работу" />
         <Button view="action" size="m" loading={isLoading} disabled={!configured || !runs || busy || categories.length === 0} onClick={() => void handleStart()}>
           Запустить анализ
         </Button>
       </div>
+      {!busy && categories.length === 0 && (
+        <Text color="warning" variant="caption-2">
+          Выберите хотя бы одно направление, чтобы запустить анализ.
+        </Text>
+      )}
+      {busy && (
+        <Text color="secondary" variant="caption-2">
+          Анализ уже выполняется — новый запустится, когда он закончится.
+        </Text>
+      )}
       {error && <Alert theme="danger" view="filled" message={error} />}
 
       {isListLoading && <Loader size="m" />}

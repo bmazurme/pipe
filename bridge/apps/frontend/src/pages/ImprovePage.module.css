@@ -52,6 +52,14 @@
   gap: 8px;
 }
 
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .form {
   display: flex;
   flex-direction: column;

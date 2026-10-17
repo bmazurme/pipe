@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRightFromSquare, Rocket, Stop } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Label, Skeleton, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, SegmentedRadioGroup, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
-import { getErrorMessage, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
+import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
 import { isActiveRun, modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 const FAST_POLL_MS = 5000;
 const SLOW_POLL_MS = 30000;
+
+// Runs accumulate forever; the tab should open on what is recent, with the
+// rest one click away instead of an ever-longer scroll (same reasoning as
+// the Worker page's job list).
+const INITIAL_VISIBLE_RUNS = 8;
+
+type RunFilter = 'all' | 'active' | 'failed';
+
+function matches(run: ImproveRun, filter: RunFilter): boolean {
+  if (filter === 'active') return isActiveRun(run);
+  if (filter === 'failed') return run.status === 'failed';
+
+  return true;
+}
 
 export function RunsTab() {
   // Fast while something is working, slow otherwise, paused in a background tab.
@@ -18,10 +32,18 @@ export function RunsTab() {
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId, error }] = useCancelImproveRunMutation();
   const [retry, { isLoading: isRetrying, error: retryError }] = useRetryImprovePublishMutation();
   const hasActive = Boolean(runs?.some((run) => isActiveRun(run)));
+  const [filter, setFilter] = useState<RunFilter>('all');
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setPollingInterval(hasActive ? FAST_POLL_MS : SLOW_POLL_MS);
   }, [hasActive]);
+
+  const activeCount = runs?.filter((run) => isActiveRun(run)).length ?? 0;
+  const failedCount = runs?.filter((run) => run.status === 'failed').length ?? 0;
+  const filtered = (runs ?? []).filter((run) => matches(run, filter));
+  const visibleRuns = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE_RUNS);
+  const hiddenCount = filtered.length - visibleRuns.length;
 
   return (
     <div className={styles.panel}>
@@ -45,7 +67,34 @@ export function RunsTab() {
         <EmptyState icon={Rocket} title="Запусков ещё не было" description="Запустите задачу на вкладке «Задачи» или дождитесь расписания." />
       )}
 
-      {runs?.map((run) => (
+      {runs && runs.length > 0 && (
+        <div className={styles.filterRow}>
+          <SegmentedRadioGroup
+            size="m"
+            value={filter}
+            onUpdate={(value) => {
+              setFilter(value as RunFilter);
+              setShowAll(false);
+            }}
+            aria-label="Фильтр запусков"
+            options={[
+              { value: 'all', content: 'Все' },
+              { value: 'active', content: activeCount > 0 ? `Активные (${activeCount})` : 'Активные' },
+              { value: 'failed', content: failedCount > 0 ? `С ошибкой (${failedCount})` : 'С ошибкой' },
+            ]}
+          />
+        </div>
+      )}
+
+      {runs && runs.length > 0 && filtered.length === 0 && (
+        <EmptyState
+          icon={Rocket}
+          title={filter === 'active' ? 'Активных запусков нет' : 'Запусков с ошибкой нет'}
+          description="Выберите «Все», чтобы увидеть остальные."
+        />
+      )}
+
+      {visibleRuns.map((run) => (
         <div key={run.id} className={styles.row}>
           <div className={styles.rowMain}>
             <Text variant="body-2" ellipsis title={run.issueTitle}>
@@ -81,6 +130,12 @@ export function RunsTab() {
           </div>
         </div>
       ))}
+
+      {hiddenCount > 0 && (
+        <Button view="flat-secondary" onClick={() => setShowAll(true)}>
+          Показать ещё {hiddenCount}
+        </Button>
+      )}
     </div>
   );
 }
