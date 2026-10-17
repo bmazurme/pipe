@@ -8,6 +8,8 @@
 // (sync/src/gitlabClient.ts, reports/.../subscription/gitlab-client.ts)
 // built on top of what's here, rather than importing this directly, so
 // neither has to give up its own config source or error-message language.
+import { extractMarkdownImageRefs } from './markdownImages.js';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class GitlabApiError extends Error {
@@ -166,6 +168,83 @@ export async function addSpentTime(
 ): Promise<void> {
   const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}/add_spent_time?duration=${encodeURIComponent(duration)}`;
   await gitlabFetch(url, privateToken, { method: 'POST' });
+}
+
+export interface IssueImage {
+  relPath: string;
+  base64: string;
+}
+
+// What getIssueImages skipped and why, for the caller to word in its own
+// language (sync logs English, reports Russian): 'http' is a bad status
+// (error is the GitlabApiError), 'network' any other fetch failure, 'limit'
+// the total-size cap below — everything after it was dropped.
+export interface IssueImageWarning {
+  kind: 'http' | 'network' | 'limit';
+  url?: string;
+  status?: number;
+  error?: unknown;
+}
+
+// GitLab stores uploaded issue images under /uploads/<hash>/<filename>
+// relative to the instance root, not the API base (apiUrl is ".../api/v4").
+// Only refs to this same instance's /uploads/ are fetched (resolveIssueUploadUrl); a
+// link to any other host in the description is left alone.
+export const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+
+export async function getIssueImages(
+  apiUrl: string,
+  privateToken: string,
+  description: string,
+  options: { onWarn?: (warning: IssueImageWarning) => void } = {},
+): Promise<IssueImage[]> {
+  const warn = options.onWarn ?? (() => {});
+  const instanceRoot = apiUrl.replace(/\/api\/v4\/?$/, '');
+  const refs = extractMarkdownImageRefs(description);
+
+  const images: IssueImage[] = [];
+  const usedNames = new Set<string>();
+  let totalBytes = 0;
+
+  for (const ref of refs) {
+    // Only this instance's own /uploads/ qualify (see resolveIssueUploadUrl): a look-alike host in the description must never
+    // receive the private token.
+    const absoluteUrl = resolveIssueUploadUrl(instanceRoot, ref.url);
+    if (!absoluteUrl) {
+      continue;
+    }
+
+    let response: Response;
+    try {
+      // A redirect is not followed (it would carry Private-Token along) — the 3xx comes back as a non-ok status and the image
+      // is skipped below.
+      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
+    } catch (error) {
+      if (error instanceof GitlabApiError) {
+        warn({ kind: 'http', url: absoluteUrl, status: error.status, error });
+      } else {
+        warn({ kind: 'network', url: absoluteUrl, error });
+      }
+      continue;
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
+      warn({ kind: 'limit' });
+      break;
+    }
+
+    let name = ref.url.split('/').pop() || 'image';
+    while (usedNames.has(name)) {
+      name = `${usedNames.size}-${name}`;
+    }
+    usedNames.add(name);
+
+    images.push({ relPath: `issue-images/${name}`, base64: bytes.toString('base64') });
+  }
+
+  return images;
 }
 
 // Resolves a markdown image ref from an issue description to the URL it is

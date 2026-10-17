@@ -62,7 +62,7 @@ function buildIssueFileBody(
 // Assets (images pulled from the issue description) are written to disk
 // too, listed by their local path rather than rewritten in place inline:
 // two differently-named-upstream images can collide to the same local
-// filename and get de-duplicated (see gitlabClient.ts getIssueImages), so
+// filename and get de-duplicated (see @pipe/protocol/gitlabClient getIssueImages), so
 // reconstructing "which inline ![]() referred to which written file" after
 // the fact isn't reliably unambiguous — an explicit list is.
 export function extractIssue(

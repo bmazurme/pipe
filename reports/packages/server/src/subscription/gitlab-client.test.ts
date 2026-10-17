@@ -37,18 +37,11 @@ afterEach(() => {
 
 const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
 
+// The download logic itself is tested in @pipe/protocol's gitlabClient.test.ts —
+// these only cover what reports' wrapper adds: Settings as the source of
+// apiUrl/token and the Russian warning lines.
 describe('getIssueImages', () => {
-  it('returns nothing when the description has no image references', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const images = await getIssueImages('Just text, no attachments.');
-
-    expect(images).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('downloads a relative /uploads/ image with the GitLab auth header', async () => {
+  it('downloads with the apiUrl and token from Settings', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(PNG_BYTES, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -61,37 +54,6 @@ describe('getIssueImages', () => {
     );
   });
 
-  it('downloads an absolute image URL on the same GitLab instance', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(PNG_BYTES, { status: 200 })));
-
-    const images = await getIssueImages(
-      '![shot](https://gitlab.example.com/uploads/def/shot.png)',
-    );
-
-    expect(images).toHaveLength(1);
-    expect(images[0].relPath).toBe('issue-images/shot.png');
-  });
-
-  it('skips an image hosted on a different origin', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const images = await getIssueImages('![external](https://evil.example/tracker.png)');
-
-    expect(images).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('de-duplicates two images that would otherwise share a filename', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(PNG_BYTES, { status: 200 })));
-
-    const images = await getIssueImages(
-      '![a](/uploads/aaa/shot.png) ![b](/uploads/bbb/shot.png)',
-    );
-
-    expect(images.map((i) => i.relPath)).toEqual(['issue-images/shot.png', 'issue-images/1-shot.png']);
-  });
-
   it('returns nothing when GitLab is not configured', async () => {
     stubSettings({ gitlabUrl: '', privateToken: '' });
     const fetchMock = vi.fn();
@@ -101,6 +63,24 @@ describe('getIssueImages', () => {
 
     expect(images).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('warns in Russian with the translated error and continues when a download fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 404 })));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const images = await getIssueImages('![shot](/uploads/abc/shot.png)');
+
+      expect(images).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toBe(
+        'Не удалось скачать изображение из описания issue (https://gitlab.example.com/uploads/abc/shot.png):',
+      );
+      expect((warnSpy.mock.calls[0][1] as Error).message).toBe('GitLab API вернул ошибку 404: nope');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 

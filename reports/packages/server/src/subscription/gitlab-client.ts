@@ -1,11 +1,12 @@
 import type { ResType } from '@reports/shared';
 import {
-  extractMarkdownImageRefs,
   GitlabApiError,
   gitlabFetch as sharedGitlabFetch,
   getIssue as sharedGetIssue,
+  getIssueImages as sharedGetIssueImages,
+  MAX_TOTAL_IMAGE_BYTES,
+  type IssueImage,
   listAssignedOpenIssues as sharedListAssignedOpenIssues,
-  resolveIssueUploadUrl,
 } from '@pipe/protocol';
 
 import { describeFetchError } from '../utils/describe-fetch-error';
@@ -101,62 +102,26 @@ export async function setIssueTimeEstimate(projectId: number | string, iid: numb
   await gitlabFetch(url, privateToken, { method: 'POST' });
 }
 
-export interface IssueImage {
-  relPath: string;
-  base64: string;
-}
+export type { IssueImage };
 
-// GitLab stores uploaded issue images under /uploads/<hash>/<filename>,
-// relative to the instance root, not the API base (gitlabUrl is
-// ".../api/v4"). Fetches only refs to this same instance's /uploads/ (see
-// resolveIssueUploadUrl) — an image link to any other host is left alone
-// rather than fetched.
-const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
-
+// The download itself is shared with sync (@pipe/protocol's getIssueImages);
+// this wrapper only supplies apiUrl/token from Settings and words the
+// warnings in Russian, with the failure translated like every other
+// GitLab error here.
 export async function getIssueImages(description: string): Promise<IssueImage[]> {
   const { gitlabUrl, privateToken } = getSettings();
   if (!gitlabUrl || !privateToken) {
     return [];
   }
 
-  const instanceRoot = gitlabUrl.replace(/\/api\/v4\/?$/, '');
-  const refs = extractMarkdownImageRefs(description);
-
-  const images: IssueImage[] = [];
-  const usedNames = new Set<string>();
-  let totalBytes = 0;
-
-  for (const ref of refs) {
-    const absoluteUrl = resolveIssueUploadUrl(instanceRoot, ref.url);
-    if (!absoluteUrl) {
-      continue;
-    }
-
-    let response;
-    try {
-      // A redirect is not followed (it would carry Private-Token along) — the
-      // 3xx comes back as a non-ok status and the image is skipped below.
-      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
-    } catch (error) {
-      console.warn(`Не удалось скачать изображение из описания issue (${absoluteUrl}):`, error);
-      continue;
-    }
-
-    const bytes = Buffer.from(await response.arrayBuffer());
-    totalBytes += bytes.length;
-    if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
-      console.warn(`Изображения issue превысили лимит ${MAX_TOTAL_IMAGE_BYTES} байт — остальные пропущены.`);
-      break;
-    }
-
-    let name = ref.url.split('/').pop() || 'image';
-    while (usedNames.has(name)) {
-      name = `${usedNames.size}-${name}`;
-    }
-    usedNames.add(name);
-
-    images.push({ relPath: `issue-images/${name}`, base64: bytes.toString('base64') });
-  }
-
-  return images;
+  return sharedGetIssueImages(gitlabUrl, privateToken, description, {
+    onWarn: (warning) => {
+      if (warning.kind === 'limit') {
+        console.warn(`Изображения issue превысили лимит ${MAX_TOTAL_IMAGE_BYTES} байт — остальные пропущены.`);
+        return;
+      }
+      const url = warning.url ?? gitlabUrl;
+      console.warn(`Не удалось скачать изображение из описания issue (${url}):`, translateGitlabError(warning.error, url));
+    },
+  });
 }
