@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { listFilesRecursively } from './fsWalk.js';
+import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 
 describe('listFilesRecursively', () => {
   let root: string;
@@ -66,5 +66,22 @@ describe('listFilesRecursively', () => {
     writeFileSync(join(root, '.claude', 'settings.json'), '{}');
 
     assert.deepEqual(listFilesRecursively(root).sort(), [join('.claude', 'settings.json'), '.env']);
+  });
+
+  it('does not descend into skipDirs', () => {
+    mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(root, 'src', '.claude'), { recursive: true });
+    writeFileSync(join(root, 'node_modules', 'pkg', 'i.js'), 'x');
+    writeFileSync(join(root, 'src', '.claude', 's.json'), '{}');
+    writeFileSync(join(root, 'src', 'a.ts'), 'x');
+
+    assert.deepEqual(listFilesRecursively(root, root, EXCLUDED_RESULT_DIRS), [join('src', 'a.ts')]);
+  });
+
+  it('lists a very large flat directory without a RangeError', () => {
+    mkdirSync(join(root, 'flat'));
+    for (let i = 0; i < 150_000; i++) writeFileSync(join(root, 'flat', `f${i}`), '');
+
+    assert.equal(listFilesRecursively(root).length, 150_000);
   });
 });

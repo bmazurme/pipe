@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
-import { listFilesRecursively } from '../fsWalk.js';
+import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from '../fsWalk.js';
 import { resolveDispatcher } from '../proxyAgent.js';
 import { resolveInDir } from '../resolveInDir.js';
 import type { RunResult } from './claudeRunner.js';
@@ -89,7 +89,7 @@ function truncate(text: string, max = 200): string {
 export function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
   switch (name) {
     case 'list_files': {
-      return listFilesRecursively(cwd).join('\n');
+      return listFilesRecursively(cwd, cwd, EXCLUDED_RESULT_DIRS).join('\n');
     }
     case 'read_file': {
       const path = resolveInWorkDir(cwd, String(args.path ?? ''));

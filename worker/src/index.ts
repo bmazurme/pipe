@@ -15,7 +15,7 @@ import { createChatToolset } from './chatTools.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { loadConfig, type WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
-import { listFilesRecursively } from './fsWalk.js';
+import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
@@ -73,8 +73,6 @@ export async function withHeartbeat<T>(
     clearInterval(timer);
   }
 }
-
-const EXCLUDED_RESULT_DIRS = new Set(['.claude', 'node_modules']);
 
 function isExcludedResultPath(relPath: string): boolean {
   return relPath.split(/[\\/]/).some((segment) => EXCLUDED_RESULT_DIRS.has(segment));
@@ -231,7 +229,7 @@ export async function processJob(
     const assetPaths = new Set(parcel.assets.map((asset) => asset.relPath));
     const resultFiles: PackedFile[] = [];
     const resultAssets: PackedAsset[] = [...parcel.assets];
-    for (const relPath of listFilesRecursively(jobDir)) {
+    for (const relPath of listFilesRecursively(jobDir, jobDir, EXCLUDED_RESULT_DIRS)) {
       if (assetPaths.has(relPath) || isExcludedResultPath(relPath)) continue;
       const bytes = readFileSync(path.join(jobDir, relPath));
       const text = decodeUtf8Strict(bytes);
