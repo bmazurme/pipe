@@ -1923,6 +1923,7 @@ export interface components {
             id: number;
             username: string;
             status: string;
+            isOwner: boolean;
         };
         UpdateUserDto: {
             status?: string;
