@@ -8,6 +8,7 @@ import type { PackedAsset, PackedFile } from '@pipe/protocol';
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
+import { clipReply } from './chatReply.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { createChatToolset } from './chatTools.js';
@@ -18,6 +19,7 @@ import { listFilesRecursively } from './fsWalk.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
+import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
 import { runLoop } from './loop.js';
@@ -114,15 +116,20 @@ export async function processJob(
   let pendingLog = '';
   let flushed: Promise<void> = Promise.resolve();
 
+  // A burst (a large file read, a test run dump) can exceed what bridge accepts in one chunk, so it goes out as
+  // several capped pieces. Each piece is chained and caught on its own: one rejected piece leaves a single warning
+  // and the rest still arrive, instead of the whole batch silently disappearing.
   const flushLog = () => {
     if (!pendingLog) return;
-    const chunk = pendingLog;
+    const pieces = splitLogChunk(pendingLog);
     pendingLog = '';
-    flushed = flushed.then(() =>
-      client.appendLog(job.id, chunk).catch((error) => {
-        jlog.warn({ err: error }, 'failed to forward a log chunk to bridge');
-      }),
-    );
+    for (const piece of pieces) {
+      flushed = flushed.then(() =>
+        client.appendLog(job.id, piece).catch((error) => {
+          jlog.warn({ err: error, chars: piece.length }, 'failed to forward a log chunk to bridge');
+        }),
+      );
+    }
   };
 
   const log = (chunk: string) => {
@@ -302,7 +309,7 @@ export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedCha
       : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools));
 
     await Promise.all(reports);
-    await client.complete(turn.messageId, reply);
+    await client.complete(turn.messageId, clipReply(reply));
     clog.info('succeeded');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

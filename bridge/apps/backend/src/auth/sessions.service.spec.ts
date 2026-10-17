@@ -193,4 +193,29 @@ describe('SessionsService', () => {
       expect(count).toBe(0);
     });
   });
+
+  describe('isSessionActive', () => {
+    it('queries for an unrevoked, unexpired session of this user', async () => {
+      repository.findOne!.mockResolvedValue({ id: 1 });
+
+      const active = await service.isSessionActive(1, 2);
+
+      expect(active).toBe(true);
+      const { where } = repository.findOne!.mock.calls[0][0];
+      expect(where).toMatchObject({ id: 1, userId: 2 });
+      expect(where.revokedAt).toMatchObject({ _type: 'isNull' });
+      expect(where.expiresAt).toMatchObject({
+        _type: 'moreThan',
+        _value: expect.any(Date),
+      });
+      const now = where.expiresAt._value as Date;
+      expect(Math.abs(now.getTime() - Date.now())).toBeLessThan(5000);
+    });
+
+    it('returns false when no matching session is found', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.isSessionActive(1, 2)).resolves.toBe(false);
+    });
+  });
 });

@@ -90,6 +90,9 @@ export interface ClaudeCredential {
   createdAt: string;
   /** The plan limits the last run on this token reported, or null before any run did. */
   limits: ClaudeLimits | null;
+  /** When a job on this token last failed to authenticate; null while it looks healthy. */
+  authFailedAt: string | null;
+  authFailedJobId: number | null;
 }
 
 export type ProviderModel = 'gpt' | 'deepseek' | 'qwen';

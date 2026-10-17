@@ -1,5 +1,6 @@
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { ImproveHandoffService } from './improve-handoff.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 import { zipSync, strToU8 } from 'fflate';
@@ -62,6 +63,11 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     appLogs as never,
     filing as never,
     publisher as never,
+    new ImproveHandoffService(
+      github as never,
+      storage as never,
+      workers as never,
+    ),
   );
 
   return { service, filing, runs, github, workers, storage, appLogs };

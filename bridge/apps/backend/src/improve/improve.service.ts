@@ -20,10 +20,9 @@ import {
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService } from '../loop/github-api.service';
 import { MergeService } from '../loop/merge.service';
-import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
-import { JobModel, JobStatus } from '../worker/entities/job.entity';
+import { JobStatus } from '../worker/entities/job.entity';
 import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
   ACTIVE_RUN_STATUSES,
@@ -42,6 +41,7 @@ import {
   parseBacklog,
   pickOnePerCategory,
 } from './analysis';
+import { ImproveHandoffService } from './improve-handoff.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImprovePublishService } from './improve-publish.service';
 import {
@@ -52,15 +52,7 @@ import {
 } from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
-import {
-  buildIssueParcel,
-  readResultParcel,
-  readZipball,
-  selectParcelFiles,
-  snapshotBaseline,
-  SnapshotFile,
-  utf8Text,
-} from './parcel';
+import { readResultParcel, utf8Text } from './parcel';
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 
@@ -84,8 +76,6 @@ export const AUTOSTART_MIN_AGE_SECONDS = 10;
 // and the issue to a worker, and turn what comes back into a branch and a pull
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
-const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
-
 @Injectable()
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
@@ -94,22 +84,6 @@ export class ImproveService {
   // active run happens long before the run row is saved, so concurrent starts
   // would all pass it. In-process only: this relies on a single bridge replica.
   private readonly starting = new Set<string>();
-  // One repo snapshot, reused by consecutive launches on the same base SHA.
-  // The baseline hashes are cached with it: hashing the whole repo is synchronous.
-  private zipCache: {
-    sha: string;
-    files: SnapshotFile[];
-    baseline: Record<string, string>;
-    at: number;
-  } | null = null;
-  // The snapshot being built right now, so concurrent starts on one SHA share a single download.
-  private zipPending: {
-    sha: string;
-    promise: Promise<{
-      files: SnapshotFile[];
-      baseline: Record<string, string>;
-    }>;
-  } | null = null;
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -123,6 +97,7 @@ export class ImproveService {
     private readonly appLogs: AppLogService,
     private readonly issueFiling: ImproveIssueFilingService,
     private readonly publisher: ImprovePublishService,
+    private readonly handoff: ImproveHandoffService,
   ) {}
 
   // ---------------------------------------------------------------- status
@@ -266,27 +241,28 @@ export class ImproveService {
     // not-open issue is still rejected before any file or job is created.
     const [issue, prepared] = await Promise.all([
       this.github.getIssue(issueNumber),
-      this.prepareSnapshot(),
+      this.handoff.prepareSnapshot(),
     ]);
 
     if (issue.isPull || issue.state !== 'open') {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
     }
 
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      userId,
-      model,
-      {
-        number: issue.number,
-        title: issue.title,
-        body: withDefinitionOfDone(issue.body),
-      },
-      `improve:${issue.number}`,
-      `improve-${issue.number}.subscription.zip`,
-      undefined,
-      prepared,
-      contextId,
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        userId,
+        model,
+        {
+          number: issue.number,
+          title: issue.title,
+          body: withDefinitionOfDone(issue.body),
+        },
+        `improve:${issue.number}`,
+        `improve-${issue.number}.subscription.zip`,
+        undefined,
+        prepared,
+        contextId,
+      );
 
     const run = await this.runs.save(
       this.runs.create({
@@ -332,27 +308,28 @@ export class ImproveService {
       (await this.runs.count({
         where: { kind: 'repair', prNumber: pull.number, trigger: 'ci' },
       })) + 1;
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      parent.userId,
-      parent.model,
-      {
-        number: parent.issueNumber as number,
-        title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
-        body: withDefinitionOfDone(
-          repairBody({
-            prNumber: pull.number,
-            branch: pull.branch,
-            issueNumber: parent.issueNumber,
-            issueTitle: parent.issueTitle,
-            attempt,
-            failures,
-          }),
-        ),
-      },
-      `improve:${parent.issueNumber}:repair:${attempt}`,
-      `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
-      { sha: pull.headSha, branch: pull.branch },
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        parent.userId,
+        parent.model,
+        {
+          number: parent.issueNumber as number,
+          title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
+          body: withDefinitionOfDone(
+            repairBody({
+              prNumber: pull.number,
+              branch: pull.branch,
+              issueNumber: parent.issueNumber,
+              issueTitle: parent.issueTitle,
+              attempt,
+              failures,
+            }),
+          ),
+        },
+        `improve:${parent.issueNumber}:repair:${attempt}`,
+        `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
+        { sha: pull.headSha, branch: pull.branch },
+      );
     const run = await this.runs.save(
       this.runs.create({
         userId: parent.userId,
@@ -423,25 +400,26 @@ export class ImproveService {
       (await this.runs.count({
         where: { kind: 'repair', prNumber, trigger: 'chat' },
       })) + 1;
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      userId,
-      model,
-      {
-        number: `pr-${prNumber}`,
-        title: `Change PR #${prNumber}: ${pull.title}`,
-        body: withDefinitionOfDone(
-          prFixBody({
-            prNumber,
-            prTitle: pull.title,
-            branch: pull.headRef,
-            instruction,
-          }),
-        ),
-      },
-      `improve:pr-${prNumber}:chat:${attempt}`,
-      `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
-      { sha: pull.headSha, branch: pull.headRef },
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        userId,
+        model,
+        {
+          number: `pr-${prNumber}`,
+          title: `Change PR #${prNumber}: ${pull.title}`,
+          body: withDefinitionOfDone(
+            prFixBody({
+              prNumber,
+              prTitle: pull.title,
+              branch: pull.headRef,
+              instruction,
+            }),
+          ),
+        },
+        `improve:pr-${prNumber}:chat:${attempt}`,
+        `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
+        { sha: pull.headSha, branch: pull.headRef },
+      );
     const run = await this.runs.save(
       this.runs.create({
         userId,
@@ -484,101 +462,6 @@ export class ImproveService {
     );
 
     return result;
-  }
-
-  private async snapshotFiles(sha: string) {
-    const cached = this.zipCache;
-    if (
-      cached &&
-      cached.sha === sha &&
-      Date.now() - cached.at < ZIP_CACHE_TTL_MS
-    ) {
-      return { files: cached.files, baseline: cached.baseline };
-    }
-    if (this.zipPending?.sha === sha) return this.zipPending.promise;
-
-    const promise = (async () => {
-      const files = selectParcelFiles(
-        await readZipball(await this.github.downloadZipball(sha)),
-      );
-      const baseline = snapshotBaseline(files);
-      this.zipCache = { sha, files, baseline, at: Date.now() };
-
-      return { files, baseline };
-    })();
-    const pending = { sha, promise };
-    this.zipPending = pending;
-
-    try {
-      return await promise;
-    } finally {
-      if (this.zipPending === pending) this.zipPending = null;
-    }
-  }
-
-  // Base-branch SHA + parcel files; independent of the task, so it can start early.
-  private async prepareSnapshot(branch?: string) {
-    const baseSha = await this.github.getBranchSha(
-      branch ?? this.github.baseBranch(),
-    );
-    const { files, baseline } = await this.snapshotFiles(baseSha);
-
-    return { baseSha, files, baseline };
-  }
-
-  // Snapshot of the base branch → parcel with this task as its manifest → Storage →
-  // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
-  // description is the prompt).
-  private async handToWorker(
-    userId: number,
-    model: string,
-    task: { number: number | string; title: string; body: string },
-    taskKey: string,
-    fileName: string,
-    // A CI repair works on the PR's branch as it is now, not on the base branch.
-    snapshot?: { sha: string; branch: string },
-    prepared?: Awaited<ReturnType<ImproveService['prepareSnapshot']>>,
-    // A saved Context (Context page) the run's worker job carries as background text; the job keeps its own snapshot.
-    contextId: number | null = null,
-  ) {
-    const baseBranch = snapshot?.branch ?? this.github.baseBranch();
-    const { baseSha, files, baseline } =
-      prepared ??
-      (snapshot
-        ? {
-            baseSha: snapshot.sha,
-            ...(await this.snapshotFiles(snapshot.sha)),
-          }
-        : await this.prepareSnapshot(baseBranch));
-    const { buffer } = await buildIssueParcel(
-      files,
-      {
-        number: task.number,
-        title: task.title,
-        body: task.body,
-        repo: this.github.repoName() as string,
-        baseBranch,
-      },
-      new Date(),
-      baseline,
-    );
-    const stored = await this.storage.createFromBuffer(
-      userId,
-      buffer,
-      fileName,
-      {
-        channel: 'issue',
-        taskKey,
-        direction: StoredFileDirection.Outbound,
-      },
-    );
-    const job = await this.workers.create(userId, {
-      sourceFileId: stored.id,
-      model: model as JobModel,
-      ...(contextId !== null ? { contextId } : {}),
-    });
-
-    return { job, baseSha, baseline, fileCount: files.length };
   }
 
   async cancelRun(id: number, userId: number): Promise<ImproveRun> {
@@ -819,6 +702,32 @@ export class ImproveService {
     }
 
     if (job.status === JobStatus.Failed) {
+      // A worker restart already re-queued the job: go straight onto the retry instead of a false failure.
+      const retry = (await this.workers.findRetriesOf([job.id])).get(job.id);
+
+      if (retry && retry.userId === run.userId) {
+        const moved = await this.runs.update(
+          { id: run.id, status: run.status },
+          {
+            jobId: retry.id,
+            status: ImproveRunStatus.Queued,
+            error: null,
+            finishedAt: null,
+          },
+        );
+
+        if (moved.affected === 1) {
+          this.log(
+            'info',
+            'improve.job_retried',
+            `Run ${run.id} (issue #${run.issueNumber}): follows the retried job ${retry.id} (was ${run.jobId})`,
+            { runId: run.id, jobId: retry.id },
+          );
+        }
+
+        return;
+      }
+
       await this.publisher.finish(run, ImproveRunStatus.Failed, {
         error: job.errorMessage ?? 'Задача worker завершилась ошибкой',
       });
@@ -909,11 +818,11 @@ export class ImproveService {
     const [titlesStep, digestStep, prepStep] = await Promise.all([
       timed(this.github.listIssueTitles()),
       timed(this.logDigest()),
-      timed(this.prepareSnapshot()),
+      timed(this.handoff.prepareSnapshot()),
     ]);
     const titles = titlesStep.value.map((issue) => issue.title);
     const date = new Date().toISOString().slice(0, 10);
-    const { job, baseSha, fileCount } = await this.handToWorker(
+    const { job, baseSha, fileCount } = await this.handoff.handToWorker(
       userId,
       model,
       {

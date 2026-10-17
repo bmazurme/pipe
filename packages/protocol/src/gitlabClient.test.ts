@@ -10,6 +10,7 @@ import {
   listMergeRequestsForBranch,
   addSpentTime,
   MAX_TOTAL_IMAGE_BYTES,
+  resolveIssueUploadUrl,
   type IssueImageWarning,
 } from './gitlabClient.js';
 
@@ -312,9 +313,85 @@ describe('getIssueImages', () => {
     assert.deepEqual(warnings, [{ kind: 'limit' }]);
   });
 
+  it('never sends the token to a look-alike host or one with the instance as userinfo, and fetches nothing for them', async () => {
+    const fetched: string[] = [];
+
+    globalThis.fetch = (async (url: string) => {
+      fetched.push(String(url));
+
+      return new Response(PNG_BYTES);
+    }) as typeof fetch;
+
+    const images = await getIssueImages(
+      API_URL,
+      'tok',
+      '![a](https://gitlab.example.com.evil.net/uploads/a.png) ![b](https://gitlab.example.com@evil.net/uploads/b.png) ![c](/uploads/../api/v4/user)',
+    );
+
+    assert.deepEqual(images, []);
+    assert.deepEqual(fetched, []);
+  });
+
+  it('does not follow a redirect (it would carry the private token along) and skips that image', async () => {
+    const calls: { url: string; redirect?: RequestRedirect }[] = [];
+
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), redirect: init?.redirect });
+
+      return new Response(null, { status: 302, headers: { Location: 'https://evil.net/steal' } });
+    }) as typeof fetch;
+
+    const warnings: IssueImageWarning[] = [];
+    const images = await getIssueImages(API_URL, 'tok', '![a](/uploads/abc/shot.png)', { onWarn: (w) => warnings.push(w) });
+
+    assert.deepEqual(images, []);
+    assert.deepEqual(calls, [{ url: 'https://gitlab.example.com/uploads/abc/shot.png', redirect: 'manual' }]);
+    assert.equal(warnings[0]?.kind, 'http');
+  });
+
   it('does not throw on a failed download when no onWarn is given', async () => {
     globalThis.fetch = (async () => new Response('nope', { status: 500 })) as typeof fetch;
 
     assert.deepEqual(await getIssueImages(API_URL, 'tok', '![a](/uploads/x/a.png)'), []);
+  });
+});
+
+describe('resolveIssueUploadUrl', () => {
+  const root = 'https://gitlab.example.com';
+
+  it('resolves a relative /uploads/ ref against the instance root', () => {
+    assert.equal(resolveIssueUploadUrl(root, '/uploads/abc/shot.png'), 'https://gitlab.example.com/uploads/abc/shot.png');
+  });
+
+  it('keeps an instance installed under a sub-path', () => {
+    assert.equal(
+      resolveIssueUploadUrl('https://example.com/gitlab', '/uploads/abc/shot.png'),
+      'https://example.com/gitlab/uploads/abc/shot.png',
+    );
+    assert.equal(resolveIssueUploadUrl('https://example.com/gitlab', 'https://example.com/uploads/abc/shot.png'), null);
+  });
+
+  it('accepts an absolute upload URL on the same origin', () => {
+    assert.equal(resolveIssueUploadUrl(root, 'https://gitlab.example.com/uploads/def/shot.png'), 'https://gitlab.example.com/uploads/def/shot.png');
+  });
+
+  it('rejects look-alike hosts, userinfo and other origins', () => {
+    for (const ref of [
+      'https://gitlab.example.com.evil.net/uploads/a.png',
+      'https://gitlab.example.com@evil.net/uploads/a.png',
+      'https://user:pass@gitlab.example.com/uploads/a.png',
+      'http://gitlab.example.com/uploads/a.png',
+      'https://gitlab.example.com:8443/uploads/a.png',
+      '//evil.net/uploads/a.png',
+      'https://evil.example/uploads/a.png',
+    ]) {
+      assert.equal(resolveIssueUploadUrl(root, ref), null, ref);
+    }
+  });
+
+  it('rejects paths outside /uploads/, including ones that only normalize there', () => {
+    for (const ref of ['/api/v4/user', 'https://gitlab.example.com/a.png', '/uploads/../api/v4/user', '/uploadsx/a.png', 'uploads/a.png', 'not a url']) {
+      assert.equal(resolveIssueUploadUrl(root, ref), null, ref);
+    }
   });
 });

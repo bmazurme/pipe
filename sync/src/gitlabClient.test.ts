@@ -111,3 +111,38 @@ describe('getIssueImages', () => {
     ]);
   });
 });
+
+describe('getIssueImages — refusing to send the token off-instance', () => {
+  for (const [label, description] of [
+    ['a look-alike host with the instance as a prefix', '![x](https://gitlab.example.com.evil.net/uploads/a.png)'],
+    ['the instance as userinfo in front of another host', '![x](https://gitlab.example.com@evil.net/uploads/a.png)'],
+    ['a same-instance path outside /uploads/', '![x](https://gitlab.example.com/api/v4/user)'],
+    ['a relative path outside /uploads/', '![x](/api/v4/user)'],
+  ] as const) {
+    it(`makes no request for ${label}`, async () => {
+      let called = false;
+      globalThis.fetch = (async () => {
+        called = true;
+        throw new Error('should not be called');
+      }) as typeof fetch;
+
+      const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', description);
+
+      assert.deepEqual(images, []);
+      assert.equal(called, false);
+    });
+  }
+
+  it('does not follow a redirect and skips the image', async () => {
+    const calls: { url: string; redirect?: RequestRedirect }[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, redirect: init?.redirect });
+      return new Response(null, { status: 302, headers: { Location: 'https://evil.net/steal' } });
+    }) as typeof fetch;
+
+    const images = await getIssueImages('https://gitlab.example.com/api/v4', 'tok', '![shot](/uploads/abc/shot.png)');
+
+    assert.deepEqual(images, []);
+    assert.deepEqual(calls, [{ url: 'https://gitlab.example.com/uploads/abc/shot.png', redirect: 'manual' }]);
+  });
+});

@@ -9,7 +9,10 @@ import { ASSET_PREFIX, buildArchive } from '@pipe/protocol';
 
 import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
-import { processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './index.js';
+import type { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
+import { MAX_REPLY_LENGTH, TRUNCATED_REPLY_NOTE } from './chatReply.js';
+import { processChatTurn, processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './index.js';
+import { MAX_LOG_CHUNK_CHARS } from './logChunks.js';
 
 const originalFetch = globalThis.fetch;
 const originalOpenAiKey = process.env.OPENAI_API_KEY;
@@ -446,6 +449,128 @@ describe('processJob worker shutdown', () => {
     assert.equal(client.uploadResult.calls.length, 0);
     assert.deepEqual(readdirSync(workDir), []);
     assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Claimed job 22')));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
+describe('processChatTurn reply length', () => {
+  function fakeChatClient() {
+    const completed: [number, string][] = [];
+    const failed: [number, string][] = [];
+    const client = {
+      complete: async (messageId: number, content: string) => void completed.push([messageId, content]),
+      fail: async (messageId: number, errorMessage: string) => void failed.push([messageId, errorMessage]),
+    } as unknown as ChatBridgeClient;
+    return { client, completed, failed };
+  }
+
+  const turn: ClaimedChatTurn = { messageId: 9, chatId: 1, model: 'gpt', history: [{ role: 'user', content: 'write a lot' }] };
+
+  it('completes a reply longer than MAX_REPLY_LENGTH in truncated form instead of failing it', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
+    try {
+      stubOpenAiCompletion('ж'.repeat(MAX_REPLY_LENGTH + 1000));
+      const { client, completed, failed } = fakeChatClient();
+
+      await processChatTurn(client, turn, fakeConfig(workDir));
+
+      assert.deepEqual(failed, []);
+      assert.equal(completed.length, 1);
+      const [messageId, content] = completed[0]!;
+      assert.equal(messageId, 9);
+      assert.equal(content.length, MAX_REPLY_LENGTH);
+      assert.ok(content.startsWith('жжж'));
+      assert.ok(content.endsWith(TRUNCATED_REPLY_NOTE));
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('completes a reply that fits unchanged', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
+    try {
+      stubOpenAiCompletion('short answer');
+      const { client, completed } = fakeChatClient();
+
+      await processChatTurn(client, turn, fakeConfig(workDir));
+
+      assert.deepEqual(completed, [[9, 'short answer']]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('processJob log chunking', () => {
+  // A chunk that starts with a low surrogate or ends with a high one means a pair was cut in half.
+  const LONE_SURROGATE_AT_EDGE = /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/;
+
+  function loggedChunks(client: FakeClient): string[] {
+    return client.appendLog.calls.map((call) => call[1] as string);
+  }
+
+  it('splits a 200 KB burst into capped pieces that join back to the full output in order', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-big-log-'));
+    const lines = Array.from({ length: 4000 }, (_, i) => `line ${String(i).padStart(5, '0')} ${'x'.repeat(40)}`);
+    const output = lines.join('\n');
+    assert.ok(output.length >= 200_000);
+    stubOpenAiCompletion(output);
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 40, sourceFileId: 50, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const chunks = loggedChunks(client);
+    assert.ok(chunks.length > 1);
+    assert.ok(chunks.every((chunk) => chunk.length <= MAX_LOG_CHUNK_CHARS));
+    assert.ok(chunks.join('').includes(`${output}\n`), 'the model output arrives whole and in order');
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('never splits a surrogate pair across chunks of Cyrillic and emoji output', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-emoji-log-'));
+    const output = 'Привет, мир 😀🚀 '.repeat(8000);
+    stubOpenAiCompletion(output);
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 41, sourceFileId: 51, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const chunks = loggedChunks(client);
+    assert.ok(chunks.length > 1);
+    for (const chunk of chunks) {
+      assert.ok(chunk.length <= MAX_LOG_CHUNK_CHARS);
+      assert.doesNotMatch(chunk, LONE_SURROGATE_AT_EDGE);
+    }
+    assert.ok(chunks.join('').includes(output));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('keeps sending the remaining pieces when bridge rejects one of them', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-reject-log-'));
+    stubOpenAiCompletion('y'.repeat(MAX_LOG_CHUNK_CHARS * 3));
+
+    const client = fakeClient(fakeParcel());
+    const attempted: string[] = [];
+    client.appendLog = Object.assign(
+      async (_jobId: number, chunk: string) => {
+        attempted.push(chunk);
+        if (attempted.length === 2) throw new Error('Appending log failed (400)');
+      },
+      { calls: [] },
+    );
+    const job: RemoteJob = { id: 42, sourceFileId: 52, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    assert.ok(attempted.length >= 4, 'every piece after the rejected one was still sent');
+    assert.match(attempted.at(-1)!, /Uploading result parcel/);
+    assert.equal(client.uploadResult.calls.length, 1);
 
     rmSync(workDir, { recursive: true, force: true });
   });

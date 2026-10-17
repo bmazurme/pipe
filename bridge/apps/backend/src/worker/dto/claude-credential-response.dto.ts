@@ -14,12 +14,21 @@ export class ClaudeCredentialResponseDto {
   @ApiProperty({ type: 'object', additionalProperties: true, nullable: true })
   limits: ClaudeLimits | null;
 
+  // When a job on this token last failed to authenticate, or null while the token looks healthy.
+  @ApiProperty({ type: 'string', format: 'date-time', nullable: true })
+  authFailedAt: Date | null;
+
+  @ApiProperty({ type: 'number', nullable: true })
+  authFailedJobId: number | null;
+
   static fromEntity(credential: ClaudeCredential): ClaudeCredentialResponseDto {
     return {
       id: credential.id,
       name: credential.name,
       createdAt: credential.createdAt,
       limits: credential.limits ?? null,
+      authFailedAt: credential.authFailedAt ?? null,
+      authFailedJobId: credential.authFailedJobId ?? null,
     };
   }
 }

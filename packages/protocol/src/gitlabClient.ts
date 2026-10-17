@@ -188,8 +188,8 @@ export interface IssueImageWarning {
 
 // GitLab stores uploaded issue images under /uploads/<hash>/<filename>
 // relative to the instance root, not the API base (apiUrl is ".../api/v4").
-// Only relative refs or ones already on this same instance are fetched; a
-// link to some third-party host in the description is left alone.
+// Only refs to this same instance's /uploads/ are fetched (resolveIssueUploadUrl); a
+// link to any other host in the description is left alone.
 export const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export async function getIssueImages(
@@ -207,18 +207,18 @@ export async function getIssueImages(
   let totalBytes = 0;
 
   for (const ref of refs) {
-    let absoluteUrl: string;
-    if (ref.url.startsWith('/')) {
-      absoluteUrl = `${instanceRoot}${ref.url}`;
-    } else if (ref.url.startsWith(instanceRoot)) {
-      absoluteUrl = ref.url;
-    } else {
+    // Only this instance's own /uploads/ qualify (see resolveIssueUploadUrl): a look-alike host in the description must never
+    // receive the private token.
+    const absoluteUrl = resolveIssueUploadUrl(instanceRoot, ref.url);
+    if (!absoluteUrl) {
       continue;
     }
 
     let response: Response;
     try {
-      response = await gitlabFetch(absoluteUrl, privateToken);
+      // A redirect is not followed (it would carry Private-Token along) — the 3xx comes back as a non-ok status and the image
+      // is skipped below.
+      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
     } catch (error) {
       if (error instanceof GitlabApiError) {
         warn({ kind: 'http', url: absoluteUrl, status: error.status, error });
@@ -245,4 +245,31 @@ export async function getIssueImages(
   }
 
   return images;
+}
+
+// Resolves a markdown image ref from an issue description to the URL it is
+// safe to fetch with the private token, or null if it must not be fetched.
+// Only GitLab's own uploads on this very instance qualify: the origin has to
+// match exactly (a plain prefix test let `https://gitlab.example.com.evil.net`
+// and `https://gitlab.example.com@evil.net` through), no userinfo, and the
+// path — after URL normalization, so `/uploads/../api` does not count — has
+// to sit under the instance's `/uploads/`. Callers should also fetch with
+// `redirect: 'manual'`: fetch keeps a custom Private-Token header on a
+// cross-origin redirect, unlike Authorization.
+export function resolveIssueUploadUrl(instanceRoot: string, ref: string): string | null {
+  try {
+    const root = new URL(instanceRoot);
+    const rootPath = root.pathname.replace(/\/+$/, '');
+    const url = ref.startsWith('/') ? new URL(`${root.origin}${rootPath}${ref}`) : new URL(ref);
+    if (url.origin !== root.origin || url.username || url.password) {
+      return null;
+    }
+    if (!url.pathname.startsWith(`${rootPath}/uploads/`)) {
+      return null;
+    }
+
+    return url.href;
+  } catch {
+    return null;
+  }
 }

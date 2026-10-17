@@ -13,6 +13,8 @@ import {
   useListLogsQuery,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
+import { useIsNonOwner } from '../../store/hooks';
+import { OwnerOnlyNotice } from '../../widgets/OwnerOnly';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../ProfilePage.module.css';
 import { formatMs, formatPercent } from './logFormat';
@@ -32,6 +34,8 @@ export function LogsSection() {
   const [source, setSource] = useState<LogSource | 'all'>('all');
   const [onlyProblems, setOnlyProblems] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Logs are owner-only: another account gets the notice instead of two requests bound to fail.
+  const isNonOwner = useIsNonOwner();
 
   const {
     data: summary,
@@ -39,7 +43,7 @@ export function LogsSection() {
     isError: isSummaryError,
     error: summaryError,
     refetch: refetchSummary,
-  } = useGetLogSummaryQuery(days);
+  } = useGetLogSummaryQuery(days, { skip: isNonOwner });
   const {
     data: entries,
     isLoading: isListLoading,
@@ -52,7 +56,7 @@ export function LogsSection() {
     ...(source !== 'all' ? { source } : {}),
     // "Problems" = warnings and errors; the API filters one level at a time, so
     // an unfiltered list is trimmed here instead.
-  });
+  }, { skip: isNonOwner });
   const [exportLogs, { isLoading: isExporting }] = useExportLogsMutation();
 
   const visible = (entries ?? []).filter((entry) => !onlyProblems || entry.level !== 'info');
@@ -71,6 +75,14 @@ export function LogsSection() {
   const isForbidden = [summaryError, listError].some(
     (err) => typeof err === 'object' && err !== null && 'status' in err && err.status === 403,
   );
+
+  if (isNonOwner) {
+    return (
+      <Card view="outlined" className={styles.card}>
+        <OwnerOnlyNotice />
+      </Card>
+    );
+  }
 
   if (isForbidden) {
     return (
