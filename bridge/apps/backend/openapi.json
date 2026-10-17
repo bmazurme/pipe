@@ -4351,8 +4351,8 @@
           },
           "authFailedAt": {
             "type": "string",
-            "format": "date-time",
-            "nullable": true
+            "nullable": true,
+            "format": "date-time"
           },
           "authFailedJobId": {
             "type": "number",
