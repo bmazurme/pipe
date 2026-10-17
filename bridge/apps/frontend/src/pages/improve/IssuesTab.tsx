@@ -7,19 +7,7 @@ import { getErrorMessage, ImproveIssue, useListImproveIssuesQuery, useStartImpro
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
-import { blocksNewRun, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
-
-const MODEL_KEY = 'improve.model';
-
-function readModel(): string {
-  try {
-    const value = localStorage.getItem(MODEL_KEY);
-
-    return MODEL_OPTIONS.some((option) => option.value === value) ? (value as string) : 'sonnet';
-  } catch {
-    return 'sonnet';
-  }
-}
+import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 export function IssuesTab({ configured }: { configured: boolean }) {
   const [showAll, setShowAll] = useState(false);
@@ -27,7 +15,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [start, { isLoading: isStarting }] = useStartImproveRunMutation();
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
-  const [model, setModel] = useState(readModel);
+  const [model, setModel] = useState(readStoredModel);
   const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
   const [launching, setLaunching] = useState<number[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
@@ -72,11 +60,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
 
   const handleModel = (value: string) => {
     setModel(value);
-    try {
-      localStorage.setItem(MODEL_KEY, value);
-    } catch {
-      // Not remembering the choice is fine.
-    }
+    storeModel(value);
   };
 
   if (!configured) return null;
