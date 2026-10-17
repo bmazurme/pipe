@@ -5,6 +5,7 @@ import {
   gitlabFetch as sharedGitlabFetch,
   getIssue as sharedGetIssue,
   listAssignedOpenIssues as sharedListAssignedOpenIssues,
+  resolveIssueUploadUrl,
 } from '@pipe/protocol';
 
 import { describeFetchError } from '../utils/describe-fetch-error';
@@ -107,9 +108,9 @@ export interface IssueImage {
 
 // GitLab stores uploaded issue images under /uploads/<hash>/<filename>,
 // relative to the instance root, not the API base (gitlabUrl is
-// ".../api/v4"). Fetches only relative refs or ones that already point back
-// at this same instance — an image link to some third-party host in the
-// description is left alone rather than fetched.
+// ".../api/v4"). Fetches only refs to this same instance's /uploads/ (see
+// resolveIssueUploadUrl) — an image link to any other host is left alone
+// rather than fetched.
 const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export async function getIssueImages(description: string): Promise<IssueImage[]> {
@@ -126,18 +127,16 @@ export async function getIssueImages(description: string): Promise<IssueImage[]>
   let totalBytes = 0;
 
   for (const ref of refs) {
-    let absoluteUrl: string;
-    if (ref.url.startsWith('/')) {
-      absoluteUrl = `${instanceRoot}${ref.url}`;
-    } else if (ref.url.startsWith(instanceRoot)) {
-      absoluteUrl = ref.url;
-    } else {
+    const absoluteUrl = resolveIssueUploadUrl(instanceRoot, ref.url);
+    if (!absoluteUrl) {
       continue;
     }
 
     let response;
     try {
-      response = await gitlabFetch(absoluteUrl, privateToken);
+      // A redirect is not followed (it would carry Private-Token along) — the
+      // 3xx comes back as a non-ok status and the image is skipped below.
+      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
     } catch (error) {
       console.warn(`Не удалось скачать изображение из описания issue (${absoluteUrl}):`, error);
       continue;

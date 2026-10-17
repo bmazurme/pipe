@@ -1,7 +1,15 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GitlabApiError, gitlabFetch, getIssue, listAssignedOpenIssues, listMergeRequestsForBranch, addSpentTime } from './gitlabClient.js';
+import {
+  GitlabApiError,
+  gitlabFetch,
+  getIssue,
+  listAssignedOpenIssues,
+  listMergeRequestsForBranch,
+  addSpentTime,
+  resolveIssueUploadUrl,
+} from './gitlabClient.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -189,5 +197,45 @@ describe('addSpentTime', () => {
 
     assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/issues/628/add_spent_time?duration=2h30m');
     assert.equal(capturedMethod, 'POST');
+  });
+});
+
+describe('resolveIssueUploadUrl', () => {
+  const root = 'https://gitlab.example.com';
+
+  it('resolves a relative /uploads/ ref against the instance root', () => {
+    assert.equal(resolveIssueUploadUrl(root, '/uploads/abc/shot.png'), 'https://gitlab.example.com/uploads/abc/shot.png');
+  });
+
+  it('keeps an instance installed under a sub-path', () => {
+    assert.equal(
+      resolveIssueUploadUrl('https://example.com/gitlab', '/uploads/abc/shot.png'),
+      'https://example.com/gitlab/uploads/abc/shot.png',
+    );
+    assert.equal(resolveIssueUploadUrl('https://example.com/gitlab', 'https://example.com/uploads/abc/shot.png'), null);
+  });
+
+  it('accepts an absolute upload URL on the same origin', () => {
+    assert.equal(resolveIssueUploadUrl(root, 'https://gitlab.example.com/uploads/def/shot.png'), 'https://gitlab.example.com/uploads/def/shot.png');
+  });
+
+  it('rejects look-alike hosts, userinfo and other origins', () => {
+    for (const ref of [
+      'https://gitlab.example.com.evil.net/uploads/a.png',
+      'https://gitlab.example.com@evil.net/uploads/a.png',
+      'https://user:pass@gitlab.example.com/uploads/a.png',
+      'http://gitlab.example.com/uploads/a.png',
+      'https://gitlab.example.com:8443/uploads/a.png',
+      '//evil.net/uploads/a.png',
+      'https://evil.example/uploads/a.png',
+    ]) {
+      assert.equal(resolveIssueUploadUrl(root, ref), null, ref);
+    }
+  });
+
+  it('rejects paths outside /uploads/, including ones that only normalize there', () => {
+    for (const ref of ['/api/v4/user', 'https://gitlab.example.com/a.png', '/uploads/../api/v4/user', '/uploadsx/a.png', 'uploads/a.png', 'not a url']) {
+      assert.equal(resolveIssueUploadUrl(root, ref), null, ref);
+    }
   });
 });
