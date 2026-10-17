@@ -820,6 +820,32 @@ export class ImproveService {
     }
 
     if (job.status === JobStatus.Failed) {
+      // A worker restart already re-queued the job: go straight onto the retry instead of a false failure.
+      const retry = (await this.workers.findRetriesOf([job.id])).get(job.id);
+
+      if (retry && retry.userId === run.userId) {
+        const moved = await this.runs.update(
+          { id: run.id, status: run.status },
+          {
+            jobId: retry.id,
+            status: ImproveRunStatus.Queued,
+            error: null,
+            finishedAt: null,
+          },
+        );
+
+        if (moved.affected === 1) {
+          this.log(
+            'info',
+            'improve.job_retried',
+            `Run ${run.id} (issue #${run.issueNumber}): follows the retried job ${retry.id} (was ${run.jobId})`,
+            { runId: run.id, jobId: retry.id },
+          );
+        }
+
+        return;
+      }
+
       await this.finish(run, ImproveRunStatus.Failed, {
         error: job.errorMessage ?? 'Задача worker завершилась ошибкой',
       });
