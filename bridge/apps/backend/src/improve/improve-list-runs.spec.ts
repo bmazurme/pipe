@@ -43,6 +43,7 @@ describe('ImproveService.listRuns leaves out result', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return { qb, service };
@@ -83,6 +84,7 @@ describe('ImproveService.getRun', () => {
     const findOne = jest.fn().mockResolvedValue(found);
     const service = new ImproveService(
       { findOne } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -205,6 +207,7 @@ describe('ImproveService.listIssues latest run', () => {
     const service = new ImproveService(
       repo as never,
       github as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
