@@ -11,7 +11,7 @@ describe('ChatController listMessages — updatedAfter', () => {
   const make = () => {
     const chatService = {
       listMessages: jest.fn().mockResolvedValue([]),
-      listAttachments: jest.fn().mockResolvedValue([]),
+      attachmentsByMessage: jest.fn().mockResolvedValue(new Map()),
     };
 
     return { chatService, controller: controllerWith(chatService) };
@@ -44,5 +44,64 @@ describe('ChatController listMessages — updatedAfter', () => {
       controller.listMessages(1, { id: 7 }, 'yesterday'),
     ).rejects.toThrow(/updatedAfter must be a valid date/);
     expect(chatService.listMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChatController listMessages — attachments', () => {
+  const message = (id: number) =>
+    ({
+      id,
+      chatId: 1,
+      role: 'user',
+      content: `m${id}`,
+      status: 'complete',
+      createdAt: new Date('2026-10-16T12:00:00.000Z'),
+      updatedAt: new Date('2026-10-16T12:00:00.000Z'),
+    }) as unknown;
+
+  it('makes no attachment query for an empty delta', async () => {
+    const chatService = {
+      listMessages: jest.fn().mockResolvedValue([]),
+      attachmentsByMessage: jest.fn(),
+    };
+
+    const result = await controllerWith(chatService).listMessages(
+      1,
+      { id: 7 },
+      '2026-10-16T12:00:00.000Z',
+    );
+
+    expect(result).toEqual([]);
+    expect(chatService.attachmentsByMessage).not.toHaveBeenCalled();
+  });
+
+  it('asks only for the returned messages and gives each its own files', async () => {
+    const chatService = {
+      listMessages: jest.fn().mockResolvedValue([message(5), message(6)]),
+      attachmentsByMessage: jest.fn().mockResolvedValue(
+        new Map([
+          [
+            6,
+            [
+              {
+                id: 3,
+                messageId: 6,
+                originalName: 'shot.png',
+                size: 5,
+              },
+            ],
+          ],
+        ]),
+      ),
+    };
+
+    const result = await controllerWith(chatService).listMessages(1, {
+      id: 7,
+    });
+
+    expect(chatService.attachmentsByMessage).toHaveBeenCalledWith([5, 6]);
+    expect(result.map((m) => m.id)).toEqual([5, 6]);
+    expect(result[0].attachments).toEqual([]);
+    expect(result[1].attachments.map((a) => a.id)).toEqual([3]);
   });
 });
