@@ -66,6 +66,28 @@ export function analysisItems(run: Pick<ImproveRun, 'result'>): AnalysisItem[] {
 export const modelLabel = (model: string): string =>
   MODEL_OPTIONS.find((option) => option.value === model)?.content ?? model;
 
+const MODEL_STORAGE_KEY = 'improve.model';
+
+// Shared across every "Модель" picker on this page (Задачи, Анализ) — picking opus in one tab
+// and finding sonnet still selected in another was the inconsistency this fixes.
+export function readStoredModel(): string {
+  try {
+    const value = localStorage.getItem(MODEL_STORAGE_KEY);
+
+    return MODEL_OPTIONS.some((option) => option.value === value) ? (value as string) : 'sonnet';
+  } catch {
+    return 'sonnet';
+  }
+}
+
+export function storeModel(value: string): void {
+  try {
+    localStorage.setItem(MODEL_STORAGE_KEY, value);
+  } catch {
+    // Not remembering the choice is fine.
+  }
+}
+
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export const formatTime = (hour: number, minute: number): string => `${pad(hour)}:${pad(minute)}`;
