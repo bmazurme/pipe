@@ -89,3 +89,22 @@ describe('the worker status dot', () => {
     expect(screen.getByRole('img', { name: 'Worker: не отвечает' })).toBeTruthy();
   });
 });
+
+describe('the owner-only pages', () => {
+  const ownerOnly = ['dashboard', 'improve'];
+
+  it('are left out of the sidebar and the burger for an account that is not the owner', () => {
+    for (const id of ownerOnly) {
+      expect(ids(buildMenuItems('/', navigate, { isOwner: false }))).not.toContain(id);
+      expect(ids(buildBurgerItems('/', navigate, { isOwner: false }))).not.toContain(id);
+    }
+    expect(ids(buildMenuItems('/', navigate, { isOwner: false }))).toContain('worker');
+  });
+
+  it('are listed for the owner', () => {
+    for (const id of ownerOnly) {
+      expect(ids(buildMenuItems('/', navigate, { isOwner: true }))).toContain(id);
+      expect(ids(buildBurgerItems('/', navigate, { isOwner: true }))).toContain(id);
+    }
+  });
+});

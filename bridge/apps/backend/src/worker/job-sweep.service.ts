@@ -69,7 +69,7 @@ export class JobSweepService {
     // the write are atomic, so a job the worker finished in between is never touched.
     // (Raw query result is [rows, affectedCount].)
     const [rows]: [Job[], number] = await this.jobRepository.query(
-      `UPDATE jobs SET status = $1, "errorMessage" = $2, "finishedAt" = now(),
+      `UPDATE jobs SET status = $1, "errorMessage" = $2, "failureKind" = 'lost', "finishedAt" = now(),
          logs = COALESCE(logs, '') || $3, "updatedAt" = now()
        WHERE status IN ($5, $6) AND "updatedAt" < $4${filters}
        RETURNING *`,

@@ -24,4 +24,8 @@ export class UpdateJobStatusDto {
   @MaxLength(MAX_ERROR_MESSAGE_LENGTH)
   @IsOptional()
   errorMessage?: string;
+
+  @IsIn(['shutdown'])
+  @IsOptional()
+  failureKind?: 'shutdown';
 }

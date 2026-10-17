@@ -61,7 +61,10 @@ export function AppLayout() {
     pollingInterval: WORKER_STATUS_POLL_MS,
     skipPollingIfUnfocused: true,
   });
-  const navStatus: NavStatus = { workerUp: typeof workerStatus?.isUp === 'boolean' ? workerStatus.isUp : undefined };
+  const navStatus: NavStatus = {
+    workerUp: typeof workerStatus?.isUp === 'boolean' ? workerStatus.isUp : undefined,
+    isOwner: user?.isOwner,
+  };
 
   const menuItems = buildMenuItems(location.pathname, navigate, navStatus);
   const burgerItems = buildBurgerItems(location.pathname, navigate, navStatus);

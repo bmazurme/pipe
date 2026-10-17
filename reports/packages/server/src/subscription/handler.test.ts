@@ -509,6 +509,45 @@ describe('handlePullSubscriptionIssue', () => {
     expect(deleteCalled).toBe(false);
   });
 
+  // A parcel entry under .git/ would be written and then executed by the
+  // very next git command (core.fsmonitor, core.hooksPath, hooks/pre-commit).
+  // It must be refused before anything is written, leaving the tree clean.
+  it('refuses a parcel that writes into .git and leaves the tree clean', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+    const configBefore = readFileSync(path.join(dir, '.git', 'config'), 'utf-8');
+
+    const parcel = buildArchive(
+      [
+        { relPath: 'pulled.txt', content: 'from the parcel' },
+        { relPath: '.git/config', content: '[core]\n\tfsmonitor = touch pwned\n' },
+      ],
+      { issueId: '1', issueIid: '6', issueTitle: 'Fix it', issueDescription: 'd', projectId: 173, branch: 'task/173-6', createdAt: new Date().toISOString() } as never,
+    );
+    let deleteCalled = false;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage?')) return Response.json([{ id: 99, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: parcel.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'result' }]);
+      if (url.includes('/peek')) return new Response(parcel, { status: 200 });
+      if (init?.method === 'DELETE') {
+        deleteCalled = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/Path inside \.git is not allowed: \.git\/config/);
+    expect(readFileSync(path.join(dir, '.git', 'config'), 'utf-8')).toBe(configBefore);
+    expect(git(dir, ['status', '--porcelain'])).toBe('');
+    expect(getIssueState('173', '6')?.step).toBe('pushed');
+    expect(deleteCalled).toBe(false);
+  });
+
   it('reports a clear error when no result has arrived on bridge yet', async () => {
     const { dir } = initTrackedProject('173');
     setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });

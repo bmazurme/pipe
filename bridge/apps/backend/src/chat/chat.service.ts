@@ -35,7 +35,7 @@ import {
   ChatMessageRole,
   ChatMessageStatus,
 } from './entities/chat-message.entity';
-import { MAX_PROGRESS_LENGTH } from './chat.limits';
+import { MAX_ERROR_MESSAGE_LENGTH, MAX_PROGRESS_LENGTH } from './chat.limits';
 
 // Chat attachments live under chat/ in the store (apart from Storage's mailbox, see attachment-multer.config.ts).
 // A turn that has been Running longer than this is assumed lost (worker died or the claim response never arrived).
@@ -264,11 +264,26 @@ export class ChatService {
     await this.deleteFile(attachment);
   }
 
-  listAttachments(chatId: number): Promise<ChatAttachment[]> {
-    return this.attachmentRepository.find({
-      where: { chatId },
+  // Attachments of just these messages, grouped by message: no query at all for none
+  // (an empty poll delta), and never a scan of the whole chat.
+  async attachmentsByMessage(
+    messageIds: number[],
+  ): Promise<Map<number, ChatAttachment[]>> {
+    const byMessage = new Map<number, ChatAttachment[]>();
+    if (messageIds.length === 0) return byMessage;
+
+    const attachments = await this.attachmentRepository.find({
+      where: { messageId: In(messageIds) },
       order: { id: 'ASC' },
     });
+    for (const attachment of attachments) {
+      if (attachment.messageId === null) continue;
+      const list = byMessage.get(attachment.messageId);
+      if (list) list.push(attachment);
+      else byMessage.set(attachment.messageId, [attachment]);
+    }
+
+    return byMessage;
   }
 
   // Files uploaded for a message that was never sent are dropped after a day.
@@ -448,28 +463,31 @@ export class ChatService {
     // Only Complete messages: the claimed message is Running, and
     // Pending/Failed assistant placeholders have empty content, which
     // providers such as Anthropic reject.
-    const attachments = await this.listAttachments(message.chatId);
+    const completed = priorMessages.filter(
+      (m) => m.status === ChatMessageStatus.Complete,
+    );
+    const attachments = await this.attachmentsByMessage(
+      completed.map((m) => m.id),
+    );
 
-    const history: ClaimedTurnHistoryEntry[] = priorMessages
-      .filter((m) => m.status === ChatMessageStatus.Complete)
-      .map((m) => {
-        const files = attachments.filter((a) => a.messageId === m.id);
+    const history: ClaimedTurnHistoryEntry[] = completed.map((m) => {
+      const files = attachments.get(m.id) ?? [];
 
-        return {
-          role: m.role,
-          content: m.content,
-          ...(files.length > 0
-            ? {
-                attachments: files.map((a) => ({
-                  id: a.id,
-                  name: a.originalName,
-                  size: a.size,
-                  isImage: isImageAttachment(a.originalName),
-                })),
-              }
-            : {}),
-        };
-      });
+      return {
+        role: m.role,
+        content: m.content,
+        ...(files.length > 0
+          ? {
+              attachments: files.map((a) => ({
+                id: a.id,
+                name: a.originalName,
+                size: a.size,
+                isImage: isImageAttachment(a.originalName),
+              })),
+            }
+          : {}),
+      };
+    });
 
     return { message, chat, history };
   }
@@ -554,7 +572,10 @@ export class ChatService {
     const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.status = ChatMessageStatus.Failed;
-    message.errorMessage = errorMessage ?? null;
+    message.errorMessage =
+      errorMessage === undefined
+        ? null
+        : errorMessage.slice(-MAX_ERROR_MESSAGE_LENGTH);
     message.progress = null;
 
     return this.messageRepository.save(message);

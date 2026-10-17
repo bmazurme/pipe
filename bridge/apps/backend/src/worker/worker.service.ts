@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThan, Not, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
@@ -83,6 +83,17 @@ export class WorkerService {
     };
   }
 
+  private isInfraFailure(job: Job): boolean {
+    if (job.failureKind) return true;
+
+    // Legacy fallback for workers that do not send failureKind yet.
+    // TODO: remove once every worker is upgraded.
+    return (
+      job.errorMessage !== null &&
+      INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
+    );
+  }
+
   // A job lost to a worker stop/restart says nothing about the task, so it is queued
   // once more automatically — but only once per parcel (an earlier infrastructure
   // failure on the same parcel means this already was the retry), so a crash-looping
@@ -91,19 +102,27 @@ export class WorkerService {
     if (
       job.status !== JobStatus.Failed ||
       job.sourceFileId === null ||
-      job.errorMessage === null ||
-      !INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
+      !this.isInfraFailure(job)
     ) {
       return null;
     }
 
     try {
       const earlier = await this.jobRepository.count({
-        where: {
-          sourceFileId: job.sourceFileId,
-          errorMessage: In(INFRA_FAILURE_MESSAGES),
-          id: Not(job.id),
-        },
+        where: [
+          {
+            sourceFileId: job.sourceFileId,
+            failureKind: Not(IsNull()),
+            id: Not(job.id),
+          },
+          // Legacy fallback for workers that do not send failureKind yet.
+          // TODO: remove once every worker is upgraded.
+          {
+            sourceFileId: job.sourceFileId,
+            errorMessage: In(INFRA_FAILURE_MESSAGES),
+            id: Not(job.id),
+          },
+        ],
       });
 
       if (earlier > 0) return null;
@@ -857,6 +876,7 @@ export class WorkerService {
 
     if (dto.status === JobStatus.Failed) {
       job.errorMessage = dto.errorMessage ?? job.errorMessage;
+      job.failureKind = dto.failureKind ?? job.failureKind ?? null;
       job.finishedAt = new Date();
     }
 

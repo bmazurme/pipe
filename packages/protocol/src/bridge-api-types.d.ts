@@ -1923,6 +1923,7 @@ export interface components {
             id: number;
             username: string;
             status: string;
+            isOwner: boolean;
         };
         UpdateUserDto: {
             status?: string;
@@ -2072,6 +2073,8 @@ export interface components {
             /** @enum {string} */
             status: "running" | "succeeded" | "failed" | "cancelled";
             errorMessage?: string;
+            /** @enum {string} */
+            failureKind?: "shutdown";
         };
         AppendJobLogDto: {
             chunk: string;

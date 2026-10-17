@@ -29,19 +29,22 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [model, setModel] = useState(readModel);
   const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
-  const [startingFor, setStartingFor] = useState<number | null>(null);
+  const [launching, setLaunching] = useState<number[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
+
+  const lock = (numbers: number[]) => setLaunching((prev) => [...prev, ...numbers]);
+  const unlock = (numbers: number[]) => setLaunching((prev) => prev.filter((n) => !numbers.includes(n)));
 
   const handleStart = async (issue: ImproveIssue) => {
     setStartError(null);
-    setStartingFor(issue.number);
+    lock([issue.number]);
 
     try {
       await start({ issueNumber: issue.number, model }).unwrap();
     } catch (err) {
       setStartError(getErrorMessage(err, 'Не удалось запустить'));
     } finally {
-      setStartingFor(null);
+      unlock([issue.number]);
     }
   };
 
@@ -52,6 +55,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const handleStartMany = async (kind: 'selected' | 'oldest', numbers: number[]) => {
     setStartError(null);
     setBatchKind(kind);
+    lock(numbers);
 
     try {
       const result = await startMany({ issueNumbers: numbers, model }).unwrap();
@@ -62,6 +66,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
       setStartError(getErrorMessage(err, 'Не удалось запустить'));
     } finally {
       setBatchKind(null);
+      unlock(numbers);
     }
   };
 
@@ -110,6 +115,11 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         <Button view="outlined" size="m" loading={isFetching} onClick={() => void refetch()}>
           Обновить
         </Button>
+        {launching.length > 0 && (
+          <Text variant="caption-2" color="secondary">
+            Готовим снимок репозитория — запуск может занять до минуты
+          </Text>
+        )}
       </div>
 
       {startError && <Alert theme="danger" view="filled" message={startError} />}
@@ -125,13 +135,15 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         <div key={issue.number} className={styles.row}>
           <Checkbox
             checked={selected.includes(issue.number)}
-            disabled={blocksNewRun(issue.run)}
+            disabled={blocksNewRun(issue.run) || launching.includes(issue.number)}
             controlProps={{ 'aria-label': `Выбрать #${issue.number}` }}
             onUpdate={(on) => setSelected(on ? [...selected, issue.number] : selected.filter((n) => n !== issue.number))}
           />
           <div className={styles.rowMain}>
             <Text variant="body-2" ellipsis title={issue.title}>
-              #{issue.number} {issue.title}
+              <a href={issue.htmlUrl} target="_blank" rel="noreferrer noopener" aria-label={`Issue #${issue.number} на GitHub: ${issue.title}`}>
+                #{issue.number} {issue.title}
+              </a>
             </Text>
             <Text variant="caption-2" color="secondary">
               создана {formatRelativeTime(issue.createdAt)}
@@ -150,8 +162,8 @@ export function IssuesTab({ configured }: { configured: boolean }) {
             <Button
               view="action"
               size="s"
-              disabled={blocksNewRun(issue.run)}
-              loading={isStarting && startingFor === issue.number}
+              disabled={blocksNewRun(issue.run) || launching.includes(issue.number)}
+              loading={isStarting && launching.includes(issue.number)}
               onClick={() => void handleStart(issue)}
               aria-label={`Запустить #${issue.number}`}
             >

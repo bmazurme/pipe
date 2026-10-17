@@ -167,3 +167,30 @@ export async function addSpentTime(
   const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}/add_spent_time?duration=${encodeURIComponent(duration)}`;
   await gitlabFetch(url, privateToken, { method: 'POST' });
 }
+
+// Resolves a markdown image ref from an issue description to the URL it is
+// safe to fetch with the private token, or null if it must not be fetched.
+// Only GitLab's own uploads on this very instance qualify: the origin has to
+// match exactly (a plain prefix test let `https://gitlab.example.com.evil.net`
+// and `https://gitlab.example.com@evil.net` through), no userinfo, and the
+// path — after URL normalization, so `/uploads/../api` does not count — has
+// to sit under the instance's `/uploads/`. Callers should also fetch with
+// `redirect: 'manual'`: fetch keeps a custom Private-Token header on a
+// cross-origin redirect, unlike Authorization.
+export function resolveIssueUploadUrl(instanceRoot: string, ref: string): string | null {
+  try {
+    const root = new URL(instanceRoot);
+    const rootPath = root.pathname.replace(/\/+$/, '');
+    const url = ref.startsWith('/') ? new URL(`${root.origin}${rootPath}${ref}`) : new URL(ref);
+    if (url.origin !== root.origin || url.username || url.password) {
+      return null;
+    }
+    if (!url.pathname.startsWith(`${rootPath}/uploads/`)) {
+      return null;
+    }
+
+    return url.href;
+  } catch {
+    return null;
+  }
+}

@@ -18,13 +18,11 @@ import {
 } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
-import { GithubApiService, TreeEntry } from '../loop/github-api.service';
+import { GithubApiService } from '../loop/github-api.service';
 import { MergeService } from '../loop/merge.service';
-import { findProtected } from '../loop/protected-paths';
-import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
-import { JobModel, JobStatus } from '../worker/entities/job.entity';
+import { JobStatus } from '../worker/entities/job.entity';
 import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
   ACTIVE_RUN_STATUSES,
@@ -43,24 +41,18 @@ import {
   parseBacklog,
   pickOnePerCategory,
 } from './analysis';
+import { ImproveHandoffService } from './improve-handoff.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
-import { AnalysisResult, message, PR_LABEL } from './improve-shared';
+import { ImprovePublishService } from './improve-publish.service';
+import {
+  AnalysisResult,
+  mapInBatches,
+  message,
+  PR_LABEL,
+} from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
-import {
-  buildIssueParcel,
-  Change,
-  describeChanges,
-  diffResult,
-  MAX_CHANGED_BYTES,
-  MAX_CHANGED_FILES,
-  readResultParcel,
-  readZipball,
-  selectParcelFiles,
-  snapshotBaseline,
-  SnapshotFile,
-  utf8Text,
-} from './parcel';
+import { readResultParcel, utf8Text } from './parcel';
 
 export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
 
@@ -84,10 +76,6 @@ export const AUTOSTART_MIN_AGE_SECONDS = 10;
 // and the issue to a worker, and turn what comes back into a branch and a pull
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
-// Blobs of one result are created this many at a time — modest, so GitHub's secondary rate limits stay quiet.
-const BLOB_CONCURRENCY = 6;
-const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
-
 @Injectable()
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
@@ -96,22 +84,6 @@ export class ImproveService {
   // active run happens long before the run row is saved, so concurrent starts
   // would all pass it. In-process only: this relies on a single bridge replica.
   private readonly starting = new Set<string>();
-  // One repo snapshot, reused by consecutive launches on the same base SHA.
-  // The baseline hashes are cached with it: hashing the whole repo is synchronous.
-  private zipCache: {
-    sha: string;
-    files: SnapshotFile[];
-    baseline: Record<string, string>;
-    at: number;
-  } | null = null;
-  // The snapshot being built right now, so concurrent starts on one SHA share a single download.
-  private zipPending: {
-    sha: string;
-    promise: Promise<{
-      files: SnapshotFile[];
-      baseline: Record<string, string>;
-    }>;
-  } | null = null;
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -124,6 +96,8 @@ export class ImproveService {
     private readonly dataSource: DataSource,
     private readonly appLogs: AppLogService,
     private readonly issueFiling: ImproveIssueFilingService,
+    private readonly publisher: ImprovePublishService,
+    private readonly handoff: ImproveHandoffService,
   ) {}
 
   // ---------------------------------------------------------------- status
@@ -267,27 +241,28 @@ export class ImproveService {
     // not-open issue is still rejected before any file or job is created.
     const [issue, prepared] = await Promise.all([
       this.github.getIssue(issueNumber),
-      this.prepareSnapshot(),
+      this.handoff.prepareSnapshot(),
     ]);
 
     if (issue.isPull || issue.state !== 'open') {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
     }
 
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      userId,
-      model,
-      {
-        number: issue.number,
-        title: issue.title,
-        body: withDefinitionOfDone(issue.body),
-      },
-      `improve:${issue.number}`,
-      `improve-${issue.number}.subscription.zip`,
-      undefined,
-      prepared,
-      contextId,
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        userId,
+        model,
+        {
+          number: issue.number,
+          title: issue.title,
+          body: withDefinitionOfDone(issue.body),
+        },
+        `improve:${issue.number}`,
+        `improve-${issue.number}.subscription.zip`,
+        undefined,
+        prepared,
+        contextId,
+      );
 
     const run = await this.runs.save(
       this.runs.create({
@@ -333,27 +308,28 @@ export class ImproveService {
       (await this.runs.count({
         where: { kind: 'repair', prNumber: pull.number, trigger: 'ci' },
       })) + 1;
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      parent.userId,
-      parent.model,
-      {
-        number: parent.issueNumber as number,
-        title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
-        body: withDefinitionOfDone(
-          repairBody({
-            prNumber: pull.number,
-            branch: pull.branch,
-            issueNumber: parent.issueNumber,
-            issueTitle: parent.issueTitle,
-            attempt,
-            failures,
-          }),
-        ),
-      },
-      `improve:${parent.issueNumber}:repair:${attempt}`,
-      `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
-      { sha: pull.headSha, branch: pull.branch },
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        parent.userId,
+        parent.model,
+        {
+          number: parent.issueNumber as number,
+          title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
+          body: withDefinitionOfDone(
+            repairBody({
+              prNumber: pull.number,
+              branch: pull.branch,
+              issueNumber: parent.issueNumber,
+              issueTitle: parent.issueTitle,
+              attempt,
+              failures,
+            }),
+          ),
+        },
+        `improve:${parent.issueNumber}:repair:${attempt}`,
+        `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
+        { sha: pull.headSha, branch: pull.branch },
+      );
     const run = await this.runs.save(
       this.runs.create({
         userId: parent.userId,
@@ -424,25 +400,26 @@ export class ImproveService {
       (await this.runs.count({
         where: { kind: 'repair', prNumber, trigger: 'chat' },
       })) + 1;
-    const { job, baseSha, baseline, fileCount } = await this.handToWorker(
-      userId,
-      model,
-      {
-        number: `pr-${prNumber}`,
-        title: `Change PR #${prNumber}: ${pull.title}`,
-        body: withDefinitionOfDone(
-          prFixBody({
-            prNumber,
-            prTitle: pull.title,
-            branch: pull.headRef,
-            instruction,
-          }),
-        ),
-      },
-      `improve:pr-${prNumber}:chat:${attempt}`,
-      `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
-      { sha: pull.headSha, branch: pull.headRef },
-    );
+    const { job, baseSha, baseline, fileCount } =
+      await this.handoff.handToWorker(
+        userId,
+        model,
+        {
+          number: `pr-${prNumber}`,
+          title: `Change PR #${prNumber}: ${pull.title}`,
+          body: withDefinitionOfDone(
+            prFixBody({
+              prNumber,
+              prTitle: pull.title,
+              branch: pull.headRef,
+              instruction,
+            }),
+          ),
+        },
+        `improve:pr-${prNumber}:chat:${attempt}`,
+        `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
+        { sha: pull.headSha, branch: pull.headRef },
+      );
     const run = await this.runs.save(
       this.runs.create({
         userId,
@@ -485,101 +462,6 @@ export class ImproveService {
     );
 
     return result;
-  }
-
-  private async snapshotFiles(sha: string) {
-    const cached = this.zipCache;
-    if (
-      cached &&
-      cached.sha === sha &&
-      Date.now() - cached.at < ZIP_CACHE_TTL_MS
-    ) {
-      return { files: cached.files, baseline: cached.baseline };
-    }
-    if (this.zipPending?.sha === sha) return this.zipPending.promise;
-
-    const promise = (async () => {
-      const files = selectParcelFiles(
-        await readZipball(await this.github.downloadZipball(sha)),
-      );
-      const baseline = snapshotBaseline(files);
-      this.zipCache = { sha, files, baseline, at: Date.now() };
-
-      return { files, baseline };
-    })();
-    const pending = { sha, promise };
-    this.zipPending = pending;
-
-    try {
-      return await promise;
-    } finally {
-      if (this.zipPending === pending) this.zipPending = null;
-    }
-  }
-
-  // Base-branch SHA + parcel files; independent of the task, so it can start early.
-  private async prepareSnapshot(branch?: string) {
-    const baseSha = await this.github.getBranchSha(
-      branch ?? this.github.baseBranch(),
-    );
-    const { files, baseline } = await this.snapshotFiles(baseSha);
-
-    return { baseSha, files, baseline };
-  }
-
-  // Snapshot of the base branch → parcel with this task as its manifest → Storage →
-  // Worker job. Shared by issue runs and analysis runs (an analysis is a task whose
-  // description is the prompt).
-  private async handToWorker(
-    userId: number,
-    model: string,
-    task: { number: number | string; title: string; body: string },
-    taskKey: string,
-    fileName: string,
-    // A CI repair works on the PR's branch as it is now, not on the base branch.
-    snapshot?: { sha: string; branch: string },
-    prepared?: Awaited<ReturnType<ImproveService['prepareSnapshot']>>,
-    // A saved Context (Context page) the run's worker job carries as background text; the job keeps its own snapshot.
-    contextId: number | null = null,
-  ) {
-    const baseBranch = snapshot?.branch ?? this.github.baseBranch();
-    const { baseSha, files, baseline } =
-      prepared ??
-      (snapshot
-        ? {
-            baseSha: snapshot.sha,
-            ...(await this.snapshotFiles(snapshot.sha)),
-          }
-        : await this.prepareSnapshot(baseBranch));
-    const { buffer } = await buildIssueParcel(
-      files,
-      {
-        number: task.number,
-        title: task.title,
-        body: task.body,
-        repo: this.github.repoName() as string,
-        baseBranch,
-      },
-      new Date(),
-      baseline,
-    );
-    const stored = await this.storage.createFromBuffer(
-      userId,
-      buffer,
-      fileName,
-      {
-        channel: 'issue',
-        taskKey,
-        direction: StoredFileDirection.Outbound,
-      },
-    );
-    const job = await this.workers.create(userId, {
-      sourceFileId: stored.id,
-      model: model as JobModel,
-      ...(contextId !== null ? { contextId } : {}),
-    });
-
-    return { job, baseSha, baseline, fileCount: files.length };
   }
 
   async cancelRun(id: number, userId: number): Promise<ImproveRun> {
@@ -657,7 +539,7 @@ export class ImproveService {
     run.status = ImproveRunStatus.Publishing;
     run.error = null;
     run.finishedAt = null;
-    await this.publish(run, job.resultFileId);
+    await this.publisher.publish(run, job.resultFileId);
 
     return run;
   }
@@ -777,7 +659,7 @@ export class ImproveService {
     });
 
     for (const run of stale) {
-      await this.finish(run, ImproveRunStatus.Failed, {
+      await this.publisher.finish(run, ImproveRunStatus.Failed, {
         error: PUBLISH_ABANDONED_ERROR,
       });
       this.log(
@@ -813,18 +695,18 @@ export class ImproveService {
 
         if (run.kind === 'analysis')
           await this.finishAnalysis(run, job.resultFileId);
-        else await this.publish(run, job.resultFileId);
+        else await this.publisher.publish(run, job.resultFileId);
       }
 
       return;
     }
 
     if (job.status === JobStatus.Failed) {
-      await this.finish(run, ImproveRunStatus.Failed, {
+      await this.publisher.finish(run, ImproveRunStatus.Failed, {
         error: job.errorMessage ?? 'Задача worker завершилась ошибкой',
       });
     } else if (job.status === JobStatus.Cancelled) {
-      await this.finish(run, ImproveRunStatus.Cancelled, {
+      await this.publisher.finish(run, ImproveRunStatus.Cancelled, {
         note: 'Задача worker остановлена',
       });
     } else {
@@ -835,222 +717,6 @@ export class ImproveService {
 
       if (run.status !== next) await this.runs.update(run.id, { status: next });
     }
-  }
-
-  // result parcel → diff against the baseline → branch → PR.
-  async publish(run: ImproveRun, resultFileId: number | null): Promise<void> {
-    try {
-      if (!resultFileId) throw new Error('У задачи worker нет результата');
-
-      // `baseline` is not selected by default; fetch it when the run came without.
-      if (run.baseline === undefined) {
-        const stored = await this.runs.findOne({
-          where: { id: run.id },
-          select: { id: true, baseline: true },
-        });
-
-        run.baseline = stored?.baseline ?? null;
-      }
-      const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = await readResultParcel(await this.storage.readBytes(file));
-
-      const changes = diffResult(
-        JSON.parse(run.baseline ?? '{}') as Record<string, string>,
-        result,
-      );
-
-      // The enforced boundary: the loop never proposes a change to its own machinery
-      // or to CI/deploy — those are dropped here, not merely discouraged in a prompt.
-      const blocked = new Set(
-        findProtected(changes.map((change) => change.path)),
-      );
-      const allowed = changes.filter((change) => !blocked.has(change.path));
-      const note = blocked.size
-        ? `Отброшены изменения защищённых путей: ${[...blocked].join(', ')}`
-        : null;
-
-      if (allowed.length === 0) {
-        await this.finish(run, ImproveRunStatus.NoChanges, {
-          note: note ?? 'Worker ничего не изменил',
-        });
-        await this.notifier.send(
-          run.kind === 'repair'
-            ? `ℹ️ PR #${run.prNumber}: автоисправление CI не внесло изменений`
-            : `ℹ️ Задача #${run.issueNumber}: worker не внёс изменений — PR не нужен`,
-        );
-
-        return;
-      }
-
-      if (allowed.length > MAX_CHANGED_FILES) {
-        throw new Error(
-          `Слишком много изменённых файлов (${allowed.length} > ${MAX_CHANGED_FILES})`,
-        );
-      }
-
-      const size = allowed.reduce(
-        (sum, change) => sum + (change.bytes?.length ?? 0),
-        0,
-      );
-
-      if (size > MAX_CHANGED_BYTES) {
-        throw new Error(
-          `Слишком большой результат (${Math.round(size / 1024)} КБ)`,
-        );
-      }
-
-      if (run.kind === 'repair') {
-        await this.commitRepair(run, allowed);
-        await this.finish(run, ImproveRunStatus.PrUpdated, {
-          note: [run.note, describeChanges(allowed), note]
-            .filter(Boolean)
-            .join('. '),
-        });
-        await this.storage.delete(file).catch(() => undefined);
-        await this.notifier.send(
-          `🔧 PR #${run.prNumber}: автоисправление CI (${describeChanges(allowed)}) — жду новый прогон\n${run.prUrl ?? ''}`.trim(),
-        );
-
-        return;
-      }
-
-      const pr = await this.openPullRequest(run, allowed, note);
-
-      await this.finish(run, ImproveRunStatus.PrOpen, {
-        branch: pr.branch,
-        prNumber: pr.number,
-        prUrl: pr.url,
-        note: [describeChanges(allowed), note].filter(Boolean).join('. '),
-      });
-      await this.storage.delete(file).catch(() => undefined);
-      await this.notifier.send(
-        `🔀 Задача #${run.issueNumber} → PR #${pr.number} (${describeChanges(allowed)})\n${pr.url}`,
-      );
-    } catch (error) {
-      const reason = describePublishError(error);
-
-      await this.finish(run, ImproveRunStatus.Failed, { error: reason });
-      await this.notifier.send(
-        run.kind === 'repair'
-          ? `🔴 PR #${run.prNumber}: автоисправление CI не удалось — ${reason.slice(0, 200)}`
-          : `🔴 Задача #${run.issueNumber}: не удалось открыть PR — ${reason.slice(0, 200)}`,
-      );
-    }
-  }
-
-  // The blobs and the tree of a result on top of a commit — shared by the first PR and by a repair.
-  private async createTreeFor(
-    baseSha: string,
-    changes: Change[],
-  ): Promise<string> {
-    const baseTree = await this.github.getCommitTreeSha(baseSha);
-    const tree = await mapInBatches(
-      changes,
-      BLOB_CONCURRENCY,
-      async (change): Promise<TreeEntry> => ({
-        path: change.path,
-        mode: '100644',
-        type: 'blob',
-        sha:
-          change.kind === 'deleted'
-            ? null
-            : await this.github.createBlob(change.bytes as Uint8Array),
-      }),
-    );
-
-    return this.github.createTree(baseTree, tree);
-  }
-
-  // A repair is a commit on top of the PR's head, pushed to the PR's own branch (never forced).
-  private async commitRepair(run: ImproveRun, changes: Change[]) {
-    const headSha = run.baseSha as string;
-    const commit = await this.github.createCommit(
-      `${run.trigger === 'chat' ? 'Update' : 'Fix CI on'} PR #${run.prNumber}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}): ${describeChanges(changes)}.`,
-      await this.createTreeFor(headSha, changes),
-      headSha,
-    );
-
-    await this.github.updateBranch(run.branch as string, commit);
-  }
-
-  private async openPullRequest(
-    run: ImproveRun,
-    changes: Change[],
-    note: string | null,
-  ) {
-    const baseSha = run.baseSha as string;
-    const commit = await this.github.createCommit(
-      `Pull issue #${run.issueNumber}: ${run.issueTitle}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}).`,
-      await this.createTreeFor(baseSha, changes),
-      baseSha,
-    );
-    const branch = `improve/issue-${run.issueNumber}-run-${run.id}`;
-
-    await this.github.createBranch(branch, commit);
-
-    let pull: { number: number; htmlUrl: string };
-
-    try {
-      pull = await this.github.createPull({
-        title: run.issueTitle,
-        head: branch,
-        base: this.github.baseBranch(),
-        body: [
-          `Closes #${run.issueNumber}`,
-          '',
-          `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
-          ...(note ? ['', `⚠️ ${note}`] : []),
-          '',
-          'Не влито автоматически — проверьте и влейте как обычно (CI → Telegram → Merge).',
-        ].join('\n'),
-      });
-    } catch (error) {
-      // A branch with no PR helps nobody, and every retry would leave another one behind.
-      await this.github
-        .deleteBranch(branch)
-        .catch((cleanup) =>
-          this.logger.warn(
-            `Could not remove branch ${branch} after a failed PR: ${message(cleanup)}`,
-          ),
-        );
-
-      throw error;
-    }
-
-    // The loop picks the PR up by this label (see LoopService's adoption).
-    await this.github
-      .addLabels(pull.number, [PR_LABEL])
-      .catch((error) =>
-        this.logger.warn(
-          `Could not label PR #${pull.number}: ${message(error)}`,
-        ),
-      );
-
-    return { branch, number: pull.number, url: pull.htmlUrl };
-  }
-
-  private async finish(
-    run: ImproveRun,
-    status: ImproveRunStatus,
-    patch: Partial<
-      Pick<
-        ImproveRun,
-        'error' | 'note' | 'branch' | 'prNumber' | 'prUrl' | 'result'
-      >
-    >,
-  ): Promise<void> {
-    Object.assign(run, patch, { status, finishedAt: new Date() });
-    await this.runs.save(run);
-    this.log(
-      status === ImproveRunStatus.Failed ? 'error' : 'info',
-      `improve.${status}`,
-      `Run ${run.id} (issue #${run.issueNumber}): ${status}${patch.error ? ` — ${patch.error}` : ''}`,
-      {
-        runId: run.id,
-        jobId: run.jobId ?? undefined,
-        prNumber: patch.prNumber ?? undefined,
-      },
-    );
   }
 
   // -------------------------------------------------------------- analysis
@@ -1126,11 +792,11 @@ export class ImproveService {
     const [titlesStep, digestStep, prepStep] = await Promise.all([
       timed(this.github.listIssueTitles()),
       timed(this.logDigest()),
-      timed(this.prepareSnapshot()),
+      timed(this.handoff.prepareSnapshot()),
     ]);
     const titles = titlesStep.value.map((issue) => issue.title);
     const date = new Date().toISOString().slice(0, 10);
-    const { job, baseSha, fileCount } = await this.handToWorker(
+    const { job, baseSha, fileCount } = await this.handoff.handToWorker(
       userId,
       model,
       {
@@ -1230,7 +896,7 @@ export class ImproveService {
       );
 
       if (items.length === 0) {
-        await this.finish(run, ImproveRunStatus.Analyzed, {
+        await this.publisher.finish(run, ImproveRunStatus.Analyzed, {
           result: JSON.stringify({ ...stored, items: [] }),
           note: 'Анализ ничего не предложил',
         });
@@ -1251,7 +917,7 @@ export class ImproveService {
           // The proposals exist; only the filing failed — the manual button can finish it.
           const note = `${items.length} предложений ждут проверки; автосоздание issues прервано: ${message(error)}`;
 
-          await this.finish(run, ImproveRunStatus.Analyzed, {
+          await this.publisher.finish(run, ImproveRunStatus.Analyzed, {
             result: run.result,
             note,
           });
@@ -1268,7 +934,7 @@ export class ImproveService {
         summary += `; ${await this.startFiled(run)}`;
       }
 
-      await this.finish(run, ImproveRunStatus.Analyzed, {
+      await this.publisher.finish(run, ImproveRunStatus.Analyzed, {
         result: run.result,
         note: summary ?? `${items.length} предложений ждут проверки`,
       });
@@ -1277,7 +943,7 @@ export class ImproveService {
         `🔍 Анализ завершён: ${summary ?? `${items.length} предложений ждут проверки в Improve → Анализ`}`,
       );
     } catch (error) {
-      await this.finish(run, ImproveRunStatus.Failed, {
+      await this.publisher.finish(run, ImproveRunStatus.Failed, {
         error: message(error),
       });
       await this.notifier.send(
@@ -1421,34 +1087,6 @@ export class ImproveService {
   }
 }
 
-// GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
-// about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
-// Maps in order, at most `size` calls in flight; the first rejection rejects the whole map.
 const START_CONCURRENCY = 3;
-
-async function mapInBatches<T, R>(
-  items: T[],
-  size: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = [];
-
-  for (let i = 0; i < items.length; i += size) {
-    out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
-  }
-
-  return out;
-}
-
-const TOKEN_PERMISSION_ERROR =
-  'Resource not accessible by personal access token';
-
-export function describePublishError(error: unknown): string {
-  const text = message(error);
-
-  return text.includes(TOKEN_PERMISSION_ERROR)
-    ? `${text}. Токену GitHub (LOOP_GITHUB_TOKEN) не хватает права: для Improve нужны Issues, Pull requests и Contents — чтение и запись, Checks — чтение`
-    : text;
-}
 
 export { message, PR_LABEL };

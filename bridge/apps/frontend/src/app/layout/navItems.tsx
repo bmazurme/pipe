@@ -1,7 +1,7 @@
 import { AsideHeaderItem, MobileMenuItem } from '@gravity-ui/navigation';
 import { NavigateFunction } from 'react-router-dom';
 
-import { HOME_LINK, NAV_GROUP_ORDER, SERVICES, SOON_SERVICES, type ServiceLink } from '../../shared/config/services';
+import { HOME_LINK, NAV_GROUP_ORDER, SERVICES, SOON_SERVICES, type ServiceLink, visibleServices } from '../../shared/config/services';
 import { isCurrentPath, isModifiedClick, soonTitle } from './layoutUtils';
 import { StatusDot } from './StatusDot';
 import styles from './AppLayout.module.css';
@@ -12,9 +12,11 @@ export const NAV_ITEMS = [
   ...NAV_GROUP_ORDER.flatMap((group) => SERVICES.filter((item) => item.group === group)),
 ];
 
-/** The same list split into sections (Home alone first), for the dividers between them. */
-export function navSections(): (typeof HOME_LINK | ServiceLink)[][] {
-  return [[HOME_LINK], ...NAV_GROUP_ORDER.map((group) => SERVICES.filter((item) => item.group === group))].filter(
+/** The same list split into sections (Home alone first), for the dividers between them; owner-only pages are left out for a non-owner. */
+export function navSections(isOwner?: boolean): (typeof HOME_LINK | ServiceLink)[][] {
+  const services = visibleServices(isOwner);
+
+  return [[HOME_LINK], ...NAV_GROUP_ORDER.map((group) => services.filter((item) => item.group === group))].filter(
     (section) => section.length > 0,
   );
 }
@@ -22,6 +24,8 @@ export function navSections(): (typeof HOME_LINK | ServiceLink)[][] {
 /** Live state shown on rows: `up` is undefined until it is known (nothing is drawn then). */
 export interface NavStatus {
   workerUp?: boolean;
+  /** From /users/me; only `false` hides the owner-only pages, so nothing disappears while it is unknown. */
+  isOwner?: boolean;
 }
 
 export function buildMenuItems(
@@ -31,7 +35,7 @@ export function buildMenuItems(
 ): AsideHeaderItem[] {
   const items: AsideHeaderItem[] = [];
 
-  navSections().forEach((section, index) => {
+  navSections(status.isOwner).forEach((section, index) => {
     if (index > 0) items.push({ id: `divider-${index}`, title: '', type: 'divider' as const });
 
     for (const item of section) {
@@ -82,7 +86,7 @@ export function buildBurgerItems(
 ): MobileMenuItem[] {
   const items: MobileMenuItem[] = [];
 
-  navSections().forEach((section, index) => {
+  navSections(status.isOwner).forEach((section, index) => {
     if (index > 0) items.push({ id: `divider-${index}`, title: '', type: 'divider' as const });
 
     for (const item of section) {
