@@ -1296,6 +1296,46 @@ describe('WorkerService', () => {
       );
     });
 
+    it('retries a job reported with failureKind shutdown whatever the text', async () => {
+      repository.findOne!.mockResolvedValue(
+        lost({ status: JobStatus.Running, errorMessage: null }),
+      );
+
+      await service.updateStatus(5, 7, {
+        status: JobStatus.Failed,
+        errorMessage: 'Worker stopped',
+        failureKind: 'shutdown',
+      });
+
+      expect(repository.save).toHaveBeenCalledTimes(2);
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ failureKind: 'shutdown' }),
+      );
+    });
+
+    it('retries a job with failureKind lost whatever the text', async () => {
+      const retried = await service.retryAfterInfraFailure(
+        lost({ errorMessage: 'anything', failureKind: 'lost' }),
+      );
+
+      expect(retried).toMatchObject({ status: JobStatus.Queued });
+    });
+
+    it('does not retry twice when the earlier attempt only has a failureKind', async () => {
+      repository.count!.mockResolvedValue(1);
+
+      const retried = await service.retryAfterInfraFailure(
+        lost({ failureKind: 'shutdown', errorMessage: 'x' }),
+      );
+
+      expect(retried).toBeNull();
+      expect(repository.count).toHaveBeenCalledWith({
+        where: expect.arrayContaining([
+          expect.objectContaining({ failureKind: expect.anything() }),
+        ]),
+      });
+    });
+
     it('never retries a job that failed for another reason', async () => {
       const retried = await service.retryAfterInfraFailure(
         lost({ errorMessage: 'claude exited with code 1' }),

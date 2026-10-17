@@ -246,7 +246,7 @@ export async function processJob(
       jlog.warn('stopped by worker shutdown');
 
       try {
-        await client.updateStatus(job.id, 'failed', SHUTDOWN_FAILURE_MESSAGE);
+        await client.updateStatus(job.id, 'failed', SHUTDOWN_FAILURE_MESSAGE, 'shutdown');
       } catch (statusError) {
         jlog.error({ err: statusError }, 'additionally failed to report failure status');
       }
