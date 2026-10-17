@@ -111,6 +111,10 @@ export class Job extends BaseEntity {
   @Column({ type: 'smallint', nullable: true })
   historyCount: number | null;
 
+  // Opt-in Telegram message when the job ends (honoured for the deployment owner only).
+  @Column({ type: 'boolean', default: false })
+  notifyOnFinish: boolean;
+
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
 
