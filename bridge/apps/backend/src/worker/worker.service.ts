@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThan, Not, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
@@ -55,6 +55,10 @@ export type JobStatusRow = Pick<
   'id' | 'userId' | 'status' | 'resultFileId' | 'errorMessage'
 >;
 
+// What a Claude run that Anthropic refused prints (e.g. "Failed to authenticate. API Error: 403 Request not allowed").
+const AUTH_FAILURE_PATTERN =
+  /Failed to authenticate|\b401\b|\b403\b.*Request not allowed/i;
+
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
@@ -79,6 +83,17 @@ export class WorkerService {
     };
   }
 
+  private isInfraFailure(job: Job): boolean {
+    if (job.failureKind) return true;
+
+    // Legacy fallback for workers that do not send failureKind yet.
+    // TODO: remove once every worker is upgraded.
+    return (
+      job.errorMessage !== null &&
+      INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
+    );
+  }
+
   // A job lost to a worker stop/restart says nothing about the task, so it is queued
   // once more automatically — but only once per parcel (an earlier infrastructure
   // failure on the same parcel means this already was the retry), so a crash-looping
@@ -87,19 +102,27 @@ export class WorkerService {
     if (
       job.status !== JobStatus.Failed ||
       job.sourceFileId === null ||
-      job.errorMessage === null ||
-      !INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
+      !this.isInfraFailure(job)
     ) {
       return null;
     }
 
     try {
       const earlier = await this.jobRepository.count({
-        where: {
-          sourceFileId: job.sourceFileId,
-          errorMessage: In(INFRA_FAILURE_MESSAGES),
-          id: Not(job.id),
-        },
+        where: [
+          {
+            sourceFileId: job.sourceFileId,
+            failureKind: Not(IsNull()),
+            id: Not(job.id),
+          },
+          // Legacy fallback for workers that do not send failureKind yet.
+          // TODO: remove once every worker is upgraded.
+          {
+            sourceFileId: job.sourceFileId,
+            errorMessage: In(INFRA_FAILURE_MESSAGES),
+            id: Not(job.id),
+          },
+        ],
       });
 
       if (earlier > 0) return null;
@@ -653,6 +676,7 @@ export class WorkerService {
             userId,
             limits,
           );
+          await this.claudeCredentialsService.clearAuthFailed(token.id, userId);
 
           return { limits, credentialId: token.id };
         }
@@ -675,6 +699,14 @@ export class WorkerService {
         limitsCredentialId,
         userId,
         limits,
+      );
+    }
+
+    // Usage or limits only arrive from a run Anthropic accepted.
+    if ((limits || usage) && limitsCredentialId !== null) {
+      await this.claudeCredentialsService.clearAuthFailed(
+        limitsCredentialId,
+        userId,
       );
     }
 
@@ -844,6 +876,7 @@ export class WorkerService {
 
     if (dto.status === JobStatus.Failed) {
       job.errorMessage = dto.errorMessage ?? job.errorMessage;
+      job.failureKind = dto.failureKind ?? job.failureKind ?? null;
       job.finishedAt = new Date();
     }
 
@@ -852,6 +885,28 @@ export class WorkerService {
     }
 
     const saved = await this.jobRepository.save(job);
+
+    if (
+      dto.status === JobStatus.Failed &&
+      saved.usedClaudeCredentialId != null &&
+      AUTH_FAILURE_PATTERN.test(saved.errorMessage ?? '')
+    ) {
+      await this.claudeCredentialsService.markAuthFailed(
+        saved.usedClaudeCredentialId,
+        userId,
+        saved.id,
+      );
+    }
+
+    if (
+      dto.status === JobStatus.Succeeded &&
+      saved.usedClaudeCredentialId != null
+    ) {
+      await this.claudeCredentialsService.clearAuthFailed(
+        saved.usedClaudeCredentialId,
+        userId,
+      );
+    }
 
     if (dto.status === JobStatus.Failed) {
       logJobOutcome(this.appLogs, saved);

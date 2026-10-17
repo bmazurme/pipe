@@ -2,12 +2,25 @@ import { ArrowDownToSquare } from '@gravity-ui/icons';
 import { Alert, Button, Card, Icon, Text } from '@gravity-ui/uikit';
 
 import { describeApiError, useDownloadReportsReleaseMutation, useGetReportsReleaseInfoQuery } from '../../store/api';
+import { useIsNonOwner } from '../../store/hooks';
+import { OwnerOnlyNotice } from '../../widgets/OwnerOnly';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../ReportsPage.module.css';
 
 export function ReportsReleaseSection() {
-  const { data: info, isError: isInfoError } = useGetReportsReleaseInfoQuery();
+  // Both routes are owner-only: another account gets the notice and no request that is bound to fail.
+  const isNonOwner = useIsNonOwner();
+  const { data: info, isError: isInfoError } = useGetReportsReleaseInfoQuery(undefined, { skip: isNonOwner });
   const [download, { isLoading: isDownloading, error: downloadError }] = useDownloadReportsReleaseMutation();
+
+  if (isNonOwner) {
+    return (
+      <Card view="outlined" className={styles.card}>
+        <SectionHeader title="Скачать reports" />
+        <OwnerOnlyNotice />
+      </Card>
+    );
+  }
 
   return (
     <Card view="outlined" className={styles.card}>

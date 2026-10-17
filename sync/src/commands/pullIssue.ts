@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 import { notify } from '@pipe/protocol/notify';
 import { resolveInDir } from '@pipe/protocol/resolveInDir';
@@ -65,7 +66,7 @@ async function tryPullOnce(
   const { manifest, files, assets, legacyManifest } = extractIssueArchive(buffer);
 
   // Validate asset paths up front too, so a bad parcel writes nothing at all.
-  for (const asset of assets) resolveInDir(project.path, asset.relPath);
+  const assetDestinations = assets.map((asset) => resolveInDir(project.path, asset.relPath));
   writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
 
   if (legacyManifest) {
@@ -73,8 +74,13 @@ async function tryPullOnce(
       `Warning: "${newest.originalName}" used the legacy ${'__sync_manifest__.json'} format — ` +
         'no issue title/description/branch is available for it.',
     );
+    // No ISSUE.md to list them in, but binary results still belong on disk.
+    assets.forEach((asset, i) => {
+      mkdirSync(path.dirname(assetDestinations[i]), { recursive: true });
+      writeFileSync(assetDestinations[i], Buffer.from(asset.base64, 'base64'));
+    });
   } else {
-    const issueFile = extractIssue(project.path, manifest, dictionary, newest.id);
+    const issueFile = extractIssue(project.path, manifest, dictionary, newest.id, assets);
     log.info(`Issue #${manifest.issueIid}: ${issueFile.title}`);
     if (issueFile.description) log.info(issueFile.description);
     log.info(`Branch: ${manifest.branch}`);
@@ -82,7 +88,7 @@ async function tryPullOnce(
   }
 
   log.info(
-    `Pulled ${files.length} files into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
+    `Pulled ${files.length} files and ${assets.length} assets into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
   );
 
   return true;

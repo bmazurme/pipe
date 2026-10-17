@@ -4,6 +4,7 @@ import {
   gitlabFetch,
   getIssue,
   listAssignedOpenIssues,
+  resolveIssueUploadUrl,
   type GitlabIssue,
 } from '@pipe/protocol';
 import { log } from './log.js';
@@ -26,8 +27,8 @@ export interface IssueImage {
 
 // GitLab stores uploaded issue images under /uploads/<hash>/<filename>
 // relative to the instance root, not the API base (apiUrl is ".../api/v4").
-// Only relative refs or ones already on this same instance are fetched; a
-// link to some third-party host in the description is left alone.
+// Only refs to this same instance's /uploads/ are fetched (see
+// resolveIssueUploadUrl); a link to any other host is left alone.
 const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export async function getIssueImages(
@@ -43,18 +44,16 @@ export async function getIssueImages(
   let totalBytes = 0;
 
   for (const ref of refs) {
-    let absoluteUrl: string;
-    if (ref.url.startsWith('/')) {
-      absoluteUrl = `${instanceRoot}${ref.url}`;
-    } else if (ref.url.startsWith(instanceRoot)) {
-      absoluteUrl = ref.url;
-    } else {
+    const absoluteUrl = resolveIssueUploadUrl(instanceRoot, ref.url);
+    if (!absoluteUrl) {
       continue;
     }
 
     let response: Response;
     try {
-      response = await gitlabFetch(absoluteUrl, privateToken);
+      // A redirect is not followed (it would carry Private-Token along) — the
+      // 3xx comes back as a non-ok status and the image is skipped below.
+      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
     } catch (error) {
       if (error instanceof GitlabApiError) {
         log.warn(`Could not download an image from the issue description (${absoluteUrl}): HTTP ${error.status}`);

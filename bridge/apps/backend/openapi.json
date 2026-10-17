@@ -3759,12 +3759,16 @@
           },
           "status": {
             "type": "string"
+          },
+          "isOwner": {
+            "type": "boolean"
           }
         },
         "required": [
           "id",
           "username",
-          "status"
+          "status",
+          "isOwner"
         ]
       },
       "UpdateUserDto": {
@@ -3999,7 +4003,8 @@
         "type": "object",
         "properties": {
           "errorMessage": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           }
         }
       },
@@ -4312,6 +4317,12 @@
           "errorMessage": {
             "type": "string",
             "maxLength": 8192
+          },
+          "failureKind": {
+            "type": "string",
+            "enum": [
+              "shutdown"
+            ]
           }
         },
         "required": [
@@ -4338,6 +4349,15 @@
             "nullable": true,
             "additionalProperties": true
           },
+          "authFailedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "authFailedJobId": {
+            "type": "number",
+            "nullable": true
+          },
           "id": {
             "type": "number"
           },
@@ -4351,6 +4371,8 @@
         },
         "required": [
           "limits",
+          "authFailedAt",
+          "authFailedJobId",
           "id",
           "name",
           "createdAt"

@@ -80,8 +80,9 @@ export class WorkerBridgeClient {
     jobId: number,
     status: 'running' | 'succeeded' | 'failed' | 'cancelled',
     errorMessage?: string,
+    failureKind?: 'shutdown',
   ): Promise<void> {
-    await this.post(`/${jobId}/status`, `Updating status for job ${jobId}`, { status, errorMessage });
+    await this.post(`/${jobId}/status`, `Updating status for job ${jobId}`, { status, errorMessage, failureKind });
   }
 
   // Whether the owner asked to stop this job (or bridge already cancelled it).

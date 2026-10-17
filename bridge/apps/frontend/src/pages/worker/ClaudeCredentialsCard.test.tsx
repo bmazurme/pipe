@@ -55,6 +55,29 @@ describe('ClaudeCredentialsCard', () => {
     expect(screen.queryByText('Не удалось загрузить список токенов')).toBeNull();
   });
 
+  it('flags a token Anthropic rejected, with the job number', async () => {
+    listReply = () =>
+      json([
+        {
+          id: 3,
+          name: 'личный',
+          createdAt: '2026-10-08T00:00:00Z',
+          authFailedAt: new Date().toISOString(),
+          authFailedJobId: 57,
+        },
+      ]);
+    renderCard();
+
+    expect(await screen.findByText(/Отклонён Anthropic · задача #57/)).toBeTruthy();
+  });
+
+  it('shows no rejected label for a healthy token', async () => {
+    renderCard();
+
+    await screen.findByText('личный');
+    expect(screen.queryByText(/Отклонён Anthropic/)).toBeNull();
+  });
+
   it('shows an empty state for an empty list', async () => {
     listReply = () => json([]);
     renderCard();

@@ -6,6 +6,8 @@ import {
   isDue,
   localDate,
 } from './improve-schedule.service';
+import { ImproveHandoffService } from './improve-handoff.service';
+import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 
 function setup() {
@@ -56,6 +58,13 @@ function setup() {
   const notifier = { send: jest.fn().mockResolvedValue(true) };
   const dataSource = { query: jest.fn().mockResolvedValue([]) };
   const appLogs = { record: jest.fn() };
+  const publisher = new ImprovePublishService(
+    runs as never,
+    github as never,
+    storage as never,
+    notifier as never,
+    appLogs as never,
+  );
   const improve = new ImproveService(
     runs as never,
     github as never,
@@ -66,6 +75,12 @@ function setup() {
     dataSource as never,
     appLogs as never,
     {} as never,
+    publisher as never,
+    new ImproveHandoffService(
+      github as never,
+      storage as never,
+      workers as never,
+    ),
   );
   const contexts = { findOwned: jest.fn().mockResolvedValue({ id: 4 }) };
   const service = new ImproveScheduleService(

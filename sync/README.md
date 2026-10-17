@@ -107,9 +107,61 @@ node dist/cli.js pull bridge
 проект, если в нём есть незакоммиченные изменения (git working tree грязный) —
 закоммитьте/застэшьте их или передайте `--force`.
 
+`node dist/cli.js inbox [--channel issue] [--direction result|outbound] [--json]` —
+показывает, какие посылки лежат в bridge (id, имя, taskKey, направление,
+размер, возраст; новые сверху), ничего не скачивая и не удаляя, так что
+следующий `pull-issue` их по-прежнему найдёт.
+
 Глобальный флаг `-v`/`--verbose` (до имени команды) включает debug-уровень
 вывода (`src/log.ts`) — по умолчанию скрыт, обычные сообщения команд
 (`log.info`/`log.warn`/`log.error`) показываются всегда, как и раньше.
+
+## Режим issue
+
+Помимо переноса всего дерева (`push`/`pull`), sync-cli умеет работать с одной
+задачей GitLab: проект упаковывается в посылку `${projectId}-${iid}.subscription.zip`
+(совместима с модулем Subscription в `reports`), её забирает агент на другой
+машине, а результат возвращается обратно.
+
+| Команда | Что делает |
+| --- | --- |
+| `login-gitlab <token>` | Сохраняет personal access token GitLab — `push-issue` берёт по нему заголовок и описание задачи. |
+| `login-api-key <apiKey>` | Сохраняет персональный API-ключ bridge (Profile → API keys); для машины без человека лучше, чем `login`, т.к. не выдаёт себя за сессию пользователя. |
+| `generate-keys <name>` | Генерирует пару RSA-4096 по `publicKeyPath`/`privateKeyPath` проекта — для шифрования в `push-issue`/`pull-issue`. |
+| `push-issue <name> <projectId> <iid>` | Преобразует и грузит отслеживаемый проект как посылку для одной задачи GitLab. |
+| `pull-issue <name> <projectId> <iid>` | Скачивает и преобразует последнюю посылку, адресованную этой задаче. |
+| `gitlab-worker <name>` | Опрашивает GitLab: открытые задачи, назначенные на вас в этом проекте, которые ещё не отправлены, отправляет через `push-issue` — без ручного ввода id. |
+| `agent-runner <name>` | Опрашивает bridge на посылки по задачам, запускает Claude Code в изолированном git worktree, пушит коммиты до/после в ветку на origin и возвращает результат в bridge. Словарь не используется — (де)обезличивание остаётся за `reports`. |
+| `remove <name>` | Перестаёт отслеживать проект (обратное к `add`). |
+
+Флаги:
+
+- `--strict` (`push`, `push-issue`, `gitlab-worker`) — при находках leak-scan
+  `push`/`push-issue` прерываются, а `gitlab-worker` пропускает такую задачу
+  (без флага только предупреждение).
+- `-w, --watch <seconds>` (`pull-issue`, `gitlab-worker`, `agent-runner`) —
+  опрашивать каждые `<seconds>` секунд. Для `pull-issue` — пока не появится
+  результат, затем уведомление и выход; для `gitlab-worker` и `agent-runner` —
+  вместо одного прохода.
+- `--review` (`agent-runner`) — перед каждым запуском остановиться, чтобы
+  просмотреть/отредактировать задачу и выбрать модель; несовместим с `--watch`.
+- `-f, --force` — `push`: отправить, даже если хеш содержимого не изменился;
+  `pull`: даже при грязном git-дереве или неизменном хеше; `pull-issue`: даже
+  при грязном git-дереве; `generate-keys`: перезаписать существующие ключи.
+
+Пример (машина A отправляет задачу, ждёт результат):
+
+```bash
+node dist/cli.js login-gitlab <gitlab-token>
+node dist/cli.js generate-keys bridge
+node dist/cli.js push-issue bridge 123 45 --strict
+node dist/cli.js pull-issue bridge 123 45 --watch 30
+```
+
+На машине с агентом: `node dist/cli.js agent-runner bridge --watch 30`.
+
+Подробнее о сценариях — [`docs/workflows.md`](../docs/workflows.md), о форматах
+state-файлов — [`ECOSYSTEM.md`](../ECOSYSTEM.md).
 
 ## Прокси
 
