@@ -4450,6 +4450,22 @@
             "type": "number",
             "nullable": true
           },
+          "usage7d": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "runs": {
+                "type": "number"
+              },
+              "costUsd": {
+                "type": "number",
+                "nullable": true
+              },
+              "tokens": {
+                "type": "number"
+              }
+            }
+          },
           "id": {
             "type": "number"
           },

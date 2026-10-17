@@ -10,6 +10,7 @@ import {
 } from '../../store/api';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { ClaudeLimitsView } from './ClaudeLimitsView';
+import { describeRecentUsage } from './claudeLimits';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 
@@ -97,6 +98,9 @@ export function ClaudeCredentialsCard() {
                   </>
                 )}
                 <ClaudeLimitsView limits={credential.limits} emptyText="Лимиты появятся после первого запуска на этом токене" />
+                <Text color="secondary" variant="caption-2">
+                  {describeRecentUsage(credential.usage7d)}
+                </Text>
               </div>
               <Button
                 view="flat-danger"

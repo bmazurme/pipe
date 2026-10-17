@@ -4,13 +4,62 @@ import { IsNull, Not, Repository } from 'typeorm';
 
 import type { ClaudeLimits } from './claude-limits';
 import { ClaudeCredential } from './entities/claude-credential.entity';
+import { Job } from './entities/job.entity';
+
+export interface RecentClaudeUsage {
+  runs: number;
+  /** null when no run in the window reported a cost. */
+  costUsd: number | null;
+  tokens: number;
+}
 
 @Injectable()
 export class ClaudeCredentialsService {
   constructor(
     @InjectRepository(ClaudeCredential)
     private readonly repository: Repository<ClaudeCredential>,
+    @InjectRepository(Job)
+    private readonly jobRepository: Repository<Job>,
   ) {}
+
+  // Runs, cost and tokens of the user's jobs created since `since`, per token the job actually ran on. Tokens with
+  // no runs are absent from the map; jobs whose token was deleted (null id) are left out.
+  async recentUsage(
+    userId: number,
+    since: Date,
+  ): Promise<Map<number, RecentClaudeUsage>> {
+    const rows: {
+      credentialId: number | string;
+      runs: string;
+      costUsd: string | null;
+      tokens: string | null;
+    }[] = await this.jobRepository
+      .createQueryBuilder('job')
+      .select('job.usedClaudeCredentialId', 'credentialId')
+      .addSelect('COUNT(*)', 'runs')
+      .addSelect("SUM((job.usage->>'costUsd')::numeric)", 'costUsd')
+      .addSelect(
+        "SUM(COALESCE((job.usage->>'inputTokens')::numeric, 0) + COALESCE((job.usage->>'outputTokens')::numeric, 0) + COALESCE((job.usage->>'cacheReadTokens')::numeric, 0) + COALESCE((job.usage->>'cacheCreationTokens')::numeric, 0))",
+        'tokens',
+      )
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.usage IS NOT NULL')
+      .andWhere('job.usedClaudeCredentialId IS NOT NULL')
+      .andWhere('job.createdAt >= :since', { since })
+      .groupBy('job.usedClaudeCredentialId')
+      .getRawMany();
+
+    return new Map(
+      rows.map((row) => [
+        Number(row.credentialId),
+        {
+          runs: Number(row.runs),
+          costUsd: row.costUsd === null ? null : Number(row.costUsd),
+          tokens: Number(row.tokens ?? 0),
+        },
+      ]),
+    );
+  }
 
   // The plan limits a run on this token reported; best-effort, so a deleted token is simply ignored.
   async recordLimits(

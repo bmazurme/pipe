@@ -2112,6 +2112,11 @@ export interface components {
             /** Format: date-time */
             authFailedAt: string | null;
             authFailedJobId: number | null;
+            usage7d?: {
+                runs?: number;
+                costUsd?: number | null;
+                tokens?: number;
+            } | null;
             id: number;
             name: string;
             /** Format: date-time */

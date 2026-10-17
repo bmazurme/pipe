@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
 import { ClaudeCredential } from './entities/claude-credential.entity';
+import { Job } from './entities/job.entity';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 
 type MockRepository = Partial<
@@ -24,18 +25,64 @@ function createMockRepository(): MockRepository {
 describe('ClaudeCredentialsService', () => {
   let service: ClaudeCredentialsService;
   let repository: MockRepository;
+  let jobGetRawMany: jest.Mock;
+  let jobBuilder: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     repository = createMockRepository();
+    jobGetRawMany = jest.fn().mockResolvedValue([]);
+    jobBuilder = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jobGetRawMany,
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ClaudeCredentialsService,
         { provide: getRepositoryToken(ClaudeCredential), useValue: repository },
+        {
+          provide: getRepositoryToken(Job),
+          useValue: { createQueryBuilder: jest.fn(() => jobBuilder) },
+        },
       ],
     }).compile();
 
     service = module.get(ClaudeCredentialsService);
+  });
+
+  describe('recentUsage', () => {
+    const since = new Date('2026-10-10T00:00:00Z');
+
+    it('maps the grouped sums per token, scoped to the user and the window', async () => {
+      jobGetRawMany.mockResolvedValue([
+        { credentialId: 3, runs: '14', costUsd: '3.2000', tokens: '1200000' },
+        { credentialId: 4, runs: '2', costUsd: null, tokens: '500' },
+      ]);
+
+      const usage = await service.recentUsage(7, since);
+
+      expect(usage.get(3)).toEqual({ runs: 14, costUsd: 3.2, tokens: 1200000 });
+      expect(usage.get(4)).toEqual({ runs: 2, costUsd: null, tokens: 500 });
+      expect(jobBuilder.where).toHaveBeenCalledWith('job.userId = :userId', {
+        userId: 7,
+      });
+      expect(jobBuilder.andWhere).toHaveBeenCalledWith(
+        'job.createdAt >= :since',
+        { since },
+      );
+      expect(jobBuilder.andWhere).toHaveBeenCalledWith('job.usage IS NOT NULL');
+    });
+
+    it('has no entry for a token with no runs', async () => {
+      const usage = await service.recentUsage(7, since);
+
+      expect(usage.size).toBe(0);
+      expect(usage.get(9)).toBeUndefined();
+    });
   });
 
   describe('create', () => {

@@ -1,4 +1,4 @@
-import type { ClaudeLimits, ClaudeLimitWindow, ClaudeRunUsage } from '../../store/api';
+import type { ClaudeLimits, ClaudeLimitWindow, ClaudeRunUsage, RecentClaudeUsage } from '../../store/api';
 
 const WINDOW_LABEL: Record<string, string> = {
   five_hour: '5 часов',
@@ -82,4 +82,27 @@ export function describeUsage(usage: ClaudeRunUsage): string {
   parts.push(`${compact(tokens)} токенов`);
 
   return parts.join(' · ');
+}
+
+const runsWord = (n: number) => {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+
+  if (mod100 >= 11 && mod100 <= 14) return 'запусков';
+  if (mod10 === 1) return 'запуск';
+  if (mod10 >= 2 && mod10 <= 4) return 'запуска';
+
+  return 'запусков';
+};
+
+// "За 7 дней: 14 запусков · $3.20 · 1.2M токенов" — a token's runs summed over the week; no runs say so.
+export function describeRecentUsage(usage: RecentClaudeUsage | null | undefined): string {
+  if (!usage || usage.runs === 0) return 'За 7 дней запусков не было';
+
+  const parts = [`${usage.runs} ${runsWord(usage.runs)}`];
+
+  if (usage.costUsd !== null) parts.push(`$${usage.costUsd < 0.01 ? usage.costUsd.toFixed(4) : usage.costUsd.toFixed(2)}`);
+  parts.push(`${compact(usage.tokens)} токенов`);
+
+  return `За 7 дней: ${parts.join(' · ')}`;
 }

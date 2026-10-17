@@ -33,11 +33,18 @@ export class ClaudeCredentialsController {
   async list(
     @CurrentUser() currentUser: { id: number },
   ): Promise<ClaudeCredentialResponseDto[]> {
-    const credentials = await this.claudeCredentialsService.findAllByUser(
-      currentUser.id,
-    );
+    const [credentials, usage] = await Promise.all([
+      this.claudeCredentialsService.findAllByUser(currentUser.id),
+      this.claudeCredentialsService.recentUsage(
+        currentUser.id,
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      ),
+    ]);
 
-    return credentials.map(ClaudeCredentialResponseDto.fromEntity);
+    return credentials.map((credential) => ({
+      ...ClaudeCredentialResponseDto.fromEntity(credential),
+      usage7d: usage.get(credential.id) ?? null,
+    }));
   }
 
   @Post()
