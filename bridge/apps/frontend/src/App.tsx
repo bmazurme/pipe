@@ -6,6 +6,7 @@ import { AuthProvider } from './app/providers/AuthProvider';
 import { AppThemeProvider } from './app/providers/ThemeProvider';
 import { LoginPage } from './pages/LoginPage';
 import { OAuthErrorPage } from './pages/OAuthErrorPage';
+import { OwnerOnlyPage } from './widgets/OwnerOnly';
 import { RequireAuth } from './widgets/RequireAuth';
 
 // The authenticated pages carry the heavy dependencies — the calendar pulls in
@@ -74,12 +75,26 @@ export function App() {
             <Route element={<RequireAuth />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <OwnerOnlyPage title="Дашборд">
+                      <DashboardPage />
+                    </OwnerOnlyPage>
+                  }
+                />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/storage" element={<StoragePage />} />
                 <Route path="/purge" element={<PurgePage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/improve" element={<ImprovePage />} />
+                <Route
+                  path="/improve"
+                  element={
+                    <OwnerOnlyPage title="Improve">
+                      <ImprovePage />
+                    </OwnerOnlyPage>
+                  }
+                />
                 <Route path="/context" element={<ContextPage />} />
                 <Route path="/keys" element={<KeysPage />} />
                 <Route path="/secrets" element={<SecretsPage />} />

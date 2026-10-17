@@ -4,6 +4,8 @@ export interface Me {
   id: number;
   username: string;
   status: string;
+  /** Whether the owner-only pages (Dashboard, Improve, logs, reports release) are open to this account. */
+  isOwner: boolean;
 }
 
 export interface NotificationSettings {
