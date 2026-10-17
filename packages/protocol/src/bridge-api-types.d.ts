@@ -1938,6 +1938,7 @@ export interface components {
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
             title: string | null;
+            contextName: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1946,6 +1947,7 @@ export interface components {
         CreateChatDto: {
             /** @enum {string} */
             model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            contextId?: number;
         };
         RenameChatDto: {
             title: string;

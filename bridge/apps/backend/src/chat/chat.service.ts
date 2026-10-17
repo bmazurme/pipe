@@ -20,6 +20,7 @@ import {
   MAX_ATTACHMENTS_PER_CHAT,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from './attachments';
+import { ContextService } from '../context/context.service';
 import { FILE_STORE, type FileStore } from '../storage/file-store/file-store';
 import {
   type SendDone,
@@ -55,12 +56,26 @@ export class ChatService {
     @InjectRepository(ChatAttachment)
     private readonly attachmentRepository: Repository<ChatAttachment>,
     @Inject(FILE_STORE) private readonly store: FileStore,
+    private readonly contextService: ContextService,
   ) {}
 
   private readonly logger = new Logger(ChatService.name);
 
   async createChat(userId: number, dto: CreateChatDto): Promise<Chat> {
-    return this.chatRepository.save({ userId, model: dto.model, title: null });
+    // Snapshot, like a Worker job: the chat keeps its own copy of the text.
+    const context =
+      dto.contextId === undefined || dto.contextId === null
+        ? null
+        : await this.contextService.findOwned(dto.contextId, userId);
+
+    return this.chatRepository.save({
+      userId,
+      model: dto.model,
+      title: null,
+      ...(context
+        ? { contextName: context.name, contextText: context.content }
+        : {}),
+    });
   }
 
   async findAllByUser(userId: number): Promise<Chat[]> {

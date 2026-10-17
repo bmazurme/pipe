@@ -11,6 +11,7 @@ import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
+import { ContextService } from '../context/context.service';
 import { ChatService } from './chat.service';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -61,6 +62,7 @@ describe('ChatService', () => {
           useValue: attachmentRepository,
         },
         { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
+        { provide: ContextService, useValue: { findOwned: jest.fn() } },
       ],
     }).compile();
 
