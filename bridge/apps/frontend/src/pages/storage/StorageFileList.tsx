@@ -7,11 +7,11 @@ import {
   Picture,
   TrashBin,
 } from '@gravity-ui/icons';
-import { ActionTooltip, Button, Icon, IconData, Skeleton, Text } from '@gravity-ui/uikit';
+import { ActionTooltip, Alert, Button, Icon, IconData, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { isEncryptedFile } from '../../shared/lib/parcelCrypto';
-import { StoredFileMeta } from '../../store/api';
+import { getErrorMessage, StoredFileMeta } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../StoragePage.module.css';
@@ -32,6 +32,9 @@ const SKELETON_ROWS = [0, 1, 2];
 interface StorageFileListProps {
   files: StoredFileMeta[];
   isLoading: boolean;
+  isError: boolean;
+  error?: unknown;
+  onRetry: () => void;
   isMobile: boolean;
   downloadingId: number | null;
   onDownload: (file: StoredFileMeta) => void;
@@ -42,6 +45,9 @@ interface StorageFileListProps {
 export function StorageFileList({
   files,
   isLoading,
+  isError,
+  error,
+  onRetry,
   isMobile,
   downloadingId,
   onDownload,
@@ -71,7 +77,17 @@ export function StorageFileList({
         </ul>
       )}
 
-      {!isLoading && files.length === 0 && (
+      {isError && !isLoading && (
+        <Alert
+          theme="danger"
+          view="filled"
+          title="Не удалось загрузить список файлов"
+          message={getErrorMessage(error, 'Сервер недоступен или вернул ошибку')}
+          actions={<Button onClick={onRetry}>Повторить</Button>}
+        />
+      )}
+
+      {!isLoading && !isError && files.length === 0 && (
         <EmptyState
           icon={File}
           title="Файлов пока нет"
