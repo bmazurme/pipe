@@ -49,6 +49,23 @@ export async function withStream(res: Response, label: string, run: () => Promis
   }
 }
 
+const PROJECT_ID_PATTERN = /^[\w.\-/%]+$/;
+// Numeric GitLab/GitHub iid, or a manual entry's `m-` id (see createManualSubscriptionIssue).
+const IID_PATTERN = /^(\d+|m-[\w-]+)$/;
+
+// Route params are URL-decoded by Express and end up in GitLab URLs and state
+// keys — reject anything path-like before any outbound or state call.
+function rejectBadIssueParams(req: Request<Record<string, string>>, res: Response): boolean {
+  const { projectId, iid } = req.params;
+
+  if (!PROJECT_ID_PATTERN.test(projectId ?? '') || !IID_PATTERN.test(iid ?? '')) {
+    res.status(400).json({ error: 'Invalid projectId or iid' });
+    return true;
+  }
+
+  return false;
+}
+
 function parcelName(projectId: string, iid: string, encrypted: boolean): string {
   return `${projectId}-${iid}.subscription.zip${encrypted ? '.enc' : ''}`;
 }
@@ -151,6 +168,8 @@ export async function handleListSubscriptionIssues(req: Request<Record<string, s
 }
 
 export async function handleInitSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Init subscription issue', async () => {
@@ -206,6 +225,8 @@ export async function handleCreateManualSubscriptionIssue(req: Request<Record<st
 // GitLab). For a manual one, state is its only record anywhere, so this is
 // the only way it can be removed.
 export async function handleRemoveSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Remove subscription issue', async () => {
@@ -219,6 +240,8 @@ export async function handleRemoveSubscriptionIssue(req: Request<Record<string, 
 // verbatim instead of re-fetching/re-anonymizing the issue itself, so what
 // was actually reviewed is what actually gets sent.
 export async function handleGetSubscriptionDraft(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Get subscription draft', async () => {
@@ -250,6 +273,8 @@ export async function handleGetSubscriptionDraft(req: Request<Record<string, str
 }
 
 export async function handlePushSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
   const { issueId, title: issueTitle, description: issueDescription } = req.body as SubscriptionPushPayload;
 
@@ -495,12 +520,16 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
 }
 
 export async function handlePullSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Pull subscription issue', () => pullSubscriptionIssue(projectId, iid));
 }
 
 export async function handlePublishSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
   const { templateId, comment, timeEstimate } = req.body as SubscriptionPublishPayload;
 
@@ -537,6 +566,8 @@ export async function handlePublishSubscriptionIssue(req: Request<Record<string,
 }
 
 export async function handleGetSubscriptionIssueTime(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Get subscription issue time', async () => {

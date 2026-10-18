@@ -11,7 +11,7 @@ import type { SettingsType } from '@reports/shared';
 const getSettingsMock = vi.fn<() => SettingsType>();
 vi.mock('../settings/props', () => ({ getSettings: () => getSettingsMock() }));
 
-const { getIssueImages } = await import('./gitlab-client');
+const { getIssueImages, addIssueNote, setIssueTimeEstimate } = await import('./gitlab-client');
 
 function stubSettings(overrides: Partial<SettingsType> = {}) {
   getSettingsMock.mockReturnValue({
@@ -113,6 +113,30 @@ describe('getIssueImages — refusing to send the token off-instance', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'https://gitlab.example.com/uploads/abc/shot.png',
       expect.objectContaining({ redirect: 'manual' }),
+    );
+  });
+});
+
+describe('write helpers encode route params', () => {
+  it('addIssueNote never lets iid escape the issue path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await addIssueNote('1', '../../projects/999/issues/5', 'x');
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://gitlab.example.com/api/v4/projects/1/issues/..%2F..%2Fprojects%2F999%2Fissues%2F5/notes',
+    );
+  });
+
+  it('setIssueTimeEstimate encodes projectId and iid', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await setIssueTimeEstimate('a/b', '5?x#y', '1h');
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://gitlab.example.com/api/v4/projects/a%2Fb/issues/5%3Fx%23y/time_estimate?duration=1h',
     );
   });
 });

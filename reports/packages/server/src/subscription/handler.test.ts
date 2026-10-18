@@ -866,3 +866,21 @@ describe('GitHub-backed tracked project', () => {
     expect(getIssueState(repoId, '12')?.step).toBe('published');
   });
 });
+
+describe('subscription route param validation', () => {
+  it.each([
+    ['publish', handlePublishSubscriptionIssue],
+    ['pull', handlePullSubscriptionIssue],
+  ])('%s answers 400 for a non-numeric iid without any outbound fetch', async (_name, handler) => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
+    const res = { status, json } as unknown as Response;
+
+    await handler(makeReq({ projectId: '1', iid: 'abc' }), res);
+
+    expect(status).toHaveBeenCalledWith(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
