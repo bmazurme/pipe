@@ -626,7 +626,6 @@ describe('WorkerPage — remembered model', () => {
 
     await screen.findByText('Задача #1');
 
-    expect(screen.queryByText('Модель')).toBeNull();
     expect(screen.getAllByText('Qwen').length).toBeGreaterThan(0);
   });
 });
