@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { WorkerBridgeClient } from './bridgeClient.js';
 import { loadConfig } from './config.js';
-import { processJob } from './index.js';
+import { processJob } from './jobRunner.js';
 import { logger } from './logger.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
 

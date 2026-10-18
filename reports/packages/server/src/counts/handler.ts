@@ -3,16 +3,13 @@ import type { DayOffsImportType, StreamEvent } from '@reports/shared';
 
 import { countWorkAndShortDays } from '../utils/count-work-and-short-days';
 import { describeFetchError } from '../utils/describe-fetch-error';
+import { isDateStringArray } from '../utils/is-date-string-array';
 import { getSettings } from '../settings/props';
 import { getProps, addOffDays, removeOffDay, importDayOffs } from './props';
 
 const BRIDGE_TIMEOUT_MS = 20_000;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-export const isDateStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) &&
-  value.every((v) => typeof v === 'string' && DATE_RE.test(v) && !Number.isNaN(Date.parse(v)));
+export { isDateStringArray };
 
 export async function handleCounts(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;

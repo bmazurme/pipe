@@ -4,6 +4,7 @@ import { getSettings, setSettings } from './props';
 import { getSubscriptionConfig, setSubscriptionConfig } from '../subscription/config-props';
 import { getProjectDict, setProjectDict } from '../reports/project-dict-props';
 import { addOffDays, getAllOffDaysByYear } from '../counts/props';
+import { isDateStringArray } from '../utils/is-date-string-array';
 
 export const SETTINGS_BUNDLE_VERSION = 1;
 
@@ -25,6 +26,15 @@ export function applySettingsBundle(bundle: SettingsBundleType): { skippedYears:
     throw new Error('Файл не похож на экспорт настроек reports');
   }
 
+  // Validate everything before the first write so a bad file can't leave a
+  // half-imported state behind.
+  const offDaysByYear = bundle.offDaysByYear ?? {};
+  for (const [year, offDays] of Object.entries(offDaysByYear)) {
+    if (!isDateStringArray(offDays)) {
+      throw new Error(`Файл не похож на экспорт настроек reports: некорректные выходные за ${year} год`);
+    }
+  }
+
   setSettings(bundle.settings);
   setSubscriptionConfig(bundle.subscriptionConfig);
   setProjectDict(bundle.projectDict ?? {});
@@ -35,7 +45,7 @@ export function applySettingsBundle(bundle: SettingsBundleType): { skippedYears:
   const skippedYears: string[] = [];
   const existingYears = new Set(Object.keys(getAllOffDaysByYear()));
 
-  for (const [year, offDays] of Object.entries(bundle.offDaysByYear ?? {})) {
+  for (const [year, offDays] of Object.entries(offDaysByYear)) {
     if (!existingYears.has(year)) {
       skippedYears.push(year);
       continue;

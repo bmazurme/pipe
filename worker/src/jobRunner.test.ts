@@ -11,7 +11,7 @@ import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
 import type { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
 import { MAX_REPLY_LENGTH, TRUNCATED_REPLY_NOTE } from './chatReply.js';
-import { processChatTurn, processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './index.js';
+import { processChatTurn, processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './jobRunner.js';
 import { MAX_LOG_CHUNK_CHARS } from './logChunks.js';
 
 const originalFetch = globalThis.fetch;
