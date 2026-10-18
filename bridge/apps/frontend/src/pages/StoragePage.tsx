@@ -30,7 +30,7 @@ export function StoragePage() {
   // structural sharing means a poll that finds nothing new doesn't cause a
   // re-render on its own. Polling pauses while the tab is unfocused and
   // resumes (with a refetch) on focus.
-  const { isLoading } = useListFilesQuery(undefined, {
+  const { isLoading, isError, error: listError, refetch } = useListFilesQuery(undefined, {
     pollingInterval: FILES_POLL_INTERVAL_MS,
     skipPollingIfUnfocused: true,
   });
@@ -49,7 +49,7 @@ export function StoragePage() {
   // dictionary (see storage/projectZip.ts) — a plain file dropped here goes
   // up untouched otherwise. This is what closes that gap: entries are needed
   // to check whether a real secret value survived unsubstituted.
-  useListEntriesQuery();
+  const { isError: isPurgeError } = useListEntriesQuery();
   const purgeEntries = useAppSelector(purgeEntriesSelector);
   const [pendingUpload, setPendingUpload] = useState<{
     files: File[];
@@ -151,6 +151,14 @@ export function StoragePage() {
         description="Быстрый обмен файлами между вашими устройствами."
       />
 
+      {isPurgeError && (
+        <Alert
+          theme="warning"
+          view="filled"
+          message="Словарь Purge не загрузился — проверка на утечки перед загрузкой неполная"
+        />
+      )}
+
       <StorageDropzone upload={upload} onUpload={(selected) => void handleUpload(selected)} />
 
       <StorageProjectUpload onError={setError} />
@@ -171,6 +179,9 @@ export function StoragePage() {
         <StorageFileList
           files={files}
           isLoading={isLoading}
+          isError={isError}
+          error={listError}
+          onRetry={() => void refetch()}
           isMobile={isMobile}
           downloadingId={downloadingId}
           onDownload={(file) => void handleDownload(file)}
