@@ -50,7 +50,9 @@ async function tryPullOnce(
   }
 
   const isEncrypted = newest.originalName.endsWith('.enc');
-  const downloaded = await client.download(newest.id);
+  // peek, not download: every step below can still fail, and /download deletes
+  // the parcel server-side. It is deleted only once the files are written.
+  const downloaded = await client.peek(newest.id);
 
   let buffer = downloaded;
   if (isEncrypted) {
@@ -86,6 +88,8 @@ async function tryPullOnce(
     log.info(`Branch: ${manifest.branch}`);
     log.info(`Issue text extracted to ${issueFile.path}`);
   }
+
+  await client.delete(newest.id);
 
   log.info(
     `Pulled ${files.length} files and ${assets.length} assets into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
