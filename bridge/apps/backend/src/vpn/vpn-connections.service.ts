@@ -108,4 +108,14 @@ export class VpnConnectionsService {
   async remove(id: number): Promise<void> {
     await this.repository.delete(id);
   }
+
+  // Dedup state for the "panel unreachable" Telegram alert — set once a failure
+  // is announced, cleared on the next status check that succeeds.
+  async markFailureAlerted(id: number): Promise<void> {
+    await this.repository.update(id, { failureAlertedAt: new Date() });
+  }
+
+  async clearFailureAlert(id: number): Promise<void> {
+    await this.repository.update(id, { failureAlertedAt: null });
+  }
 }

@@ -27,4 +27,11 @@ export class VpnConnection extends BaseEntity {
 
   @Column({ type: 'boolean', default: false })
   isActive: boolean;
+
+  // Set when a Telegram alert was sent for this connection being unreachable,
+  // cleared on the next successful status check — so a down panel pages the
+  // owner once, not on every poll, and the next outage pages again rather
+  // than staying silent forever.
+  @Column({ type: 'timestamp', nullable: true })
+  failureAlertedAt: Date | null;
 }
