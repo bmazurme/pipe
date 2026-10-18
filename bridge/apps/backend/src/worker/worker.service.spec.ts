@@ -1950,4 +1950,93 @@ describe('WorkerService', () => {
       });
     });
   });
+
+  describe('retry with another model or token', () => {
+    const failed = (over = {}) => ({
+      id: 5,
+      userId: 7,
+      sourceFileId: 11,
+      model: JobModel.Sonnet,
+      claudeCredentialId: 2,
+      providerCredentialId: null,
+      status: JobStatus.Failed,
+      errorMessage: 'boom',
+      ...over,
+    });
+
+    beforeEach(() => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.zip',
+      });
+      claudeCredentialsService.resolveToken!.mockResolvedValue('token');
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 6, ...job }),
+      );
+    });
+
+    it('runs on the chosen model and Claude credential', async () => {
+      repository.findOne!.mockResolvedValue(failed());
+
+      const retried = await service.retry(5, 7, undefined, {
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+      });
+
+      expect(retried).toMatchObject({
+        model: JobModel.Opus,
+        claudeCredentialId: 3,
+        status: JobStatus.Queued,
+      });
+      expect(appLogs.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          meta: expect.objectContaining({
+            newModel: JobModel.Opus,
+            claudeCredentialId: 3,
+          }),
+        }),
+      );
+    });
+
+    it('drops the Claude credential when switching to a provider model', async () => {
+      repository.findOne!.mockResolvedValue(failed());
+
+      const retried = await service.retry(5, 7, undefined, {
+        model: JobModel.Deepseek,
+      });
+
+      expect(retried).toMatchObject({
+        model: JobModel.Deepseek,
+        claudeCredentialId: null,
+        providerCredentialId: null,
+      });
+    });
+
+    it('rejects a provider credential that does not fit the model', async () => {
+      repository.findOne!.mockResolvedValue(failed());
+      providerCredentials.existsFor.mockResolvedValueOnce(false);
+
+      await expect(
+        service.retry(5, 7, undefined, {
+          model: JobModel.Deepseek,
+          providerCredentialId: 4,
+        }),
+      ).rejects.toThrow('Provider credential not found for this model');
+    });
+
+    it('releases the pin when the worker does not allow the new model', async () => {
+      repository.findOne!.mockResolvedValue(failed({ targetWorkerId: 9 }));
+      workerRepository.findOneBy!.mockResolvedValue({
+        id: 9,
+        enabled: true,
+        models: ['sonnet'],
+      });
+
+      const retried = await service.retry(5, 7, undefined, {
+        model: JobModel.Opus,
+      });
+
+      expect(retried.targetWorkerId).toBeNull();
+    });
+  });
 });

@@ -30,3 +30,26 @@ describe('RetryJobDto', () => {
     expect(errors[0].property).toBe('notBefore');
   });
 });
+
+describe('RetryJobDto overrides', () => {
+  const check = (body: object) => validate(plainToInstance(RetryJobDto, body));
+
+  it('accepts a known model and positive credential ids', async () => {
+    expect(await check({ model: 'opus', claudeCredentialId: 3 })).toHaveLength(
+      0,
+    );
+    expect(
+      await check({ model: 'deepseek', providerCredentialId: 1 }),
+    ).toHaveLength(0);
+  });
+
+  it('rejects an unknown model', async () => {
+    const errors = await check({ model: 'gpt-9' });
+    expect(errors.map((e) => e.property)).toEqual(['model']);
+  });
+
+  it.each([0, -1, 1.5])('rejects credential id %s', async (id) => {
+    expect(await check({ claudeCredentialId: id })).toHaveLength(1);
+    expect(await check({ providerCredentialId: id })).toHaveLength(1);
+  });
+});

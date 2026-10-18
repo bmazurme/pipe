@@ -350,6 +350,11 @@ export class WorkerController {
       id,
       currentUser.id,
       dto.notBefore,
+      {
+        model: dto.model,
+        claudeCredentialId: dto.claudeCredentialId,
+        providerCredentialId: dto.providerCredentialId,
+      },
     );
 
     return JobResponseDto.fromEntity(job);

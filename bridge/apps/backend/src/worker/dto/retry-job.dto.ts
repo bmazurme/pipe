@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsOptional } from 'class-validator';
+import { IsDate, IsEnum, IsInt, IsOptional, Min } from 'class-validator';
 
+import { JobModel } from '../entities/job.entity';
 import { MaxFutureDate, MinFutureDate } from './not-before.validators';
 
 export class RetryJobDto {
@@ -11,4 +12,20 @@ export class RetryJobDto {
   @MinFutureDate()
   @MaxFutureDate(7 * 24 * 60 * 60 * 1000)
   notBefore?: Date;
+
+  // Run on another model than the failed job; absent = the same one.
+  @IsOptional()
+  @IsEnum(JobModel)
+  model?: JobModel;
+
+  // Run on another stored token; absent = the job's own, when it still fits the model.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  claudeCredentialId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  providerCredentialId?: number;
 }

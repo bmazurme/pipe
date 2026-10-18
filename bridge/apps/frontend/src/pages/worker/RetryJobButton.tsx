@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { ArrowRotateRight, Clock } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon } from '@gravity-ui/uikit';
+import { ArrowRotateRight, ArrowsRotateLeft, Clock } from '@gravity-ui/icons';
+import { Alert, Button, Dialog, Icon, Select } from '@gravity-ui/uikit';
 
-import { getErrorMessage, useListClaudeCredentialsQuery, useRetryJobMutation, WorkerJob } from '../../store/api';
+import {
+  getErrorMessage,
+  useListClaudeCredentialsQuery,
+  useListProviderCredentialsQuery,
+  useRetryJobMutation,
+  WorkerJob,
+  WorkerJobModel,
+} from '../../store/api';
 import { limitResetAt } from './claudeLimits';
+import { MODEL_OPTIONS } from './constants';
+
+const SAME = '';
+const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
 
 interface RetryJobButtonProps {
   job: WorkerJob;
@@ -17,20 +28,50 @@ interface RetryJobButtonProps {
 export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
   const [retryJob, { isLoading }] = useRetryJobMutation();
   const [error, setError] = useState<string | null>(null);
+  const [otherOpen, setOtherOpen] = useState(false);
+  const [newModel, setNewModel] = useState<WorkerJobModel>(job.model);
+  const [newCredential, setNewCredential] = useState(SAME);
   const failedOnLimit = job.status === 'failed' && /session limit/i.test(job.errorMessage ?? '');
   // Only asked for when it matters: the snapshot of the token the job ran on.
-  const { data: credentials } = useListClaudeCredentialsQuery(undefined, { skip: !failedOnLimit });
+  const { data: credentials } = useListClaudeCredentialsQuery(undefined, { skip: !failedOnLimit && !otherOpen });
+  const { data: providerCredentials } = useListProviderCredentialsQuery(undefined, { skip: !otherOpen });
 
   if (job.status !== 'failed' && job.status !== 'cancelled') return null;
 
   const credential = credentials?.find((item) => item.id === job.claudeCredentialId || item.name === job.usedClaudeCredentialName);
   const resetAt = limitResetAt(job.errorMessage, credential?.limits, Date.now());
 
-  const handleRetry = async (notBefore?: string) => {
+  const isProvider = PROVIDER_MODELS.includes(newModel);
+  const tokenOptions = [
+    { value: SAME, content: 'как в задаче' },
+    ...(isProvider
+      ? (providerCredentials ?? []).filter((item) => item.provider === newModel)
+      : (credentials ?? [])
+    ).map((item) => ({ value: String(item.id), content: item.name })),
+  ];
+
+  const handleModelChange = (value: WorkerJobModel) => {
+    setNewModel(value);
+    setNewCredential(SAME);
+  };
+
+  const handleRetryOther = async () => {
+    const credentialId = newCredential === SAME ? undefined : Number(newCredential);
+    setOtherOpen(false);
+    await handleRetry(undefined, {
+      model: newModel,
+      ...(credentialId !== undefined ? (isProvider ? { providerCredentialId: credentialId } : { claudeCredentialId: credentialId }) : {}),
+    });
+  };
+
+  const handleRetry = async (
+    notBefore?: string,
+    overrides?: { model?: WorkerJobModel; claudeCredentialId?: number; providerCredentialId?: number },
+  ) => {
     setError(null);
 
     try {
-      await retryJob({ id: job.id, notBefore }).unwrap();
+      await retryJob({ id: job.id, notBefore, ...overrides }).unwrap();
     } catch (err) {
       // transformErrorResponse has already reduced the error to bridge's message.
       setError(typeof err === 'string' && err ? err : getErrorMessage(err, 'Не удалось перезапустить задачу'));
@@ -64,6 +105,39 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
           {!compact && 'Перезапустить после сброса лимита'}
         </Button>
       )}
+
+      {!compact && (
+        <Button view="outlined" size="m" loading={isLoading} onClick={() => setOtherOpen(true)}>
+          <Icon data={ArrowsRotateLeft} size={16} />
+          Перезапустить с другой моделью…
+        </Button>
+      )}
+
+      <Dialog open={otherOpen} onClose={() => setOtherOpen(false)} maxWidth="s" aria-labelledby={`retry-other-${job.id}`}>
+        <Dialog.Header caption="Перезапустить с другой моделью" id={`retry-other-${job.id}`} />
+        <Dialog.Body>
+          <Select
+            label="Модель"
+            width="max"
+            value={[newModel]}
+            options={MODEL_OPTIONS}
+            onUpdate={(value) => handleModelChange(value[0] as WorkerJobModel)}
+          />
+          <Select
+            label="Токен"
+            width="max"
+            value={[newCredential]}
+            options={tokenOptions}
+            onUpdate={(value) => setNewCredential(value[0] ?? SAME)}
+          />
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          onClickButtonCancel={() => setOtherOpen(false)}
+          textButtonApply="Перезапустить"
+          onClickButtonApply={() => void handleRetryOther()}
+        />
+      </Dialog>
 
       <Dialog open={error !== null} onClose={() => setError(null)} maxWidth="s" aria-labelledby={`retry-job-${job.id}`}>
         <Dialog.Header caption={`Не удалось перезапустить задачу #${job.id}`} id={`retry-job-${job.id}`} />

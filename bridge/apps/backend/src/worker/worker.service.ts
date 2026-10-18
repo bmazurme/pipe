@@ -29,7 +29,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
-import { Job, JobStatus } from './entities/job.entity';
+import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { INFRA_FAILURE_MESSAGES } from './infra-failure';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
@@ -161,7 +161,11 @@ export class WorkerService {
         source: 'job',
         event: 'job.auto_retried',
         message: `Job ${job.id} was lost to a worker stop and re-queued as job ${retried.id}`,
-        meta: { jobId: job.id, retryJobId: retried.id, model: job.model },
+        meta: {
+          jobId: job.id,
+          retryJobId: retried.id,
+          model: job.model,
+        },
       });
 
       return retried;
@@ -326,7 +330,16 @@ export class WorkerService {
   // and credential — the original stays as history, so its log and error remain
   // readable. The parcel is only consumed when a job succeeds, so a failed job's
   // source is still there; if it was removed since, create() says so.
-  async retry(id: number, userId: number, notBefore?: Date): Promise<Job> {
+  async retry(
+    id: number,
+    userId: number,
+    notBefore?: Date,
+    overrides: {
+      model?: JobModel;
+      claudeCredentialId?: number;
+      providerCredentialId?: number;
+    } = {},
+  ): Promise<Job> {
     const job = await this.findOwned(id, userId);
 
     if (job.status !== JobStatus.Failed && job.status !== JobStatus.Cancelled) {
@@ -348,20 +361,24 @@ export class WorkerService {
             enabled: true,
           })
         : null;
+    const model = overrides.model ?? job.model;
     const pinUsable =
       pinned !== null &&
-      (pinned.models === null || pinned.models.includes(job.model));
+      (pinned.models === null || pinned.models.includes(model));
+    // A stored credential only fits the family (Claude / one provider) it was made for.
+    const claudeCredentialId =
+      overrides.claudeCredentialId ??
+      (!isProviderModel(model) ? job.claudeCredentialId : null);
+    const providerCredentialId =
+      overrides.providerCredentialId ??
+      (model === job.model ? job.providerCredentialId : null);
     const retried = await this.create(
       userId,
       {
         sourceFileId: job.sourceFileId,
-        model: job.model,
-        ...(job.claudeCredentialId !== null
-          ? { claudeCredentialId: job.claudeCredentialId }
-          : {}),
-        ...(job.providerCredentialId !== null
-          ? { providerCredentialId: job.providerCredentialId }
-          : {}),
+        model,
+        ...(claudeCredentialId !== null ? { claudeCredentialId } : {}),
+        ...(providerCredentialId !== null ? { providerCredentialId } : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
         ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
       },
@@ -383,7 +400,18 @@ export class WorkerService {
       source: 'job',
       event: 'job.retried',
       message: `Job ${job.id} retried as job ${retried.id}`,
-      meta: { jobId: job.id, retryJobId: retried.id, model: job.model },
+      meta: {
+        jobId: job.id,
+        retryJobId: retried.id,
+        model: job.model,
+        ...(model !== job.model ? { newModel: model } : {}),
+        ...(overrides.claudeCredentialId !== undefined
+          ? { claudeCredentialId: overrides.claudeCredentialId }
+          : {}),
+        ...(overrides.providerCredentialId !== undefined
+          ? { providerCredentialId: overrides.providerCredentialId }
+          : {}),
+      },
     });
 
     return retried;
