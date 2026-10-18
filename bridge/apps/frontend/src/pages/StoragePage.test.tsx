@@ -7,7 +7,7 @@ import { generateKeyPair, encryptBuffer } from '@pipe/protocol/encryption';
 
 import { StoragePage } from './StoragePage';
 import { store } from '../store';
-import { storageApi } from '../store/api';
+import { purgeApi, storageApi } from '../store/api';
 import { uploadWithProgress } from './storage/uploadWithProgress';
 
 // Uploads go around RTK Query (XHR, for progress events) — mocked here so
@@ -363,5 +363,65 @@ describe('StoragePage — opening an encrypted parcel', () => {
     );
     expect(peeked).toBe(true);
     expect(downloaded).toBe(false);
+  });
+});
+
+describe('StoragePage — load failures', () => {
+  beforeEach(() => {
+    store.dispatch(purgeApi.util.resetApiState());
+  });
+
+  function stubFetch(storageStatus: number, purgeStatus: number) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.includes('/storage')) {
+          return Promise.resolve(
+            storageStatus === 200 ? jsonResponse([]) : new Response('{}', { status: storageStatus }),
+          );
+        }
+        if (url.includes('/purge')) {
+          return Promise.resolve(
+            purgeStatus === 200 ? jsonResponse([]) : new Response('{}', { status: purgeStatus }),
+          );
+        }
+        return Promise.resolve(jsonResponse([]));
+      }),
+    );
+  }
+
+  it('shows an error with retry instead of the empty state when the list fails', async () => {
+    stubFetch(500, 200);
+    renderPage();
+
+    expect(await screen.findByText('Не удалось загрузить список файлов')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.queryByText('Файлов пока нет')).toBeNull();
+  });
+
+  it('shows the empty state when the list loads with zero files', async () => {
+    stubFetch(200, 200);
+    renderPage();
+
+    expect(await screen.findByText('Файлов пока нет')).toBeTruthy();
+    expect(screen.queryByText('Не удалось загрузить список файлов')).toBeNull();
+  });
+
+  it('warns that the leak check is incomplete when the Purge dictionary fails to load', async () => {
+    stubFetch(200, 500);
+    renderPage();
+
+    expect(
+      await screen.findByText('Словарь Purge не загрузился — проверка на утечки перед загрузкой неполная'),
+    ).toBeTruthy();
+  });
+
+  it('does not warn when the Purge dictionary loads', async () => {
+    stubFetch(200, 200);
+    renderPage();
+    await screen.findByText('Файлов пока нет');
+
+    expect(screen.queryByText(/Словарь Purge не загрузился/)).toBeNull();
   });
 });
