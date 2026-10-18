@@ -120,12 +120,18 @@ export function ClaudeCredentialsCard() {
       )}
 
       <div className={styles.secretRow}>
-        <TextInput value={name} onUpdate={setName} placeholder="Название (например, личный)" />
+        <TextInput
+          value={name}
+          onUpdate={setName}
+          placeholder="Название (например, личный)"
+          controlProps={{ 'aria-label': 'Название токена' }}
+        />
         <TextInput
           type="password"
           value={token}
           onUpdate={setToken}
           placeholder="claude token"
+          controlProps={{ 'aria-label': 'Claude-токен' }}
           hasClear
         />
         <Button

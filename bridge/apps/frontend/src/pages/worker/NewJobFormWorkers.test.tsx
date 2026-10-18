@@ -266,3 +266,19 @@ describe('NewJobForm — API keys of gpt / deepseek / qwen', () => {
     expect(sent.find((call) => call.path === 'worker/jobs')?.body).not.toHaveProperty('providerCredentialId');
   });
 });
+
+describe('NewJobForm — accessible names', () => {
+  it('names every select, and keeps the name after a value is picked', async () => {
+    workers = [fleetWorker()];
+    const user = userEvent.setup();
+
+    renderForm();
+    await screen.findByRole('combobox', { name: 'Посылка' });
+    for (const name of ['Модель', 'Worker', 'Контекст']) {
+      expect(screen.getByRole('combobox', { name })).toBeTruthy();
+    }
+
+    await pick(user, 'Модель', 'GPT');
+    expect(screen.getByRole('combobox', { name: 'Модель' })).toBeTruthy();
+  });
+});
