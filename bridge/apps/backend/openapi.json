@@ -4418,22 +4418,22 @@
             "type": "string"
           },
           "model": {
+            "type": "string",
             "enum": [
               "sonnet",
               "opus",
               "gpt",
               "deepseek",
               "qwen"
-            ],
-            "type": "string"
+            ]
           },
           "claudeCredentialId": {
-            "minimum": 1,
-            "type": "number"
+            "type": "number",
+            "minimum": 1
           },
           "providerCredentialId": {
-            "minimum": 1,
-            "type": "number"
+            "type": "number",
+            "minimum": 1
           }
         }
       },
