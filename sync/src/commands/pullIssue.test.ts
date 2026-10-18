@@ -72,9 +72,10 @@ describe('pullIssueCommand assets', () => {
 
   let root: string;
   let projectPath: string;
+  let deletes: string[];
 
   function serve(buffer: Buffer): void {
-    globalThis.fetch = (async (url: string) => {
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
       const u = String(url);
       if (u.startsWith(`${apiUrl}/api/v1/storage?`)) {
         return new Response(
@@ -82,7 +83,11 @@ describe('pullIssueCommand assets', () => {
           { status: 200 },
         );
       }
-      if (/\/storage\/9\/download$/.test(u)) return new Response(new Uint8Array(buffer), { status: 200 });
+      if (/\/storage\/9\/peek$/.test(u)) return new Response(new Uint8Array(buffer), { status: 200 });
+      if (/\/storage\/9$/.test(u) && init?.method === 'DELETE') {
+        deletes.push(u);
+        return new Response(null, { status: 204 });
+      }
       throw new Error(`unexpected request ${u}`);
     }) as typeof fetch;
   }
@@ -100,6 +105,7 @@ describe('pullIssueCommand assets', () => {
   });
 
   beforeEach(() => {
+    deletes = [];
     root = mkdtempSync(path.join(tmpdir(), 'sync-cli-pull-issue-test-'));
     projectPath = path.join(root, 'project');
     mkdirSync(projectPath);
@@ -117,6 +123,7 @@ describe('pullIssueCommand assets', () => {
 
     await pullIssueCommand(NAME, '173', '42', { force: true });
 
+    assert.deepEqual(deletes, [`${apiUrl}/api/v1/storage/9`]);
     assert.equal(readFileSync(path.join(projectPath, 'src/a.ts'), 'utf-8'), 'export const a = 1;');
     assert.deepEqual(readFileSync(path.join(projectPath, 'issue-images/shot.png')), pngBytes);
     assert.deepEqual(readFileSync(path.join(projectPath, 'out/result.bin')), binaryResult);
@@ -155,5 +162,34 @@ describe('pullIssueCommand assets', () => {
     assert.equal(existsSync(path.join(root, 'evil.png')), false);
     assert.equal(existsSync(path.join(projectPath, 'src/a.ts')), false);
     assert.equal(existsSync(path.join(projectPath, ISSUE_FILE_NAME)), false);
+    assert.deepEqual(deletes, []);
+  });
+
+  it('leaves the parcel on bridge when it is encrypted and no privateKeyPath is configured', async () => {
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith(`${apiUrl}/api/v1/storage?`)) {
+        return new Response(
+          JSON.stringify([{ id: 9, originalName: 'issue-42.zip.enc', createdAt: '2026-09-14T10:00:00Z' }]),
+          { status: 200 },
+        );
+      }
+      if (/\/storage\/9\/peek$/.test(u)) return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      if (init?.method === 'DELETE') deletes.push(u);
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true }), /no privateKeyPath/);
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true }), /no privateKeyPath/);
+
+    assert.deepEqual(deletes, []);
+  });
+
+  it('leaves the parcel on bridge when the zip is corrupt', async () => {
+    serve(Buffer.from('not a zip'));
+
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true }));
+
+    assert.deepEqual(deletes, []);
   });
 });

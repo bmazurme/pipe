@@ -28,6 +28,7 @@ const apiUrl = 'https://bridge.example.com';
 
 let projectPath: string;
 let downloaded: number[];
+let deleted: number[];
 
 interface Listed {
   id: number;
@@ -36,12 +37,17 @@ interface Listed {
 }
 
 function mockBridge(listed: Listed[], buffers: Record<number, Buffer>): void {
-  globalThis.fetch = (async (url: string) => {
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const u = String(url);
+    const del = /\/storage\/(\d+)$/.exec(u);
+    if (del && init?.method === 'DELETE') {
+      deleted.push(Number(del[1]));
+      return new Response(null, { status: 204 });
+    }
     if (u.startsWith(`${apiUrl}/api/v1/storage?`) || u === `${apiUrl}/api/v1/storage`) {
       return new Response(JSON.stringify(listed), { status: 200 });
     }
-    const match = /\/storage\/(\d+)\/download$/.exec(u);
+    const match = /\/storage\/(\d+)\/peek$/.exec(u);
     if (match) {
       const id = Number(match[1]);
       downloaded.push(id);
@@ -78,11 +84,20 @@ after(() => {
 beforeEach(() => {
   projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-pull-test-'));
   downloaded = [];
+  deleted = [];
   rmSync(STATE_PATH, { force: true });
   writeConfig();
 });
 
 describe('pullCommand', () => {
+  it('leaves the parcel on bridge when the zip is corrupt', async () => {
+    mockBridge([listing(1, '2026-01-01T00:00:00Z')], { 1: Buffer.from('not a zip') });
+
+    await assert.rejects(() => pullCommand(NAME, {}));
+
+    assert.deepEqual(deleted, []);
+  });
+
   it('returns without writing when no parcel has been pushed', async () => {
     mockBridge([listing(1, '2026-01-01T00:00:00Z', 'other.sync.zip')], {});
 
@@ -104,6 +119,7 @@ describe('pullCommand', () => {
     await pullCommand(NAME, {});
 
     assert.deepEqual(downloaded, [2]);
+    assert.deepEqual(deleted, [2]);
     assert.equal(readFileSync(path.join(projectPath, 'a.ts'), 'utf-8'), 'new');
   });
 
@@ -114,6 +130,7 @@ describe('pullCommand', () => {
 
     await pullCommand(NAME, {});
     assert.equal(existsSync(path.join(projectPath, 'a.ts')), false);
+    assert.deepEqual(deleted, [1]);
 
     await pullCommand(NAME, { force: true });
     assert.equal(readFileSync(path.join(projectPath, 'a.ts'), 'utf-8'), 'v1');

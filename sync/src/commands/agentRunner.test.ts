@@ -7,7 +7,10 @@ import assert from 'node:assert/strict';
 
 import type { StoredFileResponse } from '../types.js';
 import { log } from '../log.js';
-import { findCandidates, resultIsFreeOfOwnCredentials } from './agentRunner.js';
+import type { BridgeClient } from '../bridgeClient.js';
+import type { ProjectConfig } from '../types.js';
+import { buildArchive, SYNC_MANIFEST_ENTRY } from '@pipe/protocol';
+import { findCandidates, processCandidate, resultIsFreeOfOwnCredentials } from './agentRunner.js';
 
 function file(overrides: Partial<StoredFileResponse> = {}): StoredFileResponse {
   return {
@@ -121,5 +124,66 @@ describe('resultIsFreeOfOwnCredentials', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('processCandidate parcel consumption', () => {
+  function fakeClient(buffer: Buffer): { client: BridgeClient; peeked: number[]; deleted: number[] } {
+    const peeked: number[] = [];
+    const deleted: number[] = [];
+    const client = {
+      peek: async (id: number) => {
+        peeked.push(id);
+        return buffer;
+      },
+      delete: async (id: number) => {
+        deleted.push(id);
+      },
+    } as unknown as BridgeClient;
+    return { client, peeked, deleted };
+  }
+
+  const project: ProjectConfig = { name: 'p', path: '/nonexistent' };
+  const candidate = (encrypted: boolean) => ({
+    file: file({ id: 7 }),
+    projectId: '402',
+    iid: '6',
+    encrypted,
+  });
+
+  it('leaves an encrypted parcel on bridge when no privateKeyPath is configured', async () => {
+    const { client, peeked, deleted } = fakeClient(Buffer.from([1, 2, 3]));
+    const errors = mock.method(log, 'error', () => {});
+
+    try {
+      await processCandidate(candidate(true), project, client, false);
+    } finally {
+      errors.mock.restore();
+    }
+
+    assert.deepEqual(peeked, [7]);
+    assert.deepEqual(deleted, []);
+  });
+
+  it('leaves a legacy-manifest parcel on bridge', async () => {
+    const { buffer } = buildArchive(SYNC_MANIFEST_ENTRY, [{ relPath: 'a.ts', content: 'x' }], { createdAt: 'now' });
+    const { client, deleted } = fakeClient(buffer);
+    const errors = mock.method(log, 'error', () => {});
+
+    try {
+      await processCandidate(candidate(false), project, client, false);
+    } finally {
+      errors.mock.restore();
+    }
+
+    assert.deepEqual(deleted, []);
+  });
+
+  it('leaves a corrupt zip on bridge', async () => {
+    const { client, deleted } = fakeClient(Buffer.from('not a zip'));
+
+    await assert.rejects(processCandidate(candidate(false), project, client, false));
+
+    assert.deepEqual(deleted, []);
   });
 });
