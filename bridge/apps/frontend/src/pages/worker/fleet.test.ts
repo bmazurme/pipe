@@ -188,6 +188,11 @@ describe('enrollSnippets', () => {
     expect(snippets.docker).toContain('docker rm -f pipe-worker >/dev/null 2>&1; docker run -d --name pipe-worker --pull always');
   });
 
+  it('docker: gives a running job time to finish on a stop (stop-timeout above the worker grace period)', () => {
+    expect(snippets.docker).toContain('--stop-timeout 900');
+    expect(snippets.docker).toContain('-e WORKER_SHUTDOWN_GRACE_SEC=840');
+  });
+
   it('docker: caps what the worker may take from the machine (half the cores, 4 GB, low priority)', () => {
     expect(snippets.docker).toContain("--cpus \"$(docker info --format '{{.NCPU}}' | awk '{c=int($1/2); print (c<1?1:c)}')\"");
     expect(snippets.docker).toContain('--memory 4g');

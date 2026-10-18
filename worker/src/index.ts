@@ -38,6 +38,8 @@ export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the
 
 // Aborted on SIGTERM/SIGINT: the main loop stops claiming and a running job is failed with a clear reason.
 const shutdown = new AbortController();
+// A second signal while a grace period is running: stop the current job at once.
+const forceShutdown = new AbortController();
 
 // Model output can arrive many times a second — one POST per chunk would
 // mean bridge fields a request storm for the duration of every job. Batched
@@ -100,7 +102,7 @@ export async function processJob(
   client: WorkerBridgeClient,
   job: RemoteJob,
   config: WorkerConfig,
-  options: { cancelPollMs?: number; shutdown?: AbortSignal } = {},
+  options: { cancelPollMs?: number; shutdown?: AbortSignal; forceShutdown?: AbortSignal } = {},
 ): Promise<void> {
   let jobDir: string | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
@@ -159,15 +161,31 @@ export async function processJob(
   }, options.cancelPollMs ?? CANCEL_POLL_INTERVAL_MS);
 
   // A worker shutdown reuses the owner-stop ladder, but is reported as a failure.
+  // With a grace period (WORKER_SHUTDOWN_GRACE_SEC) the first shutdown signal only lets the run finish; the stop
+  // ladder starts when the grace ends or a second signal (`forceShutdown`) arrives.
   let shutdownRequested = false;
-  const onShutdown = () => {
+  let graceTimer: NodeJS.Timeout | undefined;
+  const hardStop = () => {
     if (shutdownRequested) return;
     shutdownRequested = true;
+    if (graceTimer) clearTimeout(graceTimer);
     log('Worker is shutting down — stopping the run...\n');
     cancel.abort();
   };
+  const onShutdown = () => {
+    const graceSec = config.shutdownGraceSec ?? 0;
+    if (graceSec <= 0 || options.forceShutdown?.aborted) {
+      hardStop();
+      return;
+    }
+    if (graceTimer || shutdownRequested) return;
+    log(`Worker is shutting down — finishing the current job (up to ${graceSec}s)…\n`);
+    graceTimer = setTimeout(hardStop, graceSec * 1000);
+  };
   if (options.shutdown?.aborted) onShutdown();
   else options.shutdown?.addEventListener('abort', onShutdown, { once: true });
+  if (options.forceShutdown?.aborted) hardStop();
+  else options.forceShutdown?.addEventListener('abort', hardStop, { once: true });
 
   // Best-effort, like log forwarding: a missed ping must never fail the job.
   const heartbeatInterval = setInterval(() => {
@@ -280,7 +298,9 @@ export async function processJob(
     clearInterval(cancelPoll);
 
     clearInterval(heartbeatInterval);
+    if (graceTimer) clearTimeout(graceTimer);
     options.shutdown?.removeEventListener('abort', onShutdown);
+    options.forceShutdown?.removeEventListener('abort', hardStop);
     flushLog();
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });
@@ -331,8 +351,13 @@ async function main(): Promise<void> {
   );
 
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(sig, () => {
-      logger.info({ signal: sig }, 'shutting down');
+    process.on(sig, () => {
+      if (shutdown.signal.aborted) {
+        logger.info({ signal: sig }, 'second signal, stopping at once');
+        forceShutdown.abort();
+        return;
+      }
+      logger.info({ signal: sig, graceSec: baseConfig.shutdownGraceSec }, 'shutting down');
       shutdown.abort();
     });
   }
@@ -353,7 +378,7 @@ async function main(): Promise<void> {
       signal: shutdown.signal,
       initialSession: await waitForEnrolment(),
       waitForEnrolment,
-      processJob: (client, job, config, signal) => processJob(client, job, config, { shutdown: signal }),
+      processJob: (client, job, config, signal) => processJob(client, job, config, { shutdown: signal, forceShutdown: forceShutdown.signal }),
       processChatTurn,
       withHeartbeat,
       sleep,
