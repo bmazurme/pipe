@@ -142,3 +142,12 @@ describe('ClaudeCredentialsCard 7-day usage', () => {
     expect(await screen.findByText('За 7 дней запусков не было')).toBeTruthy();
   });
 });
+
+describe('ClaudeCredentialsCard accessible names', () => {
+  it('labels the name and token inputs of the add row', async () => {
+    renderCard();
+
+    expect(await screen.findByLabelText('Название токена')).toBeTruthy();
+    expect(screen.getByLabelText('Claude-токен')).toBeTruthy();
+  });
+});

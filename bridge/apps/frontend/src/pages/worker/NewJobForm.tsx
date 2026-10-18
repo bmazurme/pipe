@@ -191,6 +191,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
     }
   };
 
+  const keyLabel = `API-ключ ${model ? modelName(model) : ''}`.trim();
+
   return (
     <Card view="outlined" className={styles.card}>
       <SectionHeader title="Новая задача" />
@@ -201,7 +203,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         <>
           <div className={styles.createForm}>
             <Select
-              placeholder="Посылка"
+              label="Посылка"
+              aria-label="Посылка"
               value={sourceFileId ? [String(sourceFileId)] : []}
               onUpdate={([value]) => {
                 setSourceFileId(value ? Number(value) : undefined);
@@ -215,7 +218,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               loading={isLoadingFiles}
             />
             <Select
-              placeholder="Модель"
+              label="Модель"
+              aria-label="Модель"
               value={model ? [model] : []}
               onUpdate={([value]) => setModel(value as WorkerJobModel)}
               options={MODEL_OPTIONS}
@@ -223,7 +227,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
             />
             {isClaudeModel && (
               <Select
-                placeholder="Claude-токен"
+                label="Claude-токен"
+                aria-label="Claude-токен"
                 value={claudeCredentialId ? [String(claudeCredentialId)] : []}
                 onUpdate={([value]) => setClaudeCredentialId(value ? Number(value) : undefined)}
                 options={(claudeCredentialsData ?? []).map((credential: ClaudeCredential) => ({
@@ -235,7 +240,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
             )}
             {isProviderModel && providerKeys.length > 0 && (
               <Select
-                placeholder={`API-ключ ${model ? modelName(model) : ''}`}
+                label={keyLabel}
+                aria-label={keyLabel}
                 value={[providerCredentialId ? String(providerCredentialId) : 'default']}
                 onUpdate={([value]) => setProviderCredentialId(value && value !== 'default' ? Number(value) : undefined)}
                 options={[
@@ -249,7 +255,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               />
             )}
             <Select
-              placeholder="Worker"
+              label="Worker"
+              aria-label="Worker"
               value={[targetWorkerId ? String(targetWorkerId) : ANY_WORKER]}
               onUpdate={([value]) => setTargetWorkerId(value && value !== ANY_WORKER ? Number(value) : undefined)}
               options={[
@@ -262,7 +269,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               width="max"
             />
             <Select
-              placeholder="Контекст"
+              label="Контекст"
+              aria-label="Контекст"
               value={[contextId ? String(contextId) : NO_CONTEXT]}
               onUpdate={([value]) => setContextId(value && value !== NO_CONTEXT ? Number(value) : undefined)}
               options={[
