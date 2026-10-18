@@ -21,12 +21,10 @@ function fakeClientFactory(send: jest.Mock) {
 
 function setup(env: Record<string, string>, send: jest.Mock) {
   const config = { get: jest.fn((key: string) => env[key]) };
-  const service = new BackupStatusService(
-    config as never,
-    fakeClientFactory(send),
-  );
+  const factory = jest.fn(fakeClientFactory(send));
+  const service = new BackupStatusService(config as never, factory);
 
-  return { service };
+  return { service, factory };
 }
 
 describe('BackupStatusService.getStatus', () => {
@@ -97,5 +95,79 @@ describe('BackupStatusService.getStatus', () => {
       rawBytes: null,
     });
     expect(status.error).toContain('NetworkingError');
+  });
+});
+
+describe('BackupStatusService caching', () => {
+  const happySend = () =>
+    jest.fn((command: { input: { Key: string } }) =>
+      command.input.Key === 'LATEST'
+        ? textBody('20261012T030000Z')
+        : textBody('RAW_BYTES=1\n'),
+    );
+
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('reuses the client and the result within 60 s', async () => {
+    const send = happySend();
+    const { service, factory } = setup(CONFIGURED_ENV, send);
+
+    const first = await service.getStatus();
+    const second = await service.getStatus();
+
+    expect(second).toEqual(first);
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('fetches fresh data after 60 s with the same client', async () => {
+    const send = happySend();
+    const { service, factory } = setup(CONFIGURED_ENV, send);
+
+    await service.getStatus();
+    jest.advanceTimersByTime(60_001);
+    await service.getStatus();
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(4);
+  });
+
+  it('caches an error result too', async () => {
+    const send = jest.fn().mockRejectedValue(new Error('NetworkingError'));
+    const { service } = setup(CONFIGURED_ENV, send);
+
+    await service.getStatus();
+    await service.getStatus();
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes no S3 call when not configured', async () => {
+    const send = jest.fn();
+    const { service, factory } = setup({}, send);
+
+    await service.getStatus();
+    await service.getStatus();
+
+    expect(factory).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('destroys the client on module destroy', async () => {
+    const destroy = jest.fn();
+    const send = happySend();
+    const config = {
+      get: jest.fn((key: string) => CONFIGURED_ENV[key as never]),
+    };
+    const service = new BackupStatusService(
+      config as never,
+      () => ({ send, destroy }) as unknown as S3Client,
+    );
+
+    await service.getStatus();
+    service.onModuleDestroy();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });
