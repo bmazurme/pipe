@@ -23,6 +23,8 @@ export interface WorkerConfig {
   proxyUrl?: string;
   // Max wall-clock seconds a claude CLI job may run before it's killed.
   jobTimeoutSec: number;
+  // Seconds a running job may keep going after SIGTERM/SIGINT before it is stopped; 0 (default) = stop at once.
+  shutdownGraceSec?: number;
   // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): off by
   // default; `read` looks at jobs/files/worker status, `write` may also start jobs.
   chatTools: ChatToolsMode;
@@ -43,6 +45,15 @@ function parseJobTimeoutSec(raw: string | undefined): number {
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(`WORKER_JOB_TIMEOUT_SEC must be a positive number of seconds, got "${raw}"`);
+  }
+  return value;
+}
+
+function parseShutdownGraceSec(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return 0;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`WORKER_SHUTDOWN_GRACE_SEC must be a non-negative number of seconds, got "${raw}"`);
   }
   return value;
 }
@@ -69,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     workerName: env.WORKER_NAME ?? hostname(),
     proxyUrl: env.WORKER_PROXY_URL,
     jobTimeoutSec: parseJobTimeoutSec(env.WORKER_JOB_TIMEOUT_SEC),
+    shutdownGraceSec: parseShutdownGraceSec(env.WORKER_SHUTDOWN_GRACE_SEC),
     chatTools: parseChatToolsMode(env.WORKER_CHAT_TOOLS),
   };
 }
