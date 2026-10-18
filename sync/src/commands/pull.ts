@@ -31,12 +31,14 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
     return;
   }
 
-  // Pulling consumes (deletes) the file on bridge, so only the newest of any
-  // stale extras is meaningful; older ones are leftovers from a skipped pull.
-  const buffer = await client.download(candidates[0].id);
+  // Only the newest of any stale extras is meaningful; older ones are
+  // leftovers from a skipped pull. Peeked, not downloaded: the parcel is
+  // deleted on bridge only once it is applied (or known to be up to date).
+  const buffer = await client.peek(candidates[0].id);
   const { files, manifest } = extractArchive(buffer);
 
   if (!options.force && manifest.contentHash === getLastHash(name)) {
+    await client.delete(candidates[0].id);
     log.info('Already up to date.');
     return;
   }
@@ -44,5 +46,6 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
   writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
 
   setLastHash(name, manifest.contentHash);
+  await client.delete(candidates[0].id);
   log.info(`Pulled "${name}" (${files.length} files) from ${manifest.machine}, applied at ${project.path}.`);
 }

@@ -93,14 +93,14 @@ export async function resultIsFreeOfOwnCredentials(
   return false;
 }
 
-async function processCandidate(
+export async function processCandidate(
   candidate: Candidate,
   project: ProjectConfig,
   client: BridgeClient,
   review: boolean,
 ): Promise<void> {
   const key = issueKey(candidate.projectId, candidate.iid);
-  const downloaded = await client.download(candidate.file.id);
+  const downloaded = await client.peek(candidate.file.id);
 
   let buffer = downloaded;
   if (candidate.encrypted) {
@@ -121,6 +121,7 @@ async function processCandidate(
   const state = loadAgentState();
   if (state[key]?.lastOwnOutputHash === manifest.contentHash) {
     log.info(`Skipping ${key}: this is agent-runner's own last result, not a new push.`);
+    await client.delete(candidate.file.id);
     return;
   }
 
@@ -186,6 +187,10 @@ async function processCandidate(
   commitAll(worktreeDir, `Task #${manifest.issueIid}: before (parcel ${candidate.file.id})`);
   pushBranch(worktreeDir, branch);
   log.info(`Pushed "before" commit to origin/${branch}.`);
+
+  // The parcel was only peeked at so far; it is consumed once its content is
+  // safely on the branch, so any earlier failure leaves it on bridge.
+  await client.delete(candidate.file.id);
 
   const prompt = buildIssuePrompt(title, description);
   const { exitCode } = await runClaude(worktreeDir, prompt, model);

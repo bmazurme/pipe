@@ -167,4 +167,24 @@ export class BridgeClient {
 
     return Buffer.from(await response.arrayBuffer());
   }
+
+  // Non-destructive read: the file stays on bridge until delete() is called,
+  // so a caller can decrypt/extract/write first and only then consume it.
+  async peek(id: number): Promise<Buffer> {
+    const response = await this.request(`${this.apiUrl}/api/v1/storage/${id}/peek`, {}, TRANSFER_TIMEOUT_MS);
+
+    if (!response.ok) {
+      throw new Error(`Peek failed (${response.status})`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  async delete(id: number): Promise<void> {
+    const response = await this.request(`${this.apiUrl}/api/v1/storage/${id}`, { method: 'DELETE' }, API_TIMEOUT_MS);
+
+    if (!response.ok) {
+      throw new Error(`Delete failed (${response.status})`);
+    }
+  }
 }
