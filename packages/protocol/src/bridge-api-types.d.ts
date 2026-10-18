@@ -2100,6 +2100,10 @@ export interface components {
         RetryJobDto: {
             /** Format: date-time */
             notBefore?: string;
+            /** @enum {string} */
+            model?: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            claudeCredentialId?: number;
+            providerCredentialId?: number;
         };
         UpdateJobStatusDto: {
             /** @enum {string} */

@@ -4416,6 +4416,24 @@
           "notBefore": {
             "format": "date-time",
             "type": "string"
+          },
+          "model": {
+            "enum": [
+              "sonnet",
+              "opus",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ],
+            "type": "string"
+          },
+          "claudeCredentialId": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "providerCredentialId": {
+            "minimum": 1,
+            "type": "number"
           }
         }
       },
