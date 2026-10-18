@@ -36,6 +36,7 @@ import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
+import { ClaudeUsageService } from './claude-usage.service';
 import { LimitAlertsService } from './limit-alerts.service';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { RetryJobDto } from './dto/retry-job.dto';
@@ -87,6 +88,7 @@ export class WorkerController {
     private readonly runCredentials: RunCredentialsService,
     private readonly workersService: WorkersService,
     private readonly limitAlerts: LimitAlertsService,
+    private readonly claudeUsage: ClaudeUsageService,
   ) {}
 
   @Get()
@@ -159,7 +161,7 @@ export class WorkerController {
     // back to the worker's or the account's first), so its limits and an auth
     // failure can be traced to it.
     if (claudeCredentialId !== null) {
-      await this.workerService.recordUsedCredential(
+      await this.claudeUsage.recordUsedCredential(
         job.id,
         currentUser.id,
         claudeCredentialId,
@@ -191,7 +193,7 @@ export class WorkerController {
     await this.workerService.recordHeartbeat(currentUser.id, dto.workerName);
   }
 
-  // After a Claude run: plan limits and the job's tokens and cost (see WorkerService.recordClaudeReport).
+  // After a Claude run: plan limits and the job's tokens and cost (see ClaudeUsageService.recordReport).
   @Post('usage')
   @WorkerKeyAllowed()
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -199,7 +201,7 @@ export class WorkerController {
     @Body() dto: ReportUsageDto,
     @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<void> {
-    const recorded = await this.workerService.recordClaudeReport(
+    const recorded = await this.claudeUsage.recordReport(
       currentUser.id,
       currentUser.workerId,
       dto,

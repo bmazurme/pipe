@@ -5,6 +5,7 @@ import request from 'supertest';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
+import { ClaudeUsageService } from './claude-usage.service';
 import { LimitAlertsService } from './limit-alerts.service';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkerController } from './worker.controller';
@@ -17,6 +18,10 @@ describe('WorkerController', () => {
   let controller: WorkerController;
   let workerService: { recordHeartbeat: jest.Mock; assertHeldBy: jest.Mock };
   let workersService: { touch: jest.Mock };
+  const claudeUsage = {
+    recordReport: jest.fn(),
+    recordUsedCredential: jest.fn(),
+  };
 
   beforeEach(async () => {
     workerService = {
@@ -32,6 +37,7 @@ describe('WorkerController', () => {
         { provide: RunCredentialsService, useValue: {} },
         { provide: WorkersService, useValue: workersService },
         { provide: LimitAlertsService, useValue: limitAlerts },
+        { provide: ClaudeUsageService, useValue: claudeUsage },
       ],
     })
       .overrideGuard(JwtOrApiKeyGuard)
@@ -66,8 +72,7 @@ describe('WorkerController', () => {
         resolveForRun: jest.fn().mockResolvedValue({ id: 4, token: 'tok' }),
       };
       (workerService as Record<string, jest.Mock>).claim = jest.fn();
-      (workerService as Record<string, jest.Mock>).recordUsedCredential =
-        jest.fn();
+      claudeUsage.recordUsedCredential = jest.fn();
 
       const module = await Test.createTestingModule({
         controllers: [WorkerController],
@@ -87,6 +92,7 @@ describe('WorkerController', () => {
             },
           },
           { provide: LimitAlertsService, useValue: limitAlerts },
+          { provide: ClaudeUsageService, useValue: claudeUsage },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)
@@ -125,10 +131,7 @@ describe('WorkerController', () => {
 
     it('records which token the claimed job actually runs on', async () => {
       await claim(job('sonnet', null));
-
-      expect(
-        (workerService as Record<string, jest.Mock>).recordUsedCredential,
-      ).toHaveBeenCalledWith(5, 7, 4);
+      expect(claudeUsage.recordUsedCredential).toHaveBeenCalledWith(5, 7, 4);
     });
 
     it('a worker that is not enrolled (a personal API key) has no token of its own', async () => {
@@ -197,7 +200,7 @@ describe('WorkerController', () => {
     beforeEach(() => limitAlerts.check.mockClear());
 
     it('hands what was recorded to the alert check, with the token the job used', async () => {
-      (workerService as Record<string, jest.Mock>).recordClaudeReport = jest
+      claudeUsage.recordReport = jest
         .fn()
         .mockResolvedValue({ limits, credentialId: 3 });
 
@@ -215,9 +218,7 @@ describe('WorkerController', () => {
     });
 
     it('checks nothing when the report held no usable limits', async () => {
-      (workerService as Record<string, jest.Mock>).recordClaudeReport = jest
-        .fn()
-        .mockResolvedValue(null);
+      claudeUsage.recordReport = jest.fn().mockResolvedValue(null);
 
       await controller.reportUsage({ usage: {} }, { id: 7, workerId: 5 });
 
@@ -339,6 +340,7 @@ describe('WorkerController', () => {
           { provide: RunCredentialsService, useValue: {} },
           { provide: WorkersService, useValue: workersService },
           { provide: LimitAlertsService, useValue: limitAlerts },
+          { provide: ClaudeUsageService, useValue: claudeUsage },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)
