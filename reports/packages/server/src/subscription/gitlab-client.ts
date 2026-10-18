@@ -74,7 +74,7 @@ export async function getCurrentUsername(): Promise<string> {
 
 export async function addIssueNote(projectId: number | string, iid: number | string, body: string): Promise<void> {
   const { gitlabUrl, privateToken } = getSettings();
-  const url = `${gitlabUrl}/projects/${projectId}/issues/${iid}/notes`;
+  const url = `${gitlabUrl}/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(iid)}/notes`;
 
   await gitlabFetch(url, privateToken, { method: 'POST', body: JSON.stringify({ body }) });
 }
@@ -97,7 +97,7 @@ export async function getIssueTimeStats(projectId: number | string, iid: number 
 
 export async function setIssueTimeEstimate(projectId: number | string, iid: number | string, duration: string): Promise<void> {
   const { gitlabUrl, privateToken } = getSettings();
-  const url = `${gitlabUrl}/projects/${projectId}/issues/${iid}/time_estimate?duration=${encodeURIComponent(duration)}`;
+  const url = `${gitlabUrl}/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(iid)}/time_estimate?duration=${encodeURIComponent(duration)}`;
 
   await gitlabFetch(url, privateToken, { method: 'POST' });
 }
