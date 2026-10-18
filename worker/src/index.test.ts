@@ -575,3 +575,61 @@ describe('processJob log chunking', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob shutdown grace period', () => {
+  function hangingModel(shutdown: AbortController, finishAfterMs: number | null) {
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
+      setTimeout(() => shutdown.abort(), 20);
+      return new Promise((resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        if (finishAfterMs !== null) {
+          setTimeout(
+            () => resolve(new Response(JSON.stringify({ choices: [{ message: { content: 'done' } }] }), { status: 200 })),
+            finishAfterMs,
+          );
+        }
+      });
+    }) as typeof fetch;
+  }
+
+  it('lets the run finish within the grace period and reports success', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-grace-'));
+    const shutdown = new AbortController();
+    hangingModel(shutdown, 100);
+    const client = fakeClient(fakeParcel());
+    client.isCancelRequested = async () => false;
+    const job: RemoteJob = { id: 23, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, { ...fakeConfig(workDir), shutdownGraceSec: 60 }, { cancelPollMs: 1000, shutdown: shutdown.signal });
+
+    assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    assert.equal(client.uploadResult.calls.length, 1);
+    assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('finishing the current job (up to 60s)')));
+  });
+
+  it('fails the run at once when a second signal arrives', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-force-'));
+    const shutdown = new AbortController();
+    const force = new AbortController();
+    hangingModel(shutdown, null);
+    setTimeout(() => force.abort(), 80);
+    const client = fakeClient(fakeParcel());
+    client.isCancelRequested = async () => false;
+    const job: RemoteJob = { id: 24, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
+    const keepAlive = setTimeout(() => {}, 10_000);
+
+    try {
+      await processJob(
+        client as never,
+        job,
+        { ...fakeConfig(workDir), shutdownGraceSec: 60 },
+        { cancelPollMs: 1000, shutdown: shutdown.signal, forceShutdown: force.signal },
+      );
+    } finally {
+      clearTimeout(keepAlive);
+    }
+
+    assert.equal(client.updateStatus.calls.at(-1)?.[2], SHUTDOWN_FAILURE_MESSAGE);
+    assert.equal(client.uploadResult.calls.length, 0);
+  });
+});

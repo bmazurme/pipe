@@ -188,6 +188,8 @@ export function enrollSnippets(
     docker: [
       // A leftover container of the same name (a reconnect) is replaced; its state volume — and so nothing else — stays.
       `docker rm -f ${name} >/dev/null 2>&1; docker run -d --name ${name} --pull always --restart unless-stopped \\`,
+      // A running job gets up to 14 minutes to finish on a stop; Docker's default 10 s would SIGKILL it first.
+      '  --stop-timeout 900 -e WORKER_SHUTDOWN_GRACE_SEC=840 \\',
       // A job runs npm ci, the linter and the tests — on a small board that is several cores for minutes, enough to push
       // the machine over its load alarm and to starve whatever else it runs (a Swarm manager, say). Half the cores (at
       // least one), a memory ceiling, and a low priority against everything else on the machine; edit them to taste.
