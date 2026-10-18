@@ -62,17 +62,6 @@ describe('LogsSection', () => {
     expect(screen.getByText('/api/v1/storage')).toBeTruthy();
   });
 
-  it('shows only warnings and errors by default, everything on request', async () => {
-    const user = userEvent.setup();
-    renderSection();
-
-    expect(await screen.findByText('Job 7 failed: timed out')).toBeTruthy();
-    expect(screen.queryByText('Job 6 succeeded')).toBeNull();
-
-    await user.click(screen.getByText('Все события'));
-
-    expect(screen.getByText('Job 6 succeeded')).toBeTruthy();
-  });
 
   it('refetches for another period', async () => {
     const user = userEvent.setup();
@@ -125,14 +114,40 @@ describe('LogsSection load errors', () => {
     expect(screen.queryByText('Событий нет')).toBeNull();
   });
 
-  it('does not claim nothing was recorded when only info entries come back', async () => {
+});
+
+describe('LogsSection server-side filters', () => {
+  it('asks the server for problems by default and for everything on request', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await screen.findByText('Job 7 failed: timed out')).toBeTruthy();
+    expect(requested.some((path) => path.startsWith('/api/v1/logs?') && path.includes('problems=true'))).toBe(true);
+
+    await user.click(screen.getByText('Все события'));
+
+    await waitFor(() => expect(requested.some((path) => path.startsWith('/api/v1/logs?') && !path.includes("problems"))).toBe(true));
+  });
+
+  it('sends the typed phrase as q', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText('50%');
+    await user.type(screen.getByRole('textbox'), 'SIGTERM');
+
+    await waitFor(() => expect(requested.some((path) => path.includes('logs?') && path.includes('q=SIGTERM'))).toBe(true));
+  });
+
+  it('shows the rows the server returned even when they are all info', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (request: Request) => (request.url.includes('/logs/summary') ? json(SUMMARY) : json([ENTRIES[2]]))),
+      vi.fn(async (request: Request) =>
+        new Response(JSON.stringify(request.url.includes('/logs/summary') ? SUMMARY : [ENTRIES[2]]), { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
     );
     renderSection();
 
-    expect(await screen.findByText('Среди последних 30 событий нет предупреждений и ошибок')).toBeTruthy();
-    expect(screen.queryByText('Событий нет')).toBeNull();
+    expect(await screen.findByText('Job 6 succeeded')).toBeTruthy();
   });
 });

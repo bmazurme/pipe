@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
+import { ILike, In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 
 import { AppLog, AppLogLevel, AppLogSource } from './entities/app-log.entity';
 import { redact, sanitizeMeta } from './redact';
@@ -23,8 +23,13 @@ export interface LogQuery {
   level?: AppLogLevel;
   levels?: AppLogLevel[];
   source?: AppLogSource;
+  q?: string;
   days?: number;
   limit?: number;
+}
+
+export function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 function since(days: number): Date {
@@ -67,6 +72,7 @@ export class AppLogService {
         ...(query.level ? { level: query.level } : {}),
         ...(query.levels?.length ? { level: In(query.levels) } : {}),
         ...(query.source ? { source: query.source } : {}),
+        ...(query.q ? { message: ILike(`%${escapeLike(query.q)}%`) } : {}),
       },
       order: { id: 'DESC' },
       take: Math.min(Math.max(query.limit ?? 100, 1), 500),

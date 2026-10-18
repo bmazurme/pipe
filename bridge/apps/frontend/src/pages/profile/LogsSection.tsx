@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Receipt } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Select, Skeleton, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
@@ -33,7 +33,15 @@ export function LogsSection() {
   const [days, setDays] = useState(7);
   const [source, setSource] = useState<LogSource | 'all'>('all');
   const [onlyProblems, setOnlyProblems] = useState(true);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Logs are owner-only: another account gets the notice instead of two requests bound to fail.
   const isNonOwner = useIsNonOwner();
 
@@ -54,13 +62,12 @@ export function LogsSection() {
     days,
     limit: 30,
     ...(source !== 'all' ? { source } : {}),
-    // "Problems" = warnings and errors; the API filters one level at a time, so
-    // an unfiltered list is trimmed here instead.
+    ...(debouncedSearch ? { q: debouncedSearch } : {}),
+    ...(onlyProblems ? { problems: true } : {}),
   }, { skip: isNonOwner });
   const [exportLogs, { isLoading: isExporting }] = useExportLogsMutation();
 
-  const visible = (entries ?? []).filter((entry) => !onlyProblems || entry.level !== 'info');
-  const onlyInfoReturned = onlyProblems && (entries?.length ?? 0) > 0 && visible.length === 0;
+  const visible = entries ?? [];
 
   const handleExport = async () => {
     setExportError(null);
@@ -178,6 +185,7 @@ export function LogsSection() {
             <SegmentedRadioGroup.Option value="all">Все события</SegmentedRadioGroup.Option>
           </SegmentedRadioGroup>
         </div>
+        <TextInput value={search} onUpdate={setSearch} placeholder="Поиск по сообщению" label="Поиск по сообщению" hasClear size="m" />
 
         {isListLoading ? (
           <Skeleton className={styles.logsSkeleton} />
@@ -187,8 +195,6 @@ export function LogsSection() {
             message={`Не удалось загрузить события — ${describeApiError(listError)}`}
             actions={<Button view="outlined" size="m" onClick={() => void refetchList()}>Повторить</Button>}
           />
-        ) : onlyInfoReturned ? (
-          <EmptyState icon={Receipt} title="Проблем не найдено" description="Среди последних 30 событий нет предупреждений и ошибок" />
         ) : visible.length === 0 ? (
           <EmptyState icon={Receipt} title="Событий нет" description="За выбранный период ничего не записано." />
         ) : (

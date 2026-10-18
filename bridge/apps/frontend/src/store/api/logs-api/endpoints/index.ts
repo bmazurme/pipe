@@ -32,6 +32,8 @@ export interface LogSummary {
 export interface LogFilters {
   level?: LogLevel;
   source?: LogSource;
+  q?: string;
+  problems?: boolean;
   days: number;
   limit?: number;
 }

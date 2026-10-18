@@ -2462,6 +2462,23 @@
             }
           },
           {
+            "name": "problems",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
             "name": "source",
             "required": false,
             "in": "query",
@@ -2532,6 +2549,23 @@
             }
           },
           {
+            "name": "problems",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
             "name": "source",
             "required": false,
             "in": "query",
@@ -2595,6 +2629,23 @@
                 "warn",
                 "error"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "problems",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
               "type": "string"
             }
           },

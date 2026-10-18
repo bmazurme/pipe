@@ -1,6 +1,10 @@
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import type { Response } from 'express';
 
 import type { AppLogService } from './app-log.service';
+import { LogsQueryDto } from './dto/logs-query.dto';
 import { LogsController } from './logs.controller';
 
 describe('LogsController.export', () => {
@@ -39,5 +43,41 @@ describe('LogsController.export', () => {
     expect(lines[1]).not.toHaveProperty('meta');
     expect(lines[1].event).toBe('bad');
     expect(lines[2]).not.toHaveProperty('meta');
+  });
+});
+
+describe('LogsController.list', () => {
+  it('maps problems to warn and error levels', () => {
+    const list = jest.fn().mockResolvedValue([]);
+    const controller = new LogsController({ list } as unknown as AppLogService);
+
+    void controller.list({ problems: true, q: 'x', days: 7 });
+
+    expect(list).toHaveBeenCalledWith({
+      q: 'x',
+      days: 7,
+      levels: ['warn', 'error'],
+    });
+  });
+});
+
+describe('LogsQueryDto', () => {
+  const check = (raw: Record<string, unknown>) =>
+    validate(plainToInstance(LogsQueryDto, raw));
+
+  it('accepts q and problems from a query string', async () => {
+    const dto = plainToInstance(LogsQueryDto, { q: 'a', problems: 'true' });
+
+    expect(dto.problems).toBe(true);
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects q over 100 characters', async () => {
+    expect(await check({ q: 'x'.repeat(101) })).toHaveLength(1);
+    expect(await check({ q: 'x'.repeat(100) })).toHaveLength(0);
+  });
+
+  it('rejects a non-boolean problems', async () => {
+    expect(await check({ problems: 'maybe' })).toHaveLength(1);
   });
 });
