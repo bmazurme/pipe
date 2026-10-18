@@ -17,7 +17,11 @@ export class LogsController {
 
   @Get()
   list(@Query() query: LogsQueryDto) {
-    return this.logs.list(query);
+    const { problems, ...rest } = query;
+
+    return this.logs.list(
+      problems ? { ...rest, levels: ['warn', 'error'] } : rest,
+    );
   }
 
   @Get('summary')

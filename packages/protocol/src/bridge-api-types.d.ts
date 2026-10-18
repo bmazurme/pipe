@@ -4619,6 +4619,8 @@ export interface operations {
         parameters: {
             query?: {
                 level?: "info" | "warn" | "error";
+                problems?: boolean;
+                q?: string;
                 source?: "http" | "job" | "loop" | "integration" | "system";
                 days?: number;
                 limit?: number;
@@ -4643,6 +4645,8 @@ export interface operations {
         parameters: {
             query?: {
                 level?: "info" | "warn" | "error";
+                problems?: boolean;
+                q?: string;
                 source?: "http" | "job" | "loop" | "integration" | "system";
                 days?: number;
                 limit?: number;
@@ -4667,6 +4671,8 @@ export interface operations {
         parameters: {
             query?: {
                 level?: "info" | "warn" | "error";
+                problems?: boolean;
+                q?: string;
                 source?: "http" | "job" | "loop" | "integration" | "system";
                 days?: number;
                 limit?: number;

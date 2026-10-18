@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { In, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 
 import { AppLogService } from './app-log.service';
 import { AppLog } from './entities/app-log.entity';
@@ -32,5 +32,31 @@ describe('AppLogService.list levels', () => {
     await service.list({});
 
     expect(find.mock.calls[0][0].where).not.toHaveProperty('level');
+  });
+});
+
+describe('AppLogService.list text search', () => {
+  const run = async (q?: string) => {
+    const find = jest.fn().mockResolvedValue([]);
+    const service = new AppLogService(
+      { find } as unknown as Repository<AppLog>,
+      new ConfigService(),
+    );
+
+    await service.list({ q });
+
+    return find.mock.calls[0][0].where;
+  };
+
+  it('matches the message case-insensitively as a substring', async () => {
+    expect((await run('SIGTERM')).message).toEqual(ILike('%SIGTERM%'));
+  });
+
+  it('treats %, _ and backslash literally', async () => {
+    expect((await run('50%_a\\b')).message).toEqual(ILike('%50\\%\\_a\\\\b%'));
+  });
+
+  it('adds no message condition without q', async () => {
+    expect(await run()).not.toHaveProperty('message');
   });
 });
