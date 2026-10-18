@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -56,7 +56,8 @@ describe('RetryJobButton on another model', () => {
     await user.click(await screen.findByText('Claude Opus'));
     await user.click(screen.getByText('как в задаче'));
     await user.click(await screen.findByText('Second token'));
-    await user.click(screen.getByRole('button', { name: 'Перезапустить' }));
+    // The list also has its own plain "Перезапустить" button: take the one in the open dialog.
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Перезапустить' }));
 
     await waitFor(() => expect(bodies).toEqual([{ model: 'opus', claudeCredentialId: 3 }]));
   });
