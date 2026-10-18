@@ -7,6 +7,7 @@ import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { ClaudeCredentialsController } from './claude-credentials.controller';
 import { ClaudeCredentialsService } from './claude-credentials.service';
+import { ClaudeUsageService } from './claude-usage.service';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job } from './entities/job.entity';
 import { LimitAlertState } from './entities/limit-alert-state.entity';
@@ -53,6 +54,7 @@ import { WorkersService } from './workers.service';
     WorkersService,
     ClaudeCredentialsService,
     LimitAlertsService,
+    ClaudeUsageService,
     ProviderCredentialsService,
     RunCredentialsService,
     WorkerHeartbeatService,
