@@ -1,10 +1,12 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // infra/backup/mirror-s3.sh writes a bare UTC stamp like "20261012T030000Z"
 // (no JSON framing) to this key, naming the newest snapshot folder.
 const LATEST_KEY = 'LATEST';
+// The status changes once a day; the dashboard polls every 20 s per tab.
+const CACHE_TTL_MS = 60_000;
 const STAMP_PATTERN = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
 
 export interface BackupStatus {
@@ -43,8 +45,10 @@ function parseRawBytes(metaEnv: string): number | null {
 // Garage S3 — infra/backup/backup.sh + mirror-s3.sh write both server-side;
 // bridge never runs or triggers a backup, only reports on the last one.
 @Injectable()
-export class BackupStatusService {
+export class BackupStatusService implements OnModuleDestroy {
   private readonly logger = new Logger(BackupStatusService.name);
+  private s3Client: S3Client | null = null;
+  private cached: { status: BackupStatus; expiresAt: number } | null = null;
 
   // The factory is overridable in tests, the same way S3FileStore takes one
   // — a real client needs a reachable Garage endpoint, a fake `send` doesn't.
@@ -69,13 +73,32 @@ export class BackupStatusService {
       }),
   ) {}
 
+  onModuleDestroy(): void {
+    this.s3Client?.destroy();
+    this.s3Client = null;
+  }
+
   async getStatus(): Promise<BackupStatus> {
     const client = this.client();
 
     if (!client) {
+      this.cached = null;
+
       return { configured: false, lastBackupAt: null, rawBytes: null };
     }
 
+    if (this.cached && this.cached.expiresAt > Date.now()) {
+      return this.cached.status;
+    }
+
+    const status = await this.fetchStatus(client);
+
+    this.cached = { status, expiresAt: Date.now() + CACHE_TTL_MS };
+
+    return status;
+  }
+
+  private async fetchStatus(client: S3Client): Promise<BackupStatus> {
     const bucket =
       this.configService.get<string>('BACKUP_S3_BUCKET') || 'bridge-backups';
 
@@ -137,14 +160,22 @@ export class BackupStatusService {
       'BACKUP_S3_SECRET_ACCESS_KEY',
     );
 
-    if (!endpoint || !accessKeyId || !secretAccessKey) return null;
+    if (!endpoint || !accessKeyId || !secretAccessKey) {
+      this.onModuleDestroy();
 
-    return this.clientFactory({
+      return null;
+    }
+
+    if (this.s3Client) return this.s3Client;
+
+    this.s3Client = this.clientFactory({
       endpoint,
       region: this.configService.get<string>('BACKUP_S3_REGION') || 'garage',
       accessKeyId,
       secretAccessKey,
     });
+
+    return this.s3Client;
   }
 
   // Same "comma-separated list, use the first" shape as bridge's own
