@@ -26,6 +26,8 @@ export interface RemoteJob {
   // Outcomes of earlier runs of the same task, when the owner asked for them — bridge
   // assembles the text; null/absent for the default (none).
   history?: string | null;
+  // Public key (PEM): the result parcel is encrypted with it before it is uploaded.
+  resultPublicKey?: string | null;
   status: RemoteJobStatus;
 }
 

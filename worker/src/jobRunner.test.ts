@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import AdmZip from 'adm-zip';
-import { ASSET_PREFIX, buildArchive } from '@pipe/protocol';
+import { ASSET_PREFIX, buildArchive, decryptBuffer, generateKeyPair } from '@pipe/protocol';
 
 import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
@@ -256,6 +256,25 @@ describe('processJob', () => {
 
     // Never told bridge it failed.
     assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('encrypts the result for the owner when the job carries a public key, and names it .enc', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-'));
+    stubOpenAiCompletion('All done, nothing more to change.');
+    const { publicKey, privateKey } = generateKeyPair();
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 7, sourceFileId: 10, resultFileId: null, model: 'gpt', status: 'claimed', resultPublicKey: publicKey };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const [, filename, uploaded] = client.uploadResult.calls[0] as [number, string, Buffer];
+    assert.equal(filename, 'worker-result-7.zip.enc');
+    // Not a zip any more, and only the private key opens it back into one.
+    assert.notEqual(uploaded.subarray(0, 2).toString(), 'PK');
+    assert.equal(decryptBuffer(uploaded, privateKey).subarray(0, 2).toString(), 'PK');
 
     rmSync(workDir, { recursive: true, force: true });
   });

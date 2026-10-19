@@ -10,6 +10,10 @@ export interface StoredFileMeta {
   mimeType: string;
   size: number;
   createdAt: string;
+  /** Addressing of a pipeline parcel (reports / sync); absent or null for a plain file. */
+  channel?: string | null;
+  taskKey?: string | null;
+  direction?: 'outbound' | 'result' | null;
 }
 
 const storageApiEndpoints = storageApi.injectEndpoints({

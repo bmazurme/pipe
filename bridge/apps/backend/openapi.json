@@ -4433,6 +4433,11 @@
           },
           "notifyOnFinish": {
             "type": "boolean"
+          },
+          "resultPublicKey": {
+            "type": "string",
+            "maxLength": 4000,
+            "pattern": "/-----BEGIN [A-Z ]*PUBLIC KEY-----/"
           }
         },
         "required": [

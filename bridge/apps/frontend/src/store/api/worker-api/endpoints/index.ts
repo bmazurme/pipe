@@ -260,6 +260,8 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         contextId?: number;
         includeHistory?: boolean;
         notifyOnFinish?: boolean;
+        /** RSA public key (PEM): the worker encrypts the result parcel with it before uploading. */
+        resultPublicKey?: string;
       }
     >({
       query: (body) => ({ url: 'worker/jobs', method: 'POST', body }),

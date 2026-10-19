@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { PackedAsset, PackedFile } from '@pipe/protocol';
+import { encryptBuffer, type PackedAsset, type PackedFile } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
@@ -75,7 +75,7 @@ function decodeUtf8Strict(bytes: Buffer): string | undefined {
 }
 
 function resultFilename(job: RemoteJob): string {
-  return `worker-result-${job.id}.zip`;
+  return `worker-result-${job.id}.zip${job.resultPublicKey ? '.enc' : ''}`;
 }
 
 // One job at a time, in a fresh temp directory that's always removed after
@@ -243,7 +243,9 @@ export async function processJob(
 
     if (cancel.signal.aborted) throw new CancelledError();
 
-    const resultBuffer = buildResultParcel(parcel, resultFiles, resultAssets);
+    const plainResult = buildResultParcel(parcel, resultFiles, resultAssets);
+    // Encrypted for the owner when the job asked for it: bridge then only ever stores ciphertext of the result.
+    const resultBuffer = job.resultPublicKey ? encryptBuffer(plainResult, job.resultPublicKey) : plainResult;
 
     log(`Uploading result parcel (${resultFiles.length} files, ${resultAssets.length} binary assets)...\n`);
     await client.uploadResult(job.id, resultFilename(job), resultBuffer);
