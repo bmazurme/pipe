@@ -1,5 +1,12 @@
-import { ContextUsage } from '../context.service';
+import { ApiProperty } from '@nestjs/swagger';
+
+import type { ContextUsage } from '../context.service';
 import { Context } from '../entities/context.entity';
+
+export class ContextScheduleRefDto {
+  id: number;
+  name: string;
+}
 
 // What a list needs to tell contexts apart — never the text itself (see
 // ContextService.findAllByUser). ContextResponseDto carries the text, for one context.
@@ -11,7 +18,8 @@ export class ContextSummaryDto {
   createdAt: Date;
   updatedAt: Date;
   // Improve schedules that hand this context to their runs.
-  schedules: { id: number; name: string }[];
+  @ApiProperty({ type: () => [ContextScheduleRefDto] })
+  schedules: ContextScheduleRefDto[];
   // Newest job launched with a context of this name, or null if none.
   lastUsedAt: Date | null;
 
