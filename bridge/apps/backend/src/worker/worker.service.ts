@@ -32,7 +32,11 @@ import {
   isProviderModel,
   ProviderCredentialsService,
 } from './provider-credentials.service';
-import { buildRunHistory, FINISHED_STATUSES } from './run-history';
+import {
+  buildRunHistory,
+  FINISHED_STATUSES,
+  LOG_TAIL_CHARS,
+} from './run-history';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
@@ -420,10 +424,36 @@ export class WorkerService {
     userId: number,
     taskKey: string,
   ): Promise<{ text: string; count: number } | null> {
-    const earlier = await this.jobRepository.find({
-      where: { userId, taskKey, status: In(FINISHED_STATUSES) },
-      order: { finishedAt: 'DESC', id: 'DESC' },
-      take: HISTORY_LOOKUP,
+    // Only what the summary reads: a finished run's log can be megabytes and the
+    // context/history texts tens of KB — the end of the log is all that is used.
+    // CAST: an untyped parameter would make RIGHT(..., $n) ambiguous.
+    const { entities, raw } = await this.jobRepository
+      .createQueryBuilder('job')
+      .select([
+        'job.id',
+        'job.model',
+        'job.status',
+        'job.errorMessage',
+        'job.finishedAt',
+      ])
+      .addSelect(
+        `RIGHT(COALESCE("job"."logs", ''), CAST(:logTail AS integer))`,
+        'logsTail',
+      )
+      .where(
+        '"job"."userId" = :userId AND "job"."taskKey" = :taskKey AND "job"."status" IN (:...statuses)',
+        { userId, taskKey, statuses: FINISHED_STATUSES },
+      )
+      .setParameter('logTail', LOG_TAIL_CHARS)
+      .orderBy('"job"."finishedAt"', 'DESC')
+      .addOrderBy('"job"."id"', 'DESC')
+      .limit(HISTORY_LOOKUP)
+      .getRawAndEntities<{ logsTail: string | null }>();
+
+    const earlier = entities.map((job, index) => {
+      job.logs = raw[index]?.logsTail ?? '';
+
+      return job;
     });
 
     return buildRunHistory(earlier);
