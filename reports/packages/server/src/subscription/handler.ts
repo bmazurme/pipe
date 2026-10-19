@@ -17,7 +17,7 @@ import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
-import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages } from './gitlab-client';
+import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages, getIssueNotes } from './gitlab-client';
 import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
 import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
@@ -307,7 +307,20 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
     // GitLab-hosted markdown to scan at all.
     // (GitHub issues: no image fetch either — their attachments sit behind
     // a different, signed-URL mechanism this doesn't handle.)
-    const images = state.manual || githubProjectFor(projectId) ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '', projectId);
+    //
+    // The issue's comments travel with it, images included: a screenshot or a clarification in a comment is often the
+    // part of the task that matters. Their text is anonymized like the description; the images come from the real text.
+    const isGitlabIssue = !state.manual && !githubProjectFor(projectId);
+    const gitlabIssue = isGitlabIssue ? await getIssue(projectId, iid) : null;
+    const notes = isGitlabIssue ? await getIssueNotes(projectId, iid) : [];
+    const issueComments = notes.map((note) => ({
+      author: applyDictionary(note.author?.name || note.author?.username || '', dictionary, 'toRemote'),
+      createdAt: note.created_at,
+      body: applyDictionary(note.body, dictionary, 'toRemote'),
+    }));
+    const images = isGitlabIssue
+      ? await getIssueImages([gitlabIssue?.description ?? '', ...notes.map((note) => note.body)].join('\n\n'), projectId)
+      : [];
 
     // Images never go through scanForLeaks (text-only) — this is the only
     // signal the operator gets that they weren't checked, strict or not.
@@ -319,6 +332,7 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
       ...files.map((f) => ({ source: f.relPath, content: f.content })),
       { source: 'issue title', content: issueTitle },
       { source: 'issue description', content: issueDescription },
+      ...issueComments.map((comment, index) => ({ source: `issue comment ${index + 1}`, content: comment.body })),
     ]);
     if (leaks.length > 0) {
       console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
@@ -338,6 +352,7 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
         issueIid: iid,
         issueTitle,
         issueDescription,
+        ...(issueComments.length > 0 ? { issueComments } : {}),
         projectId: Number(projectId),
         branch: state.branch,
         createdAt: new Date().toISOString(),

@@ -21,6 +21,8 @@ export interface SubscriptionManifest extends BaseManifest {
   issueIid: string;
   issueTitle: string;
   issueDescription: string;
+  // The issue's comments, oldest first (anonymized like the description); absent when it had none or the parcel is older.
+  issueComments?: { author: string; createdAt: string; body: string }[];
   projectId: number;
   branch: string;
   createdAt: string;
@@ -79,7 +81,18 @@ export function buildResultParcel(
 export function describeTask(parcel: ExtractedParcel): string {
   if (parcel.manifestEntry === SUBSCRIPTION_MANIFEST_ENTRY) {
     const manifest = parcel.manifest as unknown as SubscriptionManifest;
-    return `Task (GitLab issue): ${manifest.issueTitle}\n\n${manifest.issueDescription}`;
+    const comments = (manifest.issueComments ?? [])
+      .map((comment) => `--- ${[comment.author, comment.createdAt].filter(Boolean).join(', ')}:\n${comment.body}`)
+      .join('\n\n');
+    const hasImages = parcel.assets.some((asset) => asset.relPath.startsWith('issue-images/'));
+
+    return [
+      `Task (GitLab issue): ${manifest.issueTitle}\n\n${manifest.issueDescription}`,
+      comments ? `Comments on the issue, oldest first (they may clarify or change the task):\n\n${comments}` : '',
+      hasImages ? 'Images attached to the description and the comments are in the issue-images/ folder.' : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
   }
 
   return 'No task description was included with this parcel — review the code and make general improvements.';
