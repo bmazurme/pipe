@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ClipboardEvent } from 'react';
 import { Alert, Button, Icon, Select, Text, TextInput, useToaster } from '@gravity-ui/uikit';
 import { Check, CodeFork, ArrowUpFromLine, ArrowDownToLine, PaperPlane } from '@gravity-ui/icons';
 import type { SubscriptionDraftType, SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
@@ -13,6 +13,8 @@ import {
   usePublishSubscriptionIssueMutation,
 } from '../../../store/api';
 import { describeError } from '../../../utils/describe-error';
+import { MAX_ATTACHMENTS, toAttachments, type Attachment } from './attachments';
+import { ScreenshotAttachments } from './screenshot-attachments';
 
 import style from '../subscription.module.css';
 
@@ -33,6 +35,7 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
   // endpoint's anonymized preview, edited in place, then sent back verbatim
   // on confirm so what was reviewed is exactly what gets pushed.
   const [reviewDraft, setReviewDraft] = useState<SubscriptionDraftType | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   const currentIndex = issue.subscription ? STEP_ORDER.indexOf(issue.subscription.step) : -1;
   const nextIndex = currentIndex + 1;
@@ -84,6 +87,24 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
     }
   };
 
+  // Leaving the review (sent or cancelled) drops the screenshots and frees their previews.
+  const closeReview = () => {
+    attachments.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setAttachments([]);
+    setReviewDraft(null);
+  };
+
+  // Ctrl+V of an image anywhere in the review panel attaches it; text pastes are left alone.
+  const handlePasteImages = (event: ClipboardEvent) => {
+    const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+    if (images.length === 0) return;
+
+    event.preventDefault();
+    void toAttachments(images, attachments.length).then(({ added }) => {
+      if (added.length > 0) setAttachments((prev) => [...prev, ...added].slice(0, MAX_ATTACHMENTS));
+    });
+  };
+
   const handleConfirmPush = async () => {
     if (!reviewDraft) return;
 
@@ -95,9 +116,10 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
           projectId: reviewDraft.projectId,
           title: reviewDraft.title,
           description: reviewDraft.description,
+          ...(attachments.length > 0 ? { attachments: attachments.map(({ name, base64 }) => ({ name, base64 })) } : {}),
         },
       }).unwrap();
-      setReviewDraft(null);
+      closeReview();
       toaster.add({ name: `subscription-${issue.iid}-ok`, theme: 'success', title: 'Посылка отправлена в bridge', autoHiding: 3000 });
     } catch (error) {
       toaster.add({
@@ -163,7 +185,7 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
       )}
 
       {reviewDraft && (
-        <div className={style.stepAction}>
+        <div className={style.stepAction} onPaste={handlePasteImages}>
           <Text variant="body-2" color="secondary">
             Проверьте анонимизированный текст задачи перед отправкой — можно исправить прямо здесь.
           </Text>
@@ -202,12 +224,14 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
             />
           )}
 
+          <ScreenshotAttachments value={attachments} onChange={setAttachments} disabled={isPushing} />
+
           <div className={style.reviewActions}>
             <Button view="action" size="m" onClick={handleConfirmPush} loading={isPushing}>
               <Icon data={ArrowUpFromLine} size={16} />
               Подтвердить и отправить
             </Button>
-            <Button view="outlined" size="m" onClick={() => setReviewDraft(null)} disabled={isPushing}>
+            <Button view="outlined" size="m" onClick={closeReview} disabled={isPushing}>
               Отмена
             </Button>
           </div>

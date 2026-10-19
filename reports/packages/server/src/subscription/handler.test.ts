@@ -368,6 +368,43 @@ describe('handlePushSubscriptionIssue', () => {
     expect(archive.assets.map((asset) => asset.relPath)).toEqual(['issue-images/shot.png']);
   });
 
+  it('puts screenshots attached by hand into the parcel, and refuses something that is not an image', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('px')]);
+
+    let uploaded: Buffer | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/issues/6/notes')) return Response.json([]);
+      if (url.includes('/issues/6')) return Response.json({ id: 1, iid: 6, project_id: 173, title: 't', description: '' });
+      if (url.includes('/api/v1/storage')) {
+        const form = init!.body as unknown as { get(name: string): unknown };
+        uploaded = Buffer.from(await (form.get('file') as Blob).arrayBuffer());
+        return Response.json({ id: 42, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'outbound' }, { status: 201 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const bad = makeRes();
+    await handlePushSubscriptionIssue(
+      makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd', attachments: [{ name: 'x.png', base64: Buffer.from('not an image').toString('base64') }] }),
+      bad.res,
+    );
+    expect(bad.events()[0]).toMatchObject({ type: 'error' });
+    expect(uploaded).toBeUndefined();
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(
+      makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd', attachments: [{ name: 'Screenshot 1.png', base64: png.toString('base64') }] }),
+      res,
+    );
+
+    expect(events()[0].type).toBe('message');
+    const archive = extractArchive<BaseManifest>(uploaded!, '__subscription_manifest__.json');
+    expect(archive.assets.map((asset) => asset.relPath)).toEqual(['issue-images/Screenshot-1.png']);
+  });
+
   it('refuses to push before init has created a branch', async () => {
     initTrackedProject('173');
     globalThis.fetch = vi.fn() as unknown as typeof fetch;

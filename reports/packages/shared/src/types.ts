@@ -234,6 +234,8 @@ export type SubscriptionPushPayload = {
   projectId: number;
   title: string;
   description: string;
+  /** Screenshots the person attached (PNG/JPEG/GIF/WebP, base64) — they travel in the parcel as images. */
+  attachments?: { name: string; base64: string }[];
 };
 
 export type CreateManualSubscriptionIssuePayload = {
