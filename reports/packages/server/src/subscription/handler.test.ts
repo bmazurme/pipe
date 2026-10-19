@@ -306,6 +306,26 @@ describe('handlePushSubscriptionIssue', () => {
     });
   });
 
+  it('refuses to push a parcel with no project files instead of uploading an empty one', async () => {
+    const { dir } = initTrackedProject('173');
+    setSubscriptionConfig({
+      trackedProjects: [{ gitlabProjectId: '173', path: dir, include: ['**/*.nomatch'] }],
+      dictionary: [],
+      commentTemplates: [],
+    } as unknown as Parameters<typeof setSubscriptionConfig>[0]);
+    setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/посылка была бы пустой/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(getIssueState('173', '6')?.step).toBe('init');
+  });
+
   it('refuses to push before init has created a branch', async () => {
     initTrackedProject('173');
     globalThis.fetch = vi.fn() as unknown as typeof fetch;

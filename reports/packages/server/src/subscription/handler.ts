@@ -288,6 +288,13 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
 
     const { dictionary, encryption } = getSubscriptionConfig();
     const relPaths = await walkProjectFiles(trackedProject);
+    // Same stop as sync's push-issue: a parcel with no project files would reach a worker as an empty working directory.
+    if (relPaths.length === 0) {
+      throw new Error(
+        `В отслеживаемом проекте ${trackedProject.path} нет файлов, подходящих под include/exclude, — посылка была бы пустой. ` +
+          'Проверьте путь и шаблоны include/exclude проекта в Settings.',
+      );
+    }
     const files = relPaths.map((relPath) => ({
       relPath,
       content: applyDictionary(readFileSync(join(trackedProject.path, relPath), 'utf-8'), dictionary, 'toRemote'),
