@@ -94,3 +94,26 @@ describe('resolveProjectGlobs', () => {
     assert.ok(DEFAULT_EXCLUDE.includes('**/.git/**'));
   });
 });
+
+describe('resolveProjectGlobs with quoted patterns', () => {
+  it('strips quotes and whitespace pasted around a pattern', () => {
+    const { include, exclude } = resolveProjectGlobs({
+      include: ['"**/*.js"', " '**/*.vue' ", '**/*.json'],
+      exclude: ['"**/node_modules/**"'],
+    });
+
+    assert.deepEqual(include, ['**/*.js', '**/*.vue', '**/*.json']);
+    assert.deepEqual(exclude, ['**/node_modules/**']);
+  });
+
+  it('falls back to the defaults when nothing usable is left', () => {
+    const { include, exclude } = resolveProjectGlobs({ include: ['""', '  '], exclude: [''] });
+
+    assert.deepEqual(include, [...DEFAULT_INCLUDE]);
+    assert.deepEqual(exclude, [...DEFAULT_EXCLUDE]);
+  });
+
+  it('leaves a quote in the middle of a pattern alone', () => {
+    assert.deepEqual(resolveProjectGlobs({ include: ['a"b/**'] }).include, ['a"b/**']);
+  });
+});

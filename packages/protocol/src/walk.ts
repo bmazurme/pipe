@@ -12,18 +12,30 @@ export const DEFAULT_EXCLUDE: readonly string[] = [
   '**/uploads/**',
 ];
 
+// A glob typed or pasted into a settings field with its quotes ("**/*.js", as copied from a JSON array or a shell line) would
+// match nothing: the quote characters are part of the pattern. Trim, and drop one pair of matching quotes around it.
+function cleanGlobs(patterns: string[] | null | undefined): string[] {
+  return (patterns ?? [])
+    .map((pattern) => pattern.trim().replace(/^(["'])(.*)\1$/, '$2').trim())
+    .filter((pattern) => pattern.length > 0);
+}
+
 /**
  * The globs a project is walked with: its own, or the defaults when it has none. A missing **and an empty** array both
  * fall back — an empty `exclude` must not mean "exclude nothing" (that packs `node_modules` and `.git` into a parcel)
- * and an empty `include` must not mean "walk nothing". Returns fresh arrays, safe to modify.
+ * and an empty `include` must not mean "walk nothing". Patterns are cleaned of surrounding whitespace and quotes first.
+ * Returns fresh arrays, safe to modify.
  */
 export function resolveProjectGlobs(project: { include?: string[] | null; exclude?: string[] | null }): {
   include: string[];
   exclude: string[];
 } {
+  const include = cleanGlobs(project.include);
+  const exclude = cleanGlobs(project.exclude);
+
   return {
-    include: project.include?.length ? [...project.include] : [...DEFAULT_INCLUDE],
-    exclude: project.exclude?.length ? [...project.exclude] : [...DEFAULT_EXCLUDE],
+    include: include.length ? include : [...DEFAULT_INCLUDE],
+    exclude: exclude.length ? exclude : [...DEFAULT_EXCLUDE],
   };
 }
 
