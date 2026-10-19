@@ -24,7 +24,10 @@ export function HomePage() {
               <Icon data={service.icon} size={20} />
             </span>
             <span className={styles.cardBody}>
-              <Text variant="subheader-1">{service.title}</Text>
+              <Text variant="subheader-1">
+                {service.title}
+                {service.soon && <span className={styles.soonBadge}>скоро</span>}
+              </Text>
               <Text color="secondary" variant="body-1">
                 {service.description}
               </Text>

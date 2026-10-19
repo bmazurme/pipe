@@ -41,7 +41,7 @@ export function buildMenuItems(
     for (const item of section) {
       items.push({
         id: item.id,
-        title: item.title,
+        title: 'soon' in item && item.soon ? soonTitle(item.title) : item.title,
         icon: item.icon,
         current: isCurrentPath(pathname, item.path),
         // An href makes each row a real <a>: middle-click and ⌘/Ctrl+click open
@@ -94,7 +94,9 @@ export function buildBurgerItems(
         id: item.id,
         // The burger has no right-hand slot, so the state goes into the title itself.
         title:
-          item.id === 'worker' && status.workerUp !== undefined ? (
+          'soon' in item && item.soon ? (
+            soonTitle(item.title)
+          ) : item.id === 'worker' && status.workerUp !== undefined ? (
             <span className={styles.rowWithDot}>
               {item.title}
               <StatusDot up={status.workerUp} subject="Worker" />

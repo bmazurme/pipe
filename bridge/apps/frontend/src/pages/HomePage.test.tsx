@@ -41,7 +41,9 @@ describe('HomePage', () => {
   it('lists unbuilt services without making them look openable', () => {
     renderHome();
 
-    expect(screen.getByText('скоро')).toBeTruthy();
+    // RAG is only announced; Lab keeps a placeholder page, so its card is a real link — both carry the tag.
+    expect(screen.getAllByText('скоро')).toHaveLength(2);
     expect(screen.queryByRole('link', { name: /RAG/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Lab.*скоро/ })).toHaveAttribute('href', '/lab');
   });
 });

@@ -1,7 +1,0 @@
-# Pinned to what was actually verified working (macOS/arm64, Python 3.14) when this
-# MVP was built — see IMPLEMENTATION_PLAN.md "Toolchain findings". `pip install -e .`
-# resolves these itself; this file is for reproducing exactly this environment.
-build123d==0.13.0
-cadquery-ocp-novtk==8.0.1.1.0
-cadquery-ocp-proxy==8.0.1.1.0
-pyyaml>=6.0

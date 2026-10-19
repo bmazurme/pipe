@@ -35,6 +35,8 @@ export interface ServiceLink {
   group: NavGroup;
   /** Every route behind it is limited to the deployment owner, so other accounts do not see it listed. */
   ownerOnly?: true;
+  /** Announced, with a placeholder page behind it: listed with a "скоро" tag but still a real link. */
+  soon?: true;
 }
 
 /**
@@ -144,10 +146,11 @@ export const SERVICES: ServiceLink[] = [
   {
     id: 'lab',
     title: 'Lab',
-    description: 'CAD, расчёты и BOM для хардварных проектов (катер, самолёт, …) — пока отдельный Python CLI вне bridge.',
+    description: 'CAD, расчёты и BOM для хардварных проектов (катер, самолёт, …).',
     icon: Flask,
     path: '/lab',
     group: 'work',
+    soon: true,
   },
 ];
 
