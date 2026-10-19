@@ -152,6 +152,10 @@
   margin-top: auto;
 }
 
+.codesAlert {
+  margin-bottom: 14px;
+}
+
 .codeForm {
   display: flex;
   flex-direction: column;
