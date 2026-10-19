@@ -1,6 +1,6 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useDeferredValue, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Alert, Button, Dialog, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
-import { scanForLeaks, type LeakFinding } from '@pipe/protocol/leakScan';
+import { scanForLeaks } from '@pipe/protocol/leakScan';
 
 import {
   getErrorMessage,
@@ -49,7 +49,9 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
   const [error, setError] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<string | null>(null);
-  const [leaks, setLeaks] = useState<LeakFinding[]>([]);
+  // Derived from the current text rather than stored on file load, so the warning follows edits.
+  const deferredContent = useDeferredValue(content);
+  const leaks = useMemo(() => scanForLeaks([{ source: 'контекст', content: deferredContent }]), [deferredContent]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -58,7 +60,6 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
     if (!file) return;
 
     setNotice(null);
-    setLeaks([]);
 
     if (!isTextFile(file.name)) {
       setError(`Файл «${file.name}» не текстовый — загрузите .md, .txt или другой текстовый файл`);
@@ -73,7 +74,6 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
     if (!name.trim()) setName(file.name.replace(/\.[^.]*$/, '').slice(0, MAX_CONTEXT_NAME_LENGTH));
     setContent(loaded);
     if (truncated) setNotice(`Файл обрезан до ${MAX_CONTEXT_LENGTH.toLocaleString('ru-RU')} символов`);
-    setLeaks(scanForLeaks([{ source: file.name, content: loaded }]));
   };
 
   const handleSave = async () => {
@@ -132,7 +132,7 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
           {leaks.length > 0 && (
             <Alert
               theme="warning"
-              title="В файле найдено похожее на секреты — проверьте текст перед сохранением"
+              title="В тексте найдено похожее на секреты — проверьте перед сохранением"
               message={
                 <ul>
                   {leaks.map((finding) => (

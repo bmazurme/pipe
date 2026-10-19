@@ -211,6 +211,28 @@ describe('ContextDialog file upload', () => {
     await waitFor(() => expect(sent).toHaveLength(1));
   });
 
+  it('warns about a token typed into the text without any file', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+
+    await user.click(screen.getByLabelText('Текст контекста'));
+    await user.paste('token ghp_abcdefghijklmnopqrstuvwxyz0123456789');
+
+    expect(await screen.findByText(/найдено похожее на секреты/)).toBeTruthy();
+  });
+
+  it('clears the warning once the secret is removed from the text', async () => {
+    const user = userEvent.setup();
+    await openDialog(user);
+
+    await pick(new File(['contact: someone@example.com\n'], 'notes.md'));
+    expect(await screen.findByText(/найдено похожее на секреты/)).toBeTruthy();
+
+    await user.clear(screen.getByLabelText('Текст контекста'));
+
+    await waitFor(() => expect(screen.queryByText(/найдено похожее на секреты/)).toBeNull());
+  });
+
   it('refuses a non-text file', async () => {
     const user = userEvent.setup();
     await openDialog(user);
