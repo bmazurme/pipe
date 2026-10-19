@@ -12,6 +12,7 @@ import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { buildRunHistory, LOG_TAIL_CHARS } from './run-history';
 import type { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Worker } from './entities/worker.entity';
 import { JobSweepService } from './job-sweep.service';
@@ -1076,6 +1077,37 @@ describe('WorkerService', () => {
         ...over,
       });
 
+      let historyBuilder: {
+        select: jest.Mock;
+        addSelect: jest.Mock;
+        where: jest.Mock;
+        setParameter: jest.Mock;
+        orderBy: jest.Mock;
+        addOrderBy: jest.Mock;
+        limit: jest.Mock;
+        getRawAndEntities: jest.Mock;
+      };
+
+      // The history query reads only a few columns plus the end of the log, as `logsTail`.
+      const mockHistory = (rows: ReturnType<typeof earlier>[]) => {
+        historyBuilder = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          setParameter: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          addOrderBy: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          getRawAndEntities: jest.fn().mockResolvedValue({
+            entities: rows.map((row) => ({ ...row, logs: undefined })),
+            raw: rows.map((row) => ({
+              logsTail: row.logs.slice(-LOG_TAIL_CHARS),
+            })),
+          }),
+        };
+        repository.createQueryBuilder!.mockReturnValue(historyBuilder);
+      };
+
       it('mixes in nothing unless asked, and does not even look', async () => {
         const job = await service.create(7, {
           sourceFileId: 1,
@@ -1083,7 +1115,7 @@ describe('WorkerService', () => {
         });
 
         expect(job).toMatchObject({ historyText: null, historyCount: null });
-        expect(repository.find).not.toHaveBeenCalled();
+        expect(repository.createQueryBuilder).not.toHaveBeenCalled();
       });
 
       it('summarises earlier finished runs of the same task when asked', async () => {
@@ -1092,7 +1124,7 @@ describe('WorkerService', () => {
           originalName: 'x.zip',
           taskKey: '12:34',
         });
-        repository.find!.mockResolvedValue([earlier(2), earlier(1)]);
+        mockHistory([earlier(2), earlier(1)]);
 
         const job = await service.create(7, {
           sourceFileId: 1,
@@ -1100,10 +1132,9 @@ describe('WorkerService', () => {
           includeHistory: true,
         });
 
-        expect(repository.find).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: expect.objectContaining({ userId: 7, taskKey: '12:34' }),
-          }),
+        expect(historyBuilder.where).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ userId: 7, taskKey: '12:34' }),
         );
         expect(job).toMatchObject({ taskKey: '12:34', historyCount: 2 });
         expect(job.historyText).toContain('error 1');
@@ -1120,7 +1151,7 @@ describe('WorkerService', () => {
       });
 
       it('works with a context, without one, or with both', async () => {
-        repository.find!.mockResolvedValue([earlier(1)]);
+        mockHistory([earlier(1)]);
         contextService.findOwned.mockResolvedValue({
           name: 'Notes',
           content: 'Use pnpm.',
@@ -1149,7 +1180,7 @@ describe('WorkerService', () => {
       });
 
       it('records no history when there are no earlier runs', async () => {
-        repository.find!.mockResolvedValue([]);
+        mockHistory([]);
 
         const job = await service.create(7, {
           sourceFileId: 1,
@@ -1176,7 +1207,7 @@ describe('WorkerService', () => {
 
         const retried = await service.retry(5, 7);
 
-        expect(repository.find).not.toHaveBeenCalled();
+        expect(repository.createQueryBuilder).not.toHaveBeenCalled();
         expect(retried).toMatchObject({
           historyText: 'Run #1 failed.',
           historyCount: 1,
@@ -1184,11 +1215,48 @@ describe('WorkerService', () => {
       });
 
       it('previews how many earlier runs there are', async () => {
-        repository.find!.mockResolvedValue([earlier(1), earlier(2)]);
+        mockHistory([earlier(1), earlier(2)]);
 
         await expect(service.previewHistory(7, 1)).resolves.toEqual({
           count: 2,
         });
+      });
+
+      it('reads only the status fields and the end of the log', async () => {
+        mockHistory([earlier(1)]);
+
+        await service.previewHistory(7, 1);
+
+        const selected = JSON.stringify([
+          ...historyBuilder.select.mock.calls,
+          ...historyBuilder.addSelect.mock.calls,
+        ]);
+
+        expect(selected).not.toContain('contextText');
+        expect(selected).not.toContain('historyText');
+        expect(selected).not.toContain('job.logs');
+        expect(selected).toContain('RIGHT(');
+        expect(historyBuilder.setParameter).toHaveBeenCalledWith(
+          'logTail',
+          LOG_TAIL_CHARS,
+        );
+      });
+
+      it('builds the same history from a tail-truncated log as from the full one', async () => {
+        const full = `${'old line\n'.repeat(5_000)}${'x'.repeat(500)}\nthe end\n`;
+
+        mockHistory([earlier(1, { logs: full })]);
+
+        const truncated = await service.previewHistory(7, 1);
+        const fromTail = buildRunHistory([
+          { ...earlier(1), logs: full.slice(-LOG_TAIL_CHARS) } as never,
+        ]);
+        const fromFull = buildRunHistory([
+          { ...earlier(1), logs: full } as never,
+        ]);
+
+        expect(truncated.count).toBe(1);
+        expect(fromTail).toEqual(fromFull);
       });
     });
 

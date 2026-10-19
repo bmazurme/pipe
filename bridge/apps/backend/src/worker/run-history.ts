@@ -7,6 +7,9 @@ import { Job, JobStatus } from './entities/job.entity';
 
 export const HISTORY_MAX_RUNS = 5;
 const EXCERPT_CHARS = 1_200;
+// How much of a log's end the history query reads: well above EXCERPT_CHARS, so dropping
+// worker bookkeeping lines still leaves a full excerpt.
+export const LOG_TAIL_CHARS = 16_000;
 const HISTORY_MAX_CHARS = 8_000;
 
 export const FINISHED_STATUSES = [
