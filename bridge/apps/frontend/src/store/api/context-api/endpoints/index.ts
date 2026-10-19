@@ -8,9 +8,13 @@ export interface ContextSummary {
   contentLength: number | null;
   createdAt: string;
   updatedAt: string;
+  /** Improve schedules that hand this context to their runs. */
+  schedules: { id: number; name: string }[];
+  /** Newest job launched with a context of this name; null if none. */
+  lastUsedAt: string | null;
 }
 
-export interface SavedContext extends Omit<ContextSummary, 'contentLength'> {
+export interface SavedContext extends Omit<ContextSummary, 'contentLength' | 'schedules' | 'lastUsedAt'> {
   content: string;
 }
 

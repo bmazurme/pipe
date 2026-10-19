@@ -65,7 +65,8 @@ export function ContextPage() {
               <div className={styles.rowMain}>
                 <Text variant="body-2">{context.name}</Text>
                 <Text variant="caption-2" color="secondary">
-                  {context.contentLength !== null ? `${context.contentLength} симв. · ` : ''}обновлён {formatRelativeTime(context.updatedAt)}
+                  {context.contentLength !== null ? `${context.contentLength} симв. · ` : ''}обновлён {formatRelativeTime(context.updatedAt)} · в расписаниях: {context.schedules.length} ·{' '}
+                  {context.lastUsedAt ? `запускался ${formatRelativeTime(context.lastUsedAt)}` : 'не использовался'}
                 </Text>
               </div>
               <div className={styles.rowActions}>
@@ -95,6 +96,9 @@ export function ContextPage() {
         <Dialog.Header caption={`Удалить «${deleting?.name ?? ''}»?`} id="delete-context-title" />
         <Dialog.Body>
           Задачи, которые уже запущены или стоят в очереди с этим контекстом, не изменятся — у них своя копия.
+          {deleting && deleting.schedules.length > 0 && (
+            <div>Расписания Improve продолжат работу без контекста: {deleting.schedules.map((schedule) => schedule.name).join(', ')}</div>
+          )}
           {deleteError && <Alert theme="danger" view="filled" message={deleteError} />}
         </Dialog.Body>
         <Dialog.Footer

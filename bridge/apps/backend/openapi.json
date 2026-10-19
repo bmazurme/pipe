@@ -4078,9 +4078,30 @@
           }
         }
       },
+      "ContextScheduleRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "ContextSummaryDto": {
         "type": "object",
         "properties": {
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContextScheduleRefDto"
+            }
+          },
           "id": {
             "type": "number"
           },
@@ -4098,14 +4119,21 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
+          "schedules",
           "id",
           "name",
           "contentLength",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "lastUsedAt"
         ]
       },
       "ContextResponseDto": {

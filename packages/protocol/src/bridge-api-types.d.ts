@@ -1988,7 +1988,12 @@ export interface components {
         FailTurnDto: {
             errorMessage?: string;
         };
+        ContextScheduleRefDto: {
+            id: number;
+            name: string;
+        };
         ContextSummaryDto: {
+            schedules: components["schemas"]["ContextScheduleRefDto"][];
             id: number;
             name: string;
             contentLength: number | null;
@@ -1996,6 +2001,8 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
         };
         ContextResponseDto: {
             id: number;

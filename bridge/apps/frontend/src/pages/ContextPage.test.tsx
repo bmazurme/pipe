@@ -11,7 +11,7 @@ import { contextApi } from '../store/api';
 
 const NOTES = { id: 1, name: 'Project notes', content: 'Use pnpm. No default exports.', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
 // What GET /contexts returns: a summary, never the text.
-const SUMMARY = { id: 1, name: 'Project notes', contentLength: 29, createdAt: NOTES.createdAt, updatedAt: NOTES.updatedAt };
+const SUMMARY = { id: 1, name: 'Project notes', contentLength: 29, createdAt: NOTES.createdAt, updatedAt: NOTES.updatedAt, schedules: [], lastUsedAt: null };
 let requested: string[];
 
 type Sent = { method: string; path: string; body: unknown };
@@ -242,5 +242,27 @@ describe('ContextDialog file upload', () => {
     expect(await screen.findByText(/не текстовый/)).toBeTruthy();
     expect(textValue()).toBe('');
     expect(sent).toEqual([]);
+  });
+});
+
+describe('ContextPage usage info', () => {
+  it('says a context is unused when no schedule or job refers to it', async () => {
+    renderPage();
+
+    expect(await screen.findByText(/в расписаниях: 0/)).toBeTruthy();
+    expect(screen.getByText(/не использовался/)).toBeTruthy();
+  });
+
+  it('shows the schedule count and last run, and names the schedules in the delete dialog', async () => {
+    const user = userEvent.setup();
+    contexts = [{ ...SUMMARY, schedules: [{ id: 3, name: 'Nightly' }, { id: 4, name: 'Weekly' }], lastUsedAt: new Date().toISOString() }];
+    renderPage();
+
+    expect(await screen.findByText(/в расписаниях: 2/)).toBeTruthy();
+    expect(screen.queryByText(/не использовался/)).toBeNull();
+    expect(screen.getByText(/запускался/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Удалить: Project notes' }));
+    expect(await screen.findByText(/Расписания Improve продолжат работу без контекста: Nightly, Weekly/)).toBeTruthy();
   });
 });

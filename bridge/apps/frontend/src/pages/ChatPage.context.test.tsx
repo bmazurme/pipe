@@ -10,7 +10,7 @@ import { store } from '../store';
 import { chatApi, contextApi } from '../store/api';
 
 const CONTEXTS = [
-  { id: 4, name: 'Правила проекта', contentLength: 10, createdAt: '2026-09-30T09:00:00.000Z', updatedAt: '2026-09-30T09:00:00.000Z' },
+  { id: 4, name: 'Правила проекта', contentLength: 10, createdAt: '2026-09-30T09:00:00.000Z', updatedAt: '2026-09-30T09:00:00.000Z', schedules: [], lastUsedAt: null },
 ];
 
 const CHAT = {
