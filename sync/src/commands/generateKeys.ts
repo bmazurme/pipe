@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { findProject, loadConfig } from '../config.js';
@@ -40,6 +40,10 @@ export function generateKeysCommand(name: string, options: { force?: boolean }):
   mkdirSync(path.dirname(privatePath), { recursive: true });
   writeFileSync(publicPath, publicKey, { mode: 0o644 });
   writeFileSync(privatePath, privateKey, { mode: 0o600 });
+  // writeFileSync applies `mode` only when it creates the file; --force over an
+  // existing, looser key must still end up locked down.
+  chmodSync(publicPath, 0o644);
+  chmodSync(privatePath, 0o600);
 
   log.info(`Wrote ${publicPath} and ${privatePath}.`);
   log.info(
