@@ -10,6 +10,17 @@ export interface RunResult {
   report?: ClaudeReport;
 }
 
+// A failed run that still carries what the CLI reported before it died (timeout).
+export class ClaudeRunError extends Error {
+  readonly report?: ClaudeReport;
+
+  constructor(message: string, report?: ClaudeReport) {
+    super(message);
+    this.name = 'ClaudeRunError';
+    this.report = report;
+  }
+}
+
 const MAX_OUTPUT_CHARS = 1024 * 1024;
 const DEFAULT_KILL_GRACE_MS = 5000;
 
@@ -132,20 +143,21 @@ export function runClaude(
 
     child.on('close', (code) => {
       clearTimers();
+      stream.end();
+      const report = stream.report.limits || stream.report.usage ? stream.report : undefined;
       if (cancelled) {
-        reject(new CancelledError());
+        reject(new CancelledError(report));
         return;
       }
       if (timedOut) {
-        reject(new Error(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`));
+        reject(new ClaudeRunError(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`, report));
         return;
       }
-      stream.end();
       resolve({
         exitCode: code ?? 1,
         // The CLI's own final reply is the cleanest text; the collected stream is the fallback.
         output: stream.finalText !== null && code === 0 ? stream.finalText : output,
-        ...(stream.report.limits || stream.report.usage ? { report: stream.report } : {}),
+        ...(report ? { report } : {}),
       });
     });
   });

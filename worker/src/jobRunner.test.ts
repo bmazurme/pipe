@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -631,5 +631,72 @@ describe('processJob shutdown grace period', () => {
 
     assert.equal(client.updateStatus.calls.at(-1)?.[2], SHUTDOWN_FAILURE_MESSAGE);
     assert.equal(client.uploadResult.calls.length, 0);
+  });
+});
+
+describe('processJob usage of runs that did not finish', () => {
+  const originalPath = process.env.PATH;
+  const originalStream = process.env.NODE_FAKE_STREAM;
+  const originalHang = process.env.NODE_FAKE_HANG;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+    if (originalStream === undefined) delete process.env.NODE_FAKE_STREAM;
+    else process.env.NODE_FAKE_STREAM = originalStream;
+    if (originalHang === undefined) delete process.env.NODE_FAKE_HANG;
+    else process.env.NODE_FAKE_HANG = originalHang;
+  });
+
+  function setup(failUsage: boolean) {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-timeout-usage-'));
+    const binDir = path.join(workDir, 'bin');
+    mkdirSync(binDir);
+    const script = path.join(binDir, 'claude');
+    writeFileSync(
+      script,
+      [
+        '#!/usr/bin/env node',
+        'for (const event of JSON.parse(process.env.NODE_FAKE_STREAM)) console.log(JSON.stringify(event));',
+        'setInterval(() => {}, 1000);',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(script, 0o755);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    process.env.NODE_FAKE_STREAM = JSON.stringify([
+      { type: 'rate_limit_event', rate_limit_info: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.97, resetsAt: 5 } } } },
+    ]);
+
+    const order: string[] = [];
+    const client = fakeClient(fakeParcel());
+    const baseUpdate = client.updateStatus as unknown as (...args: unknown[]) => Promise<void>;
+    client.updateStatus = Object.assign(
+      async (...args: unknown[]) => {
+        order.push(`status:${String(args[1])}`);
+        await baseUpdate(...args);
+      },
+      { calls: (client.updateStatus as { calls: unknown[][] }).calls },
+    );
+    client.reportClaudeUsage = async (jobId: number) => {
+      order.push(`usage:${jobId}`);
+      if (failUsage) throw new Error('bridge down');
+    };
+    return { workDir, client, order };
+  }
+
+  it('reports usage before marking a timed-out claude run failed', async () => {
+    const { workDir, client, order } = setup(false);
+    const job: RemoteJob = { id: 9, sourceFileId: 13, resultFileId: null, model: 'sonnet', status: 'claimed' };
+    await processJob(client as never, job, { ...fakeConfig(workDir), jobTimeoutSec: 0.4 }, { cancelPollMs: 1000 });
+
+    assert.deepEqual(order.slice(-2), ['usage:9', 'status:failed']);
+  });
+
+  it('still reports the job failed when reporting usage fails', async () => {
+    const { workDir, client, order } = setup(true);
+    const job: RemoteJob = { id: 9, sourceFileId: 13, resultFileId: null, model: 'sonnet', status: 'claimed' };
+    await processJob(client as never, job, { ...fakeConfig(workDir), jobTimeoutSec: 0.4 }, { cancelPollMs: 1000 });
+
+    assert.ok(order.includes('status:failed'));
   });
 });

@@ -236,3 +236,38 @@ describe('runClaude', () => {
     await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}), /claude.*binary not found/);
   });
 });
+
+describe('runClaude failed runs keep the CLI report', () => {
+  const rateLimit = {
+    type: 'rate_limit_event',
+    rate_limit_info: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.9, resetsAt: 5 } } },
+  };
+
+  it('attaches the report to a timeout rejection', async () => {
+    process.env.NODE_FAKE_STREAM = JSON.stringify([rateLimit]);
+    process.env.NODE_FAKE_HANG = '1';
+    await assert.rejects(
+      runClaude('/tmp', 'p', 'sonnet', () => {}, undefined, null, 300, 100),
+      (error: Error & { report?: { limits?: { windows: { five_hour?: unknown } } } }) => {
+        assert.match(error.message, /timed out/);
+        assert.ok(error.report?.limits?.windows.five_hour);
+        return true;
+      },
+    );
+  });
+
+  it('attaches the report to a CancelledError when the signal aborts', async () => {
+    process.env.NODE_FAKE_STREAM = JSON.stringify([rateLimit]);
+    process.env.NODE_FAKE_HANG = '1';
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    await assert.rejects(
+      runClaude('/tmp', 'p', 'sonnet', () => {}, undefined, null, undefined, 100, controller.signal),
+      (error: unknown) => {
+        assert.ok(error instanceof CancelledError);
+        assert.ok(error.report?.limits?.windows.five_hour);
+        return true;
+      },
+    );
+  });
+});
