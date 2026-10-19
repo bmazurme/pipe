@@ -9,6 +9,7 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { SessionsService } from '../src/auth/sessions.service';
 import { ChatService } from '../src/chat/chat.service';
+import { ChatAttachmentsService } from '../src/chat/chat-attachments.service';
 import { ChatModel } from '../src/chat/entities/chat.entity';
 import { StoredFile } from '../src/storage/entities/stored-file.entity';
 import { UsersService } from '../src/users/users.service';
@@ -151,11 +152,13 @@ describe('Contexts and chat attachments (e2e)', () => {
       model: ChatModel.Sonnet,
     });
     // addAttachment only records what multer already wrote; no file is read here.
-    const attachment = await chatService.addAttachment(chat.id, userId, {
-      originalname: 'notes.txt',
-      filename: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`,
-      size: 5,
-    } as Express.Multer.File);
+    const attachment = await app
+      .get(ChatAttachmentsService)
+      .addAttachment(chat.id, userId, {
+        originalname: 'notes.txt',
+        filename: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`,
+        size: 5,
+      } as Express.Multer.File);
 
     await chatService.sendMessage(chat.id, userId, 'See the file', [
       attachment.id,

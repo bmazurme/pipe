@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { ContextService } from '../context/context.service';
 import { FILE_STORE } from '../storage/file-store/file-store';
+import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { ChatResponseDto } from './dto/chat-response.dto';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -22,6 +23,7 @@ describe('ChatService context snapshot', () => {
     const module = await Test.createTestingModule({
       providers: [
         ChatService,
+        ChatAttachmentsService,
         { provide: getRepositoryToken(Chat), useValue: { save } },
         { provide: getRepositoryToken(ChatMessage), useValue: {} },
         { provide: getRepositoryToken(ChatAttachment), useValue: {} },

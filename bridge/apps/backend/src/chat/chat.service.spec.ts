@@ -12,6 +12,7 @@ import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ContextService } from '../context/context.service';
+import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -52,6 +53,7 @@ describe('ChatService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
+        ChatAttachmentsService,
         { provide: getRepositoryToken(Chat), useValue: chatRepository },
         {
           provide: getRepositoryToken(ChatMessage),
