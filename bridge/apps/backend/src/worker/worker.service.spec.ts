@@ -444,6 +444,31 @@ describe('WorkerService', () => {
         expect.objectContaining({ claudeCredentialId: 3 }),
       );
     });
+
+    it('stores a requested notBefore, and null when absent', async () => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: '402-6.subscription.zip',
+      });
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 10, ...job }),
+      );
+      const later = new Date(Date.now() + 3_600_000);
+
+      await service.create(7, {
+        sourceFileId: 1,
+        model: JobModel.Gpt,
+        notBefore: later,
+      });
+      expect(repository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ notBefore: later }),
+      );
+
+      await service.create(7, { sourceFileId: 1, model: JobModel.Gpt });
+      expect(repository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ notBefore: null }),
+      );
+    });
   });
 
   describe('findOwned', () => {

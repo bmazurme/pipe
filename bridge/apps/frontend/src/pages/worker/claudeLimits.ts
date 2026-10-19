@@ -139,3 +139,15 @@ export function limitResetAt(
 
   return resetsAt == null ? null : new Date(resetsAt * 1000 + 60_000).toISOString();
 }
+
+/**
+ * When a new job can start so the token's five-hour window has reset: its upcoming reset from the snapshot,
+ * as an ISO time a minute after it — or null when no future reset (within a week) is known.
+ */
+export function fiveHourResetAt(limits: ClaudeLimits | null | undefined, now: number): string | null {
+  const resetsAt = limits?.windows.five_hour?.resetsAt;
+
+  if (typeof resetsAt !== 'number' || resetsAt * 1000 <= now || resetsAt * 1000 + 60_000 - now > MAX_DELAY_MS) return null;
+
+  return new Date(resetsAt * 1000 + 60_000).toISOString();
+}

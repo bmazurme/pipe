@@ -24,11 +24,16 @@ import { SectionHeader } from '../../widgets/SectionHeader';
 import { uploadWithProgress } from '../storage/uploadWithProgress';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS, WORKER_STATUS_POLL_INTERVAL_MS } from './constants';
+import { fiveHourResetAt } from './claudeLimits';
 import { describeAvailability, modelName, pinnableWorkers, WORKER_STATE_LABEL } from './fleet';
 
 const LAST_MODEL_KEY = 'worker.lastModel';
 const NO_CONTEXT = 'none';
 const ANY_WORKER = 'any';
+const START_NOW = 'now';
+const START_1H = '1h';
+const START_3H = '3h';
+const START_RESET = 'reset';
 
 const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
 
@@ -83,6 +88,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   // Deliberately never defaulted or remembered: a job runs without a context unless the
   // owner attaches one for this launch.
   const [contextId, setContextId] = useState<number | undefined>(undefined);
+  const [startWhen, setStartWhen] = useState(START_NOW);
   const [includeHistory, setIncludeHistory] = useState(false);
   const [notifyOnFinish, setNotifyOnFinish] = useState(false);
   const [decryptKey, setDecryptKey] = useState('');
@@ -131,6 +137,25 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
     }
   }, [claudeCredentialId, claudeCredentialsData]);
 
+  const resetAt = isClaudeModel
+    ? fiveHourResetAt(claudeCredentialsData?.find((credential) => credential.id === claudeCredentialId)?.limits, Date.now())
+    : null;
+  // The choice only stands while its option is offered (another token or model may have no upcoming reset).
+  const effectiveStart = startWhen === START_RESET && !resetAt ? START_NOW : startWhen;
+  const startOptions = [
+    { value: START_NOW, content: 'Сейчас' },
+    { value: START_1H, content: 'Через 1 час' },
+    { value: START_3H, content: 'Через 3 часа' },
+    ...(resetAt
+      ? [
+          {
+            value: START_RESET,
+            content: `После сброса лимита (${new Date(resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
+          },
+        ]
+      : []),
+  ];
+
   const selectedFile = useMemo(
     () => filesData?.find((file: StoredFileMeta) => file.id === sourceFileId),
     [filesData, sourceFileId],
@@ -169,6 +194,15 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         setIsPreparingSource(false);
       }
 
+      const notBefore =
+        effectiveStart === START_1H
+          ? new Date(Date.now() + 3_600_000).toISOString()
+          : effectiveStart === START_3H
+            ? new Date(Date.now() + 3 * 3_600_000).toISOString()
+            : effectiveStart === START_RESET
+              ? (resetAt ?? undefined)
+              : undefined;
+
       const job = await createJob({
         sourceFileId: actualSourceFileId,
         model,
@@ -178,12 +212,14 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         ...(contextId ? { contextId } : {}),
         ...(includeHistory ? { includeHistory: true } : {}),
         ...(notifyOnFinish ? { notifyOnFinish: true } : {}),
+        ...(notBefore ? { notBefore } : {}),
         ...(resultPublicKey ? { resultPublicKey } : {}),
       }).unwrap();
       rememberModel(model);
       setSourceFileId(undefined);
       setContextId(undefined);
       setIncludeHistory(false);
+      setStartWhen(START_NOW);
       setDecryptKey('');
       onCreated(job.id);
     } catch (err) {
@@ -284,6 +320,14 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
                 { value: NO_CONTEXT, content: 'Без контекста' },
                 ...(contextsData ?? []).map((context) => ({ value: String(context.id), content: context.name })),
               ]}
+              width="max"
+            />
+            <Select
+              label="Когда запустить"
+              aria-label="Когда запустить"
+              value={[effectiveStart]}
+              onUpdate={([value]) => setStartWhen(value ?? START_NOW)}
+              options={startOptions}
               width="max"
             />
             <Button
