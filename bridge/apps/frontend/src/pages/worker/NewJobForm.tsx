@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FaceRobot, LockOpen } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Select, Switch, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Checkbox, Icon, Select, Switch, Text, TextArea } from '@gravity-ui/uikit';
 import { Link } from 'react-router-dom';
 
 import {
@@ -16,7 +16,7 @@ import {
   useListWorkersQuery,
   usePeekFileMutation,
 } from '../../store/api';
-import { decryptParcel, isEncryptedFile, stripEncryptedSuffix } from '../../shared/lib/parcelCrypto';
+import { decryptParcel, isEncryptedFile, publicKeyFromPrivate, stripEncryptedSuffix } from '../../shared/lib/parcelCrypto';
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { useAppSelector } from '../../store/hooks';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
@@ -86,6 +86,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   const [includeHistory, setIncludeHistory] = useState(false);
   const [notifyOnFinish, setNotifyOnFinish] = useState(false);
   const [decryptKey, setDecryptKey] = useState('');
+  // For an encrypted parcel the result goes back encrypted too, with the public half of the same key (on by default).
+  const [encryptResult, setEncryptResult] = useState(true);
   const { keys: parcelKeys } = useParcelKeys();
   const [createError, setCreateError] = useState<string | null>(null);
   // Separate from isCreating (the createJob mutation itself): this covers
@@ -148,16 +150,20 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
       // file, which then becomes the job's actual source. The key itself
       // never leaves this tab.
       let actualSourceFileId = sourceFileId;
+      let resultPublicKey: string | undefined;
 
       if (needsDecryptKey) {
         setIsPreparingSource(true);
         const encrypted = await peekFile(sourceFileId).unwrap();
         const decrypted = await decryptParcel(encrypted, decryptKey.trim());
+        if (encryptResult) resultPublicKey = await publicKeyFromPrivate(decryptKey.trim());
+        // Keeps the parcel's own task address: the worker's result inherits it, which is how reports / sync find it again.
         const uploaded = await uploadWithProgress(
           decrypted,
           stripEncryptedSuffix(selectedFile.originalName),
           accessToken,
           () => {},
+          { channel: selectedFile.channel, taskKey: selectedFile.taskKey, direction: selectedFile.direction },
         );
         actualSourceFileId = uploaded.id;
         setIsPreparingSource(false);
@@ -172,6 +178,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         ...(contextId ? { contextId } : {}),
         ...(includeHistory ? { includeHistory: true } : {}),
         ...(notifyOnFinish ? { notifyOnFinish: true } : {}),
+        ...(resultPublicKey ? { resultPublicKey } : {}),
       }).unwrap();
       rememberModel(model);
       setSourceFileId(undefined);
@@ -359,6 +366,12 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               <ParcelKeyPicker keys={parcelKeys} onPick={setDecryptKey} />
               <TextArea value={decryptKey} onUpdate={setDecryptKey} rows={2} placeholder="-----BEGIN PRIVATE KEY-----" />
             </label>
+          )}
+
+          {needsDecryptKey && (
+            <Checkbox checked={encryptResult} onUpdate={setEncryptResult} size="m">
+              Зашифровать результат для отправки обратно (публичной половиной этого ключа)
+            </Checkbox>
           )}
         </>
       )}

@@ -9,6 +9,8 @@ export function uploadWithProgress(
   filename: string,
   accessToken: string | null,
   onProgress: (fraction: number) => void,
+  // Addressing for a pipeline parcel (see StoredFileMeta): without it the file is stored as a plain one.
+  meta: Pick<StoredFileMeta, 'channel' | 'taskKey' | 'direction'> = {},
 ): Promise<StoredFileMeta> {
   return new Promise((resolve, reject) => {
     // Checked before the request so a file that can't possibly land doesn't
@@ -20,6 +22,9 @@ export function uploadWithProgress(
 
     const formData = new FormData();
     formData.append('file', blob, filename);
+    if (meta.channel) formData.append('channel', meta.channel);
+    if (meta.taskKey) formData.append('taskKey', meta.taskKey);
+    if (meta.direction) formData.append('direction', meta.direction);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_URL}/api/v1/storage`);

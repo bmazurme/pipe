@@ -2084,6 +2084,7 @@ export interface components {
             contextId?: number;
             includeHistory?: boolean;
             notifyOnFinish?: boolean;
+            resultPublicKey?: string;
         };
         ClaimJobDto: {
             workerName?: string;

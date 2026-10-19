@@ -1,4 +1,12 @@
-import { IsBoolean, IsEnum, IsInt, IsOptional } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 import { JobModel } from '../entities/job.entity';
 
@@ -38,4 +46,13 @@ export class CreateJobDto {
   @IsOptional()
   @IsBoolean()
   notifyOnFinish?: boolean;
+
+  // Encrypt the result parcel for the owner: an RSA public key (PEM). Absent = the result is stored unencrypted.
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  @Matches(/-----BEGIN [A-Z ]*PUBLIC KEY-----/, {
+    message: 'resultPublicKey must be a PEM public key',
+  })
+  resultPublicKey?: string;
 }

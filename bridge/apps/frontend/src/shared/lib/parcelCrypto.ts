@@ -45,6 +45,39 @@ export async function encryptParcel(plain: Blob, publicKeyPem: string): Promise<
   }
 }
 
+function pemBody(pem: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+
+  return bytes;
+}
+
+function toPem(label: string, der: ArrayBuffer): string {
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(der)));
+
+  return `-----BEGIN ${label}-----\n${base64.match(/.{1,64}/g)?.join('\n') ?? ''}\n-----END ${label}-----\n`;
+}
+
+// The public half of an RSA private key (PKCS#8 PEM), in the SPKI PEM form encryptParcel and the worker expect. Web Crypto
+// cannot export the public key straight from a private one, so the key goes through its JWK form (n, e) and back.
+export async function publicKeyFromPrivate(privateKeyPem: string): Promise<string> {
+  if (!privateKeyPem.includes('PRIVATE KEY')) {
+    throw new Error('Похоже, это не приватный ключ (нет заголовка «PRIVATE KEY»)');
+  }
+
+  try {
+    const algorithm = { name: 'RSA-OAEP', hash: 'SHA-256' };
+    const privateKey = await crypto.subtle.importKey('pkcs8', pemBody(privateKeyPem), algorithm, true, ['decrypt']);
+    const { n, e } = await crypto.subtle.exportKey('jwk', privateKey);
+    const publicKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n, e, alg: 'RSA-OAEP-256', ext: true }, algorithm, true, ['encrypt']);
+
+    return toPem('PUBLIC KEY', await crypto.subtle.exportKey('spki', publicKey));
+  } catch {
+    throw new Error('Не удалось получить публичный ключ из приватного — проверьте ключ');
+  }
+}
+
 export function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

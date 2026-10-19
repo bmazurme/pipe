@@ -14,6 +14,8 @@ export class ClaimedJobResponseDto extends JobResponseDto {
   provider: ClaimedProviderDto | null;
   context: string | null;
   history: string | null;
+  // Public key (PEM) to encrypt the result parcel with before uploading it, or null.
+  resultPublicKey: string | null;
 
   static fromEntityWithToken(
     job: Job,
@@ -26,6 +28,7 @@ export class ClaimedJobResponseDto extends JobResponseDto {
       provider,
       context: job.contextText ?? null,
       history: job.historyText ?? null,
+      resultPublicKey: job.resultPublicKey ?? null,
     };
   }
 }

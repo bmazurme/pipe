@@ -51,7 +51,7 @@ const JOBS = [
 const FILES = [
   { id: 10, originalName: '402-6.subscription.zip', mimeType: 'application/zip', size: 1024, createdAt: '2026-09-30T09:00:00.000Z' },
   { id: 11, originalName: '402-7.subscription.zip', mimeType: 'application/zip', size: 2048, createdAt: '2026-09-30T08:00:00.000Z' },
-  { id: 12, originalName: '402-8.subscription.zip.enc', mimeType: 'application/zip', size: 4096, createdAt: '2026-09-30T07:00:00.000Z' },
+  { id: 12, originalName: '402-8.subscription.zip.enc', mimeType: 'application/zip', size: 4096, createdAt: '2026-09-30T07:00:00.000Z', channel: 'issue', taskKey: '402:8', direction: 'outbound' },
 ];
 
 const VPN_CONNECTIONS = [
@@ -565,6 +565,53 @@ describe('WorkerPage', () => {
     const [uploadedBlob, uploadedName] = vi.mocked(uploadWithProgress).mock.calls[0];
     expect(uploadedName).toBe('402-8.subscription.zip');
     expect(Buffer.from(await (uploadedBlob as Blob).arrayBuffer())).toEqual(plaintext);
+
+    // The re-upload keeps the parcel's task address, or the result could not be found by reports / sync afterwards.
+    expect(vi.mocked(uploadWithProgress).mock.calls[0][4]).toEqual({ channel: 'issue', taskKey: '402:8', direction: 'outbound' });
+
+    // The result is to come back encrypted for the same key pair: the public half derived from the pasted private key.
+    await waitFor(() => expect(createJobBody).toEqual({ sourceFileId: 99, model: 'gpt', resultPublicKey: expect.any(String) }));
+    expect((createJobBody as { resultPublicKey: string }).resultPublicKey.trim()).toBe(publicKey.trim());
+  });
+
+  it('leaves the result unencrypted when "Зашифровать результат" is switched off', { timeout: 30000 }, async () => {
+    const user = userEvent.setup();
+    const { publicKey, privateKey } = generateKeyPair();
+    vi.mocked(uploadWithProgress).mockResolvedValue({
+      id: 99,
+      originalName: '402-8.subscription.zip',
+      mimeType: 'application/zip',
+      size: 3,
+      createdAt: '2026-09-30T07:00:00.000Z',
+    });
+
+    let createJobBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.includes('/worker/jobs') && request.method === 'POST') {
+          createJobBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...JOBS[0], id: 3, sourceFileId: 99 });
+        }
+        if (url.includes('/worker/jobs')) return jsonResponse(JOBS);
+        if (url.endsWith('/storage/12/peek')) return new Response(new Uint8Array(encryptBuffer(Buffer.from('abc'), publicKey)), { status: 200 });
+        if (url.includes('/storage')) return jsonResponse(FILES);
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Задача #1');
+    await user.click(screen.getByText('Посылка'));
+    await user.click(await screen.findByText(/🔒 402-8\.subscription\.zip\.enc/));
+    await user.type(await screen.findByPlaceholderText('-----BEGIN PRIVATE KEY-----'), privateKey);
+    await user.click(screen.getByLabelText(/Зашифровать результат для отправки обратно/));
+    await user.click(screen.getByText('Модель'));
+    await user.click(await screen.findByText('GPT'));
+    await user.click(screen.getByText('Запустить'));
 
     await waitFor(() => expect(createJobBody).toEqual({ sourceFileId: 99, model: 'gpt' }));
   });

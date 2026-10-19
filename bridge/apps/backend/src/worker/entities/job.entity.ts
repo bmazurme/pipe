@@ -44,6 +44,11 @@ export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: true })
   sourceFileId: number | null;
 
+  // An RSA public key (PEM, not a secret): when set, the worker encrypts the result parcel with it before uploading
+  // (hybrid RSA+AES, `.enc`), so only the holder of the private key can open it. Null = the result is stored as is.
+  @Column({ type: 'text', nullable: true })
+  resultPublicKey: string | null;
+
   // The result parcel's StoredFile.id, set once the job succeeds.
   @Column({ type: 'int', unsigned: true, nullable: true })
   resultFileId: number | null;

@@ -315,6 +315,7 @@ export class WorkerService {
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
+      resultPublicKey: dto.resultPublicKey ?? null,
       notBefore: carried?.notBefore ?? null,
       status: JobStatus.Queued,
     });
@@ -375,6 +376,9 @@ export class WorkerService {
         ...(providerCredentialId !== null ? { providerCredentialId } : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
         ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
+        ...(job.resultPublicKey
+          ? { resultPublicKey: job.resultPublicKey }
+          : {}),
       },
       {
         context:

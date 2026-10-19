@@ -347,6 +347,28 @@ describe('WorkerService', () => {
       expect(repository.save).not.toHaveBeenCalled();
     });
 
+    it('keeps the public key the result is to be encrypted with', async () => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: '402-6.subscription.zip',
+      });
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 10, ...job }),
+      );
+      const resultPublicKey =
+        '-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----';
+
+      await service.create(7, {
+        sourceFileId: 1,
+        model: JobModel.Deepseek,
+        resultPublicKey,
+      });
+
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ resultPublicKey }),
+      );
+    });
+
     it('queues a job for an unencrypted parcel', async () => {
       storageService.findOwned!.mockResolvedValue({
         id: 1,
@@ -370,6 +392,7 @@ describe('WorkerService', () => {
         targetWorkerId: null,
         notBefore: null,
         notifyOnFinish: false,
+        resultPublicKey: null,
         taskKey: 'file:1',
         contextName: null,
         contextText: null,
