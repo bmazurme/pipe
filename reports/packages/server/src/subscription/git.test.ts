@@ -252,6 +252,21 @@ describe('commitPulledFiles', () => {
     expect(committed).not.toContain('a.vue');
   });
 
+  it('leaves out files this checkout ignores instead of failing the whole commit', async () => {
+    const dir = initRepo();
+    writeFileSync(path.join(dir, '.gitignore'), '*.test.js\n');
+    git(dir, ['add', '.gitignore']);
+    git(dir, ['commit', '-q', '-m', 'ignore tests']);
+    writeFileSync(path.join(dir, 'pulled.txt'), 'from the parcel');
+    writeFileSync(path.join(dir, 'no-access.test.js'), 'ignored here');
+
+    await commitPulledFiles(dir, ['pulled.txt', 'no-access.test.js'], 'Pull issue #4: ignored file');
+
+    const committed = git(dir, ['show', '--stat', '--format=', 'HEAD']);
+    expect(committed).toContain('pulled.txt');
+    expect(committed).not.toContain('no-access.test.js');
+  });
+
   it('still makes a real commit when the parcel wrote no files (--allow-empty)', async () => {
     const dir = initRepo();
     const before = git(dir, ['rev-parse', 'HEAD']).trim();
