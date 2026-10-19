@@ -110,7 +110,7 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
     }
   };
 
-  const handlePull = () => run(() => pull(args).unwrap(), 'Посылка получена из bridge', 'Не удалось получить посылку');
+  const handlePull = () => run(() => pull(args).unwrap(), 'Код распакован в ветку задачи — проверьте изменения и закоммитьте сами', 'Не удалось получить посылку');
   const handlePublish = () => run(
     () => publish({ ...args, payload: { templateId, timeEstimate: timeEstimate || undefined } }).unwrap(),
     'Опубликовано в GitLab',

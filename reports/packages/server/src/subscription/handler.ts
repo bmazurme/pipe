@@ -437,7 +437,17 @@ function resolveParcelPath(projectRoot: string, relPath: string): string {
 // by the UI's Pull button and the background autopilot — both need exactly
 // the same sequence (and the same keep-the-parcel-until-it-fully-worked
 // guarantee), so it lives in one place rather than being copied.
-export async function pullSubscriptionIssue(projectId: string, iid: string): Promise<SubscriptionStateEntryType> {
+//
+// By default this only UNPACKS: the code lands in the working tree of the task's
+// own branch and nothing is committed or pushed — the person looks it over and
+// commits (or discards) it themselves. `publish: true` (the unattended
+// autopilot, which has nobody to do that) also commits and pushes that one
+// branch, never the target branch.
+export async function pullSubscriptionIssue(
+  projectId: string,
+  iid: string,
+  options: { publish?: boolean } = {},
+): Promise<SubscriptionStateEntryType> {
   const trackedProject = requireTrackedProject(projectId);
   // Matched by addressing metadata (IMPROVEMENTS_TECH.md 2.3), not by
   // filename — a filename-only match couldn't tell this task's *result*
@@ -515,17 +525,18 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
     writeFileSync(assetDestinations[index], Buffer.from(asset.base64, 'base64'));
   });
 
-  // Commits and pushes the task branch only — never the target branch.
-  // Getting this into the target branch is a deliberate manual step (open
-  // a merge request yourself, after reviewing) — nothing here does that
-  // automatically.
-  const title = applyDictionary(manifest.issueTitle, dictionary, 'toLocal');
-  const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
-  await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
-  await pushBranch(trackedProject.path, state.branch, baseBranch);
+  // Only the unattended autopilot commits and pushes (the task branch only — never the target branch). A person's Pull
+  // stops here: the files are in the working tree for them to review, commit or throw away.
+  if (options.publish) {
+    const title = applyDictionary(manifest.issueTitle, dictionary, 'toLocal');
+    const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
 
-  // The step is recorded the moment the content is safely committed and
-  // pushed — before the parcel is touched. If the process dies (or is
+    await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
+    await pushBranch(trackedProject.path, state.branch, baseBranch);
+  }
+
+  // The step is recorded the moment the content is safely written (and, for the autopilot, committed and
+  // pushed) — before the parcel is touched. If the process dies (or is
   // restarted by a file watcher) anywhere after this point, the task is
   // already `pulled` and the autopilot won't pull the same result again.
   const pulledState = setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });

@@ -40,7 +40,8 @@ const defaultDeps: AutopilotDeps = {
       .filter(([, state]) => state.step === 'pushed')
       .map(([key]) => key),
   resultReady: async (taskKey) => (await listParcels({ channel: 'issue', taskKey, direction: 'result' })).length > 0,
-  pull: pullSubscriptionIssue,
+  // Nobody is there to review and commit: the unattended mode publishes the task branch itself.
+  pull: (projectId, iid) => pullSubscriptionIssue(projectId, iid, { publish: true }),
   afterPull: openPullRequestForTask,
   now: Date.now,
 };
@@ -48,8 +49,8 @@ const defaultDeps: AutopilotDeps = {
 // The headless half of the Subscription flow, for a reports instance running
 // unattended in the closed contour: it keeps bridge informed that it is alive
 // and, whenever a result for a pushed task shows up on bridge, pulls it into
-// the task branch exactly as the UI's Pull button would (de-anonymize, commit,
-// push the branch — never the target branch). Opt-in via REPORTS_AUTOPILOT.
+// the task branch like the UI's Pull button (de-anonymize), and — unlike it —
+// commits and pushes the branch (never the target branch). Opt-in via REPORTS_AUTOPILOT.
 export function createAutopilot(deps: AutopilotDeps = defaultDeps, name = hostname()) {
   const failedAt = new Map<string, number>();
   let pulling = false;
