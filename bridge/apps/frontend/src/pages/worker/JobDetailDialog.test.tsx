@@ -115,4 +115,34 @@ describe('JobDetailDialog', () => {
     expect(await screen.findByText('Не удалось скачать результат')).toBeTruthy();
     expect(calls).toContain('GET worker/jobs/105/result/download');
   });
+
+  it('shows what a running job is doing, with its worker and elapsed time', async () => {
+    routes['GET worker/jobs/21'] = () =>
+      json({
+        ...job(21),
+        status: 'running',
+        workerName: 'pi-blue',
+        contextName: 'crm',
+        taskKey: '402:8',
+        logs: 'step 1\n',
+        startedAt: new Date(Date.now() - 65_000).toISOString(),
+        finishedAt: null,
+      });
+    renderDialog(21);
+
+    expect(await screen.findByText('Выполняется на pi-blue')).toBeInTheDocument();
+    expect(screen.getByLabelText('Время выполнения')).toHaveTextContent(/1 мин/);
+    // The facts about the job sit in a labelled list instead of a row of dots.
+    const fields = screen.getByText('Контекст').closest('dl') as HTMLElement;
+    expect(within(fields).getByText('crm')).toBeInTheDocument();
+    expect(within(fields).getByText('402:8')).toBeInTheDocument();
+    expect(within(fields).getByText('pi-blue')).toBeInTheDocument();
+  });
+
+  it('shows the log with a line count', async () => {
+    routes['GET worker/jobs/22'] = () => json({ ...job(22), logs: 'a\nb\n' });
+    renderDialog(22);
+
+    expect(await screen.findByText(/2 строк/)).toBeInTheDocument();
+  });
 });

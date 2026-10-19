@@ -146,11 +146,68 @@
   min-width: 0;
 }
 
+.detailSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 .detailMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.detailElapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+.detailStage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detailFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+}
+
+.detailField {
+  min-width: 0;
+}
+
+.detailField dt {
+  margin: 0;
+  font-size: 12px;
+  color: var(--g-color-text-secondary);
+}
+
+.detailField dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.logsActions {
+  display: flex;
+  gap: 4px;
+}
+
+.logsWrap {
+  position: relative;
+}
+
+.logsJump {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
 }
 
 .detailError {
@@ -164,7 +221,8 @@
 .logs {
   box-sizing: border-box;
   width: 100%;
-  max-height: 320px;
+  max-height: min(55vh, 480px);
+  min-height: 120px;
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
