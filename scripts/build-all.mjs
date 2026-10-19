@@ -13,7 +13,8 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function run(label, args, cwd) {
   console.log(`\n→ ${label}`);
-  execFileSync(npm, args, { cwd, stdio: 'inherit' });
+  // shell on Windows: npm is npm.cmd there, which Node (22+) refuses to spawn without one (EINVAL)
+  execFileSync(npm, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
 }
 
 run('root install (protocol/harness/sync/worker)', ['install'], repoRoot);
