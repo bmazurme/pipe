@@ -73,6 +73,8 @@ const isProductionMode = existsSync(join(clientDistDir, 'index.html'));
 
 app.use(cors({ origin: corsOrigin }));
 app.use(localOnly());
+// Pushing a task can carry screenshots (base64 in the JSON body), far past the default 100 kb.
+app.use('/api/subscription/issues', express.json({ limit: '40mb' }));
 app.use(express.json());
 
 // Lets the UI warn when the running process is older than the code on disk (see

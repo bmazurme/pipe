@@ -17,6 +17,7 @@ import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
+import { parseAttachments } from './attachments';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages, getIssueNotes } from './gitlab-client';
 import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
@@ -276,7 +277,7 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
   if (rejectBadIssueParams(req, res)) return;
 
   const { projectId, iid } = req.params;
-  const { issueId, title: issueTitle, description: issueDescription } = req.body as SubscriptionPushPayload;
+  const { issueId, title: issueTitle, description: issueDescription, attachments } = req.body as SubscriptionPushPayload;
 
   await withStream(res, 'Push subscription issue', async () => {
     const trackedProject = requireTrackedProject(projectId);
@@ -318,9 +319,12 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
       createdAt: note.created_at,
       body: applyDictionary(note.body, dictionary, 'toRemote'),
     }));
-    const images = isGitlabIssue
+    const issueImages = isGitlabIssue
       ? await getIssueImages([gitlabIssue?.description ?? '', ...notes.map((note) => note.body)].join('\n\n'), projectId)
       : [];
+    // Screenshots attached by hand, for any task (a manual one has no issue to take them from).
+    const attached = parseAttachments(attachments, issueImages.map((image) => image.relPath.replace(/^issue-images\//, '')));
+    const images = [...issueImages, ...attached];
 
     // Images never go through scanForLeaks (text-only) — this is the only
     // signal the operator gets that they weren't checked, strict or not.
