@@ -1,7 +1,25 @@
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { loadConfig, saveConfig } from '../config.js';
 import { log } from '../log.js';
+import { resolveDictionaryPath } from '../paths.js';
+
+export function assertProjectPaths(name: string, projectPath: string, dictionary?: string): void {
+  const resolved = path.resolve(projectPath);
+  if (!existsSync(resolved)) {
+    throw new Error(`Project path ${resolved} does not exist (project "${name}").`);
+  }
+  if (!statSync(resolved).isDirectory()) {
+    throw new Error(`Project path ${resolved} is not a directory (project "${name}").`);
+  }
+  if (dictionary) {
+    const dictionaryPath = resolveDictionaryPath(dictionary);
+    if (!existsSync(dictionaryPath)) {
+      throw new Error(`Dictionary file ${dictionaryPath} does not exist (project "${name}").`);
+    }
+  }
+}
 
 export function addCommand(name: string, projectPath: string, dictionary?: string): void {
   const config = loadConfig();
@@ -9,6 +27,8 @@ export function addCommand(name: string, projectPath: string, dictionary?: strin
   if (config.projects.some((p) => p.name === name)) {
     throw new Error(`Project "${name}" is already tracked.`);
   }
+
+  assertProjectPaths(name, projectPath, dictionary);
 
   config.projects.push({
     name,
