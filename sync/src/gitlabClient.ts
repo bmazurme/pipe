@@ -16,8 +16,9 @@ import { log } from './log.js';
 // left is wording its warnings for sync's own log.
 export { getIssue, listAssignedOpenIssues, type GitlabIssue, type IssueImage };
 
-export function getIssueImages(apiUrl: string, privateToken: string, description: string): Promise<IssueImage[]> {
+export function getIssueImages(apiUrl: string, privateToken: string, description: string, projectId?: string | number): Promise<IssueImage[]> {
   return sharedGetIssueImages(apiUrl, privateToken, description, {
+    projectId,
     onWarn: (warning) => {
       if (warning.kind === 'limit') {
         log.warn(`Issue images exceeded the ${MAX_TOTAL_IMAGE_BYTES}-byte limit — the rest were skipped.`);

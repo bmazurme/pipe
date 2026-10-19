@@ -300,7 +300,7 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
     // GitLab-hosted markdown to scan at all.
     // (GitHub issues: no image fetch either — their attachments sit behind
     // a different, signed-URL mechanism this doesn't handle.)
-    const images = state.manual || githubProjectFor(projectId) ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '');
+    const images = state.manual || githubProjectFor(projectId) ? [] : await getIssueImages((await getIssue(projectId, iid)).description ?? '', projectId);
 
     // Images never go through scanForLeaks (text-only) — this is the only
     // signal the operator gets that they weren't checked, strict or not.

@@ -196,7 +196,7 @@ export async function getIssueImages(
   apiUrl: string,
   privateToken: string,
   description: string,
-  options: { onWarn?: (warning: IssueImageWarning) => void } = {},
+  options: { onWarn?: (warning: IssueImageWarning) => void; projectId?: string | number } = {},
 ): Promise<IssueImage[]> {
   const warn = options.onWarn ?? (() => {});
   const instanceRoot = apiUrl.replace(/\/api\/v4\/?$/, '');
@@ -214,16 +214,27 @@ export async function getIssueImages(
       continue;
     }
 
-    let response: Response;
-    try {
-      // A redirect is not followed (it would carry Private-Token along) — the 3xx comes back as a non-ok status and the image
-      // is skipped below.
-      response = await gitlabFetch(absoluteUrl, privateToken, { redirect: 'manual' });
-    } catch (error) {
-      if (error instanceof GitlabApiError) {
-        warn({ kind: 'http', url: absoluteUrl, status: error.status, error });
+    // The web path /uploads/<secret>/<file> wants a browser session and answers a Private-Token with a 302 to the sign-in page;
+    // the project's uploads API (GitLab 17.4+) takes the token. An older GitLab answers it 404 — then the web path is tried as before.
+    const apiUploadUrl = options.projectId === undefined ? null : projectUploadApiUrl(apiUrl, options.projectId, absoluteUrl, instanceRoot);
+
+    let response: Response | undefined;
+    let failure: unknown;
+    for (const candidate of apiUploadUrl ? [apiUploadUrl, absoluteUrl] : [absoluteUrl]) {
+      try {
+        // A redirect is not followed (it would carry Private-Token along) — the 3xx comes back as a non-ok status and the image
+        // is skipped below.
+        response = await gitlabFetch(candidate, privateToken, { redirect: 'manual' });
+        break;
+      } catch (error) {
+        failure = error;
+      }
+    }
+    if (!response) {
+      if (failure instanceof GitlabApiError) {
+        warn({ kind: 'http', url: absoluteUrl, status: failure.status, error: failure });
       } else {
-        warn({ kind: 'network', url: absoluteUrl, error });
+        warn({ kind: 'network', url: absoluteUrl, error: failure });
       }
       continue;
     }
@@ -245,6 +256,14 @@ export async function getIssueImages(
   }
 
   return images;
+}
+
+// GET /projects/:id/uploads/:secret/:filename for an upload URL of the form <root>/uploads/<secret>/<filename>, else null.
+function projectUploadApiUrl(apiUrl: string, projectId: string | number, uploadUrl: string, instanceRoot: string): string | null {
+  const rootPath = new URL(instanceRoot).pathname.replace(/\/+$/, '');
+  const match = new URL(uploadUrl).pathname.slice(rootPath.length).match(/^\/uploads\/([^/]+)\/([^/]+)$/);
+
+  return match ? `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/uploads/${match[1]}/${match[2]}` : null;
 }
 
 // Resolves a markdown image ref from an issue description to the URL it is

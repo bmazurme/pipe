@@ -356,6 +356,48 @@ describe('getIssueImages', () => {
   });
 });
 
+describe('getIssueImages via the project uploads API', () => {
+  const API_URL = 'https://gitlab.example.com/api/v4';
+  const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
+
+  it('fetches /projects/:id/uploads/:secret/:file when the project is known', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return new Response(PNG_BYTES, { status: 200 });
+    }) as typeof fetch;
+
+    const images = await getIssueImages(API_URL, 'tok', '![shot](/uploads/abc/shot.png)', { projectId: 402 });
+
+    assert.deepEqual(urls, [`${API_URL}/projects/402/uploads/abc/shot.png`]);
+    assert.deepEqual(images.map((i) => i.relPath), ['issue-images/shot.png']);
+  });
+
+  it('falls back to the web path when the API route is missing (older GitLab)', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return url.includes('/api/v4/') ? new Response('nope', { status: 404 }) : new Response(PNG_BYTES, { status: 200 });
+    }) as typeof fetch;
+
+    const images = await getIssueImages(API_URL, 'tok', '![shot](/uploads/abc/shot.png)', { projectId: 402 });
+
+    assert.deepEqual(urls, [`${API_URL}/projects/402/uploads/abc/shot.png`, 'https://gitlab.example.com/uploads/abc/shot.png']);
+    assert.equal(images.length, 1);
+  });
+
+  it('reports the web path as the failing url when both attempts fail', async () => {
+    globalThis.fetch = (async () => new Response('redirected', { status: 302 })) as typeof fetch;
+    const warnings: IssueImageWarning[] = [];
+
+    await getIssueImages(API_URL, 'tok', '![shot](/uploads/abc/shot.png)', { projectId: 402, onWarn: (w) => warnings.push(w) });
+
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].url, 'https://gitlab.example.com/uploads/abc/shot.png');
+    assert.equal(warnings[0].status, 302);
+  });
+});
+
 describe('resolveIssueUploadUrl', () => {
   const root = 'https://gitlab.example.com';
 
