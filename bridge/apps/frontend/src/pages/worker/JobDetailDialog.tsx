@@ -161,7 +161,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
           <Alert theme="danger" view="filled" message={job.errorMessage} className={styles.detailError} />
         )}
 
-        <JobLogs jobId={job.id} logs={job.logs} active={jobIsActive} />
+        <JobLogs jobId={job.id} logs={job.logs ?? ''} active={jobIsActive} />
 
         {job.status === 'succeeded' && (
           <div className={styles.encryptSection}>
