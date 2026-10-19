@@ -3,8 +3,12 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd });
+// `input` goes to git's stdin — for anything that can be long (a list of paths), since the command line of a spawned process
+// is capped (about 32 000 characters on Windows, ENAMETOOLONG beyond it) and stdin is not.
+async function git(cwd: string, args: string[], input?: string): Promise<string> {
+  const pending = execFileAsync('git', args, { cwd });
+  if (input !== undefined) pending.child.stdin?.end(input);
+  const { stdout } = await pending;
 
   return stdout;
 }
@@ -121,7 +125,9 @@ export async function checkoutTaskBranch(path: string, branch: string): Promise<
 // commit marking that the pull happened, not a silent no-op.
 export async function commitPulledFiles(path: string, relPaths: string[], message: string): Promise<void> {
   if (relPaths.length > 0) {
-    await git(path, ['add', '--', ...relPaths]);
+    // A result parcel carries the whole tracked tree: thousands of paths do not fit on a Windows command line, so they are
+    // read from stdin (NUL-separated), and taken literally — a name such as `[id].vue` is not a glob.
+    await git(path, ['--literal-pathspecs', 'add', '--pathspec-from-file=-', '--pathspec-file-nul'], relPaths.join('\0'));
   }
 
   await git(path, ['commit', '-m', message, '--allow-empty']);
