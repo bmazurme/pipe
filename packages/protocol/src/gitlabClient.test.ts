@@ -6,6 +6,7 @@ import {
   gitlabFetch,
   getIssue,
   getIssueImages,
+  listIssueNotes,
   listAssignedOpenIssues,
   listMergeRequestsForBranch,
   addSpentTime,
@@ -75,6 +76,40 @@ describe('getIssue', () => {
 
     assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/issues/628');
     assert.equal(issue.iid, 2);
+  });
+});
+
+describe('listIssueNotes', () => {
+  const API_URL = 'https://gitlab.example.com/api/v4';
+
+  it('walks every page, oldest first, and leaves system notes and empty ones out', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      const second = url.includes('page=2');
+      const body = second
+        ? [{ id: 3, body: 'second page', system: false, created_at: '2026-10-03T00:00:00Z', author: { name: 'B' } }]
+        : [
+            { id: 1, body: 'first', system: false, created_at: '2026-10-01T00:00:00Z', author: { name: 'A' } },
+            { id: 2, body: 'changed the description', system: true, created_at: '2026-10-02T00:00:00Z' },
+            { id: 4, body: '   ', system: false, created_at: '2026-10-02T01:00:00Z' },
+          ];
+
+      return new Response(JSON.stringify(body), { status: 200, headers: second ? {} : { 'x-next-page': '2' } });
+    }) as typeof fetch;
+
+    const notes = await listIssueNotes(API_URL, 'tok', 173, 628);
+
+    assert.deepEqual(notes.map((note) => note.body), ['first', 'second page']);
+    assert.ok(urls[0].startsWith(`${API_URL}/projects/173/issues/628/notes?`));
+    assert.match(urls[0], /sort=asc/);
+    assert.equal(urls.length, 2);
+  });
+
+  it('tolerates a reply that is not a list', async () => {
+    globalThis.fetch = (async () => Response.json({ message: 'odd' })) as typeof fetch;
+
+    assert.deepEqual(await listIssueNotes(API_URL, 'tok', 1, 2), []);
   });
 });
 

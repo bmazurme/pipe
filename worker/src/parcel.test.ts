@@ -57,6 +57,44 @@ describe('extractParcel', () => {
   });
 });
 
+function buildCommentedParcel(withImage: boolean): Buffer {
+  const { buffer } = buildArchive(
+    SUBSCRIPTION_MANIFEST_ENTRY,
+    [{ relPath: 'src/index.ts', content: 'x' }],
+    {
+      issueId: '1',
+      issueIid: '6',
+      issueTitle: 'Fix the thing',
+      issueDescription: 'It is broken',
+      issueComments: [
+        { author: 'Anna', createdAt: '2026-10-01T10:00:00Z', body: 'Only on the passport card' },
+        { author: 'Boris', createdAt: '2026-10-02T10:00:00Z', body: 'Screenshot attached' },
+      ],
+      projectId: 402,
+      branch: 'task/402-6',
+      createdAt: '2026-09-30T00:00:00.000Z',
+    },
+    withImage ? [{ relPath: 'issue-images/shot.png', base64: 'AQID' }] : [],
+  );
+  return buffer;
+}
+
+describe('describeTask with comments', () => {
+  it('puts the issue comments, oldest first, after the description', () => {
+    const prompt = describeTask(extractParcel(buildCommentedParcel(false)));
+
+    assert.match(prompt, /Comments on the issue, oldest first/);
+    assert.ok(prompt.indexOf('Only on the passport card') < prompt.indexOf('Screenshot attached'));
+    assert.ok(prompt.indexOf('It is broken') < prompt.indexOf('Only on the passport card'));
+    assert.match(prompt, /--- Anna, 2026-10-01T10:00:00Z:/);
+    assert.doesNotMatch(prompt, /issue-images/);
+  });
+
+  it('points at the images when the parcel carries some', () => {
+    assert.match(describeTask(extractParcel(buildCommentedParcel(true))), /issue-images\//);
+  });
+});
+
 describe('describeTask', () => {
   it('builds a prompt from a subscription parcel\'s issue title/description', () => {
     const parcel = extractParcel(buildSubscriptionParcel());

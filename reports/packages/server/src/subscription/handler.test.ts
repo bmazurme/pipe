@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from '
 import { tmpdir } from 'os';
 import path from 'path';
 import type { Request, Response } from 'express';
+import { extractArchive, type BaseManifest } from '@pipe/protocol';
 import type { SettingsType, StreamEvent, SubscriptionConfigType, TrackedProjectType } from '@reports/shared';
 
 // IMPROVEMENTS_TECH.md 4.3 — the one real test gap left from the original
@@ -324,6 +325,46 @@ describe('handlePushSubscriptionIssue', () => {
     expect(String(events()[0].data)).toMatch(/посылка была бы пустой/);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(getIssueState('173', '6')?.step).toBe('init');
+  });
+
+  it('puts the issue comments (anonymized, system notes left out) and their images into the parcel', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+
+    let uploaded: Buffer | undefined;
+    const requested: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      requested.push(url);
+      if (url.includes('/issues/6/notes')) {
+        return Response.json([
+          { id: 1, body: 'See ![shot](/uploads/abc/shot.png)', system: false, created_at: '2026-10-01T10:00:00Z', author: { name: 'Anna' } },
+          { id: 2, body: 'added label', system: true, created_at: '2026-10-01T11:00:00Z' },
+        ]);
+      }
+      if (url.includes('/issues/6')) {
+        return Response.json({ id: 1, iid: 6, project_id: 173, title: 't', description: 'plain' });
+      }
+      if (url.includes('/uploads/abc/shot.png')) return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      if (url.includes('/api/v1/storage')) {
+        const form = init!.body as unknown as { get(name: string): unknown };
+        uploaded = Buffer.from(await (form.get('file') as Blob).arrayBuffer());
+        return Response.json({ id: 42, originalName: '173-6.subscription.zip', mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString(), channel: 'issue', taskKey: '173:6', direction: 'outbound' }, { status: 201 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 'Fix it', description: 'desc' }), res);
+
+    expect(events()[0].type).toBe('message');
+    const archive = extractArchive<BaseManifest & { issueComments?: { author: string; createdAt: string; body: string }[] }>(uploaded!, '__subscription_manifest__.json');
+    expect(archive.manifest.issueComments).toEqual([
+      { author: 'Anna', createdAt: '2026-10-01T10:00:00Z', body: 'See ![shot](/uploads/abc/shot.png)' },
+    ]);
+    // The image only the comment mentions is fetched too (through the project uploads API) and travels as an asset.
+    expect(requested.some((url) => url.includes('/projects/173/uploads/abc/shot.png'))).toBe(true);
+    expect(archive.assets.map((asset) => asset.relPath)).toEqual(['issue-images/shot.png']);
   });
 
   it('refuses to push before init has created a branch', async () => {

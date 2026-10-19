@@ -5,8 +5,10 @@ import {
   getIssue as sharedGetIssue,
   getIssueImages as sharedGetIssueImages,
   MAX_TOTAL_IMAGE_BYTES,
+  type GitlabNote,
   type IssueImage,
   listAssignedOpenIssues as sharedListAssignedOpenIssues,
+  listIssueNotes as sharedListIssueNotes,
 } from '@pipe/protocol';
 
 import { describeFetchError } from '../utils/describe-fetch-error';
@@ -87,6 +89,17 @@ export async function getIssue(projectId: number | string, iid: number | string)
   });
 
   return issue as unknown as ResType;
+}
+
+export type { GitlabNote };
+
+// The issue's comments (system notes left out), oldest first — they travel in the parcel next to the description.
+export async function getIssueNotes(projectId: number | string, iid: number | string): Promise<GitlabNote[]> {
+  const { gitlabUrl, privateToken } = getSettings();
+
+  return sharedListIssueNotes(gitlabUrl, privateToken, projectId, iid).catch((error) => {
+    throw translateGitlabError(error, gitlabUrl);
+  });
 }
 
 export async function getIssueTimeStats(projectId: number | string, iid: number | string): Promise<{ humanTimeEstimate: string | null }> {

@@ -70,6 +70,45 @@ export interface GitlabIssue {
   user_notes_count?: number;
 }
 
+// A comment on an issue, as GitLab's notes API returns it — only what a parcel needs. `system` notes ("changed the
+// description", "added label") are GitLab's own activity log, not discussion.
+export interface GitlabNote {
+  id: number;
+  body: string;
+  system: boolean;
+  created_at: string;
+  author?: { name?: string; username?: string } | null;
+}
+
+// A hard stop so a server that never reports the last page cannot loop forever (100 × 20 notes).
+const MAX_NOTE_PAGES = 20;
+
+// The issue's comments, oldest first, system notes left out.
+export async function listIssueNotes(
+  apiUrl: string,
+  privateToken: string,
+  projectId: string | number,
+  iid: string | number,
+): Promise<GitlabNote[]> {
+  const params = new URLSearchParams({ sort: 'asc', order_by: 'created_at', per_page: String(ISSUES_PER_PAGE) });
+  const base = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}/notes`;
+
+  const notes: GitlabNote[] = [];
+  let page: string | null = '1';
+
+  for (let fetched = 0; page && fetched < MAX_NOTE_PAGES; fetched += 1) {
+    params.set('page', page);
+
+    const response = await gitlabFetch(`${base}?${params.toString()}`, privateToken);
+    const batch = (await response.json()) as unknown;
+
+    if (Array.isArray(batch)) notes.push(...(batch as GitlabNote[]));
+    page = response.headers.get('x-next-page')?.trim() || null;
+  }
+
+  return notes.filter((note) => !note.system && typeof note.body === 'string' && note.body.trim().length > 0);
+}
+
 export async function getIssue(
   apiUrl: string,
   privateToken: string,
