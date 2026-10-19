@@ -27,7 +27,8 @@ export const getSettings = (): SettingsType => {
 };
 
 export const setSettings = (settings: SettingsType): SettingsType => {
-  writeJsonFileSync(settingsPath, settings);
+  // Owner-only: holds the GitLab token and bridge API keys (same reasoning as sync/src/credentials.ts).
+  writeJsonFileSync(settingsPath, settings, { mode: 0o600 });
 
   return settings;
 };
