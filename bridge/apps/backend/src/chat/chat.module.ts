@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ContextModule } from '../context/context.module';
 import { StorageModule } from '../storage/storage.module';
 import { WorkerModule } from '../worker/worker.module';
+import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { Chat } from './entities/chat.entity';
@@ -20,6 +21,6 @@ import { ChatMessage } from './entities/chat-message.entity';
     TypeOrmModule.forFeature([Chat, ChatMessage, ChatAttachment]),
   ],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, ChatAttachmentsService],
 })
 export class ChatModule {}

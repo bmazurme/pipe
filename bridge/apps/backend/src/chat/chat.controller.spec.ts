@@ -1,9 +1,13 @@
 import { ChatController } from './chat.controller';
 
 // Only the list route's query handling is under test: the controller is built without the rest of its dependencies.
-function controllerWith(chatService: object): ChatController {
+function controllerWith(
+  chatService: object,
+  chatAttachments: object = {},
+): ChatController {
   return Object.assign(Object.create(ChatController.prototype), {
     chatService,
+    chatAttachments,
   }) as ChatController;
 }
 
@@ -11,10 +15,15 @@ describe('ChatController listMessages — updatedAfter', () => {
   const make = () => {
     const chatService = {
       listMessages: jest.fn().mockResolvedValue([]),
+    };
+    const chatAttachments = {
       attachmentsByMessage: jest.fn().mockResolvedValue(new Map()),
     };
 
-    return { chatService, controller: controllerWith(chatService) };
+    return {
+      chatService,
+      controller: controllerWith(chatService, chatAttachments),
+    };
   };
 
   it('passes a valid date on to the service as a Date', async () => {
@@ -62,22 +71,23 @@ describe('ChatController listMessages — attachments', () => {
   it('makes no attachment query for an empty delta', async () => {
     const chatService = {
       listMessages: jest.fn().mockResolvedValue([]),
-      attachmentsByMessage: jest.fn(),
     };
+    const chatAttachments = { attachmentsByMessage: jest.fn() };
 
-    const result = await controllerWith(chatService).listMessages(
-      1,
-      { id: 7 },
-      '2026-10-16T12:00:00.000Z',
-    );
+    const result = await controllerWith(
+      chatService,
+      chatAttachments,
+    ).listMessages(1, { id: 7 }, '2026-10-16T12:00:00.000Z');
 
     expect(result).toEqual([]);
-    expect(chatService.attachmentsByMessage).not.toHaveBeenCalled();
+    expect(chatAttachments.attachmentsByMessage).not.toHaveBeenCalled();
   });
 
   it('asks only for the returned messages and gives each its own files', async () => {
     const chatService = {
       listMessages: jest.fn().mockResolvedValue([message(5), message(6)]),
+    };
+    const chatAttachments = {
       attachmentsByMessage: jest.fn().mockResolvedValue(
         new Map([
           [
@@ -95,11 +105,12 @@ describe('ChatController listMessages — attachments', () => {
       ),
     };
 
-    const result = await controllerWith(chatService).listMessages(1, {
-      id: 7,
-    });
+    const result = await controllerWith(
+      chatService,
+      chatAttachments,
+    ).listMessages(1, { id: 7 });
 
-    expect(chatService.attachmentsByMessage).toHaveBeenCalledWith([5, 6]);
+    expect(chatAttachments.attachmentsByMessage).toHaveBeenCalledWith([5, 6]);
     expect(result.map((m) => m.id)).toEqual([5, 6]);
     expect(result[0].attachments).toEqual([]);
     expect(result[1].attachments.map((a) => a.id)).toEqual([3]);

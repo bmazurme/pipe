@@ -14,6 +14,7 @@ import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ContextService } from '../context/context.service';
+import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { Chat, ChatModel } from './entities/chat.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -40,6 +41,7 @@ async function setup() {
   const module = await Test.createTestingModule({
     providers: [
       ChatService,
+      ChatAttachmentsService,
       { provide: getRepositoryToken(Chat), useValue: chats },
       { provide: getRepositoryToken(ChatMessage), useValue: messages },
       { provide: getRepositoryToken(ChatAttachment), useValue: attachments },
@@ -49,7 +51,13 @@ async function setup() {
     ],
   }).compile();
 
-  return { service: module.get(ChatService), chats, messages, attachments };
+  return {
+    service: module.get(ChatService),
+    attachmentsService: module.get(ChatAttachmentsService),
+    chats,
+    messages,
+    attachments,
+  };
 }
 
 // A file multer would already have written to disk.
@@ -65,11 +73,11 @@ const claudeChat = { id: 1, userId: 7, model: ChatModel.Sonnet };
 describe('ChatService attachments', () => {
   describe('addAttachment', () => {
     it('stores an unsent attachment for a Claude chat', async () => {
-      const { service, chats, attachments } = await setup();
+      const { chats, attachments, attachmentsService } = await setup();
       chats.findOne.mockResolvedValue(claudeChat);
       const file = uploaded();
 
-      const saved = await service.addAttachment(1, 7, file);
+      const saved = await attachmentsService.addAttachment(1, 7, file);
 
       expect(saved).toMatchObject({
         chatId: 1,
@@ -85,60 +93,60 @@ describe('ChatService attachments', () => {
     it.each([ChatModel.Gpt, ChatModel.Deepseek, ChatModel.Qwen])(
       'refuses a %s chat and removes the uploaded file',
       async (model) => {
-        const { service, chats } = await setup();
+        const { chats, attachmentsService } = await setup();
         chats.findOne.mockResolvedValue({ ...claudeChat, model });
         const file = uploaded();
 
-        await expect(service.addAttachment(1, 7, file)).rejects.toThrow(
-          'только в чатах с Claude',
-        );
+        await expect(
+          attachmentsService.addAttachment(1, 7, file),
+        ).rejects.toThrow('только в чатах с Claude');
         expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
       },
     );
 
     it('refuses someone else’s chat and removes the file', async () => {
-      const { service, chats } = await setup();
+      const { chats, attachmentsService } = await setup();
       chats.findOne.mockResolvedValue(null);
       const file = uploaded();
 
-      await expect(service.addAttachment(1, 7, file)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        attachmentsService.addAttachment(1, 7, file),
+      ).rejects.toThrow(NotFoundException);
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
 
     it('refuses a disallowed file type even if the upload filter was bypassed', async () => {
-      const { service, chats } = await setup();
+      const { chats, attachmentsService } = await setup();
       chats.findOne.mockResolvedValue(claudeChat);
       const file = uploaded('run.exe', `${Math.random()}.exe`);
 
-      await expect(service.addAttachment(1, 7, file)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        attachmentsService.addAttachment(1, 7, file),
+      ).rejects.toThrow(BadRequestException);
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
 
     it('refuses once the chat holds its maximum, and removes the file', async () => {
-      const { service, chats, attachments } = await setup();
+      const { chats, attachments, attachmentsService } = await setup();
       chats.findOne.mockResolvedValue(claudeChat);
       attachments.count.mockResolvedValue(30);
       const file = uploaded();
 
-      await expect(service.addAttachment(1, 7, file)).rejects.toThrow(
-        'не больше 30',
-      );
+      await expect(
+        attachmentsService.addAttachment(1, 7, file),
+      ).rejects.toThrow('не больше 30');
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
 
     it('removes the file when saving the row fails', async () => {
-      const { service, chats, attachments } = await setup();
+      const { chats, attachments, attachmentsService } = await setup();
       chats.findOne.mockResolvedValue(claudeChat);
       attachments.save.mockRejectedValue(new Error('db down'));
       const file = uploaded();
 
-      await expect(service.addAttachment(1, 7, file)).rejects.toThrow(
-        'db down',
-      );
+      await expect(
+        attachmentsService.addAttachment(1, 7, file),
+      ).rejects.toThrow('db down');
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
   });
@@ -201,7 +209,7 @@ describe('ChatService attachments', () => {
 
   describe('removing and reading', () => {
     it('takes back an unsent file and deletes it from disk', async () => {
-      const { service, attachments } = await setup();
+      const { attachments, attachmentsService } = await setup();
       const file = uploaded();
       attachments.findOne.mockResolvedValue({
         id: 3,
@@ -210,14 +218,14 @@ describe('ChatService attachments', () => {
         storedName: file.filename,
       });
 
-      await service.removeAttachment(3, 7);
+      await attachmentsService.removeAttachment(3, 7);
 
       expect(attachments.delete).toHaveBeenCalledWith(3);
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
 
     it('will not take back a file that is part of a sent message', async () => {
-      const { service, attachments } = await setup();
+      const { attachments, attachmentsService } = await setup();
       attachments.findOne.mockResolvedValue({
         id: 3,
         userId: 7,
@@ -225,33 +233,34 @@ describe('ChatService attachments', () => {
         storedName: 'x.png',
       });
 
-      await expect(service.removeAttachment(3, 7)).rejects.toThrow(
+      await expect(attachmentsService.removeAttachment(3, 7)).rejects.toThrow(
         ConflictException,
       );
       expect(attachments.delete).not.toHaveBeenCalled();
     });
 
     it('scopes reads to the owner', async () => {
-      const { service, attachments } = await setup();
+      const { attachments, attachmentsService } = await setup();
       attachments.findOne.mockResolvedValue(null);
 
-      await expect(service.findOwnedAttachment(3, 8)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        attachmentsService.findOwnedAttachment(3, 8),
+      ).rejects.toThrow(NotFoundException);
       expect(attachments.findOne).toHaveBeenCalledWith({
         where: { id: 3, userId: 8 },
       });
     });
 
     it('gives a worker only a file of the chat its message belongs to', async () => {
-      const { service, messages, chats, attachments } = await setup();
+      const { messages, chats, attachments, attachmentsService } =
+        await setup();
       messages.findOne.mockResolvedValue({ id: 20, chatId: 1 });
       chats.findOne.mockResolvedValue(claudeChat);
       attachments.findOne.mockResolvedValue(null);
 
-      await expect(service.findAttachmentForTurn(20, 3, 7)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        attachmentsService.findAttachmentForTurn(20, 3, 7),
+      ).rejects.toThrow(NotFoundException);
       expect(attachments.findOne).toHaveBeenCalledWith({
         where: { id: 3, chatId: 1, userId: 7 },
       });
@@ -317,46 +326,48 @@ describe('ChatService attachments', () => {
 
   describe('pruneUnsentAttachments', () => {
     it('drops files uploaded for a message that was never sent', async () => {
-      const { service, attachments } = await setup();
+      const { attachments, attachmentsService } = await setup();
       const file = uploaded();
       attachments.find.mockResolvedValue([
         { id: 3, storedName: file.filename },
       ]);
 
-      await service.pruneUnsentAttachments();
+      await attachmentsService.pruneUnsentAttachments();
 
       expect(attachments.delete).toHaveBeenCalled();
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(false);
     });
 
     it('never throws, whatever the database does', async () => {
-      const { service, attachments } = await setup();
+      const { attachments, attachmentsService } = await setup();
       attachments.find.mockRejectedValue(new Error('db down'));
 
-      await expect(service.pruneUnsentAttachments()).resolves.toBeUndefined();
+      await expect(
+        attachmentsService.pruneUnsentAttachments(),
+      ).resolves.toBeUndefined();
     });
   });
 });
 
 describe('ChatService attachmentsByMessage', () => {
   it('makes no query for no messages', async () => {
-    const { service, attachments } = await setup();
+    const { attachments, attachmentsService } = await setup();
 
-    const result = await service.attachmentsByMessage([]);
+    const result = await attachmentsService.attachmentsByMessage([]);
 
     expect(result.size).toBe(0);
     expect(attachments.find).not.toHaveBeenCalled();
   });
 
   it('queries only the given message ids and groups the files per message', async () => {
-    const { service, attachments } = await setup();
+    const { attachments, attachmentsService } = await setup();
     attachments.find.mockResolvedValue([
       { id: 3, messageId: 21 },
       { id: 4, messageId: 23 },
       { id: 5, messageId: 21 },
     ]);
 
-    const result = await service.attachmentsByMessage([21, 22, 23]);
+    const result = await attachmentsService.attachmentsByMessage([21, 22, 23]);
 
     expect(attachments.find).toHaveBeenCalledWith({
       where: { messageId: In([21, 22, 23]) },
