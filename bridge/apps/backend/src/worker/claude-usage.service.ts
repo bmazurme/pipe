@@ -37,7 +37,9 @@ export class ClaudeUsageService {
     const limits = sanitizeLimits(dto.limits, now);
     const usage = sanitizeUsage(dto.usage);
 
-    if (limits && workerId !== undefined) {
+    // The worker's own snapshot (what its card shows) is the limits of the token it uses. A probe and a chat turn run on
+    // that token; a job may have run on another one (picked at launch), whose limits belong to that token only.
+    if (limits && workerId !== undefined && dto.jobId === undefined) {
       await this.workerRepository.update(
         { id: workerId, userId },
         { claudeLimits: limits },
@@ -82,6 +84,29 @@ export class ClaudeUsageService {
 
     const limitsCredentialId =
       job.claudeCredentialId ?? job.usedClaudeCredentialId ?? null;
+
+    if (limits && workerId !== undefined) {
+      const worker = await this.workerRepository.findOneBy({
+        id: workerId,
+        userId,
+      });
+      const workerToken =
+        limitsCredentialId === null
+          ? null
+          : await this.claudeCredentialsService.resolveForRun(
+              userId,
+              null,
+              worker?.claudeCredentialId ?? null,
+            );
+
+      // Another token's limits must not overwrite the worker's own — they would show on its card as if they were its.
+      if (!workerToken || workerToken.id === limitsCredentialId) {
+        await this.workerRepository.update(
+          { id: workerId, userId },
+          { claudeLimits: limits },
+        );
+      }
+    }
 
     if (limits && limitsCredentialId !== null) {
       await this.claudeCredentialsService.recordLimits(

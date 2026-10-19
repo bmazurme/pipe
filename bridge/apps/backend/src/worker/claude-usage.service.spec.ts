@@ -101,6 +101,60 @@ describe('ClaudeUsageService', () => {
       );
     });
 
+    it('does not put the limits of a token the job picked on a worker that uses another token', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: 11,
+      });
+      workerRepository.findOneBy.mockResolvedValue({
+        id: 5,
+        claudeCredentialId: 12,
+      });
+      claudeCredentialsService.resolveForRun.mockResolvedValue({
+        id: 12,
+        token: 't',
+      });
+
+      await service.recordReport(3, 5, { jobId: 7, limits, usage }, now);
+
+      expect(workerRepository.update).not.toHaveBeenCalled();
+      // They are still the limits of the token the job ran on.
+      expect(claudeCredentialsService.recordLimits).toHaveBeenCalledWith(
+        11,
+        3,
+        expect.objectContaining({ status: 'allowed_warning' }),
+      );
+    });
+
+    it('keeps the limits on the worker when the job ran on the token the worker uses', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 7,
+        userId: 3,
+        workerId: 5,
+        claudeCredentialId: null,
+        usedClaudeCredentialId: 12,
+      });
+      workerRepository.findOneBy.mockResolvedValue({
+        id: 5,
+        claudeCredentialId: null,
+      });
+      claudeCredentialsService.resolveForRun.mockResolvedValue({
+        id: 12,
+        token: 't',
+      });
+
+      await service.recordReport(3, 5, { jobId: 7, limits, usage }, now);
+
+      expect(workerRepository.update).toHaveBeenCalledWith(
+        { id: 5, userId: 3 },
+        {
+          claudeLimits: expect.objectContaining({ status: 'allowed_warning' }),
+        },
+      );
+    });
+
     it('records the limits on the fallback token the job ran on', async () => {
       repository.findOne!.mockResolvedValue({
         id: 7,
