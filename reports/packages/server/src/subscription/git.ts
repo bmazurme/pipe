@@ -116,6 +116,20 @@ export async function checkoutTaskBranch(path: string, branch: string): Promise<
   }
 }
 
+// Of the given paths, those a .gitignore excludes and git does not already track. `check-ignore` exits 1 when none match.
+async function ignoredPaths(path: string, relPaths: string[]): Promise<string[]> {
+  if (relPaths.length === 0) return [];
+
+  try {
+    const output = await git(path, ['check-ignore', '-z', '--stdin'], relPaths.join('\0'));
+
+    return output.split('\0').filter(Boolean);
+  } catch (error) {
+    if ((error as { code?: number }).code === 1) return [];
+    throw error;
+  }
+}
+
 // Stages exactly the files the pull just wrote — never `git add -A`. Unlike
 // sync's agent-runner, this runs against the developer's own regular
 // checkout, not a freshly-created isolated worktree, so a blanket add could
@@ -124,10 +138,15 @@ export async function checkoutTaskBranch(path: string, branch: string): Promise<
 // file changes (or, in principle, none of either) — still worth a real
 // commit marking that the pull happened, not a silent no-op.
 export async function commitPulledFiles(path: string, relPaths: string[], message: string): Promise<void> {
-  if (relPaths.length > 0) {
-    // A result parcel carries the whole tracked tree: thousands of paths do not fit on a Windows command line, so they are
-    // read from stdin (NUL-separated), and taken literally — a name such as `[id].vue` is not a glob.
-    await git(path, ['--literal-pathspecs', 'add', '--pathspec-from-file=-', '--pathspec-file-nul'], relPaths.join('\0'));
+  // The result carries the whole tracked tree, including files this checkout's own .gitignore excludes — `git add` refuses
+  // the whole batch over one of them. They stay on disk, just out of the commit (a file already tracked is never "ignored").
+  const ignored = new Set(await ignoredPaths(path, relPaths));
+  const stageable = relPaths.filter((relPath) => !ignored.has(relPath));
+
+  if (stageable.length > 0) {
+    // Thousands of paths do not fit on a Windows command line, so they are read from stdin (NUL-separated), and taken
+    // literally — a name such as `[id].vue` is not a glob.
+    await git(path, ['--literal-pathspecs', 'add', '--pathspec-from-file=-', '--pathspec-file-nul'], stageable.join('\0'));
   }
 
   await git(path, ['commit', '-m', message, '--allow-empty']);
