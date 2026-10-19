@@ -20,6 +20,8 @@ describe('ContextSummaryDto', () => {
       contentLength: 42,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
+      schedules: [],
+      lastUsedAt: null,
     });
     expect(JSON.stringify(dto)).not.toContain('secret text');
   });

@@ -1996,6 +1996,9 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            schedules: Record<string, never>[];
+            /** Format: date-time */
+            lastUsedAt: string | null;
         };
         ContextResponseDto: {
             id: number;

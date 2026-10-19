@@ -36,6 +36,8 @@ describe('ContextController', () => {
         contentLength: 11,
         createdAt: stored.createdAt,
         updatedAt: stored.updatedAt,
+        schedules: [],
+        lastUsedAt: null,
       },
     ]);
     expect(result[0]).not.toHaveProperty('content');
