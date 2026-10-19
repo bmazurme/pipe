@@ -10,6 +10,7 @@ export type AppLogSource = 'http' | 'job' | 'loop' | 'integration' | 'system';
 // no bodies, no query strings, no headers; see AppLogService for the redaction.
 @Entity({ name: 'app_logs' })
 @Index(['source', 'level'])
+@Index('IDX_app_logs_createdAt', ['createdAt'])
 export class AppLog extends BaseEntity {
   @Index()
   @Column({ type: 'varchar', length: 8 })
