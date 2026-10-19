@@ -27,7 +27,7 @@ npm run dev                        # Postgres + backend + frontend одной к
 запускает backend и frontend параллельно. Поднять только базу (например,
 чтобы прогнать миграции отдельно) — `npm run dev:db`.
 
-Backend: `http://localhost:3002` (порт задаётся `PORT` в `apps/backend/.env`).
+Backend: `http://localhost:3000` (порт задаётся `PORT` в `apps/backend/.env`).
 Frontend: `http://localhost:5173`.
 
 ## Способы входа (Yandex + GitHub)
@@ -154,7 +154,7 @@ Repo → Settings → Secrets and variables → Actions.
 
 | Секрет | Обязателен | Назначение |
 |---|---|---|
-| `VITE_API_URL` | нет | адрес backend API, который попадёт в prod-сборку фронтенда. Без него используется `http://localhost:3002` — сборка всё равно проходит, просто как заглушка |
+| `VITE_API_URL` | нет | адрес backend API, который попадёт в prod-сборку фронтенда. Без него используется `http://localhost:3000` — сборка всё равно проходит, просто как заглушка |
 
 #### Для `build.yml`
 
@@ -183,7 +183,7 @@ Repo → Settings → Secrets and variables → Actions.
 | Секрет | Назначение |
 |---|---|
 | `POSTGRES_HOST` | адрес Postgres, доступный со Swarm-ноды (не `localhost` и не имя compose-сервиса — swarm-таск не резолвит короткие имена) |
-| `POSTGRES_PORT` | порт Postgres (по умолчанию `5432`) |
+| `POSTGRES_PORT` | порт Postgres (`5445` для локального docker-compose, `5432` внутри сети Swarm) |
 | `POSTGRES_USER` | пользователь Postgres |
 | `POSTGRES_PASSWORD` | пароль Postgres |
 | `POSTGRES_DB` | имя базы |
