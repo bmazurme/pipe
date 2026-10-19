@@ -13,6 +13,7 @@ import { pushIssueCommand } from './commands/pushIssue.js';
 import { pullIssueCommand } from './commands/pullIssue.js';
 import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
 import { inboxCommand } from './commands/inbox.js';
+import { doctorCommand } from './commands/doctor.js';
 import { log, setVerbose } from './log.js';
 import { setupProxy } from './setupProxy.js';
 
@@ -58,6 +59,11 @@ program
   .command('list')
   .description('List tracked projects')
   .action(listCommand);
+
+program
+  .command('doctor [name]')
+  .description('Check config, project paths, dictionaries, key files and bridge/GitLab credentials (local only, no network)')
+  .action(doctorCommand);
 
 program
   .command('push <name>')
