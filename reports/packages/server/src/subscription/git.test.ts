@@ -236,6 +236,22 @@ describe('commitPulledFiles', () => {
     expect(status).toContain('unrelated.txt');
   });
 
+  it('commits thousands of paths at once (they do not travel on the command line) and takes odd names literally', async () => {
+    const dir = initRepo();
+    const names = Array.from({ length: 3000 }, (_, index) => `generated/${'d'.repeat(120)}/file-${index}.txt`);
+    mkdirSync(path.join(dir, 'generated', 'd'.repeat(120)), { recursive: true });
+    for (const name of names) writeFileSync(path.join(dir, name), 'x');
+    writeFileSync(path.join(dir, '[id].vue'), 'literal');
+    writeFileSync(path.join(dir, 'a.vue'), 'must stay out: "[id].vue" is not a glob');
+
+    await commitPulledFiles(dir, [...names, '[id].vue'], 'Pull issue #3: many files');
+
+    const committed = git(dir, ['ls-tree', '-r', '--name-only', 'HEAD']).split('\n').filter(Boolean);
+    expect(committed).toHaveLength(names.length + 1 + 1); // + the initial commit's file, + [id].vue
+    expect(committed).toContain('[id].vue');
+    expect(committed).not.toContain('a.vue');
+  });
+
   it('still makes a real commit when the parcel wrote no files (--allow-empty)', async () => {
     const dir = initRepo();
     const before = git(dir, ['rev-parse', 'HEAD']).trim();
