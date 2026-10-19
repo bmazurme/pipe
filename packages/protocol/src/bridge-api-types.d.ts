@@ -2083,6 +2083,8 @@ export interface components {
             targetWorkerId?: number;
             contextId?: number;
             includeHistory?: boolean;
+            /** Format: date-time */
+            notBefore?: string;
             notifyOnFinish?: boolean;
             resultPublicKey?: string;
         };

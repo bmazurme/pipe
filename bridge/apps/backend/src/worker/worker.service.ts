@@ -316,7 +316,7 @@ export class WorkerService {
       targetWorkerId: dto.targetWorkerId ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
       resultPublicKey: dto.resultPublicKey ?? null,
-      notBefore: carried?.notBefore ?? null,
+      notBefore: dto.notBefore ?? carried?.notBefore ?? null,
       status: JobStatus.Queued,
     });
   }

@@ -4431,6 +4431,10 @@
           "includeHistory": {
             "type": "boolean"
           },
+          "notBefore": {
+            "format": "date-time",
+            "type": "string"
+          },
           "notifyOnFinish": {
             "type": "boolean"
           },

@@ -1,5 +1,7 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDate,
   IsEnum,
   IsInt,
   IsOptional,
@@ -9,6 +11,7 @@ import {
 } from 'class-validator';
 
 import { JobModel } from '../entities/job.entity';
+import { MaxFutureDate, MinFutureDate } from './not-before.validators';
 
 export class CreateJobDto {
   @IsInt()
@@ -41,6 +44,14 @@ export class CreateJobDto {
   @IsOptional()
   @IsBoolean()
   includeHistory?: boolean;
+
+  // Do not start the job before this time (a future moment, at most 7 days ahead); absent = as soon as a worker is free.
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  @MinFutureDate()
+  @MaxFutureDate(7 * 24 * 60 * 60 * 1000)
+  notBefore?: Date;
 
   // Send a Telegram message when the job ends. Off by default.
   @IsOptional()

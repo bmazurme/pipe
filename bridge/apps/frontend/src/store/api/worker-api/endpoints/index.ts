@@ -260,6 +260,8 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         contextId?: number;
         includeHistory?: boolean;
         notifyOnFinish?: boolean;
+        /** Do not start before this moment (ISO time, a future one, at most 7 days ahead). */
+        notBefore?: string;
         /** RSA public key (PEM): the worker encrypts the result parcel with it before uploading. */
         resultPublicKey?: string;
       }
