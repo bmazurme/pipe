@@ -19,6 +19,8 @@ COPY packages/protocol packages/protocol
 RUN npm install --prefix packages/protocol && npm run build --prefix packages/protocol
 
 COPY reports/package.json reports/package-lock.json reports/
+# the preinstall hook (a no-op here — protocol is built above — but npm ci needs the file to exist)
+COPY reports/scripts/ensure-protocol.mjs reports/scripts/ensure-protocol.mjs
 COPY reports/packages/client/package.json reports/packages/client/package.json
 COPY reports/packages/server/package.json reports/packages/server/package.json
 COPY reports/packages/shared reports/packages/shared

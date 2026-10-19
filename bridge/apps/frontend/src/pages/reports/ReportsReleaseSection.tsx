@@ -30,8 +30,8 @@ export function ReportsReleaseSection() {
         <div className={styles.meta}>
           <Text variant="body-2" color="secondary">
             reports/ и packages/protocol/ из ветки main, в виде zip — все зависимости внутри.
-            После распаковки: npm install && npm run build в packages/protocol, затем
-            npm install && npm start в reports. Доступно только владельцу развёртывания.
+            После распаковки: npm install && npm start в папке reports (packages/protocol при первой
+            установке соберётся сам). Доступно только владельцу развёртывания.
           </Text>
           {info && (
             <Text variant="caption-2" color="secondary">
