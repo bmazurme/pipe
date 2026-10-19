@@ -14,6 +14,7 @@ import { resolveChatProvider } from './chatProviders.js';
 import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
+import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { chatLogger, jobLogger, logger } from './logger.js';
@@ -249,6 +250,16 @@ export async function processJob(
 
     jlog.info('succeeded');
   } catch (error) {
+    // A run that was stopped or timed out still cost tokens; report before the status makes the job terminal.
+    const failedReport = (error as { report?: ClaudeReport } | null)?.report;
+    if (failedReport) {
+      try {
+        await client.reportClaudeUsage(job.id, failedReport);
+      } catch (usageError) {
+        jlog.warn({ err: usageError }, 'could not report usage of a run that did not finish');
+      }
+    }
+
     if (shutdownRequested) {
       log(`Failed: ${SHUTDOWN_FAILURE_MESSAGE}\n`);
       jlog.warn('stopped by worker shutdown');
