@@ -17,7 +17,8 @@ const defaultConfig: SubscriptionConfigType = {
 };
 
 const save = (config: SubscriptionConfigType): SubscriptionConfigType => {
-  writeJsonFileSync(configPath, config);
+  // Owner-only: holds the RSA private key (same reasoning as sync/src/credentials.ts).
+  writeJsonFileSync(configPath, config, { mode: 0o600 });
 
   return config;
 };
