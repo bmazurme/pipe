@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "preinstall": "node scripts/ensure-protocol.mjs",
     "postinstall": "npm run build --workspace=packages/shared",
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/client",
     "start": "npm run build --workspace=packages/shared && npm run dev",

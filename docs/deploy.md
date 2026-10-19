@@ -7,9 +7,9 @@ file for the full index.
 
 | Service | Port | Notes |
 |---|---|---|
-| bridge backend | `3002` | dev default (`PORT` in `bridge/apps/backend/.env`) |
+| bridge backend | `3000` | `PORT` in `bridge/apps/backend/.env`; `.env.example` ships 3000, and the OAuth redirects in it use the same port |
 | bridge frontend | `5173` | Vite dev server |
-| bridge Postgres | `5432` | via `docker compose up -d postgres` |
+| bridge Postgres | `5445` | on the host: docker-compose maps `5445:5432` (`docker compose up -d postgres`); containers still use 5432 |
 | reports server | `4000` | dev default (`PORT` in `reports/packages/server/.env`) |
 | reports client | `5174` | Vite dev server — deliberately not `5173`, since bridge's frontend already claims that default; running both locally at once was already a real collision this avoids |
 | sync | — | CLI only, no ports |

@@ -29,6 +29,7 @@ import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import { RunCredentialsService } from '../worker/run-credentials.service';
 import { WorkersService } from '../worker/workers.service';
+import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { ChatAttachmentResponseDto } from './dto/chat-attachment-response.dto';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
@@ -67,6 +68,7 @@ function parseUpdatedAfter(raw: string | undefined): Date | undefined {
 export class ChatController {
   constructor(
     private readonly chatService: ChatService,
+    private readonly chatAttachments: ChatAttachmentsService,
     private readonly workersService: WorkersService,
     private readonly runCredentials: RunCredentialsService,
   ) {}
@@ -125,7 +127,7 @@ export class ChatController {
     // Most polls while a reply is pending return nothing new: then no attachment query at all.
     if (messages.length === 0) return [];
 
-    const attachments = await this.chatService.attachmentsByMessage(
+    const attachments = await this.chatAttachments.attachmentsByMessage(
       messages.map((m) => m.id),
     );
 
@@ -151,7 +153,7 @@ export class ChatController {
       throw new BadRequestException('Файл не передан');
     }
 
-    const attachment = await this.chatService.addAttachment(
+    const attachment = await this.chatAttachments.addAttachment(
       id,
       currentUser.id,
       file,
@@ -167,7 +169,7 @@ export class ChatController {
     @CurrentUser() currentUser: { id: number },
     @Res() res: Response,
   ): Promise<void> {
-    const attachment = await this.chatService.findOwnedAttachment(
+    const attachment = await this.chatAttachments.findOwnedAttachment(
       id,
       currentUser.id,
     );
@@ -182,7 +184,7 @@ export class ChatController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
   ): Promise<void> {
-    await this.chatService.removeAttachment(id, currentUser.id);
+    await this.chatAttachments.removeAttachment(id, currentUser.id);
   }
 
   private sendAttachment(res: Response, attachment: ChatAttachment): void {
@@ -196,7 +198,7 @@ export class ChatController {
       'Content-Disposition',
       `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
     );
-    this.chatService.sendAttachment(res, attachment, (err) => {
+    this.chatAttachments.sendAttachment(res, attachment, (err) => {
       if (err && !res.headersSent) {
         res.status(404).json({ message: 'File is missing' });
       }
@@ -295,7 +297,7 @@ export class ChatController {
     @CurrentUser() currentUser: { id: number },
     @Res() res: Response,
   ): Promise<void> {
-    const attachment = await this.chatService.findAttachmentForTurn(
+    const attachment = await this.chatAttachments.findAttachmentForTurn(
       messageId,
       attachmentId,
       currentUser.id,
