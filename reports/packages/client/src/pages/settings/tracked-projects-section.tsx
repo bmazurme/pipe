@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Button, TextInput, Text, Icon, Dialog, DialogHeader, DialogBody, DialogFooter, useToaster,
+  Alert, Button, TextInput, Text, Icon, Dialog, DialogHeader, DialogBody, DialogFooter, useToaster,
 } from '@gravity-ui/uikit';
 import { Plus, TrashBin } from '@gravity-ui/icons';
 import type { TrackedProjectType } from '@reports/shared';
@@ -14,6 +14,9 @@ import { describeError } from '../../utils/describe-error';
 
 import style from './settings.module.css';
 
+// Same pattern the server's resolveTrackedProject enforces.
+const GITHUB_REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+
 const emptyForm = { gitlabProjectId: '', githubRepo: '', githubLabel: '', path: '', baseBranch: '', include: '', exclude: '' };
 
 function splitList(value: string): string[] | undefined {
@@ -25,10 +28,11 @@ function splitList(value: string): string[] | undefined {
 function TrackedProjectsSection() {
   const toaster = useToaster();
   const { data: config } = useGetSubscriptionConfigQuery();
-  const [addTrackedProject] = useAddTrackedProjectMutation();
+  const [addTrackedProject, { isLoading: isAdding }] = useAddTrackedProjectMutation();
   const [removeTrackedProject] = useRemoveTrackedProjectMutation();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [addError, setAddError] = useState<string | null>(null);
   const [toRemove, setToRemove] = useState<TrackedProjectType | null>(null);
 
   const trackedProjects = config?.trackedProjects ?? [];
@@ -38,10 +42,25 @@ function TrackedProjectsSection() {
   const isDuplicate = isGithub
     ? trackedProjects.some((project) => project.githubRepo?.toLowerCase() === form.githubRepo.trim().toLowerCase())
     : Boolean(form.gitlabProjectId) && trackedProjects.some((project) => project.gitlabProjectId === form.gitlabProjectId);
-  const isValid = (isGithub || Boolean(form.gitlabProjectId)) && Boolean(form.path) && !isDuplicate;
+  const isGithubFormatInvalid = isGithub && !GITHUB_REPO_PATTERN.test(form.githubRepo.trim());
+  const isValid = (isGithub || Boolean(form.gitlabProjectId)) && Boolean(form.path) && !isDuplicate && !isGithubFormatInvalid;
+
+  const updateForm = (patch: Partial<typeof emptyForm>) => {
+    setAddError(null);
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const closeDialog = () => {
+    if (isAdding) {
+      return;
+    }
+
+    setIsDialogOpen(false);
+    setAddError(null);
+  };
 
   const handleAdd = async () => {
-    if (!isValid) {
+    if (!isValid || isAdding) {
       return;
     }
 
@@ -54,19 +73,14 @@ function TrackedProjectsSection() {
       exclude: splitList(form.exclude),
     };
 
-    setIsDialogOpen(false);
-    setForm(emptyForm);
+    setAddError(null);
 
     try {
       await addTrackedProject(project).unwrap();
+      setIsDialogOpen(false);
+      setForm(emptyForm);
     } catch (error) {
-      toaster.add({
-        name: 'tracked-project-add-error',
-        theme: 'danger',
-        title: 'Не удалось добавить репозиторий',
-        content: describeError(error),
-        isClosable: true,
-      });
+      setAddError(describeError(error));
     }
   };
 
@@ -132,15 +146,18 @@ function TrackedProjectsSection() {
         </Button>
       </section>
 
-      <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
+      <Dialog open={isDialogOpen} onClose={closeDialog}>
         <DialogHeader caption="Добавить отслеживаемый репозиторий" />
         <DialogBody>
+          {addError && (
+            <Alert theme="danger" title="Не удалось добавить репозиторий" message={addError} className={style.codesAlert} />
+          )}
           <div className={style.codeForm}>
             <TextInput
               label="Код проекта GitLab"
               placeholder="ID проекта, как в «Коды проектов»"
               value={form.gitlabProjectId}
-              onUpdate={(gitlabProjectId) => setForm((prev) => ({ ...prev, gitlabProjectId }))}
+              onUpdate={(gitlabProjectId) => updateForm({ gitlabProjectId })}
               disabled={isGithub}
               validationState={isDuplicate ? 'invalid' : undefined}
               errorMessage={isDuplicate ? 'Такой репозиторий уже отслеживается' : undefined}
@@ -149,48 +166,50 @@ function TrackedProjectsSection() {
               label="или GitHub репозиторий"
               placeholder="owner/name — задачи берутся из issues"
               value={form.githubRepo}
-              onUpdate={(githubRepo) => setForm((prev) => ({ ...prev, githubRepo }))}
+              onUpdate={(githubRepo) => updateForm({ githubRepo })}
+              validationState={isGithubFormatInvalid ? 'invalid' : undefined}
+              errorMessage={isGithubFormatInvalid ? 'Формат: owner/name' : undefined}
             />
             {isGithub && (
               <TextInput
                 label="Метка GitHub issues"
                 placeholder="loop"
                 value={form.githubLabel}
-                onUpdate={(githubLabel) => setForm((prev) => ({ ...prev, githubLabel }))}
+                onUpdate={(githubLabel) => updateForm({ githubLabel })}
               />
             )}
             <TextInput
               label="Локальный путь"
               placeholder="/Users/you/Projects/my-repo"
               value={form.path}
-              onUpdate={(path) => setForm((prev) => ({ ...prev, path }))}
+              onUpdate={(path) => updateForm({ path })}
             />
             <TextInput
               label="Базовая ветка"
               placeholder="main"
               value={form.baseBranch}
-              onUpdate={(baseBranch) => setForm((prev) => ({ ...prev, baseBranch }))}
+              onUpdate={(baseBranch) => updateForm({ baseBranch })}
             />
             <TextInput
               label="Include (через запятую)"
               placeholder="**/*.ts, **/*.tsx"
               value={form.include}
-              onUpdate={(include) => setForm((prev) => ({ ...prev, include }))}
+              onUpdate={(include) => updateForm({ include })}
             />
             <TextInput
               label="Exclude (через запятую)"
               placeholder="**/node_modules/**"
               value={form.exclude}
-              onUpdate={(exclude) => setForm((prev) => ({ ...prev, exclude }))}
+              onUpdate={(exclude) => updateForm({ exclude })}
             />
           </div>
         </DialogBody>
         <DialogFooter
-          onClickButtonCancel={() => setIsDialogOpen(false)}
+          onClickButtonCancel={closeDialog}
           onClickButtonApply={handleAdd}
           textButtonApply="Добавить"
           textButtonCancel="Отмена"
-          propsButtonApply={{ disabled: !isValid }}
+          propsButtonApply={{ disabled: !isValid || isAdding, loading: isAdding }}
         />
       </Dialog>
 
