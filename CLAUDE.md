@@ -87,7 +87,7 @@ cd bridge
 npm install
 cp apps/backend/.env.example apps/backend/.env
 cp apps/frontend/.env.example apps/frontend/.env
-npm run dev                          # docker compose up -d postgres, then backend (:3002) + frontend (:5173) together
+npm run dev                          # docker compose up -d postgres, then backend (:3000) + frontend (:5173) together
 npm run build                        # backend then frontend
 npm run lint                         # backend then frontend
 npm test -w backend                  # Jest
