@@ -478,7 +478,9 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
   // Runs before the parcel is ever consumed from bridge (see above) — a
   // dirty tree now fails loudly with the parcel still safely pullable,
   // instead of silently losing it.
-  await checkoutTaskBranch(trackedProject.path, state.branch);
+  const baseBranch = trackedProject.baseBranch || 'main';
+
+  await checkoutTaskBranch(trackedProject.path, state.branch, baseBranch);
 
   // Every path is checked before the first one is written: a refused parcel
   // (one escaping the repo, or reaching into .git — the commit below would
@@ -505,7 +507,7 @@ export async function pullSubscriptionIssue(projectId: string, iid: string): Pro
   const title = applyDictionary(manifest.issueTitle, dictionary, 'toLocal');
   const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
   await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
-  await pushBranch(trackedProject.path, state.branch);
+  await pushBranch(trackedProject.path, state.branch, baseBranch);
 
   // The step is recorded the moment the content is safely committed and
   // pushed — before the parcel is touched. If the process dies (or is
