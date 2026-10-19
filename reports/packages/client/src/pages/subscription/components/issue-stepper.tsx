@@ -190,9 +190,11 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
               title="Похоже, анонимизация неполная"
               message={(
                 <ul className={style.leakList}>
-                  {reviewDraft.leaks.map((finding) => (
-                    <li key={`${finding.kind}:${finding.match}:${finding.line}`}>
+                  {reviewDraft.leaks.map((finding, index) => (
+                    // The same value on the same line number turns up in several files — source and position keep the keys unique.
+                    <li key={`${finding.source}:${finding.line}:${finding.kind}:${index}`}>
                       {finding.kind}: {finding.match}
+                      {finding.source ? ` (${finding.source}:${finding.line})` : ''}
                     </li>
                   ))}
                 </ul>
