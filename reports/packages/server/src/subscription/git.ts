@@ -47,7 +47,22 @@ export async function branchExists(path: string, branch: string): Promise<boolea
   }
 }
 
+// Branches a task must never be written to or published as: the target branch of the task's project, and the usual
+// mainlines. Everything this module commits or pushes goes to the task's own branch, named by the mask above.
+export function assertTaskBranch(branch: string, baseBranch = 'main'): void {
+  const protectedBranches = new Set(['main', 'master', 'HEAD', baseBranch]);
+
+  if (!branch.trim() || protectedBranches.has(branch)) {
+    throw new Error(
+      `Ветка "${branch}" — целевая: reports работает только с именной веткой задачи (по маске логин-дата-номер) ` +
+        'и никогда не пишет и не публикует в main/master или базовую ветку проекта.',
+    );
+  }
+}
+
 export async function createBranch(path: string, branch: string, baseBranch = 'main'): Promise<void> {
+  assertTaskBranch(branch, baseBranch);
+
   if (!(await isTreeClean(path))) {
     throw new Error(`В репозитории ${path} есть незакоммиченные изменения — закоммитьте или сохраните их перед init`);
   }
@@ -68,7 +83,9 @@ export async function createBranch(path: string, branch: string, baseBranch = 'm
     );
   }
 
-  await git(path, ['checkout', '-b', branch, `origin/${baseBranch}`]);
+  // --no-track: the branch starts from origin/<base> but must not follow it — with that upstream a bare `git push` (or
+  // `push.default=upstream`) would send the task's commits to the target branch.
+  await git(path, ['checkout', '-b', branch, '--no-track', `origin/${baseBranch}`]);
 }
 
 // Guards against committing onto whatever branch happens to be checked out.
@@ -79,7 +96,9 @@ export async function createBranch(path: string, branch: string, baseBranch = 'm
 // later ordinary `git push` from there would carry it along. Refuses on a
 // dirty tree for the same reason createBranch does: switching branches with
 // uncommitted changes present would carry them along onto the task branch.
-export async function checkoutTaskBranch(path: string, branch: string): Promise<void> {
+export async function checkoutTaskBranch(path: string, branch: string, baseBranch = 'main'): Promise<void> {
+  assertTaskBranch(branch, baseBranch);
+
   if (!(await isTreeClean(path))) {
     throw new Error(`В репозитории ${path} есть незакоммиченные изменения — закоммитьте или сохраните их перед pull`);
   }
@@ -155,8 +174,12 @@ export async function commitPulledFiles(path: string, relPaths: string[], messag
 // Pushes the task branch only — never the target/base branch. Getting the
 // result into the target branch is a deliberate manual step (open a merge
 // request yourself) — nothing here does that automatically.
-export async function pushBranch(path: string, branch: string): Promise<void> {
-  await git(path, ['push', '-u', 'origin', branch]);
+export async function pushBranch(path: string, branch: string, baseBranch = 'main'): Promise<void> {
+  assertTaskBranch(branch, baseBranch);
+
+  // An explicit refs/heads/<branch>:refs/heads/<branch> — whatever upstream or push.default the repo has, this sends the
+  // task branch to the branch of the same name and nothing else.
+  await git(path, ['push', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`]);
 }
 
 // Reads one file as it is on a branch without checking the branch out — the

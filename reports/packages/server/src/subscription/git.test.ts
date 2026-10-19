@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch } from './git';
+import { assertTaskBranch, buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -298,6 +298,65 @@ describe('pushBranch', () => {
     // pushed real content, not just an empty ref.
     const remoteLog = git(remote, ['log', '-1', '--format=%s', 'mazur-28.09.2026-1']);
     expect(remoteLog.trim()).toBe('Pull issue #1');
+  });
+});
+
+describe('the task branch is the only branch reports writes or publishes', () => {
+  function repoWithRemote(): { dir: string; remote: string } {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare', '-b', 'master']);
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['push', '--quiet', 'origin', 'master']);
+
+    return { dir, remote };
+  }
+
+  it('refuses main, master, the project base branch and HEAD', () => {
+    for (const branch of ['main', 'master', 'HEAD', 'develop', '']) {
+      expect(() => assertTaskBranch(branch, 'develop')).toThrow(/целевая|именной веткой/);
+    }
+    expect(() => assertTaskBranch('mazur-28.09.2026-1', 'develop')).not.toThrow();
+  });
+
+  it('pushBranch refuses a target branch and sends nothing', async () => {
+    const { dir, remote } = repoWithRemote();
+    const before = git(remote, ['rev-parse', 'master']).trim();
+    writeFileSync(path.join(dir, 'x.txt'), 'x');
+    await commitPulledFiles(dir, ['x.txt'], 'commit on master');
+
+    await expect(pushBranch(dir, 'master', 'master')).rejects.toThrow(/целевая/);
+
+    expect(git(remote, ['rev-parse', 'master']).trim()).toBe(before);
+  });
+
+  it('createBranch leaves the new branch without an upstream, so a bare push cannot reach the base branch', async () => {
+    const { dir } = repoWithRemote();
+
+    await createBranch(dir, 'mazur-28.09.2026-1', 'master');
+
+    expect(() => git(dir, ['config', '--get', 'branch.mazur-28.09.2026-1.merge'])).toThrow();
+  });
+
+  it('pushBranch publishes the named branch even when the repo pushes to the upstream by default', async () => {
+    const { dir, remote } = repoWithRemote();
+    const before = git(remote, ['rev-parse', 'master']).trim();
+    // The old shape: the task branch tracking the base branch, with push.default=upstream.
+    git(dir, ['checkout', '-b', 'mazur-28.09.2026-2', '--track', 'origin/master']);
+    git(dir, ['config', 'push.default', 'upstream']);
+    writeFileSync(path.join(dir, 'y.txt'), 'y');
+    await commitPulledFiles(dir, ['y.txt'], 'task commit');
+
+    await pushBranch(dir, 'mazur-28.09.2026-2', 'master');
+
+    expect(git(remote, ['rev-parse', 'master']).trim()).toBe(before);
+    expect(git(remote, ['log', '-1', '--format=%s', 'mazur-28.09.2026-2']).trim()).toBe('task commit');
+  });
+
+  it('checkoutTaskBranch refuses to work on a target branch', async () => {
+    const dir = initRepo();
+
+    await expect(checkoutTaskBranch(dir, 'master', 'master')).rejects.toThrow(/целевая/);
   });
 });
 
