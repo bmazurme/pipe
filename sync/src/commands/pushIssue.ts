@@ -64,7 +64,7 @@ export async function buildAndUploadIssueParcel(
   const issueTitle = toRemote(dictionary, issue.title);
   const issueDescription = toRemote(dictionary, issue.description ?? '');
   const images = config.gitlab?.apiUrl
-    ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '')
+    ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '', issue.project_id)
     : [];
 
   // Images never go through scanForLeaks — it operates on text content, not

@@ -108,13 +108,14 @@ export type { IssueImage };
 // this wrapper only supplies apiUrl/token from Settings and words the
 // warnings in Russian, with the failure translated like every other
 // GitLab error here.
-export async function getIssueImages(description: string): Promise<IssueImage[]> {
+export async function getIssueImages(description: string, projectId?: string | number): Promise<IssueImage[]> {
   const { gitlabUrl, privateToken } = getSettings();
   if (!gitlabUrl || !privateToken) {
     return [];
   }
 
   return sharedGetIssueImages(gitlabUrl, privateToken, description, {
+    projectId,
     onWarn: (warning) => {
       if (warning.kind === 'limit') {
         console.warn(`Изображения issue превысили лимит ${MAX_TOTAL_IMAGE_BYTES} байт — остальные пропущены.`);
