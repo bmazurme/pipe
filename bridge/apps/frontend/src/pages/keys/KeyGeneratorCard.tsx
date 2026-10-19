@@ -24,7 +24,13 @@ function download(pem: string, name: string, kind: KeyKind): void {
   triggerBlobDownload(new Blob([pem], { type: 'application/x-pem-file' }), keyFileName(name, kind));
 }
 
-export function KeyGeneratorCard({ addKeys }: { addKeys: (entries: { name: string; pem: string }[]) => void }) {
+interface KeyGeneratorCardProps {
+  addKeys: (entries: { name: string; pem: string }[]) => void;
+  /** Names of the keys already saved in this browser, to warn about a name that would be saved twice. */
+  savedKeyNames?: string[];
+}
+
+export function KeyGeneratorCard({ addKeys, savedKeyNames = [] }: KeyGeneratorCardProps) {
   const [name, setName] = useState('');
   const [size, setSize] = useState<KeySize>(DEFAULT_KEY_SIZE);
   const [saveInBrowser, setSaveInBrowser] = useState(true);
@@ -33,10 +39,12 @@ export function KeyGeneratorCard({ addKeys }: { addKeys: (entries: { name: strin
   const [showPrivate, setShowPrivate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isDuplicate = saveInBrowser && savedKeyNames.includes(`${name.trim()} — приватный`);
+
   const handleGenerate = async () => {
     const label = name.trim();
 
-    if (!label) return;
+    if (!label || isDuplicate || isGenerating) return;
 
     setIsGenerating(true);
     setError(null);
@@ -69,13 +77,20 @@ export function KeyGeneratorCard({ addKeys }: { addKeys: (entries: { name: strin
         Публичным ключом шифруют посылку для получателя, приватным — открывают.
       </Text>
 
-      <div className={styles.generateRow}>
+      <form
+        className={styles.generateRow}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleGenerate();
+        }}
+      >
         <TextInput
           label="Название"
           value={name}
           onUpdate={setName}
           placeholder="например, ноутбук"
           disabled={isGenerating}
+          validationState={isDuplicate ? 'invalid' : undefined}
         />
         <Select
           label="Длина"
@@ -87,10 +102,16 @@ export function KeyGeneratorCard({ addKeys }: { addKeys: (entries: { name: strin
           }))}
           disabled={isGenerating}
         />
-        <Button view="action" size="m" loading={isGenerating} disabled={!name.trim()} onClick={() => void handleGenerate()}>
+        <Button view="action" size="m" loading={isGenerating} type="submit" disabled={!name.trim() || isDuplicate}>
           Сгенерировать
         </Button>
-      </div>
+      </form>
+
+      {isDuplicate && (
+        <Text color="danger" variant="caption-2">
+          Ключ с таким именем уже сохранён — добавьте суффикс
+        </Text>
+      )}
 
       <Checkbox checked={saveInBrowser} onUpdate={setSaveInBrowser} disabled={isGenerating} content="Сохранить в этом браузере (чтобы выбирать ключ по имени в Storage и Worker)" />
 

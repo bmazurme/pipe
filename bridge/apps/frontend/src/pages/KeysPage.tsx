@@ -16,7 +16,7 @@ export function KeysPage() {
         description="Пары RSA-ключей для шифрования посылок. Генерация идёт в браузере — приватный ключ не отправляется на сервер."
       />
 
-      <KeyGeneratorCard addKeys={parcelKeys.addKeys} />
+      <KeyGeneratorCard addKeys={parcelKeys.addKeys} savedKeyNames={parcelKeys.keys.map((key) => key.name)} />
       <SavedKeysCard keys={parcelKeys.keys} addKey={parcelKeys.addKey} removeKey={parcelKeys.removeKey} />
     </div>
   );
