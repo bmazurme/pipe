@@ -7,7 +7,6 @@ import type {
   ChatType,
   HeaderMenuItem,
   TChatMessage,
-  TSubmitData,
 } from '@gravity-ui/aikit';
 import { ArrowDownToLine, BookOpen, Pencil } from '@gravity-ui/icons';
 import { Alert, Button, Dialog, Icon, Select, Text, TextInput } from '@gravity-ui/uikit';
@@ -16,28 +15,26 @@ import { triggerBlobDownload } from '../shared/lib/parcelCrypto';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useAppSelector } from '../store/hooks';
 import {
-  ChatAttachmentMeta,
   ChatMessageMeta,
   ChatMeta,
   ChatModelId,
-  useCreateChatMutation,
   useDeleteChatMutation,
   useListChatsQuery,
   useListContextsQuery,
   useListMessagesQuery,
   useRenameChatMutation,
   MAX_ATTACHMENTS_PER_MESSAGE,
-  useSendMessageMutation,
 } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
 import { AttachButton } from './chat/AttachButton';
-import { attachmentProblem, deleteChatAttachment, isClaudeModel, uploadChatAttachment } from './chat/chatAttachments';
+import { isClaudeModel } from './chat/chatAttachments';
 import { extractChatAction } from './chat/chatActions';
 import { hasStreamedText, pendingBubbleText } from './chat/chatProgress';
 import { MergePrCard } from './chat/MergePrCard';
 import { PrFixCard } from './chat/PrFixCard';
 import { buildChatMarkdown, buildContextDraft, chatMarkdownFilename, ContextDraft } from './chat/chatContext';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
+import { useChatComposer } from './chat/useChatComposer';
 import { useAttachmentUrls } from './chat/useAttachmentUrls';
 import styles from './ChatPage.module.css';
 
@@ -86,13 +83,6 @@ function toChatType(chat: ChatMeta): ChatType {
     name: chat.title ?? `${modelLabel(chat.model)} · #${chat.id}`,
     createTime: chat.updatedAt,
   };
-}
-
-// A message written while the previous reply is still on its way: it goes out on its own once that reply is in.
-interface QueuedMessage {
-  chatId: number;
-  content: string;
-  files: ChatAttachmentMeta[];
 }
 
 /** The open chat lives in the URL (`?chat=12`), so a reload or a shared link lands on it. */
@@ -173,10 +163,8 @@ export function ChatPage() {
   });
   const accessToken = useAppSelector((state) => state.auth.accessToken);
 
-  const [createChat] = useCreateChatMutation();
   const [deleteChat, { isLoading: isDeletingChat }] = useDeleteChatMutation();
   const [renameChat, { isLoading: isRenamingChat }] = useRenameChatMutation();
-  const [sendMessage] = useSendMessageMutation();
 
   const [chatToDelete, setChatToDelete] = useState<ChatType | null>(null);
   const [newChatModel, setNewChatModel] = useState<ChatModelId>('sonnet');
@@ -253,13 +241,6 @@ export function ChatPage() {
     setPollingInterval(hasPendingReply ? MESSAGES_POLL_INTERVAL_MS : NO_REPLY_PENDING_POLL_MS);
   }, [hasPendingReply]);
 
-  // Files uploaded for the message being written; they travel with it when it is sent.
-  const [pendingFiles, setPendingFiles] = useState<ChatAttachmentMeta[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  // The text of a message that could not be sent — AIKit has already cleared the composer, so it is kept here to resend.
-  const [failedDraft, setFailedDraft] = useState<string | null>(null);
-  const [queued, setQueued] = useState<QueuedMessage | null>(null);
   const [contextDraft, setContextDraft] = useState<ContextDraft | null>(null);
 
   // The composer is visible and enabled even with no chat selected yet
@@ -274,125 +255,16 @@ export function ChatPage() {
   const activeContextName = chatsData?.find((chat) => chat.id === activeChatId)?.contextName ?? null;
   const canAttach = isClaudeModel(activeModel);
 
-  // The chat must exist before a file can be uploaded to it, so attaching in the empty state
-  // starts the chat (with the model currently picked) just as sending would.
-  const ensureChat = async (): Promise<number> => {
-    if (activeChatId !== null) return activeChatId;
-
-    const chat = await createChat({ model: newChatModel, contextId: newChatContextId }).unwrap();
-    setActiveChatId(chat.id);
-
-    return chat.id;
-  };
-
-  const handleAttachFiles = async (files: File[]) => {
-    setChatError(null);
-
-    const room = MAX_ATTACHMENTS_PER_MESSAGE - pendingFiles.length;
-    const chosen = files.slice(0, Math.max(room, 0));
-    const problems: string[] = files.length > chosen.length ? [`К сообщению можно прикрепить не больше ${MAX_ATTACHMENTS_PER_MESSAGE} файлов`] : [];
-
-    setIsUploading(true);
-
-    try {
-      const chatId = await ensureChat();
-
-      for (const file of chosen) {
-        const problem = attachmentProblem(file);
-
-        if (problem) {
-          problems.push(problem);
-          continue;
-        }
-
-        try {
-          const uploaded = await uploadChatAttachment(chatId, file, accessToken);
-
-          setPendingFiles((current) => [...current, uploaded]);
-        } catch (error) {
-          problems.push(error instanceof Error ? error.message : `Не удалось загрузить «${file.name}»`);
-        }
-      }
-    } catch {
-      problems.push('Не удалось создать чат');
-    } finally {
-      setIsUploading(false);
-    }
-
-    if (problems.length > 0) setChatError(problems.join('\n'));
-  };
-
-  const handleRemovePending = (attachment: ChatAttachmentMeta) => {
-    setPendingFiles((current) => current.filter((file) => file.id !== attachment.id));
-    void deleteChatAttachment(attachment.id, accessToken);
-  };
-
-  const deliver = async (content: string, files: ChatAttachmentMeta[], chatId?: number) => {
-    setChatError(null);
-    setFailedDraft(null);
-
-    try {
-      const targetChatId = chatId ?? (await ensureChat());
-
-      await sendMessage({ chatId: targetChatId, content, attachmentIds: files.map((file) => file.id) }).unwrap();
-      setPendingFiles((current) => current.filter((file) => !files.some((sent) => sent.id === file.id)));
-    } catch (error) {
-      // Text and files stay: the user can send again once whatever failed is sorted out.
-      setPendingFiles((current) => [...current, ...files.filter((file) => !current.some((kept) => kept.id === file.id))]);
-      setFailedDraft(content);
-      setChatError(typeof error === 'string' ? error : 'Не удалось отправить сообщение');
-    }
-  };
-
-  const handleSendMessage = async (data: TSubmitData) => {
-    if (hasPendingReply && activeChatId !== null) {
-      const files = pendingFiles;
-
-      setPendingFiles([]);
-      setQueued((current) =>
-        current && current.chatId === activeChatId
-          ? { ...current, content: `${current.content}\n\n${data.content}`, files: [...current.files, ...files] }
-          : { chatId: activeChatId, content: data.content, files },
-      );
-
-      return;
-    }
-
-    await deliver(data.content, pendingFiles);
-  };
-
-  // Sends the queued message once the reply it waited for is in. A failed reply holds it back, so the question is not
-  // asked into a broken turn — it comes back as a draft to resend.
-  const lastReplyStatus = lastReply?.status;
-
-  useEffect(() => {
-    if (!queued || queued.chatId !== activeChatId || hasPendingReply || !messagesData) return;
-
-    setQueued(null);
-
-    if (lastReplyStatus === 'failed') {
-      setPendingFiles((current) => [...current, ...queued.files]);
-      setFailedDraft(queued.content);
-      setChatError('Предыдущий ответ не пришёл, поэтому сообщение не отправлено');
-
-      return;
-    }
-
-    void deliver(queued.content, queued.files, queued.chatId);
-    // deliver is recreated each render; the effect only has to react to the reply finishing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queued, activeChatId, hasPendingReply, messagesData, lastReplyStatus]);
-
-  const handleUnqueue = () => {
-    if (!queued) return;
-    setPendingFiles((current) => [...current, ...queued.files]);
-    setFailedDraft(queued.content);
-    setQueued(null);
-  };
-
-  const handleCopyDraft = () => {
-    if (failedDraft) void navigator.clipboard?.writeText(failedDraft).catch(() => undefined);
-  };
+  const composer = useChatComposer({
+    activeChatId,
+    setActiveChatId,
+    newChatModel,
+    newChatContextId,
+    hasPendingReply,
+    lastReplyStatus: lastReply?.status,
+    messagesLoaded: Boolean(messagesData),
+    accessToken,
+  });
 
   const handleSaveToContext = () => {
     const chat = chatsData?.find((entry) => entry.id === activeChatId);
@@ -413,9 +285,7 @@ export function ChatPage() {
   const handleNewChat = () => {
     setActiveChatId(null);
     setNewChatContextId(undefined);
-    setPendingFiles([]);
-    setChatError(null);
-    setFailedDraft(null);
+    composer.reset();
   };
 
   // Deleting a whole conversation is a single click in AIKit's history — it is confirmed first.
@@ -427,12 +297,12 @@ export function ChatPage() {
   const handleConfirmDelete = async () => {
     if (!chatToDelete || isDeletingChat) return;
     const id = Number(chatToDelete.id);
-    setChatError(null);
+    composer.setChatError(null);
 
     try {
       await deleteChat(id).unwrap();
     } catch {
-      setChatError('Не удалось удалить чат');
+      composer.setChatError('Не удалось удалить чат');
       return;
     } finally {
       setChatToDelete(null);
@@ -440,9 +310,8 @@ export function ChatPage() {
 
     if (activeChatId === id) {
       setActiveChatId(null);
-      setPendingFiles([]);
     }
-    setQueued((current) => (current?.chatId === id ? null : current));
+    composer.dropChat(id);
   };
 
   const handleOpenRenameDialog = () => {
@@ -454,21 +323,21 @@ export function ChatPage() {
   const handleRenameChat = async () => {
     const title = renameValue.trim();
     if (activeChatId === null || !title || isRenamingChat) return;
-    setChatError(null);
+    composer.setChatError(null);
 
     try {
       await renameChat({ id: activeChatId, title }).unwrap();
       setIsRenameDialogOpen(false);
     } catch {
-      setChatError('Не удалось переименовать чат');
+      composer.setChatError('Не удалось переименовать чат');
     }
   };
 
   const attachButton = (
     <AttachButton
-      disabled={!canAttach || isUploading || pendingFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE}
+      disabled={!canAttach || composer.isUploading || composer.pendingFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE}
       disabledReason={canAttach ? `Не больше ${MAX_ATTACHMENTS_PER_MESSAGE} файлов в сообщении` : 'Вложения доступны в чатах с Claude (Sonnet, Opus)'}
-      onFiles={(files) => void handleAttachFiles(files)}
+      onFiles={(files) => void composer.attachFiles(files)}
     />
   );
 
@@ -549,32 +418,29 @@ export function ChatPage() {
         description="Диалог с моделью (Claude, GPT, DeepSeek, Qwen) через worker. В чатах с Claude можно прикреплять изображения и файлы, а весь диалог — сохранить в Context."
       />
 
-      {chatError && (
+      {composer.chatError && (
         <Alert
           theme="danger"
           view="filled"
           message={
             <span className={styles.errorText}>
-              {chatError}
-              {failedDraft && <span className={styles.draftPreview}>«{failedDraft}»</span>}
+              {composer.chatError}
+              {composer.failedDraft && <span className={styles.draftPreview}>«{composer.failedDraft}»</span>}
             </span>
           }
           actions={
-            failedDraft ? (
+            composer.failedDraft ? (
               <div className={styles.alertActions}>
-                <Button view="normal" size="s" onClick={() => void deliver(failedDraft, pendingFiles)} disabled={hasPendingReply}>
+                <Button view="normal" size="s" onClick={composer.resend} disabled={hasPendingReply}>
                   Отправить ещё раз
                 </Button>
-                <Button view="flat" size="s" onClick={handleCopyDraft}>
+                <Button view="flat" size="s" onClick={composer.copyDraft}>
                   Скопировать текст
                 </Button>
               </div>
             ) : undefined
           }
-          onClose={() => {
-            setChatError(null);
-            setFailedDraft(null);
-          }}
+          onClose={composer.dismissError}
         />
       )}
 
@@ -603,30 +469,28 @@ export function ChatPage() {
           status={status}
           isMobile={isMobile}
           texts={CHAT_TEXTS}
-          onSendMessage={handleSendMessage}
+          onSendMessage={composer.send}
           onSelectChat={(chat) => {
             setActiveChatId(Number(chat.id));
-            setPendingFiles([]);
-            setChatError(null);
-            setFailedDraft(null);
+            composer.reset();
           }}
           onCreateChat={handleNewChat}
           onDeleteChat={handleDeleteChat}
           headerProps={{ menuItems: headerMenuItems }}
           // The files waiting to be sent, as chips in the composer; clicking one takes it back.
-          contextItems={pendingFiles.map((file) => ({ id: String(file.id), content: file.name, onRemove: () => handleRemovePending(file) }))}
+          contextItems={composer.pendingFiles.map((file) => ({ id: String(file.id), content: file.name, onRemove: () => composer.removePending(file) }))}
           promptInputProps={{
             view: 'full',
             footerProps: { bottomContent: composerFooter },
             topPanel: {
-              isOpen: queued !== null && queued.chatId === activeChatId,
-              children: queued && (
+              isOpen: composer.queued !== null && composer.queued.chatId === activeChatId,
+              children: composer.queued && (
                 <div className={styles.queued} role="status">
                   <Text variant="caption-2" color="secondary" ellipsis className={styles.queuedText}>
-                    Отправится, когда придёт ответ: «{queued.content}»
-                    {queued.files.length > 0 ? ` + файлов: ${queued.files.length}` : ''}
+                    Отправится, когда придёт ответ: «{composer.queued.content}»
+                    {composer.queued.files.length > 0 ? ` + файлов: ${composer.queued.files.length}` : ''}
                   </Text>
-                  <Button view="flat-secondary" size="xs" onClick={handleUnqueue}>
+                  <Button view="flat-secondary" size="xs" onClick={composer.unqueue}>
                     Не отправлять
                   </Button>
                 </div>
