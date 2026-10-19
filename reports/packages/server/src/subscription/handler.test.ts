@@ -68,6 +68,7 @@ const {
   handleCreateManualSubscriptionIssue,
   handlePushSubscriptionIssue,
   handlePullSubscriptionIssue,
+  pullSubscriptionIssue,
   handlePublishSubscriptionIssue,
   handleListSubscriptionIssues,
   handleRemoveSubscriptionIssue,
@@ -423,14 +424,7 @@ describe('handlePullSubscriptionIssue', () => {
     );
   }
 
-  it('downloads the addressed result, commits it to the task branch, and pushes it', async () => {
-    const { dir, remote } = initTrackedProject('173');
-    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
-    git(dir, ['checkout', '-b', 'task/173-6']);
-    git(dir, ['push', '-u', 'origin', 'task/173-6']);
-
-    const parcel = buildResultParcel();
-    let deleteCalled = false;
+  function mockBridgeResult(parcel: Buffer, onDelete: () => void = () => {}): void {
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       if (url.includes('/api/v1/storage?')) {
         expect(url).toContain('taskKey=173%3A6');
@@ -441,11 +435,25 @@ describe('handlePullSubscriptionIssue', () => {
         return new Response(parcel, { status: 200 });
       }
       if (url.endsWith('/api/v1/storage/99') && init?.method === 'DELETE') {
-        deleteCalled = true;
+        onDelete();
         return new Response(null, { status: 204 });
       }
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
+  }
+
+  it('only unpacks the result into the task branch: nothing is committed or pushed', async () => {
+    const { dir, remote } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+    const headBefore = git(dir, ['rev-parse', 'HEAD']).trim();
+    const remoteBefore = git(remote, ['rev-parse', 'task/173-6']).trim();
+
+    let deleteCalled = false;
+    mockBridgeResult(buildResultParcel(), () => {
+      deleteCalled = true;
+    });
 
     const { res, events } = makeRes();
     await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
@@ -454,13 +462,27 @@ describe('handlePullSubscriptionIssue', () => {
     expect(getIssueState('173', '6')?.step).toBe('pulled');
     expect(readFileSync(path.join(dir, 'pulled.txt'), 'utf-8')).toBe('from the parcel');
 
-    const remoteLog = git(remote, ['log', '-1', '--format=%s', 'task/173-6']);
-    expect(remoteLog).toContain('Pull issue #6');
-    // The parcel is only consumed from bridge once the pull has fully
-    // succeeded (committed and pushed) — see handler.ts's own comment on
-    // why this uses peek + an explicit delete instead of bridge's
-    // download-then-delete route.
+    // The code is in the working tree of the task branch for the person to review — no commit, no push.
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('task/173-6');
+    expect(git(dir, ['rev-parse', 'HEAD']).trim()).toBe(headBefore);
+    expect(git(dir, ['status', '--porcelain'])).toContain('pulled.txt');
+    expect(git(remote, ['rev-parse', 'task/173-6']).trim()).toBe(remoteBefore);
+    // The parcel is only consumed from bridge once the files are safely written (peek + an explicit delete).
     expect(deleteCalled).toBe(true);
+  });
+
+  it('commits and pushes the task branch when asked to publish (the unattended autopilot)', async () => {
+    const { dir, remote } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+    mockBridgeResult(buildResultParcel());
+
+    await pullSubscriptionIssue('173', '6', { publish: true });
+
+    expect(getIssueState('173', '6')?.step).toBe('pulled');
+    expect(git(remote, ['log', '-1', '--format=%s', 'task/173-6'])).toContain('Pull issue #6');
+    expect(git(dir, ['status', '--porcelain']).trim()).toBe('');
   });
 
   // Regression: a pull used to rewrite every file in the parcel even when
