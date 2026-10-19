@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Copy, TrashBin } from '@gravity-ui/icons';
+import { useEffect, useState } from 'react';
+import { TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Dialog, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
 
 import {
@@ -10,12 +10,15 @@ import {
   usePeekJobResultMutation,
 } from '../../store/api';
 import { jobDuration } from '../../shared/lib/formatDuration';
+import { useNow } from '../../shared/hooks/useNow';
 import { encryptParcel, triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
 import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
 import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
+import { JobLogs } from './JobLogs';
+import { describeStage } from './jobStage';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
@@ -32,10 +35,9 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     pollingInterval,
     skipPollingIfUnfocused: true,
   });
-  const logsRef = useRef<HTMLPreElement>(null);
-  const [copied, setCopied] = useState(false);
   const jobIsActive = job ? isActive(job.status) : true;
-  const logsLength = job?.logs?.length ?? 0;
+  // Ticks each second while the job runs, so the elapsed time and the wait are live between the (slower) polls.
+  const now = useNow(jobIsActive ? 1000 : 0);
 
   // A finished job never changes again — stop polling it instead of hitting
   // the API every few seconds for as long as the dialog stays open.
@@ -43,14 +45,6 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     setPollingInterval(jobIsActive ? JOB_POLL_INTERVAL_MS : 0);
   }, [jobIsActive]);
 
-  // Follow the tail while the job is running, like a terminal would.
-  useEffect(() => {
-    const element = logsRef.current;
-
-    if (element && jobIsActive) {
-      element.scrollTop = element.scrollHeight;
-    }
-  }, [logsLength, jobIsActive]);
   const { keys: parcelKeys } = useParcelKeys();
   const [deleteJob, { isLoading: isDeleting }] = useDeleteJobMutation();
   const [downloadResult, { isLoading: isDownloading }] = useDownloadJobResultMutation();
@@ -79,17 +73,15 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     );
   }
 
-  const duration = jobDuration(job);
-
-  const handleCopyLogs = async () => {
-    try {
-      await navigator.clipboard.writeText(job.logs);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
+  const duration = jobDuration(job, now);
+  const stage = describeStage(job, now);
+  const fields: { label: string; value: string }[] = [
+    job.workerName ? { label: 'Worker', value: job.workerName } : null,
+    job.contextName ? { label: 'Контекст', value: job.contextName } : null,
+    job.taskKey ? { label: 'Задача', value: job.taskKey } : null,
+    job.historyCount ? { label: 'Итоги прошлых запусков', value: String(job.historyCount) } : null,
+    job.usage ? { label: 'Расход', value: describeUsage(job.usage) } : null,
+  ].filter((field): field is { label: string; value: string } => field !== null);
 
   const canDelete = job.status !== 'claimed' && job.status !== 'running';
 
@@ -135,36 +127,41 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="job-detail-title">
+    <Dialog open onClose={onClose} maxWidth="l" aria-labelledby="job-detail-title">
       <Dialog.Header caption={`Задача #${job.id}`} id="job-detail-title" />
       <Dialog.Body>
-        <div className={styles.detailMeta}>
-          <Label theme={isStopping(job) ? 'warning' : STATUS_THEME[job.status]}>{isStopping(job) ? 'Останавливается…' : STATUS_LABEL[job.status]}</Label>
-          <Text color="secondary">
-            {MODEL_OPTIONS.find((m) => m.value === job.model)?.content ?? job.model}
-          </Text>
-          {job.workerName && <Text color="secondary">· {job.workerName}</Text>}
-          {job.contextName && <Text color="secondary">· Контекст: {job.contextName}</Text>}
-          {job.taskKey && <Text color="secondary">· Задача: {job.taskKey}</Text>}
-          {job.historyCount ? <Text color="secondary">· Итоги прошлых запусков: {job.historyCount}</Text> : null}
-          {duration && <Text color="secondary">· {duration}</Text>}
-          {job.usage && <Text color="secondary">· {describeUsage(job.usage)}</Text>}
+        <div className={styles.detailSummary}>
+          <div className={styles.detailMeta}>
+            <Label theme={isStopping(job) ? 'warning' : STATUS_THEME[job.status]}>{isStopping(job) ? 'Останавливается…' : STATUS_LABEL[job.status]}</Label>
+            <Text variant="subheader-2">{MODEL_OPTIONS.find((m) => m.value === job.model)?.content ?? job.model}</Text>
+            {duration && (
+              <Text color="secondary" className={styles.detailElapsed} aria-label="Время выполнения">
+                {duration}
+              </Text>
+            )}
+          </div>
+          {stage && (
+            <Text color="secondary" className={styles.detailStage}>
+              {jobIsActive && <Loader size="s" />} {stage}
+            </Text>
+          )}
+          {fields.length > 0 && (
+            <dl className={styles.detailFields}>
+              {fields.map((field) => (
+                <div key={field.label} className={styles.detailField}>
+                  <dt>{field.label}</dt>
+                  <dd>{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </div>
 
         {job.errorMessage && (
           <Alert theme="danger" view="filled" message={job.errorMessage} className={styles.detailError} />
         )}
 
-        <div className={styles.logsHeader}>
-          <Text variant="subheader-1" className={styles.logsTitle}>Логи</Text>
-          {job.logs && (
-            <Button view="flat-secondary" size="s" onClick={() => void handleCopyLogs()}>
-              <Icon data={Copy} size={14} />
-              {copied ? 'Скопировано' : 'Копировать'}
-            </Button>
-          )}
-        </div>
-        <pre ref={logsRef} className={styles.logs}>{job.logs || '(пока пусто)'}</pre>
+        <JobLogs jobId={job.id} logs={job.logs} active={jobIsActive} />
 
         {job.status === 'succeeded' && (
           <div className={styles.encryptSection}>

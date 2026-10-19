@@ -623,7 +623,8 @@ describe('WorkerPage', () => {
     await user.click(await screen.findByText('Задача #1'));
 
     expect(await screen.findByText('starting up')).toBeTruthy();
-    expect(within(screen.getByRole('dialog')).getByText(/worker-host-1/)).toBeTruthy();
+    // Named in the stage line and in the worker field of the summary.
+    expect(within(screen.getByRole('dialog')).getAllByText(/worker-host-1/).length).toBeGreaterThan(0);
   });
 
   it('offers a download action for a succeeded job but not a running one', async () => {
