@@ -160,6 +160,10 @@ node dist/cli.js pull-issue bridge 123 45 --watch 30
 
 На машине с агентом: `node dist/cli.js agent-runner bridge --watch 30`.
 
+Запуск Claude ограничен по времени: `SYNC_AGENT_TIMEOUT_SEC` (по умолчанию 1800 с).
+По истечении — `SIGTERM`, через 10 с `SIGKILL`, ошибка `claude timed out after Ns and
+was killed` попадает в лог, worktree остаётся для разбора, а `--watch` идёт дальше.
+
 Подробнее о сценариях — [`docs/workflows.md`](../docs/workflows.md), о форматах
 state-файлов — [`ECOSYSTEM.md`](../ECOSYSTEM.md).
 
