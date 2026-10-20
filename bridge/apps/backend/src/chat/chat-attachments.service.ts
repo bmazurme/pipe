@@ -118,10 +118,14 @@ export class ChatAttachmentsService {
       return discard(new NotFoundException('Chat not found'));
     }
 
-    if (chat.model !== ChatModel.Sonnet && chat.model !== ChatModel.Opus) {
+    if (
+      chat.model !== ChatModel.Sonnet &&
+      chat.model !== ChatModel.Opus &&
+      chat.model !== ChatModel.Haiku
+    ) {
       return discard(
         new BadRequestException(
-          'Вложения поддерживаются только в чатах с Claude (Sonnet или Opus)',
+          'Вложения поддерживаются только в чатах с Claude (Sonnet, Opus или Haiku)',
         ),
       );
     }

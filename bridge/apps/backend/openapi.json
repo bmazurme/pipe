@@ -3918,6 +3918,7 @@
             "enum": [
               "sonnet",
               "opus",
+              "haiku",
               "gpt",
               "deepseek",
               "qwen"
@@ -3958,6 +3959,7 @@
             "enum": [
               "sonnet",
               "opus",
+              "haiku",
               "gpt",
               "deepseek",
               "qwen"
@@ -4323,6 +4325,7 @@
             "enum": [
               "sonnet",
               "opus",
+              "haiku",
               "gpt",
               "deepseek",
               "qwen"
@@ -4458,6 +4461,7 @@
             "enum": [
               "sonnet",
               "opus",
+              "haiku",
               "gpt",
               "deepseek",
               "qwen"
@@ -4557,6 +4561,7 @@
             "enum": [
               "sonnet",
               "opus",
+              "haiku",
               "gpt",
               "deepseek",
               "qwen"
@@ -4802,6 +4807,7 @@
               "enum": [
                 "sonnet",
                 "opus",
+                "haiku",
                 "gpt",
                 "deepseek",
                 "qwen"
@@ -4929,6 +4935,7 @@
               "enum": [
                 "sonnet",
                 "opus",
+                "haiku",
                 "gpt",
                 "deepseek",
                 "qwen"
@@ -5054,6 +5061,7 @@
               "enum": [
                 "sonnet",
                 "opus",
+                "haiku",
                 "gpt",
                 "deepseek",
                 "qwen"
@@ -5130,6 +5138,7 @@
               "enum": [
                 "sonnet",
                 "opus",
+                "haiku",
                 "gpt",
                 "deepseek",
                 "qwen"

@@ -10,9 +10,9 @@ export interface RemoteJob {
   id: number;
   sourceFileId: number;
   resultFileId: number | null;
-  model: 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+  model: 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
   // Resolved by bridge from the job's chosen named credential (see bridge's
-  // ClaudeCredentialsService) — only ever present for sonnet/opus, and only
+  // ClaudeCredentialsService) — only ever present for sonnet/opus/haiku, and only
   // when one was picked. Absent/null means fall back to this process's own
   // inherited CLAUDE_CODE_OAUTH_TOKEN env var, same as before this field
   // existed.

@@ -90,6 +90,18 @@ describe('ChatService attachments', () => {
       expect(existsSync(join(CHAT_UPLOAD_DIR, file.filename))).toBe(true);
     });
 
+    it.each([ChatModel.Opus, ChatModel.Haiku])(
+      'stores an attachment for a %s chat too — every Claude model reads files',
+      async (model) => {
+        const { chats, attachmentsService } = await setup();
+        chats.findOne.mockResolvedValue({ ...claudeChat, model });
+
+        await expect(
+          attachmentsService.addAttachment(1, 7, uploaded()),
+        ).resolves.toMatchObject({ chatId: 1 });
+      },
+    );
+
     it.each([ChatModel.Gpt, ChatModel.Deepseek, ChatModel.Qwen])(
       'refuses a %s chat and removes the uploaded file',
       async (model) => {

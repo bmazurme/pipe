@@ -630,7 +630,7 @@ describe('WorkersTab — settings', () => {
     await user.click(await screen.findByRole('button', { name: /Настройки/ }));
     const dialog = await screen.findByRole('dialog');
 
-    for (const label of ['Claude Sonnet', 'Claude Opus', 'DeepSeek', 'Qwen']) {
+    for (const label of ['Claude Sonnet', 'Claude Opus', 'Claude Haiku', 'DeepSeek', 'Qwen']) {
       await user.click(within(dialog).getByLabelText(label));
     }
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));

@@ -24,7 +24,7 @@ export interface ChatToolset {
 }
 
 const MAX_RESULT_CHARS = 3000;
-const MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
+const MODELS = ['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen'];
 
 export function parseChatToolsMode(raw: string | undefined): ChatToolsMode {
   const value = (raw ?? '').trim().toLowerCase();

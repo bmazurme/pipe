@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ClaimedProviderDto } from './dto/provider-credential-response.dto';
-import { JobModel } from './entities/job.entity';
+import { CLAUDE_JOB_MODELS, JobModel } from './entities/job.entity';
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkersService } from './workers.service';
 
@@ -32,16 +32,15 @@ export class RunCredentialsService {
       providerCredentialId?: number | null;
     } = {},
   ): Promise<RunCredentials> {
-    const resolved =
-      model === JobModel.Sonnet || model === JobModel.Opus
-        ? await this.claudeCredentials.resolveForRun(
-            userId,
-            picks.claudeCredentialId ?? null,
-            workerId === undefined
-              ? null
-              : await this.workers.claudeCredentialIdOf(workerId),
-          )
-        : null;
+    const resolved = CLAUDE_JOB_MODELS.includes(model as JobModel)
+      ? await this.claudeCredentials.resolveForRun(
+          userId,
+          picks.claudeCredentialId ?? null,
+          workerId === undefined
+            ? null
+            : await this.workers.claudeCredentialIdOf(workerId),
+        )
+      : null;
 
     return {
       claudeToken: resolved?.token ?? null,

@@ -9,6 +9,10 @@ describe('resolveChatProvider', () => {
     assert.deepEqual(resolveChatProvider('opus', {}), { tool: 'claude', claudeModel: 'opus' });
   });
 
+  it('routes haiku to the claude CLI as well', () => {
+    assert.deepEqual(resolveChatProvider('haiku', {}), { tool: 'claude', claudeModel: 'haiku' });
+  });
+
   it('reuses the exact same OpenAI-compatible config jobs use for gpt/deepseek/qwen', () => {
     const config = resolveChatProvider('deepseek', { DEEPSEEK_API_KEY: 'ds-x' });
     assert.deepEqual(config, {

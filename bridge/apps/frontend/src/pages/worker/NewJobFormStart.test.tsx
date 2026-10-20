@@ -114,4 +114,22 @@ describe('NewJobForm start time', () => {
     await user.click(await screen.findByText('Сейчас'));
     expect(await screen.findByText(/После сброса лимита/)).toBeTruthy();
   });
+
+  it('asks for a Claude token for Haiku, as for Sonnet and Opus, and sends the model', async () => {
+    credentials = [{ id: 4, name: 'main' }];
+    const user = userEvent.setup();
+    renderForm();
+
+    await pick(user, 'Посылка', 'task.subscription.zip');
+    await pick(user, 'Модель', 'GPT');
+    expect(screen.queryByLabelText('Claude-токен')).toBeNull();
+
+    await pick(user, 'GPT', 'Claude Haiku');
+    expect(await screen.findByLabelText('Claude-токен')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /Запустить/ }));
+
+    await waitFor(() => expect(jobBody()).toBeDefined());
+    expect(jobBody()).toMatchObject({ sourceFileId: 1, model: 'haiku' });
+  });
 });

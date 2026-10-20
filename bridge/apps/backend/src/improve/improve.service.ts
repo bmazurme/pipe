@@ -54,7 +54,14 @@ import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
 import { readResultParcel, utf8Text } from './parcel';
 
-export const IMPROVE_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'];
+export const IMPROVE_MODELS = [
+  'sonnet',
+  'opus',
+  'haiku',
+  'gpt',
+  'deepseek',
+  'qwen',
+];
 
 export function requireImproveModel(model: string): void {
   if (!IMPROVE_MODELS.includes(model)) {

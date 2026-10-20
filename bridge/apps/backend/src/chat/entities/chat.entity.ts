@@ -3,12 +3,13 @@ import { Column, Entity, Index } from 'typeorm';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { BaseEntity } from '../../base.entity';
 
-// Same five values as worker/entities/job.entity.ts's JobModel — kept as a
+// Same six values as worker/entities/job.entity.ts's JobModel — kept as a
 // separate enum rather than shared, since chat and jobs are independent
 // concepts that only happen to offer the same model choices today.
 export enum ChatModel {
   Sonnet = 'sonnet',
   Opus = 'opus',
+  Haiku = 'haiku',
   Gpt = 'gpt',
   Deepseek = 'deepseek',
   Qwen = 'qwen',

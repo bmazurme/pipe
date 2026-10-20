@@ -105,7 +105,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   const { data: historyPreview } = useGetJobHistoryPreviewQuery(sourceFileId ?? 0, { skip: !sourceFileId });
   const earlierRuns = historyPreview?.count ?? 0;
 
-  const isClaudeModel = model === 'sonnet' || model === 'opus';
+  const isClaudeModel = model === 'sonnet' || model === 'opus' || model === 'haiku';
   const isProviderModel = model !== undefined && PROVIDER_MODELS.includes(model);
   const providerKeys = useMemo(
     () => (providerCredentialsData ?? []).filter((credential) => credential.provider === model),

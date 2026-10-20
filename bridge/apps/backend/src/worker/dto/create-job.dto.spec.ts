@@ -14,6 +14,28 @@ const errorsFor = (notBefore?: unknown) =>
   );
 const inMs = (ms: number) => new Date(Date.now() + ms).toISOString();
 
+describe('CreateJobDto model', () => {
+  const modelErrors = (model: unknown) =>
+    validate(plainToInstance(CreateJobDto, { sourceFileId: 1, model }));
+
+  it('accepts haiku next to the other models, and refuses one it does not know', async () => {
+    for (const model of [
+      'sonnet',
+      'opus',
+      'haiku',
+      'gpt',
+      'deepseek',
+      'qwen',
+    ]) {
+      expect({ model, errors: await modelErrors(model) }).toEqual({
+        model,
+        errors: [],
+      });
+    }
+    expect((await modelErrors('fable')).length).toBeGreaterThan(0);
+  });
+});
+
 describe('CreateJobDto notBefore', () => {
   it('accepts no notBefore', async () => {
     expect(await errorsFor()).toHaveLength(0);
