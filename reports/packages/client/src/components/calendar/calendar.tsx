@@ -4,12 +4,12 @@ import {
   Button, Dialog, DialogHeader, DialogBody, DialogFooter, Text, Icon, Tooltip,
   TabProvider, TabList, Tab, TabPanel, useToaster,
 } from '@gravity-ui/uikit';
-import { Plus, TrashBin, CalendarXmark, ArrowDownToLine } from '@gravity-ui/icons';
+import { Plus, TrashBin, CalendarXmark, ArrowDownToLine, ArrowUpFromLine } from '@gravity-ui/icons';
 import { RangeDatePicker, type RangeValue } from '@gravity-ui/date-components';
 import { DateTime, dateTimeParse } from '@gravity-ui/date-utils';
 import { DateType } from '@reports/shared';
 
-import { useAddOffDaysMutation, useRemoveOffDayMutation, useImportDayOffsMutation } from '../../store/api';
+import { useAddOffDaysMutation, useRemoveOffDayMutation, useImportDayOffsMutation, useSendDayOffsMutation } from '../../store/api';
 import { useDocumentTitle } from '../../hooks/use-document-title';
 import { describeError } from '../../utils/describe-error';
 import PageHeader from '../page-header';
@@ -62,6 +62,7 @@ function MyCalendar({ data, year }: { data: DateType; year: string }) {
   const [addOffDays, { isLoading: isAdding }] = useAddOffDaysMutation();
   const [removeOffDay, { isLoading: isRemoving }] = useRemoveOffDayMutation();
   const [importDayOffsRequest, { isLoading: isImporting }] = useImportDayOffsMutation();
+  const [sendDayOffsRequest, { isLoading: isSending }] = useSendDayOffsMutation();
   const [activeTab, setActiveTab] = useState<string>(TABS.calendar);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<RangeValue<DateTime> | null>(null);
@@ -177,6 +178,27 @@ function MyCalendar({ data, year }: { data: DateType; year: string }) {
     }
   };
 
+  const handleSend = async () => {
+    try {
+      const { created, updated, unchanged } = await sendDayOffsRequest(year).unwrap();
+      toaster.add({
+        name: 'send-success',
+        theme: 'success',
+        title: 'Данные отправлены в bridge',
+        content: `Добавлено: ${created}, обновлено: ${updated}, без изменений: ${unchanged}`,
+        autoHiding: 4000,
+      });
+    } catch (error) {
+      toaster.add({
+        name: 'send-error',
+        theme: 'danger',
+        title: 'Не удалось отправить данные',
+        content: describeError(error, 'Проверьте Bridge API в настройках'),
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <div className={style.page}>
       <PageHeader
@@ -233,10 +255,16 @@ function MyCalendar({ data, year }: { data: DateType; year: string }) {
               <Icon data={Plus} size={16} />
               Добавить отгул
             </Button>
-            <Tooltip content="Загрузить отгулы и праздники из bridge">
-              <Button view="outlined" size="m" onClick={handleImport} loading={isImporting}>
+            <Tooltip content="Получить отгулы и праздники из bridge: недостающие даты добавятся сюда">
+              <Button view="outlined" size="m" onClick={handleImport} loading={isImporting} disabled={isSending}>
                 <Icon data={ArrowDownToLine} size={16} />
-                Импорт
+                Получить
+              </Button>
+            </Tooltip>
+            <Tooltip content="Отправить отгулы и праздники в bridge: недостающие даты добавятся там, ничего не удаляется">
+              <Button view="outlined" size="m" onClick={handleSend} loading={isSending} disabled={isImporting}>
+                <Icon data={ArrowUpFromLine} size={16} />
+                Отправить
               </Button>
             </Tooltip>
           </div>
