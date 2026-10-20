@@ -32,6 +32,28 @@ export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+export function parseRetentionDays(
+  raw: string | undefined,
+  logger: Pick<Logger, 'warn'> = new Logger(AppLogService.name),
+): number {
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_RETENTION_DAYS;
+  }
+
+  const trimmed = raw.trim();
+  const days = Number(trimmed);
+
+  if (!/^\d+$/.test(trimmed) || !Number.isSafeInteger(days) || days < 1) {
+    logger.warn(
+      `LOG_RETENTION_DAYS="${raw}" is not a positive integer; using ${DEFAULT_RETENTION_DAYS} days`,
+    );
+
+    return DEFAULT_RETENTION_DAYS;
+  }
+
+  return days;
+}
+
 function since(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
@@ -41,12 +63,18 @@ function since(days: number): Date {
 @Injectable()
 export class AppLogService {
   private readonly logger = new Logger(AppLogService.name);
+  private readonly retentionDays: number;
 
   constructor(
     @InjectRepository(AppLog)
     private readonly repository: Repository<AppLog>,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.retentionDays = parseRetentionDays(
+      this.configService.get<string>('LOG_RETENTION_DAYS'),
+      this.logger,
+    );
+  }
 
   async record(input: RecordInput): Promise<void> {
     try {
@@ -102,9 +130,7 @@ export class AppLogService {
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async prune(): Promise<void> {
-    const days =
-      Number(this.configService.get<string>('LOG_RETENTION_DAYS')) ||
-      DEFAULT_RETENTION_DAYS;
+    const days = this.retentionDays;
 
     try {
       const result = await this.repository.delete({
