@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkerJob } from '../../store/api';
-import { describeStage } from './jobStage';
+import { describeOutcome, describeStage } from './jobStage';
 
 const NOW = new Date('2026-10-19T12:00:00Z').getTime();
 const job = (patch: Partial<WorkerJob>): WorkerJob =>
@@ -37,5 +37,14 @@ describe('describeStage', () => {
 
   it('has nothing to say about a finished job', () => {
     expect(describeStage(job({ status: 'succeeded' }), NOW)).toBeNull();
+  });
+});
+
+describe('describeOutcome', () => {
+  it('takes the stage line\'s place once the job is over, so the summary keeps its height', () => {
+    expect(describeOutcome('succeeded')).toBe('Готово — результат можно скачать');
+    expect(describeOutcome('failed')).toBe('Завершилась с ошибкой');
+    expect(describeOutcome('cancelled')).toBe('Остановлена');
+    expect(describeOutcome('running')).toBe('');
   });
 });

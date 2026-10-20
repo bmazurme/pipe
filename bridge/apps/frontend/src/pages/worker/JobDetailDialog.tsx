@@ -18,7 +18,7 @@ import styles from '../WorkerPage.module.css';
 import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
 import { JobLogs } from './JobLogs';
-import { describeStage } from './jobStage';
+import { describeOutcome, describeStage } from './jobStage';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
@@ -60,9 +60,9 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   // show the dialog straight away rather than letting the click look like it did nothing.
   if (!job) {
     return (
-      <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="job-detail-title">
+      <Dialog open onClose={onClose} maxWidth="l" fullWidth aria-labelledby="job-detail-title">
         <Dialog.Header caption={`Задача #${jobId}`} id="job-detail-title" />
-        <Dialog.Body>
+        <Dialog.Body className={styles.detailBody}>
           {isLoading && <Loader size="m" />}
           {isError && (
             <Alert theme="danger" view="filled" message={getErrorMessage(loadError, 'Не удалось загрузить задачу')} />
@@ -76,7 +76,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const duration = jobDuration(job, now);
   const stage = describeStage(job, now);
   const fields: { label: string; value: string }[] = [
-    job.workerName ? { label: 'Worker', value: job.workerName } : null,
+    { label: 'Worker', value: job.workerName ?? '—' },
     job.contextName ? { label: 'Контекст', value: job.contextName } : null,
     job.taskKey ? { label: 'Задача', value: job.taskKey } : null,
     job.historyCount ? { label: 'Итоги прошлых запусков', value: String(job.historyCount) } : null,
@@ -127,9 +127,9 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="l" aria-labelledby="job-detail-title">
+    <Dialog open onClose={onClose} maxWidth="l" fullWidth aria-labelledby="job-detail-title">
       <Dialog.Header caption={`Задача #${job.id}`} id="job-detail-title" />
-      <Dialog.Body>
+      <Dialog.Body className={styles.detailBody}>
         <div className={styles.detailSummary}>
           <div className={styles.detailMeta}>
             <Label theme={isStopping(job) ? 'warning' : STATUS_THEME[job.status]}>{isStopping(job) ? 'Останавливается…' : STATUS_LABEL[job.status]}</Label>
@@ -140,11 +140,9 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
               </Text>
             )}
           </div>
-          {stage && (
-            <Text color="secondary" className={styles.detailStage}>
-              {jobIsActive && <Loader size="s" />} {stage}
-            </Text>
-          )}
+          <Text color="secondary" className={styles.detailStage}>
+            {jobIsActive && <Loader size="s" />} {stage ?? describeOutcome(job.status)}
+          </Text>
           {fields.length > 0 && (
             <dl className={styles.detailFields}>
               {fields.map((field) => (
