@@ -81,6 +81,17 @@ fresh; install_board v1; ALERT_CMD="" run
 fresh; install_board v1; STATE_DIR="/proc/nope/state" run
 [ "$(cat "$T/code")" = 0 ] && grep -q 'cannot write' "$T/stdout"; check "an unwritable state directory: said so, exit 0" $?
 
+# the deploy scripts that sit next to the stack files (@BRIDGE_PI@ is the folder given by BRIDGE_PI_DIR) and are copied by hand
+fresh; mkdir -p "$T/repo/infra/bridge-pi" "$T/bridgepi"
+printf 'deploy worker v2\n' > "$T/repo/infra/bridge-pi/deploy-worker.sh"; printf 'deploy worker v1\n' > "$T/bridgepi/deploy-worker.sh"
+printf '@BRIDGE_PI@/deploy-worker.sh|infra/bridge-pi/deploy-worker.sh\n@BRIDGE_PI@/not-there.sh|infra/bridge-pi/deploy-worker.sh\n' > "$T/manifest-bp"
+SCRIPTCHECK_MANIFEST="$T/manifest-bp" BRIDGE_PI_DIR="$T/bridgepi" run
+[ "$(alerts)" = 1 ] && grep -q 'deploy-worker.sh' "$T/alerts" && ! grep -q 'not-there' "$T/alerts"; check "the deploy scripts in BRIDGE_PI_DIR are compared too (a script that is not there is skipped)" $?
+grep -q 'scp infra/bridge-pi/\*.sh' "$T/alerts" && grep -q 'автодеплой может упасть' "$T/alerts"; check "…and the message says they are copied by hand, and why it matters" $?
+fresh; cp "$T/repo/infra/bridge-pi/deploy-worker.sh" "$T/bridgepi/deploy-worker.sh"
+SCRIPTCHECK_MANIFEST="$T/manifest-bp" BRIDGE_PI_DIR="$T/bridgepi" run
+[ "$(alerts)" = 0 ]; check "…and nothing is said once it is copied" $?
+
 # the built-in list: every repository path it names must exist (a renamed script would otherwise silently stop being checked)
 ROOT="$(cd "$HERE/../.." && pwd)"
 missing="$(sed -n "/cat <<'LIST'/,/^LIST$/p" "$HERE/check-scripts.sh" | grep '|' | cut -d'|' -f2 | while read -r path; do [ -f "$ROOT/$path" ] || echo "$path"; done)"
