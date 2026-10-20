@@ -12,7 +12,7 @@ function renderDialog(onClose: () => void) {
       <Dialog open onClose={onClose} aria-labelledby="t">
         <Dialog.Header caption="Форма" id="t" />
         <Dialog.Body>
-          <input aria-label="Поле" />
+          <input aria-label="Поле" defaultValue="черновик" />
         </Dialog.Body>
         <Dialog.Footer textButtonCancel="Отмена" onClickButtonCancel={onClose} />
       </Dialog>
@@ -26,11 +26,12 @@ describe('Dialog', () => {
     const user = userEvent.setup();
 
     renderDialog(onClose);
-    await user.type(await screen.findByLabelText('Поле'), 'черновик');
+    await screen.findByRole('dialog');
     await user.click(document.body);
     await user.click(screen.getByText('за пределами окна'));
 
     expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByLabelText('Поле')).toHaveValue('черновик');
   });
 
