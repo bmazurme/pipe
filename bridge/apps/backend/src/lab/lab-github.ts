@@ -67,8 +67,7 @@ async function repoRequest(
   });
 }
 
-// Can this token read the repository, find the base branch there, and write? Writing is probed with a harmless request that needs the
-// same permission as a commit: an empty blob (an object no branch points at; GitHub drops it on its own). Nothing visible changes.
+// Can this token read the repository, find the base branch there, and write?
 export async function checkRepo(
   repo: string,
   token: string,
@@ -115,6 +114,7 @@ export async function checkRepo(
   const data = (await info.json()) as {
     default_branch?: string;
     private?: boolean;
+    permissions?: { push?: boolean };
   };
 
   result.canRead = true;
@@ -129,16 +129,24 @@ export async function checkRepo(
 
   if (!branch?.ok) {
     result.problems.push(
-      `Ветка «${baseBranch}» не найдена${result.defaultBranch ? ` (ветка по умолчанию — «${result.defaultBranch}»)` : ''}`,
+      branch?.status === 409
+        ? 'Репозиторий пуст — сделайте в нём первый коммит (например, README), Lab работает с существующей веткой'
+        : `Ветка «${baseBranch}» не найдена${result.defaultBranch ? ` (ветка по умолчанию — «${result.defaultBranch}»)` : ''}`,
     );
   }
 
-  const probe = await repoRequest(repo, token, '/git/blobs', {
-    method: 'POST',
-    body: JSON.stringify({ content: '', encoding: 'utf-8' }),
-  }).catch(() => null);
+  // GitHub tells a token what it may do in the repository itself (`permissions.push` is Contents: write) — that is the answer, no
+  // request that changes anything is needed. Only when the field is missing, the write is tried with a harmless blob nothing points at.
+  if (data.permissions?.push !== undefined) {
+    result.canWrite = data.permissions.push;
+  } else {
+    const probe = await repoRequest(repo, token, '/git/blobs', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'lab', encoding: 'utf-8' }),
+    }).catch(() => null);
 
-  result.canWrite = Boolean(probe?.ok);
+    result.canWrite = Boolean(probe?.ok);
+  }
 
   if (!result.canWrite) {
     result.problems.push(
