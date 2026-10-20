@@ -17,8 +17,6 @@ import {
   describeChanges,
   diffResult,
   readZipball,
-  selectParcelFiles,
-  snapshotBaseline,
 } from '../improve/parcel';
 import { ContextService } from '../context/context.service';
 import { TreeEntry } from '../loop/github-api.service';
@@ -43,7 +41,11 @@ import { LabProjectsService } from './lab-projects.service';
 import {
   LAB_MAX_CHANGED_BYTES,
   LAB_MAX_CHANGED_FILES,
+  parcelEntries,
   readLabResult,
+  selectLabSnapshot,
+  splitBaseline,
+  taskWithSkipped,
   withBinaries,
 } from './lab-result';
 
@@ -136,20 +138,20 @@ export class LabRunsService {
     const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
       github.getBranchSha(project.baseBranch),
     );
-    const files = selectParcelFiles(
+    const snapshot = selectLabSnapshot(
       await readZipball(
         await readStep('скачивание репозитория', () =>
           downloadRepoZip(project.repo, project.token, baseSha),
         ),
       ),
     );
-    const baseline = snapshotBaseline(files);
+    const baseline = snapshot.baseline;
     const { buffer } = await buildIssueParcel(
-      files,
+      parcelEntries(snapshot),
       {
         number: 'lab',
         title,
-        body: input.task,
+        body: taskWithSkipped(input.task, snapshot.skipped),
         repo: project.repo,
         baseBranch: project.baseBranch,
       },
@@ -361,12 +363,13 @@ export class LabRunsService {
       });
       const file = await this.storage.findOwned(resultFileId, run.userId);
       const result = await readLabResult(await this.storage.readBytes(file));
+      const baseline = splitBaseline(
+        JSON.parse(stored?.baseline ?? '{}') as Record<string, string>,
+      );
       const changes = withBinaries(
-        diffResult(
-          JSON.parse(stored?.baseline ?? '{}') as Record<string, string>,
-          result.files,
-        ),
+        diffResult(baseline.text, result.files),
         result.binaries,
+        baseline.binaries,
       );
       const dropped = changes
         .filter((change) => isBlocked(change.path))
