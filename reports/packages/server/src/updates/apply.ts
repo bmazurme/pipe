@@ -54,14 +54,17 @@ export function computeReleaseId(entries: Map<string, Buffer>): string {
 }
 
 // The zip as a map of path → bytes, with every path checked and the size bounded (a zip can lie about what it unpacks to).
-export function unpackRelease(zipBytes: Buffer): Map<string, Buffer> {
+export function unpackRelease(
+  zipBytes: Buffer,
+  { maxEntries = MAX_ENTRIES, maxUnpackedBytes = MAX_UNPACKED_BYTES }: { maxEntries?: number; maxUnpackedBytes?: number } = {},
+): Map<string, Buffer> {
   const zip = new AdmZip(zipBytes);
   const entries = new Map<string, Buffer>();
   let total = 0;
 
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
-    if (entries.size >= MAX_ENTRIES) throw new Error('В архиве слишком много файлов — не обновляю');
+    if (entries.size >= maxEntries) throw new Error('В архиве слишком много файлов — не обновляю');
     if (!isSafeReleasePath(entry.entryName)) throw new Error(`В архиве недопустимый путь: ${entry.entryName} — не обновляю`);
 
     // The declared size is checked before inflating; the check after it stays as a backstop, since a header can lie.
@@ -70,7 +73,7 @@ export function unpackRelease(zipBytes: Buffer): Map<string, Buffer> {
     const data = entry.getData();
 
     total += data.byteLength;
-    if (total > MAX_UNPACKED_BYTES) throw new Error('Распакованный архив слишком велик — не обновляю');
+    if (total > maxUnpackedBytes) throw new Error('Распакованный архив слишком велик — не обновляю');
     entries.set(entry.entryName, data);
   }
 

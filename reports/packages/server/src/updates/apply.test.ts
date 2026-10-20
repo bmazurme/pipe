@@ -255,6 +255,37 @@ describe('unpackRelease', () => {
   });
 });
 
+describe('unpackRelease limits', () => {
+  const zipOf = (files: Files) => {
+    const zip = new AdmZip();
+
+    for (const [path, text] of Object.entries(files)) zip.addFile(path, Buffer.from(text));
+
+    return zip.toBuffer();
+  };
+  const three = zipOf({ 'reports/a.ts': 'aaaa', 'reports/b.ts': 'bbbb', 'reports/c.ts': 'cccc' });
+
+  it('refuses an archive with more files than the entry cap', () => {
+    expect(() => unpackRelease(three, { maxEntries: 2 })).toThrow(/слишком много файлов/);
+  });
+
+  it('accepts an archive with exactly as many files as the entry cap', () => {
+    expect(unpackRelease(three, { maxEntries: 3 }).size).toBe(3);
+  });
+
+  it('refuses an archive one byte over the unpacked-size cap', () => {
+    expect(() => unpackRelease(three, { maxUnpackedBytes: 11 })).toThrow(/слишком велик/);
+  });
+
+  it('accepts an archive whose unpacked size equals the cap', () => {
+    expect(unpackRelease(three, { maxUnpackedBytes: 12 }).size).toBe(3);
+  });
+
+  it('applies the default limits when none are given', () => {
+    expect(unpackRelease(three).size).toBe(3);
+  });
+});
+
 describe('unpackRelease size bound', () => {
   it('rejects an entry whose declared size exceeds the budget without inflating it', () => {
     const getData = vi.fn(() => Buffer.alloc(0));
