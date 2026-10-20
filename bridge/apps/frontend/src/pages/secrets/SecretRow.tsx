@@ -1,5 +1,5 @@
-import { KeyboardEvent } from 'react';
-import { Check, Eye, EyeSlash, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
+import { KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Check, Copy, Eye, EyeSlash, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
 import { Button, Icon, Text, TextInput } from '@gravity-ui/uikit';
 
 import { Secret } from '../../store/api';
@@ -49,6 +49,30 @@ export function SecretRow({
   onToggleReveal,
 }: SecretRowProps) {
   const isRevealed = revealedValue !== undefined;
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const copiedTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimeout.current) clearTimeout(copiedTimeout.current);
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (revealedValue === undefined) return;
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(revealedValue);
+      setCopied(true);
+      if (copiedTimeout.current) clearTimeout(copiedTimeout.current);
+      copiedTimeout.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyError('Не удалось скопировать');
+    }
+  };
+  const copyLabel = `Скопировать значение ${secret.name}`;
   const editLabel = `Изменить ${secret.name}`;
   const deleteLabel = `Удалить ${secret.name}`;
   const confirmDeleteLabel = `Подтвердить удаление ${secret.name}`;
@@ -124,8 +148,18 @@ export function SecretRow({
         <Text color="secondary" variant="code-1" className={styles.valuePreview}>
           {isRevealed ? revealedValue : '••••••••'}
         </Text>
+        {isRevealed && copyError && (
+          <Text color="danger" variant="caption-2">
+            {copyError}
+          </Text>
+        )}
       </div>
       <div className={styles.rowActions}>
+        {isRevealed && (
+          <Button view="flat" size="s" title={copyLabel} aria-label={copyLabel} onClick={() => void handleCopy()}>
+            <Icon data={copied ? Check : Copy} size={16} />
+          </Button>
+        )}
         <Button view="flat" size="s" title={revealLabel} aria-label={revealLabel} loading={isRevealing} onClick={onToggleReveal}>
           <Icon data={isRevealed ? EyeSlash : Eye} size={16} />
         </Button>
