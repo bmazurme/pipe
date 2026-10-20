@@ -17,12 +17,19 @@ import style from './update-banner.module.css';
 // Half the time the server remembers an answer for — a page left open for days still learns about a release.
 const POLL_MS = 30 * 60 * 1000;
 const PROGRESS_POLL_MS = 2000;
+const ACTIVE_PHASES = ['downloading', 'staged', 'applying', 'installing', 'building', 'rolling-back'];
 
 // "A new version of reports is available", with the button that brings it, and what the update is doing while it runs.
 function UpdateBanner() {
   const { data: status, error: statusError } = useGetUpdateStatusQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
-  // Cheap (a file read on the server), so it is always asked — an update started in another tab or by hand shows here too.
-  const { data: progress } = useGetUpdateProgressQuery(undefined, { pollingInterval: PROGRESS_POLL_MS });
+  // Asked only while there is something to follow: an update is on offer (one started in another tab or by hand stays on offer
+  // until it is applied) or this tab started one. Otherwise every open tab would poll for a banner that renders nothing.
+  const [startedHere, setStartedHere] = useState(false);
+  const { data: progress } = useGetUpdateProgressQuery(undefined, {
+    skip: !status?.updateAvailable && !startedHere,
+    pollingInterval: PROGRESS_POLL_MS,
+    skipPollingIfUnfocused: true,
+  });
   const [check, { isFetching }] = useLazyGetUpdateStatusQuery();
   const [apply, { isLoading: isStarting }] = useApplyUpdateMutation();
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -30,11 +37,15 @@ function UpdateBanner() {
   // The banner depends on how long ago the update last moved, so the clock has to tick for it to notice a stalled one.
   const [now, setNow] = useState(Date.now);
 
+  const active = progress != null && ACTIVE_PHASES.includes(progress.phase);
+
   useEffect(() => {
+    if (!active) return undefined;
+
     const timer = setInterval(() => setNow(Date.now()), PROGRESS_POLL_MS);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [active]);
 
   const state = bannerState(status, progress, now, statusError ? describeError(statusError, 'Не удалось проверить обновления') : null);
   const latest = status?.latest ?? null;
@@ -44,6 +55,7 @@ function UpdateBanner() {
 
     try {
       await apply().unwrap();
+      setStartedHere(true);
     } catch (error) {
       setStartError(describeError(error, 'Не удалось начать обновление'));
     }

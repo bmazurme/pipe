@@ -23,6 +23,8 @@ export interface WorkerConfig {
   proxyUrl?: string;
   // Max wall-clock seconds a claude CLI job may run before it's killed.
   jobTimeoutSec: number;
+  // Max wall-clock seconds a claude CLI chat turn may run before it's killed; absent: CHAT_TURN_TIMEOUT_SEC.
+  chatTimeoutSec?: number;
   // Seconds a running job may keep going after SIGTERM/SIGINT before it is stopped; 0 (default) = stop at once.
   shutdownGraceSec?: number;
   // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): off by
@@ -39,6 +41,17 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 }
 
 const DEFAULT_JOB_TIMEOUT_SEC = 30 * 60;
+
+export const CHAT_TURN_TIMEOUT_SEC = 10 * 60;
+
+function parseChatTimeoutSec(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return CHAT_TURN_TIMEOUT_SEC;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`WORKER_CHAT_TIMEOUT_SEC must be a positive number of seconds, got "${raw}"`);
+  }
+  return value;
+}
 
 function parseJobTimeoutSec(raw: string | undefined): number {
   if (raw === undefined || raw === '') return DEFAULT_JOB_TIMEOUT_SEC;
@@ -80,6 +93,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     workerName: env.WORKER_NAME ?? hostname(),
     proxyUrl: env.WORKER_PROXY_URL,
     jobTimeoutSec: parseJobTimeoutSec(env.WORKER_JOB_TIMEOUT_SEC),
+    chatTimeoutSec: parseChatTimeoutSec(env.WORKER_CHAT_TIMEOUT_SEC),
     shutdownGraceSec: parseShutdownGraceSec(env.WORKER_SHUTDOWN_GRACE_SEC),
     chatTools: parseChatToolsMode(env.WORKER_CHAT_TOOLS),
   };

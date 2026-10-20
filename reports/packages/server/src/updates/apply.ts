@@ -23,7 +23,7 @@ const RELEASE_FILE = 'reports/release.json';
 // reports/ and packages/protocol/ sit side by side in the zip, so this folder is the parent of reports/.
 export const INSTALL_ROOT = dirname(REPORTS_ROOT.replace(/[\\/]+$/, ''));
 
-const ACTIVE_PHASES = ['staged', 'applying', 'installing', 'building', 'rolling-back'];
+const ACTIVE_PHASES = ['downloading', 'staged', 'applying', 'installing', 'building', 'rolling-back'];
 
 export function readProgress(installRoot: string = INSTALL_ROOT, now: number = Date.now()): UpdateProgressType | null {
   try {
@@ -63,6 +63,9 @@ export function unpackRelease(zipBytes: Buffer): Map<string, Buffer> {
     if (entry.isDirectory) continue;
     if (entries.size >= MAX_ENTRIES) throw new Error('В архиве слишком много файлов — не обновляю');
     if (!isSafeReleasePath(entry.entryName)) throw new Error(`В архиве недопустимый путь: ${entry.entryName} — не обновляю`);
+
+    // The declared size is checked before inflating; the check after it stays as a backstop, since a header can lie.
+    if (total + entry.header.size > MAX_UNPACKED_BYTES) throw new Error('Распакованный архив слишком велик — не обновляю');
 
     const data = entry.getData();
 
@@ -147,8 +150,10 @@ const defaultDeps = (): StartUpdateDeps => ({
 });
 
 // Downloads the newest release, checks it, unpacks it next to the install (outside src/, so no watcher notices) and hands
-// it to apply-update.mjs, which runs on its own. Returns as soon as that process is started; progress is in the status file.
-export async function startUpdate(overrides: Partial<StartUpdateDeps> = {}): Promise<{ releaseId: string }> {
+// it to apply-update.mjs, which runs on its own. Returns as soon as the download has started (status `downloading`); the rest
+// runs in the background, its progress and any failure are in the status file. `done` settles when that chain ends and never
+// rejects, so a caller may ignore it.
+export async function startUpdate(overrides: Partial<StartUpdateDeps> = {}): Promise<{ releaseId: string; done: Promise<void> }> {
   const deps = { ...defaultDeps(), ...overrides };
 
   assertSelfUpdatable(deps.installRoot);
@@ -170,7 +175,7 @@ export async function startUpdate(overrides: Partial<StartUpdateDeps> = {}): Pro
 
   setStatus('downloading', 'Скачиваю новую версию…');
 
-  try {
+  const run = async () => {
     const download = await deps.download();
 
     if (download.releaseId && download.releaseId !== releaseId) throw new Error('Bridge отдал другую сборку, чем объявил, — не обновляю');
@@ -200,11 +205,17 @@ export async function startUpdate(overrides: Partial<StartUpdateDeps> = {}): Pro
 
     setStatus('staged', 'Новая версия скачана и проверена — применяю…');
     deps.launch(script, args, join(stateDir, 'update.log'));
-  } catch (error) {
-    setStatus('failed', error instanceof Error ? error.message : String(error));
-    rmSync(join(stateDir, 'staging'), { recursive: true, force: true });
-    throw error;
-  }
+  };
 
-  return { releaseId };
+  const done = run().catch((error: unknown) => {
+    console.error('Update error:', error);
+    try {
+      setStatus('failed', error instanceof Error ? error.message : String(error));
+      rmSync(join(stateDir, 'staging'), { recursive: true, force: true });
+    } catch (writeError) {
+      console.error('Could not record the failed update:', writeError);
+    }
+  });
+
+  return { releaseId, done };
 }

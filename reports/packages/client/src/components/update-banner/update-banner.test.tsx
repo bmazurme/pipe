@@ -135,13 +135,29 @@ describe('UpdateBanner', () => {
   });
 
   it('says the update is done, and that the settings were not touched', async () => {
-    statusReply = () => status({ current: { releaseId: 'b'.repeat(64), shortId: 'bbbbbbbbbbbb', version: '1.1.0' }, updateAvailable: false });
+    statusReply = () => status({ current: { releaseId: 'b'.repeat(64), shortId: 'bbbbbbbbbbbb', version: '1.1.0' } });
     progressReply = () => ({ phase: 'done', message: 'Обновлено: изменено 12.', releaseId: 'b'.repeat(64), startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     renderBanner();
 
     expect(await screen.findByText('reports обновлён')).toBeInTheDocument();
     expect(screen.getByText(/Обновлено: изменено 12\. Ваши настройки и \.env не тронуты\./)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Обновить страницу' })).toBeInTheDocument();
+  });
+
+  it('does not ask for progress when no update is available and none was started here', async () => {
+    statusReply = () => status({ updateAvailable: false });
+    renderBanner();
+    await vi.waitFor(() => expect(called('/update/status').length).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(called('/update/progress')).toHaveLength(0);
+  });
+
+  it('asks for progress while an update is available', async () => {
+    statusReply = () => status();
+    renderBanner();
+
+    await vi.waitFor(() => expect(called('/update/progress').length).toBeGreaterThan(0));
   });
 
   it('says the update failed and the old version is back, and offers to try again', async () => {

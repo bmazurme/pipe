@@ -57,6 +57,10 @@ export async function claudeChat(
   onProgress?: (text: string) => void | Promise<void>,
   // Background text from the Context attached to the chat; absent or blank: nothing is added.
   context?: string | null,
+  // Deadline for the CLI; absent: none.
+  timeoutMs?: number,
+  // Stops the CLI when aborted (worker shutdown).
+  signal?: AbortSignal,
 ): Promise<string> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
@@ -72,9 +76,9 @@ export async function claudeChat(
       () => {},
       proxyUrl,
       claudeToken,
+      timeoutMs,
       undefined,
-      undefined,
-      undefined,
+      signal,
       progress?.push,
     ).finally(() => progress?.stop());
 
