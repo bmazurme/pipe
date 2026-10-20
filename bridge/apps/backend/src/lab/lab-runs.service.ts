@@ -36,7 +36,7 @@ import {
   LabRunStatus,
   LabTrigger,
 } from './entities/lab-run.entity';
-import { describeGithubError, githubFor } from './lab-github';
+import { describeGithubError, githubFor, readStep } from './lab-github';
 import { LabProjectsService } from './lab-projects.service';
 
 const ADVANCE_EVERY_MS = 15_000;
@@ -125,9 +125,15 @@ export class LabRunsService {
 
     const github = githubFor(project);
     const title = titleOf(input.task);
-    const baseSha = await github.getBranchSha(project.baseBranch);
+    const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
+      github.getBranchSha(project.baseBranch),
+    );
     const files = selectParcelFiles(
-      await readZipball(await github.downloadZipball(baseSha)),
+      await readZipball(
+        await readStep('скачивание репозитория', () =>
+          github.downloadZipball(baseSha),
+        ),
+      ),
     );
     const baseline = snapshotBaseline(files);
     const { buffer } = await buildIssueParcel(

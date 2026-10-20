@@ -1,4 +1,4 @@
-import { checkRepo } from './lab-github';
+import { checkRepo, readStep } from './lab-github';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
@@ -73,5 +73,39 @@ describe('checkRepo', () => {
     expect(
       (await checkRepo('me/boat', 'tok', 'main')).problems.join(' '),
     ).toContain('пуст');
+  });
+});
+
+describe('readStep', () => {
+  it('tries a read once more after a timeout', async () => {
+    const run = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new Error('The operation was aborted due to timeout'),
+      )
+      .mockResolvedValueOnce('ok');
+
+    await expect(readStep('скачивание', run, 0)).resolves.toBe('ok');
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('names the step when it keeps failing', async () => {
+    const run = jest
+      .fn()
+      .mockRejectedValue(new Error('The operation was aborted due to timeout'));
+
+    await expect(readStep('скачивание репозитория', run, 0)).rejects.toThrow(
+      'скачивание репозитория: The operation was aborted due to timeout',
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not repeat a request GitHub refused', async () => {
+    const run = jest.fn().mockRejectedValue(new Error('GitHub 404: Not Found'));
+
+    await expect(readStep('ветка main', run, 0)).rejects.toThrow(
+      'ветка main: GitHub 404: Not Found',
+    );
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });
