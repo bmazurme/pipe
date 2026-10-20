@@ -21,7 +21,7 @@ const ACTIVE_PHASES = ['downloading', 'staged', 'applying', 'installing', 'build
 
 // "A new version of reports is available", with the button that brings it, and what the update is doing while it runs.
 function UpdateBanner() {
-  const { data: status } = useGetUpdateStatusQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
+  const { data: status, error: statusError } = useGetUpdateStatusQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
   // Asked only while there is something to follow: an update is on offer (one started in another tab or by hand stays on offer
   // until it is applied) or this tab started one. Otherwise every open tab would poll for a banner that renders nothing.
   const [startedHere, setStartedHere] = useState(false);
@@ -47,7 +47,7 @@ function UpdateBanner() {
     return () => clearInterval(timer);
   }, [active]);
 
-  const state = bannerState(status, progress, now);
+  const state = bannerState(status, progress, now, statusError ? describeError(statusError, 'Не удалось проверить обновления') : null);
   const latest = status?.latest ?? null;
 
   const handleUpdate = async () => {
@@ -93,6 +93,24 @@ function UpdateBanner() {
           actions={(
             <Button view="outlined" size="s" onClick={() => window.location.reload()}>
               Обновить страницу
+            </Button>
+          )}
+        />
+      </div>
+    );
+  }
+
+  if (state.kind === 'check-failed') {
+    return (
+      <div className={style.banner}>
+        <Alert
+          theme="warning"
+          view="filled"
+          title="Не удалось проверить обновления"
+          message={state.message}
+          actions={(
+            <Button view="outlined" size="s" loading={isFetching} onClick={() => void check({ refresh: true })}>
+              Проверить снова
             </Button>
           )}
         />
