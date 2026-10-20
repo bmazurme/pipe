@@ -1700,6 +1700,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/time/import/day-offs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TimeImportController_importDayOffs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/time/import/reports": {
         parameters: {
             query?: never;
@@ -2460,6 +2476,19 @@ export interface components {
             shortDays: string[];
             offDays: string[];
             badDays: string[];
+        };
+        ImportDayOffsDto: {
+            year: number;
+            holidays?: string[];
+            shortDays?: string[];
+            offDays?: string[];
+            badDays?: string[];
+        };
+        ImportDayOffsResponseDto: {
+            year: number;
+            created: number;
+            updated: number;
+            unchanged: number;
         };
         ImportReportEntryDto: {
             taskName: string;
@@ -5287,6 +5316,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportDayOffsResponseDto"];
+                };
+            };
+        };
+    };
+    TimeImportController_importDayOffs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportDayOffsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDayOffsResponseDto"];
                 };
             };
         };

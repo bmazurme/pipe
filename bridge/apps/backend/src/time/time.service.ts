@@ -6,6 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 
+import {
+  ImportDayOffsDto,
+  ImportDayOffsResponseDto,
+} from './dto/import-day-offs.dto';
 import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
 import { TimeReportEntryResponseDto } from './dto/time-report-entry-response.dto';
 import { DayOff, DayOffType } from './entities/day-off.entity';
@@ -46,6 +50,68 @@ export class TimeService {
     }
 
     return this.dayOffRepository.save({ userId, date, type });
+  }
+
+  // Merges the year's dates an external caller sends into the owner's days off — nothing is deleted (a date that is
+  // missing from the payload is left as it is), a date that is there with another kind takes the new kind. One date can
+  // have only one kind, so a payload that lists it twice is refused.
+  async importDayOffs(
+    userId: number,
+    dto: ImportDayOffsDto,
+  ): Promise<ImportDayOffsResponseDto> {
+    const wanted = new Map<string, DayOffType>();
+    const lists: [DayOffType, string[] | undefined][] = [
+      [DayOffType.Holiday, dto.holidays],
+      [DayOffType.Short, dto.shortDays],
+      [DayOffType.Compensatory, dto.badDays],
+      [DayOffType.Off, dto.offDays],
+    ];
+
+    for (const [type, dates] of lists) {
+      for (const date of dates ?? []) {
+        if (!date.startsWith(`${dto.year}-`)) {
+          throw new BadRequestException(`${date} is not in ${dto.year}`);
+        }
+        if (wanted.has(date) && wanted.get(date) !== type) {
+          throw new BadRequestException(
+            `${date} is listed as two different kinds`,
+          );
+        }
+        wanted.set(date, type);
+      }
+    }
+
+    const existing = new Map(
+      (await this.findAllByUserAndYear(userId, dto.year)).map((entry) => [
+        entry.date,
+        entry,
+      ]),
+    );
+    const result: ImportDayOffsResponseDto = {
+      year: dto.year,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+    };
+    const toSave: Partial<DayOff>[] = [];
+
+    for (const [date, type] of wanted) {
+      const current = existing.get(date);
+
+      if (!current) {
+        toSave.push({ userId, date, type });
+        result.created += 1;
+      } else if (current.type !== type) {
+        toSave.push({ id: current.id, userId, date, type });
+        result.updated += 1;
+      } else {
+        result.unchanged += 1;
+      }
+    }
+
+    if (toSave.length > 0) await this.dayOffRepository.save(toSave);
+
+    return result;
   }
 
   async delete(id: number, userId: number): Promise<void> {

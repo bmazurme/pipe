@@ -8,8 +8,9 @@ import {
 } from '../../uploads/upload-files';
 import { isAllowedAttachment, MAX_ATTACHMENT_BYTES } from '../attachments';
 
-// Chat attachments live apart from the Storage mailbox: Storage deletes a file when it is
-// downloaded, and a chat file has to stay readable for every later turn.
+// uploads/chat is only multer's staging dir; the service then adopts the file into the
+// FileStore under a chat/ key. Unlike Storage's mailbox, a chat file is never deleted on
+// download, since it has to stay readable for every later turn.
 export const CHAT_UPLOAD_DIR = ensureUploadDir('chat');
 
 export const attachmentMulterConfig: MulterOptions = {

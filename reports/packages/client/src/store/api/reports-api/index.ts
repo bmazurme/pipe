@@ -23,6 +23,7 @@ import type {
   WorkerModelType,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
+  DayOffsSendResultType,
   SubscriptionPushPayload,
   SubscriptionStateEntryType,
   TrackedProjectType,
@@ -85,6 +86,14 @@ const reportsApi = createApi({
       }),
       transformResponse: unwrap<DateType>('Не удалось импортировать данные'),
       invalidatesTags: ['Counts'],
+    }),
+    // Sends the year's dates to bridge, which merges them into its own; nothing changes locally, so no tag is invalidated.
+    sendDayOffs: builder.mutation<DayOffsSendResultType, string>({
+      query: (year) => ({
+        url: `counts/${year}/send-day-offs`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap<DayOffsSendResultType>('Не удалось отправить данные'),
     }),
     pushReportToBridge: builder.mutation<unknown, PushReportPayload>({
       query: (payload) => ({
@@ -318,6 +327,7 @@ export const {
   useAddOffDaysMutation,
   useRemoveOffDayMutation,
   useImportDayOffsMutation,
+  useSendDayOffsMutation,
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,

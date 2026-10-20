@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { assertTaskBranch, buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch, runGit } from './git';
+import { assertTaskBranch, buildBranchName, changedFiles, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch, runGit, showFile } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -396,5 +396,92 @@ describe('runGit', () => {
       runGit(dir, ['-c', 'protocol.ext.allow=always', 'fetch', 'ext::sleep 10'], undefined, 500),
     ).rejects.toThrow('git fetch не ответил за 1 с — проверьте доступ к origin');
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+});
+
+function commitFile(dir: string, file: string, content: string, message: string): void {
+  mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+  writeFileSync(path.join(dir, file), content);
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '--quiet', '-m', message]);
+}
+
+describe('changedFiles', () => {
+  it('lists both an added and a modified file of the branch', async () => {
+    const dir = initRepo();
+    git(dir, ['checkout', '--quiet', '-b', 'task']);
+    commitFile(dir, 'a.txt', 'new', 'add a');
+    commitFile(dir, 'README.md', 'changed', 'modify readme');
+
+    expect((await changedFiles(dir, 'master', 'task')).sort()).toEqual(['README.md', 'a.txt']);
+  });
+
+  it('does not list commits added to the base after the branch forked', async () => {
+    const dir = initRepo();
+    git(dir, ['checkout', '--quiet', '-b', 'task']);
+    commitFile(dir, 'a.txt', 'new', 'add a');
+    git(dir, ['checkout', '--quiet', 'master']);
+    commitFile(dir, 'later-on-base.txt', 'x', 'base moves on');
+
+    expect(await changedFiles(dir, 'master', 'task')).toEqual(['a.txt']);
+  });
+
+  it('diffs against origin/<base> when it is ahead of the local base', async () => {
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-git-test-remote-'));
+    git(remote, ['init', '--quiet', '--bare', '-b', 'master']);
+    const dir = initRepo();
+    git(dir, ['remote', 'add', 'origin', remote]);
+    git(dir, ['push', '--quiet', 'origin', 'master']);
+
+    // origin/master gains a commit the local master never sees.
+    const other = mkdtempSync(path.join(tmpdir(), 'reports-git-test-clone-'));
+    git(other, ['clone', '--quiet', remote, '.']);
+    configureIdentity(other);
+    commitFile(other, 'upstream.txt', 'x', 'upstream commit');
+    git(other, ['push', '--quiet', 'origin', 'master']);
+    git(dir, ['fetch', '--quiet', 'origin']);
+
+    // The task branch forks from origin/master and adds one file.
+    git(dir, ['checkout', '--quiet', '-b', 'task', 'origin/master']);
+    commitFile(dir, 'a.txt', 'new', 'add a');
+
+    // Against the stale local master, upstream.txt would be listed as well.
+    expect(await changedFiles(dir, 'master', 'task')).toEqual(['a.txt']);
+  });
+
+  it('lists the old path of a renamed file', async () => {
+    const dir = initRepo();
+    commitFile(dir, '.github/x.yml', 'name: x', 'add workflow');
+    git(dir, ['checkout', '--quiet', '-b', 'task']);
+    mkdirSync(path.join(dir, 'docs'), { recursive: true });
+    git(dir, ['mv', '.github/x.yml', 'docs/x.yml']);
+    git(dir, ['commit', '--quiet', '-m', 'move workflow']);
+
+    expect((await changedFiles(dir, 'master', 'task')).sort()).toEqual(['.github/x.yml', 'docs/x.yml']);
+  });
+});
+
+describe('showFile', () => {
+  it('reads a file from another branch without touching the working tree', async () => {
+    const dir = initRepo();
+    git(dir, ['checkout', '--quiet', '-b', 'task']);
+    commitFile(dir, 'loop-backlog.json', '{"items":[]}', 'add backlog');
+    git(dir, ['checkout', '--quiet', 'master']);
+
+    expect(await showFile(dir, 'task', 'loop-backlog.json')).toBe('{"items":[]}');
+    expect(git(dir, ['branch', '--show-current']).trim()).toBe('master');
+    expect(existsSync(path.join(dir, 'loop-backlog.json'))).toBe(false);
+  });
+
+  it('returns null for a file that does not exist on the branch', async () => {
+    const dir = initRepo();
+
+    expect(await showFile(dir, 'master', 'loop-backlog.json')).toBeNull();
+  });
+
+  it('returns null for a branch that does not exist', async () => {
+    const dir = initRepo();
+
+    expect(await showFile(dir, 'no-such-branch', 'README.md')).toBeNull();
   });
 });
