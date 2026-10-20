@@ -97,7 +97,10 @@ describe('startUpdate', () => {
     const zip = releaseZip(FILES);
     const { deps: d, launches } = deps(root, zip);
 
-    await expect(startUpdate(d)).resolves.toEqual({ releaseId: zip.releaseId });
+    const started = await startUpdate(d);
+
+    expect(started.releaseId).toBe(zip.releaseId);
+    await started.done;
 
     const staging = join(root, '.update', 'staging');
 
@@ -113,7 +116,7 @@ describe('startUpdate', () => {
     const root = install();
     const { deps: d, launches } = deps(root, releaseZip(FILES), { mode: 'launcher' });
 
-    await startUpdate(d);
+    await (await startUpdate(d)).done;
 
     expect(launches[0].args.slice(-4)).toEqual(['--restart', 'launcher', '--pid', '4242']);
   });
@@ -123,9 +126,10 @@ describe('startUpdate', () => {
     const zip = releaseZip(FILES);
     const { deps: d, launches } = deps(root, zip, { download: async () => download(zip.bytes, { sha256: 'f'.repeat(64) }) });
 
-    await expect(startUpdate(d)).rejects.toThrow(/Контрольная сумма/);
+    await (await startUpdate(d)).done;
     expect(launches).toEqual([]);
     expect(readProgress(root)?.phase).toBe('failed');
+    expect(readProgress(root)?.message).toMatch(/Контрольная сумма/);
   });
 
   it('refuses an archive whose content is not what its id says (altered, or another build)', async () => {
@@ -133,23 +137,27 @@ describe('startUpdate', () => {
     const forged = releaseZip(FILES, { releaseId: 'c'.repeat(64) });
     const { deps: d, launches } = deps(root, forged);
 
-    await expect(startUpdate(d)).rejects.toThrow(/не соответствует идентификатору/);
+    await (await startUpdate(d)).done;
+    expect(readProgress(root)?.message).toMatch(/не соответствует идентификатору/);
     expect(launches).toEqual([]);
 
     const other = releaseZip(FILES);
     const { deps: d2 } = deps(root, other, { download: async () => download(other.bytes, { releaseId: 'd'.repeat(64) }) });
-    await expect(startUpdate(d2)).rejects.toThrow(/другую сборку/);
+    await (await startUpdate(d2)).done;
+    expect(readProgress(root)?.message).toMatch(/другую сборку/);
   });
 
   it('refuses an archive with a path that leaves the code folders, and one without release.json', async () => {
     const root = install();
     const evil = releaseZip(FILES, { extra: { '../../outside.txt': 'x' } });
-    await expect(startUpdate(deps(root, evil).deps)).rejects.toThrow(/недопустимый путь/);
+    await (await startUpdate(deps(root, evil).deps)).done;
+    expect(readProgress(root)?.message).toMatch(/недопустимый путь/);
 
     const bare = new AdmZip();
     bare.addFile('reports/a.ts', Buffer.from('a'));
     const bytes = bare.toBuffer();
-    await expect(startUpdate(deps(root, { bytes, releaseId: 'x' }).deps)).rejects.toThrow(/нет reports\/release\.json/);
+    await (await startUpdate(deps(root, { bytes, releaseId: 'x' }).deps)).done;
+    expect(readProgress(root)?.message).toMatch(/нет reports\/release\.json/);
   });
 
   it('says there is nothing to update when no newer release is on offer', async () => {
@@ -171,6 +179,45 @@ describe('startUpdate', () => {
 
     status(new Date(Date.UTC(2026, 9, 20, 8, 0, 0)).toISOString());
     await expect(startUpdate(deps(root, zip).deps)).resolves.toBeDefined();
+  });
+
+  it('returns before the download finishes and refuses a second start while the background chain runs', async () => {
+    const root = install();
+    const zip = releaseZip(FILES);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { deps: d, launches } = deps(root, zip, {
+      download: async () => {
+        await gate;
+
+        return download(zip.bytes);
+      },
+    });
+
+    const started = await startUpdate(d);
+
+    expect(readProgress(root, Date.UTC(2026, 9, 20, 9, 0, 1))?.phase).toBe('downloading');
+    expect(launches).toEqual([]);
+    await expect(startUpdate(deps(root, zip).deps)).rejects.toThrow(/уже идёт/);
+
+    release();
+    await started.done;
+    expect(launches).toHaveLength(1);
+    expect(readProgress(root, Date.UTC(2026, 9, 20, 9, 0, 1))?.phase).toBe('staged');
+  });
+
+  it('records a failed background download as failed without an unhandled rejection', async () => {
+    const root = install();
+    const { deps: d } = deps(root, releaseZip(FILES), {
+      download: async () => {
+        throw new Error('сеть упала');
+      },
+    });
+
+    const started = await startUpdate(d);
+
+    await expect(started.done).resolves.toBeUndefined();
+    expect(readProgress(root)).toMatchObject({ phase: 'failed', message: 'сеть упала' });
   });
 });
 
