@@ -16,9 +16,6 @@ import {
   Change,
   describeChanges,
   diffResult,
-  MAX_CHANGED_BYTES,
-  MAX_CHANGED_FILES,
-  readResultParcel,
   readZipball,
   selectParcelFiles,
   snapshotBaseline,
@@ -43,6 +40,12 @@ import {
   readStep,
 } from './lab-github';
 import { LabProjectsService } from './lab-projects.service';
+import {
+  LAB_MAX_CHANGED_BYTES,
+  LAB_MAX_CHANGED_FILES,
+  readLabResult,
+  withBinaries,
+} from './lab-result';
 
 const ADVANCE_EVERY_MS = 15_000;
 const BLOB_CONCURRENCY = 6;
@@ -357,10 +360,13 @@ export class LabRunsService {
         select: { id: true, baseline: true },
       });
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = await readResultParcel(await this.storage.readBytes(file));
-      const changes = diffResult(
-        JSON.parse(stored?.baseline ?? '{}') as Record<string, string>,
-        result,
+      const result = await readLabResult(await this.storage.readBytes(file));
+      const changes = withBinaries(
+        diffResult(
+          JSON.parse(stored?.baseline ?? '{}') as Record<string, string>,
+          result.files,
+        ),
+        result.binaries,
       );
       const dropped = changes
         .filter((change) => isBlocked(change.path))
@@ -380,9 +386,9 @@ export class LabRunsService {
 
         return;
       }
-      if (allowed.length > MAX_CHANGED_FILES)
+      if (allowed.length > LAB_MAX_CHANGED_FILES)
         throw new Error(
-          `Слишком много изменённых файлов (${allowed.length} > ${MAX_CHANGED_FILES})`,
+          `Слишком много изменённых файлов (${allowed.length} > ${LAB_MAX_CHANGED_FILES})`,
         );
 
       const size = allowed.reduce(
@@ -390,9 +396,9 @@ export class LabRunsService {
         0,
       );
 
-      if (size > MAX_CHANGED_BYTES)
+      if (size > LAB_MAX_CHANGED_BYTES)
         throw new Error(
-          `Слишком большой результат (${Math.round(size / 1024)} КБ)`,
+          `Слишком большой результат (${Math.round(size / 1024 / 1024)} МБ из допустимых ${LAB_MAX_CHANGED_BYTES / 1024 / 1024})`,
         );
 
       const github = githubFor(project);
