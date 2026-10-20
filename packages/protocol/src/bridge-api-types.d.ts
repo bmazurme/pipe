@@ -1051,7 +1051,7 @@ export interface paths {
         };
         get: operations["ImproveController_issues"];
         put?: never;
-        post?: never;
+        post: operations["ImproveController_createIssue"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2281,6 +2281,12 @@ export interface components {
         };
         DeletedWorkerResponseDto: {
             failedJobs: number;
+        };
+        CreateImproveIssueDto: {
+            title: string;
+            body?: string;
+            model?: string;
+            start?: boolean;
         };
         ImproveRun: {
             userId: number;
@@ -4217,6 +4223,27 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ImproveController_createIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateImproveIssueDto"];
+            };
+        };
+        responses: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
