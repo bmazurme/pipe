@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -188,5 +188,109 @@ describe('SecretsPage', () => {
     await user.type(screen.getByLabelText('Новое значение для api-key'), 'abc');
 
     expect(screen.getByText('Оставьте пустым, чтобы не менять')).toBeTruthy();
+  });
+});
+
+describe('SecretsPage revealed value handling', () => {
+  function stubRevealFetch(onPatch?: () => void) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets/1/value')) return jsonResponse({ value: 'ghp_realtoken' });
+        if (url.includes('/secrets/1') && request.method === 'PATCH') {
+          onPatch?.();
+          return jsonResponse({ ...SECRETS[0], updatedAt: '2026-10-06T00:00:00.000Z' });
+        }
+        if (url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+  }
+
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  }
+
+  it('copies a revealed value to the clipboard and confirms', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+
+    renderPage();
+    await screen.findByText('github-token');
+    expect(screen.queryByLabelText('Скопировать значение github-token')).toBeNull();
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('ghp_realtoken'));
+    expect(screen.queryByText('Не удалось скопировать')).toBeNull();
+  });
+
+  it('shows an error and keeps the value visible when the clipboard write is rejected', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await screen.findByText('Не удалось скопировать');
+    expect(screen.getByText('ghp_realtoken')).toBeTruthy();
+  });
+
+  it('masks a revealed value again after 30 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      stubRevealFetch();
+
+      renderPage();
+      await screen.findByText('github-token');
+
+      await user.click(screen.getByLabelText('Показать значение github-token'));
+      await screen.findByText('ghp_realtoken');
+
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      await waitFor(() => expect(screen.queryByText('ghp_realtoken')).toBeNull());
+      expect(screen.getAllByText('••••••••')).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('masks the row after the value is edited, not showing the old value', async () => {
+    const user = userEvent.setup();
+    let patched = false;
+    stubRevealFetch(() => {
+      patched = true;
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+
+    await user.click(screen.getByLabelText('Изменить github-token'));
+    await user.type(screen.getByLabelText('Новое значение для github-token'), 'ghp_newtoken');
+    await user.click(screen.getByLabelText('Сохранить'));
+
+    await waitFor(() => expect(patched).toBe(true));
+    await waitFor(() => expect(screen.queryByLabelText('Сохранить')).toBeNull());
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
+    expect(screen.getAllByText('••••••••')).toHaveLength(2);
   });
 });

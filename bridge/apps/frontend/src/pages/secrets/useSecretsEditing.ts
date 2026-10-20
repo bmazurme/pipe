@@ -7,6 +7,8 @@ import {
   useUpdateSecretMutation,
 } from '../../store/api';
 
+const REVEAL_TIMEOUT_MS = 30_000;
+
 /**
  * Bundles the per-row edit/delete/reveal state SecretListCard wires into
  * each SecretRow — one hook rather than duplicated local state in the list
@@ -41,13 +43,25 @@ export function useSecretsEditing() {
   const [revealingId, setRevealingId] = useState<number | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
 
+  // A revealed value masks itself again after REVEAL_TIMEOUT_MS, so a secret
+  // left open on an unattended screen doesn't stay visible.
+  const hideTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
   useEffect(() => {
+    const timers = hideTimers.current;
     return () => {
       if (confirmDeleteTimeout.current) clearTimeout(confirmDeleteTimeout.current);
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
     };
   }, []);
 
   const hideRevealed = (id: number) => {
+    const timer = hideTimers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      hideTimers.current.delete(id);
+    }
     setRevealedValues((prev) => {
       if (!(id in prev)) return prev;
       const next = { ...prev };
@@ -67,6 +81,12 @@ export function useSecretsEditing() {
     try {
       const { value } = await revealSecretTrigger(id).unwrap();
       setRevealedValues((prev) => ({ ...prev, [id]: value }));
+      const previous = hideTimers.current.get(id);
+      if (previous) clearTimeout(previous);
+      hideTimers.current.set(
+        id,
+        setTimeout(() => hideRevealed(id), REVEAL_TIMEOUT_MS),
+      );
     } catch {
       setRevealError('Не удалось получить значение секрета');
     } finally {
@@ -126,6 +146,8 @@ export function useSecretsEditing() {
         description: editDescription.trim(),
         ...(editValue.trim() ? { value: editValue.trim() } : {}),
       }).unwrap();
+      // The old value must not stay on screen as if it were current.
+      if (editValue.trim()) hideRevealed(id);
       setEditingId(null);
     } catch (err) {
       setEditError(typeof err === 'string' ? err : 'Не удалось сохранить изменения');
