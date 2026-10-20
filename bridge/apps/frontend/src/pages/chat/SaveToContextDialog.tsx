@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Dialog, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 import { Link } from 'react-router-dom';
 
 import { getErrorMessage, MAX_CONTEXT_LENGTH, MAX_CONTEXT_NAME_LENGTH, useCreateContextMutation } from '../../store/api';

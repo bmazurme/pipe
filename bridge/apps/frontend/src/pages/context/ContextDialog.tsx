@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Alert, Button, Dialog, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 import { scanForLeaks } from '@pipe/protocol/leakScan';
 
 import {

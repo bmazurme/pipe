@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Dialog, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { type CreatedFleetWorker, useCreateWorkerMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';

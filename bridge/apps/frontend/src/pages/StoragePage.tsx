@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Card, Dialog, Text } from '@gravity-ui/uikit';
+import { Alert, Card, Text } from '@gravity-ui/uikit';
+import { Dialog } from '../shared/ui/Dialog';
 
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import {

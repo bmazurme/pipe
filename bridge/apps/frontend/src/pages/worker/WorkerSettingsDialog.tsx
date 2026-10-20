@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Checkbox, Dialog, NumberInput, Select, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Checkbox, NumberInput, Select, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';

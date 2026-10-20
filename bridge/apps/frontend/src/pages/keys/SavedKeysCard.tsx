@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Lock, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, ClipboardButton, Dialog, Icon, Label, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, ClipboardButton, Icon, Label, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { fingerprintOfPublicKey, keyFileName, keyKind } from '../../shared/lib/keyGeneration';
 import { triggerBlobDownload } from '../../shared/lib/parcelCrypto';

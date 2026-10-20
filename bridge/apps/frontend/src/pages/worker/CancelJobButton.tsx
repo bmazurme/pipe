@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Stop } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon } from '@gravity-ui/uikit';
+import { Alert, Button, Icon } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { getErrorMessage, useCancelJobMutation, WorkerJob } from '../../store/api';
 import { FORCE_STOP_AFTER_MS, isActive, isStopping } from './constants';

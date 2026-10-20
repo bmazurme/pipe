@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Dialog, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import {
   ClaudeCredential,

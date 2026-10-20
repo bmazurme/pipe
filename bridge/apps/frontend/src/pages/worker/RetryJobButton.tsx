@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRotateRight, ArrowsRotateLeft, Clock } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Select } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Select } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import {
   getErrorMessage,

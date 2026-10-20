@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import {
   getErrorMessage,

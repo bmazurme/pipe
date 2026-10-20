@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Dialog, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Text, TextArea } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { decryptParcel, stripEncryptedSuffix, triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import { useParcelKeys } from '../../shared/lib/parcelKeys';
