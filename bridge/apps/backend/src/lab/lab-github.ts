@@ -156,3 +156,30 @@ export async function checkRepo(
 
   return result;
 }
+
+const TRANSIENT =
+  /aborted due to timeout|timed out|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|GitHub 5\d\d/i;
+
+// A read from GitHub that failed for a reason of the network, not of the request (a timeout, a reset connection, a 5xx), is tried once
+// more, and whatever still fails says WHICH step it was — "operation was aborted due to timeout" alone does not. Only for reads: a write
+// that timed out may have gone through.
+export async function readStep<T>(
+  label: string,
+  run: () => Promise<T>,
+  pauseMs = 2000,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+
+      if (attempt === 1 && TRANSIENT.test(text)) {
+        await new Promise((resolve) => setTimeout(resolve, pauseMs));
+        continue;
+      }
+
+      throw new Error(`${label}: ${text}`);
+    }
+  }
+}
