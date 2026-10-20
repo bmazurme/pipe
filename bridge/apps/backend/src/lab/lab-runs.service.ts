@@ -36,7 +36,12 @@ import {
   LabRunStatus,
   LabTrigger,
 } from './entities/lab-run.entity';
-import { describeGithubError, githubFor, readStep } from './lab-github';
+import {
+  describeGithubError,
+  downloadRepoZip,
+  githubFor,
+  readStep,
+} from './lab-github';
 import { LabProjectsService } from './lab-projects.service';
 
 const ADVANCE_EVERY_MS = 15_000;
@@ -131,7 +136,7 @@ export class LabRunsService {
     const files = selectParcelFiles(
       await readZipball(
         await readStep('скачивание репозитория', () =>
-          github.downloadZipball(baseSha),
+          downloadRepoZip(project.repo, project.token, baseSha),
         ),
       ),
     );
