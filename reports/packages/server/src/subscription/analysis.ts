@@ -122,7 +122,7 @@ If you find nothing worth proposing, write {"items": []}. Quality over quantity.
 
 const RISKS: readonly BacklogRiskType[] = ['low', 'medium', 'high'];
 
-function normalizeTitle(title: string): string {
+export function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
