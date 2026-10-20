@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Alert, Button, Loader, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 import { scanForLeaks } from '@pipe/protocol/leakScan';
@@ -31,7 +31,7 @@ export function ContextDialog({ contextId, onClose }: ContextDialogProps) {
   if (context) return <ContextForm key={context.id} context={context} onClose={onClose} />;
 
   return (
-    <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="context-dialog-title">
+    <Dialog open onClose={onClose} maxWidth="l" aria-labelledby="context-dialog-title">
       <Dialog.Header caption="Изменить контекст" id="context-dialog-title" />
       <Dialog.Body>
         {isLoading && <Loader size="m" />}
@@ -54,6 +54,22 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
   const deferredContent = useDeferredValue(content);
   const leaks = useMemo(() => scanForLeaks([{ source: 'контекст', content: deferredContent }]), [deferredContent]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const isSaving = isCreating || isUpdating;
+  // Anything typed or loaded that is not saved yet: closing then asks first, so a stray Escape does not throw it away.
+  const isDirty = name !== (context?.name ?? '') || content !== (context?.content ?? '');
+  const nearLimit = content.length > MAX_CONTEXT_LENGTH * 0.9;
+
+  // The form can be taller than the window: bring a new error into view instead of leaving it below the fold.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [error]);
+
+  const requestClose = () => {
+    if (isDirty && !isSaving) setConfirmDiscard(true);
+    else onClose();
+  };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -93,11 +109,18 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
     }
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !isSaving) {
+      event.preventDefault();
+      void handleSave();
+    }
+  };
+
   return (
-    <Dialog open onClose={onClose} maxWidth="m" aria-labelledby="context-dialog-title">
+    <Dialog open onClose={requestClose} maxWidth="l" aria-labelledby="context-dialog-title">
       <Dialog.Header caption={context ? 'Изменить контекст' : 'Новый контекст'} id="context-dialog-title" />
       <Dialog.Body>
-        <div className={styles.form}>
+        <div className={styles.form} onKeyDown={handleKeyDown}>
           <TextInput
             label="Название"
             value={name}
@@ -108,14 +131,12 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
           <TextArea
             value={content}
             onUpdate={setContent}
-            minRows={8}
-            maxRows={16}
+            minRows={12}
+            maxRows={24}
+            autoFocus={context !== null}
             placeholder="Что модели нужно знать о проекте: договорённости, ограничения, структура, заметки с прошлых запусков…"
             controlProps={{ 'aria-label': 'Текст контекста', maxLength: MAX_CONTEXT_LENGTH }}
           />
-          <Text variant="caption-2" color="secondary" className={styles.counter}>
-            {content.length} / {MAX_CONTEXT_LENGTH}
-          </Text>
           <input
             ref={fileInput}
             type="file"
@@ -124,10 +145,16 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
             hidden
             onChange={(event) => void handleFile(event)}
           />
-          <div>
+          <div className={styles.formToolbar}>
             <Button view="outlined" onClick={() => fileInput.current?.click()}>
               Загрузить из файла
             </Button>
+            <Text variant="caption-2" color="secondary" className={styles.hint}>
+              Ctrl/⌘ + Enter — сохранить
+            </Text>
+            <Text variant="caption-2" color={nearLimit ? 'warning' : 'secondary'} className={styles.counter}>
+              {content.length.toLocaleString('ru-RU')} / {MAX_CONTEXT_LENGTH.toLocaleString('ru-RU')}
+            </Text>
           </div>
           {notice && <Alert theme="warning" message={notice} />}
           {leaks.length > 0 && (
@@ -135,7 +162,7 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
               theme="warning"
               title="В тексте найдено похожее на секреты — проверьте перед сохранением"
               message={
-                <ul>
+                <ul className={styles.findings}>
                   {leaks.map((finding) => (
                     <li key={`${finding.kind}:${finding.line}:${finding.match}`}>
                       строка {finding.line}: {finding.kind} — {finding.match}
@@ -145,16 +172,32 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
               }
             />
           )}
-          {error && <Alert theme="danger" view="filled" message={error} />}
+          <div ref={errorRef} role="alert">
+            {error && <Alert theme="danger" view="filled" message={error} />}
+          </div>
         </div>
       </Dialog.Body>
       <Dialog.Footer
         textButtonCancel="Отмена"
         textButtonApply="Сохранить"
-        propsButtonApply={{ loading: isCreating || isUpdating }}
-        onClickButtonCancel={onClose}
+        propsButtonApply={{ loading: isSaving }}
+        onClickButtonCancel={requestClose}
         onClickButtonApply={() => void handleSave()}
       />
+
+      <Dialog open={confirmDiscard} onClose={() => setConfirmDiscard(false)} maxWidth="s" aria-labelledby="context-discard-title">
+        <Dialog.Header caption="Закрыть без сохранения?" id="context-discard-title" />
+        <Dialog.Body>
+          <Text variant="body-2">Введённые изменения не сохранены и пропадут.</Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Продолжить редактирование"
+          textButtonApply="Закрыть без сохранения"
+          propsButtonApply={{ view: 'outlined-danger' }}
+          onClickButtonCancel={() => setConfirmDiscard(false)}
+          onClickButtonApply={onClose}
+        />
+      </Dialog>
     </Dialog>
   );
 }

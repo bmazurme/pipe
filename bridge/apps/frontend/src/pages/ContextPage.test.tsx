@@ -266,3 +266,61 @@ describe('ContextPage usage info', () => {
     expect(await screen.findByText(/Расписания Improve продолжат работу без контекста: Nightly, Weekly/)).toBeTruthy();
   });
 });
+
+describe('ContextDialog closing and saving', () => {
+  it('closes at once when nothing was typed', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Новый контекст/ }));
+    await user.click(await screen.findByRole('button', { name: 'Отмена' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('Название контекста')).toBeNull());
+    expect(screen.queryByText('Закрыть без сохранения?')).toBeNull();
+  });
+
+  it('asks before throwing away typed text, and keeps it when told to go on editing', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Новый контекст/ }));
+    await user.type(await screen.findByLabelText('Текст контекста'), 'черновик');
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    expect(await screen.findByText('Закрыть без сохранения?')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Продолжить редактирование' }));
+
+    await waitFor(() => expect(screen.queryByText('Закрыть без сохранения?')).toBeNull());
+    expect((screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value).toBe('черновик');
+
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
+    expect(sent).toEqual([]);
+  });
+
+  it('does not ask about an existing context that was opened and not changed', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Изменить: Project notes' }));
+    await screen.findByLabelText('Текст контекста');
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
+  });
+
+  it('saves with Ctrl+Enter from the text field', async () => {
+    const user = userEvent.setup();
+    contexts = [];
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Новый контекст/ }));
+    await user.type(await screen.findByLabelText('Название контекста'), 'Quick');
+    await user.type(screen.getByLabelText('Текст контекста'), 'Notes.');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'contexts', body: { name: 'Quick', content: 'Notes.' } }));
+  });
+});

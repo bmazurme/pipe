@@ -51,8 +51,26 @@
   gap: 12px;
 }
 
+.formToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.hint {
+  margin-inline-start: auto;
+}
+
 .counter {
-  align-self: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.findings {
+  max-height: 140px;
+  margin: 0;
+  overflow-y: auto;
+  padding-inline-start: 20px;
 }
 
 .centered {
