@@ -98,6 +98,22 @@ beforeEach(() => {
 });
 
 describe('SchedulesTab', () => {
+  it('lists the schedules by the time they run, earliest first — not in the order they were made', async () => {
+    schedules = [
+      { ...makeSchedule(1, 'Вечерний'), hour: 22, minute: 30 },
+      { ...makeSchedule(2, 'Утренний'), hour: 6, minute: 15 },
+      { ...makeSchedule(3, 'Ночной'), hour: 2, minute: 0 },
+    ];
+    renderTab();
+
+    await screen.findByText('Ночной');
+    const [night, morning, evening] = ['Ночной', 'Утренний', 'Вечерний'].map((name) => screen.getByText(name));
+
+    // each one comes after the previous in the document: 02:00, 06:15, 22:30 — not 22:30, 06:15, 02:00 as made
+    expect(night.compareDocumentPosition(morning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(morning.compareDocumentPosition(evening) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('asks for confirmation and deletes nothing until confirmed', async () => {
     const user = userEvent.setup();
     renderTab();
