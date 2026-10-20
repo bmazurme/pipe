@@ -4,8 +4,8 @@ import { BaseEntity } from '../../base.entity';
 import { Chat } from './chat.entity';
 
 // A file or image the user attached to a chat message. Uploaded first (messageId null,
-// "pending"), then linked to the message it is sent with. The bytes live on disk under
-// uploads/chat; only Claude chats take them (see attachments.ts).
+// "pending"), then linked to the message it is sent with. The bytes live in the FileStore
+// under the chat/ key (uploads/chat is only multer's staging dir); only Claude chats take them (see attachments.ts).
 @Entity({ name: 'chat_attachments' })
 @Index(['chatId'])
 @Index(['messageId'])

@@ -2,6 +2,10 @@ import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import {
+  ImportDayOffsDto,
+  ImportDayOffsResponseDto,
+} from './dto/import-day-offs.dto';
 import { ImportReportEntriesDto } from './dto/import-report-entries.dto';
 import { ImportTimeReportResponseDto } from './dto/import-time-report-response.dto';
 import { TimeService } from './time.service';
@@ -14,6 +18,15 @@ import { TimeService } from './time.service';
 @UseGuards(JwtOrApiKeyGuard)
 export class TimeImportController {
   constructor(private readonly timeService: TimeService) {}
+
+  // The days off of a year, from reports' calendar: merged into the key owner's own, never deleting any.
+  @Post('day-offs')
+  importDayOffs(
+    @Body() dto: ImportDayOffsDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ImportDayOffsResponseDto> {
+    return this.timeService.importDayOffs(currentUser.id, dto);
+  }
 
   @Post('reports')
   importReports(

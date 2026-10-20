@@ -32,6 +32,23 @@ describe('time export/import controllers', () => {
     );
   });
 
+  it('imports days off into the account that owns the API key', async () => {
+    const timeService = {
+      importDayOffs: jest.fn().mockResolvedValue({
+        year: 2026,
+        created: 1,
+        updated: 0,
+        unchanged: 0,
+      }),
+    };
+    const controller = new TimeImportController(timeService as never);
+    const dto = { year: 2026, offDays: ['2026-03-10'] };
+
+    await controller.importDayOffs(dto as never, { id: 7 });
+
+    expect(timeService.importDayOffs).toHaveBeenCalledWith(7, dto);
+  });
+
   it('no longer accepts the old shared-secret guard', () => {
     // The routes are guarded by JwtOrApiKeyGuard (personal brk_ keys or a
     // browser session) — see the guard's own spec for the key handling.

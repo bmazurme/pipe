@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 
-import { handleCounts, handleAddOffDay, handleRemoveOffDay, handleImportDayOffs } from './counts/handler';
+import { handleCounts, handleAddOffDay, handleRemoveOffDay, handleImportDayOffs, handleSendDayOffs } from './counts/handler';
 import { handleReport, handlePushReport } from './reports/handler';
 import { handleGetSettings, handleSetSettings, handleExportSettingsBundle, handleImportSettingsBundle } from './settings/handler';
 import { handlePushSettingsToBridge, handlePullSettingsFromBridge } from './settings/bridge-sync-handler';
@@ -92,6 +92,7 @@ app.get('/api/counts/:id', handleCounts);
 app.post('/api/counts/:id/off-days', handleAddOffDay);
 app.delete('/api/counts/:id/off-days/:date', handleRemoveOffDay);
 app.post('/api/counts/:id/import-day-offs', handleImportDayOffs);
+app.post('/api/counts/:id/send-day-offs', handleSendDayOffs);
 app.get('/api/reports', handleReport);
 app.post('/api/reports/push-to-bridge', handlePushReport);
 app.get('/api/settings', handleGetSettings);

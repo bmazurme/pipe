@@ -5,6 +5,7 @@ export {
   useAddOffDaysMutation,
   useRemoveOffDayMutation,
   useImportDayOffsMutation,
+  useSendDayOffsMutation,
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,
