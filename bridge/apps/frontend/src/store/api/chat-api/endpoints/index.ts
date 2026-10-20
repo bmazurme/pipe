@@ -99,6 +99,11 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { chatId }) => [{ type: 'ChatMessages', id: chatId }, 'Chat'],
     }),
+    // Re-runs the newest failed reply: the same message goes back to pending.
+    retryChatTurn: builder.mutation<ChatMessageMeta, { chatId: number; messageId: number }>({
+      query: ({ messageId }) => ({ url: `chat/messages/${messageId}/retry`, method: 'POST' }),
+      invalidatesTags: (_result, _error, { chatId }) => [{ type: 'ChatMessages', id: chatId }, 'Chat'],
+    }),
   }),
 });
 
@@ -133,5 +138,6 @@ export const {
   useRenameChatMutation,
   useListMessagesQuery,
   useSendMessageMutation,
+  useRetryChatTurnMutation,
 } = chatApiEndpoints;
 export { chatApiEndpoints };

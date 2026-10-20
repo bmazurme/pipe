@@ -351,4 +351,38 @@ export class ChatService {
 
     return this.messageRepository.save(message);
   }
+
+  // Re-runs the newest reply of a chat if it failed: the same message goes back to Pending, so the normal claim
+  // takes it with the same history and attachments. Older replies stay as they are (a later question follows them).
+  async retryTurn(messageId: number, userId: number): Promise<ChatMessage> {
+    const message = await this.findOwnedMessage(messageId, userId);
+
+    if (message.role !== ChatMessageRole.Assistant) {
+      throw new BadRequestException('Message is not an assistant message');
+    }
+    if (message.status !== ChatMessageStatus.Failed) {
+      throw new ConflictException('Only a failed reply can be retried');
+    }
+
+    const [newest] = await this.messageRepository.find({
+      where: { chatId: message.chatId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: 1,
+    });
+
+    if (newest?.id !== message.id) {
+      throw new ConflictException('Only the last reply can be retried');
+    }
+
+    message.status = ChatMessageStatus.Pending;
+    message.errorMessage = null;
+    message.progress = null;
+    const saved = await this.messageRepository.save(message);
+
+    await this.chatRepository.update(message.chatId, {
+      updatedAt: new Date(),
+    });
+
+    return saved;
+  }
 }

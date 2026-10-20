@@ -228,6 +228,16 @@ export class ChatController {
     };
   }
 
+  @Post('messages/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  async retryTurn(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ChatMessageResponseDto> {
+    const message = await this.chatService.retryTurn(id, currentUser.id);
+    return ChatMessageResponseDto.fromEntity(message);
+  }
+
   // Worker-only from here down.
 
   @Post('turns/claim')
