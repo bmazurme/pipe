@@ -24,6 +24,7 @@ import type {
   SubscriptionIssueType,
   SubscriptionPublishPayload,
   DayOffsSendResultType,
+  UpdateStatusType,
   SubscriptionPushPayload,
   SubscriptionStateEntryType,
   TrackedProjectType,
@@ -204,6 +205,12 @@ const reportsApi = createApi({
       query: () => 'version',
       transformResponse: unwrap<ServerCodeStatus>('Не удалось проверить версию сервера'),
     }),
+    // Whether bridge has a newer build of reports than the one running (the server remembers the answer for half an hour;
+    // `refresh` asks bridge again).
+    getUpdateStatus: builder.query<UpdateStatusType, { refresh?: boolean } | void>({
+      query: (arg) => ({ url: 'update/status', params: arg && arg.refresh ? { refresh: '1' } : undefined }),
+      transformResponse: unwrap<UpdateStatusType>('Не удалось проверить обновления'),
+    }),
     setAutoStartWorkerModel: builder.mutation<SubscriptionConfigType, { model: WorkerModelType | null }>({
       query: (body) => ({ url: 'subscription/config/auto-start-worker', method: 'PUT', body }),
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось сохранить настройку'),
@@ -344,6 +351,8 @@ export const {
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
   useGetServerCodeStatusQuery,
+  useGetUpdateStatusQuery,
+  useLazyGetUpdateStatusQuery,
   useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,

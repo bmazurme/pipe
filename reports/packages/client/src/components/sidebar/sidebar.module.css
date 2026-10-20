@@ -111,6 +111,11 @@
   border-top: 1px solid var(--g-color-line-generic);
 }
 
+.version {
+  padding: 6px 8px 0;
+  overflow-wrap: anywhere;
+}
+
 .collapseBar {
   padding-top: 4px;
   border-top: 1px solid var(--g-color-line-generic);

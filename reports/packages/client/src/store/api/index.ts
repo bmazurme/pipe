@@ -22,6 +22,8 @@ export {
   useGetBacklogQuery,
   useCreateBacklogIssuesMutation,
   useGetServerCodeStatusQuery,
+  useGetUpdateStatusQuery,
+  useLazyGetUpdateStatusQuery,
   useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,

@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { unzip, zip, type Unzipped, type Zippable } from 'fflate';
+import { strToU8, unzip, zip, type Unzipped, type Zippable } from 'fflate';
 
 import { GithubApiService } from '../loop/github-api.service';
 
@@ -11,9 +13,38 @@ const BASE_BRANCH = 'main';
 // correctly in the extracted zip with no rewriting needed.
 const INCLUDED_SEGMENTS = ['reports/', 'packages/protocol/'];
 
+// What the owner's reports needs to know about the build on offer. The release id is a hash of the CONTENT that goes into
+// the zip (reports/ and packages/protocol/), not of a commit: a merge elsewhere in the repository (bridge, worker, docs)
+// leaves it unchanged, so "a new version is available" is only ever said when reports itself changed.
 export interface ReportsReleaseInfo {
+  // The head of main this build was cut from.
   sha: string;
   shortSha: string;
+  releaseId: string;
+  shortId: string;
+  // reports/package.json's version — for people to read, never compared.
+  version: string | null;
+  // Of the zip itself, so the receiver can check what it downloaded.
+  sha256: string;
+  size: number;
+}
+
+// What the zip carries as reports/release.json: the receiver reads its own version from it, and uses `files` to remove
+// what a later release no longer has.
+export interface ReleaseManifest {
+  releaseId: string;
+  shortId: string;
+  version: string | null;
+  sourceSha: string;
+  files: string[];
+}
+
+export const RELEASE_MANIFEST_PATH = 'reports/release.json';
+
+interface BuiltRelease {
+  sha: string;
+  bytes: Uint8Array;
+  info: ReportsReleaseInfo;
 }
 
 // fflate's callback forms run on worker threads in Node — see improve/parcel.ts
@@ -37,8 +68,9 @@ function zipAsync(entries: Zippable): Promise<Uint8Array> {
 @Injectable()
 export class ReportsReleaseService {
   // Single-entry cache: the output depends only on the base SHA.
-  private cached: { sha: string; bytes: Uint8Array } | null = null;
-  private inFlight: { sha: string; promise: Promise<Uint8Array> } | null = null;
+  private cached: BuiltRelease | null = null;
+  private inFlight: { sha: string; promise: Promise<BuiltRelease> } | null =
+    null;
 
   constructor(private readonly githubApi: GithubApiService) {}
 
@@ -51,11 +83,7 @@ export class ReportsReleaseService {
   }
 
   async getInfo(): Promise<ReportsReleaseInfo> {
-    this.assertConfigured();
-
-    const sha = await this.githubApi.getBranchSha(BASE_BRANCH);
-
-    return { sha, shortSha: sha.slice(0, 7) };
+    return (await this.getRelease()).info;
   }
 
   // Re-packs reports/ plus packages/protocol/ out of the whole-repo zipball
@@ -66,18 +94,22 @@ export class ReportsReleaseService {
   // isn't prebuilt inside the zip; there is no way around that short of
   // compiling it server-side here, which this deliberately doesn't do.
   async downloadReportsZip(): Promise<Uint8Array> {
+    return (await this.getRelease()).bytes;
+  }
+
+  async getRelease(): Promise<{ bytes: Uint8Array; info: ReportsReleaseInfo }> {
     this.assertConfigured();
 
     const sha = await this.githubApi.getBranchSha(BASE_BRANCH);
 
-    if (this.cached?.sha === sha) return this.cached.bytes;
+    if (this.cached?.sha === sha) return this.cached;
 
     if (this.inFlight?.sha === sha) return this.inFlight.promise;
 
-    const promise = this.buildReportsZip(sha).then((bytes) => {
-      this.cached = { sha, bytes };
+    const promise = this.buildReportsZip(sha).then((built) => {
+      this.cached = built;
 
-      return bytes;
+      return built;
     });
     const entry = { sha, promise };
 
@@ -92,7 +124,7 @@ export class ReportsReleaseService {
     return promise;
   }
 
-  private async buildReportsZip(sha: string): Promise<Uint8Array> {
+  private async buildReportsZip(sha: string): Promise<BuiltRelease> {
     const zipball = await this.githubApi.downloadZipball(sha);
     const unzipped = await unzipAsync(zipball);
     const paths = Object.keys(unzipped);
@@ -129,6 +161,69 @@ export class ReportsReleaseService {
       throw new Error('В репозитории не нашлось папки packages/protocol/');
     }
 
-    return zipAsync(output);
+    const files = Object.keys(output).sort();
+    const releaseId = hashContents(output as Record<string, Uint8Array>, files);
+    const manifest: ReleaseManifest = {
+      releaseId,
+      shortId: releaseId.slice(0, 12),
+      version: readVersion(
+        output['reports/package.json'] as Uint8Array | undefined,
+      ),
+      sourceSha: sha,
+      files,
+    };
+
+    output[RELEASE_MANIFEST_PATH] = strToU8(JSON.stringify(manifest, null, 2));
+
+    const bytes = await zipAsync(output);
+
+    return {
+      sha,
+      bytes,
+      info: {
+        sha,
+        shortSha: sha.slice(0, 7),
+        releaseId,
+        shortId: manifest.shortId,
+        version: manifest.version,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        size: bytes.byteLength,
+      },
+    };
+  }
+}
+
+// The id of a release: the paths and bytes of every file that goes into the zip, in path order.
+function hashContents(
+  entries: Record<string, Uint8Array>,
+  sortedPaths: string[],
+): string {
+  const hash = createHash('sha256');
+
+  for (const path of sortedPaths) {
+    const content = entries[path];
+
+    hash
+      .update(path)
+      .update('\0')
+      .update(String(content.byteLength))
+      .update('\0')
+      .update(content);
+  }
+
+  return hash.digest('hex');
+}
+
+function readVersion(packageJson: Uint8Array | undefined): string | null {
+  if (!packageJson) return null;
+
+  try {
+    const { version } = JSON.parse(Buffer.from(packageJson).toString()) as {
+      version?: unknown;
+    };
+
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
   }
 }

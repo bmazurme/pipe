@@ -9,6 +9,7 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { useTheme } from '../../hooks/use-theme';
 import { useSidebarCollapse } from '../../hooks/use-sidebar-collapse';
 import { useConfirmNavigation } from '../../hooks/use-unsaved-changes';
+import { useGetUpdateStatusQuery } from '../../store/api';
 
 import style from './sidebar.module.css';
 
@@ -27,6 +28,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { isDark, toggleTheme } = useTheme();
   const { collapsed, toggleCollapsed } = useSidebarCollapse();
   const isMobile = useMediaQuery('(max-width: 768px)');
+  // The build running here, as the server reads it from release.json; nothing is drawn for an install that carries none.
+  const { data: updateStatus } = useGetUpdateStatusQuery(undefined, { pollingInterval: 30 * 60 * 1000, skipPollingIfUnfocused: true });
+  const running = updateStatus?.current;
   // The mobile drawer always shows labels, so tooltips only help on the collapsed desktop rail
   const showTooltips = collapsed && !isMobile;
   const themeLabel = isDark ? 'Светлая тема' : 'Тёмная тема';
@@ -125,6 +129,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </Button>
           ))}
         </div>
+        {running && !collapsed && (
+          <Text variant="caption-2" color="secondary" className={style.version} title={`Сборка ${running.releaseId}`}>
+            {running.version ? `Версия ${running.version} · ` : ''}сборка {running.shortId}
+          </Text>
+        )}
       </div>
     </div>
   )

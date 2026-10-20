@@ -3,6 +3,7 @@ import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { Bars } from '@gravity-ui/icons';
 
 import Sidebar from '../sidebar';
+import UpdateBanner from '../update-banner';
 
 import style from './content.module.css';
 
@@ -74,6 +75,7 @@ function Content({ sidebar, main }: ContentProps) {
       )}
       <div className={style.right}>
         <div className={style.body}>
+          {sidebar && <UpdateBanner />}
           {main && <main id="main-content" className={style.main}>{main}</main>}
         </div>
       </div>

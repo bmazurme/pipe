@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { strToU8, unzip, zip, type Zippable } from 'fflate';
 
 import { ReportsReleaseService } from './reports-release.service';
@@ -36,13 +38,116 @@ describe('ReportsReleaseService', () => {
     await expect(service.downloadReportsZip()).rejects.toThrow('GITHUB_REPO');
   });
 
-  it('returns the HEAD sha of main', async () => {
-    const service = new ReportsReleaseService(fakeGithubApi());
+  async function releaseZipball(
+    reportsVersion: string | null = '1.4.0',
+    extra: Record<string, string> = {},
+  ): Promise<Uint8Array> {
+    return zipAsync({
+      'owner-pipe-abc1234/README.md': strToU8('root readme'),
+      'owner-pipe-abc1234/reports/package.json': strToU8(
+        JSON.stringify(
+          reportsVersion
+            ? { name: 'reports', version: reportsVersion }
+            : { name: 'reports' },
+        ),
+      ),
+      'owner-pipe-abc1234/reports/src/index.ts': strToU8('// entry'),
+      'owner-pipe-abc1234/packages/protocol/package.json': strToU8('{}'),
+      ...Object.fromEntries(
+        Object.entries(extra).map(([path, text]) => [
+          `owner-pipe-abc1234/${path}`,
+          strToU8(text),
+        ]),
+      ),
+    });
+  }
 
-    await expect(service.getInfo()).resolves.toEqual({
+  it('describes the build on offer: the head of main, a content id, the version and the zip checksum', async () => {
+    const zipball = await releaseZipball();
+    const service = new ReportsReleaseService(
+      fakeGithubApi({ downloadZipball: async () => zipball }),
+    );
+
+    const info = await service.getInfo();
+    const { bytes } = await service.getRelease();
+
+    expect(info).toMatchObject({
       sha: 'abc1234567',
       shortSha: 'abc1234',
+      version: '1.4.0',
+      size: bytes.byteLength,
     });
+    expect(info.releaseId).toMatch(/^[0-9a-f]{64}$/);
+    expect(info.shortId).toBe(info.releaseId.slice(0, 12));
+    expect(info.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+  });
+
+  it('keeps the release id when only something outside reports/ and protocol changed — and changes it when they change', async () => {
+    const releaseOf = async (zipball: Uint8Array, sha: string) =>
+      (
+        await new ReportsReleaseService(
+          fakeGithubApi({
+            getBranchSha: async () => sha,
+            downloadZipball: async () => zipball,
+          }),
+        ).getInfo()
+      ).releaseId;
+
+    const base = await releaseOf(await releaseZipball(), 'sha-1');
+    const bridgeOnlyChange = await releaseOf(
+      await releaseZipball('1.4.0', { 'bridge/src/main.ts': '// changed' }),
+      'sha-2',
+    );
+    const reportsChange = await releaseOf(
+      await releaseZipball('1.4.0', { 'reports/src/new.ts': '// new' }),
+      'sha-3',
+    );
+    const protocolChange = await releaseOf(
+      await releaseZipball('1.4.0', {
+        'packages/protocol/src/new.ts': '// new',
+      }),
+      'sha-4',
+    );
+
+    expect(bridgeOnlyChange).toBe(base);
+    expect(reportsChange).not.toBe(base);
+    expect(protocolChange).not.toBe(base);
+    expect(new Set([base, reportsChange, protocolChange]).size).toBe(3);
+  });
+
+  it('writes reports/release.json into the zip: its id, version, source commit and the list of files', async () => {
+    const zipball = await releaseZipball();
+    const service = new ReportsReleaseService(
+      fakeGithubApi({ downloadZipball: async () => zipball }),
+    );
+
+    const unzipped = await unzipAsync(await service.downloadReportsZip());
+    const manifest = JSON.parse(
+      Buffer.from(unzipped['reports/release.json']).toString(),
+    );
+    const { releaseId } = await service.getInfo();
+
+    expect(manifest).toMatchObject({
+      releaseId,
+      version: '1.4.0',
+      sourceSha: 'abc1234567',
+    });
+    expect(manifest.files).toEqual([
+      'packages/protocol/package.json',
+      'reports/package.json',
+      'reports/src/index.ts',
+    ]);
+    // The manifest does not list itself, and so does not change the id it carries.
+    expect(manifest.files).not.toContain('reports/release.json');
+  });
+
+  it('has no version when reports/package.json has none', async () => {
+    const zipball = await releaseZipball(null);
+    const service = new ReportsReleaseService(
+      fakeGithubApi({ downloadZipball: async () => zipball }),
+    );
+
+    expect((await service.getInfo()).version).toBeNull();
   });
 
   it('keeps reports/ and packages/protocol/ from the zipball and strips the repo-root prefix', async () => {
@@ -72,6 +177,7 @@ describe('ReportsReleaseService', () => {
       'packages/protocol/src/pack.ts',
       'reports/package.json',
       'reports/packages/server/src/index.ts',
+      'reports/release.json',
     ]);
     expect(Buffer.from(unzipped['reports/package.json']).toString()).toBe(
       '{"name":"reports"}',
