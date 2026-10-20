@@ -1,4 +1,9 @@
-import { checkRepo, readStep } from './lab-github';
+import {
+  checkRepo,
+  downloadRepoZip,
+  readStep,
+  ZIP_MAX_BYTES,
+} from './lab-github';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
@@ -107,5 +112,63 @@ describe('readStep', () => {
       'ветка main: GitHub 404: Not Found',
     );
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('downloadRepoZip', () => {
+  const streamOf = (chunks: Uint8Array[], stallAfter = false) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk));
+        if (!stallAfter) controller.close();
+      },
+    });
+
+  it('collects the whole body', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(streamOf([new Uint8Array([1, 2]), new Uint8Array([3])]), {
+        status: 200,
+      }),
+    );
+
+    await expect(downloadRepoZip('me/boat', 'tok', 'abc')).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+  });
+
+  it('gives up on a stalled download and says how far it got', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation((_url, init) => {
+      const body = streamOf([new Uint8Array(2 * 1024 * 1024)], true);
+
+      init?.signal?.addEventListener('abort', () => undefined);
+
+      return Promise.resolve(new Response(body, { status: 200 }));
+    });
+
+    await expect(downloadRepoZip('me/boat', 'tok', 'abc', 50)).rejects.toThrow(
+      /не пришло данных.*получено 2\.0 МБ/,
+    );
+  });
+
+  it('refuses a repository over the limit', async () => {
+    const big = new Uint8Array(ZIP_MAX_BYTES + 1);
+
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(streamOf([big]), { status: 200 }));
+
+    await expect(downloadRepoZip('me/boat', 'tok', 'abc')).rejects.toThrow(
+      /больше 100 МБ/,
+    );
+  });
+
+  it('reports a refusal of GitHub', async () => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 404 }));
+
+    await expect(downloadRepoZip('me/boat', 'tok', 'abc')).rejects.toThrow(
+      'GitHub 404',
+    );
   });
 });

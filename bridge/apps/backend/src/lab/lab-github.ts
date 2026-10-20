@@ -183,3 +183,88 @@ export async function readStep<T>(
     }
   }
 }
+
+const ZIP_IDLE_MS = 30_000;
+const ZIP_TOTAL_MS = 10 * 60_000;
+export const ZIP_MAX_BYTES = 100 * 1024 * 1024;
+
+// The repository at a commit as a zip. The client of the loop gives the whole download 90 s, which a bigger repository (images, other
+// binaries — the archive carries everything, though only text goes to the worker) or a slow link does not make; here the download may take
+// as long as bytes keep arriving, and a stall, or a repository over the limit, says how far it got.
+export async function downloadRepoZip(
+  repo: string,
+  token: string,
+  sha: string,
+  idleMs = ZIP_IDLE_MS,
+): Promise<Uint8Array> {
+  const abort = new AbortController();
+  const startedAt = Date.now();
+  const total = setTimeout(() => abort.abort(), ZIP_TOTAL_MS);
+  let idle: NodeJS.Timeout | undefined;
+  let received = 0;
+  const progress = () =>
+    `получено ${(received / 1024 / 1024).toFixed(1)} МБ за ${Math.round((Date.now() - startedAt) / 1000)} с`;
+  const arm = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => abort.abort(), idleMs);
+  };
+
+  try {
+    arm();
+
+    const response = await fetch(`${API}/repos/${repo}/zipball/${sha}`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        Authorization: `Bearer ${token}`,
+      },
+      signal: abort.signal,
+    });
+
+    if (!response.ok || !response.body)
+      throw new Error(`GitHub ${response.status} при скачивании архива`);
+
+    const chunks: Uint8Array[] = [];
+    const reader = response.body.getReader();
+    const stalled = new Promise<never>((_resolve, reject) => {
+      abort.signal.addEventListener(
+        'abort',
+        () => reject(new Error('aborted')),
+        { once: true },
+      );
+    });
+
+    stalled.catch(() => undefined);
+
+    for (;;) {
+      // Not left to fetch alone to end a read that never returns: the abort itself ends the wait.
+      const { done, value } = await Promise.race([reader.read(), stalled]);
+
+      if (done) break;
+
+      arm();
+      received += value.length;
+
+      if (received > ZIP_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(
+          `репозиторий больше ${ZIP_MAX_BYTES / 1024 / 1024} МБ — Lab такие не берёт (уберите из него крупные файлы или выберите другой проект)`,
+        );
+      }
+
+      chunks.push(value);
+    }
+
+    return new Uint8Array(Buffer.concat(chunks));
+  } catch (error) {
+    if (abort.signal.aborted)
+      throw new Error(
+        `не пришло данных ${Math.round(idleMs / 1000)} с или архив качается дольше ${ZIP_TOTAL_MS / 60000} мин (${progress()})`,
+      );
+
+    throw error;
+  } finally {
+    clearTimeout(idle);
+    clearTimeout(total);
+  }
+}
