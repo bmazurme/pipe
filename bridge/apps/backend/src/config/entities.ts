@@ -9,6 +9,9 @@ import { Context } from '../context/entities/context.entity';
 import { ImproveRun } from '../improve/entities/improve-run.entity';
 import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
 import { ImproveSettings } from '../improve/entities/improve-settings.entity';
+import { LabProject } from '../lab/entities/lab-project.entity';
+import { LabRun } from '../lab/entities/lab-run.entity';
+import { LabSchedule } from '../lab/entities/lab-schedule.entity';
 import { AppLog } from '../logs/entities/app-log.entity';
 import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
 import { LoopEvent } from '../loop/entities/loop-event.entity';
@@ -67,4 +70,7 @@ export const ENTITIES = [
   ImproveRun,
   ImproveSchedule,
   ImproveSettings,
+  LabProject,
+  LabSchedule,
+  LabRun,
 ];

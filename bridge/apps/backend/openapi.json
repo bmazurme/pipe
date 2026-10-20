@@ -2490,6 +2490,358 @@
         }
       }
     },
+    "/api/v1/lab/projects": {
+      "get": {
+        "operationId": "LabController_listProjects",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "LabController_createProject",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLabProjectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/projects/{id}": {
+      "patch": {
+        "operationId": "LabController_updateProject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLabProjectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "LabController_removeProject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/lab/projects/{id}/check": {
+      "post": {
+        "operationId": "LabController_checkProject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/schedules": {
+      "get": {
+        "operationId": "LabController_listSchedules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LabSchedule"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "LabController_createSchedule",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLabScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabSchedule"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/schedules/{id}": {
+      "put": {
+        "operationId": "LabController_updateSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLabScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabSchedule"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "LabController_removeSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/lab/schedules/{id}/run": {
+      "post": {
+        "operationId": "LabController_runSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/lab/runs": {
+      "get": {
+        "operationId": "LabController_listRuns",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LabRun"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "LabController_startRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartLabRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/runs/{id}/cancel": {
+      "post": {
+        "operationId": "LabController_cancelRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/runs/{id}/retry-publish": {
+      "post": {
+        "operationId": "LabController_retryPublish",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "operationId": "LogsController_list",
@@ -5735,6 +6087,326 @@
           "name",
           "type",
           "taskKey"
+        ]
+      },
+      "CreateLabProjectDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "repo": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "token": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "baseBranch": {
+            "type": "string",
+            "pattern": "/^[\\w./-]{1,100}$/"
+          }
+        },
+        "required": [
+          "name",
+          "repo",
+          "token"
+        ]
+      },
+      "UpdateLabProjectDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "baseBranch": {
+            "type": "string",
+            "pattern": "/^[\\w./-]{1,100}$/"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        }
+      },
+      "LabSchedule": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number"
+          },
+          "projectId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hour": {
+            "type": "number"
+          },
+          "minute": {
+            "type": "number"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "contextId": {
+            "type": "number",
+            "nullable": true
+          },
+          "lastRunOn": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastRunAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "lastResult": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "projectId",
+          "name",
+          "enabled",
+          "hour",
+          "minute",
+          "timezone",
+          "model",
+          "task",
+          "contextId",
+          "lastRunOn",
+          "lastRunAt",
+          "lastResult",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SaveLabScheduleDto": {
+        "type": "object",
+        "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hour": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "minute": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 59
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "model": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "projectId",
+          "name",
+          "enabled",
+          "hour",
+          "minute",
+          "timezone",
+          "model",
+          "task"
+        ]
+      },
+      "LabRun": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number"
+          },
+          "projectId": {
+            "type": "number",
+            "nullable": true
+          },
+          "repo": {
+            "type": "string"
+          },
+          "scheduleId": {
+            "type": "number",
+            "nullable": true
+          },
+          "trigger": {
+            "type": "object"
+          },
+          "title": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "publishing",
+              "pr_open",
+              "no_changes",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "jobId": {
+            "type": "number",
+            "nullable": true
+          },
+          "baseSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "baseline": {
+            "type": "string",
+            "nullable": true
+          },
+          "branch": {
+            "type": "string",
+            "nullable": true
+          },
+          "prNumber": {
+            "type": "number",
+            "nullable": true
+          },
+          "prUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "projectId",
+          "repo",
+          "scheduleId",
+          "trigger",
+          "title",
+          "task",
+          "model",
+          "status",
+          "jobId",
+          "baseSha",
+          "baseline",
+          "branch",
+          "prNumber",
+          "prUrl",
+          "note",
+          "error",
+          "finishedAt",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "StartLabRunDto": {
+        "type": "object",
+        "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "task": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8000
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "task",
+          "model"
         ]
       },
       "AppLog": {

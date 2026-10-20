@@ -1,26 +1,34 @@
-import { Flask } from '@gravity-ui/icons';
-import { Icon, Text } from '@gravity-ui/uikit';
+import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
+import { useTabParam } from '../shared/hooks/useTabParam';
 import { PageHeader } from '../widgets/PageHeader';
-import styles from './ComingSoonPage.module.css';
+import styles from './ImprovePage.module.css';
+import { ProjectsTab } from './lab/ProjectsTab';
+import { RunsTab } from './lab/RunsTab';
+import { SchedulesTab } from './lab/SchedulesTab';
 
-// Lab (CAD, calculations and BOM for hardware projects) is not part of the project for now: only this placeholder is left,
-// so the sidebar entry and the /lab address keep working while the section is announced as "скоро".
+const TABS = ['projects', 'schedules', 'runs'] as const;
+
+// Improve for somebody else's repository: the owner connects a GitHub project with their own token, and Lab hands the task (free text)
+// to a worker and opens a pull request in that repository — by hand or on a nightly schedule.
 export function LabPage() {
+  const [activeTab, setActiveTab] = useTabParam(TABS, 'projects');
+
   return (
     <div className={styles.page}>
-      <PageHeader title="Lab" description="CAD, расчёты и BOM для хардварных проектов." />
+      <PageHeader title="Lab" description="Свои проекты на GitHub: задача текстом → worker → pull request в вашем репозитории. Слияние остаётся за вами." />
 
-      <div className={styles.card}>
-        <span className={styles.icon}>
-          <Icon data={Flask} size={28} />
-        </span>
-        <Text variant="header-2">
-          Раздел в разработке
-          <span className={styles.badge}>скоро</span>
-        </Text>
-        <Text color="secondary">Здесь появится, когда будет готов.</Text>
-      </div>
+      <TabProvider value={activeTab} onUpdate={setActiveTab}>
+        <TabList>
+          <Tab value="projects">Проекты</Tab>
+          <Tab value="schedules">Расписания</Tab>
+          <Tab value="runs">Запуски</Tab>
+        </TabList>
+
+        <TabPanel value="projects">{activeTab === 'projects' && <ProjectsTab />}</TabPanel>
+        <TabPanel value="schedules">{activeTab === 'schedules' && <SchedulesTab />}</TabPanel>
+        <TabPanel value="runs">{activeTab === 'runs' && <RunsTab />}</TabPanel>
+      </TabProvider>
     </div>
   );
 }

@@ -108,13 +108,13 @@ describe('the owner-only pages', () => {
     }
   });
 
-  it('lists Lab as a real link carrying the "скоро" tag, in the sidebar and in the burger', () => {
+  it('lists Lab as a plain link, without the "скоро" tag, in the sidebar and in the burger', () => {
     const aside = buildMenuItems('/', navigate).find((item) => item.id === 'lab');
     const burger = buildBurgerItems('/', navigate).find((item) => item.id === 'lab');
 
     expect(aside).toMatchObject({ href: '/lab' });
     expect(render(<>{aside?.title}</>).container).toHaveTextContent('Lab');
-    expect(screen.getAllByText('скоро').length).toBeGreaterThan(0);
+    expect(screen.queryByText('скоро')).toBeNull();
     expect(burger?.onItemClick).toBeTypeOf('function');
   });
 });
