@@ -67,6 +67,25 @@ export type DayOffsSendResultType = {
   unchanged: number;
 };
 
+/** A build of reports: its id (a hash of its content), the version number people read, and the commit it was cut from. */
+export type ReleaseInfoType = {
+  releaseId: string;
+  shortId: string;
+  version: string | null;
+  sourceSha?: string;
+};
+
+/** What the Update banner needs: the build that is running, the newest one bridge offers, and whether they differ. */
+export type UpdateStatusType = {
+  /** Null for an install that carries no release.json (older than versioning, or a git checkout). */
+  current: ReleaseInfoType | null;
+  latest: ReleaseInfoType | null;
+  updateAvailable: boolean;
+  checkedAt: string | null;
+  /** Why the check could not be made (bridge not configured, unreachable…), in words for the person. */
+  error: string | null;
+};
+
 export type BridgeReportEntry = {
   taskName: string;
   status: string;

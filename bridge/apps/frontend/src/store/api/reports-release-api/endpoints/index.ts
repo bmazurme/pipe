@@ -1,8 +1,16 @@
 import reportsReleaseApi from '..';
 
 export interface ReportsReleaseInfo {
+  /** The head of main this build was cut from. */
   sha: string;
   shortSha: string;
+  /** A hash of what goes into the zip (reports/ + packages/protocol/): it changes only when reports itself does. */
+  releaseId: string;
+  shortId: string;
+  /** reports/package.json's version, for people to read. */
+  version: string | null;
+  sha256: string;
+  size: number;
 }
 
 const reportsReleaseApiEndpoints = reportsReleaseApi.injectEndpoints({

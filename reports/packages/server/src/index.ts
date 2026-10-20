@@ -40,6 +40,7 @@ import {
 import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
+import { handleUpdateStatus } from './updates/handler';
 import { corsOrigin, localOnly } from './security/local-only';
 import { setupProxy } from './utils/setup-proxy';
 import { codeStatus } from './utils/stale-code';
@@ -87,6 +88,8 @@ const codeDirectories = [
 app.get('/api/version', (_req, res) => {
   res.json({ type: 'message', data: codeStatus(codeDirectories) });
 });
+
+app.get('/api/update/status', handleUpdateStatus);
 
 app.get('/api/counts/:id', handleCounts);
 app.post('/api/counts/:id/off-days', handleAddOffDay);

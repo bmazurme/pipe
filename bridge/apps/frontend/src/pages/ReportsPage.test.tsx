@@ -41,7 +41,7 @@ describe('ReportsPage', () => {
       'fetch',
       vi.fn(async (request: Request) => {
         const url = request.url;
-        if (url.endsWith('/reports-release/info')) return jsonResponse({ sha: 'abc1234567', shortSha: 'abc1234' });
+        if (url.endsWith('/reports-release/info')) return jsonResponse({ sha: 'abc1234567', shortSha: 'abc1234', releaseId: 'f'.repeat(64), shortId: 'ffffffffffff', version: '1.4.0', sha256: 'd', size: 1 });
         if (url.endsWith('/reports-release/download')) {
           downloadRequested = true;
           return new Response(new Blob(['zip bytes']), { status: 200 });
@@ -53,7 +53,7 @@ describe('ReportsPage', () => {
 
     renderPage();
 
-    await screen.findByText('Последний коммит main: abc1234');
+    await screen.findByText('Версия 1.4.0 · сборка ffffffffffff · из коммита main abc1234');
     await user.click(screen.getByText('Скачать zip'));
 
     await waitFor(() => expect(downloadRequested).toBe(true));

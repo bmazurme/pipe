@@ -35,7 +35,7 @@ export function ReportsReleaseSection() {
           </Text>
           {info && (
             <Text variant="caption-2" color="secondary">
-              Последний коммит main: {info.shortSha}
+              {info.version ? `Версия ${info.version} · ` : ''}сборка {info.shortId} · из коммита main {info.shortSha}
             </Text>
           )}
         </div>
