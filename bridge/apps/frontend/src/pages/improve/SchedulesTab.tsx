@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Card, Dialog, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 import { Clock } from '@gravity-ui/icons';
 
 import { ALL_CATEGORIES, CATEGORY_LABEL, DEFAULT_CATEGORIES } from './improveLabels';
+import { sortSchedulesByRunTime } from './scheduleOrder';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { listTimeZones } from '../../shared/lib/timeZones';
 import {
@@ -94,6 +95,8 @@ function AutoRepairCard() {
 
 export function SchedulesTab() {
   const { data: schedules, isLoading, isError } = useListImproveSchedulesQuery();
+  // By the time they run, earliest first (the server returns them in the order they were made).
+  const sortedSchedules = useMemo(() => sortSchedulesByRunTime(schedules ?? []), [schedules]);
   const [saveSchedule, { isLoading: isSaving }] = useSaveImproveScheduleMutation();
   const [deleteSchedule] = useDeleteImproveScheduleMutation();
   const [runNow] = useRunImproveScheduleNowMutation();
@@ -179,7 +182,7 @@ export function SchedulesTab() {
         <EmptyState icon={Clock} title="Расписаний нет" description="Например: каждую ночь в 02:00 запускать 5 самых старых задач с меткой loop." />
       )}
 
-      {schedules?.map((schedule) => (
+      {sortedSchedules.map((schedule) => (
         <div key={schedule.id} className={styles.row}>
           <div className={styles.rowMain}>
             <Text variant="body-2">{schedule.name}</Text>
