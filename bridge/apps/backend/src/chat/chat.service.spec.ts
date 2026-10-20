@@ -593,4 +593,92 @@ describe('ChatService', () => {
       );
     });
   });
+
+  describe('retryTurn', () => {
+    const failedReply = {
+      id: 99,
+      chatId: 1,
+      role: ChatMessageRole.Assistant,
+      content: '',
+      status: ChatMessageStatus.Failed,
+      errorMessage: 'Worker was stopped (SIGTERM)',
+      progress: null,
+    };
+
+    beforeEach(() => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      chatRepository.update = jest.fn().mockResolvedValue(undefined);
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+    });
+
+    it('puts the newest failed reply back to pending without its error', async () => {
+      messageRepository.findOne!.mockResolvedValue({ ...failedReply });
+      messageRepository.find!.mockResolvedValue([{ id: 99 }]);
+
+      const result = await service.retryTurn(99, 7);
+
+      expect(result.status).toBe(ChatMessageStatus.Pending);
+      expect(result.errorMessage).toBeNull();
+      expect(result.progress).toBeNull();
+      expect(chatRepository.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ updatedAt: expect.any(Date) }),
+      );
+    });
+
+    it.each([
+      ChatMessageStatus.Complete,
+      ChatMessageStatus.Pending,
+      ChatMessageStatus.Running,
+    ])('rejects a %s reply with 409', async (status) => {
+      messageRepository.findOne!.mockResolvedValue({ ...failedReply, status });
+
+      await expect(service.retryTurn(99, 7)).rejects.toThrow(ConflictException);
+      expect(messageRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a failed reply that is not the newest message with 409', async () => {
+      messageRepository.findOne!.mockResolvedValue({ ...failedReply });
+      messageRepository.find!.mockResolvedValue([{ id: 120 }]);
+
+      await expect(service.retryTurn(99, 7)).rejects.toThrow(ConflictException);
+      expect(messageRepository.save).not.toHaveBeenCalled();
+    });
+
+    it("throws NotFoundException for another user's message", async () => {
+      messageRepository.findOne!.mockResolvedValue({ ...failedReply });
+      chatRepository.findOne!.mockResolvedValue(null);
+
+      await expect(service.retryTurn(99, 8)).rejects.toThrow(NotFoundException);
+    });
+
+    it('lets claim return the same message with the same history afterwards', async () => {
+      messageRepository.findOne!.mockResolvedValue({ ...failedReply });
+      messageRepository.find!.mockResolvedValueOnce([{ id: 99 }]);
+      const retried = await service.retryTurn(99, 7);
+
+      messageRepository.query!.mockResolvedValue([[{ id: 99 }], 1]);
+      messageRepository.findOneByOrFail!.mockResolvedValue({
+        ...retried,
+        status: ChatMessageStatus.Running,
+      });
+      chatRepository.findOneByOrFail!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.find!.mockResolvedValue([
+        {
+          id: 98,
+          role: ChatMessageRole.User,
+          content: 'hi',
+          status: ChatMessageStatus.Complete,
+        },
+        { ...retried, status: ChatMessageStatus.Running },
+      ]);
+
+      const claimed = await service.claim(7);
+
+      expect(claimed?.message.id).toBe(99);
+      expect(claimed?.history).toEqual([
+        { role: ChatMessageRole.User, content: 'hi' },
+      ]);
+    });
+  });
 });

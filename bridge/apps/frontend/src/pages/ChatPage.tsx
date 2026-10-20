@@ -23,6 +23,7 @@ import {
   useListContextsQuery,
   useListMessagesQuery,
   useRenameChatMutation,
+  useRetryChatTurnMutation,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
@@ -215,6 +216,20 @@ export function ChatPage() {
     lastReply && lastReply.status === 'complete' && !decidedActions.has(lastReply.id)
       ? extractChatAction(lastReply.content).action
       : null;
+
+  const [retryChatTurn, { isLoading: isRetrying }] = useRetryChatTurnMutation();
+  const newestMessage = (messagesData ?? [])[(messagesData ?? []).length - 1];
+  const failedLastReply = newestMessage && newestMessage.role === 'assistant' && newestMessage.status === 'failed' ? newestMessage : null;
+
+  const handleRetry = async (message: ChatMessageMeta) => {
+    composer.setChatError(null);
+
+    try {
+      await retryChatTurn({ chatId: message.chatId, messageId: message.id }).unwrap();
+    } catch {
+      composer.setChatError('Не удалось повторить ответ');
+    }
+  };
 
   const hasPendingReply = (messagesData ?? []).some(
     (message) => message.status === 'pending' || message.status === 'running',
@@ -500,6 +515,14 @@ export function ChatPage() {
           }}
         />
       </div>
+
+      {failedLastReply && activeChatId !== null && (
+        <div className={styles.retryRow}>
+          <Button view="outlined" size="s" onClick={() => void handleRetry(failedLastReply)} disabled={isRetrying} loading={isRetrying}>
+            Повторить
+          </Button>
+        </div>
+      )}
 
       {contextDraft && <SaveToContextDialog draft={contextDraft} onClose={() => setContextDraft(null)} />}
 
