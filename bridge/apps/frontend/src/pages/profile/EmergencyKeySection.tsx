@@ -5,11 +5,11 @@ import {
   Button,
   Card,
   ClipboardButton,
-  Dialog,
   Icon,
   Skeleton,
   Text,
 } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { SectionHeader } from '../../widgets/SectionHeader';

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Dialog, Select, Switch, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Select, Switch, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { describeApiError } from '../../store/api/describeApiError';
 import { useCreateImproveIssueMutation } from '../../store/api';

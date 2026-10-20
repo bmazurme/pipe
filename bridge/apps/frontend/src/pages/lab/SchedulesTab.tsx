@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Clock, Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Label, Select, Skeleton, Switch, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, Select, Skeleton, Switch, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { listTimeZones } from '../../shared/lib/timeZones';

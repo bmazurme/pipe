@@ -8,7 +8,8 @@ import {
   LayoutHeaderCells,
   TrashBin,
 } from '@gravity-ui/icons';
-import { Alert, Button, Card, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import {
   useDeleteReportEntriesMutation,

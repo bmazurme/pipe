@@ -5,12 +5,12 @@ import {
   Alert,
   Button,
   Card,
-  Dialog,
   Icon,
   Label,
   Skeleton,
   Text,
 } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { EmptyState } from '../../widgets/EmptyState';

@@ -11,13 +11,13 @@ import {
   Alert,
   Button,
   Card,
-  Dialog,
   Icon,
   Label,
   Loader,
   SegmentedRadioGroup,
   Text,
 } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 import { RangeDatePicker, type RangeValue } from '@gravity-ui/date-components';
 import { DateTime } from '@gravity-ui/date-utils';
 

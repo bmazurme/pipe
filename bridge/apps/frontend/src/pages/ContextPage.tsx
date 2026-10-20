@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BookOpen, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Loader, Text } from '@gravity-ui/uikit';
+import { Dialog } from '../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import { ContextSummary, getErrorMessage, useDeleteContextMutation, useListContextsQuery } from '../store/api';

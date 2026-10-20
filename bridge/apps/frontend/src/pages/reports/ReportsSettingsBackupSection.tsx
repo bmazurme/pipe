@@ -1,8 +1,17 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
 import {
-  Alert, Button, Card, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Loader, Text,
+  Alert,
+  Button,
+  Card,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  Icon,
+  Loader,
+  Text,
 } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import {
   describeApiError,

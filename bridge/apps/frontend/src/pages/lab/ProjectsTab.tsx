@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowUpRightFromSquare, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 import { LogoGithub } from '@gravity-ui/icons';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';

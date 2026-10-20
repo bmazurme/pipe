@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Dialog, Text } from '@gravity-ui/uikit';
+import { Alert, Text } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 
 import { type FleetWorker, useDeleteWorkerMutation, useForgetLegacyWorkerMutation } from '../../store/api';
 

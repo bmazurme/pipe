@@ -9,7 +9,8 @@ import type {
   TChatMessage,
 } from '@gravity-ui/aikit';
 import { ArrowDownToLine, BookOpen, Pencil } from '@gravity-ui/icons';
-import { Alert, Button, Dialog, Icon, Select, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Select, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../shared/ui/Dialog';
 
 import { triggerBlobDownload } from '../shared/lib/parcelCrypto';
 import { useIsMobile } from '../shared/lib/useIsMobile';

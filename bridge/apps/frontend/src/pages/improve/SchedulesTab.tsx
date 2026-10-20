@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Dialog, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Dialog } from '../../shared/ui/Dialog';
 import { Clock } from '@gravity-ui/icons';
 
 import { ALL_CATEGORIES, CATEGORY_LABEL, DEFAULT_CATEGORIES } from './improveLabels';
