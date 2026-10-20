@@ -288,12 +288,12 @@ describe('ContextDialog closing and saving', () => {
     await user.click(screen.getByRole('button', { name: 'Отмена' }));
 
     expect(await screen.findByText('Закрыть без сохранения?')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Продолжить редактирование' }));
+    await user.click(await screen.findByRole('button', { name: 'Продолжить редактирование' }));
 
     await waitFor(() => expect(screen.queryByText('Закрыть без сохранения?')).toBeNull());
     expect((screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value).toBe('черновик');
 
-    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    await user.click(await screen.findByRole('button', { name: 'Отмена' }));
     await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения' }));
 
     await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
