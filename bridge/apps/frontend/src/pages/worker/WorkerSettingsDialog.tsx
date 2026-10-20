@@ -29,6 +29,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [pollIntervalSec, setPollIntervalSec] = useState<number | null>(worker.pollIntervalSec);
   const [timeoutMin, setTimeoutMin] = useState<number | null>(Math.round(worker.jobTimeoutSec / 60));
   const [proxyUrl, setProxyUrl] = useState(worker.proxyUrl ?? '');
+  const proxyEdited = proxyUrl !== (worker.proxyUrl ?? '');
   const [chatEnabled, setChatEnabled] = useState(worker.chatEnabled);
   const [limitsRefreshMin, setLimitsRefreshMin] = useState(String(worker.limitsRefreshMin ?? 0));
   const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
@@ -59,7 +60,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         models: allModels ? null : models,
         pollIntervalSec: pollIntervalSec as number,
         jobTimeoutSec: (timeoutMin as number) * 60,
-        proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim(),
+        // left out when untouched: the field holds the masked value, which must never overwrite the real URL
+        ...(proxyEdited ? { proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim() } : {}),
         chatEnabled,
         limitsRefreshMin: Number(limitsRefreshMin),
         claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),

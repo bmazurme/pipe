@@ -335,6 +335,7 @@ describe('WorkerPage', () => {
       pollIntervalSec: 10,
       jobTimeoutSec: 1800,
       proxyUrl: null,
+    proxyHasCredentials: false,
       chatEnabled: true,
       keyPrefix: 'brw_AAAAAAAA',
       enrollmentPending: false,

@@ -141,6 +141,8 @@ export interface FleetWorker {
   pollIntervalSec: number;
   jobTimeoutSec: number;
   proxyUrl: string | null;
+  /** true when the proxy URL had user:pass@ — it is shown masked (***@) and never sent back. */
+  proxyHasCredentials: boolean;
   chatEnabled: boolean;
   keyPrefix: string | null;
   enrollmentPending: boolean;

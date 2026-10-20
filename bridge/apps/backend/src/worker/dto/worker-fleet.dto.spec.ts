@@ -117,3 +117,29 @@ describe('WorkerResponseDto.legacy', () => {
     );
   });
 });
+
+describe('WorkerResponseDto.fromWorker — proxy credentials', () => {
+  it('masks user:pass in the owner view', () => {
+    const dto = WorkerResponseDto.fromWorker(
+      worker({ proxyUrl: 'http://u:p@proxy:3128' }),
+      0,
+      true,
+      now,
+    );
+
+    expect(dto.proxyUrl).toBe('http://***@proxy:3128');
+    expect(dto.proxyHasCredentials).toBe(true);
+  });
+
+  it('returns a credential-less proxy as it is', () => {
+    const dto = WorkerResponseDto.fromWorker(
+      worker({ proxyUrl: 'http://proxy:3128' }),
+      0,
+      true,
+      now,
+    );
+
+    expect(dto.proxyUrl).toBe('http://proxy:3128');
+    expect(dto.proxyHasCredentials).toBe(false);
+  });
+});

@@ -26,6 +26,7 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     pollIntervalSec: 10,
     jobTimeoutSec: 1800,
     proxyUrl: null,
+    proxyHasCredentials: false,
     chatEnabled: true,
     keyPrefix: 'brw_AAAAAAAA',
     enrollmentPending: false,
@@ -482,7 +483,7 @@ describe('WorkersTab — settings', () => {
       models: null,
       chatEnabled: true,
     });
-    expect(body.proxyUrl).toBeNull();
+    expect(body).not.toHaveProperty('proxyUrl');
   });
 
   it('binds the worker to one of the Claude tokens, or back to the first one', async () => {
