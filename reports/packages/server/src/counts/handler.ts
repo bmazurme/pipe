@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express';
-import type { DayOffsImportType, StreamEvent } from '@reports/shared';
+import type { DayOffsImportType } from '@reports/shared';
 
 import { countWorkAndShortDays } from '../utils/count-work-and-short-days';
 import { describeFetchError } from '../utils/describe-fetch-error';
 import { isDateStringArray } from '../utils/is-date-string-array';
+import { withStream } from '../utils/stream';
 import { getSettings } from '../settings/props';
 import { getProps, addOffDays, removeOffDay, importDayOffs } from './props';
 
@@ -13,40 +14,18 @@ export { isDateStringArray };
 
 export async function handleCounts(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Counts', async () => {
     const { holidays, shortDays, badDays, offDays } = getProps(id);
     const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
 
-    sendEvent({ type: 'message', data: { calendar, holidays, shortDays, badDays, offDays } });
-    res.end();
-  } catch (error) {
-    console.error('Counts error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return { calendar, holidays, shortDays, badDays, offDays };
+  });
 }
 
 export async function handleAddOffDay(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   const { dates } = req.body;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Add off day', async () => {
     if (!isDateStringArray(dates)) {
       throw new Error('Поле dates должно быть массивом строк формата YYYY-MM-DD');
     }
@@ -54,53 +33,23 @@ export async function handleAddOffDay(req: Request<Record<string, string>>, res:
     const { holidays, shortDays, badDays, offDays } = addOffDays(id, dates);
     const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
 
-    sendEvent({ type: 'message', data: { calendar, holidays, shortDays, badDays, offDays } });
-    res.end();
-  } catch (error) {
-    console.error('Add off day error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return { calendar, holidays, shortDays, badDays, offDays };
+  });
 }
 
 export async function handleRemoveOffDay(req: Request<Record<string, string>>, res: Response) {
   const { id, date } = req.params;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Remove off day', async () => {
     const { holidays, shortDays, badDays, offDays } = removeOffDay(id, date);
     const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
 
-    sendEvent({ type: 'message', data: { calendar, holidays, shortDays, badDays, offDays } });
-    res.end();
-  } catch (error) {
-    console.error('Remove off day error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return { calendar, holidays, shortDays, badDays, offDays };
+  });
 }
 
 export async function handleImportDayOffs(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Import day offs', async () => {
     const { bridgeApiUrl, bridgeApiKey } = getSettings();
 
     if (!bridgeApiUrl || !bridgeApiKey) {
@@ -125,14 +74,6 @@ export async function handleImportDayOffs(req: Request<Record<string, string>>, 
     const { holidays, shortDays, badDays, offDays } = importDayOffs(id, imported);
     const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
 
-    sendEvent({ type: 'message', data: { calendar, holidays, shortDays, badDays, offDays } });
-    res.end();
-  } catch (error) {
-    console.error('Import day offs error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return { calendar, holidays, shortDays, badDays, offDays };
+  });
 }

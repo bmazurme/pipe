@@ -1,69 +1,24 @@
 import type { Request, Response } from 'express';
-import type { StreamEvent } from '@reports/shared';
 
 import { getProjectDict, addProjectCode, removeProjectCode } from './project-dict-props';
+import { withStream } from '../utils/stream';
 
 export async function handleGetProjectDict(req: Request<Record<string, string>>, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
-    sendEvent({ type: 'message', data: getProjectDict() });
-    res.end();
-  } catch (error) {
-    console.error('Get project dict error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+  await withStream(res, 'Get project dict', async () => {
+    return getProjectDict();
+  });
 }
 
 export async function handleAddProjectCode(req: Request<Record<string, string>>, res: Response) {
   const { code, label } = req.body;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
-    sendEvent({ type: 'message', data: addProjectCode(code, label) });
-    res.end();
-  } catch (error) {
-    console.error('Add project code error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+  await withStream(res, 'Add project code', async () => {
+    return addProjectCode(code, label);
+  });
 }
 
 export async function handleRemoveProjectCode(req: Request<Record<string, string>>, res: Response) {
   const { code } = req.params;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
-    sendEvent({ type: 'message', data: removeProjectCode(code) });
-    res.end();
-  } catch (error) {
-    console.error('Remove project code error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+  await withStream(res, 'Remove project code', async () => {
+    return removeProjectCode(code);
+  });
 }

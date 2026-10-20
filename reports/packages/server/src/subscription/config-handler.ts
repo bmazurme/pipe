@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, StreamEvent, TrackedProjectType } from '@reports/shared';
+import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, TrackedProjectType } from '@reports/shared';
 
 import {
   getSubscriptionConfig,
@@ -17,18 +17,10 @@ import {
   setLeakScanStrict,
 } from './config-props';
 import { getRepo } from './github-client';
-
-function sender(res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  return (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-}
+import { streamSender } from '../utils/stream';
 
 function withSync(res: Response, label: string, run: () => unknown) {
-  const sendEvent = sender(res);
+  const sendEvent = streamSender(res);
 
   try {
     sendEvent({ type: 'message', data: run() });
@@ -62,7 +54,7 @@ export async function resolveTrackedProject(input: TrackedProjectType): Promise<
 }
 
 export async function handleAddTrackedProject(req: Request<Record<string, string>>, res: Response) {
-  const sendEvent = sender(res);
+  const sendEvent = streamSender(res);
 
   try {
     sendEvent({ type: 'message', data: addTrackedProject(await resolveTrackedProject(req.body as TrackedProjectType)) });

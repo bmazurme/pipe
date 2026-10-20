@@ -1,21 +1,13 @@
 import type { Request, Response } from 'express';
-import type { PurgeApplyPayload, PurgeApplyResultType, StreamEvent } from '@reports/shared';
+import type { PurgeApplyPayload, PurgeApplyResultType } from '@reports/shared';
 import { scanForLeaks } from '@pipe/protocol';
 
 import { getSubscriptionConfig } from './config-props';
 import { applyDictionaryWithCount } from './dictionary';
-
-function sender(res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  return (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-}
+import { streamSender } from '../utils/stream';
 
 function withSync(res: Response, label: string, run: () => unknown) {
-  const sendEvent = sender(res);
+  const sendEvent = streamSender(res);
 
   try {
     sendEvent({ type: 'message', data: run() });

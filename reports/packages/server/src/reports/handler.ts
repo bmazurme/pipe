@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { BridgeReportEntry, IssueResponse, ResultType, StreamEvent } from '@reports/shared';
+import type { BridgeReportEntry, IssueResponse, ResultType } from '@reports/shared';
 // import path from 'path';
 // import { fileURLToPath } from 'url';
 // import { dirname } from 'path';
@@ -14,16 +14,12 @@ import { pushReportToBridge } from './push-to-bridge';
 import { getSettings } from '../settings/props';
 import { getProjectDict } from './project-dict-props';
 import { fetchAllPages } from './fetch-all-pages';
+import { streamSender, withStream } from '../utils/stream';
 
 const GITLAB_TIMEOUT_MS = 30_000;
 
 export async function handleReport(req: Request, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
+  const sendEvent = streamSender(res);
   let issues: any = [];
 
   const { gitlabUrl: GITLAB_URL, privateToken: PRIVATE_TOKEN, userId: USER_ID } = getSettings();
@@ -116,14 +112,7 @@ export async function handleReport(req: Request, res: Response) {
 }
 
 export async function handlePushReport(req: Request, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Push report to bridge', async () => {
     const { year, month, entries } = req.body as { year: number; month: number; entries: BridgeReportEntry[] };
 
     if (!Array.isArray(entries) || entries.length === 0) {
@@ -132,14 +121,6 @@ export async function handlePushReport(req: Request, res: Response) {
 
     const result = await pushReportToBridge(year, month, entries);
 
-    sendEvent({ type: 'message', data: result });
-    res.end();
-  } catch (error) {
-    console.error('Push report to bridge error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return result;
+  });
 }

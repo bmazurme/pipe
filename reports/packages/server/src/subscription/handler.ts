@@ -3,7 +3,6 @@ import { dirname, join, resolve } from 'path';
 import type { Request, Response } from 'express';
 import type {
   CreateManualSubscriptionIssuePayload,
-  StreamEvent,
   SubscriptionDraftType,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
@@ -22,33 +21,12 @@ import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, get
 import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
 import { buildBranchName, createBranch, checkoutTaskBranch, commitPulledFiles, pushBranch } from './git';
+import { withStream } from '../utils/stream';
 import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
 import { buildArchive, extractArchive } from './pack';
 import { uploadParcel, listParcels, peekParcel, deleteParcel, createWorkerJob } from './bridge-client';
 import { encryptBuffer, decryptBuffer } from './encryption';
-
-function sender(res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  return (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-}
-
-export async function withStream(res: Response, label: string, run: () => Promise<unknown>) {
-  const sendEvent = sender(res);
-
-  try {
-    sendEvent({ type: 'message', data: await run() });
-  } catch (error) {
-    console.error(`${label} error:`, error);
-    sendEvent({ type: 'error', data: error instanceof Error ? error.message : 'Unknown error' });
-  } finally {
-    res.end();
-  }
-}
 
 const PROJECT_ID_PATTERN = /^[\w.\-/%]+$/;
 // Numeric GitLab/GitHub iid, or a manual entry's `m-` id (see createManualSubscriptionIssue).

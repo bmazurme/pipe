@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express';
-import type { SettingsBundleType, StreamEvent } from '@reports/shared';
+import type { SettingsBundleType } from '@reports/shared';
 
 import { getSettings } from './props';
 import { buildSettingsBundle, applySettingsBundle } from './bundle';
 import { describeFetchError } from '../utils/describe-fetch-error';
+import { withStream } from '../utils/stream';
 
 const BRIDGE_TIMEOUT_MS = 20_000;
 
@@ -20,14 +21,7 @@ async function describeBridgeResponseError(response: Awaited<ReturnType<typeof f
 }
 
 export async function handlePushSettingsToBridge(req: Request, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Push settings to bridge', async () => {
     const { bridgeApiUrl, bridgeApiKey } = getSettings();
 
     if (!bridgeApiUrl || !bridgeApiKey) {
@@ -56,27 +50,12 @@ export async function handlePushSettingsToBridge(req: Request, res: Response) {
 
     const data = (await response.json()) as { updatedAt: string };
 
-    sendEvent({ type: 'message', data });
-    res.end();
-  } catch (error) {
-    console.error('Push settings to bridge error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return data;
+  });
 }
 
 export async function handlePullSettingsFromBridge(req: Request, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  const sendEvent = (event: StreamEvent) => {
-    res.write(JSON.stringify(event) + '\n');
-  };
-
-  try {
+  await withStream(res, 'Pull settings from bridge', async () => {
     const body = req.body as { bridgeApiUrl?: string; bridgeApiKey?: string };
     const stored = getSettings();
     const bridgeApiUrl = body?.bridgeApiUrl || stored.bridgeApiUrl;
@@ -108,17 +87,6 @@ export async function handlePullSettingsFromBridge(req: Request, res: Response) 
     const bundle = JSON.parse(payload) as SettingsBundleType;
     const { skippedYears } = applySettingsBundle(bundle);
 
-    sendEvent({
-      type: 'message',
-      data: { skippedYears },
-    });
-    res.end();
-  } catch (error) {
-    console.error('Pull settings from bridge error:', error);
-    sendEvent({
-      type: 'error',
-      data: error instanceof Error ? error.message : 'Unknown error',
-    });
-    res.end();
-  }
+    return { skippedYears };
+  });
 }
