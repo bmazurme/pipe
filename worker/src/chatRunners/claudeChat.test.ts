@@ -1,6 +1,6 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -97,5 +97,47 @@ describe('claudeChat failure', () => {
       claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work),
       (error: Error) => error.message.length <= 560 && error.message.endsWith('REAL-CAUSE'),
     );
+  });
+});
+
+describe('claudeChat deadline', () => {
+  const originalPath = process.env.PATH;
+
+  after(() => {
+    process.env.PATH = originalPath;
+  });
+
+  function hangingClaude(): void {
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-hang-'));
+    const script = path.join(dir, 'claude');
+
+    writeFileSync(script, ['#!/usr/bin/env node', 'setInterval(() => {}, 1000);', ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+  }
+
+  it('rejects with a timeout error and removes the turn dir when the CLI hangs', async () => {
+    hangingClaude();
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+
+    await assert.rejects(
+      claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work, undefined, undefined, undefined, undefined, undefined, undefined, 200),
+      /timed out/,
+    );
+    assert.deepEqual(readdirSync(work), []);
+  });
+
+  it('rejects with a cancellation when the signal is aborted', async () => {
+    hangingClaude();
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+    const controller = new AbortController();
+
+    setTimeout(() => controller.abort(), 200);
+
+    await assert.rejects(
+      claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work, undefined, undefined, undefined, undefined, undefined, undefined, 60_000, controller.signal),
+      (error: Error) => error.name === 'CancelledError' || /cancel|stop/i.test(error.message),
+    );
+    assert.deepEqual(readdirSync(work), []);
   });
 });
