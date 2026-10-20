@@ -113,6 +113,13 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       providesTags: ['ImproveIssues'],
       transformErrorResponse: errorMessage('Не удалось загрузить задачи'),
     }),
+    createImproveIssue: builder.mutation<
+      { number: number; htmlUrl: string; missingLabels: string[]; run?: ImproveRun },
+      { title: string; body?: string; model?: string; start?: boolean }
+    >({
+      query: (body) => ({ url: 'improve/issues', method: 'POST', body }),
+      invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+    }),
     listImproveRuns: builder.query<ImproveRun[], void>({
       query: () => 'improve/runs',
       providesTags: ['ImproveRuns'],
@@ -203,6 +210,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 export const {
   useGetImproveStatusQuery,
   useListImproveIssuesQuery,
+  useCreateImproveIssueMutation,
   useListImproveRunsQuery,
   useGetImproveRunQuery,
   useStartImproveRunMutation,

@@ -86,3 +86,57 @@ describe('ImproveIssueFilingService partial issue filing', () => {
     expect(runs.save).toHaveBeenCalledWith(run);
   });
 });
+
+describe('ImproveIssueFilingService.createManualIssue', () => {
+  it('files a loop-labelled issue without starting a run', async () => {
+    const { service, github } = setup();
+    github.createIssue.mockResolvedValue({
+      number: 55,
+      htmlUrl: 'https://github.com/acme/repo/issues/55',
+      missingLabels: [],
+    } as never);
+
+    const result = await service.createManualIssue({
+      title: 'Idea',
+      body: 'Details',
+    });
+
+    expect(github.createIssue).toHaveBeenCalledWith({
+      title: 'Idea',
+      body: 'Details',
+      labels: ['loop'],
+    });
+    expect(result).toEqual({
+      number: 55,
+      htmlUrl: 'https://github.com/acme/repo/issues/55',
+      missingLabels: [],
+    });
+  });
+
+  it('starts a run on the new issue when asked and reports dropped labels', async () => {
+    const { service, github } = setup();
+    github.createIssue.mockResolvedValue({
+      number: 56,
+      htmlUrl: 'u',
+      missingLabels: ['loop'],
+    } as never);
+    const start = jest.fn().mockResolvedValue({ id: 9 });
+
+    const result = await service.createManualIssue({ title: 'Idea' }, start);
+
+    expect(start).toHaveBeenCalledWith(56);
+    expect(result.run).toEqual({ id: 9 });
+    expect(result.missingLabels).toEqual(['loop']);
+  });
+
+  it('propagates a GitHub error and starts nothing', async () => {
+    const { service, github } = setup();
+    github.createIssue.mockRejectedValue(new Error('boom'));
+    const start = jest.fn();
+
+    await expect(
+      service.createManualIssue({ title: 'Idea' }, start),
+    ).rejects.toThrow('boom');
+    expect(start).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -28,6 +28,29 @@ export class StartRunDto {
 
   @IsString()
   model: string;
+}
+
+export class CreateImproveIssueDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  body?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  start?: boolean;
 }
 
 export class StartPrFixDto {
