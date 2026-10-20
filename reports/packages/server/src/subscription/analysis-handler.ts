@@ -6,7 +6,8 @@ import { sendClientEvent } from './bridge-client';
 import { findTrackedProject } from './config-props';
 import { createIssue, DEFAULT_GITHUB_LABEL, listAllIssues } from './github-client';
 import { listModules, showFile } from './git';
-import { createManualSubscriptionIssue, withStream } from './handler';
+import { createManualSubscriptionIssue } from './handler';
+import { withStream } from '../utils/stream';
 import { getIssueState, setIssueState } from './state-props';
 import { hostname } from 'os';
 
