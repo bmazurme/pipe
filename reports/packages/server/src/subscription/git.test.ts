@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { assertTaskBranch, buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch } from './git';
+import { assertTaskBranch, buildBranchName, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch, runGit } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -373,5 +373,28 @@ describe('listModules', () => {
     git(dir, ['commit', '--quiet', '-m', 'init']);
 
     expect(await listModules(dir)).toEqual(['a', 'a/b', 'docs']);
+  });
+});
+
+describe('runGit', () => {
+  it('sets GIT_TERMINAL_PROMPT=0 even if the environment says otherwise', async () => {
+    const prev = process.env.GIT_TERMINAL_PROMPT;
+    process.env.GIT_TERMINAL_PROMPT = '1';
+    try {
+      const value = await runGit(process.cwd(), ['-c', 'alias.e=!echo $GIT_TERMINAL_PROMPT', 'e']);
+      expect(value.trim()).toBe('0');
+    } finally {
+      if (prev === undefined) delete process.env.GIT_TERMINAL_PROMPT;
+      else process.env.GIT_TERMINAL_PROMPT = prev;
+    }
+  });
+
+  it('rejects with a readable message when git exceeds the timeout', async () => {
+    const dir = initRepo();
+    const started = Date.now();
+    await expect(
+      runGit(dir, ['-c', 'protocol.ext.allow=always', 'fetch', 'ext::sleep 10'], undefined, 500),
+    ).rejects.toThrow('git fetch не ответил за 1 с — проверьте доступ к origin');
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 });
