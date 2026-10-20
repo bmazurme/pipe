@@ -1,4 +1,9 @@
-import { describeVless, parseVlessLink } from './vless-link';
+import {
+  describeVless,
+  maskProxyUrl,
+  parseVlessLink,
+  proxyHasCredentials,
+} from './vless-link';
 
 const LINK =
   'vless://3f1c2d4e-0000-4000-8000-000000000001@vpn.example.com:8443?security=reality&type=tcp&pbk=PUBKEY&sni=www.example.org&fp=firefox&sid=ab12&flow=xtls-rprx-vision#node';
@@ -36,5 +41,25 @@ describe('describeVless', () => {
     expect(describeVless(null)).toBeNull();
     expect(describeVless('')).toBeNull();
     expect(describeVless('garbage')).toBeNull();
+  });
+});
+
+describe('maskProxyUrl', () => {
+  it('hides user:pass', () => {
+    expect(maskProxyUrl('http://u:p@proxy:3128')).toBe('http://***@proxy:3128');
+    expect(maskProxyUrl('https://token@proxy.example.com')).toBe(
+      'https://***@proxy.example.com',
+    );
+    expect(proxyHasCredentials('http://u:p@proxy:3128')).toBe(true);
+  });
+
+  it('leaves a URL without credentials unchanged', () => {
+    expect(maskProxyUrl('http://proxy:3128')).toBe('http://proxy:3128');
+    expect(proxyHasCredentials('http://proxy:3128')).toBe(false);
+  });
+
+  it('keeps null as null', () => {
+    expect(maskProxyUrl(null)).toBeNull();
+    expect(proxyHasCredentials(null)).toBe(false);
   });
 });

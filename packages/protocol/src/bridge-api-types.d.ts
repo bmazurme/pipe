@@ -2208,6 +2208,7 @@ export interface components {
             pollIntervalSec: number;
             jobTimeoutSec: number;
             proxyUrl: string | null;
+            proxyHasCredentials: boolean;
             chatEnabled: boolean;
             claudeCredentialId: number | null;
             vpnHost: string | null;

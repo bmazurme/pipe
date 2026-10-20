@@ -4861,6 +4861,9 @@
             "type": "string",
             "nullable": true
           },
+          "proxyHasCredentials": {
+            "type": "boolean"
+          },
           "chatEnabled": {
             "type": "boolean"
           },
@@ -4913,6 +4916,7 @@
           "pollIntervalSec",
           "jobTimeoutSec",
           "proxyUrl",
+          "proxyHasCredentials",
           "chatEnabled",
           "claudeCredentialId",
           "vpnHost",

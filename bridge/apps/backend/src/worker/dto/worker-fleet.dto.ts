@@ -16,7 +16,11 @@ import {
 } from 'class-validator';
 
 import type { ClaudeLimits } from '../claude-limits';
-import { describeVless } from '../vless-link';
+import {
+  describeVless,
+  maskProxyUrl,
+  proxyHasCredentials,
+} from '../vless-link';
 import { JobModel } from '../entities/job.entity';
 import { Worker } from '../entities/worker.entity';
 
@@ -143,7 +147,9 @@ export class WorkerResponseDto {
   models: JobModel[] | null;
   pollIntervalSec: number;
   jobTimeoutSec: number;
+  // Credentials in the URL (user:pass@) are masked; only the worker's own config fetch gets the real value.
   proxyUrl: string | null;
+  proxyHasCredentials: boolean;
   chatEnabled: boolean;
   // The Claude token this worker uses by default, or null (the account's first).
   claudeCredentialId: number | null;
@@ -191,7 +197,8 @@ export class WorkerResponseDto {
       models: worker.models,
       pollIntervalSec: worker.pollIntervalSec,
       jobTimeoutSec: worker.jobTimeoutSec,
-      proxyUrl: worker.proxyUrl,
+      proxyUrl: maskProxyUrl(worker.proxyUrl),
+      proxyHasCredentials: proxyHasCredentials(worker.proxyUrl),
       chatEnabled: worker.chatEnabled,
       claudeCredentialId: worker.claudeCredentialId ?? null,
       vpnHost: describeVless(worker.vpnLink),
@@ -228,6 +235,7 @@ export class WorkerResponseDto {
       pollIntervalSec: 10,
       jobTimeoutSec: 1800,
       proxyUrl: null,
+      proxyHasCredentials: false,
       chatEnabled: true,
       keyPrefix: null,
       enrollmentPending: false,

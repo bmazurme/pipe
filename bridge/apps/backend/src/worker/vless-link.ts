@@ -54,3 +54,27 @@ export function describeVless(raw: string | null | undefined): string | null {
     return null;
   }
 }
+
+function proxyWithUserinfo(raw: string): URL | null {
+  try {
+    const url = new URL(raw.trim());
+
+    return url.username || url.password ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+export function proxyHasCredentials(raw: string | null | undefined): boolean {
+  return !!raw && proxyWithUserinfo(raw) !== null;
+}
+
+// The proxy URL for owner views: user:pass@ becomes ***@, a URL without credentials is returned as it is.
+export function maskProxyUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const url = proxyWithUserinfo(raw);
+
+  if (!url) return raw;
+
+  return `${url.protocol}//***@${url.host}${url.pathname === '/' ? '' : url.pathname}${url.search}${url.hash}`;
+}
