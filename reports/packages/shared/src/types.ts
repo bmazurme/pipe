@@ -84,6 +84,17 @@ export type UpdateStatusType = {
   checkedAt: string | null;
   /** Why the check could not be made (bridge not configured, unreachable…), in words for the person. */
   error: string | null;
+  /** Whether this install can update itself (an install from the bridge zip can; a git work tree is updated with git). */
+  selfUpdate?: { available: boolean; reason: string | null };
+};
+
+/** Where a running update stands (written by scripts/apply-update.mjs, read back by the server and shown in the banner). */
+export type UpdateProgressType = {
+  phase: 'downloading' | 'staged' | 'applying' | 'installing' | 'building' | 'rolling-back' | 'done' | 'failed' | 'rolled-back';
+  message: string;
+  releaseId: string | null;
+  startedAt: string;
+  updatedAt: string;
 };
 
 export type BridgeReportEntry = {

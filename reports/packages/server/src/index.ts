@@ -40,7 +40,7 @@ import {
 import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
-import { handleUpdateStatus } from './updates/handler';
+import { handleApplyUpdate, handleUpdateProgress, handleUpdateStatus } from './updates/handler';
 import { corsOrigin, localOnly } from './security/local-only';
 import { setupProxy } from './utils/setup-proxy';
 import { codeStatus } from './utils/stale-code';
@@ -90,6 +90,8 @@ app.get('/api/version', (_req, res) => {
 });
 
 app.get('/api/update/status', handleUpdateStatus);
+app.get('/api/update/progress', handleUpdateProgress);
+app.post('/api/update/apply', handleApplyUpdate);
 
 app.get('/api/counts/:id', handleCounts);
 app.post('/api/counts/:id/off-days', handleAddOffDay);

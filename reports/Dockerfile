@@ -21,6 +21,7 @@ RUN npm install --prefix packages/protocol && npm run build --prefix packages/pr
 COPY reports/package.json reports/package-lock.json reports/
 # the preinstall hook (a no-op here — protocol is built above — but npm ci needs the file to exist)
 COPY reports/scripts/ensure-protocol.mjs reports/scripts/ensure-protocol.mjs
+COPY reports/scripts/apply-update.mjs reports/scripts/apply-update.mjs
 COPY reports/packages/client/package.json reports/packages/client/package.json
 COPY reports/packages/server/package.json reports/packages/server/package.json
 COPY reports/packages/shared reports/packages/shared
@@ -40,6 +41,8 @@ ENV NODE_ENV=production
 # is what actually restricts host-level exposure, by publishing only to
 # 127.0.0.1 on the host.
 ENV HOST=0.0.0.0
+# An image is immutable: the new version arrives by rebuilding it (`docker compose up -d --build`), never by replacing files in it.
+ENV REPORTS_SELF_UPDATE=off
 
 # @pipe/protocol is a file: dependency — npm installs it as a symlink into
 # node_modules pointing at ../../packages/protocol (relative to reports/,
@@ -50,6 +53,8 @@ COPY --from=builder /app/packages/protocol/package.json /app/packages/protocol/p
 COPY --from=builder /app/packages/protocol/dist /app/packages/protocol/dist
 COPY --from=builder /app/packages/protocol/node_modules /app/packages/protocol/node_modules
 
+# The server imports the update script's path rules; the container itself never updates in place (see REPORTS_SELF_UPDATE).
+COPY --from=builder /app/reports/scripts/apply-update.mjs ./scripts/apply-update.mjs
 COPY --from=builder /app/reports/package.json ./package.json
 COPY --from=builder /app/reports/node_modules ./node_modules
 COPY --from=builder /app/reports/packages/server ./packages/server
