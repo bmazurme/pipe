@@ -82,6 +82,50 @@ describe('stageAttachments', () => {
   });
 });
 
+describe('stageAttachments concurrency', () => {
+  it('downloads at most 3 files at once and writes all of them', async () => {
+    const dir = tmp();
+    const attachments = [1, 2, 3, 4, 5, 6].map((id) => ({ id, name: `f${id}.txt`, size: 1, isImage: false }));
+    let inFlight = 0;
+    let max = 0;
+
+    const staged = await stageAttachments(dir, [{ role: 'user', content: 'x', attachments }], async (id) => {
+      inFlight++;
+      max = Math.max(max, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight--;
+
+      return Buffer.from(`file-${id}`);
+    });
+
+    assert.equal(max, 3);
+    assert.equal(staged.size, 6);
+
+    for (const a of attachments) assert.ok(existsSync(path.join(dir, attachmentRelPath(a))));
+  });
+
+  it('downloads an attachment listed twice only once', async () => {
+    const dir = tmp();
+    const att = { id: 9, name: 'a.txt', size: 1, isImage: false };
+    const calls: number[] = [];
+
+    await stageAttachments(
+      dir,
+      [
+        { role: 'user', content: 'a', attachments: [att] },
+        { role: 'user', content: 'b', attachments: [att] },
+      ],
+      async (id) => {
+        calls.push(id);
+
+        return Buffer.from('x');
+      },
+    );
+
+    assert.deepEqual(calls, [9]);
+  });
+});
+
 describe('buildPrompt with attachments', () => {
   const history: ChatHistoryEntry[] = [
     { role: 'user', content: 'what is wrong here?', attachments: [{ id: 5, name: 'err.png', size: 3, isImage: true }] },
