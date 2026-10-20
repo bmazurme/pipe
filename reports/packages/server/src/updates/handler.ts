@@ -22,7 +22,7 @@ export function handleUpdateProgress(_req: Request, res: Response) {
   res.json({ type: 'message', data: readProgress() });
 }
 
-// POST /api/update/apply — downloads, checks and unpacks the newest release and starts the update; answers at once.
+// POST /api/update/apply — starts downloading the newest release and answers at once; checking, unpacking and launching go on in the background.
 // JSON only: a page on another site can send a plain form POST to a local address, but not a JSON one without CORS allowing it.
 export async function handleApplyUpdate(req: Request, res: Response) {
   if (!req.is('application/json')) {
@@ -31,7 +31,9 @@ export async function handleApplyUpdate(req: Request, res: Response) {
   }
 
   try {
-    res.json({ type: 'message', data: await startUpdate() });
+    const { releaseId } = await startUpdate();
+
+    res.json({ type: 'message', data: { releaseId } });
   } catch (error) {
     console.error('Apply update error:', error);
     res.json({ type: 'error', data: error instanceof Error ? error.message : 'Unknown error' });

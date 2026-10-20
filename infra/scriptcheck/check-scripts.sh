@@ -13,7 +13,7 @@
 # unreachable GitHub is logged and nothing else happens.
 #
 # Settings (/etc/pipe-scriptcheck.env): ALERT_CMD (e.g. /usr/local/bin/notify-telegram), OWNER, REPO, BRANCH, REPEAT_HOURS (24),
-# STATE_DIR (/var/lib/pipe-scriptcheck). Tests: SCRIPTCHECK_MANIFEST (a file of `installed|repo path` lines), RAW_BASE, SCRIPTCHECK_NOW.
+# STATE_DIR (/var/lib/pipe-scriptcheck), BRIDGE_PI_DIR (/home/pi/bridge-pi — where white keeps the deploy scripts). Tests: SCRIPTCHECK_MANIFEST (a file of `installed|repo path` lines), RAW_BASE, SCRIPTCHECK_NOW.
 set -uo pipefail
 
 OWNER="${OWNER:-bmazurme}"
@@ -21,6 +21,7 @@ REPO="${REPO:-pipe}"
 BRANCH="${BRANCH:-main}"
 RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/$OWNER/$REPO/$BRANCH}"
 STATE_DIR="${STATE_DIR:-/var/lib/pipe-scriptcheck}"
+BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 REPEAT_HOURS="${REPEAT_HOURS:-24}"
 HOST="${SCRIPTCHECK_HOST:-$(hostname)}"
 now="${SCRIPTCHECK_NOW:-$(date +%s)}"
@@ -47,6 +48,13 @@ manifest() {
 /usr/local/lib/pipe-monitor/primary-watch.sh|infra/monitor/primary-watch.sh
 /usr/local/sbin/pipe-swarm-heal|infra/pi/swarm-heal.sh
 /usr/local/lib/pipe-scriptcheck/check-scripts.sh|infra/scriptcheck/check-scripts.sh
+@BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh
+@BRIDGE_PI@/deploy-worker.sh|infra/bridge-pi/deploy-worker.sh
+@BRIDGE_PI@/enroll-worker.sh|infra/bridge-pi/enroll-worker.sh
+@BRIDGE_PI@/secrets.sh|infra/bridge-pi/secrets.sh
+@BRIDGE_PI@/vless-to-xray.sh|infra/bridge-pi/vless-to-xray.sh
+@BRIDGE_PI@/build-images.sh|infra/bridge-pi/build-images.sh
+@BRIDGE_PI@/build-worker-image.sh|infra/bridge-pi/build-worker-image.sh
 LIST
 }
 
@@ -55,6 +63,7 @@ trap 'rm -rf "$work"' EXIT
 
 rows=(); stale=(); checked=0; unreachable=0
 while IFS='|' read -r installed repo_path; do
+  installed="${installed//@BRIDGE_PI@/$BRIDGE_PI_DIR}"
   [ -n "$installed" ] && [ -f "$installed" ] || continue   # this board does not have that script
   if ! curl -fsSL --max-time 30 "$RAW_BASE/$repo_path" -o "$work/current" 2>/dev/null || [ ! -s "$work/current" ]; then
     unreachable=$((unreachable + 1)); continue
@@ -103,10 +112,16 @@ fi
 
 lines="$(printf '%s\n' "${stale[@]}" | cut -d'|' -f2- | sed 's/^/• /')"
 dirs="$(printf '%s\n' "${stale[@]}" | sed -E 's#^(infra/[^/]+)/.*#\1#' | sort -u | paste -sd' ' -)"
+how="Обновить: скопировать infra/ на плату и запустить установщик нужного каталога ($dirs) — см. README каталога, например
+scp -r infra/backup pi@$HOST:/tmp/ && ssh -t pi@$HOST 'sudo bash /tmp/backup/install-uploads.sh'"
+# The deploy scripts of white are plain files next to the stack files, not installed by anything: they are copied.
+if printf '%s\n' "${stale[@]}" | grep -q '^infra/bridge-pi/'; then
+  how="$how
+Скрипты деплоя (infra/bridge-pi) просто копируются: scp infra/bridge-pi/*.sh pi@$HOST:~/bridge-pi/ — иначе автодеплой может упасть на новых stack-файлах."
+fi
 alert "⚠️ Скрипты на $HOST устарели относительно $BRANCH (${#stale[@]}):
 $lines
 
-Обновить: скопировать infra/ на плату и запустить установщик нужного каталога ($dirs) — см. README каталога, например
-scp -r infra/backup pi@$HOST:/tmp/ && ssh -t pi@$HOST 'sudo bash /tmp/backup/install-uploads.sh'"
+$how"
 echo "$now $signature" > "$last"
 exit 0

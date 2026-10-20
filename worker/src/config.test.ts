@@ -94,3 +94,18 @@ describe('loadConfig', () => {
     assert.equal(config.workDir, '/tmp/custom');
   });
 });
+
+describe('WORKER_CHAT_TIMEOUT_SEC', () => {
+  const base = { BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: 'k' };
+
+  it('defaults to 10 minutes and honors an override', () => {
+    assert.equal(loadConfig(base).chatTimeoutSec, 600);
+    assert.equal(loadConfig({ ...base, WORKER_CHAT_TIMEOUT_SEC: '90' }).chatTimeoutSec, 90);
+  });
+
+  for (const bad of ['abc', '0', '-5']) {
+    it(`rejects WORKER_CHAT_TIMEOUT_SEC=${JSON.stringify(bad)}`, () => {
+      assert.throws(() => loadConfig({ ...base, WORKER_CHAT_TIMEOUT_SEC: bad }), /WORKER_CHAT_TIMEOUT_SEC must be a positive number/);
+    });
+  }
+});

@@ -59,7 +59,7 @@ async function main(): Promise<void> {
       initialSession: await waitForEnrolment(),
       waitForEnrolment,
       processJob: (client, job, config, signal) => processJob(client, job, config, { shutdown: signal, forceShutdown: forceShutdown.signal }),
-      processChatTurn,
+      processChatTurn: (chatClient, turn, config, signal) => processChatTurn(chatClient, turn, config, { shutdown: signal }),
       withHeartbeat,
       sleep,
       log: logger,

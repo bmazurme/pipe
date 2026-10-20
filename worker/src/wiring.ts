@@ -12,7 +12,7 @@ export interface WiringInput {
   initialSession: Session | null;
   waitForEnrolment: () => Promise<Session | null>;
   processJob: (client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig, signal: AbortSignal) => Promise<void>;
-  processChatTurn: (chatClient: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig) => Promise<void>;
+  processChatTurn: (chatClient: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig, signal: AbortSignal) => Promise<void>;
   withHeartbeat: LoopDeps['withHeartbeat'];
   sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   log: LoopDeps['log'];
@@ -59,7 +59,7 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
     },
     forgetRevokedKey: () => forgetRevokedKey(baseConfig),
     processJob: (client, job, config) => input.processJob(client, job, config, signal),
-    processChatTurn: input.processChatTurn,
+    processChatTurn: (chatClient, turn, config) => input.processChatTurn(chatClient, turn, config, signal),
     withHeartbeat: input.withHeartbeat,
     sleep: (ms) => input.sleep(ms, signal),
     log: input.log,

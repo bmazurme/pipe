@@ -12,7 +12,10 @@ repository. That is how the uploads copy on red ran an old `uploads-pull.sh` for
 - `✅ Скрипты на <board> снова актуальны` once when everything is current.
 
 Only scripts that exist on the board are looked at (white has the auto-deploy, red the uploads copy…). The list is in the script
-(installed path → path in the repository); a test checks that every repository path in it exists. A failed check never fails
+(installed path → path in the repository); a test checks that every repository path in it exists. It also covers the deploy scripts
+that sit next to the stack files on white (`~/bridge-pi/deploy.sh`, `deploy-worker.sh`, … — `BRIDGE_PI_DIR`, default `/home/pi/bridge-pi`):
+nothing installs those, they are copied (`scp infra/bridge-pi/*.sh pi@HOST:~/bridge-pi/`), and a stale `deploy-worker.sh` makes the
+auto-deploy fail on newer stack files (the stack file reads `${TELEGRAM_PROXY_ALIAS}`, which only the newer script sets). A failed check never fails
 anything: an unreachable GitHub is logged and nothing more.
 
 ```bash
@@ -26,4 +29,4 @@ hours of `infra/notify` the message waits for the morning), `OWNER`, `REPO`, `BR
 A merged change to a script is "outdated" on every board that has it until you install it there — that is the point. The check
 cannot install anything for you: copying code onto a board stays a decision.
 
-`test.sh` (14 checks with a fake curl, the clock injected): `bash infra/scriptcheck/test.sh`.
+`test.sh` (17 checks with a fake curl, the clock injected): `bash infra/scriptcheck/test.sh`.

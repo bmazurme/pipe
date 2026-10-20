@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -85,6 +85,62 @@ describe('processChatTurn reply length', () => {
       await processChatTurn(client, turn, fakeConfig(workDir));
 
       assert.deepEqual(completed, [[9, 'short answer']]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('processChatTurn with a hanging claude CLI', () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
+  function setup() {
+    const dir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-hang-'));
+    const script = path.join(dir, 'claude');
+    writeFileSync(script, ['#!/usr/bin/env node', 'setInterval(() => {}, 1000);', ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+
+    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
+    const completed: [number, string][] = [];
+    const failed: [number, string][] = [];
+    const client = {
+      complete: async (messageId: number, content: string) => void completed.push([messageId, content]),
+      fail: async (messageId: number, errorMessage: string) => void failed.push([messageId, errorMessage]),
+      reportClaudeUsage: async () => undefined,
+      reportProgress: async () => undefined,
+      downloadAttachment: async () => Buffer.alloc(0),
+    } as unknown as ChatBridgeClient;
+    return { workDir, client, completed, failed };
+  }
+
+  const turn: ClaimedChatTurn = { messageId: 11, chatId: 1, model: 'sonnet', history: [{ role: 'user', content: 'hi' }] };
+
+  it('fails the turn with the timeout message and never completes it', async () => {
+    const { workDir, client, completed, failed } = setup();
+    try {
+      await processChatTurn(client, turn, { ...fakeConfig(workDir), chatTimeoutSec: 0.3 });
+
+      assert.deepEqual(completed, []);
+      assert.deepEqual(failed, [[11, 'Модель не ответила за 1 мин']]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails the turn with the stop message when the shutdown signal is aborted', async () => {
+    const { workDir, client, completed, failed } = setup();
+    const shutdown = new AbortController();
+    setTimeout(() => shutdown.abort(), 200);
+    try {
+      await processChatTurn(client, turn, fakeConfig(workDir), { shutdown: shutdown.signal });
+
+      assert.deepEqual(completed, []);
+      assert.deepEqual(failed, [[11, 'Worker был остановлен']]);
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }

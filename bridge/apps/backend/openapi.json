@@ -664,6 +664,33 @@
         }
       }
     },
+    "/api/v1/chat/messages/{id}/retry": {
+      "post": {
+        "operationId": "ChatController_retryTurn",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat/turns/claim": {
       "post": {
         "operationId": "ChatController_claim",
