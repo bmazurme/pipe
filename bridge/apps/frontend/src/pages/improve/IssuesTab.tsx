@@ -5,6 +5,7 @@ import { Alert, Button, Checkbox, Icon, Label, Select, Skeleton, Switch, Text } 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { getErrorMessage, ImproveIssue, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
+import { NewIssueDialog } from './NewIssueDialog';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
 import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
@@ -18,6 +19,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [model, setModel] = useState(readStoredModel);
   const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
   const [launching, setLaunching] = useState<number[]>([]);
+  const [newIssueOpen, setNewIssueOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
   const lock = (numbers: number[]) => setLaunching((prev) => [...prev, ...numbers]);
@@ -96,6 +98,9 @@ export function IssuesTab({ configured }: { configured: boolean }) {
             Запустить {Math.min(5, startable.length)} старых
           </Button>
         )}
+        <Button view="outlined" size="m" onClick={() => setNewIssueOpen(true)}>
+          Новая задача
+        </Button>
         <Button view="outlined" size="m" loading={isFetching} onClick={() => void refetch()}>
           Обновить
         </Button>
@@ -106,13 +111,15 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         )}
       </div>
 
+      <NewIssueDialog open={newIssueOpen} onClose={() => setNewIssueOpen(false)} defaultModel={model} />
+
       {startError && <Alert theme="danger" view="filled" message={startError} />}
       {isError && <Alert theme="danger" view="filled" message={getErrorMessage(error, 'Не удалось загрузить задачи')} />}
 
       {isLoading && <Skeleton style={{ height: 120 }} />}
 
       {issues && issues.length === 0 && (
-        <EmptyState icon={Rocket} title="Открытых задач нет" description={showAll ? 'В репозитории нет открытых issues.' : 'Нет открытых issues с меткой loop — включите «Все открытые issues», создайте их из анализа или вручную на GitHub.'} />
+        <EmptyState icon={Rocket} title="Открытых задач нет" description={showAll ? 'В репозитории нет открытых issues.' : 'Нет открытых issues с меткой loop — включите «Все открытые issues», создайте их из анализа или кнопкой «Новая задача».'} />
       )}
 
       {issues?.map((issue) => (

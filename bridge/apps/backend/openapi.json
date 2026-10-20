@@ -1939,6 +1939,25 @@
             "description": ""
           }
         }
+      },
+      "post": {
+        "operationId": "ImproveController_createIssue",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImproveIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/v1/improve/runs": {
@@ -5175,6 +5194,29 @@
         },
         "required": [
           "failedJobs"
+        ]
+      },
+      "CreateImproveIssueDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "model": {
+            "type": "string"
+          },
+          "start": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "title"
         ]
       },
       "ImproveRun": {

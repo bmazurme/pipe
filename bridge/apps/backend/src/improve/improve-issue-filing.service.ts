@@ -109,6 +109,35 @@ export class ImproveIssueFilingService {
     return this.runs.save(run);
   }
 
+  // Files one issue the owner wrote by hand, labelled for Improve. Starting a run
+  // on it is left to the caller (`start`), since ImproveService depends on this one.
+  async createManualIssue(
+    input: { title: string; body?: string },
+    start?: (issueNumber: number) => Promise<ImproveRun>,
+  ): Promise<{
+    number: number;
+    htmlUrl: string;
+    missingLabels: string[];
+    run?: ImproveRun;
+  }> {
+    this.requireConfigured();
+
+    const issue = await this.github.createIssue({
+      title: input.title,
+      body: input.body ?? '',
+      labels: [PR_LABEL],
+    });
+    const result = {
+      number: issue.number,
+      htmlUrl: issue.htmlUrl,
+      missingLabels: issue.missingLabels ?? [],
+    };
+
+    if (!start) return result;
+
+    return { ...result, run: await start(issue.number) };
+  }
+
   private requireConfigured(): void {
     if (!this.github.isReady()) {
       throw new BadRequestException(

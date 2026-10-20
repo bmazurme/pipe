@@ -20,6 +20,7 @@ import { JwtGuard } from '../auth/guards/jwt.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
 import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import {
+  CreateImproveIssueDto,
   CreateIssuesDto,
   SaveScheduleDto,
   SaveSettingsDto,
@@ -56,6 +57,26 @@ export class ImproveController {
   @Get('issues')
   issues(@Query('label') label?: string, @Query('all') all?: string) {
     return this.improve.listIssues(label || undefined, all === '1');
+  }
+
+  // Files a hand-written issue labelled for Improve, optionally starting a run on it.
+  @Post('issues')
+  createIssue(
+    @Body() dto: CreateImproveIssueDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const model = dto.model;
+
+    if (dto.start && !model) {
+      throw new BadRequestException('Для запуска выберите модель');
+    }
+
+    return this.issueFiling.createManualIssue(
+      dto,
+      dto.start && model
+        ? (number) => this.improve.startRun(user.id, number, model)
+        : undefined,
+    );
   }
 
   @Get('runs')
