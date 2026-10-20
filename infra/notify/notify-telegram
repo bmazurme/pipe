@@ -5,6 +5,12 @@
 # auto-deploy) in their /etc/pipe-*.env and they call it with the text as $1.
 #
 #   notify-telegram "text"
+#   notify-telegram --flush      # deliver what was held back during the quiet hours (a timer runs this, see install.sh)
+#
+# Quiet hours (like the bridge's own notifications): between NOTIFY_QUIET_HOURS (default 23:00-08:00, in NOTIFY_TZ, default
+# Europe/Moscow) a message is not sent but kept in NOTIFY_QUEUE_DIR; the first call after the window — or the timer — sends
+# everything held as ONE digest message. NOTIFY_QUIET_HOURS=off turns it off. A queue that cannot be written to never loses a
+# message: it is sent at once instead.
 #
 # Telegram is blocked from here, so the message goes out through the VPN proxy of the worker stack: a throwaway curl
 # container joins the shared overlay network `telegram-proxy-net` (backend and vpn-client live there) and uses
@@ -18,9 +24,11 @@ ENV_FILE="${NOTIFY_ENV_FILE:-/etc/pipe-notify.env}"
 NETWORK="${NOTIFY_NETWORK:-telegram-proxy-net}"
 PROXY="${NOTIFY_PROXY:-http://vpn-client:1080}"
 IMAGE="${NOTIFY_CURL_IMAGE:-curlimages/curl:8.10.1}"
-text="${1:-}"
+QUEUE_DIR="${NOTIFY_QUEUE_DIR:-/var/lib/pipe-notify}"
+flush_only=0
+if [ "${1:-}" = "--flush" ]; then flush_only=1; text=""; else text="${1:-}"; fi
 
-[ -n "$text" ] || { echo "usage: notify-telegram \"text\"" >&2; exit 0; }
+[ "$flush_only" = 1 ] || [ -n "$text" ] || { echo "usage: notify-telegram \"text\" | --flush" >&2; exit 0; }
 [ -r "$ENV_FILE" ] || { echo "notify-telegram: cannot read $ENV_FILE" >&2; exit 0; }
 set -a
 # shellcheck disable=SC1090
@@ -28,20 +36,67 @@ set -a
 set +a
 [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || { echo "notify-telegram: token or chat id missing in $ENV_FILE" >&2; exit 0; }
 
-# Telegram caps a message at 4096 characters.
-NOTIFY_TEXT="${text:0:4000}"
-export NOTIFY_TEXT
+QUIET="${NOTIFY_QUIET_HOURS:-23:00-08:00}"
+QUIET_TZ="${NOTIFY_TZ:-Europe/Moscow}"
 
-out="$(docker run --rm --network "$NETWORK" \
-  -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e NOTIFY_TEXT -e NOTIFY_PROXY="$PROXY" \
-  --entrypoint sh "$IMAGE" -c '
-    curl -sS -m 25 -x "$NOTIFY_PROXY" \
-      --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
-      --data-urlencode "text=$NOTIFY_TEXT" \
-      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"' 2>&1)" || true
+minutes() { local h="${1%%:*}" m="${1##*:}"; echo $(( 10#$h * 60 + 10#$m )); } # "HH:MM" → minutes since midnight
 
-case "$out" in
-  *'"ok":true'*) ;;
-  *) echo "notify-telegram: not delivered: $(printf '%s' "$out" | sed -E 's/bot[0-9]+:[A-Za-z0-9_-]+/bot<token>/g' | tail -c 300)" >&2 ;;
-esac
+in_quiet_hours() {
+  [ "$QUIET" != off ] || return 1
+  local start="${QUIET%%-*}" end="${QUIET##*-}" now
+  now="$(minutes "${NOTIFY_NOW:-$(TZ="$QUIET_TZ" date +%H:%M)}")" start="$(minutes "$start")" end="$(minutes "$end")" 2>/dev/null || return 1
+  if [ "$start" -le "$end" ]; then [ "$now" -ge "$start" ] && [ "$now" -lt "$end" ]; else [ "$now" -ge "$start" ] || [ "$now" -lt "$end" ]; fi
+}
+
+# Sends $1; succeeds only when Telegram says ok.
+send() {
+  # Telegram caps a message at 4096 characters.
+  NOTIFY_TEXT="${1:0:4000}"
+  export NOTIFY_TEXT
+  local out
+  out="$(docker run --rm --network "$NETWORK" \
+    -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e NOTIFY_TEXT -e NOTIFY_PROXY="$PROXY" \
+    --entrypoint sh "$IMAGE" -c '
+      curl -sS -m 25 -x "$NOTIFY_PROXY" \
+        --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+        --data-urlencode "text=$NOTIFY_TEXT" \
+        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"' 2>&1)" || true
+
+  case "$out" in
+    *'"ok":true'*) return 0 ;;
+    *) echo "notify-telegram: not delivered: $(printf '%s' "$out" | sed -E 's/bot[0-9]+:[A-Za-z0-9_-]+/bot<token>/g' | tail -c 300)" >&2; return 1 ;;
+  esac
+}
+
+# Everything held back during the quiet hours, as one message; the entries are removed only once it went out.
+flush_queue() {
+  [ -d "$QUEUE_DIR" ] || return 0
+  local files=() f
+  while IFS= read -r f; do files+=("$f"); done < <(find "$QUEUE_DIR" -maxdepth 1 -type f -name 'q-*' 2>/dev/null | sort)
+  [ "${#files[@]}" -gt 0 ] || return 0
+
+  local digest="🌙 Пока были тихие часы (${#files[@]}):" shown=0
+  for f in "${files[@]}"; do
+    if [ "${#digest}" -gt 3600 ]; then break; fi
+    digest+=$'\n\n'"$(cat "$f")"
+    shown=$((shown + 1))
+  done
+  [ "$shown" -ge "${#files[@]}" ] || digest+=$'\n\n'"…и ещё $(( ${#files[@]} - shown ))"
+
+  if send "$digest"; then rm -f "${files[@]}"; fi
+}
+
+if in_quiet_hours; then
+  [ "$flush_only" = 1 ] && exit 0
+  # Held until the window is over; an unwritable queue must not swallow the message, so then it is sent now.
+  entry="$QUEUE_DIR/q-$(date +%s)-$$"
+  if mkdir -p "$QUEUE_DIR" 2>/dev/null && printf '%s %s\n' "$(TZ="$QUIET_TZ" date +%H:%M)" "$text" > "$entry" 2>/dev/null; then
+    exit 0
+  fi
+  send "$text"
+  exit 0
+fi
+
+flush_queue
+[ "$flush_only" = 1 ] || send "$text"
 exit 0
