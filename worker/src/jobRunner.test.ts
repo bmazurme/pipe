@@ -9,9 +9,7 @@ import { ASSET_PREFIX, buildArchive, decryptBuffer, generateKeyPair } from '@pip
 
 import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
-import type { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
-import { MAX_REPLY_LENGTH, TRUNCATED_REPLY_NOTE } from './chatReply.js';
-import { processChatTurn, processJob, SHUTDOWN_FAILURE_MESSAGE, withHeartbeat } from './jobRunner.js';
+import { processJob, SHUTDOWN_FAILURE_MESSAGE } from './jobRunner.js';
 import { MAX_LOG_CHUNK_CHARS } from './logChunks.js';
 
 const originalFetch = globalThis.fetch;
@@ -372,70 +370,6 @@ describe('processJob stop requests', () => {
 });
 
 
-describe('withHeartbeat (chat turns)', () => {
-  it('pings bridge every 10s while the work runs, returns its result, and stops after', async (t) => {
-    t.mock.timers.enable({ apis: ['setInterval'] });
-    const names: string[] = [];
-    let release!: (value: string) => void;
-    const work = new Promise<string>((resolve) => {
-      release = resolve;
-    });
-
-    const running = withHeartbeat({ heartbeat: async (name) => void names.push(name) }, 'pi-worker', () => work);
-
-    t.mock.timers.tick(35_000);
-    assert.deepEqual(names, ['pi-worker', 'pi-worker', 'pi-worker']);
-
-    release('reply');
-    assert.equal(await running, 'reply');
-
-    t.mock.timers.tick(60_000);
-    assert.equal(names.length, 3, 'the interval must be cleared once the work ends');
-  });
-
-  it('clears the interval and rethrows when the work fails', async (t) => {
-    t.mock.timers.enable({ apis: ['setInterval'] });
-    let pings = 0;
-    let fail!: (error: Error) => void;
-    const work = new Promise<string>((_, reject) => {
-      fail = reject;
-    });
-
-    const running = withHeartbeat({ heartbeat: async () => void (pings += 1) }, 'pi-worker', () => work);
-    t.mock.timers.tick(10_000);
-    assert.equal(pings, 1);
-
-    fail(new Error('model call broke'));
-    await assert.rejects(running, /model call broke/);
-
-    t.mock.timers.tick(60_000);
-    assert.equal(pings, 1);
-  });
-
-  it('keeps the work going when a heartbeat fails', async (t) => {
-    t.mock.timers.enable({ apis: ['setInterval'] });
-    let release!: (value: string) => void;
-    const work = new Promise<string>((resolve) => {
-      release = resolve;
-    });
-
-    const running = withHeartbeat(
-      {
-        heartbeat: async () => {
-          throw new Error('bridge unreachable');
-        },
-      },
-      'pi-worker',
-      () => work,
-    );
-    t.mock.timers.tick(25_000);
-    await new Promise((resolve) => setImmediate(resolve));
-
-    release('still fine');
-    assert.equal(await running, 'still fine');
-  });
-});
-
 describe('processJob worker shutdown', () => {
   it('reports "failed" with the SIGTERM reason, flushes logs and never reports "cancelled"', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-shutdown-'));
@@ -470,54 +404,6 @@ describe('processJob worker shutdown', () => {
     assert.ok(client.appendLog.calls.some((call) => String(call[1]).includes('Claimed job 22')));
 
     rmSync(workDir, { recursive: true, force: true });
-  });
-});
-
-describe('processChatTurn reply length', () => {
-  function fakeChatClient() {
-    const completed: [number, string][] = [];
-    const failed: [number, string][] = [];
-    const client = {
-      complete: async (messageId: number, content: string) => void completed.push([messageId, content]),
-      fail: async (messageId: number, errorMessage: string) => void failed.push([messageId, errorMessage]),
-    } as unknown as ChatBridgeClient;
-    return { client, completed, failed };
-  }
-
-  const turn: ClaimedChatTurn = { messageId: 9, chatId: 1, model: 'gpt', history: [{ role: 'user', content: 'write a lot' }] };
-
-  it('completes a reply longer than MAX_REPLY_LENGTH in truncated form instead of failing it', async () => {
-    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
-    try {
-      stubOpenAiCompletion('ж'.repeat(MAX_REPLY_LENGTH + 1000));
-      const { client, completed, failed } = fakeChatClient();
-
-      await processChatTurn(client, turn, fakeConfig(workDir));
-
-      assert.deepEqual(failed, []);
-      assert.equal(completed.length, 1);
-      const [messageId, content] = completed[0]!;
-      assert.equal(messageId, 9);
-      assert.equal(content.length, MAX_REPLY_LENGTH);
-      assert.ok(content.startsWith('жжж'));
-      assert.ok(content.endsWith(TRUNCATED_REPLY_NOTE));
-    } finally {
-      rmSync(workDir, { recursive: true, force: true });
-    }
-  });
-
-  it('completes a reply that fits unchanged', async () => {
-    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
-    try {
-      stubOpenAiCompletion('short answer');
-      const { client, completed } = fakeChatClient();
-
-      await processChatTurn(client, turn, fakeConfig(workDir));
-
-      assert.deepEqual(completed, [[9, 'short answer']]);
-    } finally {
-      rmSync(workDir, { recursive: true, force: true });
-    }
   });
 });
 

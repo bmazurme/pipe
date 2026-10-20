@@ -5,19 +5,14 @@ import { encryptBuffer, type PackedAsset, type PackedFile } from '@pipe/protocol
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
-import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
-import { clipReply } from './chatReply.js';
-import { claudeChat } from './chatRunners/claudeChat.js';
-import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
-import { createChatToolset } from './chatTools.js';
-import { resolveChatProvider } from './chatProviders.js';
 import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
-import { chatLogger, jobLogger, logger } from './logger.js';
+import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
+import { jobLogger } from './logger.js';
 import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
@@ -35,32 +30,7 @@ const LOG_FLUSH_INTERVAL_MS = 1500;
 // How often a running job asks bridge whether its owner pressed "stop".
 const CANCEL_POLL_INTERVAL_MS = 3000;
 
-// Bridge treats a worker as down after 30s without a heartbeat, and the main
-// loop doesn't poll (so doesn't claim) while a job runs — ping well inside that.
-export const HEARTBEAT_INTERVAL_MS = 10_000;
-
-// Runs `work` while pinging bridge every HEARTBEAT_INTERVAL_MS. A job pings from inside processJob, but a chat
-// turn is one long model call: without this the worker looked "down" on the Worker page (and chat said it did
-// not answer) for as long as a reply took. Best-effort like the job ping: a missed one never fails the work,
-// and the timer is always cleared.
-export async function withHeartbeat<T>(
-  client: Pick<WorkerBridgeClient, 'heartbeat'>,
-  workerName: string,
-  work: () => Promise<T>,
-  intervalMs: number = HEARTBEAT_INTERVAL_MS,
-): Promise<T> {
-  const timer = setInterval(() => {
-    void (async () => client.heartbeat(workerName))().catch((error) => {
-      logger.warn({ err: error }, 'failed to send heartbeat to bridge');
-    });
-  }, intervalMs);
-
-  try {
-    return await work();
-  } finally {
-    clearInterval(timer);
-  }
-}
+export { HEARTBEAT_INTERVAL_MS };
 
 function isExcludedResultPath(relPath: string): boolean {
   return relPath.split(/[\\/]/).some((segment) => EXCLUDED_RESULT_DIRS.has(segment));
@@ -302,39 +272,5 @@ export async function processJob(
     flushLog();
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });
-  }
-}
-
-// Chat has no parcel and no result to upload — one model call per turn, then
-// report the reply (or the failure) straight back. Sonnet/Opus spawn the
-// same claude CLI Worker jobs use (a scratch work dir only because the CLI
-// requires a cwd, removed right after); gpt/deepseek/qwen share the exact
-// OpenAI-compatible provider config jobs use, nothing about execution.
-export async function processChatTurn(client: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig): Promise<void> {
-  const clog = chatLogger(turn.messageId);
-
-  const reports: Promise<void>[] = [];
-
-  try {
-    const provider = resolveChatProvider(turn.model, process.env, turn.provider);
-
-    const reply = provider.tool === 'claude'
-      ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
-          reports.push(client.reportClaudeUsage(report));
-        }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text), turn.context)
-      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context);
-
-    await Promise.all(reports);
-    await client.complete(turn.messageId, clipReply(reply));
-    clog.info('succeeded');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    clog.error({ err: error }, 'failed');
-
-    try {
-      await client.fail(turn.messageId, message);
-    } catch (failError) {
-      clog.error({ err: failError }, 'additionally failed to report failure status');
-    }
   }
 }
