@@ -20,11 +20,14 @@ import {
   handlePublishSubscriptionIssue,
   handleGetSubscriptionIssueTime,
   handleCreateManualSubscriptionIssue,
+  handleCreateMigrationTask,
   handleRemoveSubscriptionIssue,
 } from './subscription/handler';
 import {
   handleGetSubscriptionConfig,
   handleAddTrackedProject,
+  handleAddMigration,
+  handleRemoveMigration,
   handleRemoveTrackedProject,
   handleAddDictionaryEntry,
   handleRemoveDictionaryEntry,
@@ -121,6 +124,9 @@ app.get('/api/subscription/issues/:projectId/:iid/time', handleGetSubscriptionIs
 app.delete('/api/subscription/issues/:projectId/:iid', handleRemoveSubscriptionIssue);
 app.get('/api/subscription/config', handleGetSubscriptionConfig);
 app.post('/api/subscription/config/tracked-projects', handleAddTrackedProject);
+app.post('/api/subscription/config/migrations', handleAddMigration);
+app.delete('/api/subscription/config/migrations/:id', handleRemoveMigration);
+app.post('/api/subscription/migration/tasks', handleCreateMigrationTask);
 app.delete('/api/subscription/config/tracked-projects/:gitlabProjectId', handleRemoveTrackedProject);
 app.post('/api/subscription/config/dictionary', handleAddDictionaryEntry);
 app.post('/api/subscription/config/dictionary/import', handleImportDictionary);

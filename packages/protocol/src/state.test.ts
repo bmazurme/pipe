@@ -77,6 +77,26 @@ describe('subscriptionStateSchema', () => {
     assert.ok('value' in result);
   });
 
+  it('keeps what a migration task adds: its kind, and how many files the last Pull wrote', () => {
+    const result = parseState(subscriptionStateSchema, {
+      '4000000001:m-mup3r0x2': { step: 'pulled', manual: true, kind: 'migration', title: 'Миграция: Orders', projectId: 4000000001, pulledFiles: 7 },
+    });
+
+    assert.ok('value' in result);
+    assert.deepEqual(result.value['4000000001:m-mup3r0x2'], {
+      step: 'pulled',
+      manual: true,
+      kind: 'migration',
+      title: 'Миграция: Orders',
+      projectId: 4000000001,
+      pulledFiles: 7,
+    });
+  });
+
+  it('rejects a kind it does not know', () => {
+    assert.ok('error' in parseState(subscriptionStateSchema, { '1:m-x': { step: 'init', kind: 'other' } }));
+  });
+
   it('rejects an invalid step value', () => {
     const result = parseState(subscriptionStateSchema, { '402:6': { step: 'bogus' } });
     assert.ok('error' in result);

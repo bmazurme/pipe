@@ -61,6 +61,11 @@ export const subscriptionStateEntrySchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   projectId: z.number().optional(),
+  // 'migration': a task that moves a module from the current repository into the one the project is moving to (reports'
+  // Subscription, see MigrationProjectType); its parcel carries both repositories and the result goes into the target one.
+  kind: z.enum(['migration']).optional(),
+  // How many files the last Pull actually wrote (an unchanged file is not rewritten, so it is not counted).
+  pulledFiles: z.number().optional(),
 });
 export const subscriptionStateSchema = z.record(z.string(), subscriptionStateEntrySchema);
 export type SubscriptionStep = z.infer<typeof subscriptionStepSchema>;

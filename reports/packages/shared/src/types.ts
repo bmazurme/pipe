@@ -161,6 +161,32 @@ export type TrackedProjectType = {
   exclude?: string[];
 };
 
+// A project that is moving to another repository (usually with another stack): the CURRENT repository is only ever read, the TARGET
+// one receives the result. A migration task (Subscription → «Миграция») sends both to the worker with a text saying which module
+// has to be brought up to date or added in the target, and Pull unpacks the result into the target repository — on the task's own branch.
+export type MigrationProjectType = {
+  /** Assigned when the migration is added: a number from a range no GitLab or GitHub id reaches, so it can stand wherever a project id does. */
+  id: string;
+  name: string;
+  /** The current repository — read-only, never written. */
+  sourcePath: string;
+  sourceInclude?: string[];
+  sourceExclude?: string[];
+  /** The repository the project moves to — the task branch is created here and the result unpacked here. */
+  targetPath: string;
+  targetBaseBranch?: string;
+  targetInclude?: string[];
+  targetExclude?: string[];
+};
+
+export type CreateMigrationTaskPayload = {
+  migrationId: string;
+  /** Which module has to be brought up to date or added in the target repository. */
+  description: string;
+  /** A short name for the list; made from the first line of the description when absent. */
+  title?: string;
+};
+
 export type DictionaryEntryType = {
   key: string;
   value: string;
@@ -192,6 +218,8 @@ export type SubscriptionConfigType = {
   // pushed (bridge's POST /worker/jobs). Absent = off: today's behavior, where
   // the job has to be created by hand on bridge's Worker page.
   autoStartWorkerModel?: WorkerModelType;
+  // Projects moving to another repository (Subscription → «Миграция»); absent = none.
+  migrations?: MigrationProjectType[];
 };
 
 // Mirrors bridge's JobModel; @reports/shared holds types only, so the runtime
@@ -235,6 +263,8 @@ export type SubscriptionIssueType = {
   status: string;
   tracked: boolean;
   source?: 'gitlab' | 'github';
+  /** 'migration' for a task that moves a module into the target repository of a migration project. */
+  kind?: 'migration';
   subscription?: SubscriptionStateEntryType;
 };
 
@@ -263,6 +293,8 @@ export type SubscriptionDraftType = {
   title: string;
   description: string;
   leaks: LeakFindingType[];
+  /** For a migration task: what the parcel will carry from each repository. */
+  migration?: { name: string; sourcePath: string; targetPath: string; sourceFiles: number; targetFiles: number };
 };
 
 // Body for both POST .../push (real or manual issue) and

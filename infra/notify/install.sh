@@ -33,6 +33,31 @@ if id "${DEPLOY_USER:-pi}" >/dev/null 2>&1; then
   echo "/etc/pipe-notify.env: readable by ${DEPLOY_USER:-pi} (the auto-deploy runs as that user)"
 fi
 
+# Quiet hours (see notify-telegram): what is held back during the night waits in this directory, writable by the board's user
+# (the auto-deploy runs as it), and a timer sends it as one digest once the window is over.
+install -d -m 770 -o root -g "$(id -gn "${DEPLOY_USER:-pi}" 2>/dev/null || echo root)" /var/lib/pipe-notify
+cat > /etc/systemd/system/pipe-notify-flush.service <<'UNIT'
+[Unit]
+Description=Send the Telegram messages held back during the quiet hours
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/notify-telegram --flush
+UNIT
+cat > /etc/systemd/system/pipe-notify-flush.timer <<'UNIT'
+[Unit]
+Description=Every 10 minutes: deliver the messages held back during the quiet hours
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now pipe-notify-flush.timer >/dev/null && echo "pipe-notify-flush.timer: enabled (quiet hours ${NOTIFY_QUIET_HOURS:-23:00-08:00} Europe/Moscow — NOTIFY_QUIET_HOURS / NOTIFY_TZ in /etc/pipe-notify.env change it, off disables)"
+
 wire() { # file variable
   local file="$1" var="$2"
   [ -f "$file" ] || return 0

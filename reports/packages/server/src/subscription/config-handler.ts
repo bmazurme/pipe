@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, TrackedProjectType } from '@reports/shared';
+import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, MigrationProjectType, TrackedProjectType } from '@reports/shared';
 
 import {
   getSubscriptionConfig,
@@ -15,7 +15,9 @@ import {
   generateAndSaveKeyPair,
   setAutoStartWorkerModel,
   setLeakScanStrict,
+  removeMigration,
 } from './config-props';
+import { createMigration } from './migration';
 import { getRepo } from './github-client';
 import { streamSender } from '../utils/stream';
 
@@ -64,6 +66,16 @@ export async function handleAddTrackedProject(req: Request<Record<string, string
   } finally {
     res.end();
   }
+}
+
+// A migration project: the current repository (read) and the one the project moves to (written). Checked when added — the folders have
+// to exist, differ and the target be a git repository.
+export function handleAddMigration(req: Request<Record<string, string>>, res: Response) {
+  withSync(res, 'Add migration', () => createMigration(req.body as Omit<MigrationProjectType, 'id'>));
+}
+
+export function handleRemoveMigration(req: Request<Record<string, string>>, res: Response) {
+  withSync(res, 'Remove migration', () => removeMigration(req.params.id));
 }
 
 export function handleRemoveTrackedProject(req: Request<Record<string, string>>, res: Response) {

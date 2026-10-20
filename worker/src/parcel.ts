@@ -23,6 +23,8 @@ export interface SubscriptionManifest extends BaseManifest {
   issueDescription: string;
   // The issue's comments, oldest first (anonymized like the description); absent when it had none or the parcel is older.
   issueComments?: { author: string; createdAt: string; body: string }[];
+  // A migration task: the current repository is under sourceRoot, the one the project moves to under targetRoot (see reports' Subscription).
+  migration?: { name?: string; sourceRoot: string; targetRoot: string };
   projectId: number;
   branch: string;
   createdAt: string;
@@ -81,6 +83,8 @@ export function buildResultParcel(
 export function describeTask(parcel: ExtractedParcel): string {
   if (parcel.manifestEntry === SUBSCRIPTION_MANIFEST_ENTRY) {
     const manifest = parcel.manifest as unknown as SubscriptionManifest;
+
+    if (manifest.migration) return describeMigration(manifest, parcel);
     const comments = (manifest.issueComments ?? [])
       .map((comment) => `--- ${[comment.author, comment.createdAt].filter(Boolean).join(', ')}:\n${comment.body}`)
       .join('\n\n');
@@ -96,4 +100,32 @@ export function describeTask(parcel: ExtractedParcel): string {
   }
 
   return 'No task description was included with this parcel — review the code and make general improvements.';
+}
+
+// A migration task: the model gets the current repository to read and the target one to work in, and the person's text saying which
+// module to bring up to date or add there. Only target/ comes back to the person's machine — source/ changes are thrown away.
+function describeMigration(manifest: SubscriptionManifest, parcel: ExtractedParcel): string {
+  const { sourceRoot, targetRoot, name } = manifest.migration!;
+  const hasImages = parcel.assets.some((asset) => asset.relPath.startsWith('issue-images/'));
+
+  return [
+    `Migration task${name ? ` (${name})` : ''}: ${manifest.issueTitle}`,
+    [
+      'The project is moving from one repository to another, usually onto a different stack.',
+      `- \`${sourceRoot}\` is the CURRENT repository (the old stack). It is a read-only reference: anything changed there is thrown away.`,
+      `- \`${targetRoot}\` is the repository the project is moving TO (the new stack). It may already hold part of the project. Your work goes here.`,
+    ].join('\n'),
+    `What has to be done in ${targetRoot} — the text says which module to bring up to date or to add:\n\n${manifest.issueDescription}`,
+    [
+      'How to work:',
+      `- Read the relevant code in ${sourceRoot} to see what the module does, then implement it in ${targetRoot} in the target's own stack, structure, conventions and naming — do not translate source code line by line.`,
+      `- If the module already exists in ${targetRoot}, bring it up to date with ${sourceRoot} instead of adding a second copy, and keep what is still right.`,
+      `- Change only files under ${targetRoot}. Put new files where the target's own structure expects them, and add or update tests there if the target has them.`,
+      '- Names, hosts and identifiers that look like placeholders are placeholders: keep them exactly as they are.',
+      `- When you finish, say briefly what was added or changed in ${targetRoot}, and anything in ${sourceRoot} that could not be ported, and why.`,
+    ].join('\n'),
+    hasImages ? 'Images attached to the task are in the issue-images/ folder.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
