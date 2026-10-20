@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AnalysisModulesType, BacklogType, CreateBacklogIssuesPayload, CreateBacklogIssuesResult, StartAnalysisPayload } from '@reports/shared';
 
-import { ANALYSIS_KINDS, analysisTitle, buildAnalysisPrompt, BACKLOG_FILE, isAnalysisTitle, markDuplicates, normalizeModule, parseBacklog } from './analysis';
+import { ANALYSIS_KINDS, analysisTitle, buildAnalysisPrompt, BACKLOG_FILE, isAnalysisTitle, markDuplicates, normalizeModule, normalizeTitle, parseBacklog } from './analysis';
 import { sendClientEvent } from './bridge-client';
 import { findTrackedProject } from './config-props';
 import { createIssue, DEFAULT_GITHUB_LABEL, listAllIssues } from './github-client';
@@ -94,6 +94,8 @@ export async function handleCreateBacklogIssues(req: Request<Record<string, stri
     const { project, items } = await loadBacklog(projectId, iid);
     const result: CreateBacklogIssuesResult = { created: [], skipped: [] };
 
+    const filedTitles = new Set<string>();
+
     for (const index of [...new Set(indices)]) {
       const item = items[index];
 
@@ -101,10 +103,18 @@ export async function handleCreateBacklogIssues(req: Request<Record<string, stri
         result.skipped.push({ title: `#${index}`, reason: 'нет такого пункта' });
       } else if (item.duplicateOf !== undefined) {
         result.skipped.push({ title: item.title, reason: `дубликат #${item.duplicateOf}` });
+      } else if (filedTitles.has(normalizeTitle(item.title))) {
+        result.skipped.push({ title: item.title, reason: 'дубликат в этой партии' });
       } else {
-        const issue = await createIssue(project.githubRepo, { title: item.title, body: item.body, labels: [project.label, `risk:${item.risk}`] });
+        try {
+          const issue = await createIssue(project.githubRepo, { title: item.title, body: item.body, labels: [project.label, `risk:${item.risk}`] });
 
-        result.created.push({ number: issue.number, url: issue.html_url, title: issue.title });
+          filedTitles.add(normalizeTitle(item.title));
+          result.created.push({ number: issue.number, url: issue.html_url, title: issue.title });
+        } catch (error) {
+          // Keep what was already filed: a failure midway must not hide the issues that exist.
+          result.skipped.push({ title: item.title, reason: `ошибка GitHub: ${error instanceof Error ? error.message : String(error)}` });
+        }
       }
     }
 

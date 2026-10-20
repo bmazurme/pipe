@@ -204,6 +204,73 @@ describe('handleCreateBacklogIssues', () => {
   });
 });
 
+describe('handleCreateBacklogIssues — partial failure and batch duplicates', () => {
+  const THREE = JSON.stringify({
+    items: [
+      { title: 'One', body: 'b1', risk: 'low' },
+      { title: 'Two', body: 'b2', risk: 'low' },
+      { title: 'Three', body: 'b3', risk: 'low' },
+    ],
+  });
+
+  function failingFetch(failTitles: string[]) {
+    const { events: bridgeEvents } = githubFetch();
+    const inner = globalThis.fetch;
+
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/repos/o/r/issues') && init?.method === 'POST' && failTitles.includes(JSON.parse(init.body as string).title)) {
+        return new Response('boom', { status: 502 });
+      }
+
+      return inner(url, init);
+    }) as typeof fetch;
+
+    return { bridgeEvents };
+  }
+
+  it('keeps issues already created when GitHub fails midway and marks the task published', async () => {
+    setup(repoWithBacklog(THREE));
+    const { bridgeEvents } = failingFetch(['Two']);
+
+    const { res, events } = makeRes();
+    await handleCreateBacklogIssues(req({ projectId: PROJECT, iid: 'm-an1' }, { indices: [0, 1, 2] }), res);
+
+    const data = events()[0].data as { created: unknown[]; skipped: Array<{ title: string; reason: string }> };
+
+    expect(events()[0].type).toBe('message');
+    expect(data.created).toHaveLength(2);
+    expect(data.skipped).toHaveLength(1);
+    expect(data.skipped[0]).toMatchObject({ title: 'Two' });
+    expect(data.skipped[0].reason).toMatch(/ошибка GitHub/);
+    expect(stores.state[`${PROJECT}:m-an1`].step).toBe('published');
+    expect(bridgeEvents).toEqual([expect.objectContaining({ type: 'issues_created', count: 2 })]);
+  });
+
+  it('leaves the state unchanged when every create fails', async () => {
+    setup(repoWithBacklog(THREE));
+    const { bridgeEvents } = failingFetch(['One', 'Two', 'Three']);
+
+    const { res, events } = makeRes();
+    await handleCreateBacklogIssues(req({ projectId: PROJECT, iid: 'm-an1' }, { indices: [0, 1, 2] }), res);
+
+    expect(events()[0].data).toMatchObject({ created: [] });
+    expect((events()[0].data as { skipped: unknown[] }).skipped).toHaveLength(3);
+    expect(stores.state[`${PROJECT}:m-an1`].step).toBe('pulled');
+    expect(bridgeEvents).toEqual([]);
+  });
+
+  it('files only one of two items with the same title in one batch', async () => {
+    setup(repoWithBacklog(JSON.stringify({ items: [{ title: 'Same', body: 'a', risk: 'low' }, { title: ' same ', body: 'b', risk: 'low' }] })));
+    const { created } = githubFetch();
+
+    const { res, events } = makeRes();
+    await handleCreateBacklogIssues(req({ projectId: PROJECT, iid: 'm-an1' }, { indices: [0, 1] }), res);
+
+    expect(created).toHaveLength(1);
+    expect(events()[0].data).toMatchObject({ skipped: [{ reason: 'дубликат в этой партии' }] });
+  });
+});
+
 describe('handleStartAnalysis', () => {
   it('creates an analysis task whose description is the prompt, listing existing proposals', async () => {
     const dir = repoWithBacklog(null);
