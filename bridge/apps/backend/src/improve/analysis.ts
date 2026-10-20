@@ -59,6 +59,12 @@ export const ANALYSIS_CATEGORIES = [
       'A structural problem in how the code is organised: a module that knows too much about another (a layering or dependency-direction violation), logic duplicated across packages that belongs in one place, a god-class or a file doing several jobs, a leaky or inconsistent abstraction, an import cycle, or a boundary the architecture notes in CLAUDE.md describe but the code does not keep. Propose one concrete, incremental refactor — name the files and the target shape — not a rewrite.',
   },
   {
+    id: 'refactoring',
+    label: 'Рефакторинг',
+    guidance:
+      'A code-level refactor that changes no behavior: duplicated logic that should be one function, a function or component that is too long or does several things, deep nesting or a tangled condition, an unclear name, dead or unreachable code, a type that is `any` or cast where a real type fits, or a pattern the codebase uses in one way almost everywhere and in another here. Not the architecture of the whole system (that is its own direction) and not a bug fix. Propose ONE concrete, small refactor — name the file(s) and function(s), say what the code looks like now and what it should look like after, and which existing tests cover it (or which to add first) so the behavior is shown to be unchanged.',
+  },
+  {
     id: 'features',
     label: 'Новые фичи',
     guidance:
@@ -73,10 +79,14 @@ export const ALL_CATEGORIES: AnalysisCategory[] = ANALYSIS_CATEGORIES.map(
 );
 
 // What an analysis covers when nobody picked directions (a new analysis, a schedule that never chose, an old stored run):
-// the improvement directions. "New features" is opt-in — a checkbox on the Analysis tab, a choice in a schedule — so an
-// existing nightly analysis does not start proposing features by itself.
+// the improvement directions. "New features" and "Refactoring" are opt-in — a checkbox on the Analysis tab, a choice in a
+// schedule — so an existing nightly analysis does not start proposing them by itself.
+export const OPT_IN_CATEGORIES: AnalysisCategory[] = [
+  'refactoring',
+  'features',
+];
 export const DEFAULT_CATEGORIES: AnalysisCategory[] = ALL_CATEGORIES.filter(
-  (id) => id !== 'features',
+  (id) => !OPT_IN_CATEGORIES.includes(id),
 );
 
 export function isCategory(value: unknown): value is AnalysisCategory {

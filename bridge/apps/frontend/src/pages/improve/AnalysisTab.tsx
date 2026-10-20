@@ -134,6 +134,11 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         «Новые фичи» — не исправление, а предложение новой возможности в рамках этого проекта: worker опирается на CLAUDE.md, README и то, что уже есть в
         приложении, и называет модуль, который он расширяет. По умолчанию выключено.
       </Text>
+      <Text color="secondary" variant="caption-2">
+        «Рефакторинг» — небольшая правка кода без изменения поведения: дублирование, слишком длинная функция, запутанное условие, мёртвый код, лишний any.
+        Worker называет файл и функцию, как код выглядит сейчас и каким должен стать, и чем подтверждается, что поведение то же. Не путать с «Архитектурой»
+        (границы модулей и зависимости). По умолчанию выключено.
+      </Text>
       <div className={styles.toolbar}>
         <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => handleModel(value)} options={MODEL_OPTIONS} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />

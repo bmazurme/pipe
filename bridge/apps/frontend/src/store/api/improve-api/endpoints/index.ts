@@ -25,7 +25,7 @@ export interface ImproveStatus {
   models: string[];
 }
 
-export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability' | 'tests' | 'docs' | 'architecture' | 'features';
+export type AnalysisCategory = 'general' | 'uiux' | 'security' | 'performance' | 'reliability' | 'tests' | 'docs' | 'architecture' | 'refactoring' | 'features';
 
 export interface AnalysisItem {
   category: AnalysisCategory;
