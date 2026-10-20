@@ -75,8 +75,13 @@ function Content({ sidebar, main }: ContentProps) {
       )}
       <div className={style.right}>
         <div className={style.body}>
-          {sidebar && <UpdateBanner />}
-          {main && <main id="main-content" className={style.main}>{main}</main>}
+          {/* Inside the column of the page itself: .body is a flex ROW, and a banner beside <main> sat next to the page and squeezed it. */}
+          {main && (
+            <main id="main-content" className={style.main}>
+              {sidebar && <UpdateBanner />}
+              {main}
+            </main>
+          )}
         </div>
       </div>
     </div>
