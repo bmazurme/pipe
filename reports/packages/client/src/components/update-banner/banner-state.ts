@@ -9,11 +9,12 @@ export type BannerState =
   | { kind: 'available'; canUpdate: boolean; blockedReason: string | null }
   | { kind: 'running'; message: string }
   | { kind: 'done'; message: string }
-  | { kind: 'failed'; message: string; rolledBack: boolean };
+  | { kind: 'failed'; message: string; rolledBack: boolean }
+  | { kind: 'check-failed'; message: string };
 
 // What the banner shows, from what the server says about the versions and about the update. The update's own progress wins
 // over "a new version is available" while it runs, and its outcome is shown only while it is fresh and still relevant.
-export function bannerState(status: UpdateStatusType | undefined, progress: UpdateProgressType | null | undefined, now: number): BannerState {
+export function bannerState(status: UpdateStatusType | undefined, progress: UpdateProgressType | null | undefined, now: number, queryError?: string | null): BannerState {
   const age = progress ? now - new Date(progress.updatedAt).getTime() : Infinity;
 
   if (progress && ACTIVE.includes(progress.phase) && age < OUTCOME_FRESH_MS) return { kind: 'running', message: progress.message };
@@ -23,7 +24,14 @@ export function bannerState(status: UpdateStatusType | undefined, progress: Upda
     return { kind: 'done', message: progress.message };
   }
 
-  if (!status?.updateAvailable || !status.latest) return { kind: 'none' };
+  // The check itself did not work (bad bridge settings, bridge down, the status request failed) — not the same as "up to date".
+  if (!status?.updateAvailable) {
+    const checkError = status?.error ?? queryError;
+
+    return checkError ? { kind: 'check-failed', message: checkError } : { kind: 'none' };
+  }
+
+  if (!status.latest) return { kind: 'none' };
 
   if ((progress?.phase === 'failed' || progress?.phase === 'rolled-back') && age < OUTCOME_FRESH_MS) {
     return { kind: 'failed', message: progress.message, rolledBack: progress.phase === 'rolled-back' };

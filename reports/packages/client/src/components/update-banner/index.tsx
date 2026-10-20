@@ -20,7 +20,7 @@ const PROGRESS_POLL_MS = 2000;
 
 // "A new version of reports is available", with the button that brings it, and what the update is doing while it runs.
 function UpdateBanner() {
-  const { data: status } = useGetUpdateStatusQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
+  const { data: status, error: statusError } = useGetUpdateStatusQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
   // Cheap (a file read on the server), so it is always asked — an update started in another tab or by hand shows here too.
   const { data: progress } = useGetUpdateProgressQuery(undefined, { pollingInterval: PROGRESS_POLL_MS });
   const [check, { isFetching }] = useLazyGetUpdateStatusQuery();
@@ -36,7 +36,7 @@ function UpdateBanner() {
     return () => clearInterval(timer);
   }, []);
 
-  const state = bannerState(status, progress, now);
+  const state = bannerState(status, progress, now, statusError ? describeError(statusError, 'Не удалось проверить обновления') : null);
   const latest = status?.latest ?? null;
 
   const handleUpdate = async () => {
@@ -81,6 +81,24 @@ function UpdateBanner() {
           actions={(
             <Button view="outlined" size="s" onClick={() => window.location.reload()}>
               Обновить страницу
+            </Button>
+          )}
+        />
+      </div>
+    );
+  }
+
+  if (state.kind === 'check-failed') {
+    return (
+      <div className={style.banner}>
+        <Alert
+          theme="warning"
+          view="filled"
+          title="Не удалось проверить обновления"
+          message={state.message}
+          actions={(
+            <Button view="outlined" size="s" loading={isFetching} onClick={() => void check({ refresh: true })}>
+              Проверить снова
             </Button>
           )}
         />

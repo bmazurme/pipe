@@ -79,6 +79,18 @@ describe('UpdateBanner', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('shows why the check failed and retries it with refresh on "Проверить снова"', async () => {
+    statusReply = () => status({ updateAvailable: false, error: 'укажите адрес bridge и API-ключ' });
+    const user = userEvent.setup();
+    renderBanner();
+
+    expect(await screen.findByText('укажите адрес bridge и API-ключ')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Проверить снова' }));
+
+    await vi.waitFor(() => expect(called('/update/status').some((request) => request.search.includes('refresh=1'))).toBe(true));
+  });
+
   it('starts the update on "Обновить"', async () => {
     statusReply = () => status();
     const user = userEvent.setup();

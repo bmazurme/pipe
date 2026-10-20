@@ -66,6 +66,12 @@ describe('bannerState', () => {
     expect(bannerState(status(), progress('failed', { updatedAt: at(3600) }), NOW)).toMatchObject({ kind: 'available' });
   });
 
+  it('reports a failed check instead of looking up to date', () => {
+    expect(bannerState(status({ updateAvailable: false, error: 'x' }), null, NOW)).toEqual({ kind: 'check-failed', message: 'x' });
+    expect(bannerState(undefined, null, NOW, 'нет связи')).toEqual({ kind: 'check-failed', message: 'нет связи' });
+    expect(bannerState(status({ updateAvailable: false, error: null }), null, NOW)).toEqual({ kind: 'none' });
+  });
+
   it('forgets a "running" update that has not moved for a long time (a dead one)', () => {
     expect(bannerState(status(), progress('building', { updatedAt: at(3600) }), NOW)).toMatchObject({ kind: 'available' });
   });
