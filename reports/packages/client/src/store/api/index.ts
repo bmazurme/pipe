@@ -24,6 +24,8 @@ export {
   useGetServerCodeStatusQuery,
   useGetUpdateStatusQuery,
   useLazyGetUpdateStatusQuery,
+  useGetUpdateProgressQuery,
+  useApplyUpdateMutation,
   useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,

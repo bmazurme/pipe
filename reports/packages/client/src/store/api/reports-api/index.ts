@@ -24,6 +24,7 @@ import type {
   SubscriptionIssueType,
   SubscriptionPublishPayload,
   DayOffsSendResultType,
+  UpdateProgressType,
   UpdateStatusType,
   SubscriptionPushPayload,
   SubscriptionStateEntryType,
@@ -211,6 +212,16 @@ const reportsApi = createApi({
       query: (arg) => ({ url: 'update/status', params: arg && arg.refresh ? { refresh: '1' } : undefined }),
       transformResponse: unwrap<UpdateStatusType>('Не удалось проверить обновления'),
     }),
+    // Where a running (or the last) update stands; polled while one runs.
+    getUpdateProgress: builder.query<UpdateProgressType | null, void>({
+      query: () => 'update/progress',
+      transformResponse: unwrap<UpdateProgressType | null>('Не удалось получить ход обновления'),
+    }),
+    // Downloads, checks and starts the update of this install; answers as soon as the update process is running.
+    applyUpdate: builder.mutation<{ releaseId: string }, void>({
+      query: () => ({ url: 'update/apply', method: 'POST', body: {} }),
+      transformResponse: unwrap<{ releaseId: string }>('Не удалось начать обновление'),
+    }),
     setAutoStartWorkerModel: builder.mutation<SubscriptionConfigType, { model: WorkerModelType | null }>({
       query: (body) => ({ url: 'subscription/config/auto-start-worker', method: 'PUT', body }),
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось сохранить настройку'),
@@ -353,6 +364,8 @@ export const {
   useGetServerCodeStatusQuery,
   useGetUpdateStatusQuery,
   useLazyGetUpdateStatusQuery,
+  useGetUpdateProgressQuery,
+  useApplyUpdateMutation,
   useSetAutoStartWorkerModelMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,

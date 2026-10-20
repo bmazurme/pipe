@@ -5,7 +5,7 @@
 // Invoked via ../run.sh or ../run.cmd, never run directly — those check for
 // Node itself first, which this script can't do before it's even running.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,37 +38,59 @@ console.log('Собираю приложение...');
 run('npm', ['run', 'build', '--workspace=packages/shared']);
 run('npm', ['run', 'build', '--workspace=packages/client']);
 
-console.log('Запускаю сервер...');
-const server = spawn('npx', ['tsx', 'src/index.ts'], {
-  cwd: serverDir,
-  env: process.env,
-  shell: process.platform === 'win32',
-});
+// scripts/apply-update.mjs, which replaces the files of a running reports, ends by writing this marker and stopping the
+// server; seeing it, the launcher starts the server again (on the new code) instead of leaving.
+const restartMarker = join(reportsRoot, '..', '.update', 'restart');
 
+let server = null;
 let browserOpened = false;
 const readyPattern = /Сервер запущен: (http:\/\/\S+)/;
 
-server.stdout.on('data', (chunk) => {
-  const text = chunk.toString();
-  process.stdout.write(text);
+function startServer() {
+  server = spawn('npx', ['tsx', 'src/index.ts'], {
+    cwd: serverDir,
+    // REPORTS_LAUNCHER tells the server it can be restarted by this launcher (the update then stops it and relies on that).
+    env: { ...process.env, REPORTS_LAUNCHER: '1' },
+    shell: process.platform === 'win32',
+  });
 
-  if (!browserOpened) {
-    const match = readyPattern.exec(text);
-    if (match) {
-      browserOpened = true;
-      openBrowser(match[1]);
+  server.stdout.on('data', (chunk) => {
+    const text = chunk.toString();
+    process.stdout.write(text);
+
+    if (!browserOpened) {
+      const match = readyPattern.exec(text);
+      if (match) {
+        browserOpened = true;
+        openBrowser(match[1]);
+      }
     }
-  }
-});
+  });
 
-server.stderr.on('data', (chunk) => process.stderr.write(chunk));
+  server.stderr.on('data', (chunk) => process.stderr.write(chunk));
 
-server.on('exit', (code) => process.exit(code ?? 0));
+  server.on('exit', (code) => {
+    if (existsSync(restartMarker)) {
+      rmSync(restartMarker, { force: true });
+      console.log('\nreports обновлён — запускаю сервер заново...');
+      startServer();
+
+      return;
+    }
+
+    process.exit(code ?? 0);
+  });
+}
+
+console.log('Запускаю сервер...');
+rmSync(restartMarker, { force: true });
+startServer();
 
 // Ctrl+C in this process's own terminal should stop the server too, not
 // leave it running detached in the background.
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    server.kill(signal);
+    rmSync(restartMarker, { force: true });
+    server?.kill(signal);
   });
 }

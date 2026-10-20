@@ -1,3 +1,14 @@
 .banner {
   margin-bottom: 16px;
 }
+
+.running {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.error {
+  color: var(--g-color-text-danger);
+}
