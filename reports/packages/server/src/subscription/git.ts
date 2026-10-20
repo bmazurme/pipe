@@ -3,14 +3,37 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
+const NETWORK_TIMEOUT_MS = 120_000;
+const LOCAL_TIMEOUT_MS = 30_000;
+
+// Never let git wait for a credential prompt or a silent remote: a hung fetch/push would hang the HTTP request or the autopilot tick forever.
+export async function runGit(cwd: string, args: string[], input?: string, timeoutMs?: number): Promise<string> {
+  const timeout = timeoutMs ?? (args.some((arg) => arg === 'fetch' || arg === 'push') ? NETWORK_TIMEOUT_MS : LOCAL_TIMEOUT_MS);
+  const pending = execFileAsync('git', args, {
+    cwd,
+    timeout,
+    killSignal: 'SIGKILL',
+    maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  });
+  if (input !== undefined) pending.child.stdin?.end(input);
+  try {
+    const { stdout } = await pending;
+
+    return stdout;
+  } catch (error) {
+    if ((error as { killed?: boolean }).killed) {
+      const command = args.find((arg, i) => !arg.startsWith('-') && args[i - 1] !== '-c' && !arg.includes('=')) ?? 'git';
+      throw new Error(`git ${command} не ответил за ${Math.round(timeout / 1000)} с — проверьте доступ к origin`);
+    }
+    throw error;
+  }
+}
+
 // `input` goes to git's stdin — for anything that can be long (a list of paths), since the command line of a spawned process
 // is capped (about 32 000 characters on Windows, ENAMETOOLONG beyond it) and stdin is not.
-async function git(cwd: string, args: string[], input?: string): Promise<string> {
-  const pending = execFileAsync('git', args, { cwd });
-  if (input !== undefined) pending.child.stdin?.end(input);
-  const { stdout } = await pending;
-
-  return stdout;
+function git(cwd: string, args: string[], input?: string): Promise<string> {
+  return runGit(cwd, args, input);
 }
 
 export async function isTreeClean(path: string): Promise<boolean> {
