@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { ChatHistoryAttachment, ChatHistoryEntry } from '../chatBridgeClient.js';
 
 export const ATTACHMENTS_DIR = 'attachments';
+export const ATTACHMENT_CONCURRENCY = 3;
 
 // A file name from the user, made safe to use as one path segment: no directories, no
 // control characters, no leading dots, bounded length — the id in front keeps names unique.
@@ -31,20 +32,33 @@ export async function stageAttachments(
   download: (attachmentId: number) => Promise<Buffer>,
 ): Promise<Set<number>> {
   const staged = new Set<number>();
-  const all = history.flatMap((entry) => entry.attachments ?? []);
+  const byId = new Map<number, ChatHistoryAttachment>();
+
+  for (const attachment of history.flatMap((entry) => entry.attachments ?? [])) {
+    if (!byId.has(attachment.id)) byId.set(attachment.id, attachment);
+  }
+
+  const all = [...byId.values()];
 
   if (all.length === 0) return staged;
 
   mkdirSync(path.join(turnDir, ATTACHMENTS_DIR), { recursive: true });
 
-  for (const attachment of all) {
-    try {
-      writeFileSync(path.join(turnDir, attachmentRelPath(attachment)), await download(attachment.id));
-      staged.add(attachment.id);
-    } catch {
-      // Left out of `staged`; the transcript says it could not be loaded.
+  let next = 0;
+  const runner = async () => {
+    while (next < all.length) {
+      const attachment = all[next++];
+
+      try {
+        writeFileSync(path.join(turnDir, attachmentRelPath(attachment)), await download(attachment.id));
+        staged.add(attachment.id);
+      } catch {
+        // Left out of `staged`; the transcript says it could not be loaded.
+      }
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(ATTACHMENT_CONCURRENCY, all.length) }, runner));
 
   return staged;
 }
