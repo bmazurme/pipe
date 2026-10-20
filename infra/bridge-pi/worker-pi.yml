@@ -20,7 +20,7 @@ services:
       # "vpn-client" there); a second worker stack gets its own, harmless alias here so the two never collide on
       # this shared network — nothing resolves it, this stack's own traffic never needs it.
       telegram-proxy-net:
-        aliases: [${TELEGRAM_PROXY_ALIAS:-vpn-client}]
+        aliases: ["${TELEGRAM_PROXY_ALIAS:-vpn-client}"]
     secrets:
       - source: xray_client_config
         target: /usr/local/etc/xray/config.json
@@ -33,7 +33,7 @@ services:
       endpoint_mode: dnsrr
       replicas: 1
       placement:
-        constraints: [node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}]
+        constraints: ["node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}"]
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -60,7 +60,7 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: [node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}]
+        constraints: ["node.hostname == ${WORKER_NODE_HOSTNAME:-ubuntu-green}"]
       restart_policy:
         condition: on-failure
         delay: 5s
