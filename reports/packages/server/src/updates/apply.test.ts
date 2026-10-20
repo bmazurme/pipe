@@ -7,6 +7,29 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../settings/props', () => ({ getSettings: () => ({}) }));
 
+// AdmZip with a hook on getEntries, so a test can swap in entries that declare a size the zip does not really have.
+const entriesHook = vi.hoisted(() => ({ replace: null as null | ((entries: unknown[]) => unknown[]) }));
+
+vi.mock('adm-zip', async (importOriginal) => {
+  const Real = ((await importOriginal()) as { default: typeof import('adm-zip') }).default;
+
+  // adm-zip assigns its methods per instance, so a subclass cannot override them — wrap the instance instead.
+  function Wrapped(this: unknown, ...args: ConstructorParameters<typeof Real>) {
+    const zip = new Real(...args);
+    const getEntries = zip.getEntries.bind(zip);
+
+    zip.getEntries = () => {
+      const entries = getEntries();
+
+      return (entriesHook.replace ? entriesHook.replace(entries) : entries) as typeof entries;
+    };
+
+    return zip;
+  }
+
+  return { default: Wrapped };
+});
+
 import { assertSelfUpdatable, computeReleaseId, readProgress, startUpdate, unpackRelease, type ReleaseDownload } from './apply';
 
 type Files = Record<string, string>;
@@ -182,6 +205,21 @@ describe('unpackRelease', () => {
       'reports/release.json',
       'reports/scripts/apply-update.mjs',
     ]);
+  });
+});
+
+describe('unpackRelease size bound', () => {
+  it('rejects an entry whose declared size exceeds the budget without inflating it', () => {
+    const getData = vi.fn(() => Buffer.alloc(0));
+    const entry = { isDirectory: false, entryName: 'reports/big.bin', header: { size: 301 * 1024 * 1024 }, getData };
+
+    entriesHook.replace = () => [entry];
+    try {
+      expect(() => unpackRelease(releaseZip(FILES).bytes)).toThrow(/слишком велик/);
+      expect(getData).not.toHaveBeenCalled();
+    } finally {
+      entriesHook.replace = null;
+    }
   });
 });
 

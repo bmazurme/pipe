@@ -64,6 +64,9 @@ export function unpackRelease(zipBytes: Buffer): Map<string, Buffer> {
     if (entries.size >= MAX_ENTRIES) throw new Error('В архиве слишком много файлов — не обновляю');
     if (!isSafeReleasePath(entry.entryName)) throw new Error(`В архиве недопустимый путь: ${entry.entryName} — не обновляю`);
 
+    // The declared size is checked before inflating; the check after it stays as a backstop, since a header can lie.
+    if (total + entry.header.size > MAX_UNPACKED_BYTES) throw new Error('Распакованный архив слишком велик — не обновляю');
+
     const data = entry.getData();
 
     total += data.byteLength;
