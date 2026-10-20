@@ -3301,6 +3301,34 @@
         }
       }
     },
+    "/api/v1/time/import/day-offs": {
+      "post": {
+        "operationId": "TimeImportController_importDayOffs",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportDayOffsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDayOffsResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/time/import/reports": {
       "post": {
         "operationId": "TimeImportController_importReports",
@@ -5939,6 +5967,66 @@
           "shortDays",
           "offDays",
           "badDays"
+        ]
+      },
+      "ImportDayOffsDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "holidays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shortDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "offDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "badDays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "year"
+        ]
+      },
+      "ImportDayOffsResponseDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number"
+          },
+          "created": {
+            "type": "number"
+          },
+          "updated": {
+            "type": "number"
+          },
+          "unchanged": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "year",
+          "created",
+          "updated",
+          "unchanged"
         ]
       },
       "ImportReportEntryDto": {

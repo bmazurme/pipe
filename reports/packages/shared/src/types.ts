@@ -59,6 +59,14 @@ export type DayOffsImportType = {
   badDays: string[];
 };
 
+/** What bridge answers to "send the year's days off": how many dates it added, changed, and already had. */
+export type DayOffsSendResultType = {
+  year: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+};
+
 export type BridgeReportEntry = {
   taskName: string;
   status: string;
