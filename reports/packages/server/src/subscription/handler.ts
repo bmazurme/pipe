@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'path';
 import type { Request, Response } from 'express';
 import type {
   CreateManualSubscriptionIssuePayload,
+  CreateMigrationTaskPayload,
   SubscriptionDraftType,
   SubscriptionIssueType,
   SubscriptionPublishPayload,
@@ -14,9 +15,10 @@ import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
-import { getSubscriptionConfig, findTrackedProject } from './config-props';
+import { getSubscriptionConfig, findMigration, findTrackedProject } from './config-props';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
 import { parseAttachments } from './attachments';
+import { collectMigrationFiles, countMigrationFiles, migrationTitle, requireMigration, targetFilesOf, TARGET_PREFIX, SOURCE_PREFIX } from './migration';
 import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages, getIssueNotes } from './gitlab-client';
 import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
@@ -70,6 +72,20 @@ function requireTrackedProject(projectId: string) {
   }
 
   return trackedProject;
+}
+
+// The repository a task works in: for an ordinary one, its tracked project; for a migration task, the TARGET repository (the task
+// branch is created there and the result unpacked there — the current repository is only ever read).
+function workTreeFor(projectId: string) {
+  const migration = findMigration(projectId);
+
+  if (migration) {
+    return { path: migration.targetPath, baseBranch: migration.targetBaseBranch || 'main', migration };
+  }
+
+  const project = requireTrackedProject(projectId);
+
+  return { path: project.path, baseBranch: project.baseBranch || 'main', migration: undefined };
 }
 
 export async function handleListSubscriptionIssues(req: Request<Record<string, string>>, res: Response) {
@@ -130,14 +146,15 @@ export async function handleListSubscriptionIssues(req: Request<Record<string, s
         id: manualIid,
         iid: manualIid,
         projectId: state.projectId ?? Number(manualProjectId),
-        projectName: githubProjectFor(manualProjectId)?.githubRepo || projectDict[manualProjectId] || manualProjectId,
+        projectName: findMigration(manualProjectId)?.name || githubProjectFor(manualProjectId)?.githubRepo || projectDict[manualProjectId] || manualProjectId,
         title: state.title ?? '',
         description: state.description ?? '',
         webUrl: '',
         timeEstimate: '',
         state: 'manual',
-        status: 'Вручную',
-        tracked: config.trackedProjects.some((project) => project.gitlabProjectId === manualProjectId),
+        status: state.kind === 'migration' ? 'Миграция' : 'Вручную',
+        tracked: state.kind === 'migration' ? Boolean(findMigration(manualProjectId)) : config.trackedProjects.some((project) => project.gitlabProjectId === manualProjectId),
+        ...(state.kind === 'migration' ? { kind: 'migration' as const } : {}),
         subscription: state,
       });
     }
@@ -152,11 +169,11 @@ export async function handleInitSubscriptionIssue(req: Request<Record<string, st
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Init subscription issue', async () => {
-    const trackedProject = requireTrackedProject(projectId);
+    const workTree = workTreeFor(projectId);
     const username = await branchUsername(projectId);
     const branch = buildBranchName(username, iid);
 
-    await createBranch(trackedProject.path, branch, trackedProject.baseBranch || 'main');
+    await createBranch(workTree.path, branch, workTree.baseBranch);
 
     return setIssueState(projectId, iid, { step: 'init', branch });
   });
@@ -191,6 +208,45 @@ export async function createManualSubscriptionIssue(
   });
 
   return { iid, state };
+}
+
+// A migration task: like a manual one — text instead of a GitLab issue, the same init → push → worker → pull pipeline — but the branch is
+// made in the TARGET repository of the migration, and the text says which module has to be brought up to date or added there.
+export async function createMigrationTask(
+  migrationId: string,
+  description: string,
+  title?: string,
+): Promise<{ iid: string; state: SubscriptionStateEntryType }> {
+  const migration = requireMigration(migrationId);
+  const text = (description ?? '').trim();
+
+  if (!text) {
+    throw new Error('Опишите задачу: какой модуль нужно актуализировать или добавить в целевом репозитории');
+  }
+
+  const iid = `m-${Date.now().toString(36)}`;
+  const username = await branchUsername(migrationId).catch(() => 'user');
+  const branch = buildBranchName(username, iid);
+
+  await createBranch(migration.targetPath, branch, migration.targetBaseBranch || 'main');
+
+  const state = setIssueState(migrationId, iid, {
+    step: 'init',
+    branch,
+    manual: true,
+    kind: 'migration',
+    title: migrationTitle(text, title),
+    description: text,
+    projectId: Number(migrationId),
+  });
+
+  return { iid, state };
+}
+
+export async function handleCreateMigrationTask(req: Request<Record<string, string>>, res: Response) {
+  const { migrationId, description, title } = req.body as CreateMigrationTaskPayload;
+
+  await withStream(res, 'Create migration task', async () => (await createMigrationTask(migrationId, description, title)).state);
 }
 
 export async function handleCreateManualSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
@@ -235,6 +291,9 @@ export async function handleGetSubscriptionDraft(req: Request<Record<string, str
 
     const title = applyDictionary(String(rawTitle), dictionary, 'toRemote');
     const description = applyDictionary(String(rawDescription), dictionary, 'toRemote');
+    // For a migration task the review also says what the parcel will carry from each of the two repositories.
+    const migration = state?.kind === 'migration' ? requireMigration(projectId) : undefined;
+    const counts = migration ? await countMigrationFiles(migration) : undefined;
 
     const draft: SubscriptionDraftType = {
       issueId: String(issueId),
@@ -245,6 +304,7 @@ export async function handleGetSubscriptionDraft(req: Request<Record<string, str
         { source: 'issue title', content: title },
         { source: 'issue description', content: description },
       ]),
+      ...(migration && counts ? { migration: { name: migration.name, sourcePath: migration.sourcePath, targetPath: migration.targetPath, ...counts } } : {}),
     };
 
     return draft;
@@ -258,26 +318,35 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
   const { issueId, title: issueTitle, description: issueDescription, attachments } = req.body as SubscriptionPushPayload;
 
   await withStream(res, 'Push subscription issue', async () => {
-    const trackedProject = requireTrackedProject(projectId);
     const state = getIssueState(projectId, iid);
+    // A migration task sends BOTH repositories — the current one under source/, the target under target/ — not a tracked project's tree.
+    const migration = state?.kind === 'migration' ? requireMigration(projectId) : undefined;
+    const trackedProject = migration ? undefined : requireTrackedProject(projectId);
 
     if (!state?.branch) {
       throw new Error('Сначала выполните init — ветка ещё не создана');
     }
 
     const { dictionary, encryption } = getSubscriptionConfig();
-    const relPaths = await walkProjectFiles(trackedProject);
-    // Same stop as sync's push-issue: a parcel with no project files would reach a worker as an empty working directory.
-    if (relPaths.length === 0) {
-      throw new Error(
-        `В отслеживаемом проекте ${trackedProject.path} нет файлов, подходящих под include/exclude, — посылка была бы пустой. ` +
-          'Проверьте путь и шаблоны include/exclude проекта в Settings.',
-      );
+    let files: { relPath: string; content: string }[];
+
+    if (migration) {
+      files = (await collectMigrationFiles(migration, dictionary)).files;
+    } else {
+      const tracked = trackedProject!;
+      const relPaths = await walkProjectFiles(tracked);
+      // Same stop as sync's push-issue: a parcel with no project files would reach a worker as an empty working directory.
+      if (relPaths.length === 0) {
+        throw new Error(
+          `В отслеживаемом проекте ${tracked.path} нет файлов, подходящих под include/exclude, — посылка была бы пустой. ` +
+            'Проверьте путь и шаблоны include/exclude проекта в Settings.',
+        );
+      }
+      files = relPaths.map((relPath) => ({
+        relPath,
+        content: applyDictionary(readFileSync(join(tracked.path, relPath), 'utf-8'), dictionary, 'toRemote'),
+      }));
     }
-    const files = relPaths.map((relPath) => ({
-      relPath,
-      content: applyDictionary(readFileSync(join(trackedProject.path, relPath), 'utf-8'), dictionary, 'toRemote'),
-    }));
 
     // Image refs only resolve against the *real* GitLab markdown — the
     // dictionary-substituted description above isn't safe to scan for them
@@ -335,6 +404,7 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
         issueTitle,
         issueDescription,
         ...(issueComments.length > 0 ? { issueComments } : {}),
+        ...(migration ? { migration: { name: migration.name, sourceRoot: SOURCE_PREFIX, targetRoot: TARGET_PREFIX } } : {}),
         projectId: Number(projectId),
         branch: state.branch,
         createdAt: new Date().toISOString(),
@@ -400,11 +470,13 @@ async function startWorkerIfConfigured(projectId: string, iid: string, parcelId:
 // sees its own sources "change" and restarts the server in the middle of the
 // pull — before the step is recorded — and the autopilot then pulls the same
 // result again, forever. Only genuinely different files are written.
-function writeIfChanged(destination: string, content: string): void {
-  if (existsSync(destination) && readFileSync(destination, 'utf-8') === content) return;
+function writeIfChanged(destination: string, content: string): boolean {
+  if (existsSync(destination) && readFileSync(destination, 'utf-8') === content) return false;
 
   mkdirSync(dirname(destination), { recursive: true });
   writeFileSync(destination, content, 'utf-8');
+
+  return true;
 }
 
 function resolveParcelPath(projectRoot: string, relPath: string): string {
@@ -430,7 +502,8 @@ export async function pullSubscriptionIssue(
   iid: string,
   options: { publish?: boolean } = {},
 ): Promise<SubscriptionStateEntryType> {
-  const trackedProject = requireTrackedProject(projectId);
+  // The repository the result goes into: the tracked project's, or — for a migration task — the TARGET repository.
+  const workTree = workTreeFor(projectId);
   // Matched by addressing metadata (IMPROVEMENTS_TECH.md 2.3), not by
   // filename — a filename-only match couldn't tell this task's *result*
   // apart from its own outbound parcel (push, above, uses the exact same
@@ -471,8 +544,12 @@ export async function pullSubscriptionIssue(
   // succeeded (see its own call further down).
   const downloaded = await peekParcel(newest.id);
   const buffer = isEncrypted ? decryptBuffer(downloaded, encryption.privateKey) : downloaded;
-  const { manifest, files, assets } = extractArchive(buffer);
-  const projectRoot = resolve(trackedProject.path);
+  const { manifest, files: parcelFiles, assets: parcelAssets } = extractArchive(buffer);
+  // A migration result carries both repositories; only target/… is taken (with that prefix cut), the current repository is never
+  // written, and the images sent along (screenshots) are not scattered into the target.
+  const files = workTree.migration ? targetFilesOf(parcelFiles) : parcelFiles;
+  const assets = workTree.migration ? [] : parcelAssets;
+  const projectRoot = resolve(workTree.path);
 
   const state = getIssueState(projectId, iid);
   if (!state?.branch) {
@@ -485,9 +562,9 @@ export async function pullSubscriptionIssue(
   // Runs before the parcel is ever consumed from bridge (see above) — a
   // dirty tree now fails loudly with the parcel still safely pullable,
   // instead of silently losing it.
-  const baseBranch = trackedProject.baseBranch || 'main';
+  const baseBranch = workTree.baseBranch;
 
-  await checkoutTaskBranch(trackedProject.path, state.branch, baseBranch);
+  await checkoutTaskBranch(workTree.path, state.branch, baseBranch);
 
   // Every path is checked before the first one is written: a refused parcel
   // (one escaping the repo, or reaching into .git — the commit below would
@@ -496,8 +573,10 @@ export async function pullSubscriptionIssue(
   const fileDestinations = files.map((file) => resolveParcelPath(projectRoot, file.relPath));
   const assetDestinations = assets.map((asset) => resolveParcelPath(projectRoot, asset.relPath));
 
+  let writtenFiles = 0;
+
   files.forEach((file, index) => {
-    writeIfChanged(fileDestinations[index], applyDictionary(file.content, dictionary, 'toLocal'));
+    if (writeIfChanged(fileDestinations[index], applyDictionary(file.content, dictionary, 'toLocal'))) writtenFiles += 1;
   });
 
   // Images extracted from the issue description — written next to the code
@@ -513,15 +592,15 @@ export async function pullSubscriptionIssue(
     const title = applyDictionary(manifest.issueTitle, dictionary, 'toLocal');
     const relPaths = [...files.map((file) => file.relPath), ...assets.map((asset) => asset.relPath)];
 
-    await commitPulledFiles(trackedProject.path, relPaths, `Pull issue #${iid}: ${title}`);
-    await pushBranch(trackedProject.path, state.branch, baseBranch);
+    await commitPulledFiles(workTree.path, relPaths, `Pull issue #${iid}: ${title}`);
+    await pushBranch(workTree.path, state.branch, baseBranch);
   }
 
   // The step is recorded the moment the content is safely written (and, for the autopilot, committed and
   // pushed) — before the parcel is touched. If the process dies (or is
   // restarted by a file watcher) anywhere after this point, the task is
   // already `pulled` and the autopilot won't pull the same result again.
-  const pulledState = setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted });
+  const pulledState = setIssueState(projectId, iid, { step: 'pulled', pulledAt: new Date().toISOString(), encrypted: isEncrypted, pulledFiles: writtenFiles + assets.length });
 
   // This is the one call allowed to consume the parcel from bridge. A
   // failure here is deliberately non-fatal: the pull itself already fully

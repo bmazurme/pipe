@@ -79,6 +79,59 @@ function buildCommentedParcel(withImage: boolean): Buffer {
   return buffer;
 }
 
+function buildMigrationParcel(withImage = false): Buffer {
+  const { buffer } = buildArchive(
+    SUBSCRIPTION_MANIFEST_ENTRY,
+    [
+      { relPath: 'source/Orders/Order.cs', content: 'class Order {}' },
+      { relPath: 'target/src/users.ts', content: 'export const users = 1;' },
+    ],
+    {
+      issueId: 'm-1',
+      issueIid: 'm-1',
+      issueTitle: 'Миграция: модуль Orders',
+      issueDescription: 'Перенести модуль Orders и актуализировать Users',
+      projectId: 4000000001,
+      branch: 'task/m-1',
+      createdAt: '2026-10-20T00:00:00.000Z',
+      migration: { name: 'CRM → Nest', sourceRoot: 'source/', targetRoot: 'target/' },
+    },
+    withImage ? [{ relPath: 'issue-images/shot.png', base64: 'AQID' }] : [],
+  );
+  return buffer;
+}
+
+describe('describeTask for a migration', () => {
+  it('names the current repository as read-only, the target as where the work goes, and carries the person\'s text', () => {
+    const prompt = describeTask(extractParcel(buildMigrationParcel()));
+
+    assert.match(prompt, /^Migration task \(CRM → Nest\): Миграция: модуль Orders/);
+    assert.match(prompt, /`source\/` is the CURRENT repository.*read-only/s);
+    assert.match(prompt, /`target\/` is the repository the project is moving TO/);
+    assert.match(prompt, /Перенести модуль Orders и актуализировать Users/);
+    assert.match(prompt, /Change only files under target\//);
+    assert.doesNotMatch(prompt, /issue-images/);
+  });
+
+  it('keeps the migration marker in the result parcel it builds, so reports knows what it is unpacking', () => {
+    const parcel = extractParcel(buildMigrationParcel());
+    const result = extractParcel(buildResultParcel(parcel, [{ relPath: 'target/src/orders.ts', content: 'x' }]));
+
+    assert.deepEqual((result.manifest as unknown as { migration: unknown }).migration, { name: 'CRM → Nest', sourceRoot: 'source/', targetRoot: 'target/' });
+  });
+
+  it('points at attached images when there are some', () => {
+    assert.match(describeTask(extractParcel(buildMigrationParcel(true))), /issue-images\//);
+  });
+
+  it('leaves the prompt of an ordinary task as it was', () => {
+    const prompt = describeTask(extractParcel(buildSubscriptionParcel()));
+
+    assert.doesNotMatch(prompt, /Migration task/);
+    assert.match(prompt, /^Task \(GitLab issue\)/);
+  });
+});
+
 describe('describeTask with comments', () => {
   it('puts the issue comments, oldest first, after the description', () => {
     const prompt = describeTask(extractParcel(buildCommentedParcel(false)));

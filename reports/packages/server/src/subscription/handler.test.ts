@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { Request, Response } from 'express';
 import { extractArchive, type BaseManifest } from '@pipe/protocol';
-import type { SettingsType, StreamEvent, SubscriptionConfigType, TrackedProjectType } from '@reports/shared';
+import type { MigrationProjectType, SettingsType, StreamEvent, SubscriptionConfigType, TrackedProjectType } from '@reports/shared';
 
 // IMPROVEMENTS_TECH.md 4.3 — the one real test gap left from the original
 // analysis. Mirrors the mocking depth already established by this
@@ -61,11 +61,19 @@ vi.mock('./config-props', () => ({
   },
   findTrackedProject: (gitlabProjectId: string | number) =>
     (stores.config as SubscriptionConfigType).trackedProjects.find((p) => p.gitlabProjectId === String(gitlabProjectId)),
+  findMigration: (id: string | number) =>
+    ((stores.config as SubscriptionConfigType).migrations ?? []).find((m) => m.id === String(id)),
+  addMigration: (migration: MigrationProjectType) => {
+    const config = stores.config as SubscriptionConfigType;
+    stores.config = { ...config, migrations: [...(config.migrations ?? []).filter((m) => m.id !== migration.id), migration] };
+    return migration;
+  },
 }));
 
 const {
   handleInitSubscriptionIssue,
   handleCreateManualSubscriptionIssue,
+  handleCreateMigrationTask,
   handlePushSubscriptionIssue,
   handlePullSubscriptionIssue,
   pullSubscriptionIssue,
@@ -75,7 +83,7 @@ const {
   handleGetSubscriptionDraft,
   handleGetSubscriptionIssueTime,
 } = await import('./handler');
-const { setIssueState, getIssueState } = await import('./state-props');
+const { setIssueState, getIssueState, getAllIssueStates } = await import('./state-props');
 const { setSubscriptionConfig, addTrackedProject } = await import('./config-props');
 const { buildArchive } = await import('./pack');
 
@@ -1002,5 +1010,191 @@ describe('subscription route param validation', () => {
 
     expect(status).toHaveBeenCalledWith(400);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// A migration task: the current repository is only read, the target one gets the task branch and the unpacked result.
+describe('migration task', () => {
+  const MIGRATION_ID = '4000000001';
+
+  function initMigration(dictionary: { key: string; value: string }[] = []) {
+    const source = mkdtempSync(path.join(tmpdir(), 'reports-handler-test-source-'));
+    mkdirSync(path.join(source, 'Orders'), { recursive: true });
+    writeFileSync(path.join(source, 'Orders', 'Order.cs'), 'class Order { /* ClearingIdentifier */ }');
+    writeFileSync(path.join(source, 'notes.txt'), 'not matched by the include');
+
+    const remote = mkdtempSync(path.join(tmpdir(), 'reports-handler-test-target-remote-'));
+    git(remote, ['init', '--quiet', '--bare']);
+    const target = mkdtempSync(path.join(tmpdir(), 'reports-handler-test-target-'));
+    git(target, ['init', '--quiet', '-b', 'master']);
+    git(target, ['config', 'user.email', 'test@example.com']);
+    git(target, ['config', 'user.name', 'Test']);
+    mkdirSync(path.join(target, 'src'), { recursive: true });
+    writeFileSync(path.join(target, 'src', 'users.ts'), 'export const users = 1;');
+    git(target, ['add', '-A']);
+    git(target, ['commit', '-m', 'initial', '--quiet']);
+    git(target, ['remote', 'add', 'origin', remote]);
+    git(target, ['push', '-u', 'origin', 'master']);
+
+    setSubscriptionConfig({
+      ...defaultConfig,
+      dictionary,
+      migrations: [
+        { id: MIGRATION_ID, name: 'CRM → Nest', sourcePath: source, sourceInclude: ['**/*.cs'], targetPath: target, targetBaseBranch: 'master', targetInclude: ['**/*.ts'] },
+      ],
+    } as SubscriptionConfigType);
+
+    return { source, target };
+  }
+
+  const stubGitlabUser = () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(gitlabUserResponse()) as typeof fetch;
+  };
+
+  async function createTask(description = 'Перенести модуль Orders') {
+    stubGitlabUser();
+    const { res, events } = makeRes();
+    await handleCreateMigrationTask(makeReq({}, { migrationId: MIGRATION_ID, description }), res);
+
+    return { events: events(), entry: Object.entries(getAllIssueStates()).find(([, state]) => state.kind === 'migration') };
+  }
+
+  it('creates the task branch in the TARGET repository — the current one is not touched', async () => {
+    const { source, target } = initMigration();
+
+    const { events, entry } = await createTask();
+
+    expect(events[0].type).toBe('message');
+    const [key, state] = entry!;
+    expect(key.startsWith(`${MIGRATION_ID}:m-`)).toBe(true);
+    expect(state).toMatchObject({ step: 'init', manual: true, kind: 'migration', title: 'Миграция: Перенести модуль Orders', description: 'Перенести модуль Orders', projectId: Number(MIGRATION_ID) });
+    expect(git(target, ['branch', '--show-current']).trim()).toBe(state.branch);
+    expect(existsSync(path.join(source, '.git'))).toBe(false);
+  });
+
+  it('asks for the task text instead of creating an empty one', async () => {
+    initMigration();
+
+    const { events, entry } = await createTask('   ');
+
+    expect(events[0]).toMatchObject({ type: 'error' });
+    expect(String(events[0].data)).toMatch(/какой модуль/);
+    expect(entry).toBeUndefined();
+  });
+
+  it('lists it as a migration under the migration\'s name', async () => {
+    initMigration();
+    const { entry } = await createTask();
+    globalThis.fetch = vi.fn().mockResolvedValue(Response.json([])) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handleListSubscriptionIssues(makeReq({}), res);
+
+    const rows = (events()[0].data as { iid: string; kind?: string; projectName: string; status: string; tracked: boolean }[]);
+    expect(rows.find((row) => row.iid === entry![0].split(':')[1])).toMatchObject({ kind: 'migration', projectName: 'CRM → Nest', status: 'Миграция', tracked: true });
+  });
+
+  it('shows in the review what the parcel will carry from each repository', async () => {
+    const { source, target } = initMigration();
+    const { entry } = await createTask();
+
+    const { res, events } = makeRes();
+    await handleGetSubscriptionDraft(makeReq({ projectId: MIGRATION_ID, iid: entry![0].split(':')[1] }), res);
+
+    expect(events()[0].data).toMatchObject({ migration: { name: 'CRM → Nest', sourcePath: source, targetPath: target, sourceFiles: 1, targetFiles: 1 } });
+  });
+
+  it('pushes BOTH repositories, anonymized — the current one under source/, the target under target/ — and says so in the manifest', async () => {
+    initMigration([{ key: 'ClearingIdentifier', value: 'PLACEHOLDER' }]);
+    const { entry } = await createTask();
+    const iid = entry![0].split(':')[1];
+
+    let uploaded: Buffer | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage')) {
+        const form = init!.body as unknown as { get(name: string): unknown };
+        uploaded = Buffer.from(await (form.get('file') as Blob).arrayBuffer());
+        return Response.json({ id: 42, originalName: `${MIGRATION_ID}-${iid}.subscription.zip`, mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString(), channel: 'issue', taskKey: `${MIGRATION_ID}:${iid}`, direction: 'outbound' }, { status: 201 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(
+      makeReq({ projectId: MIGRATION_ID, iid }, { issueId: iid, title: 'Миграция: Orders', description: 'Перенести модуль Orders' }),
+      res,
+    );
+
+    expect(events()[0].type).toBe('message');
+    const archive = extractArchive<BaseManifest & { migration?: unknown; issueDescription?: string }>(uploaded!, '__subscription_manifest__.json');
+    expect(archive.files.map((file) => file.relPath).sort()).toEqual(['source/Orders/Order.cs', 'target/src/users.ts']);
+    expect(archive.files.find((file) => file.relPath === 'source/Orders/Order.cs')?.content).toContain('PLACEHOLDER');
+    expect(archive.manifest.migration).toEqual({ name: 'CRM → Nest', sourceRoot: 'source/', targetRoot: 'target/' });
+    expect(archive.manifest.issueDescription).toBe('Перенести модуль Orders');
+    expect(getIssueState(MIGRATION_ID, iid)?.step).toBe('pushed');
+  });
+
+  it('refuses to push when the current repository has no files to move', async () => {
+    const { source } = initMigration();
+    rmSync(path.join(source, 'Orders'), { recursive: true });
+    const { entry } = await createTask();
+    const iid = entry![0].split(':')[1];
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(makeReq({ projectId: MIGRATION_ID, iid }, { issueId: iid, title: 't', description: 'd' }), res);
+
+    expect(events()[0]).toMatchObject({ type: 'error' });
+    expect(String(events()[0].data)).toMatch(/переносить нечего/);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('unpacks only target/… into the TARGET repository on the task branch: the current repository is never written, nothing is committed', async () => {
+    const { source, target } = initMigration([{ key: 'ClearingIdentifier', value: 'PLACEHOLDER' }]);
+    const { entry } = await createTask();
+    const iid = entry![0].split(':')[1];
+    setIssueState(MIGRATION_ID, iid, { step: 'pushed' });
+    const headBefore = git(target, ['rev-parse', 'HEAD']).trim();
+
+    const result = buildArchive(
+      [
+        // the worker also "changed" the current repository, and sent the screenshot along — neither may reach the disk
+        { relPath: 'source/Orders/Order.cs', content: 'class Order { /* changed by the worker */ }' },
+        { relPath: 'target/src/users.ts', content: 'export const users = 1;' },
+        { relPath: 'target/src/orders.ts', content: 'export const order = "PLACEHOLDER";' },
+        { relPath: 'target/src/nested/new.ts', content: 'export const nested = true;' },
+      ],
+      { issueId: '1', issueIid: iid, issueTitle: 't', issueDescription: 'd', projectId: Number(MIGRATION_ID), branch: 'b', createdAt: new Date().toISOString(), migration: { name: 'x', sourceRoot: 'source/', targetRoot: 'target/' } } as never,
+      [{ relPath: 'issue-images/shot.png', base64: Buffer.from('png').toString('base64') }],
+    );
+    let deleted = false;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/v1/storage?')) return Response.json([{ id: 99, originalName: `${MIGRATION_ID}-${iid}.subscription.zip`, mimeType: 'application/zip', size: result.length, createdAt: new Date().toISOString(), channel: 'issue', taskKey: `${MIGRATION_ID}:${iid}`, direction: 'result' }]);
+      if (url.includes('/storage/99/peek')) return new Response(result, { status: 200 });
+      if (url.endsWith('/storage/99') && init?.method === 'DELETE') {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: MIGRATION_ID, iid }), res);
+
+    expect(events()[0].type).toBe('message');
+    const state = getIssueState(MIGRATION_ID, iid);
+    expect(git(target, ['branch', '--show-current']).trim()).toBe(state!.branch);
+    // the target got the new files (de-anonymized), an unchanged one was left alone, and the prefix is gone
+    expect(readFileSync(path.join(target, 'src', 'orders.ts'), 'utf-8')).toBe('export const order = "ClearingIdentifier";');
+    expect(readFileSync(path.join(target, 'src', 'nested', 'new.ts'), 'utf-8')).toBe('export const nested = true;');
+    expect(existsSync(path.join(target, 'target'))).toBe(false);
+    expect(existsSync(path.join(target, 'issue-images'))).toBe(false);
+    // unpack only: no commit, the files wait in the working tree
+    expect(git(target, ['rev-parse', 'HEAD']).trim()).toBe(headBefore);
+    expect(git(target, ['status', '--porcelain'])).toContain('src/orders.ts');
+    // the current repository is exactly as it was
+    expect(readFileSync(path.join(source, 'Orders', 'Order.cs'), 'utf-8')).toBe('class Order { /* ClearingIdentifier */ }');
+    expect(state).toMatchObject({ step: 'pulled', pulledFiles: 2 });
+    expect(deleted).toBe(true);
   });
 });
