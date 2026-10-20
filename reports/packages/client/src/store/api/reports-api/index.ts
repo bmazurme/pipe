@@ -4,6 +4,8 @@ import type {
   BacklogType,
   CreateBacklogIssuesPayload,
   CreateBacklogIssuesResult,
+  CreateMigrationTaskPayload,
+  MigrationProjectType,
   CreateManualSubscriptionIssuePayload,
   DateType,
   DictionaryEntryType,
@@ -283,6 +285,22 @@ const reportsApi = createApi({
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось добавить репозиторий'),
       invalidatesTags: ['SubscriptionConfig'],
     }),
+    // A project that is moving to another repository: the current one is read, the target one gets the result.
+    addMigration: builder.mutation<MigrationProjectType, Omit<MigrationProjectType, 'id'>>({
+      query: (migration) => ({ url: 'subscription/config/migrations', method: 'POST', body: migration }),
+      transformResponse: unwrap<MigrationProjectType>('Не удалось добавить миграцию'),
+      invalidatesTags: ['SubscriptionConfig'],
+    }),
+    removeMigration: builder.mutation<SubscriptionConfigType, { id: string }>({
+      query: ({ id }) => ({ url: `subscription/config/migrations/${id}`, method: 'DELETE' }),
+      transformResponse: unwrap<SubscriptionConfigType>('Не удалось удалить миграцию'),
+      invalidatesTags: ['SubscriptionConfig', 'SubscriptionIssues'],
+    }),
+    createMigrationTask: builder.mutation<SubscriptionStateEntryType, CreateMigrationTaskPayload>({
+      query: (payload) => ({ url: 'subscription/migration/tasks', method: 'POST', body: payload }),
+      transformResponse: unwrap<SubscriptionStateEntryType>('Не удалось создать задачу миграции'),
+      invalidatesTags: ['SubscriptionIssues'],
+    }),
     removeTrackedProject: builder.mutation<SubscriptionConfigType, { gitlabProjectId: string }>({
       query: ({ gitlabProjectId }) => ({ url: `subscription/config/tracked-projects/${gitlabProjectId}`, method: 'DELETE' }),
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось удалить репозиторий'),
@@ -378,6 +396,9 @@ export const {
   useGetSubscriptionConfigQuery,
   useAddTrackedProjectMutation,
   useRemoveTrackedProjectMutation,
+  useAddMigrationMutation,
+  useRemoveMigrationMutation,
+  useCreateMigrationTaskMutation,
   useAddDictionaryEntryMutation,
   useRemoveDictionaryEntryMutation,
   useUpdateDictionaryEntryMutation,

@@ -13,6 +13,7 @@ import { useUnsavedChangesGuard } from '../../hooks/use-unsaved-changes';
 import { describeError } from '../../utils/describe-error';
 import PageHeader from '../../components/page-header';
 import TrackedProjectsSection from './tracked-projects-section';
+import MigrationsSection from './migrations-section';
 import DictionarySection from './dictionary-section';
 import CommentTemplatesSection from './comment-templates-section';
 import EncryptionSection from './encryption-section';
@@ -319,6 +320,7 @@ function Settings() {
 
           <TabPanel value="subscription" className={style.page}>
             <TrackedProjectsSection />
+            <MigrationsSection />
             <DictionarySection />
             <CommentTemplatesSection />
             <EncryptionSection />

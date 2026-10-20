@@ -2,13 +2,14 @@ import { useState } from 'react';
 import {
   Alert, Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
-import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, TrashBin, Tray } from '@gravity-ui/icons';
+import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, Shuffle, TrashBin, Tray } from '@gravity-ui/icons';
 import type { AnalysisKindType, SubscriptionIssueType, WorkerModelType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
 import { EmptyState, ErrorState, PageSkeleton } from '../../components/state';
 import {
   useCreateManualSubscriptionIssueMutation,
+  useCreateMigrationTaskMutation,
   useGetServerCodeStatusQuery,
   useGetSubscriptionConfigQuery,
   useGetSubscriptionIssuesQuery,
@@ -23,6 +24,7 @@ import {
   STEP_BADGE_THEME, STEP_TITLES, countByGroup, filterIssues, groupByProject, type StatusFilter,
 } from './status';
 import AnalysisDialog from './components/analysis-dialog';
+import MigrationDialog from './components/migration-dialog';
 import BacklogPanel from './components/backlog-panel';
 import IssueStepper from './components/issue-stepper';
 
@@ -48,6 +50,7 @@ function Subscription() {
   const { data: codeStatus } = useGetServerCodeStatusQuery(undefined, { pollingInterval: 60_000 });
   const [setAutoStart] = useSetAutoStartWorkerModelMutation();
   const [createManual] = useCreateManualSubscriptionIssueMutation();
+  const [createMigrationTask, { isLoading: isCreatingMigration }] = useCreateMigrationTaskMutation();
   const [removeIssue] = useRemoveSubscriptionIssueMutation();
   const [startAnalysis, { isLoading: isStartingAnalysis }] = useStartAnalysisMutation();
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -55,6 +58,7 @@ function Subscription() {
   const [manualForm, setManualForm] = useState(emptyManualForm);
   const [toRemove, setToRemove] = useState<SubscriptionIssueType | null>(null);
   const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
+  const [isMigrationDialogOpen, setIsMigrationDialogOpen] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
 
@@ -99,6 +103,24 @@ function Subscription() {
         theme: 'danger',
         title: 'Не удалось запустить анализ',
         content: describeError(analysisError),
+        isClosable: true,
+      });
+    }
+  };
+
+  // A migration task: the person's text about the module, over the current and the target repository; the usual Init → Push → worker → Pull
+  // pipeline then carries it, and Pull unpacks the result into the target repository.
+  const handleStartMigration = async (payload: { migrationId: string; description: string; title?: string }) => {
+    try {
+      await createMigrationTask(payload).unwrap();
+      setIsMigrationDialogOpen(false);
+      toaster.add({ name: 'migration-created', theme: 'success', title: 'Задача миграции создана — отправьте её (Push)', autoHiding: 5000 });
+    } catch (migrationError) {
+      toaster.add({
+        name: 'migration-create-error',
+        theme: 'danger',
+        title: 'Не удалось создать задачу миграции',
+        content: describeError(migrationError),
         isClosable: true,
       });
     }
@@ -171,6 +193,10 @@ function Subscription() {
                 Запустить анализ
               </Button>
             )}
+            <Button view="outlined" size="m" onClick={() => setIsMigrationDialogOpen(true)} title="Перенести модуль из текущего репозитория в целевой">
+              <Icon data={Shuffle} size={16} />
+              Миграция
+            </Button>
             <Button view="outlined" size="m" onClick={() => setIsManualDialogOpen(true)}>
               <Icon data={Plus} size={16} />
               Добавить вручную
@@ -280,7 +306,7 @@ function Subscription() {
                             </div>
                           </div>
                           <div className={style.rowBadges}>
-                            {issue.state === 'manual' && <Label theme="utility">Вручную</Label>}
+                            {issue.kind === 'migration' ? <Label theme="info">Миграция</Label> : issue.state === 'manual' && <Label theme="utility">Вручную</Label>}
                             {!issue.tracked && <Label theme="warning">Не отслеживается</Label>}
                             <Label theme={issue.subscription ? STEP_BADGE_THEME[issue.subscription.step] : 'normal'}>
                               {issue.subscription ? STEP_TITLES[issue.subscription.step] : 'Не начато'}
@@ -306,6 +332,14 @@ function Subscription() {
           )}
         </>
       )}
+
+      <MigrationDialog
+        open={isMigrationDialogOpen}
+        migrations={config?.migrations ?? []}
+        loading={isCreatingMigration}
+        onClose={() => setIsMigrationDialogOpen(false)}
+        onStart={handleStartMigration}
+      />
 
       <AnalysisDialog
         open={isAnalysisDialogOpen}

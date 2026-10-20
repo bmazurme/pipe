@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { writeJsonFileSync } from '@pipe/protocol';
-import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, SubscriptionConfigType, TrackedProjectType, WorkerModelType } from '@reports/shared';
+import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, MigrationProjectType, SubscriptionConfigType, TrackedProjectType, WorkerModelType } from '@reports/shared';
 
 import { generateKeyPair } from './encryption';
 
@@ -59,6 +59,32 @@ export const findTrackedProject = (gitlabProjectId: string | number): TrackedPro
   const { trackedProjects } = getSubscriptionConfig();
 
   return trackedProjects.find((item) => item.gitlabProjectId === String(gitlabProjectId));
+};
+
+// Migration projects get ids from a range no GitLab project or GitHub repository id reaches, so an id can stand wherever a project id
+// does (state keys `<id>:<iid>`, parcel names, URLs) without ever meaning a real project.
+export const MIGRATION_ID_BASE = 4_000_000_000;
+
+export const getMigrations = (): MigrationProjectType[] => getSubscriptionConfig().migrations ?? [];
+
+export const findMigration = (id: string | number): MigrationProjectType | undefined => getMigrations().find((item) => item.id === String(id));
+
+export const addMigration = (migration: Omit<MigrationProjectType, 'id'> & { id?: string }): MigrationProjectType => {
+  const config = getSubscriptionConfig();
+  const existing = config.migrations ?? [];
+  const taken = existing.map((item) => Number(item.id));
+  const id = migration.id ?? String(Math.max(MIGRATION_ID_BASE, ...taken) + 1);
+  const saved: MigrationProjectType = { ...migration, id };
+
+  save({ ...config, migrations: [...existing.filter((item) => item.id !== id), saved] });
+
+  return saved;
+};
+
+export const removeMigration = (id: string): SubscriptionConfigType => {
+  const config = getSubscriptionConfig();
+
+  return save({ ...config, migrations: (config.migrations ?? []).filter((item) => item.id !== id) });
 };
 
 export const addDictionaryEntry = (entry: DictionaryEntryType): SubscriptionConfigType => {

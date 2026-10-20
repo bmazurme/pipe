@@ -132,7 +132,31 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
     }
   };
 
-  const handlePull = () => run(() => pull(args).unwrap(), 'Код распакован в ветку задачи — проверьте изменения и закоммитьте сами', 'Не удалось получить посылку');
+  const isMigration = issue.kind === 'migration';
+
+  const handlePull = async () => {
+    try {
+      const state = await pull(args).unwrap();
+      const count = state.pulledFiles;
+      const where = isMigration ? 'в целевой репозиторий (ветка задачи)' : 'в ветку задачи';
+
+      toaster.add({
+        name: `subscription-${issue.iid}-pulled`,
+        theme: 'success',
+        title: `Код распакован ${where} — проверьте изменения и закоммитьте сами`,
+        content: count === undefined ? undefined : count === 0 ? 'Файлов не изменилось' : `Записано файлов: ${count}`,
+        autoHiding: 6000,
+      });
+    } catch (error) {
+      toaster.add({
+        name: `subscription-${issue.iid}-error`,
+        theme: 'danger',
+        title: 'Не удалось получить посылку',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
   const handlePublish = () => run(
     () => publish({ ...args, payload: { templateId, timeEstimate: timeEstimate || undefined } }).unwrap(),
     'Опубликовано в GitLab',
@@ -205,6 +229,13 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
             />
           </div>
 
+          {reviewDraft.migration && (
+            <Text variant="caption-2" color="secondary">
+              В посылку уйдёт: текущий репозиторий ({reviewDraft.migration.sourcePath}) — {reviewDraft.migration.sourceFiles} файл.; целевой ({reviewDraft.migration.targetPath}) — {reviewDraft.migration.targetFiles} файл.
+              Оба — после словаря подстановки.
+            </Text>
+          )}
+
           {reviewDraft.leaks.length > 0 && (
             <Alert
               theme="warning"
@@ -241,7 +272,9 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
       {nextIndex === 2 && (
         <div className={style.stepAction}>
           <Text variant="body-2" color="secondary">
-            Получит последнюю посылку из bridge и применит её поверх локального репозитория.
+            {isMigration
+              ? 'Получит результат из bridge и распакует его в целевой репозиторий — на ветку задачи, без коммита (из посылки берётся только target/). Текущий репозиторий не меняется.'
+              : 'Получит последнюю посылку из bridge и применит её поверх локального репозитория.'}
           </Text>
           <Button view="action" size="m" onClick={handlePull} loading={isPulling} disabled={!!disabledReason} title={disabledReason}>
             <Icon data={ArrowDownToLine} size={16} />

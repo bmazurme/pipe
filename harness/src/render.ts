@@ -65,7 +65,7 @@ function formatTaskSection(tasks: AnnotatedTaskEntry[]): string[] {
     if (task.subscription) {
       const s = task.subscription;
       const parts = [`step ${s.step}`];
-      if (s.manual) parts.push(`[вручную] "${s.title ?? ''}"`);
+      if (s.manual) parts.push(`[${s.kind === 'migration' ? 'миграция' : 'вручную'}] "${s.title ?? ''}"`);
       if (s.branch) parts.push(`branch ${s.branch}`);
       if (s.pushedAt) parts.push(`pushed ${s.pushedAt}`);
       if (s.pulledAt) parts.push(`pulled ${s.pulledAt}`);
