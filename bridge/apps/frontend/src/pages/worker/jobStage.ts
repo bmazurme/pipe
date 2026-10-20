@@ -25,3 +25,17 @@ export function describeStage(job: WorkerJob, now: number): string | null {
     ? `Worker${job.workerName ? ` ${job.workerName}` : ''} взял задачу и готовит запуск`
     : `Выполняется${job.workerName ? ` на ${job.workerName}` : ''}`;
 }
+
+// What takes the stage line's place once the job is over, so the summary keeps its height instead of shrinking by a line.
+export function describeOutcome(status: WorkerJob['status']): string {
+  switch (status) {
+    case 'succeeded':
+      return 'Готово — результат можно скачать';
+    case 'failed':
+      return 'Завершилась с ошибкой';
+    case 'cancelled':
+      return 'Остановлена';
+    default:
+      return '';
+  }
+}

@@ -145,4 +145,34 @@ describe('JobDetailDialog', () => {
 
     expect(await screen.findByText(/2 строк/)).toBeInTheDocument();
   });
+
+  it('keeps the same blocks from the moment the job is queued to the moment it ends, so the window does not change shape', async () => {
+    routes['GET worker/jobs/23'] = () => json({ ...job(23), status: 'queued', createdAt: new Date().toISOString(), targetWorkerId: null, workerName: null, logs: '' });
+    routes['GET worker/jobs/24'] = () => json({ ...job(24), status: 'succeeded', workerName: 'pi-blue', logs: 'done\n' });
+
+    const queued = render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <JobDetailDialog jobId={23} onClose={vi.fn()} />
+        </ThemeProvider>
+      </Provider>,
+    );
+    // Queued: the worker is not known yet, but its place is there, and so is the stage line and the log box.
+    const worker = (await screen.findByText('Worker')).closest('div') as HTMLElement;
+    expect(within(worker).getByText('—')).toBeInTheDocument();
+    expect(screen.getByText(/Ждёт свободный worker/)).toBeInTheDocument();
+    expect(screen.getByText('(пока пусто)')).toBeInTheDocument();
+    queued.unmount();
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <JobDetailDialog jobId={24} onClose={vi.fn()} />
+        </ThemeProvider>
+      </Provider>,
+    );
+    // Finished: the stage line is replaced by the outcome, not removed.
+    expect(await screen.findByText('Готово — результат можно скачать')).toBeInTheDocument();
+    expect(within((await screen.findByText('Worker')).closest('div') as HTMLElement).getByText('pi-blue')).toBeInTheDocument();
+  });
 });

@@ -63,7 +63,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
   const lines = logs ? logs.replace(/\n$/, '').split('\n').length : 0;
 
   return (
-    <section aria-label="Логи">
+    <section aria-label="Логи" className={styles.logsSection}>
       <div className={styles.logsHeader}>
         <Text variant="subheader-1" className={styles.logsTitle}>
           Логи

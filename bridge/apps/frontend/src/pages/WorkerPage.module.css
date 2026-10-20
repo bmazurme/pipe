@@ -168,6 +168,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  /* One line is always reserved, whether or not there is a stage to name. */
+  min-height: 1.5em;
 }
 
 .detailFields {
@@ -202,6 +204,8 @@
 
 .logsWrap {
   position: relative;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .logsJump {
@@ -214,6 +218,29 @@
   margin-bottom: 12px;
 }
 
+/* The job window has one size for the whole run — the log, the error and the result block share what it has instead of
+   stretching it — so it does not jump while a worker is writing. */
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  height: min(72vh, 640px);
+  min-height: 360px;
+  overflow-y: auto;
+}
+
+.detailSummary,
+.detailError,
+.encryptSection {
+  flex: none;
+}
+
+.logsSection {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 160px;
+}
+
 .logsTitle {
   margin: 0;
 }
@@ -221,8 +248,8 @@
 .logs {
   box-sizing: border-box;
   width: 100%;
-  max-height: min(55vh, 480px);
-  min-height: 120px;
+  /* Fills what the dialog body leaves: the log grows inside its box and scrolls, the window itself keeps its size. */
+  height: 100%;
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
