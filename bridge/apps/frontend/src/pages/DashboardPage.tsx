@@ -17,8 +17,11 @@ import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
 import styles from './DashboardPage.module.css';
 import { formatBytes } from './vpn/formatBytes';
+import { useFailureAwarePollInterval } from './vpn/statusPollInterval';
 
 const POLL_INTERVAL_MS = 20_000;
+// A panel that is down (expired certificate, deleted server) cannot recover on its own.
+export const FAILING_POLL_INTERVAL_MS = 60_000;
 // Same "connected recently, not right now" heuristic as VpnConnectionStatusGrid —
 // there is no separate liveness ping, just the last Reality handshake.
 const VPN_RECENT_THRESHOLD_MS = 5 * 60 * 1000;
@@ -64,11 +67,13 @@ function isRecent(lastOnline: string | null | undefined): boolean {
 // polled without `force` so it shares the same short-lived server-side cache
 // /vpn/status itself uses instead of hitting every panel on every tick.
 function VpnConnectionRow({ connection, activeStatus }: { connection: VpnConnection; activeStatus: StatusResult }) {
+  const poll = useFailureAwarePollInterval(POLL_INTERVAL_MS, FAILING_POLL_INTERVAL_MS);
   const polled = useGetVpnConnectionStatusQuery(connection.id, {
-    pollingInterval: POLL_INTERVAL_MS,
+    pollingInterval: poll.intervalMs,
     skipPollingIfUnfocused: true,
     skip: connection.isActive,
   });
+  poll.track(polled);
   const status: StatusResult = connection.isActive ? activeStatus : polled;
   const lastOnline = status.data?.lastOnline ?? null;
   const down = status.isError || !lastOnline;
@@ -100,10 +105,12 @@ function VpnConnectionRow({ connection, activeStatus }: { connection: VpnConnect
 }
 
 export function DashboardPage() {
+  const vpnPoll = useFailureAwarePollInterval(POLL_INTERVAL_MS, FAILING_POLL_INTERVAL_MS);
   const vpnActive = useGetVpnStatusQuery(undefined, {
-    pollingInterval: POLL_INTERVAL_MS,
+    pollingInterval: vpnPoll.intervalMs,
     skipPollingIfUnfocused: true,
   });
+  vpnPoll.track(vpnActive);
   const vpnConnections = useListVpnConnectionsQuery();
   const nodes = useGetDashboardNodesQuery(undefined, {
     pollingInterval: POLL_INTERVAL_MS,
