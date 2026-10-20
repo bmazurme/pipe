@@ -3,7 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadConfig } from './config.js';
-import { processChatTurn, processJob, withHeartbeat } from './jobRunner.js';
+import { processChatTurn } from './chatTurn.js';
+import { withHeartbeat } from './heartbeat.js';
+import { processJob } from './jobRunner.js';
 import { logger } from './logger.js';
 import { runLoop } from './loop.js';
 import { waitForSession } from './session.js';
