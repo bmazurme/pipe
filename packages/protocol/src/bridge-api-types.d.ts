@@ -1952,7 +1952,7 @@ export interface components {
         ChatResponseDto: {
             id: number;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             title: string | null;
             contextName: string | null;
             /** Format: date-time */
@@ -1962,7 +1962,7 @@ export interface components {
         };
         CreateChatDto: {
             /** @enum {string} */
-            model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             contextId?: number;
         };
         RenameChatDto: {
@@ -2060,7 +2060,7 @@ export interface components {
             sourceFileId: number | null;
             resultFileId: number | null;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId: number | null;
             usedClaudeCredentialName: string | null;
             providerCredentialId: number | null;
@@ -2093,7 +2093,7 @@ export interface components {
         CreateJobDto: {
             sourceFileId: number;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
             providerCredentialId?: number;
             targetWorkerId?: number;
@@ -2127,7 +2127,7 @@ export interface components {
             /** Format: date-time */
             notBefore?: string;
             /** @enum {string} */
-            model?: "sonnet" | "opus" | "gpt" | "deepseek" | "qwen";
+            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
             providerCredentialId?: number;
         };
@@ -2191,7 +2191,7 @@ export interface components {
             workers: components["schemas"]["WorkerHeartbeatStatusDto"][];
         };
         WorkerResponseDto: {
-            models: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeLimits: {
                 [key: string]: unknown;
             } | null;
@@ -2222,7 +2222,7 @@ export interface components {
             createdAt: string | null;
         };
         CreateWorkerDto: {
-            models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             name: string;
@@ -2250,7 +2250,7 @@ export interface components {
             key: string;
         };
         WorkerConfigResponseDto: {
-            models: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             id: number;
             name: string;
             enabled: boolean;
@@ -2267,7 +2267,7 @@ export interface components {
             };
         };
         UpdateWorkerDto: {
-            models?: ("sonnet" | "opus" | "gpt" | "deepseek" | "qwen")[] | null;
+            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             name?: string;

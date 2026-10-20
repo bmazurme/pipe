@@ -112,7 +112,7 @@ export function handleSetLeakScanStrict(req: Request<Record<string, string>>, re
   withSync(res, 'Set leak scan strict mode', () => setLeakScanStrict(Boolean(leakScanStrict)));
 }
 
-export const WORKER_MODELS = ['sonnet', 'opus', 'gpt', 'deepseek', 'qwen'] as const;
+export const WORKER_MODELS = ['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen'] as const;
 
 // `model: null` (or an empty string) switches the automatic start off.
 export function handleSetAutoStartWorkerModel(req: Request<Record<string, string>>, res: Response) {

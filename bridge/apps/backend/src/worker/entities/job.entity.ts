@@ -4,17 +4,25 @@ import { BaseEntity } from '../../base.entity';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import type { ClaudeRunUsage } from '../claude-limits';
 
-// Sonnet/opus run through the existing `claude` CLI (same as sync's
+// Sonnet/opus/haiku run through the existing `claude` CLI (same as sync's
 // agent-runner); gpt/deepseek/qwen run through worker's own minimal
 // OpenAI-compatible tool-calling loop, since all three expose the same
 // Chat Completions + function-calling shape.
 export enum JobModel {
   Sonnet = 'sonnet',
   Opus = 'opus',
+  Haiku = 'haiku',
   Gpt = 'gpt',
   Deepseek = 'deepseek',
   Qwen = 'qwen',
 }
+
+// The models that run through the `claude` CLI, and so use a stored Claude token and report plan limits.
+export const CLAUDE_JOB_MODELS: readonly JobModel[] = [
+  JobModel.Sonnet,
+  JobModel.Opus,
+  JobModel.Haiku,
+];
 
 export enum JobStatus {
   Queued = 'queued',

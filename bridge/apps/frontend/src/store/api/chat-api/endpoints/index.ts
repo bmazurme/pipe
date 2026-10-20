@@ -1,7 +1,7 @@
 import chatApi from '..';
 import { deltaSince } from '../../incrementalSince';
 
-export type ChatModelId = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+export type ChatModelId = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
 
 export interface ChatMeta {
   id: number;

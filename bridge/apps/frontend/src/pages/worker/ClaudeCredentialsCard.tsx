@@ -56,7 +56,7 @@ export function ClaudeCredentialsCard() {
       <Text color="secondary" variant="caption-2">
         Несколько именованных Claude Code OAuth токенов — хранятся в базе bridge, без GitHub
         Secrets и передеплоя. Первый в списке используется по умолчанию при запуске задачи на
-        Sonnet/Opus.
+        Sonnet/Opus/Haiku.
       </Text>
 
       {isLoading && <Skeleton height={40} />}

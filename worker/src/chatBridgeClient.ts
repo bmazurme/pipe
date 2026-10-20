@@ -21,7 +21,7 @@ export interface ChatHistoryEntry {
 export interface ClaimedChatTurn {
   messageId: number;
   chatId: number;
-  model: 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+  model: 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
   // The account's Claude token for a sonnet/opus turn (null/absent: this process's own login).
   claudeToken?: string | null;
   context?: string | null;

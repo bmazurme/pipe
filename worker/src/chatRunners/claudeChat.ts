@@ -9,6 +9,7 @@ import { createProgressReporter } from './progress.js';
 import { withContext } from '../taskContext.js';
 import { runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
+import type { ClaudeModel } from '../providers.js';
 
 // `claude -p` is a single-shot, stateless invocation — there's no session to
 // resume across separate chat turns (worker keeps no state between turns;
@@ -37,13 +38,13 @@ export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<num
   return withContext(prompt, context);
 }
 
-// Sonnet/Opus chat turns run through the same claude CLI login Worker jobs
+// Sonnet/Opus/Haiku chat turns run through the same claude CLI login Worker jobs
 // use (CLAUDE_CODE_OAUTH_TOKEN or `claude login`), not a separate billed
 // ANTHROPIC_API_KEY — unlike a job, a chat turn has no files of its own, so
 // the working directory only exists because the CLI requires one.
 export async function claudeChat(
   history: ChatHistoryEntry[],
-  claudeModel: 'sonnet' | 'opus',
+  claudeModel: ClaudeModel,
   workDir: string,
   proxyUrl?: string,
   // Fetches one attached file by id; absent when the turn has no way to (older callers).

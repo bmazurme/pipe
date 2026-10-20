@@ -128,7 +128,7 @@ describe('Chat attachments', () => {
   it('shows the server’s reason when an upload is refused', async () => {
     const user = userEvent.setup();
     uploadStatus = 400;
-    uploadMessage = 'Вложения поддерживаются только в чатах с Claude (Sonnet или Opus)';
+    uploadMessage = 'Вложения поддерживаются только в чатах с Claude (Sonnet, Opus или Haiku)';
     renderPage();
     await screen.findByRole('button', { name: 'Прикрепить файл' });
 

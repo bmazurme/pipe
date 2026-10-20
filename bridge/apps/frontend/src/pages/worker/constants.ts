@@ -12,6 +12,7 @@ export const WORKER_STATUS_POLL_INTERVAL_MS = 10000;
 export const MODEL_OPTIONS: { value: WorkerJobModel; content: string }[] = [
   { value: 'sonnet', content: 'Claude Sonnet' },
   { value: 'opus', content: 'Claude Opus' },
+  { value: 'haiku', content: 'Claude Haiku' },
   { value: 'gpt', content: 'GPT' },
   { value: 'deepseek', content: 'DeepSeek' },
   { value: 'qwen', content: 'Qwen' },

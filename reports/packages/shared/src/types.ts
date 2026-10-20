@@ -196,7 +196,7 @@ export type SubscriptionConfigType = {
 
 // Mirrors bridge's JobModel; @reports/shared holds types only, so the runtime
 // list lives next to its users (server/subscription/config-handler.ts, the client).
-export type WorkerModelType = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+export type WorkerModelType = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
 
 // Everything a user configures by hand, bundled for moving to a new machine
 // in one file — the calendar's holidays/shortDays/badDays are deliberately

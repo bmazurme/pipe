@@ -9,6 +9,12 @@ describe('resolveProvider', () => {
     assert.deepEqual(resolveProvider('opus', {}), { tool: 'claude', claudeModel: 'opus' });
   });
 
+  it('routes haiku to the claude CLI too, with no API key and no OpenAI-compatible config', () => {
+    assert.deepEqual(resolveProvider('haiku', {}), { tool: 'claude', claudeModel: 'haiku' });
+    // an unrelated provider key in the environment changes nothing for it
+    assert.deepEqual(resolveProvider('haiku', { OPENAI_API_KEY: 'k' }), { tool: 'claude', claudeModel: 'haiku' });
+  });
+
   it('throws a clear error when the required API key is missing', () => {
     assert.throws(() => resolveProvider('gpt', {}), /OPENAI_API_KEY/);
     assert.throws(() => resolveProvider('deepseek', {}), /DEEPSEEK_API_KEY/);

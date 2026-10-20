@@ -10,7 +10,7 @@ const ALLOWED_EXTENSIONS = [
 /** Same list as the backend's (apps/backend/src/chat/attachments.ts) — it re-checks, this only spares a doomed upload. */
 export const ATTACHMENT_ACCEPT = ALLOWED_EXTENSIONS.join(',');
 
-export const isClaudeModel = (model: string | undefined): boolean => model === 'sonnet' || model === 'opus';
+export const isClaudeModel = (model: string | undefined): boolean => model === 'sonnet' || model === 'opus' || model === 'haiku';
 
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} Б`;

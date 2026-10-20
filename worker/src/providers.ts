@@ -1,7 +1,10 @@
-export type JobModel = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+export type JobModel = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
+
+// The models that run through the `claude` CLI (the others go through an OpenAI-compatible provider).
+export type ClaudeModel = 'sonnet' | 'opus' | 'haiku';
 
 export type ProviderConfig =
-  | { tool: 'claude'; claudeModel: 'sonnet' | 'opus' }
+  | { tool: 'claude'; claudeModel: ClaudeModel }
   | { tool: 'openai-compatible'; baseUrl: string; apiKey: string; model: string };
 
 export interface OpenAiCompatibleDefaults {
@@ -102,7 +105,7 @@ export function resolveProvider(
   env: NodeJS.ProcessEnv = process.env,
   override?: ProviderOverride | null,
 ): ProviderConfig {
-  if (model === 'sonnet' || model === 'opus') {
+  if (model === 'sonnet' || model === 'opus' || model === 'haiku') {
     return { tool: 'claude', claudeModel: model };
   }
 

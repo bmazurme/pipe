@@ -1,7 +1,7 @@
 import workerApi from '..';
 import { deltaSince } from '../../incrementalSince';
 
-export type WorkerJobModel = 'sonnet' | 'opus' | 'gpt' | 'deepseek' | 'qwen';
+export type WorkerJobModel = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
 export type WorkerJobStatus =
   | 'queued'
   | 'claimed'

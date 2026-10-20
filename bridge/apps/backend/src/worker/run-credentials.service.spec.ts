@@ -30,6 +30,15 @@ describe('RunCredentialsService', () => {
     expect(result).toMatchObject({ claudeToken: 'tok', claudeCredentialId: 4 });
   });
 
+  it('treats haiku as a Claude model: it gets a stored Claude token, not a provider key', async () => {
+    const result = await service.resolve(7, 3, 'haiku', {
+      claudeCredentialId: 9,
+    });
+
+    expect(claude.resolveForRun).toHaveBeenCalledWith(7, 9, 6);
+    expect(result).toMatchObject({ claudeToken: 'tok', claudeCredentialId: 4 });
+  });
+
   it('falls back to the worker’s token when the job picked none', async () => {
     await service.resolve(7, 3, 'opus', {});
 

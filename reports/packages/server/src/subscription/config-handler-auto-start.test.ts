@@ -24,6 +24,11 @@ describe('handleSetAutoStartWorkerModel', () => {
     expect(setAutoStartWorkerModel).toHaveBeenCalledWith('opus');
   });
 
+  it('stores haiku as well', () => {
+    expect(run({ model: 'haiku' })[0]).toEqual({ type: 'message', data: { autoStartWorkerModel: 'haiku' } });
+    expect(setAutoStartWorkerModel).toHaveBeenCalledWith('haiku');
+  });
+
   it('switches the feature off for null or an empty string', () => {
     run({ model: null });
     run({ model: '' });

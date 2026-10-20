@@ -13,7 +13,7 @@ interface ClaudeTokenFieldProps {
   onChange: (value: string) => void;
 }
 
-// Which stored Claude token the worker runs Sonnet/Opus with — chosen here, never in the worker's environment.
+// Which stored Claude token the worker runs Sonnet/Opus/Haiku with — chosen here, never in the worker's environment.
 export function ClaudeTokenField({ value, onChange }: ClaudeTokenFieldProps) {
   const { data: credentials } = useListClaudeCredentialsQuery();
 
@@ -36,7 +36,7 @@ export function ClaudeTokenField({ value, onChange }: ClaudeTokenFieldProps) {
         aria-label="Claude-токен worker'а"
       />
       <Text variant="caption-2" color="secondary">
-        Для задач и чата на Sonnet/Opus, если в задаче токен не выбран явно. Токены добавляются на странице Worker →
+        Для задач и чата на Sonnet/Opus/Haiku, если в задаче токен не выбран явно. Токены добавляются на странице Worker →
         «Ключи».
       </Text>
     </label>

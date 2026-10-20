@@ -66,6 +66,7 @@ const CHAT_TEXTS: ChatContainerTexts = {
 const MODEL_OPTIONS: { value: ChatModelId; content: string }[] = [
   { value: 'sonnet', content: 'Claude Sonnet' },
   { value: 'opus', content: 'Claude Opus' },
+  { value: 'haiku', content: 'Claude Haiku' },
   { value: 'gpt', content: 'GPT' },
   { value: 'deepseek', content: 'DeepSeek' },
   { value: 'qwen', content: 'Qwen' },
@@ -336,7 +337,7 @@ export function ChatPage() {
   const attachButton = (
     <AttachButton
       disabled={!canAttach || composer.isUploading || composer.pendingFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE}
-      disabledReason={canAttach ? `Не больше ${MAX_ATTACHMENTS_PER_MESSAGE} файлов в сообщении` : 'Вложения доступны в чатах с Claude (Sonnet, Opus)'}
+      disabledReason={canAttach ? `Не больше ${MAX_ATTACHMENTS_PER_MESSAGE} файлов в сообщении` : 'Вложения доступны в чатах с Claude (Sonnet, Opus, Haiku)'}
       onFiles={(files) => void composer.attachFiles(files)}
     />
   );

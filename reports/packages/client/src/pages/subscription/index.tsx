@@ -32,6 +32,7 @@ const AUTO_START_OPTIONS: { value: WorkerModelType | 'off'; content: string }[] 
   { value: 'off', content: 'Вручную' },
   { value: 'sonnet', content: 'Claude Sonnet' },
   { value: 'opus', content: 'Claude Opus' },
+  { value: 'haiku', content: 'Claude Haiku' },
   { value: 'gpt', content: 'GPT' },
   { value: 'deepseek', content: 'DeepSeek' },
   { value: 'qwen', content: 'Qwen' },

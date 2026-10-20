@@ -23,7 +23,7 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: 'claude',
     title: 'Claude Code OAuth-токен',
-    usedFor: 'Модели Claude Sonnet и Claude Opus',
+    usedFor: 'Модели Claude Sonnet, Opus и Haiku',
     steps: [
       'Нужна подписка Claude (Pro или Max) и установленный Claude Code: npm install -g @anthropic-ai/claude-code.',
       'В терминале на своём компьютере выполните: claude setup-token.',
