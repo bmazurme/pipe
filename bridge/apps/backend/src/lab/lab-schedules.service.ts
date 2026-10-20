@@ -1,0 +1,167 @@
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { ContextService } from '../context/context.service';
+import { isDue, localDate } from '../improve/improve-schedule.service';
+import { message } from '../improve/improve-shared';
+import { requireImproveModel } from '../improve/improve.service';
+import { isValidTimeZone } from '../telegram/notification-settings.service';
+import { NotifyService } from '../telegram/notify.service';
+import { LabSchedule } from './entities/lab-schedule.entity';
+import { LabProjectsService } from './lab-projects.service';
+import { LabRunsService } from './lab-runs.service';
+
+const SCHEDULE_TICK_MS = 60_000;
+
+type ScheduleInput = Pick<
+  LabSchedule,
+  | 'projectId'
+  | 'name'
+  | 'enabled'
+  | 'hour'
+  | 'minute'
+  | 'timezone'
+  | 'model'
+  | 'task'
+> & { contextId?: number | null };
+
+@Injectable()
+export class LabSchedulesService {
+  private readonly logger = new Logger(LabSchedulesService.name);
+  private ticking = false;
+
+  constructor(
+    @InjectRepository(LabSchedule)
+    private readonly schedules: Repository<LabSchedule>,
+    private readonly projects: LabProjectsService,
+    private readonly runs: LabRunsService,
+    private readonly contexts: ContextService,
+    private readonly notifier: NotifyService,
+  ) {}
+
+  list(userId: number): Promise<LabSchedule[]> {
+    return this.schedules.find({ where: { userId }, order: { id: 'ASC' } });
+  }
+
+  async save(
+    userId: number,
+    input: ScheduleInput,
+    id?: number,
+  ): Promise<LabSchedule> {
+    requireImproveModel(input.model);
+
+    if (!isValidTimeZone(input.timezone))
+      throw new BadRequestException(
+        `Неизвестный часовой пояс: ${input.timezone}`,
+      );
+
+    await this.projects.findOwned(input.projectId, userId);
+
+    if (input.contextId) await this.contexts.findOwned(input.contextId, userId);
+
+    const schedule = id
+      ? await this.schedules.findOne({ where: { id, userId } })
+      : this.schedules.create({ userId });
+
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    Object.assign(schedule, { ...input, contextId: input.contextId ?? null });
+
+    return this.schedules.save(schedule);
+  }
+
+  async remove(id: number, userId: number): Promise<void> {
+    await this.schedules.delete({ id, userId });
+  }
+
+  async runNow(
+    id: number,
+    userId: number,
+  ): Promise<{ runId: number | null; error: string | null }> {
+    const schedule = await this.schedules.findOne({ where: { id, userId } });
+
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    return this.fire(schedule);
+  }
+
+  @Interval(SCHEDULE_TICK_MS)
+  async tick(now = new Date()): Promise<void> {
+    if (this.ticking) return;
+
+    this.ticking = true;
+
+    try {
+      for (const schedule of await this.schedules.find({
+        where: { enabled: true },
+      })) {
+        if (!isDue(schedule, now)) continue;
+
+        // Claim today's slot first (compare-and-set), so two ticks — or two bridge instances — never fire one schedule twice.
+        const claim = await this.schedules
+          .createQueryBuilder()
+          .update()
+          .set({ lastRunOn: localDate(now, schedule.timezone), lastRunAt: now })
+          .where(
+            'id = :id AND ("lastRunOn" IS NULL OR "lastRunOn" <> :today)',
+            { id: schedule.id, today: localDate(now, schedule.timezone) },
+          )
+          .execute();
+
+        if (claim.affected !== 1) continue;
+
+        await this.fire(schedule).catch((error) =>
+          this.logger.warn(
+            `Lab schedule ${schedule.id} failed: ${message(error)}`,
+          ),
+        );
+      }
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  async fire(
+    schedule: LabSchedule,
+  ): Promise<{ runId: number | null; error: string | null }> {
+    let runId: number | null = null;
+    let error: string | null = null;
+
+    try {
+      const run = await this.runs.start(
+        schedule.userId,
+        {
+          projectId: schedule.projectId,
+          task: schedule.task,
+          model: schedule.model,
+          contextId: schedule.contextId,
+        },
+        'schedule',
+        schedule.id,
+      );
+
+      runId = run.id;
+    } catch (cause) {
+      error = message(cause);
+    }
+
+    const summary = error ? `не запущено: ${error}` : `запуск #${runId}`;
+
+    await this.schedules.update(schedule.id, {
+      lastRunAt: new Date(),
+      lastResult: summary,
+    });
+    await this.notifier.send(
+      `🧪 Lab, расписание «${schedule.name}»: ${summary}`,
+    );
+
+    return { runId, error };
+  }
+}

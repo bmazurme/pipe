@@ -12,6 +12,7 @@ import { ChatModule } from './chat/chat.module';
 import { ContextModule } from './context/context.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ImproveModule } from './improve/improve.module';
+import { LabModule } from './lab/lab.module';
 import { LogsModule } from './logs/logs.module';
 import { LoopModule } from './loop/loop.module';
 import { OauthModule } from './oauth/oauth.module';
@@ -49,6 +50,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     ContextModule,
     DashboardModule,
     ImproveModule,
+    LabModule,
     LogsModule,
     LoopModule,
     OauthModule,
