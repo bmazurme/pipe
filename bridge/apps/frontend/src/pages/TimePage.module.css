@@ -308,6 +308,12 @@
   min-width: 0;
 }
 
+.dayOffWeekday {
+  /* A fixed column, so the dates under it line up whatever the weekday is. */
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
+}
+
 .dayOffRowIcon {
   color: var(--g-color-text-secondary);
   flex-shrink: 0;

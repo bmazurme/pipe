@@ -33,7 +33,7 @@ import { timeYearSelector } from '../../store/slices';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
-import { groupConsecutiveDayOffs } from './dayOffUtils';
+import { groupConsecutiveDayOffs, isWeekend, weekdayShort } from './dayOffUtils';
 import { YearSwitcher } from './YearSwitcher';
 
 const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
@@ -256,6 +256,13 @@ export function DayOffsTab() {
                   >
                     <div className={styles.dayOffRowMain}>
                       <Icon data={meta.icon} size={16} className={styles.dayOffRowIcon} />
+                      <Text
+                        color={isWeekend(dayOff.date) ? 'danger' : 'secondary'}
+                        className={styles.dayOffWeekday}
+                        aria-label={`День недели: ${weekdayShort(dayOff.date)}`}
+                      >
+                        {weekdayShort(dayOff.date)}
+                      </Text>
                       <Text>{formatDate(dayOff.date)}</Text>
                       {dayOff.type !== 'off' && (
                         <Label theme={meta.badgeTheme} size="xs">
