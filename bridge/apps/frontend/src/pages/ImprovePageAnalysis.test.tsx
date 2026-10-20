@@ -170,6 +170,32 @@ describe('ImprovePage analysis', () => {
     );
   });
 
+  it('has a "Рефакторинг" checkbox that is off by default and sends the direction when ticked', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    const refactoring = (await screen.findByLabelText('Рефакторинг')) as HTMLInputElement;
+
+    expect(refactoring.checked).toBe(false);
+    expect(screen.getByText(/небольшая правка кода без изменения поведения/)).toBeTruthy();
+
+    await user.click(refactoring);
+    await user.click(screen.getByRole('button', { name: 'Запустить анализ' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({
+        method: 'POST',
+        path: 'improve/analysis',
+        body: {
+          model: 'sonnet',
+          categories: ['general', 'uiux', 'security', 'performance', 'reliability', 'tests', 'docs', 'architecture', 'refactoring'],
+          autoCreate: false,
+          autoStart: false,
+        },
+      }),
+    );
+  });
+
   it('can run new features on their own', async () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');

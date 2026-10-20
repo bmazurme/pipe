@@ -20,6 +20,9 @@ describe('improve labels', () => {
     expect(describeSchedule({ ...base, categories: null })).toContain('анализ: 5 направлений');
     expect(describeSchedule({ ...base, categories: 'tests,features' })).toContain('анализ: Тесты, Новые фичи');
     expect(describeSchedule({ ...base, categories: 'general,uiux,security,performance,reliability,tests,docs,architecture,features' })).toContain('Новые фичи');
+    // the five improvement directions plus refactoring are no longer "the default 5"
+    expect(describeSchedule({ ...base, categories: 'general,uiux,security,performance,reliability,tests,docs,architecture,refactoring' })).toContain('Рефакторинг');
+    expect(describeSchedule({ ...base, categories: 'refactoring' })).toContain('анализ: Рефакторинг');
   });
 
   it('formats and parses times', () => {

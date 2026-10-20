@@ -69,6 +69,18 @@ describe('buildAnalysisPrompt', () => {
     expect(prompt).toContain('dependency-direction');
   });
 
+  it('asks for refactoring only when that direction is chosen, separate from architecture', () => {
+    expect(ALL_CATEGORIES).toContain('refactoring');
+    expect(DEFAULT_CATEGORIES).not.toContain('refactoring');
+    expect(buildAnalysisPrompt([])).not.toContain('"refactoring"');
+
+    const prompt = buildAnalysisPrompt([], ['refactoring']);
+
+    expect(prompt).toContain('"refactoring" — Рефакторинг');
+    expect(prompt).toContain('changes no behavior');
+    expect(prompt).not.toContain('"architecture"');
+  });
+
   it('can be limited to some directions', () => {
     const prompt = buildAnalysisPrompt([], ['uiux', 'security']);
 
