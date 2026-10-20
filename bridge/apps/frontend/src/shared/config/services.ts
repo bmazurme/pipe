@@ -146,11 +146,10 @@ export const SERVICES: ServiceLink[] = [
   {
     id: 'lab',
     title: 'Lab',
-    description: 'CAD, расчёты и BOM для хардварных проектов (катер, самолёт, …).',
+    description: 'Свои проекты на GitHub: задача текстом, расписания и pull request в вашем репозитории.',
     icon: Flask,
     path: '/lab',
     group: 'work',
-    soon: true,
   },
 ];
 
