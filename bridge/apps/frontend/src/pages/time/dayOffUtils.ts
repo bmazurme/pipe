@@ -35,3 +35,19 @@ export function groupConsecutiveDayOffs<T extends { date: string; type: string }
 
   return groups;
 }
+
+const weekdayFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', timeZone: 'UTC' });
+
+/** "Пн", "Вт", … for a YYYY-MM-DD date — read as that calendar day wherever the browser is (no timezone shift). */
+export function weekdayShort(date: string): string {
+  const label = weekdayFormatter.format(new Date(`${date}T00:00:00Z`));
+
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/** Saturday or Sunday. */
+export function isWeekend(date: string): boolean {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+
+  return day === 0 || day === 6;
+}

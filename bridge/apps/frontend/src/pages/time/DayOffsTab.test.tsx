@@ -41,3 +41,34 @@ describe('DayOffsTab list failure', () => {
     expect(screen.queryByText('Не удалось загрузить дни отдыха')).toBeNull();
   });
 });
+
+describe('DayOffsTab weekday', () => {
+  it('shows the weekday next to each date, weekends told apart', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        json([
+          { id: 1, date: '2026-10-19', type: 'off' },
+          { id: 2, date: '2026-10-24', type: 'compensatory' },
+        ]),
+      ),
+    );
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <DayOffsTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    const monday = await screen.findByLabelText('День недели: Пн');
+    const saturday = screen.getByLabelText('День недели: Сб');
+
+    expect(monday).toHaveTextContent('Пн');
+    expect(saturday).toHaveTextContent('Сб');
+    // A weekend is drawn in the danger colour, a working day in the quiet one.
+    expect(saturday.className).toMatch(/color_danger/);
+    expect(monday.className).toMatch(/color_secondary/);
+  });
+});
