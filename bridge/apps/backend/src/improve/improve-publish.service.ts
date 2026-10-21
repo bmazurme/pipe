@@ -3,12 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
-import { GithubApiService, TreeEntry } from '../loop/github-api.service';
+import { GithubApiService } from '../loop/github-api.service';
 import { findProtected } from '../loop/protected-paths';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
-import { mapInBatches, message, PR_LABEL } from './improve-shared';
+import { buildResultTree, message, PR_LABEL } from './improve-shared';
 import {
   Change,
   describeChanges,
@@ -17,9 +17,6 @@ import {
   MAX_CHANGED_FILES,
   readResultParcel,
 } from './parcel';
-
-// Blobs of one result are created this many at a time — modest, so GitHub's secondary rate limits stay quiet.
-const BLOB_CONCURRENCY = 6;
 
 // GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
 // about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
@@ -151,26 +148,8 @@ export class ImprovePublishService {
   }
 
   // The blobs and the tree of a result on top of a commit — shared by the first PR and by a repair.
-  private async createTreeFor(
-    baseSha: string,
-    changes: Change[],
-  ): Promise<string> {
-    const baseTree = await this.github.getCommitTreeSha(baseSha);
-    const tree = await mapInBatches(
-      changes,
-      BLOB_CONCURRENCY,
-      async (change): Promise<TreeEntry> => ({
-        path: change.path,
-        mode: '100644',
-        type: 'blob',
-        sha:
-          change.kind === 'deleted'
-            ? null
-            : await this.github.createBlob(change.bytes as Uint8Array),
-      }),
-    );
-
-    return this.github.createTree(baseTree, tree);
+  private createTreeFor(baseSha: string, changes: Change[]): Promise<string> {
+    return buildResultTree(this.github, baseSha, changes);
   }
 
   // A repair is a commit on top of the PR's head, pushed to the PR's own branch (never forced).

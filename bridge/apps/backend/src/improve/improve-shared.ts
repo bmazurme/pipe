@@ -1,8 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 
+import type { GithubApiService, TreeEntry } from '../loop/github-api.service';
 import { localMinutes } from '../telegram/quiet-hours';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { AnalysisCategory, BacklogItem } from './analysis';
+import type { Change } from './parcel';
 
 export const PR_LABEL = 'loop';
 
@@ -36,6 +38,33 @@ export async function mapInBatches<T, R>(
   }
 
   return out;
+}
+
+// Blobs of one result are created this many at a time — modest, so GitHub's secondary rate limits stay quiet.
+const BLOB_CONCURRENCY = 6;
+
+// The blobs and the tree of a result on top of a commit.
+export async function buildResultTree(
+  github: GithubApiService,
+  baseSha: string,
+  changes: Change[],
+): Promise<string> {
+  const baseTree = await github.getCommitTreeSha(baseSha);
+  const tree = await mapInBatches(
+    changes,
+    BLOB_CONCURRENCY,
+    async (change): Promise<TreeEntry> => ({
+      path: change.path,
+      mode: '100644',
+      type: 'blob',
+      sha:
+        change.kind === 'deleted'
+          ? null
+          : await github.createBlob(change.bytes as Uint8Array),
+    }),
+  );
+
+  return github.createTree(baseTree, tree);
 }
 
 export const IMPROVE_MODELS = [
