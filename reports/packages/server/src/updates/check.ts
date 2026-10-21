@@ -4,9 +4,13 @@ import { describeFetchError } from '../utils/describe-fetch-error';
 import { getSettings } from '../settings/props';
 import { readInstalledRelease } from './release';
 
-const CHECK_TIMEOUT_MS = 20_000;
+// The first check after a merge waits for bridge to cut the build (download, unzip and re-zip the repository, ~50 s seen);
+// giving up earlier only throws that wait away, since bridge finishes and caches the build anyway. Still below apply.ts's DOWNLOAD_TIMEOUT_MS.
+export const CHECK_TIMEOUT_MS = 90_000;
 // A check costs bridge a download of the repository the first time a build is cut, so it is not repeated at every page load.
 export const CHECK_TTL_MS = 30 * 60 * 1000;
+// A failed check is remembered only briefly: its cause (a timeout while bridge was cutting a build, a short outage) is usually gone soon.
+export const CHECK_FAILURE_TTL_MS = 2 * 60 * 1000;
 
 // What bridge's GET /api/v1/reports-release/info answers (more fields than these; only these are used here).
 interface BridgeReleaseInfo extends ReleaseInfoType {
@@ -19,6 +23,8 @@ export interface UpdateCheckerDeps {
   fetchLatest: () => Promise<BridgeReleaseInfo>;
   now: () => number;
   ttlMs: number;
+  // How long a failed check is remembered; CHECK_FAILURE_TTL_MS when not given.
+  failureTtlMs?: number;
 }
 
 // The owner's API key and bridge's address come from Settings, as for every other call to bridge.
@@ -60,9 +66,10 @@ const defaultDeps: UpdateCheckerDeps = {
   fetchLatest: fetchLatestRelease,
   now: Date.now,
   ttlMs: CHECK_TTL_MS,
+  failureTtlMs: CHECK_FAILURE_TTL_MS,
 };
 
-// Remembers the answer for a while; a failed check is remembered as well, so an unreachable bridge is not asked at every call.
+// Remembers the answer for a while; a failed check is remembered as well, for a shorter while, so an unreachable bridge is not asked at every call.
 export function createUpdateChecker(deps: UpdateCheckerDeps = defaultDeps) {
   let cached: { at: number; status: UpdateStatusType } | null = null;
   let pending: Promise<UpdateStatusType> | null = null;
@@ -89,7 +96,9 @@ export function createUpdateChecker(deps: UpdateCheckerDeps = defaultDeps) {
 
   return {
     async status(options: { refresh?: boolean } = {}): Promise<UpdateStatusType> {
-      if (!options.refresh && cached && deps.now() - cached.at < deps.ttlMs) {
+      const ttlMs = cached?.status.error != null ? (deps.failureTtlMs ?? CHECK_FAILURE_TTL_MS) : deps.ttlMs;
+
+      if (!options.refresh && cached && deps.now() - cached.at < ttlMs) {
         // The running build can change under a cached answer (an update was applied): re-read it, keep the rest.
         const current = deps.readInstalled();
 

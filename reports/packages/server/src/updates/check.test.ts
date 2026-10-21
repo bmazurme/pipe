@@ -5,7 +5,8 @@ import type { ReleaseInfoType } from '@reports/shared';
 const state = vi.hoisted(() => ({ settings: {} as Record<string, string> }));
 vi.mock('../settings/props', () => ({ getSettings: () => state.settings }));
 
-import { createUpdateChecker, fetchLatestRelease } from './check';
+import { DOWNLOAD_TIMEOUT_MS } from './apply';
+import { CHECK_TIMEOUT_MS, createUpdateChecker, fetchLatestRelease } from './check';
 
 const release = (id: string, version: string | null = '1.0.0'): ReleaseInfoType & { sha256: string; size: number } => ({
   releaseId: id.repeat(64).slice(0, 64),
@@ -91,6 +92,56 @@ describe('the update status', () => {
     installed.value = release('b', '1.1.0');
 
     expect((await c.status()).updateAvailable).toBe(false);
+  });
+});
+
+describe('the update status after a failed check', () => {
+  function flakyChecker() {
+    const clock = { t: 0 };
+    const outcome = { fail: true };
+    const fetchLatest = vi.fn(async () => {
+      if (outcome.fail) throw new Error('Bridge не ответил вовремя');
+
+      return release('b', '1.1.0');
+    });
+    const c = createUpdateChecker({ readInstalled: () => release('a'), fetchLatest, now: () => clock.t, ttlMs: 10_000, failureTtlMs: 1000 });
+
+    return { checker: c, fetchLatest, clock, outcome };
+  }
+
+  it('remembers a failure only for failureTtlMs, then asks again', async () => {
+    const { checker: c, fetchLatest, clock, outcome } = flakyChecker();
+
+    expect((await c.status()).error).toBe('Bridge не ответил вовремя');
+
+    clock.t = 999;
+    expect((await c.status()).error).toBe('Bridge не ответил вовремя');
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+
+    outcome.fail = false;
+    clock.t = 1000;
+    expect(await c.status()).toMatchObject({ error: null, updateAvailable: true });
+    expect(fetchLatest).toHaveBeenCalledTimes(2);
+  });
+
+  it('still remembers a successful check for ttlMs', async () => {
+    const { checker: c, fetchLatest, clock, outcome } = flakyChecker();
+    outcome.fail = false;
+
+    await c.status();
+
+    clock.t = 9999;
+    await c.status();
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+
+    clock.t = 10_000;
+    await c.status();
+    expect(fetchLatest).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits longer than bridge takes to cut a build, but less than a download', () => {
+    expect(CHECK_TIMEOUT_MS).toBeGreaterThan(51_000);
+    expect(CHECK_TIMEOUT_MS).toBeLessThan(DOWNLOAD_TIMEOUT_MS);
   });
 });
 
