@@ -203,7 +203,7 @@ Repo → Settings → Secrets and variables → Actions.
 | `EMAILS` | опционально: список email через запятую — если задан, вход разрешён только им |
 | `CORS_ORIGINS` | список origin'ов через запятую, которым разрешён доступ к API |
 | `STORAGE_DRIVER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | опционально: хранилище загруженных файлов — `local` (по умолчанию, том) или `s3`; при `s3` все, кроме `S3_REGION`, обязательны, иначе backend не стартует. Подробности: [docs/deploy.md](../docs/deploy.md#file-storage) |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../docs/improvements/SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
 | `LIMIT_ALERTS` | опционально: `off` выключает Telegram-предупреждения о лимитах плана Claude (окно токена или worker'а перешло 80 % / 95 % или отклонено — одно сообщение на уровень и окно; тихие часы `NOTIFY_QUIET_HOURS` соблюдаются). По умолчанию включены |
 | `VPN_ALERTS` | опционально: `off` выключает Telegram-предупреждения о недоступности VPN-подключения (активного или проверяемого вручную) — одно сообщение при падении, ещё одно когда панель снова отвечает; не на каждый опрос. По умолчанию включены |
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |

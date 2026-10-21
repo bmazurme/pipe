@@ -1,6 +1,6 @@
 # End-to-end test: closed-contour auto-pull
 
-Verifies the stage-2 link of [SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md):
+Verifies the stage-2 link of [SELF_IMPROVEMENT_PLAN.md](improvements/SELF_IMPROVEMENT_PLAN.md):
 reports (running unattended, `REPORTS_AUTOPILOT=true`) heartbeats to bridge and
 pulls a ready result parcel into the task branch by itself, reporting to Telegram.
 

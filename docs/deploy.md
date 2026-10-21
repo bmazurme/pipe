@@ -131,7 +131,7 @@ bridge backend reads `DOCKER_PROXY_URL` (default `http://docker-proxy:2375`, a r
 ### Self-improvement loop
 
 Variables added for the self-improvement loop (see
-[SELF_IMPROVEMENT_PLAN.md](../SELF_IMPROVEMENT_PLAN.md)); meanings are
+[SELF_IMPROVEMENT_PLAN.md](improvements/SELF_IMPROVEMENT_PLAN.md)); meanings are
 carried over from `bridge/README.md` and `reports/README.md`.
 
 **bridge backend** (`bridge/apps/backend/.env`, production values as GitHub
