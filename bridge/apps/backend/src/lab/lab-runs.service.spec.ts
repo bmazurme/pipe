@@ -1,3 +1,9 @@
+import {
+  ACTIVE_LAB_RUN_STATUSES,
+  LabRunStatus,
+} from './entities/lab-run.entity';
+import * as labGithub from './lab-github';
+import { LabRunsService } from './lab-runs.service';
 import { isBlocked, titleOf } from './lab-runs.service';
 import { isValidRepo } from './lab-github';
 import { toView } from './lab-projects.service';
@@ -135,5 +141,118 @@ describe('LabRunsService repo snapshot cache', () => {
     await start('one');
 
     expect(downloadRepoZip).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('LabRunsService preparing run', () => {
+  const project = {
+    id: 7,
+    repo: 'o/r',
+    token: 't',
+    baseBranch: 'main',
+    canWrite: true,
+  };
+
+  function build(download: () => Promise<unknown>) {
+    const rows: Array<Record<string, unknown>> = [];
+    const runs = {
+      count: jest.fn(
+        async ({ where }: { where: { task: string } }) =>
+          rows.filter(
+            (row) =>
+              row.task === where.task &&
+              ACTIVE_LAB_RUN_STATUSES.includes(row.status as LabRunStatus),
+          ).length,
+      ),
+      create: jest.fn((row: Record<string, unknown>) => ({ ...row })),
+      save: jest.fn(async (row: Record<string, unknown>) => {
+        if (!rows.includes(row)) rows.push(row);
+
+        return row;
+      }),
+      update: jest.fn(
+        async (_where: unknown, patch: Record<string, unknown>) => {
+          Object.assign(rows[0], patch);
+        },
+      ),
+    };
+    const service = new LabRunsService(
+      runs as never,
+      { findOwned: jest.fn(async () => project) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    jest.spyOn(labGithub, 'githubFor').mockReturnValue({
+      getBranchSha: async () => 'sha',
+    } as never);
+    jest
+      .spyOn(labGithub, 'downloadRepoZip')
+      .mockImplementation(download as never);
+
+    return { service, rows, runs };
+  }
+
+  const input = { projectId: 7, task: 'do it', model: 'sonnet' };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('rejects a second start of the same task while the download is pending', async () => {
+    const { service, rows } = build(() => new Promise(() => undefined));
+
+    void service.start(1, input);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(rows[0].status).toBe(LabRunStatus.Preparing);
+    await expect(service.start(1, input)).rejects.toThrow(
+      'Эта задача в этом проекте уже выполняется',
+    );
+  });
+
+  it('marks the run failed with the step message when the download fails', async () => {
+    const { service, rows } = build(async () => {
+      throw new Error('boom');
+    });
+
+    await expect(service.start(1, input)).rejects.toThrow();
+    expect(rows[0].status).toBe(LabRunStatus.Failed);
+    expect(String(rows[0].error)).toContain('скачивание репозитория');
+  });
+
+  it('fails only stale preparing rows in advance()', async () => {
+    const execute = jest.fn(async () => undefined);
+    const where = jest.fn(() => ({ execute }));
+    const qb = {
+      update: () => qb,
+      set: () => qb,
+      where,
+    };
+    const service = new LabRunsService(
+      {
+        createQueryBuilder: () => qb,
+        find: jest.fn(async () => []),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.advance();
+
+    const calls = where.mock.calls as unknown as Array<
+      [string, { status: string; before: Date }]
+    >;
+    const preparing = calls.find(
+      ([, p]) => p.status === LabRunStatus.Preparing,
+    );
+
+    expect(preparing).toBeDefined();
+    expect(preparing![1].before.getTime()).toBeLessThan(
+      Date.now() - 10 * 60_000,
+    );
   });
 });

@@ -1,6 +1,7 @@
 import improveApi from '..';
 
 export type ImproveRunStatus =
+  | 'preparing'
   | 'queued'
   | 'running'
   | 'publishing'
