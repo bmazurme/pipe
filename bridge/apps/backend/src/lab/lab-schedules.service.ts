@@ -33,7 +33,32 @@ type ScheduleInput = Pick<
   | 'timezone'
   | 'model'
   | 'task'
-> & { contextId?: number | null };
+> & { contextId?: number | null; weekdays?: number[] | null };
+
+const WEEKDAY_NUMBERS: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+
+// Whether `now` falls on one of the schedule's weekdays in its own time zone; no weekdays = every day.
+export function onAllowedWeekday(
+  schedule: Pick<LabSchedule, 'weekdays' | 'timezone'>,
+  now: Date,
+): boolean {
+  if (!schedule.weekdays?.length) return true;
+
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: schedule.timezone,
+    weekday: 'short',
+  }).format(now);
+
+  return schedule.weekdays.includes(WEEKDAY_NUMBERS[weekday]);
+}
 
 @Injectable()
 export class LabSchedulesService {
@@ -75,7 +100,13 @@ export class LabSchedulesService {
 
     if (!schedule) throw new NotFoundException('Schedule not found');
 
-    Object.assign(schedule, { ...input, contextId: input.contextId ?? null });
+    Object.assign(schedule, {
+      ...input,
+      contextId: input.contextId ?? null,
+      weekdays: input.weekdays?.length
+        ? [...input.weekdays].sort((a, b) => a - b)
+        : null,
+    });
 
     return this.schedules.save(schedule);
   }
@@ -105,7 +136,7 @@ export class LabSchedulesService {
       for (const schedule of await this.schedules.find({
         where: { enabled: true },
       })) {
-        if (!isDue(schedule, now)) continue;
+        if (!isDue(schedule, now) || !onAllowedWeekday(schedule, now)) continue;
 
         // Claim today's slot first (compare-and-set), so two ticks — or two bridge instances — never fire one schedule twice.
         const claim = await this.schedules

@@ -6170,6 +6170,13 @@
           "timezone": {
             "type": "string"
           },
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "model": {
             "type": "string"
           },
@@ -6213,6 +6220,7 @@
           "hour",
           "minute",
           "timezone",
+          "weekdays",
           "model",
           "task",
           "contextId",
@@ -6227,6 +6235,15 @@
       "SaveLabScheduleDto": {
         "type": "object",
         "properties": {
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 7,
+              "minimum": 1
+            }
+          },
           "contextId": {
             "type": "number",
             "nullable": true,

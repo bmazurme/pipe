@@ -2585,6 +2585,7 @@ export interface components {
             hour: number;
             minute: number;
             timezone: string;
+            weekdays: number[] | null;
             model: string;
             task: string;
             contextId: number | null;
@@ -2599,6 +2600,7 @@ export interface components {
             updatedAt: string;
         };
         SaveLabScheduleDto: {
+            weekdays?: number[] | null;
             contextId?: number | null;
             projectId: number;
             name: string;

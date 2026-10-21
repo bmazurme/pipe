@@ -1,15 +1,31 @@
+import type { MonthKeyType, MonthType } from '@reports/shared';
+
+const MONTH_KEYS: MonthKeyType[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+
+function emptyMonth(): MonthType {
+  return {
+    allDays: 0,
+    shortDays: 0,
+    holidays: 0,
+    weekends: 0,
+    workDays: 0,
+    hours: 0,
+    offDays: 0,
+  };
+}
+
 export function countWorkAndShortDays(
   year: number = 2025,
   holidays: string[] = [],
   shortDays: string[] = [],
   badDays: string[] = [],
   offDays: string[] = [],
-) { 
+): Record<MonthKeyType, MonthType> {
   if (!Number.isInteger(year) || year < 1 || year > 9999) {
     throw new Error('Год должен быть целым числом от 1 до 9999');
   }
   // Инициализация данных по месяцам
-  const data: any = {};
+  const data = Object.fromEntries(MONTH_KEYS.map((key) => [key, emptyMonth()])) as Record<MonthKeyType, MonthType>;
   const SUNDAY = 0;
   const SATURDAY = 6;
 
@@ -18,18 +34,6 @@ export function countWorkAndShortDays(
   const badDaySet = new Set(badDays);
   const offDaySet = new Set(offDays);
 
-  for (let month = 1; month <= 12; month++) {
-    data[month] = {
-      allDays: 0,
-      shortDays: 0,
-      holidays: 0,
-      weekends: 0,
-      workDays: 0,
-      hours: 0,
-      offDays: 0,
-    };
-  }
-
   for (let month = 0; month < 12; month++) {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -37,7 +41,7 @@ export function countWorkAndShortDays(
       const date = new Date(Date.UTC(year, month, day));
       const dayOfWeek = date.getUTCDay(); // 0 — воскресенье, 6 — суббота
       const dateStr: string = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const monthKey = month + 1;
+      const monthKey = MONTH_KEYS[month];
 
       // Подсчёт всех дней
       data[monthKey].allDays++;
@@ -76,10 +80,10 @@ export function countWorkAndShortDays(
 
   // Расчёт рабочих дней: все дни минус выходные минус праздники
   // (учитываем, что праздники могут совпадать с выходными — тогда они уже учтены в weekends)
-  Object.keys(data).forEach(month => {
+  for (const month of MONTH_KEYS) {
     data[month].workDays = data[month].allDays - data[month].weekends - data[month].holidays - data[month].offDays;
     data[month].hours = data[month].workDays * 8 - data[month].shortDays;
-  });
+  }
 
   return data;
 }
