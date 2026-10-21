@@ -126,3 +126,33 @@ describe('the binaries sent to the worker', () => {
     ]);
   });
 });
+
+describe('readLabResult limits', () => {
+  const limits = { maxEntries: 3, maxEntryBytes: 1000, maxTotalBytes: 1500 };
+
+  it('rejects a result with too many entries', async () => {
+    const data = zipSync({
+      'a.md': strToU8('a'),
+      'b.md': strToU8('b'),
+      'c.md': strToU8('c'),
+      'd.md': strToU8('d'),
+    });
+
+    await expect(readLabResult(data, limits)).rejects.toThrow(/файлов/);
+  });
+
+  it('rejects a result whose total is too large', async () => {
+    const data = zipSync({
+      'a.md': new Uint8Array(900),
+      'b.md': new Uint8Array(900),
+    });
+
+    await expect(readLabResult(data, limits)).rejects.toThrow(/общий размер/);
+  });
+
+  it('rejects one entry that inflates past the limit', async () => {
+    const data = zipSync({ 'big.bin': new Uint8Array(5000) });
+
+    await expect(readLabResult(data, limits)).rejects.toThrow(/big\.bin/);
+  });
+});

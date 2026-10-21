@@ -204,3 +204,24 @@ describe('snapshotBaseline', () => {
     expect(passed.baseline).toEqual(computed.baseline);
   });
 });
+
+describe('readResultParcel limits', () => {
+  it('rejects an entry that inflates past the limit without returning data', async () => {
+    const data = zipSync({ 'bomb.txt': new Uint8Array(100000) });
+
+    expect(data.length).toBeLessThan(1000);
+    await expect(
+      readResultParcel(data, {
+        maxEntries: 10,
+        maxEntryBytes: 1000,
+        maxTotalBytes: 5000,
+      }),
+    ).rejects.toThrow(/bomb\.txt/);
+  });
+
+  it('still reads a normal result', async () => {
+    const data = zipSync({ 'a.md': strToU8('hi') });
+
+    expect([...(await readResultParcel(data)).keys()]).toEqual(['a.md']);
+  });
+});

@@ -25,7 +25,7 @@ export const MANIFEST_ENTRY = '__subscription_manifest__.json';
 export const ASSET_PREFIX = '__issue_assets__/';
 
 const MAX_FILE_BYTES = 256 * 1024;
-const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
+export const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 const EXCLUDED_DIRS = new Set([
   'node_modules',
   'dist',
@@ -68,6 +68,82 @@ export function sha256(bytes: Uint8Array): string {
 function unzipAsync(data: Uint8Array): Promise<Unzipped> {
   return new Promise((resolve, reject) => {
     unzip(data, (err, out) => (err ? reject(err) : resolve(out)));
+  });
+}
+
+export interface UnzipLimits {
+  maxEntries: number;
+  maxEntryBytes: number;
+  maxTotalBytes: number;
+}
+
+// For archives a worker (a model on untrusted content) produced: the sizes the zip headers declare are checked BEFORE anything is
+// inflated, and the real lengths after it, so neither a huge declared entry nor a lying header can exhaust bridge's memory.
+export function unzipBounded(
+  data: Uint8Array,
+  limits: UnzipLimits,
+): Promise<Unzipped> {
+  const mb = (n: number) => `${Math.round((n / 1024 / 1024) * 10) / 10} МБ`;
+  const tooBig = (what: string) =>
+    new Error(`Слишком большой результат worker: ${what}`);
+
+  return new Promise((resolve, reject) => {
+    let entries = 0;
+    let declared = 0;
+
+    try {
+      unzip(
+        data,
+        {
+          filter: (file) => {
+            entries += 1;
+            declared += file.originalSize;
+
+            if (entries > limits.maxEntries)
+              throw tooBig(`больше ${limits.maxEntries} файлов в архиве`);
+
+            if (file.originalSize > limits.maxEntryBytes)
+              throw tooBig(
+                `«${file.name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
+              );
+
+            if (declared > limits.maxTotalBytes)
+              throw tooBig(
+                `общий размер после распаковки больше ${mb(limits.maxTotalBytes)} (на «${file.name}»)`,
+              );
+
+            return true;
+          },
+        },
+        (err, out) => {
+          if (err) return reject(err);
+
+          let total = 0;
+
+          for (const [name, bytes] of Object.entries(out)) {
+            total += bytes.length;
+
+            if (bytes.length > limits.maxEntryBytes)
+              return reject(
+                tooBig(
+                  `«${name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
+                ),
+              );
+          }
+
+          if (total > limits.maxTotalBytes)
+            return reject(
+              tooBig(
+                `общий размер после распаковки больше ${mb(limits.maxTotalBytes)}`,
+              ),
+            );
+
+          resolve(out);
+        },
+      );
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
@@ -195,15 +271,25 @@ export async function buildIssueParcel(
   return { buffer: Buffer.from(await zipAsync(entries)), baseline };
 }
 
+// What was sent is at most MAX_TOTAL_BYTES of text; the result may add the changes (MAX_CHANGED_BYTES) on top.
+export const RESULT_UNZIP_LIMITS: UnzipLimits = {
+  maxEntries: 10000,
+  maxEntryBytes: MAX_CHANGED_BYTES,
+  maxTotalBytes: MAX_TOTAL_BYTES + MAX_CHANGED_BYTES,
+};
+
 // The worker's result: every text file left on disk (edited, new, untouched), the
 // binaries as __issue_assets__/ entries, and the manifest. Only the text files can
 // be a change we publish.
 export async function readResultParcel(
   data: Uint8Array,
+  limits: UnzipLimits = RESULT_UNZIP_LIMITS,
 ): Promise<Map<string, Uint8Array>> {
   const result = new Map<string, Uint8Array>();
 
-  for (const [name, bytes] of Object.entries(await unzipAsync(data))) {
+  for (const [name, bytes] of Object.entries(
+    await unzipBounded(data, limits),
+  )) {
     if (
       name.endsWith('/') ||
       name === MANIFEST_ENTRY ||
