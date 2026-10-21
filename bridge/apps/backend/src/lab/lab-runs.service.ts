@@ -67,6 +67,15 @@ const SNAPSHOT_CACHE_SIZE = 2;
 // A run still preparing after the longest possible download plus a margin was lost to a restart.
 const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
 
+export type LabStartInput = {
+  projectId: number;
+  task: string;
+  model: string;
+  contextId?: number | null;
+  // A branch other than the project's own, for this run only.
+  baseBranch?: string;
+};
+
 export function titleOf(task: string): string {
   const line = task.trim().split('\n')[0].trim();
 
@@ -117,20 +126,38 @@ export class LabRunsService {
     });
   }
 
-  // Snapshot of the base branch → parcel (the task is the manifest) → Storage → Worker job.
+  // Answers as soon as the run is recorded: the slow part goes on in the background, and its
+  // outcome lands on the run row itself (Queued, or Failed with the step message).
   async start(
     userId: number,
-    input: {
-      projectId: number;
-      task: string;
-      model: string;
-      contextId?: number | null;
-      // A branch other than the project's own, for this run only.
-      baseBranch?: string;
-    },
+    input: LabStartInput,
     trigger: LabTrigger = 'manual',
     scheduleId: number | null = null,
   ): Promise<LabRun> {
+    const { run, prepared } = await this.launch(
+      userId,
+      input,
+      trigger,
+      scheduleId,
+    );
+
+    prepared.catch((error) =>
+      this.logger.warn(
+        `Lab run ${run.id} could not be prepared: ${message(error)}`,
+      ),
+    );
+
+    return run;
+  }
+
+  // Validation errors and the Preparing row come before this resolves; `prepared` settles once the
+  // job is queued, or rejects after the run has been marked failed.
+  async launch(
+    userId: number,
+    input: LabStartInput,
+    trigger: LabTrigger = 'manual',
+    scheduleId: number | null = null,
+  ): Promise<{ run: LabRun; prepared: Promise<LabRun> }> {
     requireImproveModel(input.model);
 
     const project = await this.projects.findOwned(input.projectId, userId);
@@ -171,6 +198,18 @@ export class LabRunsService {
         baseBranch,
       }),
     );
+
+    return { run, prepared: this.prepare(run, project, input, baseBranch) };
+  }
+
+  // Snapshot of the base branch → parcel (the task is the manifest) → Storage → Worker job.
+  private async prepare(
+    run: LabRun,
+    project: LabProject,
+    input: LabStartInput,
+    baseBranch: string,
+  ): Promise<LabRun> {
+    const { userId, title } = run;
 
     try {
       const github = githubFor(project);

@@ -1,3 +1,5 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+
 import {
   ACTIVE_LAB_RUN_STATUSES,
   LabRunStatus,
@@ -114,8 +116,9 @@ describe('LabRunsService repo snapshot cache', () => {
       { findOwned: jest.fn() },
       {},
     );
-    const start = (task: string) =>
-      service.start(1, { projectId: 1, task, model: 'sonnet' });
+    const start = async (task: string) =>
+      (await service.launch(1, { projectId: 1, task, model: 'sonnet' }))
+        .prepared;
 
     return { service, project, start };
   };
@@ -238,9 +241,44 @@ describe('LabRunsService preparing run', () => {
       throw new Error('boom');
     });
 
-    await expect(service.start(1, input)).rejects.toThrow();
+    const { prepared } = await service.launch(1, input);
+
+    await expect(prepared).rejects.toThrow();
     expect(rows[0].status).toBe(LabRunStatus.Failed);
     expect(String(rows[0].error)).toContain('скачивание репозитория');
+  });
+
+  it('answers with the preparing run without waiting for the download', async () => {
+    const { service } = build(() => new Promise(() => undefined));
+
+    const run = await service.start(1, input);
+
+    expect(run.status).toBe(LabRunStatus.Preparing);
+  });
+
+  it('answers a failing download with the preparing run and only logs it', async () => {
+    const { service, rows } = build(async () => {
+      throw new Error('boom');
+    });
+
+    await expect(service.start(1, input)).resolves.toMatchObject({
+      task: 'do it',
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(rows[0].status).toBe(LabRunStatus.Failed);
+  });
+
+  it('rejects an unknown project or a read-only token right away', async () => {
+    const { service } = build(() => new Promise(() => undefined));
+    const projects = (
+      service as unknown as { projects: { findOwned: jest.Mock } }
+    ).projects;
+
+    projects.findOwned.mockRejectedValueOnce(new NotFoundException());
+    await expect(service.start(1, input)).rejects.toThrow(NotFoundException);
+
+    projects.findOwned.mockResolvedValueOnce({ ...project, canWrite: false });
+    await expect(service.start(1, input)).rejects.toThrow(BadRequestException);
   });
 
   it('fails only stale preparing rows in advance()', async () => {
@@ -371,8 +409,11 @@ describe('LabRunsService: the branch of a run', () => {
       baseBranch,
     }) as LabRun;
 
+  const prepare = async (input: Parameters<LabRunsService['launch']>[1]) =>
+    (await service.launch(1, input)).prepared;
+
   it('snapshots and stores an explicitly chosen branch', async () => {
-    const saved = await service.start(1, {
+    const saved = await prepare({
       projectId: project.id,
       task: 'Fix the test',
       model: 'sonnet',
@@ -391,7 +432,7 @@ describe('LabRunsService: the branch of a run', () => {
   });
 
   it("uses the project's branch when none is chosen", async () => {
-    const saved = await service.start(1, {
+    const saved = await prepare({
       projectId: project.id,
       task: 'Fix the test',
       model: 'sonnet',
@@ -405,7 +446,7 @@ describe('LabRunsService: the branch of a run', () => {
     github.getBranchSha.mockRejectedValue(new Error('Ветка «nope» не найдена'));
 
     await expect(
-      service.start(1, {
+      prepare({
         projectId: project.id,
         task: 'Fix the test',
         model: 'sonnet',

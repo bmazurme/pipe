@@ -134,11 +134,10 @@ export class LabSchedulesService {
   async fire(
     schedule: LabSchedule,
   ): Promise<{ runId: number | null; error: string | null }> {
-    let runId: number | null = null;
-    let error: string | null = null;
+    let launched: Awaited<ReturnType<LabRunsService['launch']>>;
 
     try {
-      const run = await this.runs.start(
+      launched = await this.runs.launch(
         schedule.userId,
         {
           projectId: schedule.projectId,
@@ -149,22 +148,42 @@ export class LabSchedulesService {
         'schedule',
         schedule.id,
       );
-
-      runId = run.id;
     } catch (cause) {
-      error = message(cause);
+      const error = message(cause);
+
+      void this.report(schedule, `не запущено: ${error}`);
+
+      return { runId: null, error };
     }
 
-    const summary = error ? `не запущено: ${error}` : `запуск #${runId}`;
+    // The caller gets the run as soon as it is recorded; the result and the Telegram summary wait for the preparation.
+    const runId = launched.run.id;
 
-    await this.schedules.update(schedule.id, {
-      lastRunAt: new Date(),
-      lastResult: summary,
-    });
-    await this.notifier.send(
-      `🧪 Lab, расписание «${schedule.name}»: ${summary}`,
+    void launched.prepared.then(
+      () => this.report(schedule, `запуск #${runId}`),
+      (cause) =>
+        this.report(
+          schedule,
+          `запуск #${runId} не подготовлен: ${message(cause)}`,
+        ),
     );
 
-    return { runId, error };
+    return { runId, error: null };
+  }
+
+  private async report(schedule: LabSchedule, summary: string): Promise<void> {
+    try {
+      await this.schedules.update(schedule.id, {
+        lastRunAt: new Date(),
+        lastResult: summary,
+      });
+      await this.notifier.send(
+        `🧪 Lab, расписание «${schedule.name}»: ${summary}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Lab schedule ${schedule.id} result could not be reported: ${message(error)}`,
+      );
+    }
   }
 }
