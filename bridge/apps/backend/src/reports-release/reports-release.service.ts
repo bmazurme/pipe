@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { strToU8, unzip, zip, type Unzipped, type Zippable } from 'fflate';
 
+import { SharedAsyncCache } from '../common/shared-async-cache';
 import { GithubApiService } from '../loop/github-api.service';
 
 const BASE_BRANCH = 'main';
@@ -68,9 +69,9 @@ function zipAsync(entries: Zippable): Promise<Uint8Array> {
 @Injectable()
 export class ReportsReleaseService {
   // Single-entry cache: the output depends only on the base SHA.
-  private cached: BuiltRelease | null = null;
-  private inFlight: { sha: string; promise: Promise<BuiltRelease> } | null =
-    null;
+  private readonly releases = new SharedAsyncCache<BuiltRelease>({
+    maxEntries: 1,
+  });
 
   constructor(private readonly githubApi: GithubApiService) {}
 
@@ -102,26 +103,7 @@ export class ReportsReleaseService {
 
     const sha = await this.githubApi.getBranchSha(BASE_BRANCH);
 
-    if (this.cached?.sha === sha) return this.cached;
-
-    if (this.inFlight?.sha === sha) return this.inFlight.promise;
-
-    const promise = this.buildReportsZip(sha).then((built) => {
-      this.cached = built;
-
-      return built;
-    });
-    const entry = { sha, promise };
-
-    this.inFlight = entry;
-
-    const clear = (): void => {
-      if (this.inFlight === entry) this.inFlight = null;
-    };
-
-    promise.then(clear, clear);
-
-    return promise;
+    return this.releases.get(sha, () => this.buildReportsZip(sha));
   }
 
   private async buildReportsZip(sha: string): Promise<BuiltRelease> {

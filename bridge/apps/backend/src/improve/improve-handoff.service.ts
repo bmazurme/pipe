@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
+import { SharedAsyncCache } from '../common/shared-async-cache';
 import { GithubApiService } from '../loop/github-api.service';
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
@@ -25,22 +26,12 @@ export type PreparedSnapshot = {
 // across consecutive launches) → parcel with the task as its manifest → Storage → job.
 @Injectable()
 export class ImproveHandoffService {
-  // One repo snapshot, reused by consecutive launches on the same base SHA.
-  // The baseline hashes are cached with it: hashing the whole repo is synchronous.
-  private zipCache: {
-    sha: string;
+  // One repo snapshot, reused by consecutive launches on the same base SHA and shared by
+  // concurrent ones. The baseline hashes are cached with it: hashing the whole repo is synchronous.
+  private readonly snapshots = new SharedAsyncCache<{
     files: SnapshotFile[];
     baseline: Record<string, string>;
-    at: number;
-  } | null = null;
-  // The snapshot being built right now, so concurrent starts on one SHA share a single download.
-  private zipPending: {
-    sha: string;
-    promise: Promise<{
-      files: SnapshotFile[];
-      baseline: Record<string, string>;
-    }>;
-  } | null = null;
+  }>({ ttlMs: ZIP_CACHE_TTL_MS, maxEntries: 1 });
 
   constructor(
     private readonly github: GithubApiService,
@@ -48,34 +39,14 @@ export class ImproveHandoffService {
     private readonly workers: WorkerService,
   ) {}
 
-  async snapshotAt(sha: string) {
-    const cached = this.zipCache;
-    if (
-      cached &&
-      cached.sha === sha &&
-      Date.now() - cached.at < ZIP_CACHE_TTL_MS
-    ) {
-      return { files: cached.files, baseline: cached.baseline };
-    }
-    if (this.zipPending?.sha === sha) return this.zipPending.promise;
-
-    const promise = (async () => {
+  snapshotAt(sha: string) {
+    return this.snapshots.get(sha, async () => {
       const files = selectParcelFiles(
         await readZipball(await this.github.downloadZipball(sha)),
       );
-      const baseline = snapshotBaseline(files);
-      this.zipCache = { sha, files, baseline, at: Date.now() };
 
-      return { files, baseline };
-    })();
-    const pending = { sha, promise };
-    this.zipPending = pending;
-
-    try {
-      return await promise;
-    } finally {
-      if (this.zipPending === pending) this.zipPending = null;
-    }
+      return { files, baseline: snapshotBaseline(files) };
+    });
   }
 
   // Base-branch SHA + parcel files; independent of the task, so it can start early.
