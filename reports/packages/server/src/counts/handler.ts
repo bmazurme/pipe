@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { DayOffsImportType, DayOffsSendResultType } from '@reports/shared';
+import type { DateType, DayOffsImportType, DayOffsSendResultType } from '@reports/shared';
 
 import { countWorkAndShortDays } from '../utils/count-work-and-short-days';
 import { describeFetchError } from '../utils/describe-fetch-error';
@@ -12,13 +12,18 @@ const BRIDGE_TIMEOUT_MS = 20_000;
 
 export { isDateStringArray };
 
+type DayListsType = Pick<DateType, 'holidays' | 'shortDays' | 'badDays' | 'offDays'>;
+
+function yearCounts(id: string, { holidays, shortDays, badDays, offDays }: DayListsType): DateType {
+  const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
+
+  return { calendar, holidays, shortDays, badDays, offDays };
+}
+
 export async function handleCounts(req: Request<Record<string, string>>, res: Response) {
   const { id } = req.params;
   await withStream(res, 'Counts', async () => {
-    const { holidays, shortDays, badDays, offDays } = getProps(id);
-    const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
-
-    return { calendar, holidays, shortDays, badDays, offDays };
+    return yearCounts(id, getProps(id));
   });
 }
 
@@ -30,20 +35,14 @@ export async function handleAddOffDay(req: Request<Record<string, string>>, res:
       throw new Error('Поле dates должно быть массивом строк формата YYYY-MM-DD');
     }
 
-    const { holidays, shortDays, badDays, offDays } = addOffDays(id, dates);
-    const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
-
-    return { calendar, holidays, shortDays, badDays, offDays };
+    return yearCounts(id, addOffDays(id, dates));
   });
 }
 
 export async function handleRemoveOffDay(req: Request<Record<string, string>>, res: Response) {
   const { id, date } = req.params;
   await withStream(res, 'Remove off day', async () => {
-    const { holidays, shortDays, badDays, offDays } = removeOffDay(id, date);
-    const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
-
-    return { calendar, holidays, shortDays, badDays, offDays };
+    return yearCounts(id, removeOffDay(id, date));
   });
 }
 
@@ -71,10 +70,7 @@ export async function handleImportDayOffs(req: Request<Record<string, string>>, 
     }
 
     const imported = await bridgeResponse.json() as DayOffsImportType;
-    const { holidays, shortDays, badDays, offDays } = importDayOffs(id, imported);
-    const calendar = countWorkAndShortDays(Number(id), holidays, shortDays, badDays, offDays);
-
-    return { calendar, holidays, shortDays, badDays, offDays };
+    return yearCounts(id, importDayOffs(id, imported));
   });
 }
 

@@ -61,3 +61,21 @@ describe('countWorkAndShortDays', () => {
     expect(data[1].workDays).toBe(31 - 8 - 1);
   });
 });
+
+describe('countWorkAndShortDays result shape', () => {
+  it('has all 12 month keys, each with every MonthType field', () => {
+    const data = countWorkAndShortDays(2025);
+    const monthKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+    const fields = ['allDays', 'holidays', 'weekends', 'offDays', 'shortDays', 'workDays', 'hours'];
+
+    expect(Object.keys(data).sort((a, b) => Number(a) - Number(b))).toEqual(monthKeys);
+    for (const key of monthKeys) {
+      const month = data[key as keyof typeof data];
+
+      expect(Object.keys(month).sort()).toEqual([...fields].sort());
+      for (const field of fields) {
+        expect(typeof month[field as keyof typeof month]).toBe('number');
+      }
+    }
+  });
+});
