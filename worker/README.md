@@ -204,6 +204,35 @@ sudo systemctl enable --now pipe-worker
 journalctl -u pipe-worker -f
 ```
 
+## macOS + Fusion 360 (задачи Lab для CAD)
+
+Worker может работать на Mac рядом с **Fusion 360**. Такой worker берёт задачи Lab с выбором **«Fusion 360 на Mac»**: Claude строит и
+проверяет модель в живом Fusion (скрипты Fusion API, снимки, выгрузка STEP/STL/F3D) и возвращает `cad/vN/*.py` и экспорты в pull request.
+Обычные задачи он тоже может брать; задачи без выбора Fusion другим worker'ам не мешают.
+
+**Безопасность.** Worker запускает Claude с `--dangerously-skip-permissions`, то есть произвольные команды от имени пользователя macOS.
+Заведите **отдельную учётную запись без прав администратора** для worker'а и Fusion 360 (быстрое переключение пользователей подходит,
+сессия должна быть залогинена) — подробности в [fusion-addin/README.md](fusion-addin/README.md).
+
+1. В отдельной учётной записи: Node.js ≥22, `npm install -g @anthropic-ai/claude-code`, репозиторий и сборка:
+   ```bash
+   git clone <этот репозиторий> ~/pipe && cd ~/pipe && npm install
+   npm run build --workspace=packages/protocol && npm run build --workspace=worker
+   ```
+2. Add-in в Fusion: `worker/fusion-addin/install.sh`, затем в Fusion «Scripts and Add-Ins» → PipeFusion → Run on Startup + Run.
+   Проверка: `node worker/dist/fusion/fusionctl.js health`.
+3. В bridge: **Worker → Worker'ы → Добавить** (имя, например `mac-fusion`). Подключите код как выше, без Docker:
+   ```bash
+   cd ~/pipe/worker && BRIDGE_API_URL=https://api.bridge.example.com node dist/enrollCli.js brn_…
+   ```
+   (на macOS нет xray из образа: если доступ к Claude нужен через прокси, укажите **прокси** в настройках worker'а или включите VPN на самом Mac.)
+4. Автозапуск: `worker/macos/com.pipe.worker.plist.example` → `~/Library/LaunchAgents/com.pipe.worker.plist`, поправьте пути, затем
+   `launchctl load ~/Library/LaunchAgents/com.pipe.worker.plist`. Это именно launch agent (в сессии пользователя), не демон: Fusion работает в ней.
+5. В настройках этого worker'а на странице включите **«Fusion 360 на этом компьютере»**.
+
+Перед запуском каждой такой задачи worker проверяет, что add-in отвечает; если нет — задача завершается понятной ошибкой («Fusion не запущен /
+add-in не установлен»), а не молча. Модели GPT/DeepSeek/Qwen для таких задач не подходят (нужна оболочка): выберите Sonnet, Opus или Haiku.
+
 ## Безопасность и изоляция
 
 `claude` CLI запускается с `--dangerously-skip-permissions` (нужно для

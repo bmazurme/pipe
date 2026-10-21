@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "addin",
+  "id": "6f1c1c5e-5a8e-4a52-9d7e-3b1d9c0a7e21",
+  "author": "pipe",
+  "description": {
+    "": "Lets a pipe worker on this Mac run scripts, take screenshots and export files in Fusion 360 (localhost only)."
+  },
+  "version": "1.0.0",
+  "runOnStartup": true,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

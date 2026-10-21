@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { encryptBuffer, type PackedAsset, type PackedFile } from '@pipe/protocol';
 
@@ -7,6 +8,7 @@ import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
+import { prepareFusionJob } from './fusion/job.js';
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
@@ -171,7 +173,7 @@ export async function processJob(
       writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
     }
 
-    const prompt = withContext(describeTask(parcel), job.context, job.history);
+    let prompt = withContext(describeTask(parcel), job.context, job.history);
     // The key stored in bridge for this account wins; the environment is the fallback for a worker not moved yet.
     const provider = resolveProvider(job.model, process.env, job.provider);
 
@@ -180,6 +182,15 @@ export async function processJob(
 
     // Fail the job up front rather than let it run with no shell and open an unchecked pull request.
     if (provider.tool === 'claude') requireShell();
+
+    // A job that needs Fusion 360: check it answers before the model starts, and tell the model how to drive it.
+    if (job.requiredCapability === 'fusion') {
+      prompt = await prepareFusionJob(prompt, {
+        ctlPath: fileURLToPath(new URL('./fusion/fusionctl.js', import.meta.url)),
+        providerTool: provider.tool === 'claude' ? 'claude' : 'openai',
+        log,
+      });
+    }
 
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 

@@ -138,6 +138,10 @@ jobs:
       - name: Unit tests + coverage regression check
         run: node ../scripts/check-coverage.mjs .
         working-directory: worker
+      # The Fusion 360 add-in's own logic (script runner, HTTP server, config) — Python standard library only, no Fusion needed.
+      - name: Fusion add-in tests (Python)
+        run: python3 -m unittest discover -s fusion-addin/tests
+        working-directory: worker
 
   reports:
     name: reports (build, tests)

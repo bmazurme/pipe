@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  pipe worker on macOS (next to Fusion 360), as a launch agent of the user who is logged in and runs Fusion:
+    cp worker/macos/com.pipe.worker.plist.example ~/Library/LaunchAgents/com.pipe.worker.plist
+    (edit the paths and BRIDGE_API_URL below)
+    launchctl load ~/Library/LaunchAgents/com.pipe.worker.plist
+  A LAUNCH AGENT, not a daemon: it must run in the GUI session, where Fusion is. Logs: ~/Library/Logs/pipe-worker.log
+  Stop: launchctl unload ~/Library/LaunchAgents/com.pipe.worker.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.pipe.worker</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- the full path of node (`command -v node`) and of the built worker -->
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/pipeworker/pipe/worker/dist/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/pipeworker/pipe/worker</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>BRIDGE_API_URL</key>
+    <string>https://api.bridge.example.com</string>
+    <key>WORKER_NAME</key>
+    <string>mac-fusion</string>
+    <key>WORKER_STATE_DIR</key>
+    <string>/Users/pipeworker/Library/Application Support/pipe-worker/state</string>
+    <key>WORKER_WORK_DIR</key>
+    <string>/Users/pipeworker/Library/Application Support/pipe-worker/work</string>
+    <!-- node and the `claude` CLI must be on PATH (a launch agent does not read your shell profile) -->
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/pipeworker/Library/Logs/pipe-worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/pipeworker/Library/Logs/pipe-worker.log</string>
+</dict>
+</plist>
