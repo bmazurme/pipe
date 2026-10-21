@@ -9,8 +9,11 @@ import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
-import { requireImproveModel } from '../improve/improve.service';
-import { mapInBatches, message } from '../improve/improve-shared';
+import {
+  mapInBatches,
+  message,
+  requireImproveModel,
+} from '../improve/improve-shared';
 import {
   buildIssueParcel,
   Change,
