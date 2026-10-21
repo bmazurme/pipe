@@ -15,6 +15,8 @@ export class ChatMessageResponseDto {
   errorMessage: string | null;
   // The partial reply of a running turn, or null.
   progress: string | null;
+  // The model's reasoning behind this reply (Claude only), or null.
+  reasoning: string | null;
   attachments: ChatAttachmentResponseDto[];
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +36,7 @@ export class ChatMessageResponseDto {
         message.status === ChatMessageStatus.Running
           ? (message.progress ?? null)
           : null,
+      reasoning: message.reasoning,
       attachments: attachments.map(ChatAttachmentResponseDto.fromEntity),
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,

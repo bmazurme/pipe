@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clipReply, MAX_REPLY_LENGTH, TRUNCATED_REPLY_NOTE } from './chatReply.js';
+import { clipReasoning, clipReply, MAX_REASONING_LENGTH, MAX_REPLY_LENGTH, TRUNCATED_REPLY_NOTE } from './chatReply.js';
 
 describe('clipReply', () => {
   it('leaves a reply that fits untouched', () => {
@@ -19,5 +19,18 @@ describe('clipReply', () => {
     const max = TRUNCATED_REPLY_NOTE.length + 4;
     const clipped = clipReply(`abc${'😀'.repeat(max)}`, max);
     assert.equal(clipped, `abc${TRUNCATED_REPLY_NOTE}`);
+  });
+});
+
+describe('clipReasoning', () => {
+  it('leaves reasoning that fits untouched', () => {
+    const reasoning = 'x'.repeat(MAX_REASONING_LENGTH);
+    assert.equal(clipReasoning(reasoning), reasoning);
+  });
+
+  it('cuts longer reasoning silently, with no note', () => {
+    const clipped = clipReasoning('x'.repeat(MAX_REASONING_LENGTH + 10));
+    assert.equal(clipped.length, MAX_REASONING_LENGTH);
+    assert.equal(clipped, 'x'.repeat(MAX_REASONING_LENGTH));
   });
 });

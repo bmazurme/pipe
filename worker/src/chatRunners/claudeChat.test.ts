@@ -72,8 +72,33 @@ describe('claudeChat', () => {
 
     const reply = await claudeChat([{ role: 'user', content: 'hi' }], 'sonnet', work, undefined, undefined, (report) => reports.push(report), 'tok-123');
 
-    assert.equal(reply, 'token=tok-123');
+    assert.equal(reply.text, 'token=tok-123');
+    assert.equal(reply.reasoning, null);
     assert.equal(reports.length, 1);
+  });
+
+  it('returns the reasoning the model showed alongside the answer', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-think-'));
+    const script = path.join(dir, 'claude');
+
+    writeFileSync(
+      script,
+      [
+        '#!/usr/bin/env node',
+        "console.log(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Let me check the math.' } } }));",
+        "console.log(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'It is 391.' } } }));",
+        "console.log(JSON.stringify({ type: 'result', result: 'It is 391.' }));",
+        '',
+      ].join('\n'),
+    );
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+
+    const reply = await claudeChat([{ role: 'user', content: 'what is 17*23' }], 'sonnet', work, undefined, undefined, undefined, undefined, () => {});
+
+    assert.equal(reply.text, 'It is 391.');
+    assert.equal(reply.reasoning, 'Let me check the math.');
   });
 });
 

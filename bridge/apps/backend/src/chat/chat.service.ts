@@ -325,11 +325,13 @@ export class ChatService {
     messageId: number,
     userId: number,
     content: string,
+    reasoning?: string | null,
   ): Promise<ChatMessage> {
     const message = await this.findRunningAssistantMessage(messageId, userId);
 
     message.content = content;
     message.progress = null;
+    message.reasoning = reasoning || null;
     message.status = ChatMessageStatus.Complete;
 
     return this.messageRepository.save(message);

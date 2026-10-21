@@ -88,4 +88,23 @@ describe('createProgressReporter', () => {
     assert.equal(sent.at(-1), '> 💭 Let me check\n\nIt is 391.');
     reporter.stop();
   });
+
+  it('keeps the full reasoning available after stopping, untruncated', async () => {
+    const reporter = createProgressReporter(() => undefined, 20);
+
+    reporter.push({ kind: 'thinking', text: 'x'.repeat(5000) });
+    reporter.push({ kind: 'text', text: 'Answer' });
+    reporter.stop();
+
+    assert.equal(reporter.reasoning().length, 5000);
+  });
+
+  it('reasoning is empty when the model showed none', () => {
+    const reporter = createProgressReporter(() => undefined, 20);
+
+    reporter.push({ kind: 'text', text: 'Answer' });
+    reporter.stop();
+
+    assert.equal(reporter.reasoning(), '');
+  });
 });

@@ -16,6 +16,8 @@ export interface ProgressReporter {
   push: (delta: StreamDelta) => void;
   /** No more reports (the turn ended): a pending one is dropped, since the final reply follows. */
   stop: () => void;
+  /** The full reasoning seen so far, untruncated (unlike the live progress text, which keeps only its tail). */
+  reasoning: () => string;
 }
 
 // Collects the deltas and sends the whole text so far at most once per `intervalMs`, always the latest — a lost or skipped
@@ -59,6 +61,9 @@ export function createProgressReporter(
       stopped = true;
       clearTimeout(timer);
       timer = undefined;
+    },
+    reasoning() {
+      return thinking.trim();
     },
   };
 }

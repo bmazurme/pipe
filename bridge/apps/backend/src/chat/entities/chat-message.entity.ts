@@ -51,4 +51,9 @@ export class ChatMessage extends BaseEntity {
   // can show the reply growing instead of a bare loader. Cleared the moment the turn completes or fails.
   @Column({ type: 'text', nullable: true })
   progress: string | null;
+
+  // The model's reasoning behind this reply (Claude sonnet/opus/haiku only — gpt/deepseek/qwen chats never report one),
+  // kept once the turn completes so it can be shown collapsed behind a toggle. Unlike `progress`, never cleared.
+  @Column({ type: 'text', nullable: true })
+  reasoning: string | null;
 }

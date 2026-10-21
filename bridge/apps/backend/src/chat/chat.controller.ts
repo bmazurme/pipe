@@ -339,6 +339,7 @@ export class ChatController {
       messageId,
       currentUser.id,
       dto.content,
+      dto.reasoning,
     );
     return ChatMessageResponseDto.fromEntity(message);
   }
