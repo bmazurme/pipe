@@ -12,7 +12,7 @@ import { getSettings } from '../settings/props';
 import { updateChecker } from './check';
 import { REPORTS_ROOT } from './release';
 
-const DOWNLOAD_TIMEOUT_MS = 180_000;
+export const DOWNLOAD_TIMEOUT_MS = 180_000;
 const STATE_DIR = '.update';
 const MAX_ENTRIES = 20_000;
 const MAX_UNPACKED_BYTES = 300 * 1024 * 1024;
