@@ -37,12 +37,14 @@ import {
   githubFor,
   readStep,
 } from './lab-github';
+import { LabProject } from './entities/lab-project.entity';
 import { LabProjectsService } from './lab-projects.service';
 import {
   LAB_MAX_CHANGED_BYTES,
   LAB_MAX_CHANGED_FILES,
   parcelEntries,
   readLabResult,
+  LabSnapshot,
   selectLabSnapshot,
   splitBaseline,
   taskWithSkipped,
@@ -55,6 +57,9 @@ const BLOB_CONCURRENCY = 6;
 const BLOCKED = [/^\.github\/workflows\//, /^\.git\//];
 // A run claimed for publishing and untouched this long was lost to a restart.
 const PUBLISHING_STALE_MS = 10 * 60_000;
+// Same lifetime and bound as Improve's handoff cache.
+const SNAPSHOT_CACHE_TTL_MS = 10 * 60 * 1000;
+const SNAPSHOT_CACHE_SIZE = 2;
 
 export function titleOf(task: string): string {
   const line = task.trim().split('\n')[0].trim();
@@ -80,6 +85,13 @@ export function isBlocked(path: string): boolean {
 export class LabRunsService {
   private readonly logger = new Logger(LabRunsService.name);
   private advancing = false;
+  // Recent repo snapshots (oldest first) and the ones being built right now, so consecutive or
+  // concurrent starts on one project + base SHA download the repository once.
+  private readonly snapshotCache = new Map<
+    string,
+    { snapshot: LabSnapshot; at: number }
+  >();
+  private readonly snapshotPending = new Map<string, Promise<LabSnapshot>>();
 
   constructor(
     @InjectRepository(LabRun)
@@ -138,13 +150,7 @@ export class LabRunsService {
     const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
       github.getBranchSha(project.baseBranch),
     );
-    const snapshot = selectLabSnapshot(
-      await readZipball(
-        await readStep('скачивание репозитория', () =>
-          downloadRepoZip(project.repo, project.token, baseSha),
-        ),
-      ),
-    );
+    const snapshot = await this.snapshotFor(project, baseSha);
     const baseline = snapshot.baseline;
     const { buffer } = await buildIssueParcel(
       parcelEntries(snapshot),
@@ -190,6 +196,47 @@ export class LabRunsService {
         baseline: JSON.stringify(baseline),
       }),
     );
+  }
+
+  // The key carries updatedAt, so a changed token or branch never reuses an older download.
+  private async snapshotFor(
+    project: LabProject,
+    baseSha: string,
+  ): Promise<LabSnapshot> {
+    const key = `${project.id}:${project.updatedAt?.getTime()}:${baseSha}`;
+    const cached = this.snapshotCache.get(key);
+
+    if (cached && Date.now() - cached.at < SNAPSHOT_CACHE_TTL_MS)
+      return cached.snapshot;
+
+    const pending = this.snapshotPending.get(key);
+
+    if (pending) return pending;
+
+    const promise = (async () => {
+      const snapshot = selectLabSnapshot(
+        await readZipball(
+          await readStep('скачивание репозитория', () =>
+            downloadRepoZip(project.repo, project.token, baseSha),
+          ),
+        ),
+      );
+
+      this.snapshotCache.delete(key);
+      this.snapshotCache.set(key, { snapshot, at: Date.now() });
+      while (this.snapshotCache.size > SNAPSHOT_CACHE_SIZE)
+        this.snapshotCache.delete(this.snapshotCache.keys().next().value!);
+
+      return snapshot;
+    })();
+
+    this.snapshotPending.set(key, promise);
+
+    try {
+      return await promise;
+    } finally {
+      this.snapshotPending.delete(key);
+    }
   }
 
   async cancel(id: number, userId: number): Promise<LabRun> {
