@@ -30,6 +30,8 @@ export interface LabSchedule {
   hour: number;
   minute: number;
   timezone: string;
+  /** ISO weekdays (1 = Mon … 7 = Sun) the schedule fires on; null = every day. */
+  weekdays: number[] | null;
   model: string;
   /** What the worker is asked to do on every run, as free text. */
   task: string;

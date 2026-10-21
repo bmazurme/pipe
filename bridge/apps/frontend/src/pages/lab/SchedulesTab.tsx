@@ -20,6 +20,7 @@ import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
 import { formatTime, modelLabel, parseTime } from '../improve/improveLabels';
 import { sortSchedulesByRunTime } from '../improve/scheduleOrder';
+import { ALL_WEEKDAYS, formatWeekdays, WEEKDAYS } from './weekdays';
 
 interface Form {
   projectId: string;
@@ -27,12 +28,13 @@ interface Form {
   enabled: boolean;
   time: string;
   timezone: string;
+  weekdays: number[];
   model: string;
   task: string;
   contextId: string;
 }
 
-const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', model: 'sonnet', task: '', contextId: '' };
+const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, model: 'sonnet', task: '', contextId: '' };
 
 export function SchedulesTab() {
   const { data: schedules, isLoading, isError } = useListLabSchedulesQuery();
@@ -61,6 +63,7 @@ export function SchedulesTab() {
               enabled: schedule.enabled,
               time: formatTime(schedule.hour, schedule.minute),
               timezone: schedule.timezone,
+              weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
               model: schedule.model,
               task: schedule.task,
               contextId: schedule.contextId === null ? '' : String(schedule.contextId),
@@ -80,6 +83,7 @@ export function SchedulesTab() {
     if (!form.name.trim()) return setError('Укажите название');
     if (!time) return setError('Укажите время в формате ЧЧ:ММ');
     if (form.task.trim().length < 3) return setError('Опишите задачу текстом');
+    if (form.weekdays.length === 0) return setError('Выберите хотя бы один день недели');
 
     try {
       await save({
@@ -91,6 +95,7 @@ export function SchedulesTab() {
           hour: time.hour,
           minute: time.minute,
           timezone: form.timezone,
+          weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b),
           model: form.model,
           task: form.task.trim(),
           contextId: form.contextId ? Number(form.contextId) : null,
@@ -136,6 +141,9 @@ export function SchedulesTab() {
 
   const update = (patch: Partial<Form>) => editing && setEditing({ ...editing, form: { ...editing.form, ...patch } });
 
+  const toggleWeekday = (day: number) =>
+    editing && update({ weekdays: editing.form.weekdays.includes(day) ? editing.form.weekdays.filter((d) => d !== day) : [...editing.form.weekdays, day] });
+
   return (
     <div className={styles.panel}>
       <div className={styles.toolbar}>
@@ -164,7 +172,7 @@ export function SchedulesTab() {
           <div className={styles.rowMain}>
             <Text variant="body-2">{schedule.name}</Text>
             <Text variant="caption-2" color="secondary">
-              {projectName(schedule.projectId)} · каждый день в {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}) · {modelLabel(schedule.model)}
+              {projectName(schedule.projectId)} · {formatWeekdays(schedule.weekdays)} в {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}) · {modelLabel(schedule.model)}
             </Text>
             <Text variant="caption-2" color="secondary" ellipsis title={schedule.task}>
               {schedule.task}
@@ -228,6 +236,14 @@ export function SchedulesTab() {
                 onUpdate={(task) => update({ task })}
               />
               <TextInput label="Время" value={editing.form.time} onUpdate={(time) => update({ time })} controlProps={{ type: 'time', 'aria-label': 'Время запуска' }} />
+              <Text variant="body-2">Дни недели</Text>
+              <div role="group" aria-label="Дни недели" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {WEEKDAYS.map(({ day, short }) => (
+                  <Button key={day} size="s" view={editing.form.weekdays.includes(day) ? 'action' : 'outlined'} selected={editing.form.weekdays.includes(day)} onClick={() => toggleWeekday(day)}>
+                    {short}
+                  </Button>
+                ))}
+              </div>
               <Select
                 label="Часовой пояс"
                 value={[editing.form.timezone]}

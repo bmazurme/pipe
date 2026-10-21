@@ -184,3 +184,87 @@ describe('LabPage: the branch of a run', () => {
     expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({ projectId: 1, task: 'Починить тест', baseBranch: 'release/1.4' });
   });
 });
+
+describe('LabPage: schedule weekdays', () => {
+  const openNewSchedule = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderPage('/lab?tab=schedules');
+    await waitFor(() => expect(screen.getByRole('button', { name: /Новое расписание/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Новое расписание/ }));
+    await screen.findByRole('dialog');
+  };
+
+  it('starts with every day on and sends null for them', async () => {
+    const user = userEvent.setup();
+    await openNewSchedule(user);
+
+    for (const day of ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']) expect(screen.getByRole('button', { name: day })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(await screen.findByLabelText('Задача'), 'Обновить зависимости');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ weekdays: null });
+  });
+
+  it('sends only the days left on after toggling the weekend off', async () => {
+    const user = userEvent.setup();
+    await openNewSchedule(user);
+
+    await user.click(screen.getByRole('button', { name: 'Сб' }));
+    await user.click(screen.getByRole('button', { name: 'Вс' }));
+    expect(screen.getByRole('button', { name: 'Сб' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.type(await screen.findByLabelText('Задача'), 'Обновить зависимости');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ weekdays: [1, 2, 3, 4, 5] });
+  });
+
+  it('refuses a schedule with no day left', async () => {
+    const user = userEvent.setup();
+    await openNewSchedule(user);
+
+    for (const day of ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']) await user.click(screen.getByRole('button', { name: day }));
+    await user.type(await screen.findByLabelText('Задача'), 'Обновить зависимости');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(await screen.findByText('Выберите хотя бы один день недели')).toBeInTheDocument();
+    expect(sent).toHaveLength(0);
+  });
+
+  it('shows the saved days in the row and reloads them into the dialog', async () => {
+    const user = userEvent.setup();
+    schedules = [
+      {
+        id: 5,
+        projectId: 1,
+        name: 'Будни',
+        enabled: true,
+        hour: 2,
+        minute: 0,
+        timezone: 'Europe/Moscow',
+        weekdays: [1, 2, 3, 4, 5],
+        model: 'sonnet',
+        task: 'Обновить зависимости',
+        contextId: null,
+        lastRunAt: null,
+        lastResult: null,
+      },
+    ];
+    renderPage('/lab?tab=schedules');
+
+    expect(await screen.findByText(/Пн–Пт в 02:00/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Изменить: Будни' }));
+    await screen.findByRole('dialog');
+    expect(screen.getByRole('button', { name: 'Пн' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Сб' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Пн' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules/5')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/schedules/5')).toMatchObject({ method: 'PUT', body: { weekdays: [2, 3, 4, 5] } });
+  });
+});

@@ -28,6 +28,10 @@ export class LabSchedule extends BaseEntity {
   @Column({ type: 'varchar', length: 64 })
   timezone: string;
 
+  // ISO weekdays (1 = Mon … 7 = Sun, in `timezone`) the schedule fires on; null = every day.
+  @Column({ type: 'smallint', array: true, nullable: true })
+  weekdays: number[] | null;
+
   @Column({ type: 'varchar', length: 16 })
   model: string;
 
