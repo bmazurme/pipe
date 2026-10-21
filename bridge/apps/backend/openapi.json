@@ -2490,6 +2490,118 @@
         }
       }
     },
+    "/api/v1/boards/agent/report": {
+      "post": {
+        "operationId": "BoardsAgentController_report",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/pending": {
+      "get": {
+        "operationId": "BoardsAgentController_pending",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/updates/{id}/result": {
+      "post": {
+        "operationId": "BoardsAgentController_result",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards": {
+      "get": {
+        "operationId": "BoardsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/boards/{host}/updates": {
+      "post": {
+        "operationId": "BoardsController_update",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/lab/projects": {
       "get": {
         "operationId": "LabController_listProjects",
@@ -6152,6 +6264,87 @@
           "name",
           "type",
           "taskKey"
+        ]
+      },
+      "ReportedScriptDto": {
+        "type": "object",
+        "properties": {
+          "installed": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "INSTALLED_PATH_PATTERN"
+          },
+          "repoPath": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "REPO_PATH_PATTERN"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "outdated",
+              "missing"
+            ]
+          },
+          "installedHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "mainHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "installed",
+          "repoPath",
+          "status"
+        ]
+      },
+      "BoardReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "mainSha": {
+            "type": "string",
+            "pattern": "SHA_PATTERN"
+          },
+          "agentVersion": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "scripts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportedScriptDto"
+            }
+          }
+        },
+        "required": [
+          "host",
+          "mainSha",
+          "scripts"
+        ]
+      },
+      "UpdateResultDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "ok"
         ]
       },
       "CreateLabProjectDto": {

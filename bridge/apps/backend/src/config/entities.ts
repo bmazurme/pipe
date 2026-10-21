@@ -2,6 +2,8 @@ import { ApiKey } from '../auth/entities/api-key.entity';
 import { AuthIdentity } from '../auth/entities/auth-identity.entity';
 import { EmergencyKey } from '../auth/entities/emergency-key.entity';
 import { Session } from '../auth/entities/session.entity';
+import { BoardReport } from '../boards/entities/board-report.entity';
+import { ScriptUpdate } from '../boards/entities/script-update.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
@@ -39,6 +41,8 @@ import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
 // here still boots, then fails its first query with EntityMetadataNotFoundError.
 // entities.spec.ts checks every forFeature entity is listed.
 export const ENTITIES = [
+  BoardReport,
+  ScriptUpdate,
   User,
   StoredFile,
   PurgeEntry,

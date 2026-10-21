@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module';
+import { BoardsModule } from '../boards/boards.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { ClientHeartbeatService } from './client-heartbeat.service';
 import { ClientsController } from './clients.controller';
@@ -21,6 +22,7 @@ import { TelegramWebhookController } from './telegram-webhook.controller';
     AuthModule,
     TypeOrmModule.forFeature([LoopRun, LoopEvent, ClientHeartbeat]),
     TelegramModule,
+    BoardsModule,
   ],
   controllers: [
     GithubWebhookController,

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
+import { BoardsService } from '../boards/boards.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { LoopService } from './loop.service';
 import { MergeService } from './merge.service';
@@ -27,6 +28,7 @@ export class TelegramCommandsService {
     private readonly loopService: LoopService,
     private readonly telegram: TelegramService,
     private readonly merges: MergeService,
+    private readonly boards: BoardsService,
   ) {}
 
   async handle(update: TelegramUpdate): Promise<void> {
@@ -70,6 +72,20 @@ export class TelegramCommandsService {
       chatId === undefined ||
       String(chatId) !== this.telegram.chatId()
     ) {
+      return;
+    }
+
+    // `su:<board>:<sha7>` — the owner allows a board to bring its scripts up to `main` at that commit.
+    const update = /^su:([A-Za-z0-9][A-Za-z0-9._-]{0,98}):([0-9a-f]{7})$/.exec(
+      query.data ?? '',
+    );
+
+    if (update) {
+      await this.telegram.answerCallback(query.id, 'Разрешаю обновление…');
+      await this.telegram.send(
+        await this.boards.approveFromTelegram(update[1], update[2]),
+      );
+
       return;
     }
 

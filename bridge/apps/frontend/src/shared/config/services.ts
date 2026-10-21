@@ -12,6 +12,7 @@ import {
   MagicWand,
   Pulse,
   Rocket,
+  Server,
   ShieldKeyhole,
   TrashBin,
 } from '@gravity-ui/icons';
@@ -51,6 +52,15 @@ export const SERVICES: ServiceLink[] = [
     description: 'Состояние инфраструктуры: туннель, узлы кластера и бэкапы — на одной странице.',
     icon: Pulse,
     path: '/dashboard',
+    group: 'system',
+    ownerOnly: true,
+  },
+  {
+    id: 'boards',
+    title: 'Платы',
+    description: 'Скрипты на платах против main и кнопка, которая разрешает плате обновиться.',
+    icon: Server,
+    path: '/boards',
     group: 'system',
     ownerOnly: true,
   },
