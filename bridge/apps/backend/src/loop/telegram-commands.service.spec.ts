@@ -9,15 +9,20 @@ function setup() {
   };
 
   const merges = { merge: jest.fn().mockResolvedValue('MERGED') };
+  const boards = {
+    approveFromTelegram: jest.fn().mockResolvedValue('APPROVED'),
+  };
 
   return {
     service: new TelegramCommandsService(
       loop as never,
       telegram as never,
       merges as never,
+      boards as never,
     ),
     telegram,
     merges,
+    boards,
   };
 }
 
@@ -101,5 +106,34 @@ describe('TelegramCommandsService callbacks', () => {
     }
 
     expect(merges.merge).not.toHaveBeenCalled();
+  });
+
+  describe('the board update button', () => {
+    const press = (data: string, chat = 42) => ({
+      callback_query: { id: 'q1', data, message: { chat: { id: chat } } },
+    });
+
+    it('lets the owner allow an update of a board at the commit shown on the button', async () => {
+      const { service, telegram, boards } = setup();
+
+      await service.handle(press('su:ubuntu-red:c823ea5'));
+
+      expect(boards.approveFromTelegram).toHaveBeenCalledWith(
+        'ubuntu-red',
+        'c823ea5',
+      );
+      expect(telegram.send).toHaveBeenCalledWith('APPROVED');
+    });
+
+    it('ignores the button from any chat but the owner’s, and a malformed one', async () => {
+      const { service, telegram, boards } = setup();
+
+      await service.handle(press('su:ubuntu-red:c823ea5', 7));
+      await service.handle(press('su:bad host:c823ea5'));
+      await service.handle(press('su:ubuntu-red:xyz'));
+
+      expect(boards.approveFromTelegram).not.toHaveBeenCalled();
+      expect(telegram.send).not.toHaveBeenCalled();
+    });
   });
 });

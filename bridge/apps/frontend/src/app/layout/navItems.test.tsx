@@ -24,6 +24,7 @@ describe('the sidebar sections', () => {
       'reports',
       'lab',
       'dashboard',
+      'boards',
       'vpn',
     ]);
   });

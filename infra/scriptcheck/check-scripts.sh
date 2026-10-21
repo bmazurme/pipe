@@ -8,12 +8,14 @@
 #   check-scripts.sh             the check (a timer runs it hourly): messages ALERT_CMD when the set of outdated scripts changes,
 #                                again every REPEAT_HOURS while it stays that way, and once when everything is current again
 #   check-scripts.sh --status    a table: every script this board has, current or outdated (no message)
+#   check-scripts.sh --json      the same as JSON for the board agent (infra/boardagent): the commit of `main` it compared with, and per
+#                                script its repository path, status and full hashes. Compared against THAT commit, not a moving `main`.
 #
 # Only scripts that exist on the board are looked at (white has the auto-deploy, red the uploads copy…). Never fails the caller: an
 # unreachable GitHub is logged and nothing else happens.
 #
 # Settings (/etc/pipe-scriptcheck.env): ALERT_CMD (e.g. /usr/local/bin/notify-telegram), OWNER, REPO, BRANCH, REPEAT_HOURS (24),
-# STATE_DIR (/var/lib/pipe-scriptcheck), BRIDGE_PI_DIR (/home/pi/bridge-pi — where white keeps the deploy scripts). Tests: SCRIPTCHECK_MANIFEST (a file of `installed|repo path` lines), RAW_BASE, SCRIPTCHECK_NOW.
+# STATE_DIR (/var/lib/pipe-scriptcheck), BRIDGE_PI_DIR (/home/pi/bridge-pi — where white keeps the deploy scripts). Tests: MAIN_SHA (skips the lookup of main's commit), SCRIPTCHECK_MANIFEST (a file of `installed|repo path` lines), RAW_BASE, SCRIPTCHECK_NOW.
 set -uo pipefail
 
 OWNER="${OWNER:-bmazurme}"
@@ -48,6 +50,8 @@ manifest() {
 /usr/local/lib/pipe-monitor/primary-watch.sh|infra/monitor/primary-watch.sh
 /usr/local/sbin/pipe-swarm-heal|infra/pi/swarm-heal.sh
 /usr/local/lib/pipe-scriptcheck/check-scripts.sh|infra/scriptcheck/check-scripts.sh
+/usr/local/lib/pipe-boardagent/board-agent.sh|infra/boardagent/board-agent.sh
+/usr/local/lib/pipe-boardagent/manifest.txt|infra/boardagent/manifest.txt
 @BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh
 @BRIDGE_PI@/deploy-worker.sh|infra/bridge-pi/deploy-worker.sh
 @BRIDGE_PI@/enroll-worker.sh|infra/bridge-pi/enroll-worker.sh
@@ -61,15 +65,27 @@ LIST
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-rows=(); stale=(); checked=0; unreachable=0
+# For the agent's report: pin everything to one commit of the branch, so the report says exactly which commit it was compared with
+# (and an update installs exactly that one).
+main_sha=""
+if [ "${1:-}" = "--json" ]; then
+  main_sha="${MAIN_SHA:-$(curl -fsS --max-time 20 -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/$OWNER/$REPO/commits/$BRANCH" 2>/dev/null || true)}"
+  if ! printf '%s' "$main_sha" | grep -qE '^[0-9a-f]{40}$'; then log "cannot tell the commit of $BRANCH — nothing done" >&2; exit 1; fi
+  [ -n "${MAIN_SHA:-}" ] || RAW_BASE="https://raw.githubusercontent.com/$OWNER/$REPO/$main_sha"
+fi
+
+rows=(); stale=(); jrows=(); checked=0; unreachable=0
 while IFS='|' read -r installed repo_path; do
+  installed_raw="$installed"
   installed="${installed//@BRIDGE_PI@/$BRIDGE_PI_DIR}"
   [ -n "$installed" ] && [ -f "$installed" ] || continue   # this board does not have that script
   if ! curl -fsSL --max-time 30 "$RAW_BASE/$repo_path" -o "$work/current" 2>/dev/null || [ ! -s "$work/current" ]; then
     unreachable=$((unreachable + 1)); continue
   fi
   checked=$((checked + 1))
-  mine="$(sha256sum "$installed" | cut -c1-8)"; theirs="$(sha256sum "$work/current" | cut -c1-8)"
+  full_mine="$(sha256sum "$installed" | cut -d' ' -f1)"; full_theirs="$(sha256sum "$work/current" | cut -d' ' -f1)"
+  mine="${full_mine:0:8}"; theirs="${full_theirs:0:8}"
+  if [ "$full_mine" = "$full_theirs" ]; then jrows+=("$installed_raw|$repo_path|current|$full_mine|$full_theirs"); else jrows+=("$installed_raw|$repo_path|outdated|$full_mine|$full_theirs"); fi
   if [ "$mine" = "$theirs" ]; then
     rows+=("ok     $(basename "$installed")  $mine")
   else
@@ -77,6 +93,19 @@ while IFS='|' read -r installed repo_path; do
     stale+=("$repo_path:$theirs|$(basename "$installed") (установлен $mine, в репозитории $theirs)")
   fi
 done < <(manifest)
+
+if [ "${1:-}" = "--json" ]; then
+  [ "$checked" -gt 0 ] || { log "nothing compared (${unreachable} unreachable, or no known script here)" >&2; exit 1; }
+  printf '%s\n' "${jrows[@]}" | python3 -c '
+import json, sys
+scripts = []
+for line in sys.stdin.read().splitlines():
+    installed, repo_path, status, mine, theirs = line.split("|")
+    scripts.append({"installed": installed, "repoPath": repo_path, "status": status, "installedHash": mine, "mainHash": theirs})
+print(json.dumps({"mainSha": sys.argv[1], "scripts": scripts}))
+' "$main_sha"
+  exit 0
+fi
 
 if [ "${1:-}" = "--status" ]; then
   printf '%s\n' "${rows[@]}"

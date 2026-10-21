@@ -27,6 +27,9 @@ const StoragePage = lazy(() =>
 const ContextPage = lazy(() =>
   import('./pages/ContextPage').then((m) => ({ default: m.ContextPage })),
 );
+const BoardsPage = lazy(() =>
+  import('./pages/BoardsPage').then((m) => ({ default: m.BoardsPage })),
+);
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
@@ -80,6 +83,14 @@ export function App() {
                   element={
                     <OwnerOnlyPage title="Дашборд">
                       <DashboardPage />
+                    </OwnerOnlyPage>
+                  }
+                />
+                <Route
+                  path="/boards"
+                  element={
+                    <OwnerOnlyPage title="Платы">
+                      <BoardsPage />
                     </OwnerOnlyPage>
                   }
                 />

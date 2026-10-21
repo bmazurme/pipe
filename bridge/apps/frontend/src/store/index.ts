@@ -3,6 +3,7 @@ import { setupListeners } from '@reduxjs/toolkit/query';
 
 import {
   apiKeysApi,
+  boardsApi,
   authApi,
   chatApi,
   contextApi,
@@ -57,6 +58,7 @@ export const store = configureStore({
     [logsApi.reducerPath]: logsApi.reducer,
     [improveApi.reducerPath]: improveApi.reducer,
     [labApi.reducerPath]: labApi.reducer,
+    [boardsApi.reducerPath]: boardsApi.reducer,
     [contextApi.reducerPath]: contextApi.reducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
   },
@@ -78,6 +80,7 @@ export const store = configureStore({
       logsApi.middleware,
       improveApi.middleware,
       labApi.middleware,
+      boardsApi.middleware,
       contextApi.middleware,
       dashboardApi.middleware,
     ),
