@@ -1,6 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsInt,
   IsOptional,
@@ -119,6 +122,17 @@ export class SaveLabScheduleDto {
   @IsString()
   @MaxLength(64)
   timezone: string;
+
+  // ISO weekdays (1 = Mon … 7 = Sun) to fire on; absent or null = every day.
+  @ApiPropertyOptional({ type: [Number], nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(7)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  weekdays?: number[] | null;
 
   @IsString()
   model: string;
