@@ -32,7 +32,7 @@ export function RunsTab() {
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId }] = useCancelLabRunMutation();
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
-  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor } | null>(null);
+  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
@@ -48,7 +48,7 @@ export function RunsTab() {
     if (!form.baseBranch.trim()) return setError('Укажите ветку');
 
     try {
-      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim(), executor: form.executor }).unwrap();
+      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim(), executor: form.executor, ...(form.followUpOf ? { followUpOf: form.followUpOf } : {}) }).unwrap();
       setForm(null);
       setError(null);
     } catch (err) {
@@ -120,6 +120,18 @@ export function RunsTab() {
                 Запустить снова
               </Button>
             )}
+            {run.status === 'pr_open' && run.branch && run.projectId !== null && projects?.some((project) => project.id === run.projectId && project.canWrite) && (
+              <Button
+                view="outlined"
+                size="s"
+                onClick={() => {
+                  setError(null);
+                  setForm({ projectId: String(run.projectId), task: '', model: run.model, contextId: '', baseBranch: run.branch ?? '', executor: run.executor ?? 'any', followUpOf: run.id });
+                }}
+              >
+                Доработать
+              </Button>
+            )}
             {(run.status === 'queued' || run.status === 'running') && (
               <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
                 <Icon data={Stop} size={16} />
@@ -130,18 +142,19 @@ export function RunsTab() {
       ))}
 
       <Dialog open={form !== null} onClose={() => setForm(null)} maxWidth="s" aria-labelledby="lab-run-title">
-        <Dialog.Header caption="Новый запуск" id="lab-run-title" />
+        <Dialog.Header caption={form?.followUpOf ? "Доработать PR" : "Новый запуск"} id="lab-run-title" />
         <Dialog.Body>
           {form && (
             <div className={styles.form}>
               <Select
                 label="Проект"
+                disabled={Boolean(form.followUpOf)}
                 value={[form.projectId]}
                 onUpdate={([projectId]) => setForm({ ...form, projectId: projectId ?? '', baseBranch: branchOf(projectId ?? '') })}
                 options={(projects ?? []).filter((project) => project.canWrite).map((project) => ({ value: String(project.id), content: `${project.name} (${project.repo})` }))}
                 width="max"
               />
-              <TextInput label="Ветка" value={form.baseBranch} onUpdate={(baseBranch) => setForm({ ...form, baseBranch })} />
+              <TextInput label="Ветка" value={form.baseBranch} disabled={Boolean(form.followUpOf)} onUpdate={(baseBranch) => setForm({ ...form, baseBranch })} />
               <Text variant="body-2">Задача</Text>
               <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
               <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={MODEL_OPTIONS} width="max" />

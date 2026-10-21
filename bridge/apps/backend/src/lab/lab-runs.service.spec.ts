@@ -488,3 +488,98 @@ describe('LabRunsService: the branch of a run', () => {
     expect(saved.executor).toBe('any');
   });
 });
+
+describe('LabRunsService: follow-up of a pull request', () => {
+  const project = {
+    id: 3,
+    userId: 1,
+    repo: 'owner/repo',
+    token: 'ghp_x',
+    baseBranch: 'main',
+    canWrite: true,
+  } as LabProject;
+  const parent = {
+    id: 4,
+    userId: 1,
+    projectId: 3,
+    status: LabRunStatus.PrOpen,
+    branch: 'lab/run-4-fix',
+    prNumber: 8,
+    prUrl: 'https://pr/8',
+  };
+  let runs: {
+    count: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let service: LabRunsService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (githubFor as jest.Mock).mockReturnValue({
+      getBranchSha: jest.fn().mockResolvedValue('sha-pr'),
+    });
+    (downloadRepoZip as jest.Mock).mockResolvedValue(new Uint8Array());
+    (readZipball as jest.Mock).mockResolvedValue([]);
+    runs = {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn((row: Partial<LabRun>) => row),
+      save: jest.fn((row: Partial<LabRun>) =>
+        Promise.resolve({ id: 9, ...row }),
+      ),
+      findOne: jest.fn().mockResolvedValue(parent),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    service = new LabRunsService(
+      runs as never,
+      {
+        findOwned: jest.fn().mockResolvedValue(project),
+      } as unknown as LabProjectsService,
+      {
+        create: jest.fn().mockResolvedValue({ id: 42 }),
+        hasEnabledWorkerWith: jest.fn(),
+      } as never,
+      { createFromBuffer: jest.fn().mockResolvedValue({ id: 5 }) } as never,
+      { findOwned: jest.fn() } as never,
+      {} as never,
+    );
+  });
+
+  const launch = () =>
+    service.launch(1, {
+      projectId: 3,
+      task: 'More',
+      model: 'sonnet',
+      followUpOf: 4,
+    });
+
+  it('snapshots the PR branch and carries the PR over to the new row', async () => {
+    const { run, prepared } = await launch();
+
+    await prepared;
+
+    expect(run).toMatchObject({
+      baseBranch: 'lab/run-4-fix',
+      branch: 'lab/run-4-fix',
+      prNumber: 8,
+      prUrl: 'https://pr/8',
+    });
+    expect(runs.findOne).toHaveBeenCalledWith({ where: { id: 4, userId: 1 } });
+  });
+
+  it('rejects a run of somebody else or an unknown one', async () => {
+    runs.findOne.mockResolvedValue(null);
+
+    await expect(launch()).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects a run of another project or without an open PR', async () => {
+    runs.findOne.mockResolvedValue({ ...parent, projectId: 99 });
+    await expect(launch()).rejects.toBeInstanceOf(BadRequestException);
+
+    runs.findOne.mockResolvedValue({ ...parent, status: LabRunStatus.Failed });
+    await expect(launch()).rejects.toBeInstanceOf(BadRequestException);
+  });
+});

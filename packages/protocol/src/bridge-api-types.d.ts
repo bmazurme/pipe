@@ -2754,6 +2754,7 @@ export interface components {
             contextId?: number | null;
             /** @enum {string} */
             executor?: "any" | "fusion";
+            followUpOf?: number;
             projectId: number;
             task: string;
             model: string;
