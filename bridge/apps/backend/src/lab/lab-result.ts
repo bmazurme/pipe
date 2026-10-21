@@ -1,14 +1,15 @@
-import { unzip, type Unzipped } from 'fflate';
-
 import {
   ASSET_PREFIX,
   Change,
   isExcludedPath,
   MANIFEST_ENTRY,
+  MAX_TOTAL_BYTES,
   selectParcelFiles,
   sha256,
   snapshotBaseline,
   type SnapshotFile,
+  unzipBounded,
+  type UnzipLimits,
 } from '../improve/parcel';
 
 // Lab, unlike Improve, publishes what a worker made as it is — drawings, images and other binaries included. The worker sends the
@@ -18,12 +19,6 @@ import {
 export const LAB_MAX_CHANGED_FILES = 200;
 export const LAB_MAX_CHANGED_BYTES = 50 * 1024 * 1024;
 
-function unzipAsync(data: Uint8Array): Promise<Unzipped> {
-  return new Promise((resolve, reject) => {
-    unzip(data, (error, out) => (error ? reject(error) : resolve(out)));
-  });
-}
-
 export interface LabResult {
   /** Text files left on disk (edited, new, untouched), by path. */
   files: Map<string, Uint8Array>;
@@ -31,11 +26,16 @@ export interface LabResult {
   binaries: Map<string, Uint8Array>;
 }
 
-export async function readLabResult(data: Uint8Array): Promise<LabResult> {
+export async function readLabResult(
+  data: Uint8Array,
+  limits: UnzipLimits = LAB_RESULT_UNZIP_LIMITS,
+): Promise<LabResult> {
   const files = new Map<string, Uint8Array>();
   const binaries = new Map<string, Uint8Array>();
 
-  for (const [name, bytes] of Object.entries(await unzipAsync(data))) {
+  for (const [name, bytes] of Object.entries(
+    await unzipBounded(data, limits),
+  )) {
     if (name.endsWith('/') || name === MANIFEST_ENTRY) continue;
 
     if (name.startsWith(ASSET_PREFIX)) {
@@ -177,3 +177,11 @@ export function withBinaries(
 
   return changes.sort((a, b) => a.path.localeCompare(b.path));
 }
+
+// The text snapshot that was sent, plus the changes and the binaries; one entry is a binary at most.
+export const LAB_RESULT_UNZIP_LIMITS: UnzipLimits = {
+  maxEntries: 10000,
+  maxEntryBytes: LAB_MAX_BINARY_FILE_BYTES,
+  maxTotalBytes:
+    MAX_TOTAL_BYTES + LAB_MAX_CHANGED_BYTES + LAB_MAX_BINARY_TOTAL_BYTES,
+};
