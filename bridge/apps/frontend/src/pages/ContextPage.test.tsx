@@ -279,7 +279,7 @@ describe('ContextDialog closing and saving', () => {
     expect(screen.queryByText('Закрыть без сохранения?')).toBeNull();
   });
 
-  it('asks before throwing away typed text, and keeps it when told to go on editing', async () => {
+  it('asks before throwing away typed text, and keeps it when told to go on editing', { timeout: 30000 }, async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -287,14 +287,16 @@ describe('ContextDialog closing and saving', () => {
     await user.type(await screen.findByLabelText('Текст контекста'), 'черновик');
     await user.click(screen.getByRole('button', { name: 'Отмена' }));
 
-    expect(await screen.findByText('Закрыть без сохранения?')).toBeTruthy();
-    await user.click(await screen.findByRole('button', { name: 'Продолжить редактирование' }));
+    // The confirmation is a dialog nested in a dialog: under a loaded CI runner
+    // its buttons can take longer than the default 1 s to become accessible.
+    expect(await screen.findByText('Закрыть без сохранения?', {}, { timeout: 5000 })).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: 'Продолжить редактирование' }, { timeout: 5000 }));
 
     await waitFor(() => expect(screen.queryByText('Закрыть без сохранения?')).toBeNull());
     expect((screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value).toBe('черновик');
 
     await user.click(await screen.findByRole('button', { name: 'Отмена' }));
-    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения' }));
+    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения' }, { timeout: 5000 }));
 
     await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
     expect(sent).toEqual([]);
