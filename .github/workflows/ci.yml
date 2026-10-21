@@ -143,6 +143,16 @@ jobs:
         run: python3 -m unittest discover -s fusion-addin/tests
         working-directory: worker
 
+  # The board scripts' own shell tests (fake curl, nothing outside a temp directory): the check of installed scripts against main and
+  # the agent that installs them when the owner allows it.
+  infra:
+    name: infra scripts (shell tests)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash infra/scriptcheck/test.sh
+      - run: bash infra/boardagent/test.sh
+
   reports:
     name: reports (build, tests)
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}

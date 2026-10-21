@@ -30,3 +30,7 @@ A merged change to a script is "outdated" on every board that has it until you i
 cannot install anything for you: copying code onto a board stays a decision.
 
 `test.sh` (17 checks with a fake curl, the clock injected): `bash infra/scriptcheck/test.sh`.
+
+## Агент и кнопка «Обновить»
+
+`check-scripts.sh --json` отдаёт то же сравнение в JSON (коммит `main`, статус и полные хеши каждого скрипта): это отчёт, который плата шлёт в bridge (`infra/boardagent`). Там же — разрешение обновить скрипты кнопкой из Telegram или со страницы «Платы». Когда агент установлен, сообщение об устаревших скриптах шлёт bridge (с кнопкой), а `ALERT_CMD` здесь отключается.

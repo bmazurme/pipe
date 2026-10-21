@@ -92,6 +92,25 @@ fresh; cp "$T/repo/infra/bridge-pi/deploy-worker.sh" "$T/bridgepi/deploy-worker.
 SCRIPTCHECK_MANIFEST="$T/manifest-bp" BRIDGE_PI_DIR="$T/bridgepi" run
 [ "$(alerts)" = 0 ]; check "…and nothing is said once it is copied" $?
 
+# --json: what the board agent reports — the commit it compared with and per script its status and full hashes, no message sent
+fresh; install_board v1
+export MAIN_SHA="$(printf 'ab12cd34%032d' 0)"; run --json
+python3 - "$T/stdout" "$MAIN_SHA" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+status = {s["repoPath"]: s for s in data["scripts"]}
+ok = (data["mainSha"] == sys.argv[2]
+      and status["infra/backup/uploads-pull.sh"]["status"] == "outdated"
+      and status["infra/backup/backup.sh"]["status"] == "current"
+      and len(status["infra/backup/backup.sh"]["installedHash"]) == 64
+      and status["infra/backup/uploads-pull.sh"]["installedHash"] != status["infra/backup/uploads-pull.sh"]["mainHash"]
+      and "infra/backup/not-on-this-board.sh" not in status)
+sys.exit(0 if ok else 1)
+PY
+check "--json: the commit, and the status and hashes of each script this board has" $?
+[ "$(alerts)" = 0 ]; check "…and sends no message" $?
+unset MAIN_SHA
+
 # the built-in list: every repository path it names must exist (a renamed script would otherwise silently stop being checked)
 ROOT="$(cd "$HERE/../.." && pwd)"
 missing="$(sed -n "/cat <<'LIST'/,/^LIST$/p" "$HERE/check-scripts.sh" | grep '|' | cut -d'|' -f2 | while read -r path; do [ -f "$ROOT/$path" ] || echo "$path"; done)"
