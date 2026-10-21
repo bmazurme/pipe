@@ -4741,6 +4741,10 @@
             "type": "number",
             "nullable": true
           },
+          "requiredCapability": {
+            "type": "string",
+            "nullable": true
+          },
           "contextName": {
             "type": "string",
             "nullable": true
@@ -4823,6 +4827,7 @@
           "providerCredentialId",
           "workerId",
           "targetWorkerId",
+          "requiredCapability",
           "contextName",
           "historyCount",
           "taskKey",
@@ -4864,6 +4869,12 @@
           },
           "targetWorkerId": {
             "type": "number"
+          },
+          "requiredCapability": {
+            "type": "string",
+            "enum": [
+              "fusion"
+            ]
           },
           "contextId": {
             "type": "number"
@@ -5203,6 +5214,15 @@
               ]
             }
           },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fusion"
+              ]
+            }
+          },
           "claudeLimits": {
             "type": "object",
             "nullable": true,
@@ -5292,6 +5312,7 @@
         },
         "required": [
           "models",
+          "capabilities",
           "claudeLimits",
           "id",
           "name",
@@ -5344,6 +5365,18 @@
             "type": "string",
             "nullable": true,
             "maxLength": 4000
+          },
+          "capabilities": {
+            "type": "array",
+            "enum": [
+              "fusion"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "fusion"
+              ]
+            }
           },
           "name": {
             "type": "string",
@@ -5461,6 +5494,15 @@
               ]
             }
           },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fusion"
+              ]
+            }
+          },
           "id": {
             "type": "number"
           },
@@ -5507,6 +5549,7 @@
         },
         "required": [
           "models",
+          "capabilities",
           "id",
           "name",
           "enabled",
@@ -5547,6 +5590,18 @@
             "type": "string",
             "nullable": true,
             "maxLength": 4000
+          },
+          "capabilities": {
+            "type": "array",
+            "enum": [
+              "fusion"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "fusion"
+              ]
+            }
           },
           "name": {
             "type": "string",
@@ -6180,6 +6235,9 @@
           "model": {
             "type": "string"
           },
+          "executor": {
+            "type": "object"
+          },
           "task": {
             "type": "string"
           },
@@ -6222,6 +6280,7 @@
           "timezone",
           "weekdays",
           "model",
+          "executor",
           "task",
           "contextId",
           "lastRunOn",
@@ -6248,6 +6307,13 @@
             "type": "number",
             "nullable": true,
             "minimum": 1
+          },
+          "executor": {
+            "type": "string",
+            "enum": [
+              "any",
+              "fusion"
+            ]
           },
           "projectId": {
             "type": "number",
@@ -6324,6 +6390,9 @@
           "model": {
             "type": "string"
           },
+          "executor": {
+            "type": "object"
+          },
           "status": {
             "enum": [
               "preparing",
@@ -6399,6 +6468,7 @@
           "title",
           "task",
           "model",
+          "executor",
           "status",
           "jobId",
           "baseBranch",
@@ -6422,6 +6492,13 @@
             "type": "number",
             "nullable": true,
             "minimum": 1
+          },
+          "executor": {
+            "type": "string",
+            "enum": [
+              "any",
+              "fusion"
+            ]
           },
           "projectId": {
             "type": "number",

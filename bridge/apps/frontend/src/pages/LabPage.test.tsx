@@ -268,3 +268,66 @@ describe('LabPage: schedule weekdays', () => {
     expect(sent.find((call) => call.path === 'lab/schedules/5')).toMatchObject({ method: 'PUT', body: { weekdays: [2, 3, 4, 5] } });
   });
 });
+
+describe('LabPage: where a run is executed', () => {
+  const chooseFusion = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByText('Любой worker'));
+    await user.click(await screen.findByText('Fusion 360 на Mac'));
+  };
+
+  it('runs on any worker by default and on a Fusion worker when chosen from the list', async () => {
+    const user = userEvent.setup();
+    renderPage('/lab?tab=runs');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Новый запуск/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Новый запуск/ }));
+    await screen.findByRole('dialog');
+    expect(screen.queryByText(/берёт только worker, у которого/)).toBeNull();
+
+    await chooseFusion(user);
+    expect(await screen.findByText(/берёт только worker, у которого/)).toBeTruthy();
+    await user.type(screen.getByLabelText('Задача'), 'Построить корпус в Fusion');
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({ executor: 'fusion', task: 'Построить корпус в Fusion' });
+  });
+
+  it('sends "any" for an ordinary run', async () => {
+    const user = userEvent.setup();
+    renderPage('/lab?tab=runs');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Новый запуск/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Новый запуск/ }));
+    await screen.findByRole('dialog');
+    await user.type(screen.getByLabelText('Задача'), 'Починить тест');
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({ executor: 'any' });
+  });
+
+  it('puts a Fusion schedule on a Fusion worker and names it in the row', async () => {
+    const user = userEvent.setup();
+    renderPage('/lab?tab=schedules');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Новое расписание/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Новое расписание/ }));
+    await screen.findByRole('dialog');
+    await chooseFusion(user);
+    await user.type(await screen.findByLabelText('Задача'), 'Обновить эскиз');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ executor: 'fusion' });
+  });
+
+  it('shows where a finished run was executed', async () => {
+    runs = [
+      { id: 5, projectId: 1, repo: 'me/boat', scheduleId: null, trigger: 'manual', title: 'Корпус', task: 'Корпус', model: 'sonnet', executor: 'fusion', status: 'pr_open', jobId: 3, baseBranch: 'main', branch: 'lab/run-5', prNumber: 4, prUrl: 'https://pr/4', note: null, error: null, createdAt: '2026-10-21T10:00:00Z', finishedAt: null },
+    ];
+    renderPage('/lab?tab=runs');
+
+    expect(await screen.findByText(/Fusion 360/)).toBeTruthy();
+  });
+});

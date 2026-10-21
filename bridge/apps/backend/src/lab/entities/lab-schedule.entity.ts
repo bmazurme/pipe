@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 
+import type { LabExecutor } from '../lab-executor';
 import { BaseEntity } from '../../base.entity';
 
 // "Every night at 02:00 do THIS in that repository" — one row. THIS is the owner's own text: there are no task types to tick.
@@ -34,6 +35,10 @@ export class LabSchedule extends BaseEntity {
 
   @Column({ type: 'varchar', length: 16 })
   model: string;
+
+  // Where it runs: 'any' worker (default) or a 'fusion' one (see lab-executor.ts).
+  @Column({ type: 'varchar', length: 16, default: 'any' })
+  executor: LabExecutor;
 
   // What the worker is asked to do in the repository, in the owner's words.
   @Column({ type: 'text' })

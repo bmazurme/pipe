@@ -30,6 +30,7 @@ const worker = (over: Partial<FleetWorker> = {}): FleetWorker =>
     claudeLimits: LIMITS,
     limitsRefreshMin: 0,
     limitsRefreshRequestedAt: null,
+    capabilities: [],
     ...over,
   }) as FleetWorker;
 

@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDate,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
+import { WORKER_CAPABILITIES, type WorkerCapability } from '../capabilities';
 import { JobModel } from '../entities/job.entity';
 import { MaxFutureDate, MinFutureDate } from './not-before.validators';
 
@@ -33,6 +35,11 @@ export class CreateJobDto {
   @IsOptional()
   @IsInt()
   targetWorkerId?: number;
+
+  // Only a worker with this capability may take the job (e.g. 'fusion'); absent = any worker.
+  @IsOptional()
+  @IsIn(WORKER_CAPABILITIES)
+  requiredCapability?: WorkerCapability;
 
   // A saved context (ContextModule) to attach; absent = run with none.
   @IsOptional()

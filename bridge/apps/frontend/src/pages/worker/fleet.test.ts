@@ -38,6 +38,7 @@ function worker(over: Partial<FleetWorker> = {}): FleetWorker {
     vpnHost: null,
     limitsRefreshMin: 0,
     limitsRefreshRequestedAt: null,
+    capabilities: [],
     ...over,
   };
 }

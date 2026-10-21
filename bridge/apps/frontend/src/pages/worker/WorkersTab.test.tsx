@@ -37,6 +37,7 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     vpnHost: null,
     limitsRefreshMin: 0,
     limitsRefreshRequestedAt: null,
+    capabilities: [],
     ...over,
   };
 }

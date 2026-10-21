@@ -343,7 +343,7 @@ describe('LabRunsService: the branch of a run', () => {
     findOne: jest.Mock;
     update: jest.Mock;
   };
-  let workers: { create: jest.Mock };
+  let workers: { create: jest.Mock; hasEnabledWorkerWith: jest.Mock };
   let service: LabRunsService;
 
   beforeEach(() => {
@@ -376,7 +376,10 @@ describe('LabRunsService: the branch of a run', () => {
       findOne: jest.fn().mockResolvedValue({ id: 9, baseline: '{}' }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
-    workers = { create: jest.fn().mockResolvedValue({ id: 42 }) };
+    workers = {
+      create: jest.fn().mockResolvedValue({ id: 42 }),
+      hasEnabledWorkerWith: jest.fn().mockResolvedValue(true),
+    };
     service = new LabRunsService(
       runs as never,
       {
@@ -470,5 +473,49 @@ describe('LabRunsService: the branch of a run', () => {
     expect(github.createPull).toHaveBeenCalledWith(
       expect.objectContaining({ base: 'main' }),
     );
+  });
+
+  it('hands a Fusion run to the job as a required capability, and records where it runs', async () => {
+    const saved = await prepare({
+      projectId: project.id,
+      task: 'Построить корпус',
+      model: 'sonnet',
+      executor: 'fusion',
+    });
+
+    expect(workers.hasEnabledWorkerWith).toHaveBeenCalledWith(1, 'fusion');
+    expect(workers.create).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ requiredCapability: 'fusion' }),
+    );
+    expect(saved.executor).toBe('fusion');
+  });
+
+  it('refuses a Fusion run when no worker with Fusion is switched on', async () => {
+    workers.hasEnabledWorkerWith.mockResolvedValue(false);
+
+    await expect(
+      service.launch(1, {
+        projectId: project.id,
+        task: 'Построить корпус',
+        model: 'sonnet',
+        executor: 'fusion',
+      }),
+    ).rejects.toThrow(/Нет включённого worker с Fusion 360/);
+    expect(runs.save).not.toHaveBeenCalled();
+  });
+
+  it('puts an ordinary run on any worker, with no capability required', async () => {
+    const saved = await prepare({
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'sonnet',
+    });
+
+    expect(workers.hasEnabledWorkerWith).not.toHaveBeenCalled();
+    expect(workers.create.mock.calls[0][1]).not.toHaveProperty(
+      'requiredCapability',
+    );
+    expect(saved.executor).toBe('any');
   });
 });

@@ -210,6 +210,7 @@ export class WorkersService {
         chatEnabled: dto.chatEnabled ?? true,
         claudeCredentialId: dto.claudeCredentialId ?? null,
         vpnLink: this.normalizeVpnLink(dto.vpnLink),
+        capabilities: dto.capabilities?.length ? dto.capabilities : null,
       }),
     );
 
@@ -251,6 +252,9 @@ export class WorkersService {
     }
     if (dto.vpnLink !== undefined) {
       worker.vpnLink = this.normalizeVpnLink(dto.vpnLink);
+    }
+    if (dto.capabilities !== undefined) {
+      worker.capabilities = dto.capabilities.length ? dto.capabilities : null;
     }
 
     const saved = await this.workers.save(worker);
@@ -394,6 +398,7 @@ export class WorkersService {
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       limitProbe: null,
+      capabilities: worker.capabilities ?? [],
     };
   }
 

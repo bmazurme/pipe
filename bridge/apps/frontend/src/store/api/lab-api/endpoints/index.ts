@@ -1,5 +1,7 @@
 import labApi from '..';
 
+export type LabExecutor = 'any' | 'fusion';
+
 export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'no_changes' | 'failed' | 'cancelled';
 
 export interface LabProject {
@@ -33,6 +35,8 @@ export interface LabSchedule {
   /** ISO weekdays (1 = Mon … 7 = Sun) the schedule fires on; null = every day. */
   weekdays: number[] | null;
   model: string;
+  /** Where it runs: any worker, or only one set up for Fusion 360. */
+  executor: LabExecutor;
   /** What the worker is asked to do on every run, as free text. */
   task: string;
   contextId: number | null;
@@ -51,6 +55,7 @@ export interface LabRun {
   title: string;
   task: string;
   model: string;
+  executor: LabExecutor;
   status: LabRunStatus;
   jobId: number | null;
   // The branch the run started from and its pull request targets; null on runs from before it could be chosen (the project's).
@@ -71,6 +76,8 @@ export interface StartLabRunInput {
   contextId?: number | null;
   // Absent = the project's branch.
   baseBranch?: string;
+  // Absent = any worker.
+  executor?: LabExecutor;
 }
 
 function errorMessage(fallback: string) {

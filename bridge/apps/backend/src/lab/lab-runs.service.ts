@@ -27,6 +27,7 @@ import { TreeEntry } from '../loop/github-api.service';
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
+import { WORKER_CAPABILITY_LABEL } from '../worker/capabilities';
 import { JobModel, JobStatus } from '../worker/entities/job.entity';
 import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
@@ -43,6 +44,7 @@ import {
   ZIP_TOTAL_MS,
 } from './lab-github';
 import { LabProject } from './entities/lab-project.entity';
+import { requiredCapabilityOf, type LabExecutor } from './lab-executor';
 import { LabProjectsService } from './lab-projects.service';
 import {
   LAB_MAX_CHANGED_BYTES,
@@ -75,6 +77,8 @@ export type LabStartInput = {
   contextId?: number | null;
   // A branch other than the project's own, for this run only.
   baseBranch?: string;
+  // Where to run: any worker (default) or one set up for Fusion 360.
+  executor?: LabExecutor;
 };
 
 export function titleOf(task: string): string {
@@ -180,6 +184,19 @@ export class LabRunsService {
     if (active > 0)
       throw new ConflictException('Эта задача в этом проекте уже выполняется');
 
+    const executor = input.executor ?? 'any';
+    const capability = requiredCapabilityOf(executor);
+
+    // Better a clear answer now than a run that waits for ever for a worker that does not exist.
+    if (
+      capability &&
+      !(await this.workers.hasEnabledWorkerWith(userId, capability))
+    ) {
+      throw new BadRequestException(
+        `Нет включённого worker с ${WORKER_CAPABILITY_LABEL[capability]} — добавьте его на странице Worker`,
+      );
+    }
+
     const title = titleOf(input.task);
     const baseBranch = input.baseBranch || project.baseBranch;
     // Recorded before the slow part so that a second start (or the nightly tick) of the same task sees it as active.
@@ -194,6 +211,7 @@ export class LabRunsService {
         task: input.task,
         model: input.model,
         status: LabRunStatus.Preparing,
+        executor,
         jobId: null,
         baseBranch,
       }),
@@ -244,6 +262,9 @@ export class LabRunsService {
         sourceFileId: stored.id,
         model: input.model as JobModel,
         ...(input.contextId ? { contextId: input.contextId } : {}),
+        ...(requiredCapabilityOf(run.executor)
+          ? { requiredCapability: requiredCapabilityOf(run.executor)! }
+          : {}),
       });
 
       run.status = LabRunStatus.Queued;

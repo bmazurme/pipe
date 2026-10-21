@@ -15,6 +15,8 @@ export class JobResponseDto {
   // The worker that took it, and the one it was pinned to (null = any).
   workerId: number | null;
   targetWorkerId: number | null;
+  // A capability a worker needs to take it (e.g. 'fusion'), or null.
+  requiredCapability: string | null;
   // The attached context's name, or null — never its text (see ClaimedJobResponseDto).
   contextName: string | null;
   // How many earlier runs' outcomes were mixed in, or null when none were.
@@ -51,6 +53,7 @@ export class JobResponseDto {
       providerCredentialId: job.providerCredentialId ?? null,
       workerId: job.workerId ?? null,
       targetWorkerId: job.targetWorkerId ?? null,
+      requiredCapability: job.requiredCapability ?? null,
       contextName: job.contextName ?? null,
       historyCount: job.historyCount ?? null,
       taskKey: job.taskKey ?? null,

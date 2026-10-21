@@ -18,6 +18,7 @@ import {
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { LabSchedule } from './entities/lab-schedule.entity';
+import type { LabExecutor } from './lab-executor';
 import { LabProjectsService } from './lab-projects.service';
 import { LabRunsService } from './lab-runs.service';
 
@@ -33,7 +34,11 @@ type ScheduleInput = Pick<
   | 'timezone'
   | 'model'
   | 'task'
-> & { contextId?: number | null; weekdays?: number[] | null };
+> & {
+  contextId?: number | null;
+  weekdays?: number[] | null;
+  executor?: LabExecutor;
+};
 
 const WEEKDAY_NUMBERS: Record<string, number> = {
   Mon: 1,
@@ -103,6 +108,7 @@ export class LabSchedulesService {
     Object.assign(schedule, {
       ...input,
       contextId: input.contextId ?? null,
+      executor: input.executor ?? 'any',
       weekdays: input.weekdays?.length
         ? [...input.weekdays].sort((a, b) => a - b)
         : null,
@@ -175,6 +181,7 @@ export class LabSchedulesService {
           task: schedule.task,
           model: schedule.model,
           contextId: schedule.contextId,
+          executor: schedule.executor,
         },
         'schedule',
         schedule.id,

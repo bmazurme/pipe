@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 
+import type { LabExecutor } from '../lab-executor';
 import { BaseEntity } from '../../base.entity';
 
 export enum LabRunStatus {
@@ -57,6 +58,10 @@ export class LabRun extends BaseEntity {
 
   @Column({ type: 'varchar', length: 16 })
   model: string;
+
+  // Where it was asked to run: 'any' worker or a 'fusion' one (see lab-executor.ts).
+  @Column({ type: 'varchar', length: 16, default: 'any' })
+  executor: LabExecutor;
 
   @Column({ type: 'varchar', length: 24, default: LabRunStatus.Queued })
   status: LabRunStatus;

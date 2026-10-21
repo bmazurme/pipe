@@ -32,6 +32,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [proxyUrl, setProxyUrl] = useState(worker.proxyUrl ?? '');
   const proxyEdited = proxyUrl !== (worker.proxyUrl ?? '');
   const [chatEnabled, setChatEnabled] = useState(worker.chatEnabled);
+  const [fusion, setFusion] = useState((worker.capabilities ?? []).includes('fusion'));
   const [limitsRefreshMin, setLimitsRefreshMin] = useState(String(worker.limitsRefreshMin ?? 0));
   const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
   // undefined = the VPN is left as it is, null = removed, a string = replaced
@@ -64,6 +65,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         // left out when untouched: the field holds the masked value, which must never overwrite the real URL
         ...(proxyEdited ? { proxyUrl: proxyUrl.trim() === '' ? null : proxyUrl.trim() } : {}),
         chatEnabled,
+        capabilities: fusion ? ['fusion'] : [],
         limitsRefreshMin: Number(limitsRefreshMin),
         claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),
         ...(vpnChange !== undefined ? { vpnLink: vpnChange } : {}),
@@ -174,6 +176,11 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
           </label>
 
           <Switch checked={chatEnabled} onUpdate={setChatEnabled} content="Отвечать на сообщения в чате" />
+
+          <Switch checked={fusion} onUpdate={setFusion} content="Fusion 360 на этом компьютере" />
+          <Text variant="caption-2" color="secondary">
+            Для worker&apos;а на Mac с открытым Fusion 360 и установленным add-in (worker/fusion-addin). Только он берёт задачи Lab с выбором «Fusion 360 на Mac».
+          </Text>
 
           {error && <Alert theme="danger" view="filled" message={error} />}
         </div>

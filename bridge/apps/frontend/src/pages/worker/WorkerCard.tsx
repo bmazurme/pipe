@@ -115,6 +115,11 @@ export function WorkerCard({ worker, activeJob, onOpenJob, onSettings, onReconne
               Прокси: {worker.proxyUrl}
             </Text>
           )}
+          {(worker.capabilities ?? []).includes('fusion') && (
+            <Text variant="caption-2" color="secondary">
+              Fusion 360
+            </Text>
+          )}
           {!worker.chatEnabled && (
             <Text variant="caption-2" color="secondary">
               Чат выключен

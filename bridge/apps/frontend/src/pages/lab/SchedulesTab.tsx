@@ -7,6 +7,7 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { listTimeZones } from '../../shared/lib/timeZones';
 import {
   getErrorMessage,
+  type LabExecutor,
   LabSchedule,
   useDeleteLabScheduleMutation,
   useListContextsQuery,
@@ -17,6 +18,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
+import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
 import styles from '../ImprovePage.module.css';
 import { formatTime, modelLabel, parseTime } from '../improve/improveLabels';
 import { sortSchedulesByRunTime } from '../improve/scheduleOrder';
@@ -30,11 +32,12 @@ interface Form {
   timezone: string;
   weekdays: number[];
   model: string;
+  executor: LabExecutor;
   task: string;
   contextId: string;
 }
 
-const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, model: 'sonnet', task: '', contextId: '' };
+const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, model: 'sonnet', executor: 'any', task: '', contextId: '' };
 
 export function SchedulesTab() {
   const { data: schedules, isLoading, isError } = useListLabSchedulesQuery();
@@ -65,6 +68,7 @@ export function SchedulesTab() {
               timezone: schedule.timezone,
               weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
               model: schedule.model,
+              executor: schedule.executor ?? 'any',
               task: schedule.task,
               contextId: schedule.contextId === null ? '' : String(schedule.contextId),
             },
@@ -97,6 +101,7 @@ export function SchedulesTab() {
           timezone: form.timezone,
           weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b),
           model: form.model,
+          executor: form.executor,
           task: form.task.trim(),
           contextId: form.contextId ? Number(form.contextId) : null,
         },
@@ -172,7 +177,7 @@ export function SchedulesTab() {
           <div className={styles.rowMain}>
             <Text variant="body-2">{schedule.name}</Text>
             <Text variant="caption-2" color="secondary">
-              {projectName(schedule.projectId)} · {formatWeekdays(schedule.weekdays)} в {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}) · {modelLabel(schedule.model)}
+              {projectName(schedule.projectId)} · {formatWeekdays(schedule.weekdays)} в {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}) · {modelLabel(schedule.model)}{executorLabel(schedule.executor) && ` · ${executorLabel(schedule.executor)}`}
             </Text>
             <Text variant="caption-2" color="secondary" ellipsis title={schedule.task}>
               {schedule.task}
@@ -253,6 +258,12 @@ export function SchedulesTab() {
                 width="max"
               />
               <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
+              <Select label="Где выполнять" value={[editing.form.executor]} onUpdate={([executor]) => update({ executor: (executor as LabExecutor) ?? 'any' })} options={EXECUTOR_OPTIONS} width="max" />
+              {editing.form.executor === 'fusion' && (
+                <Text variant="caption-2" color="secondary">
+                  {EXECUTOR_HINT}
+                </Text>
+              )}
               <Select
                 label="Контекст"
                 value={[editing.form.contextId]}
