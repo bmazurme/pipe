@@ -64,6 +64,10 @@ export class LabRun extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: true })
   jobId: number | null;
 
+  // The branch the snapshot was taken from and the pull request targets. Null on runs from before it could be chosen: the project's.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  baseBranch: string | null;
+
   // The commit the snapshot was taken from, and path → sha256 of every file the worker was given: the result is diffed against this,
   // and the branch is cut from exactly this commit.
   @Column({ type: 'varchar', length: 64, nullable: true })

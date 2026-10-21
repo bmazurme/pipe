@@ -51,6 +51,8 @@ export interface LabRun {
   model: string;
   status: LabRunStatus;
   jobId: number | null;
+  // The branch the run started from and its pull request targets; null on runs from before it could be chosen (the project's).
+  baseBranch: string | null;
   branch: string | null;
   prNumber: number | null;
   prUrl: string | null;
@@ -65,6 +67,8 @@ export interface StartLabRunInput {
   task: string;
   model: string;
   contextId?: number | null;
+  // Absent = the project's branch.
+  baseBranch?: string;
 }
 
 function errorMessage(fallback: string) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRightFromSquare, Plus, Rocket, Stop } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Label, Select, Skeleton, Text, TextArea } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, Select, Skeleton, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
@@ -30,8 +30,9 @@ export function RunsTab() {
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId }] = useCancelLabRunMutation();
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
-  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string } | null>(null);
+  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
 
   useEffect(() => {
@@ -42,9 +43,10 @@ export function RunsTab() {
     if (!form) return;
     if (!form.projectId) return setError('Выберите проект');
     if (form.task.trim().length < 3) return setError('Опишите задачу текстом');
+    if (!form.baseBranch.trim()) return setError('Укажите ветку');
 
     try {
-      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null }).unwrap();
+      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim() }).unwrap();
       setForm(null);
       setError(null);
     } catch (err) {
@@ -61,7 +63,8 @@ export function RunsTab() {
           disabled={!projects?.some((project) => project.canWrite)}
           onClick={() => {
             setError(null);
-            setForm({ projectId: String(projects?.find((project) => project.canWrite)?.id ?? ''), task: '', model: 'sonnet', contextId: '' });
+            const projectId = String(projects?.find((project) => project.canWrite)?.id ?? '');
+            setForm({ projectId, task: '', model: 'sonnet', contextId: '', baseBranch: branchOf(projectId) });
           }}
         >
           <Icon data={Plus} size={16} />
@@ -82,6 +85,7 @@ export function RunsTab() {
             </Text>
             <Text variant="caption-2" color="secondary">
               {run.repo} · {modelLabel(run.model)} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}
+              {run.baseBranch && run.baseBranch !== branchOf(run.projectId) && ` · ветка ${run.baseBranch}`}
               {run.note && ` · ${run.note}`}
             </Text>
             {run.error && (
@@ -108,7 +112,7 @@ export function RunsTab() {
                 size="s"
                 onClick={() => {
                   setError(null);
-                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '' });
+                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '', baseBranch: run.baseBranch ?? branchOf(run.projectId) });
                 }}
               >
                 Запустить снова
@@ -131,10 +135,11 @@ export function RunsTab() {
               <Select
                 label="Проект"
                 value={[form.projectId]}
-                onUpdate={([projectId]) => setForm({ ...form, projectId: projectId ?? '' })}
+                onUpdate={([projectId]) => setForm({ ...form, projectId: projectId ?? '', baseBranch: branchOf(projectId ?? '') })}
                 options={(projects ?? []).filter((project) => project.canWrite).map((project) => ({ value: String(project.id), content: `${project.name} (${project.repo})` }))}
                 width="max"
               />
+              <TextInput label="Ветка" value={form.baseBranch} onUpdate={(baseBranch) => setForm({ ...form, baseBranch })} />
               <Text variant="body-2">Задача</Text>
               <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
               <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={MODEL_OPTIONS} width="max" />

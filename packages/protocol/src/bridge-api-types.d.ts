@@ -2619,6 +2619,7 @@ export interface components {
             /** @enum {string} */
             status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
             jobId: number | null;
+            baseBranch: string | null;
             baseSha: string | null;
             baseline: string | null;
             branch: string | null;
@@ -2639,6 +2640,7 @@ export interface components {
             projectId: number;
             task: string;
             model: string;
+            baseBranch?: string;
         };
         AppLog: {
             level: Record<string, never>;
