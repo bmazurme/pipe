@@ -22,7 +22,14 @@ import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
 import styles from '../ImprovePage.module.css';
 import { formatTime, modelLabel, parseTime } from '../improve/improveLabels';
 import { sortSchedulesByRunTime } from '../improve/scheduleOrder';
-import { ALL_WEEKDAYS, formatWeekdays, WEEKDAYS } from './weekdays';
+import { ALL_WEEKDAYS, formatWeekdays, WEEKDAYS, WEEKEND_DAYS, WORKDAYS } from './weekdays';
+
+const sameDays = (a: number[], b: number[]) => {
+  const left = [...a].sort((x, y) => x - y);
+  const right = [...b].sort((x, y) => x - y);
+
+  return left.length === right.length && left.every((day, index) => day === right[index]);
+};
 
 interface Form {
   projectId: string;
@@ -240,8 +247,29 @@ export function SchedulesTab() {
                 value={editing.form.task}
                 onUpdate={(task) => update({ task })}
               />
-              <TextInput label="Время" value={editing.form.time} onUpdate={(time) => update({ time })} controlProps={{ type: 'time', 'aria-label': 'Время запуска' }} />
+              <div className={styles.timeRow}>
+                <TextInput label="Время" value={editing.form.time} onUpdate={(time) => update({ time })} controlProps={{ type: 'time', 'aria-label': 'Время запуска' }} />
+                <Select
+                  label="Часовой пояс"
+                  value={[editing.form.timezone]}
+                  onUpdate={([timezone]) => update({ timezone })}
+                  options={listTimeZones(editing.form.timezone).map((zone) => ({ value: zone, content: zone }))}
+                  filterable
+                  width="max"
+                />
+              </div>
               <Text variant="body-2">Дни недели</Text>
+              <div role="group" aria-label="Готовые наборы дней" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Каждый день', days: ALL_WEEKDAYS },
+                  { label: 'Будни', days: WORKDAYS },
+                  { label: 'Выходные', days: WEEKEND_DAYS },
+                ].map(({ label, days }) => (
+                  <Button key={label} size="s" view="flat-secondary" selected={sameDays(editing.form.weekdays, days)} onClick={() => update({ weekdays: days })}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
               <div role="group" aria-label="Дни недели" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {WEEKDAYS.map(({ day, short }) => (
                   <Button key={day} size="s" view={editing.form.weekdays.includes(day) ? 'action' : 'outlined'} selected={editing.form.weekdays.includes(day)} onClick={() => toggleWeekday(day)}>
@@ -249,14 +277,6 @@ export function SchedulesTab() {
                   </Button>
                 ))}
               </div>
-              <Select
-                label="Часовой пояс"
-                value={[editing.form.timezone]}
-                onUpdate={([timezone]) => update({ timezone })}
-                options={listTimeZones(editing.form.timezone).map((zone) => ({ value: zone, content: zone }))}
-                filterable
-                width="max"
-              />
               <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
               <Select label="Где выполнять" value={[editing.form.executor]} onUpdate={([executor]) => update({ executor: (executor as LabExecutor) ?? 'any' })} options={EXECUTOR_OPTIONS} width="max" />
               {editing.form.executor === 'fusion' && (

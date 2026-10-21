@@ -10,6 +10,8 @@ export const WEEKDAYS = [
 ];
 
 export const ALL_WEEKDAYS = WEEKDAYS.map(({ day }) => day);
+export const WORKDAYS = WEEKDAYS.filter(({ day }) => day <= 5).map(({ day }) => day);
+export const WEEKEND_DAYS = WEEKDAYS.filter(({ day }) => day > 5).map(({ day }) => day);
 
 const shortOf = (day: number) => WEEKDAYS.find((weekday) => weekday.day === day)?.short ?? String(day);
 
