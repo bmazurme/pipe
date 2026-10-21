@@ -13,6 +13,7 @@ type Sent = { path: string; method: string; body: unknown };
 let sent: Sent[];
 let projects: unknown[];
 let schedules: unknown[];
+let runs: unknown[];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -20,6 +21,7 @@ beforeEach(() => {
   sent = [];
   projects = [{ id: 1, name: 'Катер', repo: 'me/boat', baseBranch: 'main', tokenHint: 'abcd', checkedAt: null, canWrite: true }];
   schedules = [];
+  runs = [];
   store.dispatch(labApi.util.resetApiState());
   store.dispatch(contextApi.util.resetApiState());
   vi.stubGlobal(
@@ -34,6 +36,7 @@ beforeEach(() => {
       }
       if (path === 'lab/projects') return json(projects);
       if (path === 'lab/schedules') return json(schedules);
+      if (path === 'lab/runs') return json(runs);
 
       return json([]);
     }),
@@ -98,6 +101,51 @@ describe('LabPage', () => {
 
     await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules')).toBeDefined());
     expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ projectId: 1, task: 'Обновить зависимости', hour: 2, minute: 0 });
+  });
+
+  describe('run again', () => {
+    const makeRun = (over: Record<string, unknown>) => ({
+      id: 1,
+      projectId: 1,
+      repo: 'me/boat',
+      scheduleId: null,
+      trigger: 'manual',
+      title: 'Задача',
+      task: 'Почистить код',
+      model: 'opus',
+      status: 'failed',
+      jobId: null,
+      prUrl: null,
+      prNumber: null,
+      error: null,
+      note: null,
+      createdAt: new Date().toISOString(),
+      ...over,
+    });
+
+    it('opens the start dialog prefilled from a failed run and posts the edited task', async () => {
+      const user = userEvent.setup();
+      runs = [makeRun({})];
+      renderPage('/lab?tab=runs');
+
+      await user.click(await screen.findByRole('button', { name: 'Запустить снова' }));
+      const task = await screen.findByLabelText('Задача');
+      expect(task).toHaveValue('Почистить код');
+
+      await user.type(task, ' аккуратно');
+      await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+      await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs')).toBeDefined());
+      expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({ projectId: 1, task: 'Почистить код аккуратно', model: 'opus' });
+    });
+
+    it('is not offered for active runs or runs whose project was disconnected', async () => {
+      runs = [makeRun({ id: 1, status: 'queued' }), makeRun({ id: 2, status: 'running' }), makeRun({ id: 3, status: 'publishing' }), makeRun({ id: 4, projectId: null })];
+      renderPage('/lab?tab=runs');
+
+      await screen.findAllByText('Задача');
+      expect(screen.queryByRole('button', { name: 'Запустить снова' })).toBeNull();
+    });
   });
 
   it('refuses a schedule without a task', async () => {
