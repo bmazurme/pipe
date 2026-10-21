@@ -35,6 +35,7 @@ import { requiredCapabilityOf, type LabExecutor } from './lab-executor';
 import { LabProjectsService } from './lab-projects.service';
 import { LabPublishService } from './lab-publish.service';
 import {
+  labEnvironment,
   parcelEntries,
   LabSnapshot,
   selectLabSnapshot,
@@ -210,7 +211,7 @@ export class LabRunsService {
         {
           number: 'lab',
           title,
-          body: taskWithSkipped(input.task, snapshot.skipped),
+          body: `${taskWithSkipped(input.task, snapshot.skipped)}\n\n${labEnvironment(project.repo, baseBranch)}`,
           repo: project.repo,
           baseBranch,
         },
