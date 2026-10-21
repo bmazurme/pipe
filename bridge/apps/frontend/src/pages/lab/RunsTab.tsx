@@ -102,6 +102,18 @@ export function RunsTab() {
                 Повторить публикацию
               </Button>
             )}
+            {!ACTIVE.includes(run.status) && run.projectId !== null && projects?.some((project) => project.id === run.projectId && project.canWrite) && (
+              <Button
+                view="outlined"
+                size="s"
+                onClick={() => {
+                  setError(null);
+                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '' });
+                }}
+              >
+                Запустить снова
+              </Button>
+            )}
             {(run.status === 'queued' || run.status === 'running') && (
               <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
                 <Icon data={Stop} size={16} />
