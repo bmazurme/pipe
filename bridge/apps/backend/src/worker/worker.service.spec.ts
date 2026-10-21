@@ -391,6 +391,7 @@ describe('WorkerService', () => {
         claudeCredentialId: null,
         providerCredentialId: null,
         targetWorkerId: null,
+        requiredCapability: null,
         notBefore: null,
         notifyOnFinish: false,
         resultPublicKey: null,
@@ -1755,6 +1756,7 @@ describe('WorkerService', () => {
           JobStatus.Queued,
           7,
           5,
+          [],
         ]);
       });
 
@@ -1783,7 +1785,27 @@ describe('WorkerService', () => {
 
         await service.claim(7, undefined, 5);
 
-        expect(claimSql()).not.toContain('ANY(');
+        expect(claimSql()).not.toContain('model::text = ANY(');
+      });
+
+      it('hands a job that requires a capability only to a worker that has it', async () => {
+        workerRepository.findOneBy.mockResolvedValue(
+          managed({ capabilities: ['fusion'] }),
+        );
+
+        await service.claim(7, undefined, 5);
+
+        expect(claimSql()).toContain(
+          '("requiredCapability" IS NULL OR "requiredCapability" = ANY($6::text[]))',
+        );
+        expect(claimParams()[5]).toEqual(['fusion']);
+      });
+
+      it('a legacy worker never takes a job that requires a capability', async () => {
+        await service.claim(7, 'old');
+
+        expect(claimSql()).toContain('"requiredCapability" IS NULL');
+        expect(claimSql()).not.toContain('"requiredCapability" = ANY');
       });
 
       it('a paused worker is given nothing — and nothing is claimed', async () => {

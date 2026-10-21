@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -14,6 +15,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+
+import { LAB_EXECUTORS, type LabExecutor } from '../lab-executor';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -93,6 +96,12 @@ export class StartLabRunDto {
   @IsString()
   @Matches(/^[\w./-]{1,100}$/)
   baseBranch?: string;
+
+  // Where to run: 'any' worker (default) or 'fusion' — only a worker set up for Fusion 360.
+  @ApiPropertyOptional({ enum: LAB_EXECUTORS })
+  @IsOptional()
+  @IsIn(LAB_EXECUTORS)
+  executor?: LabExecutor;
 }
 
 export class SaveLabScheduleDto {
@@ -149,4 +158,10 @@ export class SaveLabScheduleDto {
   @IsInt()
   @Min(1)
   contextId?: number | null;
+
+  // Where to run: 'any' worker (default) or 'fusion' — only a worker set up for Fusion 360.
+  @ApiPropertyOptional({ enum: LAB_EXECUTORS })
+  @IsOptional()
+  @IsIn(LAB_EXECUTORS)
+  executor?: LabExecutor;
 }

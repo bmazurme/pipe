@@ -4,6 +4,7 @@ import { BaseEntity } from '../../base.entity';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { User } from '../../users/entities/user.entity';
 import type { ClaudeLimits } from '../claude-limits';
+import type { WorkerCapability } from '../capabilities';
 import { JobModel } from './job.entity';
 
 // A worker process the owner added in the UI. It joins with a one-time enrollment code (no secret in its
@@ -76,6 +77,11 @@ export class Worker extends BaseEntity {
   // first one. ON DELETE SET NULL in the migration, like jobs.claudeCredentialId.
   @Column({ type: 'int', unsigned: true, nullable: true })
   claudeCredentialId: number | null;
+
+  // What this worker can do besides running a model (see capabilities.ts); null/empty = nothing special. A job that requires a
+  // capability is only given to a worker that has it.
+  @Column({ type: 'simple-array', nullable: true })
+  capabilities: WorkerCapability[] | null;
 
   // The vless:// Reality link of this worker's own VPN tunnel (the worker runs Xray with it), encrypted at rest. It is a
   // secret: only the worker itself ever receives it back; the owner's views get a host:port summary.

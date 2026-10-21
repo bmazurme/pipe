@@ -6,6 +6,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
   getErrorMessage,
+  type LabExecutor,
   useCancelLabRunMutation,
   useListContextsQuery,
   useListLabProjectsQuery,
@@ -15,6 +16,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
+import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
 import styles from '../ImprovePage.module.css';
 import { modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from '../improve/improveLabels';
 
@@ -30,7 +32,7 @@ export function RunsTab() {
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId }] = useCancelLabRunMutation();
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
-  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string } | null>(null);
+  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
@@ -46,7 +48,7 @@ export function RunsTab() {
     if (!form.baseBranch.trim()) return setError('Укажите ветку');
 
     try {
-      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim() }).unwrap();
+      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim(), executor: form.executor }).unwrap();
       setForm(null);
       setError(null);
     } catch (err) {
@@ -64,7 +66,7 @@ export function RunsTab() {
           onClick={() => {
             setError(null);
             const projectId = String(projects?.find((project) => project.canWrite)?.id ?? '');
-            setForm({ projectId, task: '', model: 'sonnet', contextId: '', baseBranch: branchOf(projectId) });
+            setForm({ projectId, task: '', model: 'sonnet', contextId: '', baseBranch: branchOf(projectId), executor: 'any' });
           }}
         >
           <Icon data={Plus} size={16} />
@@ -84,7 +86,7 @@ export function RunsTab() {
               {run.title}
             </Text>
             <Text variant="caption-2" color="secondary">
-              {run.repo} · {modelLabel(run.model)} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}
+              {run.repo} · {modelLabel(run.model)}{executorLabel(run.executor) && ` · ${executorLabel(run.executor)}`} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}
               {run.baseBranch && run.baseBranch !== branchOf(run.projectId) && ` · ветка ${run.baseBranch}`}
               {run.note && ` · ${run.note}`}
             </Text>
@@ -112,7 +114,7 @@ export function RunsTab() {
                 size="s"
                 onClick={() => {
                   setError(null);
-                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '', baseBranch: run.baseBranch ?? branchOf(run.projectId) });
+                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '', baseBranch: run.baseBranch ?? branchOf(run.projectId), executor: run.executor ?? 'any' });
                 }}
               >
                 Запустить снова
@@ -143,6 +145,12 @@ export function RunsTab() {
               <Text variant="body-2">Задача</Text>
               <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
               <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={MODEL_OPTIONS} width="max" />
+              <Select label="Где выполнять" value={[form.executor]} onUpdate={([executor]) => setForm({ ...form, executor: (executor as LabExecutor) ?? 'any' })} options={EXECUTOR_OPTIONS} width="max" />
+              {form.executor === 'fusion' && (
+                <Text variant="caption-2" color="secondary">
+                  {EXECUTOR_HINT}
+                </Text>
+              )}
               <Select
                 label="Контекст"
                 value={[form.contextId]}

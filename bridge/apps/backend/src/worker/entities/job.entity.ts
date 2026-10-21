@@ -99,6 +99,10 @@ export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: true })
   targetWorkerId: number | null;
 
+  // A capability a worker must have to take this job (see capabilities.ts); null = any worker.
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  requiredCapability: string | null;
+
   // The context the owner attached at launch (see ContextModule) — a snapshot, not a
   // reference, so editing or deleting the saved context never changes a job that is
   // queued or already ran. Both null (the default) when nothing was attached. The text

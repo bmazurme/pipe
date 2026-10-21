@@ -2228,6 +2228,7 @@ export interface components {
             providerCredentialId: number | null;
             workerId: number | null;
             targetWorkerId: number | null;
+            requiredCapability: string | null;
             contextName: string | null;
             historyCount: number | null;
             taskKey: string | null;
@@ -2259,6 +2260,8 @@ export interface components {
             claudeCredentialId?: number;
             providerCredentialId?: number;
             targetWorkerId?: number;
+            /** @enum {string} */
+            requiredCapability?: "fusion";
             contextId?: number;
             includeHistory?: boolean;
             /** Format: date-time */
@@ -2354,6 +2357,7 @@ export interface components {
         };
         WorkerResponseDto: {
             models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            capabilities: "fusion"[];
             claudeLimits: {
                 [key: string]: unknown;
             } | null;
@@ -2388,6 +2392,8 @@ export interface components {
             models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
+            /** @enum {array} */
+            capabilities?: "fusion";
             name: string;
             pollIntervalSec?: number;
             jobTimeoutSec?: number;
@@ -2414,6 +2420,7 @@ export interface components {
         };
         WorkerConfigResponseDto: {
             models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            capabilities: "fusion"[];
             id: number;
             name: string;
             enabled: boolean;
@@ -2433,6 +2440,8 @@ export interface components {
             models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
+            /** @enum {array} */
+            capabilities?: "fusion";
             name?: string;
             enabled?: boolean;
             pollIntervalSec?: number;
@@ -2587,6 +2596,7 @@ export interface components {
             timezone: string;
             weekdays: number[] | null;
             model: string;
+            executor: Record<string, never>;
             task: string;
             contextId: number | null;
             lastRunOn: string | null;
@@ -2602,6 +2612,8 @@ export interface components {
         SaveLabScheduleDto: {
             weekdays?: number[] | null;
             contextId?: number | null;
+            /** @enum {string} */
+            executor?: "any" | "fusion";
             projectId: number;
             name: string;
             enabled: boolean;
@@ -2620,6 +2632,7 @@ export interface components {
             title: string;
             task: string;
             model: string;
+            executor: Record<string, never>;
             /** @enum {string} */
             status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
             jobId: number | null;
@@ -2641,6 +2654,8 @@ export interface components {
         };
         StartLabRunDto: {
             contextId?: number | null;
+            /** @enum {string} */
+            executor?: "any" | "fusion";
             projectId: number;
             task: string;
             model: string;

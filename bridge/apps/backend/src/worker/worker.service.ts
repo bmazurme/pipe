@@ -20,6 +20,7 @@ import {
   StoredFile,
   StoredFileDirection,
 } from '../storage/entities/stored-file.entity';
+import { isWorkerCapability } from './capabilities';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
@@ -286,6 +287,14 @@ export class WorkerService {
           `Worker "${target.name}" is not set up to run ${dto.model}`,
         );
       }
+      if (
+        dto.requiredCapability !== undefined &&
+        !(target.capabilities ?? []).includes(dto.requiredCapability)
+      ) {
+        throw new BadRequestException(
+          `Worker "${target.name}" does not have ${dto.requiredCapability}`,
+        );
+      }
     }
 
     // Nothing is attached unless the owner chose a context; a chosen one is copied onto
@@ -318,6 +327,7 @@ export class WorkerService {
       claudeCredentialId: dto.claudeCredentialId ?? null,
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
+      requiredCapability: dto.requiredCapability ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
       resultPublicKey: dto.resultPublicKey ?? null,
       notBefore: dto.notBefore ?? carried?.notBefore ?? null,
@@ -361,9 +371,14 @@ export class WorkerService {
           })
         : null;
     const model = overrides.model ?? job.model;
+    const requiredCapability = isWorkerCapability(job.requiredCapability)
+      ? job.requiredCapability
+      : null;
     const pinUsable =
       pinned !== null &&
-      (pinned.models === null || pinned.models.includes(model));
+      (pinned.models === null || pinned.models.includes(model)) &&
+      (requiredCapability === null ||
+        (pinned.capabilities ?? []).includes(requiredCapability));
     // A stored credential only fits the family (Claude / one provider) it was made for.
     const claudeCredentialId =
       overrides.claudeCredentialId ??
@@ -379,6 +394,7 @@ export class WorkerService {
         ...(claudeCredentialId !== null ? { claudeCredentialId } : {}),
         ...(providerCredentialId !== null ? { providerCredentialId } : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
+        ...(requiredCapability !== null ? { requiredCapability } : {}),
         ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
         ...(job.resultPublicKey
           ? { resultPublicKey: job.resultPublicKey }
@@ -638,6 +654,20 @@ export class WorkerService {
     await this.jobRepository.delete(job.id);
   }
 
+  // Is there a worker of this account that is switched on and set up for `capability`? Used to refuse a run that could never start.
+  async hasEnabledWorkerWith(
+    userId: number,
+    capability: string,
+  ): Promise<boolean> {
+    const workers = await this.workerRepository.find({
+      where: { userId, enabled: true },
+    });
+
+    return workers.some((worker) =>
+      (worker.capabilities ?? []).includes(capability as never),
+    );
+  }
+
   // Claim-less liveness ping — a worker busy running one long job never
   // reaches claim() again, so without this it would look down after
   // STALE_AFTER_MS (see WorkerHeartbeatService).
@@ -697,7 +727,9 @@ export class WorkerService {
       userId,
       worker?.id ?? null,
     ];
-    let eligibility = ' AND "targetWorkerId" IS NULL';
+    // A job that requires a capability goes only to a worker that has it; a legacy worker has none.
+    let eligibility =
+      ' AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL';
 
     if (worker) {
       eligibility = ' AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5)';
@@ -706,6 +738,9 @@ export class WorkerService {
         params.push(worker.models);
         eligibility += ` AND model::text = ANY($${params.length}::text[])`;
       }
+
+      params.push(worker.capabilities ?? []);
+      eligibility += ` AND ("requiredCapability" IS NULL OR "requiredCapability" = ANY($${params.length}::text[]))`;
     }
 
     const [rows]: [{ id: number }[], number] = await this.jobRepository.query(

@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -15,6 +17,7 @@ import {
   Min,
 } from 'class-validator';
 
+import { WORKER_CAPABILITIES, type WorkerCapability } from '../capabilities';
 import type { ClaudeLimits } from '../claude-limits';
 import {
   describeVless,
@@ -80,6 +83,15 @@ class WorkerSettingsDto {
   @IsOptional()
   @IsIn(LIMITS_REFRESH_OPTIONS)
   limitsRefreshMin?: number;
+
+  // What this worker can do besides running a model (e.g. 'fusion': it runs next to Fusion 360); empty = nothing special.
+  @ApiPropertyOptional({ enum: WORKER_CAPABILITIES, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(WORKER_CAPABILITIES.length)
+  @IsIn(WORKER_CAPABILITIES, { each: true })
+  capabilities?: WorkerCapability[];
 }
 
 export class CreateWorkerDto extends WorkerSettingsDto {
@@ -156,6 +168,8 @@ export class WorkerResponseDto {
   // host:port of the worker's VPN server, or null — the link itself is never shown again.
   vpnHost: string | null;
   limitsRefreshMin: number;
+  @ApiProperty({ enum: WORKER_CAPABILITIES, isArray: true })
+  capabilities: WorkerCapability[];
   // When the owner last asked for a refresh (null = never) — the card shows "requested" until a newer report arrives.
   limitsRefreshRequestedAt: Date | null;
   keyPrefix: string | null;
@@ -203,6 +217,7 @@ export class WorkerResponseDto {
       claudeCredentialId: worker.claudeCredentialId ?? null,
       vpnHost: describeVless(worker.vpnLink),
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
+      capabilities: worker.capabilities ?? [],
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       keyPrefix: worker.keyPrefix,
       enrollmentPending:
@@ -245,6 +260,7 @@ export class WorkerResponseDto {
       claudeCredentialId: null,
       vpnHost: null,
       limitsRefreshMin: 0,
+      capabilities: [],
       limitsRefreshRequestedAt: null,
     };
   }
@@ -282,6 +298,9 @@ export class WorkerConfigResponseDto {
   limitsRefreshMin: number;
   limitsRefreshRequestedAt: Date | null;
   limitProbe: { claudeToken: string } | null;
+  // What this worker is set up to do besides running a model (see capabilities.ts).
+  @ApiProperty({ enum: WORKER_CAPABILITIES, isArray: true })
+  capabilities: WorkerCapability[];
 }
 
 export class DeletedWorkerResponseDto {

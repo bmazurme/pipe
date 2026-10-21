@@ -157,6 +157,8 @@ export interface FleetWorker {
   /** Minutes between automatic probes of the plan limits (0 = only on request), and when the owner last asked for one. */
   limitsRefreshMin: number;
   limitsRefreshRequestedAt: string | null;
+  /** What the worker can do besides running a model, e.g. 'fusion' (it runs next to Fusion 360). */
+  capabilities: WorkerCapability[];
 }
 
 /** Returned once, when a worker is created or its enrolment code is renewed. */
@@ -165,6 +167,8 @@ export interface CreatedFleetWorker {
   enrollCode: string;
   enrollExpiresAt: string;
 }
+
+export type WorkerCapability = 'fusion';
 
 export interface WorkerSettings {
   models?: WorkerJobModel[] | null;
@@ -178,6 +182,7 @@ export interface WorkerSettings {
   /** Minutes between automatic probes of the Claude plan limits; 0 = only on request. */
   limitsRefreshMin?: number;
   chatEnabled?: boolean;
+  capabilities?: WorkerCapability[];
 }
 
 export interface WorkerHeartbeat {

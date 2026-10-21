@@ -143,3 +143,36 @@ describe('WorkerResponseDto.fromWorker — proxy credentials', () => {
     expect(dto.proxyHasCredentials).toBe(false);
   });
 });
+
+describe('worker capabilities', () => {
+  it('shows what a worker can do, and an empty list when it has none', () => {
+    expect(
+      WorkerResponseDto.fromWorker(
+        worker({ capabilities: ['fusion'] }),
+        0,
+        true,
+        now,
+      ).capabilities,
+    ).toEqual(['fusion']);
+    expect(
+      WorkerResponseDto.fromWorker(worker(), 0, true, now).capabilities,
+    ).toEqual([]);
+    expect(WorkerResponseDto.legacy('old', now, 0, true).capabilities).toEqual(
+      [],
+    );
+  });
+
+  it('accepts only known capabilities, each once', async () => {
+    const { plainToInstance } = await import('class-transformer');
+    const { validate } = await import('class-validator');
+    const { UpdateWorkerDto } = await import('./worker-fleet.dto');
+    const errors = async (capabilities: unknown) =>
+      (await validate(plainToInstance(UpdateWorkerDto, { capabilities })))
+        .length;
+
+    expect(await errors(['fusion'])).toBe(0);
+    expect(await errors([])).toBe(0);
+    expect(await errors(['gpu'])).toBeGreaterThan(0);
+    expect(await errors(['fusion', 'fusion'])).toBeGreaterThan(0);
+  });
+});
