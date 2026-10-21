@@ -156,3 +156,17 @@ describe('readLabResult limits', () => {
     await expect(readLabResult(data, limits)).rejects.toThrow(/big\.bin/);
   });
 });
+
+describe('what the worker is told about its place', () => {
+  it('says the folder has no .git, that nothing is cloned or committed by it, and that a question blocks only its own part', async () => {
+    const { labEnvironment } = await import('./lab-result');
+    const text = labEnvironment('bmazurme/exp2', 'main');
+
+    expect(text).toContain('bmazurme/exp2');
+    expect(text).toContain('WITHOUT .git');
+    expect(text).toContain('do not clone it');
+    expect(text).toContain('Do not commit, push');
+    expect(text).toContain('pull request');
+    expect(text).toContain('Nobody can answer a question during the run');
+  });
+});

@@ -131,6 +131,17 @@ export function parcelEntries(snapshot: LabSnapshot): SnapshotFile[] {
   ];
 }
 
+// What the worker is told about the place it works in. Without it a model finds a folder with no .git in front of a private repository
+// and asks who clones it and how to commit (it did: "Этап 0 ... Кто делает clone?"), then waits for an answer nobody gives during a run.
+export function labEnvironment(repo: string, baseBranch: string): string {
+  return [
+    'About where you work (Lab):',
+    `- The working directory is a snapshot of the repository ${repo} (branch ${baseBranch}) WITHOUT .git. The repository is private and access to it is already arranged: do not clone it, and do not ask who does.`,
+    '- Do not commit, push, create branches or open pull requests, and do not look for credentials for it. When you finish, bridge publishes every file you created or changed (text and binary; not `.github/workflows/` and `.git/`) as a branch and a pull request in that repository, which the owner reviews and merges. Just leave the files in the working directory, in the places the project describes (for example calc/ and cad/).',
+    '- Nobody can answer a question during the run. If something is unclear or missing, make the most reasonable assumption, say so where the project keeps its decisions and open questions (its documents), and carry on with everything that does not depend on it. A question only blocks the part that really needs the answer, never the whole run.',
+  ].join('\n');
+}
+
 /** The task text for the worker, with a note on the binary files that did not fit. */
 export function taskWithSkipped(task: string, skipped: string[]): string {
   if (skipped.length === 0) return task;
