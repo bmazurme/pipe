@@ -174,8 +174,9 @@ esac
 need BRIDGE_API_URL
 need BRIDGE_API_KEY
 mkdir -p "$STATE_DIR" 2>/dev/null || { log "cannot write $STATE_DIR — nothing done"; exit 0; }
-exec 9>"$STATE_DIR/lock"
-flock -n 9 || { log "another run is in progress"; exit 0; }
+# One lock per kind of run: the minute check must never make the hourly report skip itself (and a report never delays a decision).
+exec 9>"$STATE_DIR/lock-$1"
+flock -n 9 || { log "another $1 run is in progress"; exit 0; }
 
 if [ "$1" = report ]; then do_report || true; else do_apply; fi
 exit 0
