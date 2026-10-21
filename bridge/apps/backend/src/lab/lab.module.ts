@@ -11,6 +11,7 @@ import { LabRun } from './entities/lab-run.entity';
 import { LabSchedule } from './entities/lab-schedule.entity';
 import { LabController } from './lab.controller';
 import { LabProjectsService } from './lab-projects.service';
+import { LabPublishService } from './lab-publish.service';
 import { LabRunsService } from './lab-runs.service';
 import { LabSchedulesService } from './lab-schedules.service';
 
@@ -24,6 +25,11 @@ import { LabSchedulesService } from './lab-schedules.service';
     AuthModule,
   ],
   controllers: [LabController],
-  providers: [LabProjectsService, LabRunsService, LabSchedulesService],
+  providers: [
+    LabProjectsService,
+    LabPublishService,
+    LabRunsService,
+    LabSchedulesService,
+  ],
 })
 export class LabModule {}

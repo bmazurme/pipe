@@ -397,21 +397,6 @@ describe('LabRunsService: the branch of a run', () => {
     );
   });
 
-  const run = (baseBranch: string | null) =>
-    ({
-      id: 9,
-      userId: 1,
-      projectId: project.id,
-      repo: project.repo,
-      title: 'Fix',
-      task: 'Fix the test',
-      model: 'sonnet',
-      trigger: 'manual',
-      status: LabRunStatus.Publishing,
-      baseSha: 'sha-base',
-      baseBranch,
-    }) as LabRun;
-
   const prepare = async (input: Parameters<LabRunsService['launch']>[1]) =>
     (await service.launch(1, input)).prepared;
 
@@ -457,22 +442,6 @@ describe('LabRunsService: the branch of a run', () => {
       }),
     ).rejects.toThrow('не найдена');
     expect(workers.create).not.toHaveBeenCalled();
-  });
-
-  it('opens the pull request against the branch of the run', async () => {
-    await service.publish(run('release/1.4'), 6);
-
-    expect(github.createPull).toHaveBeenCalledWith(
-      expect.objectContaining({ base: 'release/1.4' }),
-    );
-  });
-
-  it("opens a run from before the per-run branch against the project's", async () => {
-    await service.publish(run(null), 6);
-
-    expect(github.createPull).toHaveBeenCalledWith(
-      expect.objectContaining({ base: 'main' }),
-    );
   });
 
   it('hands a Fusion run to the job as a required capability, and records where it runs', async () => {
