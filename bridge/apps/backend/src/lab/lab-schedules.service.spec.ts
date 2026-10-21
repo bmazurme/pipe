@@ -35,7 +35,11 @@ const setup = (schedule: LabSchedule) => {
     update: jest.fn().mockResolvedValue(undefined),
     createQueryBuilder: jest.fn(() => builder),
   };
-  const runs = { start: jest.fn().mockResolvedValue({ id: 42 }) };
+  const runs = {
+    launch: jest
+      .fn()
+      .mockResolvedValue({ run: { id: 42 }, prepared: Promise.resolve() }),
+  };
   const notifier = { send: jest.fn().mockResolvedValue(undefined) };
   const service = new LabSchedulesService(
     repo as never,
@@ -53,30 +57,30 @@ describe('LabSchedulesService: weekdays', () => {
   it('does not fire a weekday schedule on a Saturday and fires it on a Monday', async () => {
     const saturday = setup(makeSchedule());
     await saturday.service.tick(new Date('2026-10-24T09:00:00Z'));
-    expect(saturday.runs.start).not.toHaveBeenCalled();
+    expect(saturday.runs.launch).not.toHaveBeenCalled();
 
     const monday = setup(makeSchedule());
     await monday.service.tick(new Date('2026-10-26T09:00:00Z'));
-    expect(monday.runs.start).toHaveBeenCalledTimes(1);
+    expect(monday.runs.launch).toHaveBeenCalledTimes(1);
   });
 
   it('goes by the weekday in the schedule time zone, not UTC', async () => {
     // Sunday 22:30 UTC is already Monday 01:30 in Moscow.
     const mondayLocal = setup(makeSchedule());
     await mondayLocal.service.tick(new Date('2026-10-25T22:30:00Z'));
-    expect(mondayLocal.runs.start).toHaveBeenCalledTimes(1);
+    expect(mondayLocal.runs.launch).toHaveBeenCalledTimes(1);
 
     // Friday 22:30 UTC is already Saturday 01:30 in Moscow.
     const saturdayLocal = setup(makeSchedule());
     await saturdayLocal.service.tick(new Date('2026-10-23T22:30:00Z'));
-    expect(saturdayLocal.runs.start).not.toHaveBeenCalled();
+    expect(saturdayLocal.runs.launch).not.toHaveBeenCalled();
   });
 
   it('fires a schedule without weekdays every day', async () => {
     for (const day of ['2026-10-24', '2026-10-25', '2026-10-26']) {
       const { service, runs } = setup(makeSchedule({ weekdays: null }));
       await service.tick(new Date(`${day}T09:00:00Z`));
-      expect(runs.start).toHaveBeenCalledTimes(1);
+      expect(runs.launch).toHaveBeenCalledTimes(1);
     }
     expect(
       onAllowedWeekday(
@@ -93,6 +97,95 @@ describe('LabSchedulesService: weekdays', () => {
       runId: 42,
       error: null,
     });
-    expect(runs.start).toHaveBeenCalledTimes(1);
+    expect(runs.launch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LabSchedulesService.fire', () => {
+  const schedule = {
+    id: 4,
+    userId: 1,
+    projectId: 7,
+    name: 'nightly',
+    task: 'do it',
+    model: 'sonnet',
+    contextId: null,
+  } as unknown as LabSchedule;
+
+  function build(launch: jest.Mock) {
+    const schedules = { update: jest.fn(async () => undefined) };
+    const notifier = { send: jest.fn(async () => undefined) };
+    const service = new LabSchedulesService(
+      schedules as never,
+      {} as never,
+      { launch } as never,
+      {} as never,
+      notifier as never,
+    );
+
+    return { service, schedules, notifier };
+  }
+
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  it('answers with the run before its preparation settles', async () => {
+    let finish!: () => void;
+    const prepared = new Promise<void>((resolve) => (finish = resolve));
+    const { service, schedules, notifier } = build(
+      jest.fn(async () => ({ run: { id: 11 }, prepared })),
+    );
+
+    await expect(service.fire(schedule)).resolves.toEqual({
+      runId: 11,
+      error: null,
+    });
+    expect(notifier.send).not.toHaveBeenCalled();
+
+    finish();
+    await settle();
+
+    expect(schedules.update).toHaveBeenCalledWith(4, {
+      lastRunAt: expect.any(Date),
+      lastResult: 'запуск #11',
+    });
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed preparation once', async () => {
+    const { service, schedules, notifier } = build(
+      jest.fn(async () => ({
+        run: { id: 12 },
+        prepared: Promise.reject(new Error('скачивание репозитория: boom')),
+      })),
+    );
+
+    await service.fire(schedule);
+    await settle();
+
+    expect(schedules.update).toHaveBeenCalledWith(4, {
+      lastRunAt: expect.any(Date),
+      lastResult: 'запуск #12 не подготовлен: скачивание репозитория: boom',
+    });
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a run that could not start at all', async () => {
+    const { service, schedules, notifier } = build(
+      jest.fn(async () => {
+        throw new Error('Эта задача в этом проекте уже выполняется');
+      }),
+    );
+
+    await expect(service.fire(schedule)).resolves.toEqual({
+      runId: null,
+      error: 'Эта задача в этом проекте уже выполняется',
+    });
+    await settle();
+
+    expect(schedules.update).toHaveBeenCalledWith(4, {
+      lastRunAt: expect.any(Date),
+      lastResult: 'не запущено: Эта задача в этом проекте уже выполняется',
+    });
+    expect(notifier.send).toHaveBeenCalledTimes(1);
   });
 });
