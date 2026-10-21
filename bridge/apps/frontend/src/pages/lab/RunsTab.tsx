@@ -20,7 +20,7 @@ import { modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from '../improve/impro
 
 const FAST_POLL_MS = 5000;
 const SLOW_POLL_MS = 30000;
-const ACTIVE = ['queued', 'running', 'publishing'];
+const ACTIVE = ['preparing', 'queued', 'running', 'publishing'];
 
 export function RunsTab() {
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);

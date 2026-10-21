@@ -2617,7 +2617,7 @@ export interface components {
             task: string;
             model: string;
             /** @enum {string} */
-            status: "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
+            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
             jobId: number | null;
             baseSha: string | null;
             baseline: string | null;

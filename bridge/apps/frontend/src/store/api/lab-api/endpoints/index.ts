@@ -1,6 +1,6 @@
 import labApi from '..';
 
-export type LabRunStatus = 'queued' | 'running' | 'publishing' | 'pr_open' | 'no_changes' | 'failed' | 'cancelled';
+export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'no_changes' | 'failed' | 'cancelled';
 
 export interface LabProject {
   id: number;

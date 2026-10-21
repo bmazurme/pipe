@@ -39,6 +39,7 @@ import {
   downloadRepoZip,
   githubFor,
   readStep,
+  ZIP_TOTAL_MS,
 } from './lab-github';
 import { LabProject } from './entities/lab-project.entity';
 import { LabProjectsService } from './lab-projects.service';
@@ -63,6 +64,8 @@ const PUBLISHING_STALE_MS = 10 * 60_000;
 // Same lifetime and bound as Improve's handoff cache.
 const SNAPSHOT_CACHE_TTL_MS = 10 * 60 * 1000;
 const SNAPSHOT_CACHE_SIZE = 2;
+// A run still preparing after the longest possible download plus a margin was lost to a restart.
+const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
 
 export function titleOf(task: string): string {
   const line = task.trim().split('\n')[0].trim();
@@ -148,42 +151,9 @@ export class LabRunsService {
     if (active > 0)
       throw new ConflictException('Эта задача в этом проекте уже выполняется');
 
-    const github = githubFor(project);
     const title = titleOf(input.task);
-    const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
-      github.getBranchSha(project.baseBranch),
-    );
-    const snapshot = await this.snapshotFor(project, baseSha);
-    const baseline = snapshot.baseline;
-    const { buffer } = await buildIssueParcel(
-      parcelEntries(snapshot),
-      {
-        number: 'lab',
-        title,
-        body: taskWithSkipped(input.task, snapshot.skipped),
-        repo: project.repo,
-        baseBranch: project.baseBranch,
-      },
-      new Date(),
-      baseline,
-    );
-    const stored = await this.storage.createFromBuffer(
-      userId,
-      buffer,
-      `lab-${project.id}.subscription.zip`,
-      {
-        channel: 'issue',
-        taskKey: `lab:${project.id}`,
-        direction: StoredFileDirection.Outbound,
-      },
-    );
-    const job = await this.workers.create(userId, {
-      sourceFileId: stored.id,
-      model: input.model as JobModel,
-      ...(input.contextId ? { contextId: input.contextId } : {}),
-    });
-
-    return this.runs.save(
+    // Recorded before the slow part so that a second start (or the nightly tick) of the same task sees it as active.
+    const run = await this.runs.save(
       this.runs.create({
         userId,
         projectId: project.id,
@@ -193,12 +163,70 @@ export class LabRunsService {
         title,
         task: input.task,
         model: input.model,
-        status: LabRunStatus.Queued,
-        jobId: job.id,
-        baseSha,
-        baseline: JSON.stringify(baseline),
+        status: LabRunStatus.Preparing,
+        jobId: null,
       }),
     );
+
+    try {
+      const github = githubFor(project);
+      const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
+        github.getBranchSha(project.baseBranch),
+      );
+      const snapshot = await this.snapshotFor(project, baseSha);
+      const baseline = snapshot.baseline;
+      const { buffer } = await buildIssueParcel(
+        parcelEntries(snapshot),
+        {
+          number: 'lab',
+          title,
+          body: taskWithSkipped(input.task, snapshot.skipped),
+          repo: project.repo,
+          baseBranch: project.baseBranch,
+        },
+        new Date(),
+        baseline,
+      );
+      const stored = await this.storage.createFromBuffer(
+        userId,
+        buffer,
+        `lab-${project.id}.subscription.zip`,
+        {
+          channel: 'issue',
+          taskKey: `lab:${project.id}`,
+          direction: StoredFileDirection.Outbound,
+        },
+      );
+      const job = await this.workers.create(userId, {
+        sourceFileId: stored.id,
+        model: input.model as JobModel,
+        ...(input.contextId ? { contextId: input.contextId } : {}),
+      });
+
+      run.status = LabRunStatus.Queued;
+      run.jobId = job.id;
+      run.baseSha = baseSha;
+      run.baseline = JSON.stringify(baseline);
+
+      return await this.runs.save(run);
+    } catch (error) {
+      await this.runs
+        .update(
+          { id: run.id },
+          {
+            status: LabRunStatus.Failed,
+            error: message(error),
+            finishedAt: new Date(),
+          },
+        )
+        .catch((updateError) =>
+          this.logger.warn(
+            `Lab run ${run.id} could not be marked failed: ${message(updateError)}`,
+          ),
+        );
+
+      throw error;
+    }
   }
 
   // The key carries updatedAt, so a changed token or branch never reuses an older download.
@@ -312,6 +340,19 @@ export class LabRunsService {
         .where('status = :status AND "updatedAt" < :before', {
           status: LabRunStatus.Publishing,
           before: new Date(Date.now() - PUBLISHING_STALE_MS),
+        })
+        .execute();
+      await this.runs
+        .createQueryBuilder()
+        .update()
+        .set({
+          status: LabRunStatus.Failed,
+          error: 'Подготовка прервана перезапуском — запустите задачу снова',
+          finishedAt: new Date(),
+        })
+        .where('status = :status AND "updatedAt" < :before', {
+          status: LabRunStatus.Preparing,
+          before: new Date(Date.now() - PREPARING_STALE_MS),
         })
         .execute();
 

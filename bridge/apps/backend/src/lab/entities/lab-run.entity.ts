@@ -3,6 +3,8 @@ import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../base.entity';
 
 export enum LabRunStatus {
+  // The row exists while bridge snapshots the repository and creates the job: a second start of the same task sees it.
+  Preparing = 'preparing',
   // The worker job exists and has not finished (queued/claimed vs running).
   Queued = 'queued',
   Running = 'running',
@@ -16,6 +18,7 @@ export enum LabRunStatus {
 }
 
 export const ACTIVE_LAB_RUN_STATUSES = [
+  LabRunStatus.Preparing,
   LabRunStatus.Queued,
   LabRunStatus.Running,
   LabRunStatus.Publishing,

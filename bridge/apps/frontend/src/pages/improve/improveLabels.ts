@@ -2,6 +2,7 @@ import type { AnalysisCategory, AnalysisItem, ImproveRun, ImproveRunStatus, Impr
 import { MODEL_OPTIONS } from '../worker/constants';
 
 export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
+  preparing: 'Готовим запуск',
   queued: 'В очереди',
   running: 'Выполняется',
   publishing: 'Открываем PR',
@@ -14,6 +15,7 @@ export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
 };
 
 export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'success' | 'danger' | 'warning'> = {
+  preparing: 'info',
   queued: 'normal',
   running: 'info',
   publishing: 'info',

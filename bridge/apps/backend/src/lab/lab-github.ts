@@ -185,7 +185,7 @@ export async function readStep<T>(
 }
 
 const ZIP_IDLE_MS = 30_000;
-const ZIP_TOTAL_MS = 10 * 60_000;
+export const ZIP_TOTAL_MS = 10 * 60_000;
 export const ZIP_MAX_BYTES = 100 * 1024 * 1024;
 
 // The repository at a commit as a zip. The client of the loop gives the whole download 90 s, which a bigger repository (images, other

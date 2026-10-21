@@ -6299,6 +6299,7 @@
           },
           "status": {
             "enum": [
+              "preparing",
               "queued",
               "running",
               "publishing",
