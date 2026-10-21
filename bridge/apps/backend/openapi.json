@@ -6314,6 +6314,10 @@
             "type": "number",
             "nullable": true
           },
+          "baseBranch": {
+            "type": "string",
+            "nullable": true
+          },
           "baseSha": {
             "type": "string",
             "nullable": true
@@ -6370,6 +6374,7 @@
           "model",
           "status",
           "jobId",
+          "baseBranch",
           "baseSha",
           "baseline",
           "branch",
@@ -6402,6 +6407,10 @@
           },
           "model": {
             "type": "string"
+          },
+          "baseBranch": {
+            "type": "string",
+            "pattern": "/^[\\w./-]{1,100}$/"
           }
         },
         "required": [

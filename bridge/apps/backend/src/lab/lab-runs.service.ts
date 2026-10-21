@@ -125,6 +125,8 @@ export class LabRunsService {
       task: string;
       model: string;
       contextId?: number | null;
+      // A branch other than the project's own, for this run only.
+      baseBranch?: string;
     },
     trigger: LabTrigger = 'manual',
     scheduleId: number | null = null,
@@ -152,6 +154,7 @@ export class LabRunsService {
       throw new ConflictException('Эта задача в этом проекте уже выполняется');
 
     const title = titleOf(input.task);
+    const baseBranch = input.baseBranch || project.baseBranch;
     // Recorded before the slow part so that a second start (or the nightly tick) of the same task sees it as active.
     const run = await this.runs.save(
       this.runs.create({
@@ -165,13 +168,14 @@ export class LabRunsService {
         model: input.model,
         status: LabRunStatus.Preparing,
         jobId: null,
+        baseBranch,
       }),
     );
 
     try {
       const github = githubFor(project);
-      const baseSha = await readStep(`ветка ${project.baseBranch}`, () =>
-        github.getBranchSha(project.baseBranch),
+      const baseSha = await readStep(`ветка ${baseBranch}`, () =>
+        github.getBranchSha(baseBranch),
       );
       const snapshot = await this.snapshotFor(project, baseSha);
       const baseline = snapshot.baseline;
@@ -182,7 +186,7 @@ export class LabRunsService {
           title,
           body: taskWithSkipped(input.task, snapshot.skipped),
           repo: project.repo,
-          baseBranch: project.baseBranch,
+          baseBranch,
         },
         new Date(),
         baseline,
@@ -512,7 +516,8 @@ export class LabRunsService {
         pull = await github.createPull({
           title: run.title,
           head: branch,
-          base: project.baseBranch,
+          // Runs from before the per-run branch have none: they target the project's.
+          base: run.baseBranch ?? project.baseBranch,
           body: [
             run.task,
             '',

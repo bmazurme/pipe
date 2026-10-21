@@ -162,3 +162,25 @@ describe('LabPage', () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe('LabPage: the branch of a run', () => {
+  it("prefills the project's branch in the new-run dialog and sends an edited one", async () => {
+    const user = userEvent.setup();
+    renderPage('/lab?tab=runs');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Новый запуск/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Новый запуск/ }));
+    await screen.findByRole('dialog');
+
+    const branch = await screen.findByLabelText('Ветка');
+    expect(branch).toHaveValue('main');
+
+    await user.clear(branch);
+    await user.type(branch, 'release/1.4');
+    await user.type(screen.getByLabelText('Задача'), 'Починить тест');
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({ projectId: 1, task: 'Починить тест', baseBranch: 'release/1.4' });
+  });
+});

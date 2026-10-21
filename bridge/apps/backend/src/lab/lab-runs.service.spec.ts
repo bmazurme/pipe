@@ -3,11 +3,33 @@ import {
   LabRunStatus,
 } from './entities/lab-run.entity';
 import * as labGithub from './lab-github';
-import { LabRunsService } from './lab-runs.service';
-import { isBlocked, titleOf } from './lab-runs.service';
-import { isValidRepo } from './lab-github';
-import { toView } from './lab-projects.service';
+import { downloadRepoZip, githubFor, isValidRepo } from './lab-github';
+import { LabRunsService, isBlocked, titleOf } from './lab-runs.service';
+import { LabProjectsService, toView } from './lab-projects.service';
 import { LabProject } from './entities/lab-project.entity';
+import { LabRun } from './entities/lab-run.entity';
+import { readLabResult } from './lab-result';
+import { buildIssueParcel, readZipball } from '../improve/parcel';
+
+jest.mock('./lab-github', () => ({
+  ...jest.requireActual<object>('./lab-github'),
+  githubFor: jest.fn(),
+  downloadRepoZip: jest.fn(),
+}));
+jest.mock('./lab-result', () => ({
+  ...jest.requireActual<object>('./lab-result'),
+  readLabResult: jest.fn(),
+}));
+jest.mock('../improve/parcel', () => {
+  const actual =
+    jest.requireActual<typeof import('../improve/parcel')>('../improve/parcel');
+
+  return {
+    ...actual,
+    readZipball: jest.fn(),
+    buildIssueParcel: jest.fn(actual.buildIssueParcel),
+  };
+});
 
 describe('Lab helpers', () => {
   it('takes the first line of a task as its title and cuts a long one', () => {
@@ -253,6 +275,159 @@ describe('LabRunsService preparing run', () => {
     expect(preparing).toBeDefined();
     expect(preparing![1].before.getTime()).toBeLessThan(
       Date.now() - 10 * 60_000,
+    );
+  });
+});
+
+describe('LabRunsService: the branch of a run', () => {
+  const project = {
+    id: 3,
+    userId: 1,
+    repo: 'owner/repo',
+    token: 'ghp_x',
+    baseBranch: 'main',
+    canWrite: true,
+  } as LabProject;
+  let github: {
+    getBranchSha: jest.Mock;
+    getCommitTreeSha: jest.Mock;
+    createBlob: jest.Mock;
+    createTree: jest.Mock;
+    createCommit: jest.Mock;
+    createBranch: jest.Mock;
+    createPull: jest.Mock;
+    deleteBranch: jest.Mock;
+  };
+  let runs: {
+    count: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let workers: { create: jest.Mock };
+  let service: LabRunsService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    github = {
+      getBranchSha: jest.fn().mockResolvedValue('sha-base'),
+      getCommitTreeSha: jest.fn().mockResolvedValue('tree-base'),
+      createBlob: jest.fn().mockResolvedValue('blob'),
+      createTree: jest.fn().mockResolvedValue('tree'),
+      createCommit: jest.fn().mockResolvedValue('commit'),
+      createBranch: jest.fn().mockResolvedValue(undefined),
+      createPull: jest
+        .fn()
+        .mockResolvedValue({ number: 7, htmlUrl: 'https://pr/7' }),
+      deleteBranch: jest.fn().mockResolvedValue(undefined),
+    };
+    (githubFor as jest.Mock).mockReturnValue(github);
+    (downloadRepoZip as jest.Mock).mockResolvedValue(new Uint8Array());
+    (readZipball as jest.Mock).mockResolvedValue([]);
+    (readLabResult as jest.Mock).mockResolvedValue({
+      files: new Map([['new.txt', new TextEncoder().encode('hello')]]),
+      binaries: new Map(),
+    });
+    runs = {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn((row: Partial<LabRun>) => row),
+      save: jest.fn((row: Partial<LabRun>) =>
+        Promise.resolve({ id: 9, ...row }),
+      ),
+      findOne: jest.fn().mockResolvedValue({ id: 9, baseline: '{}' }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    workers = { create: jest.fn().mockResolvedValue({ id: 42 }) };
+    service = new LabRunsService(
+      runs as never,
+      {
+        findOwned: jest.fn().mockResolvedValue(project),
+      } as unknown as LabProjectsService,
+      workers as never,
+      {
+        createFromBuffer: jest.fn().mockResolvedValue({ id: 5 }),
+        findOwned: jest.fn().mockResolvedValue({ id: 6 }),
+        readBytes: jest.fn().mockResolvedValue(new Uint8Array()),
+        delete: jest.fn().mockResolvedValue(undefined),
+      } as never,
+      { findOwned: jest.fn() } as never,
+      { send: jest.fn().mockResolvedValue(undefined) } as never,
+    );
+  });
+
+  const run = (baseBranch: string | null) =>
+    ({
+      id: 9,
+      userId: 1,
+      projectId: project.id,
+      repo: project.repo,
+      title: 'Fix',
+      task: 'Fix the test',
+      model: 'sonnet',
+      trigger: 'manual',
+      status: LabRunStatus.Publishing,
+      baseSha: 'sha-base',
+      baseBranch,
+    }) as LabRun;
+
+  it('snapshots and stores an explicitly chosen branch', async () => {
+    const saved = await service.start(1, {
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'sonnet',
+      baseBranch: 'release/1.4',
+    });
+
+    expect(github.getBranchSha).toHaveBeenCalledWith('release/1.4');
+    expect((buildIssueParcel as jest.Mock).mock.calls[0][1]).toMatchObject({
+      baseBranch: 'release/1.4',
+    });
+    expect(saved).toMatchObject({
+      baseBranch: 'release/1.4',
+      baseSha: 'sha-base',
+      jobId: 42,
+    });
+  });
+
+  it("uses the project's branch when none is chosen", async () => {
+    const saved = await service.start(1, {
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'sonnet',
+    });
+
+    expect(github.getBranchSha).toHaveBeenCalledWith('main');
+    expect(saved.baseBranch).toBe('main');
+  });
+
+  it('creates no job when the chosen branch does not exist', async () => {
+    github.getBranchSha.mockRejectedValue(new Error('Ветка «nope» не найдена'));
+
+    await expect(
+      service.start(1, {
+        projectId: project.id,
+        task: 'Fix the test',
+        model: 'sonnet',
+        baseBranch: 'nope',
+      }),
+    ).rejects.toThrow('не найдена');
+    expect(workers.create).not.toHaveBeenCalled();
+  });
+
+  it('opens the pull request against the branch of the run', async () => {
+    await service.publish(run('release/1.4'), 6);
+
+    expect(github.createPull).toHaveBeenCalledWith(
+      expect.objectContaining({ base: 'release/1.4' }),
+    );
+  });
+
+  it("opens a run from before the per-run branch against the project's", async () => {
+    await service.publish(run(null), 6);
+
+    expect(github.createPull).toHaveBeenCalledWith(
+      expect.objectContaining({ base: 'main' }),
     );
   });
 });

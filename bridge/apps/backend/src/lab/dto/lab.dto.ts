@@ -83,6 +83,13 @@ export class StartLabRunDto {
   @IsInt()
   @Min(1)
   contextId?: number | null;
+
+  // Absent = the project's base branch.
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Matches(/^[\w./-]{1,100}$/)
+  baseBranch?: string;
 }
 
 export class SaveLabScheduleDto {
