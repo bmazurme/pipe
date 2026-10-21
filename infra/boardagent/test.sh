@@ -97,6 +97,10 @@ sys.exit(0 if ok else 1)
 PY
 check "…with the board's name, the commit and which scripts are outdated" $?
 
+# the two kinds of run do not share a lock
+fresh; echo '{"update": null}' > "$T/pending.json"; agent report; agent apply
+[ -f "$T/state/lock-report" ] && [ -f "$T/state/lock-apply" ] && [ ! -e "$T/state/lock" ]; check "report and apply each have their own lock" $?
+
 # ---- apply: nothing to do
 fresh; echo '{"update": null}' > "$T/pending.json"; agent apply
 [ "$(cat "$T/code")" = 0 ] && [ "$(calls)" = 0 ] && board_has uploads-pull.sh 'pull v1'; check "no decision: nothing is done and nothing is sent" $?
