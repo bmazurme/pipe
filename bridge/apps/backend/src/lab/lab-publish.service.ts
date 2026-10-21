@@ -102,11 +102,26 @@ export class LabPublishService {
 
       const github = githubFor(project);
       const baseSha = run.baseSha as string;
+      const followUp = Boolean(run.prNumber && run.branch);
       const commit = await github.createCommit(
-        `${run.title}\n\nAutomated by bridge Lab (run ${run.id}, ${run.model}).`,
+        `${followUp ? `Update PR #${run.prNumber}: ` : ''}${run.title}\n\nAutomated by bridge Lab (run ${run.id}, ${run.model}).`,
         await buildResultTree(github, baseSha, allowed),
         baseSha,
       );
+
+      if (followUp) {
+        // Never forced: a PR branch that moved since the snapshot fails the run.
+        await github.updateBranch(run.branch as string, commit);
+        await this.finish(run, LabRunStatus.PrOpen, {
+          note: [describeChanges(allowed), note].filter(Boolean).join('. '),
+        });
+        await this.storage.delete(file).catch(() => undefined);
+        await this.notifier.send(
+          `🔀 Lab «${run.title}» → новый коммит в PR #${run.prNumber} в ${run.repo} (${describeChanges(allowed)})\n${run.prUrl}`,
+        );
+
+        return;
+      }
       const branch = `lab/run-${run.id}-${slug(run.title)}`;
 
       await github.createBranch(branch, commit);

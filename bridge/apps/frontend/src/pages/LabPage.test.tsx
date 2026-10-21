@@ -331,3 +331,55 @@ describe('LabPage: where a run is executed', () => {
     expect(await screen.findByText(/Fusion 360/)).toBeTruthy();
   });
 });
+
+describe('LabPage: follow-up of a pull request', () => {
+  const prRun = (over: Record<string, unknown>) => ({
+    id: 5,
+    projectId: 1,
+    repo: 'me/boat',
+    scheduleId: null,
+    trigger: 'manual',
+    title: 'Задача',
+    task: 'Почистить код',
+    model: 'opus',
+    status: 'pr_open',
+    jobId: 3,
+    baseBranch: 'main',
+    branch: 'lab/run-5-task',
+    prUrl: 'https://github.com/me/boat/pull/8',
+    prNumber: 8,
+    error: null,
+    note: null,
+    createdAt: new Date().toISOString(),
+    ...over,
+  });
+
+  it('offers it on an open PR and posts followUpOf with the PR branch', async () => {
+    const user = userEvent.setup();
+    runs = [prRun({})];
+    renderPage('/lab?tab=runs');
+
+    await user.click(await screen.findByRole('button', { name: 'Доработать' }));
+    expect(await screen.findByLabelText('Ветка')).toBeDisabled();
+    expect(screen.getByLabelText('Задача')).toHaveValue('');
+
+    await user.type(screen.getByLabelText('Задача'), 'Обновить README');
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/runs')?.body).toMatchObject({
+      projectId: 1,
+      task: 'Обновить README',
+      baseBranch: 'lab/run-5-task',
+      followUpOf: 5,
+    });
+  });
+
+  it('is not offered on runs without an open PR or when the project cannot write', async () => {
+    runs = [prRun({ id: 6, status: 'failed' }), prRun({ id: 7, status: 'merged' })];
+    renderPage('/lab?tab=runs');
+
+    await screen.findAllByText('Задача');
+    expect(screen.queryByRole('button', { name: 'Доработать' })).toBeNull();
+  });
+});

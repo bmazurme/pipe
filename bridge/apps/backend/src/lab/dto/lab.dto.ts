@@ -102,6 +102,13 @@ export class StartLabRunDto {
   @IsOptional()
   @IsIn(LAB_EXECUTORS)
   executor?: LabExecutor;
+
+  // A run whose open pull request this one continues: the result is a new commit on its branch.
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  followUpOf?: number;
 }
 
 export class SaveLabScheduleDto {

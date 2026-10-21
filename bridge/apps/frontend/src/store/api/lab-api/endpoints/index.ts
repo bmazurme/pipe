@@ -78,6 +78,8 @@ export interface StartLabRunInput {
   baseBranch?: string;
   // Absent = any worker.
   executor?: LabExecutor;
+  // Continue the open pull request of this run: the result is a new commit on its branch.
+  followUpOf?: number;
 }
 
 function errorMessage(fallback: string) {

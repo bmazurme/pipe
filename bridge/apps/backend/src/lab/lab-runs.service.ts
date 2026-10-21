@@ -63,6 +63,8 @@ export type LabStartInput = {
   baseBranch?: string;
   // Where to run: any worker (default) or one set up for Fusion 360.
   executor?: LabExecutor;
+  // A run (of this project, with its pull request open) whose PR branch this one adds a commit to.
+  followUpOf?: number;
 };
 
 export function titleOf(task: string): string {
@@ -168,7 +170,36 @@ export class LabRunsService {
     }
 
     const title = titleOf(input.task);
-    const baseBranch = input.baseBranch || project.baseBranch;
+    let baseBranch = input.baseBranch || project.baseBranch;
+    let pr: Pick<LabRun, 'branch' | 'prNumber' | 'prUrl'> = {
+      branch: null,
+      prNumber: null,
+      prUrl: null,
+    };
+
+    if (input.followUpOf) {
+      const parent = await this.runs.findOne({
+        where: { id: input.followUpOf, userId },
+      });
+
+      if (!parent)
+        throw new NotFoundException('Запуск для доработки не найден');
+      if (
+        parent.projectId !== project.id ||
+        parent.status !== LabRunStatus.PrOpen ||
+        !parent.branch ||
+        !parent.prNumber
+      )
+        throw new BadRequestException(
+          'Доработать можно только запуск этого проекта с открытым PR',
+        );
+      baseBranch = parent.branch;
+      pr = {
+        branch: parent.branch,
+        prNumber: parent.prNumber,
+        prUrl: parent.prUrl,
+      };
+    }
     // Recorded before the slow part so that a second start (or the nightly tick) of the same task sees it as active.
     const run = await this.runs.save(
       this.runs.create({
@@ -184,6 +215,7 @@ export class LabRunsService {
         executor,
         jobId: null,
         baseBranch,
+        ...pr,
       }),
     );
 

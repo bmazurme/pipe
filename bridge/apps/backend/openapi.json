@@ -6693,6 +6693,10 @@
               "fusion"
             ]
           },
+          "followUpOf": {
+            "type": "number",
+            "minimum": 1
+          },
           "projectId": {
             "type": "number",
             "minimum": 1
