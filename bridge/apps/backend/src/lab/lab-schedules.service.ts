@@ -9,9 +9,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ContextService } from '../context/context.service';
-import { isDue, localDate } from '../improve/improve-schedule.service';
-import { message } from '../improve/improve-shared';
-import { requireImproveModel } from '../improve/improve.service';
+import {
+  isDue,
+  localDate,
+  message,
+  requireImproveModel,
+} from '../improve/improve-shared';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { LabSchedule } from './entities/lab-schedule.entity';

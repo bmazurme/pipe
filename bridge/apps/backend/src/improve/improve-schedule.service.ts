@@ -12,10 +12,9 @@ import { ContextService } from '../context/context.service';
 import { GithubApiService } from '../loop/github-api.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
-import { localMinutes } from '../telegram/quiet-hours';
 import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
-import { PR_LABEL } from './improve-shared';
+import { isDue, localDate, PR_LABEL } from './improve-shared';
 import { ImproveService } from './improve.service';
 
 const SCHEDULE_TICK_MS = 60_000;
@@ -224,27 +223,4 @@ export class ImproveScheduleService {
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-// "YYYY-MM-DD" of `now` in the schedule's own time zone.
-export function localDate(now: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
-
-// Due once today's HH:MM has passed in its time zone and it has not fired today —
-// ">=" rather than "==" so a bridge that was down at 02:00 still runs it when it is
-// back, once.
-export function isDue(
-  schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'lastRunOn'>,
-  now: Date,
-): boolean {
-  return (
-    localDate(now, schedule.timezone) !== schedule.lastRunOn &&
-    localMinutes(now, schedule.timezone) >= schedule.hour * 60 + schedule.minute
-  );
 }

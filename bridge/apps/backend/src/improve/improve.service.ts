@@ -47,27 +47,15 @@ import { ImprovePublishService } from './improve-publish.service';
 import {
   AnalysisResult,
   mapInBatches,
+  IMPROVE_MODELS,
   message,
   PR_LABEL,
+  requireImproveModel,
 } from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
 import { readResultParcel, utf8Text } from './parcel';
 
-export const IMPROVE_MODELS = [
-  'sonnet',
-  'opus',
-  'haiku',
-  'gpt',
-  'deepseek',
-  'qwen',
-];
-
-export function requireImproveModel(model: string): void {
-  if (!IMPROVE_MODELS.includes(model)) {
-    throw new BadRequestException(`Неизвестная модель: ${model}`);
-  }
-}
 const LOG_DIGEST_DAYS = 7;
 const LOG_DIGEST_ROWS = 300;
 export const ADVANCE_EVERY_MS = 15_000;

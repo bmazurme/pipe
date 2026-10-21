@@ -7,12 +7,8 @@ import { AppLogService } from '../logs/app-log.service';
 import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import { ImproveSettings } from './entities/improve-settings.entity';
-import {
-  ADVANCE_EVERY_MS,
-  AUTOSTART_MIN_AGE_SECONDS,
-  message,
-  requireImproveModel,
-} from './improve.service';
+import { ADVANCE_EVERY_MS, AUTOSTART_MIN_AGE_SECONDS } from './improve.service';
+import { message, requireImproveModel } from './improve-shared';
 
 // Reports pushes → worker at once: the per-account Improve settings and the poller that
 // starts a job for each parcel pushed from Subscription while auto-start is on.
