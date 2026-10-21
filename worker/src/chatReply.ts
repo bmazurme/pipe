@@ -15,3 +15,11 @@ export function clipReply(reply: string, maxLength = MAX_REPLY_LENGTH): string {
 
   return `${reply.slice(0, end)}${TRUNCATED_REPLY_NOTE}`;
 }
+
+// Mirrors bridge's MAX_REASONING_LENGTH (bridge/apps/backend/src/chat/chat.limits.ts): the longest reasoning bridge
+// keeps on a completed turn. Reasoning is supplementary, so an overlong one is cut silently, with no note.
+export const MAX_REASONING_LENGTH = 60_000;
+
+export function clipReasoning(reasoning: string, maxLength = MAX_REASONING_LENGTH): string {
+  return reasoning.length <= maxLength ? reasoning : reasoning.slice(0, maxLength);
+}

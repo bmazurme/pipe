@@ -79,8 +79,8 @@ export class ChatBridgeClient {
     }
   }
 
-  async complete(messageId: number, content: string): Promise<void> {
-    await this.post(`/${messageId}/complete`, `Completing chat turn ${messageId}`, { content });
+  async complete(messageId: number, content: string, reasoning?: string | null): Promise<void> {
+    await this.post(`/${messageId}/complete`, `Completing chat turn ${messageId}`, { content, ...(reasoning ? { reasoning } : {}) });
   }
 
   async fail(messageId: number, errorMessage: string): Promise<void> {

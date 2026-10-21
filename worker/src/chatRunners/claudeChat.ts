@@ -61,7 +61,7 @@ export async function claudeChat(
   timeoutMs?: number,
   // Stops the CLI when aborted (worker shutdown).
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<{ text: string; reasoning: string | null }> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
 
@@ -88,7 +88,7 @@ export async function claudeChat(
       throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
 
-    return result.output.trim();
+    return { text: result.output.trim(), reasoning: progress?.reasoning() || null };
   } finally {
     rmSync(turnDir, { recursive: true, force: true });
   }

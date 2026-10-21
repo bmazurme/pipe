@@ -4428,6 +4428,10 @@
             "type": "string",
             "nullable": true
           },
+          "reasoning": {
+            "type": "string",
+            "nullable": true
+          },
           "attachments": {
             "type": "array",
             "items": {
@@ -4451,6 +4455,7 @@
           "status",
           "errorMessage",
           "progress",
+          "reasoning",
           "attachments",
           "createdAt",
           "updatedAt"
@@ -4491,6 +4496,11 @@
           "content": {
             "type": "string",
             "maxLength": 500000
+          },
+          "reasoning": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60000
           }
         },
         "required": [

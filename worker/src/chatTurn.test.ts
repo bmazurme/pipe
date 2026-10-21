@@ -91,6 +91,69 @@ describe('processChatTurn reply length', () => {
   });
 });
 
+describe('processChatTurn reasoning', () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
+  it('completes a Claude turn with the reasoning the model showed, alongside the reply', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-think-'));
+    const script = path.join(dir, 'claude');
+    writeFileSync(
+      script,
+      [
+        '#!/usr/bin/env node',
+        "console.log(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Checking the facts.' } } }));",
+        "console.log(JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Answer.' } } }));",
+        "console.log(JSON.stringify({ type: 'result', result: 'Answer.' }));",
+        '',
+      ].join('\n'),
+    );
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+
+    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
+    const completed: [number, string, string | null | undefined][] = [];
+    const client = {
+      complete: async (messageId: number, content: string, reasoning?: string | null) => void completed.push([messageId, content, reasoning]),
+      fail: async () => undefined,
+      reportClaudeUsage: async () => undefined,
+      reportProgress: async () => undefined,
+      downloadAttachment: async () => Buffer.alloc(0),
+    } as unknown as ChatBridgeClient;
+    const turn: ClaimedChatTurn = { messageId: 12, chatId: 1, model: 'sonnet', history: [{ role: 'user', content: 'hi' }] };
+
+    try {
+      await processChatTurn(client, turn, fakeConfig(workDir));
+
+      assert.deepEqual(completed, [[12, 'Answer.', 'Checking the facts.']]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('completes a gpt/deepseek/qwen turn with no reasoning', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'pipe-worker-chat-'));
+    try {
+      stubOpenAiCompletion('short answer');
+      const completed: [number, string, string | null | undefined][] = [];
+      const client = {
+        complete: async (messageId: number, content: string, reasoning?: string | null) => void completed.push([messageId, content, reasoning]),
+        fail: async () => undefined,
+      } as unknown as ChatBridgeClient;
+      const turn: ClaimedChatTurn = { messageId: 13, chatId: 1, model: 'gpt', history: [{ role: 'user', content: 'hi' }] };
+
+      await processChatTurn(client, turn, fakeConfig(workDir));
+
+      assert.deepEqual(completed, [[13, 'short answer', null]]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('processChatTurn with a hanging claude CLI', () => {
   const originalPath = process.env.PATH;
 

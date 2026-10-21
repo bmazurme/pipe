@@ -461,6 +461,31 @@ describe('ChatService', () => {
       expect(result.status).toBe(ChatMessageStatus.Complete);
     });
 
+    it('keeps the reasoning handed over, and null when none was', async () => {
+      const stored = {
+        id: 99,
+        chatId: 1,
+        role: ChatMessageRole.Assistant,
+        content: '',
+        status: ChatMessageStatus.Running,
+      };
+      messageRepository.findOne!.mockResolvedValue(stored);
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+
+      const withReasoning = await service.completeTurn(
+        99,
+        7,
+        'the answer',
+        'because…',
+      );
+      expect(withReasoning.reasoning).toBe('because…');
+
+      stored.status = ChatMessageStatus.Running;
+      const withoutReasoning = await service.completeTurn(99, 7, 'the answer');
+      expect(withoutReasoning.reasoning).toBeNull();
+    });
+
     it.each([ChatMessageStatus.Complete, ChatMessageStatus.Failed])(
       'throws ConflictException and leaves a %s message unchanged',
       async (status) => {

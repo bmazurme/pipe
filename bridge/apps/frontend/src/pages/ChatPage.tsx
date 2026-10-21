@@ -151,6 +151,21 @@ function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, strin
       ? pendingBubbleText(message, now)
       : extractChatAction(message.content).text;
 
+  // A finished Claude reply can carry its reasoning — shown as a collapsed block above the
+  // answer, native to AIKit (ThinkingMessageContent), open/closed by its own toggle button.
+  // gpt/deepseek/qwen never report one, so this is absent for those chats.
+  if (message.status === 'complete' && message.reasoning) {
+    return {
+      role: 'assistant',
+      id,
+      timestamp,
+      content: [
+        { type: 'thinking', data: { content: message.reasoning, status: 'thought', defaultExpanded: false } },
+        { type: 'text', data: { text: content } },
+      ],
+    };
+  }
+
   return { role: 'assistant', id, timestamp, content };
 }
 

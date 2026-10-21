@@ -2145,6 +2145,7 @@ export interface components {
             status: "pending" | "running" | "complete" | "failed";
             errorMessage: string | null;
             progress: string | null;
+            reasoning: string | null;
             attachments: components["schemas"]["ChatAttachmentResponseDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -2160,6 +2161,7 @@ export interface components {
         };
         CompleteTurnDto: {
             content: string;
+            reasoning?: string | null;
         };
         FailTurnDto: {
             errorMessage?: string;

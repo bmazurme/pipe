@@ -38,6 +38,8 @@ export interface ChatMessageMeta {
   errorMessage: string | null;
   /** The partial reply of a running turn (what the model has written so far), or null. */
   progress?: string | null;
+  /** The model's reasoning behind this reply (Claude only), or null. */
+  reasoning?: string | null;
   attachments: ChatAttachmentMeta[];
   createdAt: string;
   updatedAt: string;

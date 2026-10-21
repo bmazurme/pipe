@@ -68,6 +68,34 @@ describe('ChatBridgeClient', () => {
 
       assert.deepEqual(capturedBody, { content: 'the answer' });
     });
+
+    it('includes the reasoning when there is one', async () => {
+      let capturedBody: unknown;
+
+      globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response('{}', { status: 200 });
+      }) as typeof fetch;
+
+      const client = new ChatBridgeClient('http://bridge.local', 'brk_test');
+      await client.complete(1, 'the answer', 'because…');
+
+      assert.deepEqual(capturedBody, { content: 'the answer', reasoning: 'because…' });
+    });
+
+    it('omits reasoning entirely when null, rather than sending it as null', async () => {
+      let capturedBody: unknown;
+
+      globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response('{}', { status: 200 });
+      }) as typeof fetch;
+
+      const client = new ChatBridgeClient('http://bridge.local', 'brk_test');
+      await client.complete(1, 'the answer', null);
+
+      assert.deepEqual(capturedBody, { content: 'the answer' });
+    });
   });
 
   describe('fail', () => {

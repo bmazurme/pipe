@@ -1,5 +1,5 @@
 import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
-import { clipReply } from './chatReply.js';
+import { clipReasoning, clipReply } from './chatReply.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
 import { createChatToolset } from './chatTools.js';
@@ -35,14 +35,14 @@ export async function processChatTurn(
   try {
     const provider = resolveChatProvider(turn.model, process.env, turn.provider);
 
-    const reply = provider.tool === 'claude'
+    const { text, reasoning } = provider.tool === 'claude'
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
           reports.push(client.reportClaudeUsage(report));
         }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text), turn.context, chatTimeoutSec * 1000, options.shutdown)
-      : await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context);
+      : { text: await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context), reasoning: null };
 
     await Promise.all(reports);
-    await client.complete(turn.messageId, clipReply(reply));
+    await client.complete(turn.messageId, clipReply(text), reasoning ? clipReasoning(reasoning) : null);
     clog.info('succeeded');
   } catch (error) {
     // A turn that was stopped or timed out still cost tokens.
