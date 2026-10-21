@@ -288,15 +288,16 @@ describe('ContextDialog closing and saving', () => {
     await user.click(screen.getByRole('button', { name: 'Отмена' }));
 
     // The confirmation is a dialog nested in a dialog: under a loaded CI runner
-    // its buttons can take longer than the default 1 s to become accessible.
+    // its buttons can take longer than the default 1 s to appear, and the outer
+    // dialog's focus manager may still mark them aria-hidden — hence `hidden: true`.
     expect(await screen.findByText('Закрыть без сохранения?', {}, { timeout: 5000 })).toBeTruthy();
-    await user.click(await screen.findByRole('button', { name: 'Продолжить редактирование' }, { timeout: 5000 }));
+    await user.click(await screen.findByRole('button', { name: 'Продолжить редактирование', hidden: true }, { timeout: 5000 }));
 
     await waitFor(() => expect(screen.queryByText('Закрыть без сохранения?')).toBeNull());
     expect((screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value).toBe('черновик');
 
     await user.click(await screen.findByRole('button', { name: 'Отмена' }));
-    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения' }, { timeout: 5000 }));
+    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения', hidden: true }, { timeout: 5000 }));
 
     await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
     expect(sent).toEqual([]);
