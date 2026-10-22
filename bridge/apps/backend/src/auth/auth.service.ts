@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { CookieOptions, Response } from 'express';
 
 import { TelegramService } from '../telegram/telegram.service';
+import { DeploymentAccessService } from './deployment-access';
 import { EmergencyKeysService } from './emergency-keys.service';
 import { CheckAuthResponseDto } from './dto/check-auth.response.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly sessionsService: SessionsService,
     private readonly emergencyKeys: EmergencyKeysService,
     private readonly telegram: TelegramService,
+    private readonly deploymentAccess: DeploymentAccessService,
   ) {}
 
   getCookieOptions(): CookieOptions {
@@ -115,6 +117,13 @@ export class AuthService {
 
     if (userId === null) {
       this.logger.warn(`Rejected an emergency key from ${ip ?? 'unknown ip'}`);
+      throw new UnauthorizedException('Invalid emergency key');
+    }
+
+    if (!(await this.deploymentAccess.isUserAllowed(userId))) {
+      this.logger.warn(
+        `Rejected an emergency key of user ${userId}: not in EMAILS`,
+      );
       throw new UnauthorizedException('Invalid emergency key');
     }
 

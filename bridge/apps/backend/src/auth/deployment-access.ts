@@ -36,6 +36,17 @@ export class DeploymentAccessService {
     return allowed.length === 0 || allowed.some((e) => same(e, email));
   }
 
+  /** The same check for a registered user, so dropping an email from EMAILS also locks out its existing sign-in methods. */
+  async isUserAllowed(userId: number): Promise<boolean> {
+    if (this.allowedEmails().length === 0) {
+      return true;
+    }
+
+    const user = await this.usersService.findById(userId);
+
+    return !!user && this.isAllowedToSignIn(user.email);
+  }
+
   async isOwner(userId: number): Promise<boolean> {
     const allowed = this.allowedEmails();
 

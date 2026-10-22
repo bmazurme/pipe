@@ -11,6 +11,7 @@ import { CookieOptions, Response } from 'express';
 
 import { TelegramService } from '../telegram/telegram.service';
 import { AuthService } from './auth.service';
+import { DeploymentAccessService } from './deployment-access';
 import { EmergencyKeysService } from './emergency-keys.service';
 import { InvalidRefreshTokenException } from './exceptions/invalid-refresh-token.exception';
 import { RefreshTokenNotFoundException } from './exceptions/refresh-token-not-found.exception';
@@ -41,6 +42,7 @@ describe('AuthService cookies', () => {
         },
         { provide: SessionsService, useValue: {} },
         { provide: EmergencyKeysService, useValue: {} },
+        { provide: DeploymentAccessService, useValue: {} },
         { provide: TelegramService, useValue: { send: jest.fn() } },
       ],
     }).compile();
@@ -111,6 +113,7 @@ describe('AuthService sessions and token refresh', () => {
     createSession: jest.Mock;
   };
   let emergencyKeys: { redeem: jest.Mock };
+  let deploymentAccess: { isUserAllowed: jest.Mock };
   let telegram: { send: jest.Mock };
   let response: Response & { cookie: jest.Mock; clearCookie: jest.Mock };
 
@@ -131,6 +134,7 @@ describe('AuthService sessions and token refresh', () => {
       createSession: jest.fn().mockResolvedValue({ id: 42 }),
     };
     emergencyKeys = { redeem: jest.fn() };
+    deploymentAccess = { isUserAllowed: jest.fn().mockResolvedValue(true) };
     telegram = { send: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -144,6 +148,7 @@ describe('AuthService sessions and token refresh', () => {
         { provide: SessionsService, useValue: sessionsService },
         { provide: EmergencyKeysService, useValue: emergencyKeys },
         { provide: TelegramService, useValue: telegram },
+        { provide: DeploymentAccessService, useValue: deploymentAccess },
       ],
     }).compile();
 
@@ -191,6 +196,19 @@ describe('AuthService sessions and token refresh', () => {
         'new-refresh',
       );
       expect(response.cookie).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a valid key of a user no longer in EMAILS with the generic 401 and creates no session', async () => {
+      emergencyKeys.redeem.mockResolvedValue(7);
+      deploymentAccess.isUserAllowed.mockResolvedValue(false);
+
+      await expect(
+        service.signInWithEmergencyKey('bre_good', response, 'ua', '1.2.3.4'),
+      ).rejects.toThrow(new UnauthorizedException('Invalid emergency key'));
+      expect(deploymentAccess.isUserAllowed).toHaveBeenCalledWith(7);
+      expect(sessionsService.createSession).not.toHaveBeenCalled();
+      expect(response.cookie).not.toHaveBeenCalled();
+      expect(telegram.send).not.toHaveBeenCalled();
     });
 
     it('tells Telegram at once that the emergency key was used, with the address', async () => {

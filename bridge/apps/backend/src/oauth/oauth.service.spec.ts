@@ -17,6 +17,7 @@ const github = (over: Partial<OauthProfile> = {}): OauthProfile => ({
 function setup(env: Record<string, string> = {}) {
   const usersService = {
     findByEmail: jest.fn().mockResolvedValue(null),
+    findById: jest.fn().mockResolvedValue({ id: 3, email: 'b@x' }),
     create: jest.fn().mockResolvedValue({ id: 10 }),
   };
   const identitiesService = {
@@ -71,6 +72,40 @@ describe('OauthService.signin', () => {
       'gh-1',
       'a@b.c',
     );
+    expect(s.sessionsService.createSession).toHaveBeenCalledWith(
+      3,
+      'ua',
+      '1.1.1.1',
+    );
+    expect(s.response.redirect).toHaveBeenCalledWith(TARGET);
+  });
+
+  it('blocks an already linked account whose user email left EMAILS and starts no session', async () => {
+    const s = setup({ EMAILS: 'a@x' });
+    s.identitiesService.findByProviderUserId.mockResolvedValue({
+      id: 1,
+      userId: 3,
+      enabled: true,
+    });
+
+    await s.service.signin(github(), s.response as never, 'ua', '1.1.1.1');
+
+    expect(s.response.redirect).toHaveBeenCalledWith(`${TARGET}/oauth-error`);
+    expect(s.identitiesService.markUsed).not.toHaveBeenCalled();
+    expect(s.sessionsService.createSession).not.toHaveBeenCalled();
+  });
+
+  it('still signs in an already linked account when EMAILS is empty', async () => {
+    const s = setup({ EMAILS: '' });
+    s.identitiesService.findByProviderUserId.mockResolvedValue({
+      id: 1,
+      userId: 3,
+      enabled: true,
+    });
+
+    await s.service.signin(github(), s.response as never, 'ua', '1.1.1.1');
+
+    expect(s.usersService.findById).not.toHaveBeenCalled();
     expect(s.sessionsService.createSession).toHaveBeenCalledWith(
       3,
       'ua',
