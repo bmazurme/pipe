@@ -7,6 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
+import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
 import { StorageService } from '../storage/storage.service';
@@ -120,6 +121,7 @@ describe('WorkerService', () => {
         { provide: WorkerHeartbeatService, useValue: heartbeatService },
         { provide: AppLogService, useValue: appLogs },
         { provide: ContextService, useValue: contextService },
+        { provide: ContextUsageRegistry, useValue: { register: jest.fn() } },
         { provide: getRepositoryToken(Worker), useValue: workerRepository },
         {
           provide: ProviderCredentialsService,

@@ -11,6 +11,9 @@ import { SessionsService } from '../src/auth/sessions.service';
 import { ChatService } from '../src/chat/chat.service';
 import { ChatAttachmentsService } from '../src/chat/chat-attachments.service';
 import { ChatModel } from '../src/chat/entities/chat.entity';
+import { ImproveSchedule } from '../src/improve/entities/improve-schedule.entity';
+import { LabProject } from '../src/lab/entities/lab-project.entity';
+import { LabSchedule } from '../src/lab/entities/lab-schedule.entity';
 import { StoredFile } from '../src/storage/entities/stored-file.entity';
 import { UsersService } from '../src/users/users.service';
 import { JobModel } from '../src/worker/entities/job.entity';
@@ -174,5 +177,78 @@ describe('Contexts and chat attachments (e2e)', () => {
         ],
       }),
     ]);
+  });
+
+  // Improve, Lab and Worker report their use through ContextUsageRegistry, each
+  // from its own tables — this checks they actually registered in the real app.
+  it('lists the Improve and Lab schedules and the last job that use a context', async () => {
+    const { userId, accessToken } = await authenticatedUser();
+    const dataSource = app.get(DataSource);
+
+    const context = await authed(
+      request(app.getHttpServer()).post('/api/v1/contexts'),
+      accessToken,
+    )
+      .send({ name: 'Shared', content: 'Keep commits small.' })
+      .expect(201);
+    const contextId = context.body.id as number;
+
+    const improve = await dataSource.getRepository(ImproveSchedule).save({
+      userId,
+      name: 'Nightly improve',
+      hour: 2,
+      minute: 0,
+      timezone: 'UTC',
+      count: 1,
+      model: JobModel.Sonnet,
+      contextId,
+    });
+    const project = await dataSource.getRepository(LabProject).save({
+      userId,
+      name: 'Lab repo',
+      repo: 'owner/repo',
+      token: 'ghp_e2e',
+      tokenHint: '…e2e',
+    });
+    const lab = await dataSource.getRepository(LabSchedule).save({
+      userId,
+      projectId: project.id,
+      name: 'Lab morning',
+      hour: 7,
+      minute: 0,
+      timezone: 'UTC',
+      model: JobModel.Sonnet,
+      task: 'Tidy up',
+      contextId,
+    });
+
+    const files = dataSource.getRepository(StoredFile);
+    const sourceFile = await files.save({
+      userId,
+      originalName: 'parcel.zip',
+      storedName: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`,
+      mimeType: 'application/zip',
+      size: 1,
+      channel: null,
+      taskKey: null,
+      direction: null,
+    });
+    await authed(
+      request(app.getHttpServer()).post('/api/v1/worker/jobs'),
+      accessToken,
+    )
+      .send({ sourceFileId: sourceFile.id, model: JobModel.Sonnet, contextId })
+      .expect(201);
+
+    const listed = await authed(
+      request(app.getHttpServer()).get('/api/v1/contexts'),
+      accessToken,
+    ).expect(200);
+
+    expect(listed.body[0].schedules).toEqual([
+      { id: lab.id, name: 'Lab morning', kind: 'lab' },
+      { id: improve.id, name: 'Nightly improve', kind: 'improve' },
+    ]);
+    expect(listed.body[0].lastUsedAt).not.toBeNull();
   });
 });

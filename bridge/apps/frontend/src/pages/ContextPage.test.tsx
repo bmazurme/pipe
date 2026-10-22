@@ -255,7 +255,7 @@ describe('ContextPage usage info', () => {
 
   it('shows the schedule count and last run, and names the schedules in the delete dialog', async () => {
     const user = userEvent.setup();
-    contexts = [{ ...SUMMARY, schedules: [{ id: 3, name: 'Nightly' }, { id: 4, name: 'Weekly' }], lastUsedAt: new Date().toISOString() }];
+    contexts = [{ ...SUMMARY, schedules: [{ id: 3, name: 'Nightly', kind: 'improve' }, { id: 4, name: 'Weekly', kind: 'improve' }], lastUsedAt: new Date().toISOString() }];
     renderPage();
 
     expect(await screen.findByText(/в расписаниях: 2/)).toBeTruthy();
@@ -264,6 +264,18 @@ describe('ContextPage usage info', () => {
 
     await user.click(screen.getByRole('button', { name: 'Удалить: Project notes' }));
     expect(await screen.findByText(/Расписания Improve продолжат работу без контекста: Nightly, Weekly/)).toBeTruthy();
+  });
+
+  it('names Lab schedules apart from Improve ones in the delete dialog', async () => {
+    const user = userEvent.setup();
+    contexts = [{ ...SUMMARY, schedules: [{ id: 2, name: 'Lab morning', kind: 'lab' }, { id: 3, name: 'Nightly', kind: 'improve' }] }];
+    renderPage();
+
+    expect(await screen.findByText(/в расписаниях: 2/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Удалить: Project notes' }));
+    expect(await screen.findByText(/Расписания Improve продолжат работу без контекста: Nightly$/)).toBeTruthy();
+    expect(screen.getByText(/Расписания Lab используют этот контекст — выберите им другой: Lab morning/)).toBeTruthy();
   });
 });
 

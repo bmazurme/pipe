@@ -47,6 +47,7 @@ const setup = (schedule: LabSchedule) => {
     runs as never,
     {} as never,
     notifier as never,
+    { register: jest.fn() } as never,
   );
 
   return { service, runs };
@@ -121,6 +122,7 @@ describe('LabSchedulesService.fire', () => {
       { launch } as never,
       {} as never,
       notifier as never,
+      { register: jest.fn() } as never,
     );
 
     return { service, schedules, notifier };

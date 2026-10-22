@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -12,6 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { DeploymentAccessService } from '../auth/deployment-access';
+import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -61,7 +63,7 @@ const AUTH_FAILURE_PATTERN =
   /Failed to authenticate|\b401\b|\b403\b.*Request not allowed/i;
 
 @Injectable()
-export class WorkerService {
+export class WorkerService implements OnModuleInit {
   private readonly logger = new Logger(WorkerService.name);
 
   constructor(
@@ -75,6 +77,7 @@ export class WorkerService {
     private readonly workerRepository: Repository<Worker>,
     private readonly providerCredentialsService: ProviderCredentialsService,
     private readonly jobSweep: JobSweepService,
+    private readonly contextUsage: ContextUsageRegistry,
     @Optional() private readonly appLogs?: AppLogService,
     @Optional() private readonly notifyService?: NotifyService,
     @Optional() private readonly deploymentAccess?: DeploymentAccessService,
@@ -84,6 +87,12 @@ export class WorkerService {
         await this.retryAfterInfraFailure(job);
       }
     };
+  }
+
+  onModuleInit(): void {
+    this.contextUsage.register({
+      lastUseByName: (userId) => this.lastContextUseByName(userId),
+    });
   }
 
   // Opt-in, per job: one Telegram message when a job ends. Telegram has a single recipient,
@@ -516,6 +525,23 @@ export class WorkerService {
       },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  // For the Context page: the newest job per context name. Jobs keep only a snapshot of
+  // the name, not the context's id, so this is what "last used" can be matched by.
+  async lastContextUseByName(userId: number): Promise<Map<string, Date>> {
+    const rows = await this.jobRepository
+      .createQueryBuilder('job')
+      .select('job.contextName', 'contextName')
+      .addSelect('MAX(job.createdAt)', 'lastUsedAt')
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.contextName IS NOT NULL')
+      .groupBy('job.contextName')
+      .getRawMany<{ contextName: string; lastUsedAt: Date | string }>();
+
+    return new Map(
+      rows.map((row) => [row.contextName, new Date(row.lastUsedAt)]),
+    );
   }
 
   // Only the fields a status follower needs, for many jobs in one query: no logs, no

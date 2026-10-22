@@ -1,11 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+import type { ContextScheduleKind } from '../context-usage';
 import type { ContextUsage } from '../context.service';
 import { Context } from '../entities/context.entity';
 
 export class ContextScheduleRefDto {
   id: number;
   name: string;
+  // Which kind of schedule it is, so the page can label it.
+  @ApiProperty({ enum: ['improve', 'lab'] })
+  kind: ContextScheduleKind;
 }
 
 // What a list needs to tell contexts apart — never the text itself (see
@@ -17,7 +21,7 @@ export class ContextSummaryDto {
   contentLength: number | null;
   createdAt: Date;
   updatedAt: Date;
-  // Improve schedules that hand this context to their runs.
+  // Improve and Lab schedules that hand this context to their runs.
   @ApiProperty({ type: () => [ContextScheduleRefDto] })
   schedules: ContextScheduleRefDto[];
   // Newest job launched with a context of this name, or null if none.
