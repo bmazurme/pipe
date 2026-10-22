@@ -14,6 +14,7 @@ import { UPLOAD_ROOT as UPLOAD_DIR } from '../uploads/upload-files';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ContextService } from '../context/context.service';
+import { WorkerService } from '../worker/worker.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { Chat, ChatModel } from './entities/chat.entity';
@@ -48,6 +49,7 @@ async function setup() {
       // the real local store on the real uploads directory: these tests check the files on disk
       { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
       { provide: ContextService, useValue: { findOwned: jest.fn() } },
+      { provide: WorkerService, useValue: { findOwned: jest.fn() } },
     ],
   }).compile();
 

@@ -37,6 +37,7 @@ import { ChatResponseDto } from './dto/chat-response.dto';
 import { ClaimedTurnResponseDto } from './dto/claimed-turn-response.dto';
 import { ReportProgressDto } from './dto/report-progress.dto';
 import { CompleteTurnDto } from './dto/complete-turn.dto';
+import { AttachRunResultDto } from './dto/attach-run-result.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { FailTurnDto } from './dto/fail-turn.dto';
 import { RenameChatDto } from './dto/rename-chat.dto';
@@ -100,6 +101,20 @@ export class ChatController {
       id,
       currentUser.id,
       dto.title,
+    );
+    return ChatResponseDto.fromEntity(chat);
+  }
+
+  @Post('chats/:id/run-results')
+  async attachRunResult(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AttachRunResultDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<ChatResponseDto> {
+    const chat = await this.chatService.attachRunResult(
+      id,
+      currentUser.id,
+      dto.jobId,
     );
     return ChatResponseDto.fromEntity(chat);
   }

@@ -12,6 +12,9 @@ import { MoreThan, Repository } from 'typeorm';
 import { isImageAttachment } from './attachments';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ContextService } from '../context/context.service';
+import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
+import { describeRun, FINISHED_STATUSES } from '../worker/run-history';
+import { WorkerService } from '../worker/worker.service';
 import { ClaimedTurnHistoryEntry } from './dto/claimed-turn-response.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { Chat } from './entities/chat.entity';
@@ -36,6 +39,7 @@ export class ChatService {
     @InjectRepository(ChatMessage)
     private readonly messageRepository: Repository<ChatMessage>,
     private readonly contextService: ContextService,
+    private readonly workerService: WorkerService,
     private readonly chatAttachments: ChatAttachmentsService,
   ) {}
 
@@ -56,6 +60,44 @@ export class ChatService {
         ? { contextName: context.name, contextText: context.content }
         : {}),
     });
+  }
+
+  // Adds the outcome of a finished Worker job (status, error, the end of its log) to the chat's context snapshot, so the
+  // model sees it from the next turn on. Same snapshot rule as createChat: later changes to the job do not reach the chat.
+  async attachRunResult(
+    chatId: number,
+    userId: number,
+    jobId: number,
+  ): Promise<Chat> {
+    const chat = await this.findOwnedChat(chatId, userId);
+    const job = await this.workerService.findOwned(jobId, userId);
+
+    if (!FINISHED_STATUSES.includes(job.status)) {
+      throw new ConflictException('The job has not finished yet');
+    }
+
+    const block = describeRun(job);
+    const existing = chat.contextText?.trim() ?? '';
+
+    if (existing.includes(`Run #${job.id} (`)) {
+      throw new ConflictException('This run is already attached to the chat');
+    }
+
+    const text = existing ? `${existing}\n\n${block}` : block;
+
+    if (text.length > MAX_CONTEXT_LENGTH) {
+      throw new BadRequestException(
+        `The chat's context would exceed ${MAX_CONTEXT_LENGTH} characters`,
+      );
+    }
+
+    const label = `запуск #${job.id}`;
+    chat.contextText = text;
+    chat.contextName = (
+      chat.contextName ? `${chat.contextName} + ${label}` : `Запуск #${job.id}`
+    ).slice(0, 255);
+
+    return this.chatRepository.save(chat);
   }
 
   async findAllByUser(userId: number): Promise<Chat[]> {

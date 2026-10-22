@@ -12,6 +12,7 @@ import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ContextService } from '../context/context.service';
+import { WorkerService } from '../worker/worker.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -65,6 +66,7 @@ describe('ChatService', () => {
         },
         { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
         { provide: ContextService, useValue: { findOwned: jest.fn() } },
+        { provide: WorkerService, useValue: { findOwned: jest.fn() } },
       ],
     }).compile();
 

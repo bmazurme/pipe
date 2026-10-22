@@ -55,6 +55,11 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: (body) => ({ url: 'chat/chats', method: 'POST', body }),
       invalidatesTags: ['Chat'],
     }),
+    // Adds a finished Worker job's outcome to the chat's context (409 if unfinished or already attached).
+    attachRunResult: builder.mutation<ChatMeta, { chatId: number; jobId: number }>({
+      query: ({ chatId, jobId }) => ({ url: `chat/chats/${chatId}/run-results`, method: 'POST', body: { jobId } }),
+      invalidatesTags: ['Chat'],
+    }),
     deleteChat: builder.mutation<void, number>({
       query: (id) => ({ url: `chat/chats/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Chat'],
@@ -138,6 +143,7 @@ export const {
   useCreateChatMutation,
   useDeleteChatMutation,
   useRenameChatMutation,
+  useAttachRunResultMutation,
   useListMessagesQuery,
   useSendMessageMutation,
   useRetryChatTurnMutation,

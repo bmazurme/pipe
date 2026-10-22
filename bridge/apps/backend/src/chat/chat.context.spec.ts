@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { ContextService } from '../context/context.service';
+import { WorkerService } from '../worker/worker.service';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
@@ -29,6 +30,7 @@ describe('ChatService context snapshot', () => {
         { provide: getRepositoryToken(ChatAttachment), useValue: {} },
         { provide: FILE_STORE, useValue: {} },
         { provide: ContextService, useValue: { findOwned } },
+        { provide: WorkerService, useValue: { findOwned: jest.fn() } },
       ],
     }).compile();
 
