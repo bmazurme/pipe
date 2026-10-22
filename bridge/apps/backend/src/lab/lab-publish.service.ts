@@ -3,19 +3,63 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { buildResultTree } from '../improve/improve-shared';
-import { describeChanges, diffResult } from '../improve/parcel';
+import {
+  Change,
+  describeChanges,
+  diffResult,
+  utf8Text,
+} from '../improve/parcel';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
 import { LabRun, LabRunStatus } from './entities/lab-run.entity';
 import { describeGithubError, githubFor } from './lab-github';
 import { LabProjectsService } from './lab-projects.service';
 import {
+  ISSUE_MARKER_PATH,
   LAB_MAX_CHANGED_BYTES,
   LAB_MAX_CHANGED_FILES,
   readLabResult,
   splitBaseline,
   withBinaries,
 } from './lab-result';
+
+interface IssueRequest {
+  title: string;
+  body: string;
+}
+
+// Takes `.lab/issue.json` out of the changes (it is never committed, whether or not it parses) and reports what it asked for.
+export function extractIssueRequest(changes: Change[]): IssueRequest | null {
+  const index = changes.findIndex(
+    (change) => change.path === ISSUE_MARKER_PATH,
+  );
+
+  if (index === -1) return null;
+
+  const [marker] = changes.splice(index, 1);
+
+  if (marker.kind === 'deleted' || !marker.bytes) return null;
+
+  let parsed: { title?: unknown; body?: unknown };
+
+  try {
+    parsed = JSON.parse(utf8Text(marker.bytes)) as {
+      title?: unknown;
+      body?: unknown;
+    };
+  } catch {
+    throw new Error(`${ISSUE_MARKER_PATH} содержит невалидный JSON`);
+  }
+
+  if (typeof parsed.title !== 'string' || !parsed.title.trim()) {
+    throw new Error(`${ISSUE_MARKER_PATH}: нет заголовка (title)`);
+  }
+
+  return {
+    title: parsed.title.trim(),
+    body: typeof parsed.body === 'string' ? parsed.body : '',
+  };
+}
 
 // Lab never touches CI/deploy definitions or git internals of somebody else's repository.
 const BLOCKED = [/^\.github\/workflows\//, /^\.git\//];
@@ -75,7 +119,39 @@ export class LabPublishService {
         ? `Отброшены изменения защищённых путей: ${dropped.join(', ')}`
         : null;
 
+      const github = githubFor(project);
+      const issueRequest = extractIssueRequest(allowed);
+      let issueNumber: number | null = null;
+      let issueUrl: string | null = null;
+      let issueNote: string | null = null;
+
+      if (issueRequest) {
+        const issue = await github.createIssue({
+          title: issueRequest.title,
+          body: issueRequest.body,
+          labels: [],
+        });
+
+        issueNumber = issue.number;
+        issueUrl = issue.htmlUrl;
+        issueNote = `Открыт Issue #${issue.number}`;
+      }
+
       if (allowed.length === 0) {
+        if (issueNumber) {
+          await this.finish(run, LabRunStatus.IssueOpen, {
+            issueNumber,
+            issueUrl,
+            note: [issueNote, note].filter(Boolean).join('. '),
+          });
+          await this.storage.delete(file).catch(() => undefined);
+          await this.notifier.send(
+            `📝 Lab «${run.title}» (${run.repo}): открыт Issue #${issueNumber}\n${issueUrl}`,
+          );
+
+          return;
+        }
+
         await this.finish(run, LabRunStatus.NoChanges, {
           note: note ?? 'Worker ничего не изменил',
         });
@@ -100,7 +176,6 @@ export class LabPublishService {
           `Слишком большой результат (${Math.round(size / 1024 / 1024)} МБ из допустимых ${LAB_MAX_CHANGED_BYTES / 1024 / 1024})`,
         );
 
-      const github = githubFor(project);
       const baseSha = run.baseSha as string;
       const followUp = Boolean(run.prNumber && run.branch);
       const commit = await github.createCommit(
@@ -113,11 +188,16 @@ export class LabPublishService {
         // Never forced: a PR branch that moved since the snapshot fails the run.
         await github.updateBranch(run.branch as string, commit);
         await this.finish(run, LabRunStatus.PrOpen, {
-          note: [describeChanges(allowed), note].filter(Boolean).join('. '),
+          issueNumber,
+          issueUrl,
+          note: [describeChanges(allowed), issueNote, note]
+            .filter(Boolean)
+            .join('. '),
         });
         await this.storage.delete(file).catch(() => undefined);
         await this.notifier.send(
-          `🔀 Lab «${run.title}» → новый коммит в PR #${run.prNumber} в ${run.repo} (${describeChanges(allowed)})\n${run.prUrl}`,
+          `🔀 Lab «${run.title}» → новый коммит в PR #${run.prNumber} в ${run.repo} (${describeChanges(allowed)})\n${run.prUrl}` +
+            (issueUrl ? `\nИ Issue #${issueNumber}: ${issueUrl}` : ''),
         );
 
         return;
@@ -153,18 +233,23 @@ export class LabPublishService {
         branch,
         prNumber: pull.number,
         prUrl: pull.htmlUrl,
-        note: [describeChanges(allowed), note].filter(Boolean).join('. '),
+        issueNumber,
+        issueUrl,
+        note: [describeChanges(allowed), issueNote, note]
+          .filter(Boolean)
+          .join('. '),
       });
       await this.storage.delete(file).catch(() => undefined);
       await this.notifier.send(
-        `🔀 Lab «${run.title}» → PR #${pull.number} в ${run.repo} (${describeChanges(allowed)})\n${pull.htmlUrl}`,
+        `🔀 Lab «${run.title}» → PR #${pull.number} в ${run.repo} (${describeChanges(allowed)})\n${pull.htmlUrl}` +
+          (issueUrl ? `\nИ Issue #${issueNumber}: ${issueUrl}` : ''),
       );
     } catch (error) {
       const reason = describeGithubError(error);
 
       await this.finish(run, LabRunStatus.Failed, { error: reason });
       await this.notifier.send(
-        `🔴 Lab «${run.title}» (${run.repo}): не удалось открыть PR — ${reason.slice(0, 200)}`,
+        `🔴 Lab «${run.title}» (${run.repo}): не удалось опубликовать результат — ${reason.slice(0, 200)}`,
       );
     }
   }
@@ -173,7 +258,16 @@ export class LabPublishService {
     run: LabRun,
     status: LabRunStatus,
     patch: Partial<
-      Pick<LabRun, 'error' | 'note' | 'branch' | 'prNumber' | 'prUrl'>
+      Pick<
+        LabRun,
+        | 'error'
+        | 'note'
+        | 'branch'
+        | 'prNumber'
+        | 'prUrl'
+        | 'issueNumber'
+        | 'issueUrl'
+      >
     >,
   ): Promise<void> {
     Object.assign(run, patch, { status, finishedAt: new Date() });

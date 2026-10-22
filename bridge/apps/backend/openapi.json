@@ -6611,6 +6611,7 @@
               "running",
               "publishing",
               "pr_open",
+              "issue_open",
               "no_changes",
               "failed",
               "cancelled"
@@ -6642,6 +6643,14 @@
             "nullable": true
           },
           "prUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "issueNumber": {
+            "type": "number",
+            "nullable": true
+          },
+          "issueUrl": {
             "type": "string",
             "nullable": true
           },
@@ -6688,6 +6697,8 @@
           "branch",
           "prNumber",
           "prUrl",
+          "issueNumber",
+          "issueUrl",
           "note",
           "error",
           "finishedAt",

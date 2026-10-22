@@ -359,6 +359,19 @@ describe('LabPage: where a run is executed', () => {
   });
 });
 
+describe('LabPage: a run that opened a GitHub Issue', () => {
+  it('shows the Issue status and a link to it, with no PR link', async () => {
+    runs = [
+      { id: 6, projectId: 1, repo: 'me/boat', scheduleId: null, trigger: 'manual', title: 'Превышаем лимит API', task: 'Создай Issue: превышаем лимит API', model: 'sonnet', executor: 'any', status: 'issue_open', jobId: 3, baseBranch: 'main', branch: null, prNumber: null, prUrl: null, issueNumber: 42, issueUrl: 'https://github.com/me/boat/issues/42', note: null, error: null, createdAt: '2026-10-21T10:00:00Z', finishedAt: null },
+    ];
+    renderPage('/lab?tab=runs');
+
+    expect(await screen.findByText('Issue открыт')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Issue #42' })).toHaveAttribute('href', 'https://github.com/me/boat/issues/42');
+    expect(screen.queryByRole('link', { name: /^PR #/ })).toBeNull();
+  });
+});
+
 describe('LabPage: follow-up of a pull request', () => {
   const prRun = (over: Record<string, unknown>) => ({
     id: 5,
