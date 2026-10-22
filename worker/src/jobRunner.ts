@@ -170,11 +170,15 @@ export async function processJob(
       });
     }
 
+    // A limit chosen for this job at launch wins over the worker-wide setting.
+    const timeoutSec = job.timeoutSec ?? config.jobTimeoutSec;
+    log(`Time limit: ${timeoutSec}s${job.timeoutSec != null ? ' (set for this job)' : ''}\n`);
+
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
     const result = provider.tool === 'claude'
-      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, config.jobTimeoutSec * 1000, undefined, cancel.signal)
-      : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, config.jobTimeoutSec * 1000, cancel.signal);
+      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, timeoutSec * 1000, undefined, cancel.signal)
+      : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, timeoutSec * 1000, cancel.signal);
 
     // Plan limits and cost, reported before the final status (a job can no longer be touched once it is done).
     if ('report' in result && result.report) await client.reportClaudeUsage(job.id, result.report);

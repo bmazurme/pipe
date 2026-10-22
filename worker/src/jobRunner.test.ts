@@ -605,3 +605,70 @@ describe('processJob usage of runs that did not finish', () => {
     assert.ok(order.includes('status:failed'));
   });
 });
+
+describe('processJob time limit chosen at launch', () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
+  function logsOf(client: FakeClient): string {
+    return client.appendLog.calls.map((call) => String(call[1])).join('');
+  }
+
+  function failureOf(client: FakeClient): string {
+    const failed = client.updateStatus.calls.find((call) => call[1] === 'failed');
+    assert.ok(failed, 'the job was reported failed');
+    return String(failed[2]);
+  }
+
+  it('passes the job’s own deadline to runClaude instead of the worker setting', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
+    const binDir = path.join(workDir, 'bin');
+    mkdirSync(binDir);
+    const script = path.join(binDir, 'claude');
+    writeFileSync(script, ['#!/usr/bin/env node', 'setInterval(() => {}, 1000);', ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${binDir}:${originalPath}`;
+
+    const client = fakeClient(fakeParcel());
+    client.reportClaudeUsage = async () => {};
+    const job: RemoteJob = { id: 21, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 0.4, status: 'claimed' };
+    // The worker-wide limit is an hour: only the job's own 0.4 s can end this run within the test.
+    await processJob(client as never, job, { ...fakeConfig(workDir), jobTimeoutSec: 3600 }, { cancelPollMs: 1000 });
+
+    assert.match(failureOf(client), /timed out/);
+    assert.match(logsOf(client), /Time limit: 0\.4s \(set for this job\)/);
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('passes the job’s own deadline to runOpenAiCompatible instead of the worker setting', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
+    // A model that never answers until the request is aborted.
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason ?? new Error('aborted')));
+      })) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 22, sourceFileId: 13, resultFileId: null, model: 'gpt', timeoutSec: 0.3, status: 'claimed' };
+    await processJob(client as never, job, { ...fakeConfig(workDir), jobTimeoutSec: 3600 }, { cancelPollMs: 1000 });
+
+    assert.match(failureOf(client), /timed out after 0\.3s/);
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('uses the worker setting when the job has no limit of its own', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
+    stubOpenAiCompletion('Done.');
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 23, sourceFileId: 13, resultFileId: null, model: 'gpt', timeoutSec: null, status: 'claimed' };
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    assert.match(logsOf(client), /Time limit: 1800s\n/);
+    assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});

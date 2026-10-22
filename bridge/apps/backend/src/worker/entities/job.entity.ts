@@ -128,6 +128,10 @@ export class Job extends BaseEntity {
   @Column({ type: 'smallint', nullable: true })
   historyCount: number | null;
 
+  // The run's time limit in seconds, chosen at launch; null = the worker's own jobTimeoutSec applies.
+  @Column({ type: 'int', nullable: true })
+  timeoutSec: number | null;
+
   // Opt-in Telegram message when the job ends (honoured for the deployment owner only).
   @Column({ type: 'boolean', default: false })
   notifyOnFinish: boolean;

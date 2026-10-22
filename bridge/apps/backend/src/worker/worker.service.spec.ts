@@ -14,6 +14,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { buildRunHistory, LOG_TAIL_CHARS } from './run-history';
 import type { UpdateJobStatusDto } from './dto/update-job-status.dto';
+import { JobResponseDto } from './dto/job-response.dto';
 import { Worker } from './entities/worker.entity';
 import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
@@ -393,6 +394,7 @@ describe('WorkerService', () => {
         targetWorkerId: null,
         requiredCapability: null,
         notBefore: null,
+        timeoutSec: null,
         notifyOnFinish: false,
         resultPublicKey: null,
         taskKey: 'file:1',
@@ -1582,6 +1584,67 @@ describe('WorkerService', () => {
       repository.findOne!.mockResolvedValue(null);
 
       await expect(service.retry(5, 8)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('job time limit (timeoutSec)', () => {
+    beforeEach(() => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 11,
+        originalName: 'x.subscription.zip',
+      });
+      repository.save!.mockImplementation((job) =>
+        Promise.resolve({ id: 6, ...job }),
+      );
+    });
+
+    it('stores the limit chosen at launch', async () => {
+      const job = await service.create(7, {
+        sourceFileId: 11,
+        model: JobModel.Gpt,
+        timeoutSec: 7200,
+      });
+
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutSec: 7200 }),
+      );
+      expect(JobResponseDto.fromEntity(job as Job).timeoutSec).toBe(7200);
+    });
+
+    it('a retry keeps the original job’s limit', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Gpt,
+        claudeCredentialId: null,
+        providerCredentialId: null,
+        targetWorkerId: null,
+        timeoutSec: 7200,
+        status: JobStatus.Failed,
+      });
+
+      await expect(service.retry(5, 7)).resolves.toMatchObject({
+        timeoutSec: 7200,
+      });
+    });
+
+    it('a retry of a job without a limit stays without one', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Gpt,
+        claudeCredentialId: null,
+        providerCredentialId: null,
+        targetWorkerId: null,
+        timeoutSec: null,
+        status: JobStatus.Failed,
+      });
+
+      await expect(service.retry(5, 7)).resolves.toMatchObject({
+        timeoutSec: null,
+      });
     });
   });
 

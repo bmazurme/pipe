@@ -34,6 +34,15 @@ const START_NOW = 'now';
 const START_1H = '1h';
 const START_3H = '3h';
 const START_RESET = 'reset';
+const WORKER_TIMEOUT = 'worker';
+
+// The run's time limit: the worker's own setting unless the owner gives this job more.
+const TIMEOUT_OPTIONS = [
+  { value: WORKER_TIMEOUT, content: 'Как у worker\'а' },
+  { value: '3600', content: '1 ч' },
+  { value: '7200', content: '2 ч' },
+  { value: '14400', content: '4 ч' },
+];
 
 const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
 
@@ -89,6 +98,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   // owner attaches one for this launch.
   const [contextId, setContextId] = useState<number | undefined>(undefined);
   const [startWhen, setStartWhen] = useState(START_NOW);
+  // undefined = the worker's own job timeout (the default, nothing is sent).
+  const [timeoutSec, setTimeoutSec] = useState<number | undefined>(undefined);
   const [includeHistory, setIncludeHistory] = useState(false);
   const [notifyOnFinish, setNotifyOnFinish] = useState(false);
   const [decryptKey, setDecryptKey] = useState('');
@@ -213,6 +224,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
         ...(includeHistory ? { includeHistory: true } : {}),
         ...(notifyOnFinish ? { notifyOnFinish: true } : {}),
         ...(notBefore ? { notBefore } : {}),
+        ...(timeoutSec ? { timeoutSec } : {}),
         ...(resultPublicKey ? { resultPublicKey } : {}),
       }).unwrap();
       rememberModel(model);
@@ -220,6 +232,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
       setContextId(undefined);
       setIncludeHistory(false);
       setStartWhen(START_NOW);
+      setTimeoutSec(undefined);
       setDecryptKey('');
       onCreated(job.id);
     } catch (err) {
@@ -328,6 +341,14 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               value={[effectiveStart]}
               onUpdate={([value]) => setStartWhen(value ?? START_NOW)}
               options={startOptions}
+              width="max"
+            />
+            <Select
+              label="Лимит времени"
+              aria-label="Лимит времени"
+              value={[timeoutSec ? String(timeoutSec) : WORKER_TIMEOUT]}
+              onUpdate={([value]) => setTimeoutSec(value && value !== WORKER_TIMEOUT ? Number(value) : undefined)}
+              options={TIMEOUT_OPTIONS}
               width="max"
             />
             <Button
