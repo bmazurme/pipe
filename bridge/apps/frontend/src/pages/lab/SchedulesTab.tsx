@@ -225,7 +225,7 @@ export function SchedulesTab() {
         />
       </Dialog>
 
-      <Dialog open={editing !== null} onClose={() => setEditing(null)} maxWidth="s" aria-labelledby="lab-schedule-title">
+      <Dialog open={editing !== null} onClose={() => setEditing(null)} maxWidth="m" aria-labelledby="lab-schedule-title">
         <Dialog.Header caption={editing?.id ? 'Изменить расписание' : 'Новое расписание'} id="lab-schedule-title" />
         <Dialog.Body>
           {editing && (
