@@ -221,6 +221,33 @@ describe('LabPage: schedule weekdays', () => {
     expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ weekdays: [1, 2, 3, 4, 5] });
   });
 
+  it('picks the whole weekend in one click with the preset button', async () => {
+    const user = userEvent.setup();
+    await openNewSchedule(user);
+
+    await user.click(screen.getByRole('button', { name: 'Выходные' }));
+
+    for (const day of ['Пн', 'Вт', 'Ср', 'Чт', 'Пт']) expect(screen.getByRole('button', { name: day })).toHaveAttribute('aria-pressed', 'false');
+    for (const day of ['Сб', 'Вс']) expect(screen.getByRole('button', { name: day })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(await screen.findByLabelText('Задача'), 'Обновить зависимости');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/schedules')).toBeDefined());
+    expect(sent.find((call) => call.path === 'lab/schedules')?.body).toMatchObject({ weekdays: [6, 7] });
+  });
+
+  it('marks a preset selected only while the days exactly match it', async () => {
+    const user = userEvent.setup();
+    await openNewSchedule(user);
+
+    expect(screen.getByRole('button', { name: 'Каждый день' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Пн' }));
+    expect(screen.getByRole('button', { name: 'Каждый день' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Будни' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('refuses a schedule with no day left', async () => {
     const user = userEvent.setup();
     await openNewSchedule(user);
