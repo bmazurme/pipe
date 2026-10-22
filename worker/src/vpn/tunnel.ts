@@ -22,10 +22,13 @@ export interface TunnelOptions {
   /** Test hooks. */
   spawnProcess?: (bin: string, args: string[]) => ChildProcess;
   waitForPort?: (port: number, timeoutMs: number) => Promise<boolean>;
+  now?: () => number;
 }
 
 const DEFAULT_PORT = 18080;
 const READY_TIMEOUT_MS = 8000;
+const BACKOFF_BASE_MS = 30_000;
+const BACKOFF_MAX_MS = 5 * 60_000;
 
 export function isPortOpen(port: number, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
@@ -57,6 +60,11 @@ export class VpnTunnel {
   private child: ChildProcess | null = null;
   private currentLink: string | null = null;
   private readonly port: number;
+  // Back-off for a link that failed to come up or whose tunnel exited on its own.
+  private failedLink: string | null = null;
+  private failures = 0;
+  private retryAt = 0;
+  private skipLogged = false;
 
   constructor(private readonly options: TunnelOptions) {
     this.port = options.port ?? DEFAULT_PORT;
@@ -74,17 +82,46 @@ export class VpnTunnel {
     return this.child !== null && this.child.exitCode === null && !this.child.killed;
   }
 
+  private now(): number {
+    return (this.options.now ?? Date.now)();
+  }
+
+  private resetBackoff(): void {
+    this.failedLink = null;
+    this.failures = 0;
+    this.retryAt = 0;
+    this.skipLogged = false;
+  }
+
+  private markFailed(link: string): void {
+    this.failures = this.failedLink === link ? this.failures + 1 : 1;
+    this.failedLink = link;
+    this.retryAt = this.now() + Math.min(BACKOFF_BASE_MS * 2 ** (this.failures - 1), BACKOFF_MAX_MS);
+    this.skipLogged = false;
+  }
+
   /** The proxy URL to route through, or null when there is no (working) tunnel. */
   async apply(link: string | null | undefined): Promise<string | null> {
     const wanted = link?.trim() || null;
 
     if (!wanted) {
+      this.resetBackoff();
       this.stop();
 
       return null;
     }
 
     if (this.alive() && wanted === this.currentLink) return this.proxyUrl;
+
+    if (this.failedLink !== wanted) this.resetBackoff();
+    else if (this.now() < this.retryAt) {
+      if (!this.skipLogged) {
+        this.skipLogged = true;
+        this.options.log?.warn({ retryInSec: Math.ceil((this.retryAt - this.now()) / 1000) }, 'vpn tunnel failed recently — not restarting it yet');
+      }
+
+      return null;
+    }
 
     this.stop();
 
@@ -107,6 +144,7 @@ export class VpnTunnel {
         if (this.child === child) {
           this.options.log?.warn({ code }, 'vpn tunnel exited — it is started again on the next poll');
           this.child = null;
+          this.markFailed(wanted);
         }
       });
 
@@ -115,16 +153,19 @@ export class VpnTunnel {
       if (!ready || !this.alive()) {
         this.options.log?.error({ port: this.port }, 'vpn tunnel did not come up');
         this.stop();
+        this.markFailed(wanted);
 
         return null;
       }
 
+      this.resetBackoff();
       this.options.log?.info({ proxy: this.proxyUrl }, 'vpn tunnel is up');
 
       return this.proxyUrl;
     } catch (error) {
       this.options.log?.error({ err: error }, 'vpn link from the Worker page cannot be used');
       this.stop();
+      this.markFailed(wanted);
 
       return null;
     }
