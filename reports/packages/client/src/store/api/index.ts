@@ -34,6 +34,7 @@ export {
   useCreateManualSubscriptionIssueMutation,
   useRemoveSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
+  useResetSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
   useGetSubscriptionConfigQuery,
   useAddTrackedProjectMutation,
