@@ -1,7 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
+import { ContextService } from '../context/context.service';
 import { Job } from '../worker/entities/job.entity';
 import { QuestionCardDto } from './dto/question-card.dto';
 import { TaskQuestion } from './entities/task-question.entity';
@@ -29,6 +35,7 @@ export class QuestionsService {
     private readonly questionRepository: Repository<TaskQuestion>,
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
+    private readonly contextService: ContextService,
   ) {}
 
   // What a worker found in a run's output. A question already open on the same task is not added again (a re-run
@@ -119,6 +126,7 @@ export class QuestionsService {
           id: q.id,
           text: q.text,
           resolved: q.resolvedAt !== null,
+          answer: q.answer ?? null,
           createdAt: q.createdAt,
         })),
         openCount,
@@ -132,10 +140,12 @@ export class QuestionsService {
     return cards.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
+  // `resolved` ticks a question off or back on; a non-empty `answer` is stored and resolves it, an empty one clears it.
   async setResolved(
     id: number,
     userId: number,
-    resolved: boolean,
+    resolved?: boolean,
+    answer?: string,
   ): Promise<TaskQuestion> {
     const question = await this.questionRepository.findOne({
       where: { id, userId },
@@ -143,8 +153,50 @@ export class QuestionsService {
 
     if (!question) throw new NotFoundException('Question not found');
 
-    question.resolvedAt = resolved ? new Date() : null;
+    if (resolved === undefined && answer === undefined) {
+      throw new BadRequestException('Nothing to update');
+    }
+
+    if (answer !== undefined) {
+      const trimmed = answer.trim();
+
+      question.answer = trimmed || null;
+      if (trimmed && resolved === undefined) resolved = true;
+    }
+
+    if (resolved !== undefined) {
+      question.resolvedAt = resolved
+        ? (question.resolvedAt ?? new Date())
+        : null;
+    }
 
     return this.questionRepository.save(question);
+  }
+
+  // The answered questions as "Вопрос / Ответ" text.
+  buildContextText(questions: Pick<TaskQuestion, 'text' | 'answer'>[]): string {
+    return questions
+      .filter((q) => q.answer)
+      .map((q) => `Вопрос: ${q.text}\nОтвет: ${q.answer}`)
+      .join('\n\n')
+      .slice(0, MAX_CONTEXT_LENGTH);
+  }
+
+  // Saves a card's answers as a Context to attach to the task's next run; returns its id.
+  async createContext(userId: number, taskKey: string): Promise<number> {
+    const rows = await this.questionRepository.find({
+      where: { userId, taskKey },
+      order: { id: 'ASC' },
+    });
+    const content = this.buildContextText(rows);
+
+    if (!content) throw new NotFoundException('No answered questions');
+
+    const context = await this.contextService.create(userId, {
+      name: `Ответы: ${taskKey}`,
+      content,
+    });
+
+    return context.id;
   }
 }

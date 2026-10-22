@@ -25,6 +25,10 @@ export class TaskQuestion extends BaseEntity {
   @Column({ type: 'varchar', length: 500 })
   text: string;
 
+  // What the user wrote in reply; null until they do. Saving one resolves the question.
+  @Column({ type: 'varchar', length: 2000, nullable: true })
+  answer: string | null;
+
   @Column({ type: 'timestamp', nullable: true })
   resolvedAt: Date | null;
 }

@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -40,13 +41,28 @@ export class QuestionsController {
       id,
       currentUser.id,
       dto.resolved,
+      dto.answer,
     );
 
     return {
       id: question.id,
       text: question.text,
       resolved: question.resolvedAt !== null,
+      answer: question.answer,
       createdAt: question.createdAt,
+    };
+  }
+
+  @Post('cards/:taskKey/context')
+  async saveAsContext(
+    @Param('taskKey') taskKey: string,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{ contextId: number }> {
+    return {
+      contextId: await this.questionsService.createContext(
+        currentUser.id,
+        taskKey,
+      ),
     };
   }
 }

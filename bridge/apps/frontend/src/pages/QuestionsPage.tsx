@@ -1,18 +1,31 @@
 import { useState } from 'react';
 import { CircleQuestion } from '@gravity-ui/icons';
-import { Alert, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
-import { getErrorMessage, type QuestionCard, useListQuestionCardsQuery, useSetQuestionResolvedMutation } from '../store/api';
+import { getErrorMessage, type QuestionCard, useListQuestionCardsQuery, useSaveQuestionsAsContextMutation, useSetQuestionResolvedMutation } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './QuestionsPage.module.css';
 
 const POLL_INTERVAL_MS = 30_000;
+const MAX_ANSWER_LENGTH = 2000;
 
 type View = 'open' | 'archive';
 
-function CardView({ card, onToggle, disabled }: { card: QuestionCard; onToggle: (id: number, resolved: boolean) => void; disabled: boolean }) {
+interface CardViewProps {
+  card: QuestionCard;
+  onToggle: (id: number, resolved: boolean) => void;
+  onAnswer: (id: number, answer: string) => void;
+  onSaveContext: (taskKey: string) => void;
+  disabled: boolean;
+  contextSaved: boolean;
+}
+
+function CardView({ card, onToggle, onAnswer, onSaveContext, disabled, contextSaved }: CardViewProps) {
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const hasAnswers = card.questions.some((question) => question.answer);
+
   return (
     <Card type="container" view="outlined" className={styles.card}>
       <div className={styles.cardHeader}>
@@ -37,9 +50,43 @@ function CardView({ card, onToggle, disabled }: { card: QuestionCard; onToggle: 
                 </Text>
               }
             />
+            {question.answer && <Text className={styles.answerText}>{question.answer}</Text>}
+            {!question.resolved && (
+              <div className={styles.answer}>
+                <TextInput
+                  size="s"
+                  placeholder="Ответ"
+                  value={drafts[question.id] ?? ''}
+                  controlProps={{ maxLength: MAX_ANSWER_LENGTH, "aria-label": `Ответ: ${question.text}` }}
+                  onUpdate={(value) => setDrafts((current) => ({ ...current, [question.id]: value }))}
+                />
+                <Button
+                  size="s"
+                  disabled={disabled || !(drafts[question.id] ?? '').trim()}
+                  onClick={() => {
+                    onAnswer(question.id, drafts[question.id]);
+                    setDrafts((current) => ({ ...current, [question.id]: '' }));
+                  }}
+                >
+                  Ответить
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
+      {hasAnswers && (
+        <div>
+          <Button size="s" view="outlined" disabled={disabled} onClick={() => onSaveContext(card.taskKey)}>
+            Сохранить ответы как Context
+          </Button>
+          {contextSaved && (
+            <Text variant="caption-2" color="secondary" className={styles.answerText}>
+              Context «Ответы: {card.taskKey}» создан — выберите его при запуске следующего Worker job.
+            </Text>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -51,6 +98,8 @@ export function QuestionsPage() {
     { pollingInterval: POLL_INTERVAL_MS, skipPollingIfUnfocused: true },
   );
   const [setResolved, { isLoading: isSaving }] = useSetQuestionResolvedMutation();
+  const [saveContext, { isLoading: isSavingContext }] = useSaveQuestionsAsContextMutation();
+  const [savedContexts, setSavedContexts] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const handleToggle = async (id: number, resolved: boolean) => {
@@ -60,6 +109,27 @@ export function QuestionsPage() {
       await setResolved({ id, resolved }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось обновить вопрос'));
+    }
+  };
+
+  const handleAnswer = async (id: number, answer: string) => {
+    setError(null);
+
+    try {
+      await setResolved({ id, answer }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось сохранить ответ'));
+    }
+  };
+
+  const handleSaveContext = async (taskKey: string) => {
+    setError(null);
+
+    try {
+      await saveContext({ taskKey }).unwrap();
+      setSavedContexts((current) => [...current, taskKey]);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось создать Context'));
     }
   };
 
@@ -101,7 +171,14 @@ export function QuestionsPage() {
         <ul className={styles.list}>
           {cards.map((card) => (
             <li key={card.taskKey}>
-              <CardView card={card} disabled={isSaving} onToggle={(id, resolved) => void handleToggle(id, resolved)} />
+              <CardView
+                card={card}
+                disabled={isSaving || isSavingContext}
+                contextSaved={savedContexts.includes(card.taskKey)}
+                onToggle={(id, resolved) => void handleToggle(id, resolved)}
+                onAnswer={(id, answer) => void handleAnswer(id, answer)}
+                onSaveContext={(taskKey) => void handleSaveContext(taskKey)}
+              />
             </li>
           ))}
         </ul>
