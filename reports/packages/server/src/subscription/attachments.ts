@@ -1,9 +1,11 @@
 import { MAX_TOTAL_IMAGE_BYTES, type IssueImage } from '@pipe/protocol';
 
-// Screenshots the person attaches to a task when pushing it: they travel in the parcel next to the images
-// the issue itself carries (issue-images/…), so the worker sees them the same way.
+// Files the person attaches to a task when pushing it. A picture travels next to the images the issue itself carries
+// (issue-images/…), so the worker sees it the same way; any other file (.msg, .json, .txt, a log, …) goes to issue-attachments/…,
+// where the worker reads it as input. Neither kind passes the dictionary substitution or the leak scan — they are sent as they are.
 export const MAX_ATTACHMENTS = 10;
-export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENTS_DIR = 'issue-attachments/';
 
 export interface AttachmentPayload {
   name: string;
@@ -18,11 +20,19 @@ const SIGNATURES: { extension: string; matches: (bytes: Buffer) => boolean }[] =
   { extension: 'webp', matches: (b) => b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
 ];
 
-function safeStem(name: string): string {
+function safeStem(name: string, fallback = 'file'): string {
   const base = name.split(/[\\/]/).pop() ?? '';
   const stem = base.replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^[-.]+|[-.]+$/g, '');
 
-  return stem.slice(0, 60) || 'screenshot';
+  return stem.slice(0, 60) || fallback;
+}
+
+// The extension of a file that is not a picture, as the name gives it (a file has nothing else to tell what it is): short, letters
+// and digits only, lower case — or none.
+function safeExtension(name: string): string {
+  const match = /\.([A-Za-z0-9]{1,10})$/.exec(name.split(/[\\/]/).pop() ?? '');
+
+  return match ? match[1].toLowerCase() : '';
 }
 
 // Checks what the client sent and turns it into parcel images, or throws a message the person can act on.
@@ -30,9 +40,10 @@ function safeStem(name: string): string {
 export function parseAttachments(raw: unknown, taken: Iterable<string> = []): IssueImage[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) throw new Error('Вложения переданы в неверном формате');
-  if (raw.length > MAX_ATTACHMENTS) throw new Error(`Слишком много скриншотов: не больше ${MAX_ATTACHMENTS}`);
+  if (raw.length > MAX_ATTACHMENTS) throw new Error(`Слишком много вложений: не больше ${MAX_ATTACHMENTS}`);
 
-  const used = new Set(taken);
+  // `taken` are file names inside issue-images/ (what the issue's own images are called).
+  const used = new Set([...taken].map((name) => `issue-images/${name}`));
   const images: IssueImage[] = [];
   let total = 0;
 
@@ -50,19 +61,23 @@ export function parseAttachments(raw: unknown, taken: Iterable<string> = []): Is
       throw new Error(`«${label}» больше ${MAX_ATTACHMENT_BYTES / 1024 / 1024} МБ`);
     }
 
-    const signature = SIGNATURES.find((candidate) => candidate.matches(bytes));
-    if (!signature) throw new Error(`«${label}» — не изображение (PNG, JPEG, GIF или WebP)`);
-
     total += bytes.length;
-    if (total > MAX_TOTAL_IMAGE_BYTES) throw new Error('Скриншоты вместе превышают общий лимит посылки');
+    if (total > MAX_TOTAL_IMAGE_BYTES) throw new Error('Вложения вместе превышают общий лимит посылки');
 
-    let fileName = `${safeStem(name)}.${signature.extension}`;
-    for (let counter = 2; used.has(fileName); counter += 1) {
-      fileName = `${safeStem(name)}-${counter}.${signature.extension}`;
+    // A picture is recognised by its first bytes; anything else is an ordinary file under its own (cleaned) name.
+    const signature = SIGNATURES.find((candidate) => candidate.matches(bytes));
+    const dir = signature ? 'issue-images/' : ATTACHMENTS_DIR;
+    const stem = safeStem(name, signature ? 'screenshot' : 'file');
+    const extension = signature ? signature.extension : safeExtension(name);
+    const suffix = extension ? `.${extension}` : '';
+
+    let fileName = `${stem}${suffix}`;
+    for (let counter = 2; used.has(`${dir}${fileName}`); counter += 1) {
+      fileName = `${stem}-${counter}${suffix}`;
     }
-    used.add(fileName);
+    used.add(`${dir}${fileName}`);
 
-    images.push({ relPath: `issue-images/${fileName}`, base64: bytes.toString('base64') });
+    images.push({ relPath: `${dir}${fileName}`, base64: bytes.toString('base64') });
   });
 
   return images;

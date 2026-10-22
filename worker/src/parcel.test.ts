@@ -177,3 +177,37 @@ describe('buildResultParcel', () => {
     assert.ok(reExtracted.files.some((f) => f.relPath === 'src/new-file.ts'));
   });
 });
+
+describe('describeTask with files the person attached', () => {
+  const parcelWith = (assets: { relPath: string; base64: string }[]): Buffer =>
+    buildArchive(
+      SUBSCRIPTION_MANIFEST_ENTRY,
+      [{ relPath: 'src/index.ts', content: 'x' }],
+      { issueId: '1', issueIid: '6', issueTitle: 'Read the mail', issueDescription: 'See the attachment', projectId: 402, branch: 'task/402-6', createdAt: '2026-10-22T00:00:00.000Z' },
+      assets,
+    ).buffer;
+
+  it('points the model at issue-attachments/ and says they are input only', () => {
+    const prompt = describeTask(extractParcel(parcelWith([{ relPath: 'issue-attachments/letter.msg', base64: Buffer.from('mail').toString('base64') }])));
+
+    assert.match(prompt, /issue-attachments\/ folder/);
+    assert.match(prompt, /input only/);
+    assert.doesNotMatch(prompt, /issue-images/);
+  });
+
+  it('mentions neither folder when there is nothing attached, and both when both are', () => {
+    assert.doesNotMatch(describeTask(extractParcel(parcelWith([]))), /issue-attachments|issue-images/);
+
+    const both = describeTask(
+      extractParcel(
+        parcelWith([
+          { relPath: 'issue-images/a.png', base64: Buffer.from('p').toString('base64') },
+          { relPath: 'issue-attachments/data.json', base64: Buffer.from('{}').toString('base64') },
+        ]),
+      ),
+    );
+
+    assert.match(both, /issue-images\//);
+    assert.match(both, /issue-attachments\//);
+  });
+});

@@ -97,7 +97,9 @@ export async function pullSubscriptionIssue(
   // A migration result carries both repositories; only target/… is taken (with that prefix cut), the current repository is never
   // written, and the images sent along (screenshots) are not scattered into the target.
   const files = workTree.migration ? targetFilesOf(parcelFiles) : parcelFiles;
-  const assets = workTree.migration ? [] : parcelAssets;
+  // Files the person attached (issue-attachments/) are INPUT for the worker: the worker hands every asset back with its result, but
+  // they are not part of it, and a .msg or .json with real data must not land in the repository (and in a commit of the autopilot).
+  const assets = workTree.migration ? [] : parcelAssets.filter((asset) => !asset.relPath.startsWith('issue-attachments/'));
   const projectRoot = resolve(workTree.path);
 
   const state = getIssueState(projectId, iid);

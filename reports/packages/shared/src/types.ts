@@ -304,7 +304,7 @@ export type SubscriptionPushPayload = {
   projectId: number;
   title: string;
   description: string;
-  /** Screenshots the person attached (PNG/JPEG/GIF/WebP, base64) — they travel in the parcel as images. */
+  /** Files the person attached (base64): pictures travel as issue images, anything else (.msg, .json, …) as issue-attachments/. */
   attachments?: { name: string; base64: string }[];
 };
 

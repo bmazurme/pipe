@@ -22,6 +22,7 @@ import {
   handleCreateManualSubscriptionIssue,
   handleCreateMigrationTask,
   handleRemoveSubscriptionIssue,
+  handleResetSubscriptionIssue,
 } from './subscription/handler';
 import {
   handleGetSubscriptionConfig,
@@ -120,6 +121,7 @@ app.get('/api/subscription/issues/:projectId/:iid/draft', handleGetSubscriptionD
 app.post('/api/subscription/issues/:projectId/:iid/push', handlePushSubscriptionIssue);
 app.post('/api/subscription/issues/:projectId/:iid/pull', handlePullSubscriptionIssue);
 app.post('/api/subscription/issues/:projectId/:iid/publish', handlePublishSubscriptionIssue);
+app.post('/api/subscription/issues/:projectId/:iid/reset', handleResetSubscriptionIssue);
 app.get('/api/subscription/issues/:projectId/:iid/time', handleGetSubscriptionIssueTime);
 app.delete('/api/subscription/issues/:projectId/:iid', handleRemoveSubscriptionIssue);
 app.get('/api/subscription/config', handleGetSubscriptionConfig);

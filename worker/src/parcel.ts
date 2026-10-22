@@ -80,6 +80,13 @@ export function buildResultParcel(
 // only reads whatever placeholder-substituted title/description the parcel
 // already carries, to give the model something to work from. A project-mode
 // (__sync_manifest__.json) parcel has no issue text at all.
+const ATTACHMENTS_DIR = 'issue-attachments/';
+
+// Files the person attached to the task (a letter, a JSON, a log…): input for the work, not part of the result.
+function attachmentsNote(): string {
+  return `Files the person attached to the task are in the ${ATTACHMENTS_DIR} folder (any format: e.g. .msg, .json, .txt). Read them as part of the task. They are input only: do not copy them into the project and do not change them.`;
+}
+
 export function describeTask(parcel: ExtractedParcel): string {
   if (parcel.manifestEntry === SUBSCRIPTION_MANIFEST_ENTRY) {
     const manifest = parcel.manifest as unknown as SubscriptionManifest;
@@ -89,11 +96,13 @@ export function describeTask(parcel: ExtractedParcel): string {
       .map((comment) => `--- ${[comment.author, comment.createdAt].filter(Boolean).join(', ')}:\n${comment.body}`)
       .join('\n\n');
     const hasImages = parcel.assets.some((asset) => asset.relPath.startsWith('issue-images/'));
+    const hasFiles = parcel.assets.some((asset) => asset.relPath.startsWith(ATTACHMENTS_DIR));
 
     return [
       `Task (GitLab issue): ${manifest.issueTitle}\n\n${manifest.issueDescription}`,
       comments ? `Comments on the issue, oldest first (they may clarify or change the task):\n\n${comments}` : '',
       hasImages ? 'Images attached to the description and the comments are in the issue-images/ folder.' : '',
+      hasFiles ? attachmentsNote() : '',
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -125,6 +134,7 @@ function describeMigration(manifest: SubscriptionManifest, parcel: ExtractedParc
       `- When you finish, say briefly what was added or changed in ${targetRoot}, and anything in ${sourceRoot} that could not be ported, and why.`,
     ].join('\n'),
     hasImages ? 'Images attached to the task are in the issue-images/ folder.' : '',
+    parcel.assets.some((asset) => asset.relPath.startsWith(ATTACHMENTS_DIR)) ? attachmentsNote() : '',
   ]
     .filter(Boolean)
     .join('\n\n');

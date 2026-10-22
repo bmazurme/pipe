@@ -30,6 +30,7 @@ import { buildArchive } from './pack';
 import { uploadParcel, createWorkerJob } from './bridge-client';
 import { encryptBuffer } from './encryption';
 import { pullSubscriptionIssue } from './pull';
+import { resetSubscriptionIssue } from './reset';
 
 export { pullSubscriptionIssue };
 
@@ -449,6 +450,15 @@ export async function handlePullSubscriptionIssue(req: Request<Record<string, st
   const { projectId, iid } = req.params;
 
   await withStream(res, 'Pull subscription issue', () => pullSubscriptionIssue(projectId, iid));
+}
+
+export async function handleResetSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
+  if (rejectBadIssueParams(req, res)) return;
+
+  const { projectId, iid } = req.params;
+  const discardFiles = (req.body as { discardFiles?: unknown } | undefined)?.discardFiles === true;
+
+  await withStream(res, 'Reset subscription issue', () => resetSubscriptionIssue(projectId, iid, { discardFiles }));
 }
 
 export async function handlePublishSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {

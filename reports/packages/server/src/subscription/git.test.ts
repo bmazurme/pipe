@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { assertTaskBranch, buildBranchName, changedFiles, checkoutTaskBranch, commitPulledFiles, createBranch, listModules, pushBranch, runGit, showFile } from './git';
+import { assertTaskBranch, buildBranchName, changedFiles, checkoutTaskBranch, commitPulledFiles, createBranch, currentBranch, listModules, pushBranch, runGit, showFile, stashChanges } from './git';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -485,3 +485,34 @@ describe('showFile', () => {
     expect(await showFile(dir, 'no-such-branch', 'README.md')).toBeNull();
   });
 });
+
+describe('stashChanges and currentBranch', () => {
+  it('names the branch the repository is on', async () => {
+    const dir = initRepo();
+    git(dir, ['checkout', '--quiet', '-b', 'task-1']);
+
+    expect(await currentBranch(dir)).toBe('task-1');
+  });
+
+  it('puts modified and untracked files aside, leaving a clean tree, and they can be brought back', async () => {
+    const dir = initRepo();
+    writeFileSync(path.join(dir, 'README.md'), 'changed by the result');
+    writeFileSync(path.join(dir, 'new.txt'), 'a file the result added');
+
+    expect(await stashChanges(dir, 'reports: result (reset)')).toBe(true);
+    expect(git(dir, ['status', '--porcelain']).trim()).toBe('');
+    expect(existsSync(path.join(dir, 'new.txt'))).toBe(false);
+    expect(git(dir, ['stash', 'list'])).toContain('reports: result (reset)');
+
+    git(dir, ['stash', 'pop', '--quiet']);
+    expect(existsSync(path.join(dir, 'new.txt'))).toBe(true);
+  });
+
+  it('does nothing, and says so, when the tree is already clean', async () => {
+    const dir = initRepo();
+
+    expect(await stashChanges(dir, 'nothing')).toBe(false);
+    expect(git(dir, ['stash', 'list']).trim()).toBe('');
+  });
+});
+

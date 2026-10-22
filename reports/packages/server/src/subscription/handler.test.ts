@@ -76,6 +76,7 @@ const {
   handleCreateMigrationTask,
   handlePushSubscriptionIssue,
   handlePullSubscriptionIssue,
+  handleResetSubscriptionIssue,
   pullSubscriptionIssue,
   handlePublishSubscriptionIssue,
   handleListSubscriptionIssues,
@@ -376,7 +377,7 @@ describe('handlePushSubscriptionIssue', () => {
     expect(archive.assets.map((asset) => asset.relPath)).toEqual(['issue-images/shot.png']);
   });
 
-  it('puts screenshots attached by hand into the parcel, and refuses something that is not an image', async () => {
+  it('puts files attached by hand into the parcel — pictures as images, anything else as attachments', async () => {
     const { dir } = initTrackedProject('173');
     setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
     git(dir, ['checkout', '-b', 'task/173-6']);
@@ -394,23 +395,15 @@ describe('handlePushSubscriptionIssue', () => {
       throw new Error(`unexpected URL: ${url}`);
     }) as typeof fetch;
 
-    const bad = makeRes();
-    await handlePushSubscriptionIssue(
-      makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd', attachments: [{ name: 'x.png', base64: Buffer.from('not an image').toString('base64') }] }),
-      bad.res,
-    );
-    expect(bad.events()[0]).toMatchObject({ type: 'error' });
-    expect(uploaded).toBeUndefined();
-
     const { res, events } = makeRes();
     await handlePushSubscriptionIssue(
-      makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd', attachments: [{ name: 'Screenshot 1.png', base64: png.toString('base64') }] }),
+      makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description: 'd', attachments: [{ name: 'Screenshot 1.png', base64: png.toString('base64') }, { name: 'client.msg', base64: Buffer.from('mail').toString('base64') }, { name: 'data.json', base64: Buffer.from('{}').toString('base64') }] }),
       res,
     );
 
     expect(events()[0].type).toBe('message');
     const archive = extractArchive<BaseManifest>(uploaded!, '__subscription_manifest__.json');
-    expect(archive.assets.map((asset) => asset.relPath)).toEqual(['issue-images/Screenshot-1.png']);
+    expect(archive.assets.map((asset) => asset.relPath).sort()).toEqual(['issue-attachments/client.msg', 'issue-attachments/data.json', 'issue-images/Screenshot-1.png']);
   });
 
   it('refuses to push before init has created a branch', async () => {
@@ -458,6 +451,51 @@ describe('handlePushSubscriptionIssue', () => {
     expect(String(events()[0].data)).toMatch(/leakScanStrict/);
     expect(storageCalled).toBe(false);
     expect(getIssueState('173', '6')?.step).toBe('init');
+  });
+});
+
+describe('handleResetSubscriptionIssue', () => {
+  it('takes a pulled task back to init and puts the unwanted result into the stash', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pulled', branch: 'task/173-6', pushedAt: 'a', pulledAt: 'b', pulledFiles: 1 });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    writeFileSync(path.join(dir, 'pulled.txt'), 'a result nobody wants');
+
+    const { res, events } = makeRes();
+    await handleResetSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, { discardFiles: true }), res);
+
+    expect(events()[0].type).toBe('message');
+    expect(events()[0].data).toMatchObject({ stashed: true, state: { step: 'init', branch: 'task/173-6' } });
+    expect(getIssueState('173', '6')).toMatchObject({ step: 'init', branch: 'task/173-6' });
+    expect(getIssueState('173', '6')?.pulledAt).toBeUndefined();
+    expect(git(dir, ['status', '--porcelain']).trim()).toBe('');
+    expect(git(dir, ['stash', 'list'])).toContain('сброс прогресса');
+  });
+
+  it('leaves the files where they are unless asked, and refuses a task that has not received its result', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pulled', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    writeFileSync(path.join(dir, 'pulled.txt'), 'kept');
+
+    const kept = makeRes();
+    await handleResetSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), kept.res);
+    expect(getIssueState('173', '6')?.step).toBe('init');
+    expect(readFileSync(path.join(dir, 'pulled.txt'), 'utf-8')).toBe('kept');
+
+    const refused = makeRes();
+    await handleResetSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), refused.res);
+    expect(refused.events()[0]).toMatchObject({ type: 'error' });
+  });
+
+  it('refuses a malformed task id', async () => {
+    const { res } = makeRes();
+    (res as unknown as { status: (code: number) => unknown }).status = () => res;
+    (res as unknown as { json: (body: unknown) => unknown }).json = () => res;
+
+    await handleResetSubscriptionIssue(makeReq({ projectId: '../x', iid: '6' }), res);
+
+    expect(getIssueState('173', '6')).toBeUndefined();
   });
 });
 
@@ -573,6 +611,32 @@ describe('handlePullSubscriptionIssue', () => {
   // Regression, same loop: if the process dies after the commit/push but
   // before the step is recorded, the result is still on bridge and gets
   // pulled again. The step must be written before the parcel is touched.
+  it('does not write the files the person attached back into the repository, only the images', async () => {
+    const { dir } = initTrackedProject('173');
+    setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+    git(dir, ['push', '-u', 'origin', 'task/173-6']);
+
+    mockBridgeResult(
+      buildArchive(
+        [{ relPath: 'pulled.txt', content: 'from the parcel' }],
+        { issueId: '1', issueIid: '6', issueTitle: 'Fix it', issueDescription: 'desc', projectId: 173, branch: 'task/173-6', createdAt: new Date().toISOString() },
+        [
+          { relPath: 'issue-images/shot.png', base64: Buffer.from('png').toString('base64') },
+          { relPath: 'issue-attachments/client.msg', base64: Buffer.from('a letter with real names').toString('base64') },
+        ],
+      ),
+    );
+
+    const { res, events } = makeRes();
+    await handlePullSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }), res);
+
+    expect(events()[0].type).toBe('message');
+    expect(existsSync(path.join(dir, 'issue-images', 'shot.png'))).toBe(true);
+    expect(existsSync(path.join(dir, 'issue-attachments'))).toBe(false);
+    expect(getIssueState('173', '6')).toMatchObject({ step: 'pulled', pulledFiles: 2 });
+  });
+
   it('records the pulled step before it deletes the parcel from bridge', async () => {
     const { dir } = initTrackedProject('173');
     setIssueState('173', '6', { step: 'pushed', branch: 'task/173-6' });

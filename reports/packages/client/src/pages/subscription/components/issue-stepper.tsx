@@ -1,6 +1,6 @@
 import { useState, type ClipboardEvent } from 'react';
-import { Alert, Button, Icon, Select, Text, TextInput, useToaster } from '@gravity-ui/uikit';
-import { Check, CodeFork, ArrowUpFromLine, ArrowDownToLine, PaperPlane } from '@gravity-ui/icons';
+import { Alert, Button, Checkbox, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Select, Text, TextInput, useToaster } from '@gravity-ui/uikit';
+import { Check, CodeFork, ArrowUpFromLine, ArrowDownToLine, ArrowRotateLeft, PaperPlane } from '@gravity-ui/icons';
 import type { SubscriptionDraftType, SubscriptionIssueType, SubscriptionStepType } from '@reports/shared';
 
 import {
@@ -11,6 +11,7 @@ import {
   usePushSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
+  useResetSubscriptionIssueMutation,
 } from '../../../store/api';
 import { describeError } from '../../../utils/describe-error';
 import { MAX_ATTACHMENTS, toAttachments, type Attachment } from './attachments';
@@ -29,6 +30,10 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
   const [push, { isLoading: isPushing }] = usePushSubscriptionIssueMutation();
   const [pull, { isLoading: isPulling }] = usePullSubscriptionIssueMutation();
   const [publish, { isLoading: isPublishing }] = usePublishSubscriptionIssueMutation();
+  const [reset, { isLoading: isResetting }] = useResetSubscriptionIssueMutation();
+  // The confirmation of «Сбросить прогресс»; the files of the result go into git stash (not deleted) unless the person unticks it.
+  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [discardFiles, setDiscardFiles] = useState(true);
   const { data: config } = useGetSubscriptionConfigQuery();
 
   // Set only while the review form is open — pre-filled from the draft
@@ -89,7 +94,7 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
 
   // Leaving the review (sent or cancelled) drops the screenshots and frees their previews.
   const closeReview = () => {
-    attachments.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    attachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
     setAttachments([]);
     setReviewDraft(null);
   };
@@ -152,6 +157,28 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
         name: `subscription-${issue.iid}-error`,
         theme: 'danger',
         title: 'Не удалось получить посылку',
+        content: describeError(error),
+        isClosable: true,
+      });
+    }
+  };
+  const handleReset = async () => {
+    try {
+      const result = await reset({ ...args, discardFiles }).unwrap();
+
+      setIsResetOpen(false);
+      toaster.add({
+        name: `subscription-${issue.iid}-reset`,
+        theme: 'success',
+        title: 'Прогресс сброшен — задачу можно отправить заново',
+        content: result.stashed ? 'Файлы результата убраны из ветки в git stash (git stash list; вернуть — git stash pop)' : undefined,
+        autoHiding: 8000,
+      });
+    } catch (error) {
+      toaster.add({
+        name: `subscription-${issue.iid}-error`,
+        theme: 'danger',
+        title: 'Не удалось сбросить прогресс',
         content: describeError(error),
         isClosable: true,
       });
@@ -313,6 +340,18 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
         <Text variant="body-2" color="positive">Пайплайн по задаче завершён.</Text>
       )}
 
+      {currentIndex >= 2 && !reviewDraft && (
+        <div className={style.stepAction}>
+          <Text variant="body-2" color="secondary">
+            Результат не устроил? Сбросьте прогресс — задача вернётся на шаг init, и её можно будет отправить заново (с другим описанием или вложениями).
+          </Text>
+          <Button view="outlined-danger" size="m" onClick={() => setIsResetOpen(true)} disabled={!!disabledReason} title={disabledReason}>
+            <Icon data={ArrowRotateLeft} size={16} />
+            Сбросить прогресс
+          </Button>
+        </div>
+      )}
+
       {currentIndex >= 1 && !reviewDraft && (
         <div className={style.stepAction}>
           <Text variant="body-2" color="secondary">
@@ -324,6 +363,30 @@ function IssueStepper({ issue }: { issue: SubscriptionIssueType }) {
           </Button>
         </div>
       )}
+
+      <Dialog open={isResetOpen} onClose={() => !isResetting && setIsResetOpen(false)} aria-labelledby={`reset-${issue.iid}-title`}>
+        <DialogHeader caption="Сбросить прогресс" id={`reset-${issue.iid}-title`} />
+        <DialogBody>
+          <Text variant="body-2">
+            Задача {issue.iid} вернётся на шаг init: отметки об отправке, получении и публикации будут забыты, ветка задачи останется.
+            {currentIndex >= 3 ? ' Комментарий, уже опубликованный в GitLab, останется там — сброс его не отзывает.' : ''}
+          </Text>
+          <div className={style.resetOption}>
+            <Checkbox checked={discardFiles} onUpdate={setDiscardFiles} content="Убрать полученные файлы из рабочей копии (в git stash)" />
+            <Text variant="caption-2" color="secondary">
+              Не удаляются: они откладываются в git stash и возвращаются командой git stash pop. Работает, только если репозиторий сейчас на ветке этой
+              задачи; уже сделанные коммиты не трогаются.
+            </Text>
+          </div>
+        </DialogBody>
+        <DialogFooter
+          onClickButtonCancel={() => setIsResetOpen(false)}
+          onClickButtonApply={handleReset}
+          textButtonApply="Сбросить"
+          textButtonCancel="Отмена"
+          propsButtonApply={{ view: 'outlined-danger', loading: isResetting }}
+        />
+      </Dialog>
     </div>
   );
 }

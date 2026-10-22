@@ -60,6 +60,20 @@ export function buildBranchName(username: string, iid: string | number, date = n
   return `${sanitizeUsername(username)}-${formatDate(date)}-${iid}`;
 }
 
+export async function currentBranch(path: string): Promise<string> {
+  return (await git(path, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+}
+
+// Puts every uncommitted change (untracked files included) aside in the stash instead of deleting it, so nothing is lost: it can be
+// brought back with `git stash pop`. Returns whether there was anything to put aside.
+export async function stashChanges(path: string, message: string): Promise<boolean> {
+  if (await isTreeClean(path)) return false;
+
+  await git(path, ['stash', 'push', '--include-untracked', '-m', message]);
+
+  return true;
+}
+
 export async function branchExists(path: string, branch: string): Promise<boolean> {
   try {
     await git(path, ['show-ref', '--verify', `refs/heads/${branch}`]);
