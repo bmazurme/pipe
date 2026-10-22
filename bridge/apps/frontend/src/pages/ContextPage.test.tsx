@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextPage } from './ContextPage';
 import { store } from '../store';
-import { contextApi } from '../store/api';
+import { contextApi, MAX_CONTEXT_NAME_LENGTH } from '../store/api';
 
 const NOTES = { id: 1, name: 'Project notes', content: 'Use pnpm. No default exports.', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
 // What GET /contexts returns: a summary, never the text.
@@ -325,5 +325,55 @@ describe('ContextDialog closing and saving', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'contexts', body: { name: 'Quick', content: 'Notes.' } }));
+  });
+});
+
+describe('ContextPage duplicate', () => {
+  it('opens a new-context dialog prefilled from the source, and saving creates a copy', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Дублировать: Project notes' }));
+    const name = (await screen.findByLabelText('Название контекста')) as HTMLInputElement;
+    expect(requested).toContain('contexts/1');
+    expect(screen.getAllByText('Новый контекст').length).toBeGreaterThan(0);
+    expect(name.value).toBe('Project notes (копия)');
+    expect((screen.getByLabelText('Текст контекста') as HTMLTextAreaElement).value).toBe(NOTES.content);
+
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent).toEqual([{ method: 'POST', path: 'contexts', body: { name: 'Project notes (копия)', content: NOTES.content } }]));
+    // The source is never touched.
+    expect(sent.some((request) => request.method === 'PATCH' || request.path === 'contexts/1')).toBe(false);
+  });
+
+  it('cuts a long source name so the copy still fits the name limit', async () => {
+    const user = userEvent.setup();
+    const longName = 'n'.repeat(MAX_CONTEXT_NAME_LENGTH);
+    contexts = [{ ...SUMMARY, name: longName }];
+    const respond = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (request) =>
+      new URL((request as Request).url).pathname.endsWith('/contexts/1') ? json({ ...NOTES, name: longName }) : respond(request),
+    );
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: `Дублировать: ${longName}` }));
+    const name = (await screen.findByLabelText('Название контекста')) as HTMLInputElement;
+
+    expect(name.value).toHaveLength(MAX_CONTEXT_NAME_LENGTH);
+    expect(name.value.endsWith(' (копия)')).toBe(true);
+  });
+
+  it('closes the untouched copy at once, without asking', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Дублировать: Project notes' }));
+    await screen.findByLabelText('Текст контекста');
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('Текст контекста')).toBeNull());
+    expect(screen.queryByText('Закрыть без сохранения?')).toBeNull();
+    expect(sent).toEqual([]);
   });
 });
