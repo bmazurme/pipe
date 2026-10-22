@@ -188,26 +188,19 @@ export class ImproveService {
     scheduleId: number | null = null,
     contextId: number | null = null,
   ): Promise<ImproveRun> {
-    const key = `issue:${issueNumber}`;
-
-    if (this.starting.has(key)) {
-      throw new ConflictException(`Задача #${issueNumber} уже выполняется`);
-    }
-
-    this.starting.add(key);
-
-    try {
-      return await this.startRunReserved(
-        userId,
-        issueNumber,
-        model,
-        trigger,
-        scheduleId,
-        contextId,
-      );
-    } finally {
-      this.starting.delete(key);
-    }
+    return this.withReserved(
+      `issue:${issueNumber}`,
+      `Задача #${issueNumber} уже выполняется`,
+      () =>
+        this.startRunReserved(
+          userId,
+          issueNumber,
+          model,
+          trigger,
+          scheduleId,
+          contextId,
+        ),
+    );
   }
 
   private async startRunReserved(
@@ -344,8 +337,10 @@ export class ImproveService {
     pull: { number: number; headSha: string; branch: string },
     failures: string,
   ): Promise<ImproveRun> {
-    return this.withPrReserved(pull.number, () =>
-      this.startRepairReserved(parent, pull, failures),
+    return this.withReserved(
+      `pr:${pull.number}`,
+      `PR #${pull.number} уже исправляется`,
+      () => this.startRepairReserved(parent, pull, failures),
     );
   }
 
@@ -421,21 +416,22 @@ export class ImproveService {
     instruction: string,
     model: string,
   ): Promise<ImproveRun> {
-    return this.withPrReserved(prNumber, () =>
-      this.startPrFixReserved(userId, prNumber, instruction, model),
+    return this.withReserved(
+      `pr:${prNumber}`,
+      `PR #${prNumber} уже исправляется`,
+      () => this.startPrFixReserved(userId, prNumber, instruction, model),
     );
   }
 
-  // One start per PR at a time (chat change or CI repair): like startRun's issue key — the
-  // active-repair count only sees a run once it is saved, after the slow handoff.
-  private async withPrReserved<T>(
-    prNumber: number,
+  // One start per key at a time (`issue:N`, `pr:N` — chat change or CI repair — or `analysis`):
+  // the active-run checks only see a run once it is saved, after the slow handoff.
+  private async withReserved<T>(
+    key: string,
+    busyMessage: string,
     start: () => Promise<T>,
   ): Promise<T> {
-    const key = `pr:${prNumber}`;
-
     if (this.starting.has(key)) {
-      throw new ConflictException(`PR #${prNumber} уже исправляется`);
+      throw new ConflictException(busyMessage);
     }
 
     this.starting.add(key);
@@ -856,14 +852,8 @@ export class ImproveService {
     autoStart = false,
     contextId: number | null = null,
   ): Promise<ImproveRun> {
-    if (this.starting.has('analysis')) {
-      throw new ConflictException('Анализ уже выполняется');
-    }
-
-    this.starting.add('analysis');
-
-    try {
-      return await this.startAnalysisReserved(
+    return this.withReserved('analysis', 'Анализ уже выполняется', () =>
+      this.startAnalysisReserved(
         userId,
         model,
         categories,
@@ -872,10 +862,8 @@ export class ImproveService {
         scheduleId,
         autoStart,
         contextId,
-      );
-    } finally {
-      this.starting.delete('analysis');
-    }
+      ),
+    );
   }
 
   private async startAnalysisReserved(
