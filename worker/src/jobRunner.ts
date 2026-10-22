@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { encryptBuffer, type PackedAsset, type PackedFile } from '@pipe/protocol';
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
@@ -20,7 +21,6 @@ import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
 import { withContext } from './taskContext.js';
-import { resolveInDir } from './resolveInDir.js';
 
 export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
 
