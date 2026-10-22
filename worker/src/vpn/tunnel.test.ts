@@ -31,7 +31,8 @@ class FakeChild extends EventEmitter {
   }
 }
 
-function setup(opts: { ready?: boolean; fingerprint?: string } = {}) {
+function setup(opts: { ready?: boolean; fingerprint?: string; clock?: { t: number } } = {}) {
+  const waits: number[] = [];
   const spawned: { bin: string; args: string[]; child: FakeChild }[] = [];
   const logs: string[] = [];
   const tunnel = new VpnTunnel({
@@ -47,10 +48,15 @@ function setup(opts: { ready?: boolean; fingerprint?: string } = {}) {
 
       return child as unknown as ChildProcess;
     },
-    waitForPort: async () => opts.ready ?? true,
+    waitForPort: async () => {
+      waits.push(1);
+
+      return opts.ready ?? true;
+    },
+    now: opts.clock ? () => opts.clock!.t : undefined,
   });
 
-  return { tunnel, spawned, logs };
+  return { tunnel, spawned, logs, waits };
 }
 
 describe('VpnTunnel', () => {
@@ -112,13 +118,17 @@ describe('VpnTunnel', () => {
   });
 
   it('starts it again when the process died', async () => {
-    const { tunnel, spawned, logs } = setup();
+    const clock = { t: 0 };
+    const { tunnel, spawned, logs } = setup({ clock });
 
     await tunnel.apply(LINK);
     spawned[0].child.exitCode = 1;
     spawned[0].child.emit('exit', 1);
     assert.ok(logs.includes('warn:vpn tunnel exited — it is started again on the next poll'));
 
+    assert.equal(await tunnel.apply(LINK), null);
+    assert.equal(spawned.length, 1);
+    clock.t += 30_000;
     await tunnel.apply(LINK);
     assert.equal(spawned.length, 2);
     tunnel.stop();
@@ -138,5 +148,93 @@ describe('VpnTunnel', () => {
     assert.equal(await tunnel.apply('not a link'), null);
     assert.equal(spawned.length, 0);
     assert.ok(logs.includes('error:vpn link from the Worker page cannot be used'));
+  });
+
+  describe('back-off', () => {
+    it('does not spawn or wait again within the back-off, and logs once', async () => {
+      const clock = { t: 1000 };
+      const { tunnel, spawned, waits, logs } = setup({ ready: false, clock });
+
+      assert.equal(await tunnel.apply(LINK), null);
+      assert.equal(spawned.length, 1);
+      assert.equal(waits.length, 1);
+
+      clock.t += 29_999;
+      assert.equal(await tunnel.apply(LINK), null);
+      assert.equal(await tunnel.apply(LINK), null);
+      assert.equal(spawned.length, 1);
+      assert.equal(waits.length, 1);
+      assert.equal(logs.filter((l) => l === 'warn:vpn tunnel failed recently — not restarting it yet').length, 1);
+    });
+
+    it('retries after retryAt with a doubling delay capped at 5 minutes', async () => {
+      const clock = { t: 0 };
+      const { tunnel, spawned } = setup({ ready: false, clock });
+      const delays = [30_000, 60_000, 120_000, 240_000, 300_000, 300_000];
+      let expected = 1;
+
+      await tunnel.apply(LINK);
+
+      for (const delay of delays) {
+        clock.t += delay - 1;
+        await tunnel.apply(LINK);
+        assert.equal(spawned.length, expected);
+        clock.t += 1;
+        await tunnel.apply(LINK);
+        expected += 1;
+        assert.equal(spawned.length, expected);
+      }
+    });
+
+    it('tries a different link at once', async () => {
+      const clock = { t: 0 };
+      const { tunnel, spawned } = setup({ ready: false, clock });
+
+      await tunnel.apply(LINK);
+      await tunnel.apply(OTHER);
+      assert.equal(spawned.length, 2);
+    });
+
+    it('clears the back-off when the link is removed', async () => {
+      const clock = { t: 0 };
+      const { tunnel, spawned } = setup({ ready: false, clock });
+
+      await tunnel.apply(LINK);
+      await tunnel.apply(null);
+      await tunnel.apply(LINK);
+      assert.equal(spawned.length, 2);
+    });
+
+    it('a successful start clears the back-off', async () => {
+      const clock = { t: 0 };
+      const state = { ready: false };
+      const spawned: FakeChild[] = [];
+      const tunnel = new VpnTunnel({
+        dir,
+        port: 19999,
+        spawnProcess: () => {
+          const child = new FakeChild();
+
+          spawned.push(child);
+
+          return child as unknown as ChildProcess;
+        },
+        waitForPort: async () => state.ready,
+        now: () => clock.t,
+      });
+
+      await tunnel.apply(LINK);
+      clock.t += 30_000;
+      state.ready = true;
+      assert.equal(await tunnel.apply(LINK), 'http://127.0.0.1:19999');
+
+      spawned[1].exitCode = 1;
+      spawned[1].emit('exit', 1);
+      // the failure count restarted at 1: back-off is 30 s, not 60 s
+      clock.t += 30_000;
+      assert.equal(await tunnel.apply(LINK), 'http://127.0.0.1:19999');
+      assert.equal(spawned.length, 3);
+      tunnel.stop();
+    });
   });
 });
