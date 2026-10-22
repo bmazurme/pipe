@@ -91,8 +91,8 @@ const writeActionInputShape = {
   // not an interactive prompt, is the confirmation layer here).
   yes: z.boolean().describe('Must be true to actually run this — false (or omitted) always refuses, same as pipe-status without --yes'),
   dryRun: z.boolean().optional().describe('Describe what would run/be called instead of doing it'),
-  project: z.string().optional().describe('Override local project-name resolution (sync.config.json) when ambiguous'),
-  reportsUrl: z.string().optional().describe('Override reports\' base URL (default http://127.0.0.1:4000)'),
+  project: z.string().optional().describe('Override local project-name resolution when ambiguous — must be a project name from sync.config.json'),
+  reportsUrl: z.string().optional().describe('Override reports\' base URL (default http://127.0.0.1:4000) — localhost/127.0.0.1/::1 only'),
 };
 
 // Injectable, same reasoning as bridgeLive.ts's/actions.ts's own path and
