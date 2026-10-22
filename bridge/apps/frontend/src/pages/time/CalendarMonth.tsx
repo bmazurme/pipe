@@ -5,6 +5,7 @@ import { Card, Label, Text } from '@gravity-ui/uikit';
 
 import { DayOffType } from '../../store/api';
 import styles from '../TimePage.module.css';
+import { DAY_TYPE_LABELS } from './dayTypeLabels';
 
 interface CalendarMonthProps {
   title: string;
@@ -55,7 +56,28 @@ export function CalendarMonth({
       button.classList.toggle('holiday', type === 'holiday');
       button.classList.toggle('short', type === 'short');
       button.classList.toggle('compensatory', type === 'compensatory');
-      button.classList.toggle('today', dateStr === today);
+      const isToday = dateStr === today;
+      button.classList.toggle('today', isToday);
+
+      // Name the type on the button too, so it isn't conveyed by color alone.
+      // The library's own label is read once and kept, so re-renders don't
+      // stack suffixes.
+      if (button.dataset.baseLabel === undefined) {
+        button.dataset.baseLabel = button.getAttribute('aria-label') ?? '';
+      }
+      const base = button.dataset.baseLabel;
+      const labels = [type ? DAY_TYPE_LABELS[type] : null, isToday ? DAY_TYPE_LABELS.today : null].filter(
+        Boolean,
+      );
+      if (labels.length > 0) {
+        const text = labels.join(', ');
+        button.title = text;
+        button.setAttribute('aria-label', base ? `${base}, ${text}` : text);
+      } else {
+        button.removeAttribute('title');
+        if (base) button.setAttribute('aria-label', base);
+        else button.removeAttribute('aria-label');
+      }
     });
   });
 

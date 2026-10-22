@@ -42,3 +42,36 @@ describe('CalendarTab list failure', () => {
     await screen.findByText('Сегодня');
   });
 });
+
+describe('CalendarTab day type labels', () => {
+  it('names the type on the day buttons and leaves plain days bare', async () => {
+    const year = new Date().getFullYear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        json([
+          { id: 1, date: `${year}-03-10`, type: 'holiday' },
+          { id: 2, date: `${year}-03-12`, type: 'short' },
+        ]),
+      ),
+    );
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <CalendarTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    const holiday = await screen.findByRole('button', { name: /Праздник$/ });
+    const short = screen.getByRole('button', { name: /Короткий день$/ });
+    expect(holiday.title).toBe('Праздник');
+    expect(short.title).toBe('Короткий день');
+    expect(screen.getAllByRole('button', { name: /Праздник/ })).toHaveLength(1);
+
+    const plain = screen.getAllByRole('button').filter((b) => !b.title && b.dataset.baseLabel);
+    expect(plain.length).toBeGreaterThan(0);
+    for (const b of plain) expect(b.getAttribute('aria-label')).toBe(b.dataset.baseLabel);
+  });
+});
