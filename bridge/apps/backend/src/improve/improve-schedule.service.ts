@@ -3,11 +3,16 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
+import {
+  ContextScheduleUse,
+  ContextUsageRegistry,
+} from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { GithubApiService } from '../loop/github-api.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
@@ -20,7 +25,7 @@ import { ImproveService } from './improve.service';
 const SCHEDULE_TICK_MS = 60_000;
 
 @Injectable()
-export class ImproveScheduleService {
+export class ImproveScheduleService implements OnModuleInit {
   private readonly logger = new Logger(ImproveScheduleService.name);
   private ticking = false;
 
@@ -31,7 +36,34 @@ export class ImproveScheduleService {
     private readonly github: GithubApiService,
     private readonly notifier: NotifyService,
     private readonly contexts: ContextService,
+    private readonly contextUsage: ContextUsageRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.contextUsage.register({
+      schedulesFor: (userId, contextIds) =>
+        this.schedulesUsingContexts(userId, contextIds),
+    });
+  }
+
+  // For the Context page: which of the user's schedules hand one of these contexts to their runs.
+  async schedulesUsingContexts(
+    userId: number,
+    contextIds: number[],
+  ): Promise<ContextScheduleUse[]> {
+    const rows = await this.schedules.find({
+      select: ['id', 'name', 'contextId'],
+      where: { userId, contextId: In(contextIds) },
+      order: { name: 'ASC' },
+    });
+
+    return rows.map((row) => ({
+      contextId: row.contextId as number,
+      id: row.id,
+      name: row.name,
+      kind: 'improve',
+    }));
+  }
 
   listSchedules(): Promise<ImproveSchedule[]> {
     return this.schedules.find({ order: { id: 'ASC' } });

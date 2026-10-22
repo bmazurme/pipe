@@ -2263,6 +2263,8 @@ export interface components {
             errorMessage?: string;
         };
         ContextScheduleRefDto: {
+            /** @enum {string} */
+            kind: "improve" | "lab";
             id: number;
             name: string;
         };

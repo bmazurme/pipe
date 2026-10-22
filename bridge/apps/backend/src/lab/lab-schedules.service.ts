@@ -3,11 +3,16 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
+import {
+  ContextScheduleUse,
+  ContextUsageRegistry,
+} from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import {
   isDue,
@@ -66,7 +71,7 @@ export function onAllowedWeekday(
 }
 
 @Injectable()
-export class LabSchedulesService {
+export class LabSchedulesService implements OnModuleInit {
   private readonly logger = new Logger(LabSchedulesService.name);
   private ticking = false;
 
@@ -77,7 +82,34 @@ export class LabSchedulesService {
     private readonly runs: LabRunsService,
     private readonly contexts: ContextService,
     private readonly notifier: NotifyService,
+    private readonly contextUsage: ContextUsageRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.contextUsage.register({
+      schedulesFor: (userId, contextIds) =>
+        this.schedulesUsingContexts(userId, contextIds),
+    });
+  }
+
+  // For the Context page: which of the user's schedules hand one of these contexts to their runs.
+  async schedulesUsingContexts(
+    userId: number,
+    contextIds: number[],
+  ): Promise<ContextScheduleUse[]> {
+    const rows = await this.schedules.find({
+      select: ['id', 'name', 'contextId'],
+      where: { userId, contextId: In(contextIds) },
+      order: { name: 'ASC' },
+    });
+
+    return rows.map((row) => ({
+      contextId: row.contextId as number,
+      id: row.id,
+      name: row.name,
+      kind: 'lab',
+    }));
+  }
 
   list(userId: number): Promise<LabSchedule[]> {
     return this.schedules.find({ where: { userId }, order: { id: 'ASC' } });

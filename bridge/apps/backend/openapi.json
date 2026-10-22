@@ -4651,6 +4651,13 @@
       "ContextScheduleRefDto": {
         "type": "object",
         "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "improve",
+              "lab"
+            ]
+          },
           "id": {
             "type": "number"
           },
@@ -4659,6 +4666,7 @@
           }
         },
         "required": [
+          "kind",
           "id",
           "name"
         ]

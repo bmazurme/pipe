@@ -2,6 +2,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 
 import { DeploymentAccessService } from '../auth/deployment-access';
+import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -55,6 +56,7 @@ describe('WorkerService finish notification', () => {
         { provide: ClaudeCredentialsService, useValue: {} },
         { provide: WorkerHeartbeatService, useValue: {} },
         { provide: ContextService, useValue: {} },
+        { provide: ContextUsageRegistry, useValue: { register: jest.fn() } },
         { provide: ProviderCredentialsService, useValue: {} },
         { provide: JobSweepService, useValue: {} },
         { provide: NotifyService, useValue: notify },

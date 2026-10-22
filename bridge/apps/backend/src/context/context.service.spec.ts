@@ -3,9 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 
+import { ContextUsageRegistry, ContextUsageSource } from './context-usage';
 import { ContextService } from './context.service';
-import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
-import { Job } from '../worker/entities/job.entity';
 import { Context } from './entities/context.entity';
 
 type MockRepository = Partial<Record<keyof Repository<Context>, jest.Mock>>;
@@ -13,8 +12,6 @@ type MockRepository = Partial<Record<keyof Repository<Context>, jest.Mock>>;
 describe('ContextService', () => {
   let service: ContextService;
   let repository: MockRepository;
-  let scheduleRepository: MockRepository;
-  let jobQuery: { getRawMany: jest.Mock };
 
   beforeEach(async () => {
     repository = {
@@ -25,34 +22,11 @@ describe('ContextService', () => {
       delete: jest.fn(),
     };
 
-    scheduleRepository = { find: jest.fn().mockResolvedValue([]) };
-    jobQuery = { getRawMany: jest.fn().mockResolvedValue([]) };
-    const jobRepository = {
-      createQueryBuilder: jest.fn(() => {
-        const chain: Record<string, jest.Mock> = {};
-        for (const m of [
-          'select',
-          'addSelect',
-          'where',
-          'andWhere',
-          'groupBy',
-        ]) {
-          chain[m] = jest.fn(() => chain);
-        }
-        chain.getRawMany = jobQuery.getRawMany;
-        return chain;
-      }),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContextService,
+        ContextUsageRegistry,
         { provide: getRepositoryToken(Context), useValue: repository },
-        {
-          provide: getRepositoryToken(ImproveSchedule),
-          useValue: scheduleRepository,
-        },
-        { provide: getRepositoryToken(Job), useValue: jobRepository },
       ],
     }).compile();
 
@@ -215,58 +189,100 @@ describe('ContextService', () => {
 });
 
 describe('ContextService usage info', () => {
-  const build = async (
-    contexts: unknown[],
-    schedules: unknown[],
-    jobRows: unknown[],
-  ) => {
-    const schedulesFind = jest.fn().mockResolvedValue(schedules);
-    const chain: Record<string, jest.Mock> = {};
-    for (const m of ['select', 'addSelect', 'where', 'andWhere', 'groupBy']) {
-      chain[m] = jest.fn(() => chain);
-    }
-    chain.getRawMany = jest.fn().mockResolvedValue(jobRows);
+  const build = async (contexts: unknown[], sources: ContextUsageSource[]) => {
+    const registry = new ContextUsageRegistry();
+    sources.forEach((source) => registry.register(source));
     const module = await Test.createTestingModule({
       providers: [
         ContextService,
+        { provide: ContextUsageRegistry, useValue: registry },
         {
           provide: getRepositoryToken(Context),
           useValue: { find: jest.fn().mockResolvedValue(contexts) },
         },
-        {
-          provide: getRepositoryToken(ImproveSchedule),
-          useValue: { find: schedulesFind },
-        },
-        {
-          provide: getRepositoryToken(Job),
-          useValue: { createQueryBuilder: jest.fn(() => chain) },
-        },
       ],
     }).compile();
 
-    return { service: module.get(ContextService), schedulesFind, chain };
+    return module.get(ContextService);
   };
 
   it('attaches schedules and the last job time per context, null when unused', async () => {
-    const { service, schedulesFind, chain } = await build(
+    const schedulesFor = jest
+      .fn()
+      .mockResolvedValue([
+        { contextId: 1, id: 10, name: 'Nightly', kind: 'improve' },
+      ]);
+    const lastUseByName = jest
+      .fn()
+      .mockResolvedValue(
+        new Map([['Notes', new Date('2026-10-01T00:00:00.000Z')]]),
+      );
+    const service = await build(
       [
         { id: 1, name: 'Notes' },
         { id: 2, name: 'Idle' },
       ],
-      [{ id: 10, name: 'Nightly', contextId: 1 }],
-      [{ contextName: 'Notes', lastUsedAt: '2026-10-01T00:00:00.000Z' }],
+      [{ schedulesFor }, { lastUseByName }],
     );
 
     const result = await service.findAllByUser(7);
 
-    expect(result[0].schedules).toEqual([{ id: 10, name: 'Nightly' }]);
+    expect(result[0].schedules).toEqual([
+      { id: 10, name: 'Nightly', kind: 'improve' },
+    ]);
     expect(result[0].lastUsedAt).toEqual(new Date('2026-10-01T00:00:00.000Z'));
     expect(result[1].schedules).toEqual([]);
     expect(result[1].lastUsedAt).toBeNull();
     // Scoped to the caller, for both schedules and jobs.
-    expect(schedulesFind.mock.calls[0][0].where.userId).toBe(7);
-    expect(chain.where).toHaveBeenCalledWith('job.userId = :userId', {
-      userId: 7,
+    expect(schedulesFor).toHaveBeenCalledWith(7, [1, 2]);
+    expect(lastUseByName).toHaveBeenCalledWith(7);
+  });
+
+  it('lists a Lab schedule next to an Improve one, sorted by name and labelled by kind', async () => {
+    const service = await build(
+      [{ id: 1, name: 'Notes' }],
+      [
+        {
+          schedulesFor: jest
+            .fn()
+            .mockResolvedValue([
+              { contextId: 1, id: 10, name: 'Nightly', kind: 'improve' },
+            ]),
+        },
+        {
+          schedulesFor: jest
+            .fn()
+            .mockResolvedValue([
+              { contextId: 1, id: 3, name: 'Lab morning', kind: 'lab' },
+            ]),
+        },
+      ],
+    );
+
+    const [notes] = await service.findAllByUser(7);
+
+    expect(notes.schedules).toEqual([
+      { id: 3, name: 'Lab morning', kind: 'lab' },
+      { id: 10, name: 'Nightly', kind: 'improve' },
+    ]);
+    expect(notes.lastUsedAt).toBeNull();
+  });
+});
+
+describe('ContextUsageRegistry', () => {
+  it('keeps the newest use of a name across sources', async () => {
+    const registry = new ContextUsageRegistry();
+    registry.register({
+      lastUseByName: () =>
+        Promise.resolve(new Map([['Notes', new Date('2026-10-01')]])),
     });
+    registry.register({
+      lastUseByName: () =>
+        Promise.resolve(new Map([['Notes', new Date('2026-10-05')]])),
+    });
+
+    expect((await registry.lastUseByName(7)).get('Notes')).toEqual(
+      new Date('2026-10-05'),
+    );
   });
 });

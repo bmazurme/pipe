@@ -10,6 +10,11 @@ import { PageHeader } from '../widgets/PageHeader';
 import { ContextDialog } from './context/ContextDialog';
 import styles from './ContextPage.module.css';
 
+// Improve schedules detach a deleted context; Lab ones keep pointing at it, so the dialog names them apart.
+function schedulesOfKind(context: ContextSummary, kind: ContextSummary['schedules'][number]['kind']): string[] {
+  return context.schedules.filter((schedule) => schedule.kind === kind).map((schedule) => schedule.name);
+}
+
 export function ContextPage() {
   const { data: contexts, isLoading, isError } = useListContextsQuery();
   const [deleteContext, { isLoading: isDeleting }] = useDeleteContextMutation();
@@ -106,8 +111,11 @@ export function ContextPage() {
         <Dialog.Header caption={`Удалить «${deleting?.name ?? ''}»?`} id="delete-context-title" />
         <Dialog.Body>
           Задачи, которые уже запущены или стоят в очереди с этим контекстом, не изменятся — у них своя копия.
-          {deleting && deleting.schedules.length > 0 && (
-            <div>Расписания Improve продолжат работу без контекста: {deleting.schedules.map((schedule) => schedule.name).join(', ')}</div>
+          {deleting && schedulesOfKind(deleting, 'improve').length > 0 && (
+            <div>Расписания Improve продолжат работу без контекста: {schedulesOfKind(deleting, 'improve').join(', ')}</div>
+          )}
+          {deleting && schedulesOfKind(deleting, 'lab').length > 0 && (
+            <div>Расписания Lab используют этот контекст — выберите им другой: {schedulesOfKind(deleting, 'lab').join(', ')}</div>
           )}
           {deleteError && <Alert theme="danger" view="filled" message={deleteError} />}
         </Dialog.Body>

@@ -8,8 +8,8 @@ export interface ContextSummary {
   contentLength: number | null;
   createdAt: string;
   updatedAt: string;
-  /** Improve schedules that hand this context to their runs. */
-  schedules: { id: number; name: string }[];
+  /** Improve and Lab schedules that hand this context to their runs. */
+  schedules: { id: number; name: string; kind: 'improve' | 'lab' }[];
   /** Newest job launched with a context of this name; null if none. */
   lastUsedAt: string | null;
 }

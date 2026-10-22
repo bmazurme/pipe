@@ -4,17 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
-import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
-import { Job } from '../worker/entities/job.entity';
-
+import { ContextScheduleKind, ContextUsageRegistry } from './context-usage';
 import { CreateContextDto } from './dto/create-context.dto';
 import { UpdateContextDto } from './dto/update-context.dto';
 import { Context } from './entities/context.entity';
 
 export interface ContextUsage {
-  schedules: { id: number; name: string }[];
+  schedules: { id: number; name: string; kind: ContextScheduleKind }[];
   lastUsedAt: Date | null;
 }
 
@@ -25,10 +23,7 @@ export class ContextService {
   constructor(
     @InjectRepository(Context)
     private readonly repository: Repository<Context>,
-    @InjectRepository(ImproveSchedule)
-    private readonly schedules: Repository<ImproveSchedule>,
-    @InjectRepository(Job)
-    private readonly jobs: Repository<Job>,
+    private readonly usage: ContextUsageRegistry,
   ) {}
 
   // Summaries: `content` is deliberately not selected, so nothing is decrypted or copied
@@ -52,32 +47,23 @@ export class ContextService {
       return [];
     }
 
-    const schedules = await this.schedules.find({
-      select: ['id', 'name', 'contextId'],
-      where: { userId, contextId: In(contexts.map((c) => c.id)) },
-      order: { name: 'ASC' },
-    });
-
-    // Jobs keep only the context's name, not its id, so the match is by the
+    // Improve, Lab and Worker report their own use (see context-usage.ts). Jobs
+    // keep only the context's name, not its id, so "last used" matches by the
     // current name: a renamed context loses its history, and a deleted one
     // re-created under the same name inherits it.
-    const lastUsed = await this.jobs
-      .createQueryBuilder('job')
-      .select('job.contextName', 'contextName')
-      .addSelect('MAX(job.createdAt)', 'lastUsedAt')
-      .where('job.userId = :userId', { userId })
-      .andWhere('job.contextName IS NOT NULL')
-      .groupBy('job.contextName')
-      .getRawMany<{ contextName: string; lastUsedAt: Date | string }>();
-    const lastUsedByName = new Map(
-      lastUsed.map((row) => [row.contextName, new Date(row.lastUsedAt)]),
-    );
+    const [schedules, lastUsedByName] = await Promise.all([
+      this.usage.schedulesFor(
+        userId,
+        contexts.map((c) => c.id),
+      ),
+      this.usage.lastUseByName(userId),
+    ]);
 
     return contexts.map((context) =>
       Object.assign(context, {
         schedules: schedules
           .filter((schedule) => schedule.contextId === context.id)
-          .map((schedule) => ({ id: schedule.id, name: schedule.name })),
+          .map(({ id, name, kind }) => ({ id, name, kind })),
         lastUsedAt: lastUsedByName.get(context.name) ?? null,
       }),
     );

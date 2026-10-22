@@ -86,6 +86,7 @@ function setup() {
     github as never,
     notifier as never,
     contexts as never,
+    { register: jest.fn() } as never,
   );
 
   return {
