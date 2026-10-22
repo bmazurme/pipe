@@ -1,3 +1,5 @@
+import { ConflictException } from '@nestjs/common';
+
 import { ImproveCiService } from './improve-ci.service';
 import { ImproveRunStatus } from './entities/improve-run.entity';
 
@@ -224,5 +226,24 @@ describe('ImproveCiService.tick', () => {
     expect(runs.find).toHaveBeenCalledTimes(2); // the earlier tick + the pending one, not a third
     release();
     await first;
+  });
+});
+
+describe('ImproveCiService.checkOne while another start of the PR hands off', () => {
+  it('skips the PR this tick when the repair start is refused as already in progress', async () => {
+    const { service, improve, notifier } = setup();
+    improve.startRepair.mockRejectedValue(
+      new ConflictException('PR #55 уже исправляется'),
+    );
+
+    expect(await service.checkOne(parent as never)).toBe('repair-running');
+    expect(notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('still fails on any other start error', async () => {
+    const { service, improve } = setup();
+    improve.startRepair.mockRejectedValue(new Error('boom'));
+
+    await expect(service.checkOne(parent as never)).rejects.toThrow('boom');
   });
 });

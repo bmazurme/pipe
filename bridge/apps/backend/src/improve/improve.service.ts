@@ -75,7 +75,7 @@ export const AUTOSTART_MIN_AGE_SECONDS = 10;
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
   private advancing = false;
-  // Keys of starts in flight ('analysis', `issue:${n}`). The DB check for an
+  // Keys of starts in flight ('analysis', `issue:${n}`, `pr:${n}`). The DB check for an
   // active run happens long before the run row is saved, so concurrent starts
   // would all pass it. In-process only: this relies on a single bridge replica.
   private readonly starting = new Set<string>();
@@ -297,6 +297,16 @@ export class ImproveService {
     pull: { number: number; headSha: string; branch: string },
     failures: string,
   ): Promise<ImproveRun> {
+    return this.withPrReserved(pull.number, () =>
+      this.startRepairReserved(parent, pull, failures),
+    );
+  }
+
+  private async startRepairReserved(
+    parent: ImproveRun,
+    pull: { number: number; headSha: string; branch: string },
+    failures: string,
+  ): Promise<ImproveRun> {
     this.requireConfigured();
 
     const attempt =
@@ -359,6 +369,38 @@ export class ImproveService {
   // branch (publishRepair path), never a new PR and never a force-push. Protected paths are dropped
   // at publish like for every other run.
   async startPrFix(
+    userId: number,
+    prNumber: number,
+    instruction: string,
+    model: string,
+  ): Promise<ImproveRun> {
+    return this.withPrReserved(prNumber, () =>
+      this.startPrFixReserved(userId, prNumber, instruction, model),
+    );
+  }
+
+  // One start per PR at a time (chat change or CI repair): like startRun's issue key — the
+  // active-repair count only sees a run once it is saved, after the slow handoff.
+  private async withPrReserved<T>(
+    prNumber: number,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    const key = `pr:${prNumber}`;
+
+    if (this.starting.has(key)) {
+      throw new ConflictException(`PR #${prNumber} уже исправляется`);
+    }
+
+    this.starting.add(key);
+
+    try {
+      return await start();
+    } finally {
+      this.starting.delete(key);
+    }
+  }
+
+  private async startPrFixReserved(
     userId: number,
     prNumber: number,
     instruction: string,

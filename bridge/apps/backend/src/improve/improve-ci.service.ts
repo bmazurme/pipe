@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
@@ -124,15 +124,24 @@ export class ImproveCiService {
     // ciState counts a cancelled run as failing; a cancelled run is nothing to repair.
     if (failed.length === 0) return 'nothing-to-repair';
 
-    const run = await this.improve.startRepair(
-      parent,
-      {
-        number: prNumber,
-        headSha: pull.headSha,
-        branch: parent.branch as string,
-      },
-      formatFailures(failed),
-    );
+    let run: ImproveRun;
+
+    try {
+      run = await this.improve.startRepair(
+        parent,
+        {
+          number: prNumber,
+          headSha: pull.headSha,
+          branch: parent.branch as string,
+        },
+        formatFailures(failed),
+      );
+    } catch (error) {
+      // Another start for this PR (a chat change, say) is still handing off: its run is not saved
+      // yet, so the count above missed it. Try again next tick.
+      if (error instanceof ConflictException) return 'repair-running';
+      throw error;
+    }
 
     await this.notifier.send(
       `🛠 PR #${prNumber}: CI красный (${failed.map((check) => check.name).join(', ')}) — запускаю автоисправление, попытка ${repairs.length + 1} из ${MAX_REPAIRS_PER_PR} (запуск #${run.id})`,
