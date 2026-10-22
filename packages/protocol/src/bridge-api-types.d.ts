@@ -2328,6 +2328,7 @@ export interface components {
             contextName: string | null;
             historyCount: number | null;
             taskKey: string | null;
+            timeoutSec: number | null;
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
@@ -2362,6 +2363,7 @@ export interface components {
             includeHistory?: boolean;
             /** Format: date-time */
             notBefore?: string;
+            timeoutSec?: number;
             notifyOnFinish?: boolean;
             resultPublicKey?: string;
         };

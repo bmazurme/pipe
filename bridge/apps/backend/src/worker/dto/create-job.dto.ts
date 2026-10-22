@@ -8,7 +8,9 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 import { WORKER_CAPABILITIES, type WorkerCapability } from '../capabilities';
@@ -59,6 +61,13 @@ export class CreateJobDto {
   @MinFutureDate()
   @MaxFutureDate(7 * 24 * 60 * 60 * 1000)
   notBefore?: Date;
+
+  // The run's time limit in seconds (5 min to 4 h); absent = the worker's own job timeout applies.
+  @IsOptional()
+  @IsInt()
+  @Min(300)
+  @Max(14400)
+  timeoutSec?: number;
 
   // Send a Telegram message when the job ends. Off by default.
   @IsOptional()

@@ -4889,6 +4889,10 @@
             "type": "string",
             "nullable": true
           },
+          "timeoutSec": {
+            "type": "number",
+            "nullable": true
+          },
           "status": {
             "enum": [
               "queued",
@@ -4963,6 +4967,7 @@
           "contextName",
           "historyCount",
           "taskKey",
+          "timeoutSec",
           "status",
           "logs",
           "errorMessage",
@@ -5017,6 +5022,11 @@
           "notBefore": {
             "format": "date-time",
             "type": "string"
+          },
+          "timeoutSec": {
+            "type": "number",
+            "minimum": 300,
+            "maximum": 14400
           },
           "notifyOnFinish": {
             "type": "boolean"
