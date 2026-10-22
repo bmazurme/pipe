@@ -2748,7 +2748,7 @@ export interface components {
             model: string;
             executor: Record<string, never>;
             /** @enum {string} */
-            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled";
+            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "issue_open" | "no_changes" | "failed" | "cancelled";
             jobId: number | null;
             baseBranch: string | null;
             baseSha: string | null;
@@ -2756,6 +2756,8 @@ export interface components {
             branch: string | null;
             prNumber: number | null;
             prUrl: string | null;
+            issueNumber: number | null;
+            issueUrl: string | null;
             note: string | null;
             error: string | null;
             /** Format: date-time */

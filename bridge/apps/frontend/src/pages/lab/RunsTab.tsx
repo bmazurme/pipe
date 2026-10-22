@@ -103,6 +103,11 @@ export function RunsTab() {
                 <Icon data={ArrowUpRightFromSquare} size={16} />
               </a>
             )}
+            {run.issueUrl && (
+              <a href={run.issueUrl} target="_blank" rel="noreferrer noopener" aria-label={`Issue #${run.issueNumber}`}>
+                <Icon data={ArrowUpRightFromSquare} size={16} />
+              </a>
+            )}
             {run.status === 'failed' && run.jobId !== null && (
               <Button view="outlined" size="s" loading={isRetrying} onClick={() => void retry(run.id)}>
                 Повторить публикацию

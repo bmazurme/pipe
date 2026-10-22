@@ -7,6 +7,9 @@ export type ImproveRunStatus =
   | 'publishing'
   | 'pr_open'
   | 'pr_updated'
+  // Only ever set by Lab (a worker asked to open a GitHub Issue instead of a pull request); listed here since
+  // Lab's own run status reuses this same label/theme map.
+  | 'issue_open'
   | 'analyzed'
   | 'no_changes'
   | 'failed'
