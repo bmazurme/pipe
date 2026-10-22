@@ -11,6 +11,7 @@ import { JobList } from './worker/JobList';
 import { NewJobForm } from './worker/NewJobForm';
 import { ProviderCredentialsCard } from './worker/ProviderCredentialsCard';
 import { VpnConnectionSelector } from './worker/VpnConnectionSelector';
+import { FailureBreakdown } from './worker/FailureBreakdown';
 import { WorkerFleetSummary } from './worker/WorkerFleetSummary';
 import { WorkerHelpCard } from './worker/WorkerHelpCard';
 import { WorkersTab } from './worker/WorkersTab';
@@ -55,6 +56,7 @@ export function WorkerPage() {
       />
 
       <WorkerFleetSummary workers={workers} isLoading={isLoadingWorkers} jobs={jobs} />
+      <FailureBreakdown onOpenJob={setOpenJobId} />
 
       <TabProvider value={activeTab} onUpdate={setActiveTab}>
         <TabList aria-label="Разделы страницы Worker">

@@ -43,6 +43,7 @@ import { QuestionsService } from '../questions/questions.service';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { RetryJobDto } from './dto/retry-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
+import type { FailureSummary } from './failure-summary';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkerService } from './worker.service';
 import { WorkersService } from './workers.service';
@@ -229,6 +230,22 @@ export class WorkerController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<{ count: number }> {
     return this.workerService.previewHistory(currentUser.id, sourceFileId);
+  }
+
+  // Why jobs failed lately, grouped by normalized error. Declared before ':id' so
+  // "failure-summary" is never read as a job id.
+  @Get('failure-summary')
+  @ApiQuery({ name: 'days', required: false, type: Number })
+  async failureSummary(
+    @CurrentUser() currentUser: { id: number },
+    // A string on purpose, like `logsFrom` below: a missing number must not become NaN.
+    @Query('days') daysRaw?: string,
+  ): Promise<FailureSummary> {
+    const parsed = Number(daysRaw);
+    const days =
+      Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 90) : 7;
+
+    return this.workerService.failureSummary(currentUser.id, days);
   }
 
   // `logsFrom` is for the job dialog's poll: with it, `logs` carries only the
