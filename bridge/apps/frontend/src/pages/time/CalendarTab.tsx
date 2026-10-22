@@ -7,6 +7,7 @@ import { useAppSelector } from '../../store/hooks';
 import { timeYearSelector } from '../../store/slices';
 import styles from '../TimePage.module.css';
 import { CalendarMonth } from './CalendarMonth';
+import { DAY_TYPE_LABELS } from './dayTypeLabels';
 import { YearSwitcher } from './YearSwitcher';
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => index + 1);
@@ -92,7 +93,7 @@ export function CalendarTab() {
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendToday}`} />
           <Text color="secondary" variant="body-2">
-            Сегодня
+            {DAY_TYPE_LABELS.today}
           </Text>
         </div>
         <div className={styles.legendItem}>
@@ -104,25 +105,25 @@ export function CalendarTab() {
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendDayOff}`} />
           <Text color="secondary" variant="body-2">
-            Day off
+            {DAY_TYPE_LABELS.off}
           </Text>
         </div>
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendHoliday}`} />
           <Text color="secondary" variant="body-2">
-            Праздник
+            {DAY_TYPE_LABELS.holiday}
           </Text>
         </div>
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendShort}`} />
           <Text color="secondary" variant="body-2">
-            Короткий день
+            {DAY_TYPE_LABELS.short}
           </Text>
         </div>
         <div className={styles.legendItem}>
           <span className={`${styles.legendColor} ${styles.legendCompensatory}`} />
           <Text color="secondary" variant="body-2">
-            Рабочий выходной
+            {DAY_TYPE_LABELS.compensatory}
           </Text>
         </div>
       </div>
