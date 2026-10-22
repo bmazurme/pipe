@@ -9,17 +9,29 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Matches,
+  ValidateBy,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
 
+import { isValidBranch } from '../lab-github';
 import { LAB_EXECUTORS, type LabExecutor } from '../lab-executor';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
+
+// A git-valid branch name: it is spliced into GitHub API paths, so `..` and the like must never get through.
+const IsBranchName = () =>
+  ValidateBy({
+    name: 'isBranchName',
+    validator: {
+      validate: (value: unknown) =>
+        typeof value === 'string' && isValidBranch(value),
+      defaultMessage: () => 'Недопустимое имя ветки',
+    },
+  });
 
 export class CreateLabProjectDto {
   @Transform(trim)
@@ -43,7 +55,7 @@ export class CreateLabProjectDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @Matches(/^[\w./-]{1,100}$/)
+  @IsBranchName()
   baseBranch?: string;
 }
 
@@ -58,7 +70,7 @@ export class UpdateLabProjectDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @Matches(/^[\w./-]{1,100}$/)
+  @IsBranchName()
   baseBranch?: string;
 
   // A new token; absent = keep the stored one.
@@ -94,7 +106,7 @@ export class StartLabRunDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @Matches(/^[\w./-]{1,100}$/)
+  @IsBranchName()
   baseBranch?: string;
 
   // Where to run: 'any' worker (default) or 'fusion' — only a worker set up for Fusion 360.

@@ -27,6 +27,7 @@ import {
 import {
   downloadRepoZip,
   githubFor,
+  isValidBranch,
   readStep,
   ZIP_TOTAL_MS,
 } from './lab-github';
@@ -137,6 +138,9 @@ export class LabRunsService {
     requireImproveModel(input.model);
 
     const project = await this.projects.findOwned(input.projectId, userId);
+
+    if (!isValidBranch(input.baseBranch || project.baseBranch))
+      throw new BadRequestException('Недопустимое имя ветки');
 
     if (!project.canWrite) {
       throw new BadRequestException(

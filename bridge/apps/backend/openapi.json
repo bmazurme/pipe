@@ -6365,8 +6365,7 @@
             "maxLength": 500
           },
           "baseBranch": {
-            "type": "string",
-            "pattern": "/^[\\w./-]{1,100}$/"
+            "type": "string"
           }
         },
         "required": [
@@ -6384,8 +6383,7 @@
             "maxLength": 100
           },
           "baseBranch": {
-            "type": "string",
-            "pattern": "/^[\\w./-]{1,100}$/"
+            "type": "string"
           },
           "token": {
             "type": "string",
@@ -6710,8 +6708,7 @@
             "type": "string"
           },
           "baseBranch": {
-            "type": "string",
-            "pattern": "/^[\\w./-]{1,100}$/"
+            "type": "string"
           }
         },
         "required": [
