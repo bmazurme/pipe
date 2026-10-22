@@ -91,13 +91,26 @@ export class BoardsService {
     let announcedKey = existing?.announcedKey ?? null;
 
     if (next && next !== announcedKey && !hasPending) {
-      announcedKey = next;
-      await this.announce(dto.host, dto.mainSha, outdated);
+      // Recorded only once Telegram took the message, so the next report retries a failed send.
+      if (await this.announce(dto.host, dto.mainSha, outdated)) {
+        announcedKey = next;
+      } else {
+        this.logger.warn(
+          `Could not announce outdated scripts on ${dto.host}; will retry on the next report`,
+        );
+      }
     } else if (!next && announcedKey) {
-      announcedKey = null;
-      await this.notifier.send(
+      const sent = await this.notifier.send(
         `✅ Скрипты на ${dto.host} актуальны (main ${dto.mainSha.slice(0, 7)})`,
       );
+
+      if (sent) {
+        announcedKey = null;
+      } else {
+        this.logger.warn(
+          `Could not announce current scripts on ${dto.host}; will retry on the next report`,
+        );
+      }
     }
 
     await this.reports.save(
@@ -118,7 +131,7 @@ export class BoardsService {
     host: string,
     sha: string,
     outdated: BoardScript[],
-  ): Promise<void> {
+  ): Promise<boolean> {
     const updatable = outdated.filter((script) => isUpdatable(script.repoPath));
     const manual = outdated.filter((script) => !isUpdatable(script.repoPath));
     const lines = [
@@ -135,12 +148,10 @@ export class BoardsService {
     ];
 
     if (updatable.length === 0) {
-      await this.notifier.send(lines.join('\n'));
-
-      return;
+      return this.notifier.send(lines.join('\n'));
     }
 
-    await this.notifier.sendWithButtons(lines.join('\n'), [
+    return this.notifier.sendWithButtons(lines.join('\n'), [
       [
         {
           text: `⬆️ Обновить ${host}`,
