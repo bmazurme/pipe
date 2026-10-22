@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { Logger } from '@nestjs/common';
 import { strToU8, unzip, zip, type Zippable } from 'fflate';
 
 import { ReportsReleaseService } from './reports-release.service';
@@ -223,7 +224,10 @@ describe('ReportsReleaseService', () => {
       expect(downloadZipball).toHaveBeenCalledTimes(1);
 
       sha = 'sha-2';
+      // The head of main is remembered for a short while — let that pass.
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
       await service.downloadReportsZip();
+      jest.restoreAllMocks();
 
       expect(downloadZipball).toHaveBeenCalledTimes(2);
     });
@@ -271,5 +275,105 @@ describe('ReportsReleaseService', () => {
     await expect(service.downloadReportsZip()).rejects.toThrow(
       'packages/protocol/',
     );
+  });
+
+  describe('serving info while main is rebuilt', () => {
+    async function zipballWith(marker: string): Promise<Uint8Array> {
+      return zipAsync({
+        'owner-pipe-abc1234/reports/package.json': strToU8('{}'),
+        'owner-pipe-abc1234/reports/marker.txt': strToU8(marker),
+        'owner-pipe-abc1234/packages/protocol/package.json': strToU8('{}'),
+      });
+    }
+
+    afterEach(() => jest.restoreAllMocks());
+
+    function moveClock(ms: number): void {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + ms);
+    }
+
+    it('answers with the previous release without waiting for the build of the new sha', async () => {
+      const first = await zipballWith('one');
+      const second = await zipballWith('two');
+      let sha = 'sha-1';
+      let finish!: (zipball: Uint8Array) => void;
+      const downloadZipball = jest
+        .fn()
+        .mockResolvedValueOnce(first)
+        .mockImplementationOnce(
+          () => new Promise<Uint8Array>((resolve) => (finish = resolve)),
+        );
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha: async () => sha, downloadZipball }),
+      );
+
+      const old = await service.getInfo();
+
+      sha = 'sha-2';
+      moveClock(120_000);
+
+      await expect(service.getInfo()).resolves.toBe(old);
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+
+      finish(second);
+      await service.getRelease();
+
+      const fresh = await service.getInfo();
+
+      expect(fresh.sha).toBe('sha-2');
+      expect(fresh.releaseId).not.toBe(old.releaseId);
+    });
+
+    it('asks GitHub for the head of main once within the ttl', async () => {
+      const zipball = await zipballWith('one');
+      const getBranchSha = jest.fn(async () => 'sha-1');
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha, downloadZipball: async () => zipball }),
+      );
+
+      await service.getInfo();
+      await service.getInfo();
+      await service.getInfo();
+
+      expect(getBranchSha).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps answering with the last good info when the background build fails', async () => {
+      const first = await zipballWith('one');
+      let sha = 'sha-1';
+      const downloadZipball = jest
+        .fn()
+        .mockResolvedValueOnce(first)
+        .mockRejectedValueOnce(new Error('boom'));
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha: async () => sha, downloadZipball }),
+      );
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      const old = await service.getInfo();
+
+      sha = 'sha-2';
+      moveClock(120_000);
+
+      await expect(service.getInfo()).resolves.toBe(old);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalled();
+      await expect(service.getInfo()).resolves.toBe(old);
+    });
+
+    it('download returns bytes matching the advertised sha256', async () => {
+      const zipball = await zipballWith('one');
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball: async () => zipball }),
+      );
+
+      const { bytes, info } = await service.getRelease();
+
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(
+        info.sha256,
+      );
+    });
   });
 });
