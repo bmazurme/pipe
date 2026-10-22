@@ -16,6 +16,7 @@ describe('the sidebar sections', () => {
       'chat',
       'improve',
       'context',
+      'questions',
       'storage',
       'purge',
       'keys',

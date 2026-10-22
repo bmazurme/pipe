@@ -12,6 +12,7 @@ import {
   labApi,
   logsApi,
   purgeApi,
+  questionsApi,
   reportsReleaseApi,
   reportsSettingsApi,
   secretsApi,
@@ -60,6 +61,7 @@ export const store = configureStore({
     [labApi.reducerPath]: labApi.reducer,
     [boardsApi.reducerPath]: boardsApi.reducer,
     [contextApi.reducerPath]: contextApi.reducer,
+    [questionsApi.reducerPath]: questionsApi.reducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -82,6 +84,7 @@ export const store = configureStore({
       labApi.middleware,
       boardsApi.middleware,
       contextApi.middleware,
+      questionsApi.middleware,
       dashboardApi.middleware,
     ),
 });

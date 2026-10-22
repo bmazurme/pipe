@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module';
+import { QuestionsModule } from '../questions/questions.module';
 import { ContextModule } from '../context/context.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -30,6 +31,7 @@ import { WorkersService } from './workers.service';
   imports: [
     AuthModule,
     ContextModule,
+    QuestionsModule,
     TelegramModule,
     StorageModule,
     TypeOrmModule.forFeature([

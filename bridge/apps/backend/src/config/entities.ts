@@ -18,6 +18,7 @@ import { AppLog } from '../logs/entities/app-log.entity';
 import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
 import { LoopEvent } from '../loop/entities/loop-event.entity';
 import { LoopRun } from '../loop/entities/loop-run.entity';
+import { TaskQuestion } from '../questions/entities/task-question.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { ReportsSettingsBackup } from '../reports-settings/entities/reports-settings-backup.entity';
 import { Secret } from '../secrets/entities/secret.entity';
@@ -41,6 +42,7 @@ import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
 // here still boots, then fails its first query with EntityMetadataNotFoundError.
 // entities.spec.ts checks every forFeature entity is listed.
 export const ENTITIES = [
+  TaskQuestion,
   BoardReport,
   ScriptUpdate,
   User,

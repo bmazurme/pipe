@@ -38,6 +38,8 @@ import { HeartbeatDto } from './dto/heartbeat.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { ClaudeUsageService } from './claude-usage.service';
 import { LimitAlertsService } from './limit-alerts.service';
+import { ReportQuestionsDto } from '../questions/dto/report-questions.dto';
+import { QuestionsService } from '../questions/questions.service';
 import { ReportUsageDto } from './dto/report-usage.dto';
 import { RetryJobDto } from './dto/retry-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
@@ -89,6 +91,7 @@ export class WorkerController {
     private readonly workersService: WorkersService,
     private readonly limitAlerts: LimitAlertsService,
     private readonly claudeUsage: ClaudeUsageService,
+    private readonly questionsService: QuestionsService,
   ) {}
 
   @Get()
@@ -377,6 +380,23 @@ export class WorkerController {
     const job = await this.workerService.updateStatus(id, currentUser.id, dto);
 
     return JobResponseDto.fromEntity(job);
+  }
+
+  // The open questions a worker found in a run's output; they become a card on the Questions page.
+  @Post(':id/questions')
+  @WorkerKeyAllowed()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async reportQuestions(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReportQuestionsDto,
+    @CurrentUser() currentUser: { id: number; workerId?: number },
+  ): Promise<void> {
+    await this.workerService.assertHeldBy(
+      id,
+      currentUser.id,
+      currentUser.workerId,
+    );
+    await this.questionsService.addFromRun(id, currentUser.id, dto.questions);
   }
 
   @Post(':id/logs')

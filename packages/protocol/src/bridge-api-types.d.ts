@@ -802,6 +802,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/{id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_reportQuestions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/{id}/logs": {
         parameters: {
             query?: never;
@@ -1024,6 +1040,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["QuestionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/questions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["QuestionsController_resolve"];
         trace?: never;
     };
     "/api/v1/dashboard/nodes": {
@@ -2422,6 +2470,9 @@ export interface components {
             /** @enum {string} */
             failureKind?: "shutdown";
         };
+        ReportQuestionsDto: {
+            questions: string[];
+        };
         AppendJobLogDto: {
             chunk: string;
         };
@@ -2572,6 +2623,25 @@ export interface components {
         };
         DeletedWorkerResponseDto: {
             failedJobs: number;
+        };
+        QuestionItemDto: {
+            id: number;
+            text: string;
+            resolved: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        QuestionCardDto: {
+            taskKey: string;
+            project: string | null;
+            questions: components["schemas"]["QuestionItemDto"][];
+            openCount: number;
+            archived: boolean;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ResolveQuestionDto: {
+            resolved: boolean;
         };
         CreateImproveIssueDto: {
             title: string;
@@ -4225,6 +4295,29 @@ export interface operations {
             };
         };
     };
+    WorkerController_reportQuestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportQuestionsDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     WorkerController_appendLog: {
         parameters: {
             query?: never;
@@ -4596,6 +4689,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    QuestionsController_list: {
+        parameters: {
+            query: {
+                archived: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionCardDto"][];
+                };
+            };
+        };
+    };
+    QuestionsController_resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveQuestionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionItemDto"];
+                };
             };
         };
     };

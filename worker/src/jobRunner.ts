@@ -19,6 +19,7 @@ import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
+import { extractQuestions, withQuestionsInstruction } from './taskQuestions.js';
 import { withContext } from './taskContext.js';
 
 export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
@@ -170,6 +171,8 @@ export async function processJob(
       });
     }
 
+    prompt = withQuestionsInstruction(prompt);
+
     // A limit chosen for this job at launch wins over the worker-wide setting.
     const timeoutSec = job.timeoutSec ?? config.jobTimeoutSec;
     log(`Time limit: ${timeoutSec}s${job.timeoutSec != null ? ' (set for this job)' : ''}\n`);
@@ -185,6 +188,17 @@ export async function processJob(
 
     if (result.exitCode !== 0) {
       throw new Error(buildExitFailureMessage(result.exitCode, result.output));
+    }
+
+    // Best-effort, like usage: questions are a convenience and must never fail a finished run.
+    const questions = extractQuestions(result.output);
+    if (questions.length > 0) {
+      try {
+        await client.reportQuestions(job.id, questions);
+        log(`Open questions reported: ${questions.length}\n`);
+      } catch (questionsError) {
+        jlog.warn({ err: questionsError }, 'could not report open questions');
+      }
     }
 
     const { files: resultFiles, assets: resultAssets } = collectResult(jobDir, parcel);
