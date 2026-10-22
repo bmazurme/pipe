@@ -3,6 +3,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsService } from './vpn-connections.service';
+import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 import { VpnService } from './vpn.service';
 
 const CONNECTION = {
@@ -47,7 +48,11 @@ function service(connection: VpnConnection | null = CONNECTION) {
   const github = {} as unknown as GithubActionsService;
 
   return {
-    vpn: new VpnService(connections, github, appLogs as never),
+    vpn: new VpnService(
+      connections,
+      github,
+      new VpnStatusAlertsService(connections, appLogs as never),
+    ),
     appLogs,
   };
 }
@@ -119,25 +124,6 @@ describe('VPN status failures say why', () => {
   it('keeps the "no active connection" explanation', async () => {
     await expect(service(null).vpn.getStatus()).rejects.toThrow(
       'No active VPN connection',
-    );
-  });
-
-  it('writes the cause to the app log, once for a repeating failure', async () => {
-    globalThis.fetch = jest.fn(
-      async () => new Response('', { status: 401 }),
-    ) as typeof fetch;
-    const { vpn, appLogs } = service();
-
-    for (let i = 0; i < 5; i += 1) await vpn.getStatus().catch(() => undefined);
-
-    expect(appLogs.record).toHaveBeenCalledTimes(1);
-    expect(appLogs.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warn',
-        source: 'integration',
-        event: 'vpn.status_failed',
-        message: expect.stringContaining('rejected the API token'),
-      }),
     );
   });
 

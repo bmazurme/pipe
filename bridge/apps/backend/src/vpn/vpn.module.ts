@@ -7,6 +7,7 @@ import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsController } from './vpn-connections.controller';
 import { VpnConnectionsService } from './vpn-connections.service';
+import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 import { VpnController } from './vpn.controller';
 import { VpnService } from './vpn.service';
 
@@ -17,6 +18,11 @@ import { VpnService } from './vpn.service';
     TypeOrmModule.forFeature([VpnConnection]),
   ],
   controllers: [VpnController, VpnConnectionsController],
-  providers: [VpnService, VpnConnectionsService, GithubActionsService],
+  providers: [
+    VpnService,
+    VpnConnectionsService,
+    GithubActionsService,
+    VpnStatusAlertsService,
+  ],
 })
 export class VpnModule {}

@@ -1,10 +1,10 @@
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
 
-import { AppLogService } from '../logs/app-log.service';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsService } from './vpn-connections.service';
+import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 import { VpnService } from './vpn.service';
 
 const ACTIVE_CONNECTION = {
@@ -51,13 +51,19 @@ function fakeGithub() {
   };
 }
 
+function fakeAlerts() {
+  return { recordFailure: jest.fn(), recordRecovered: jest.fn() };
+}
+
 function vpnService(
   connections?: VpnConnection[],
   github: ReturnType<typeof fakeGithub> = fakeGithub(),
+  alerts: ReturnType<typeof fakeAlerts> = fakeAlerts(),
 ): VpnService {
   return new VpnService(
     fakeVpnConnectionsService(connections),
     github as unknown as GithubActionsService,
+    alerts as unknown as VpnStatusAlertsService,
   );
 }
 
@@ -261,35 +267,29 @@ describe('VpnService', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('logs an identical failure once per 5 minutes', async () => {
+    it('hands a failed and a recovered status call to the alerts service', async () => {
+      const alerts = fakeAlerts();
+      const service = vpnService(undefined, undefined, alerts);
+
       globalThis.fetch = jest.fn(
         async () => new Response('nope', { status: 500 }),
       ) as unknown as typeof fetch;
-      const record = jest.fn();
-      const service = new VpnService(
-        fakeVpnConnectionsService(),
-        fakeGithub() as unknown as GithubActionsService,
-        { record } as unknown as AppLogService,
-      );
-
-      for (let i = 0; i < 3; i++) {
-        await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
-          'VPN panel request failed (500)',
-        );
-      }
-      expect(record).toHaveBeenCalledTimes(1);
-      expect(record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          event: 'vpn.status_failed',
-          message: expect.stringContaining('VPN panel request failed (500)'),
-        }),
-      );
-
-      jest.advanceTimersByTime(5 * 60_000 + 1);
       await expect(service.checkConnectionStatus(1, true)).rejects.toThrow(
         BadGatewayException,
       );
-      expect(record).toHaveBeenCalledTimes(2);
+      expect(alerts.recordFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        expect.any(BadGatewayException),
+      );
+      expect(alerts.recordRecovered).not.toHaveBeenCalled();
+
+      globalThis.fetch = jest.fn(async () =>
+        jsonResponse({ success: true, obj: [INBOUND] }),
+      ) as unknown as typeof fetch;
+      await service.checkConnectionStatus(1, true);
+      expect(alerts.recordRecovered).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+      );
     });
 
     it.each([401, 403])(

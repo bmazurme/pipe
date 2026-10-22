@@ -1,19 +1,12 @@
-import {
-  BadGatewayException,
-  HttpException,
-  Injectable,
-  Logger,
-  Optional,
-} from '@nestjs/common';
+import { BadGatewayException, HttpException, Injectable } from '@nestjs/common';
 
-import { AppLogService } from '../logs/app-log.service';
-import { NotifyService } from '../telegram/notify.service';
 import { GithubActionsService } from './github-actions.service';
 import { OUTBOUND_FETCH_TIMEOUT_MS, isTimeoutError } from './outbound';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { VpnConnectionsService } from './vpn-connections.service';
+import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 
 interface XrayRealitySettings {
   target: string;
@@ -72,9 +65,6 @@ function networkReason(error: unknown): string | null {
   return null;
 }
 
-// How often the same failure is written to the app log: the VPN page polls every 15 s.
-const FAILURE_LOG_EVERY_MS = 5 * 60_000;
-
 const STATUS_TTL_MS = 10_000;
 const STATUS_FAILURE_TTL_MS = 30_000;
 
@@ -87,92 +77,15 @@ interface StatusCacheEntry {
   result?: Promise<VpnStatus>;
 }
 
-// Once a failure has been alerted, VPN_ALERTS=off keeps the owner from being paged again until
-// the panel recovers — set when the alert is unwanted, e.g. during known maintenance.
-const VPN_ALERTS_OFF = () =>
-  (process.env.VPN_ALERTS ?? '').toLowerCase() === 'off';
-
 @Injectable()
 export class VpnService {
-  private readonly logger = new Logger(VpnService.name);
-  private readonly lastFailureLoggedAt = new Map<string, number>();
   private readonly statusCache = new Map<number, StatusCacheEntry>();
 
   constructor(
     private readonly vpnConnectionsService: VpnConnectionsService,
     private readonly githubActions: GithubActionsService,
-    @Optional() private readonly appLogs?: AppLogService,
-    @Optional() private readonly notifier?: NotifyService,
+    private readonly alerts: VpnStatusAlertsService,
   ) {}
-
-  // A failed status check reads as one generic line in the UI; this leaves the cause in
-  // Profile → Logs (deduplicated, since the status is polled) and, independently, pages the
-  // owner on Telegram the first time — not on every subsequent failing poll, via
-  // connection.failureAlertedAt (cleared by recordStatusRecovered once it responds again).
-  private recordStatusFailure(
-    connection: VpnConnection | undefined,
-    error: unknown,
-  ): void {
-    const reason =
-      error instanceof HttpException ? error.message : String(error);
-    const now = Date.now();
-
-    if (
-      now - (this.lastFailureLoggedAt.get(reason) ?? 0) >=
-      FAILURE_LOG_EVERY_MS
-    ) {
-      this.lastFailureLoggedAt.set(reason, now);
-      void this.appLogs?.record({
-        level: 'warn',
-        source: 'integration',
-        event: 'vpn.status_failed',
-        message: `VPN status check failed: ${reason}`,
-      });
-    }
-
-    if (connection && !connection.failureAlertedAt) {
-      void this.alertFailure(connection, reason);
-    }
-  }
-
-  private recordStatusRecovered(connection: VpnConnection): void {
-    if (connection.failureAlertedAt) {
-      void this.notifyRecovered(connection);
-    }
-  }
-
-  private async alertFailure(
-    connection: VpnConnection,
-    reason: string,
-  ): Promise<void> {
-    try {
-      // Saved first: if sending fails the owner misses one message, but a failing
-      // Telegram channel can't turn into a repeat alert on every subsequent poll.
-      await this.vpnConnectionsService.markFailureAlerted(connection.id);
-      if (VPN_ALERTS_OFF()) return;
-
-      await this.notifier?.send(
-        `🔌 VPN «${connection.name}» не отвечает: ${reason}`,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `VPN failure alert failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  private async notifyRecovered(connection: VpnConnection): Promise<void> {
-    try {
-      await this.vpnConnectionsService.clearFailureAlert(connection.id);
-      if (VPN_ALERTS_OFF()) return;
-
-      await this.notifier?.send(`✅ VPN «${connection.name}» снова отвечает`);
-    } catch (err) {
-      this.logger.warn(
-        `VPN recovery alert failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
 
   private async panelRequest<T>(
     connection: VpnConnection,
@@ -321,10 +234,10 @@ export class VpnService {
       active = await this.vpnConnectionsService.getActive();
 
       const status = await this.cachedStatusFor(active, false);
-      this.recordStatusRecovered(active);
+      this.alerts.recordRecovered(active);
       return status;
     } catch (error) {
-      this.recordStatusFailure(active, error);
+      this.alerts.recordFailure(active, error);
       throw error;
     }
   }
@@ -337,10 +250,10 @@ export class VpnService {
       connection = await this.vpnConnectionsService.findOne(id);
 
       const status = await this.cachedStatusFor(connection, force);
-      this.recordStatusRecovered(connection);
+      this.alerts.recordRecovered(connection);
       return status;
     } catch (error) {
-      this.recordStatusFailure(connection, error);
+      this.alerts.recordFailure(connection, error);
       throw error;
     }
   }
