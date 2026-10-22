@@ -255,6 +255,19 @@ export class BoardsService {
     );
   }
 
+  // The owner takes a decision back before the board collects it.
+  async cancelPending(userId: number, host: string): Promise<void> {
+    const row = await this.pendingRow(userId, host);
+
+    if (!row) throw new NotFoundException('Нет ожидающего обновления');
+
+    await this.updates.update(row.id, {
+      status: 'cancelled',
+      finishedAt: new Date(),
+    });
+    await this.notifier.send(`Обновление ${host} отменено`);
+  }
+
   // A press on the Telegram button: only the owner's chat reaches this (see TelegramCommandsService). The board is found by name.
   async approveFromTelegram(host: string, sha7: string): Promise<string> {
     const report = await this.reports.findOne({
@@ -316,7 +329,8 @@ export class BoardsService {
     const update = await this.updates.findOne({ where: { id, userId } });
 
     if (!update) throw new NotFoundException('Update not found');
-    if (update.status !== 'pending') {
+    // A cancel can race with the agent having already collected the decision: the board's real outcome wins.
+    if (update.status !== 'pending' && update.status !== 'cancelled') {
       throw new ConflictException('The update is already settled');
     }
 

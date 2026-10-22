@@ -43,9 +43,14 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
       invalidatesTags: ['Boards'],
       transformErrorResponse: errorMessage('Не удалось разрешить обновление'),
     }),
+    cancelBoardUpdate: builder.mutation<void, string>({
+      query: (host) => ({ url: `boards/${encodeURIComponent(host)}/updates/cancel`, method: 'POST' }),
+      invalidatesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось отменить обновление'),
+    }),
   }),
 });
 
-export const { useListBoardsQuery, useRequestBoardUpdateMutation } = boardsApiEndpoints;
+export const { useListBoardsQuery, useRequestBoardUpdateMutation, useCancelBoardUpdateMutation } = boardsApiEndpoints;
 
 export default boardsApiEndpoints;
