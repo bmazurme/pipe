@@ -11,6 +11,25 @@ export function isValidRepo(repo: string): boolean {
   return REPO_PATTERN.test(repo) && !repo.includes('..');
 }
 
+const BRANCH_PATTERN = /^[\w./-]{1,100}$/;
+
+// What `git check-ref-format` rejects, within the characters Lab accepts: `..`, a leading/trailing `/`, `//`,
+// a segment starting with `.`, a trailing `.lock` or `.`.
+export function isValidBranch(name: string): boolean {
+  return (
+    typeof name === 'string' &&
+    BRANCH_PATTERN.test(name) &&
+    !name.includes('..') &&
+    !name.includes('//') &&
+    !name.startsWith('/') &&
+    !name.endsWith('/') &&
+    !name.endsWith('.') &&
+    !name
+      .split('/')
+      .some((part) => part.startsWith('.') || part.endsWith('.lock'))
+  );
+}
+
 // GitHub answers a token that lacks a permission with one line that does not say WHICH — name them.
 const TOKEN_PERMISSION_ERROR =
   'Resource not accessible by personal access token';
@@ -80,6 +99,12 @@ export async function checkRepo(
     isPrivate: null,
     problems: [],
   };
+
+  if (!isValidBranch(baseBranch)) {
+    result.problems.push('Недопустимое имя ветки');
+
+    return result;
+  }
 
   let info: Response;
 

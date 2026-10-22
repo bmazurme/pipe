@@ -1,6 +1,7 @@
 import {
   checkRepo,
   downloadRepoZip,
+  isValidBranch,
   readStep,
   ZIP_MAX_BYTES,
 } from './lab-github';
@@ -170,5 +171,30 @@ describe('downloadRepoZip', () => {
     await expect(downloadRepoZip('me/boat', 'tok', 'abc')).rejects.toThrow(
       'GitHub 404',
     );
+  });
+});
+
+describe('branch names', () => {
+  it('rejects what git refuses and accepts ordinary names', () => {
+    for (const name of [
+      '../../x',
+      '/main',
+      'a//b',
+      'feat/.hidden',
+      'x.lock',
+      'x.',
+      'a/',
+    ])
+      expect(isValidBranch(name)).toBe(false);
+    for (const name of ['main', 'release/1.2', 'feature/foo-bar_baz'])
+      expect(isValidBranch(name)).toBe(true);
+  });
+
+  it('checkRepo returns a problem without calling fetch for a bad branch', async () => {
+    const spy = jest.spyOn(global, 'fetch');
+    const result = await checkRepo('o/n', 'tok', '../../x');
+
+    expect(result.problems).toEqual(['Недопустимое имя ветки']);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,12 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
-import { SaveLabScheduleDto, StartLabRunDto } from './lab.dto';
+import {
+  CreateLabProjectDto,
+  SaveLabScheduleDto,
+  StartLabRunDto,
+  UpdateLabProjectDto,
+} from './lab.dto';
 
 const errorsFor = async (body: Record<string, unknown>) =>
   (
@@ -60,4 +65,33 @@ describe('SaveLabScheduleDto: weekdays', () => {
     expect(await scheduleErrors({ weekdays: [1, 1] })).toEqual(['weekdays']);
     expect(await scheduleErrors({ weekdays: 1 })).toEqual(['weekdays']);
   });
+});
+
+describe('base branch names that git would refuse', () => {
+  const bad = ['../../x', '/main', 'a//b', 'feat/.hidden', 'x.lock', 'x.'];
+  const good = ['main', 'release/1.2', 'feature/foo-bar_baz'];
+  const failing = async (cls: new () => object, baseBranch: string) =>
+    (
+      await validate(
+        plainToInstance(cls, {
+          projectId: 1,
+          task: 'Fix the test',
+          model: 'sonnet',
+          name: 'n',
+          repo: 'o/n',
+          token: 'x'.repeat(20),
+          baseBranch,
+        }),
+      )
+    ).map((error) => error.property);
+
+  it.each([CreateLabProjectDto, UpdateLabProjectDto, StartLabRunDto])(
+    'is enforced by %p',
+    async (cls) => {
+      for (const name of bad)
+        expect(await failing(cls, name)).toContain('baseBranch');
+      for (const name of good)
+        expect(await failing(cls, name)).not.toContain('baseBranch');
+    },
+  );
 });
