@@ -1,12 +1,18 @@
 import { createHash } from 'node:crypto';
 
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { strToU8, unzip, zip, type Unzipped, type Zippable } from 'fflate';
 
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { GithubApiService } from '../loop/github-api.service';
 
 const BASE_BRANCH = 'main';
+// How long the resolved head of main is trusted before GitHub is asked again.
+const SHA_TTL_MS = 60_000;
 // reports/package.json depends on @pipe/protocol via a plain relative
 // `file:../../../packages/protocol` path (not rewritten here, not a
 // workspace range) — bundling protocol alongside reports/, at the same
@@ -73,6 +79,11 @@ export class ReportsReleaseService {
     maxEntries: 1,
   });
 
+  private readonly logger = new Logger(ReportsReleaseService.name);
+  // The last release that was built successfully: `info` answers from it while a newer one is being built.
+  private lastBuilt: BuiltRelease | null = null;
+  private resolvedSha: { promise: Promise<string>; at: number } | null = null;
+
   constructor(private readonly githubApi: GithubApiService) {}
 
   private assertConfigured(): void {
@@ -84,7 +95,48 @@ export class ReportsReleaseService {
   }
 
   async getInfo(): Promise<ReportsReleaseInfo> {
-    return (await this.getRelease()).info;
+    this.assertConfigured();
+
+    const sha = await this.resolveSha();
+    const last = this.lastBuilt;
+
+    if (!last) return (await this.buildFor(sha)).info;
+    if (last.sha === sha) return last.info;
+
+    // main moved: build the new release in the background and answer with the previous one.
+    this.buildFor(sha).catch((err: unknown) => {
+      this.logger.warn(
+        `Фоновая сборка reports-release для ${sha.slice(0, 7)} не удалась: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
+
+    return last.info;
+  }
+
+  private resolveSha(): Promise<string> {
+    const cached = this.resolvedSha;
+
+    if (cached && Date.now() - cached.at < SHA_TTL_MS) return cached.promise;
+
+    const promise = this.githubApi.getBranchSha(BASE_BRANCH);
+    const entry = { promise, at: Date.now() };
+
+    this.resolvedSha = entry;
+    promise.catch(() => {
+      if (this.resolvedSha === entry) this.resolvedSha = null;
+    });
+
+    return promise;
+  }
+
+  private async buildFor(sha: string): Promise<BuiltRelease> {
+    const built = await this.releases.get(sha, () => this.buildReportsZip(sha));
+
+    this.lastBuilt = built;
+
+    return built;
   }
 
   // Re-packs reports/ plus packages/protocol/ out of the whole-repo zipball
@@ -101,9 +153,7 @@ export class ReportsReleaseService {
   async getRelease(): Promise<{ bytes: Uint8Array; info: ReportsReleaseInfo }> {
     this.assertConfigured();
 
-    const sha = await this.githubApi.getBranchSha(BASE_BRANCH);
-
-    return this.releases.get(sha, () => this.buildReportsZip(sha));
+    return this.buildFor(await this.resolveSha());
   }
 
   private async buildReportsZip(sha: string): Promise<BuiltRelease> {
