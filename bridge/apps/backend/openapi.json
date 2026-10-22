@@ -531,6 +531,43 @@
         }
       }
     },
+    "/api/v1/chat/chats/{id}/run-results": {
+      "post": {
+        "operationId": "ChatController_attachRunResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachRunResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat/chats/{id}/messages": {
       "get": {
         "operationId": "ChatController_listMessages",
@@ -4494,6 +4531,18 @@
         },
         "required": [
           "title"
+        ]
+      },
+      "AttachRunResultDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "jobId"
         ]
       },
       "ChatAttachmentResponseDto": {
