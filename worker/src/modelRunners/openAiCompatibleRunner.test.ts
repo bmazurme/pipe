@@ -41,6 +41,25 @@ describe('executeTool read_file', () => {
   });
 });
 
+describe('executeTool write_file', () => {
+  let dir: string;
+
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'write-file-test-'));
+  });
+
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refuses a path inside .git with the shared helper message', () => {
+    assert.throws(
+      () => executeTool(dir, 'write_file', { path: '.git/config', content: 'x' }),
+      /Path inside \.git is not allowed: \.git\/config/,
+    );
+  });
+});
+
 const deadlineOptions = { baseUrl: 'http://stub.invalid', apiKey: 'k', model: 'gpt-test' };
 
 describe('runOpenAiCompatible job deadline', () => {

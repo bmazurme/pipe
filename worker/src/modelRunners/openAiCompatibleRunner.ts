@@ -1,10 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
+
 import { CancelledError } from '../cancelled.js';
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from '../fsWalk.js';
 import { resolveDispatcher } from '../proxyAgent.js';
-import { resolveInDir } from '../resolveInDir.js';
 import type { RunResult } from './claudeRunner.js';
 
 const MAX_TURNS = 20;
@@ -78,8 +79,6 @@ interface ChatMessage {
   tool_call_id?: string;
 }
 
-const resolveInWorkDir = resolveInDir;
-
 // Keeps log lines bounded — write_file's arguments carry the entire file
 // content, which would otherwise be copied in full into the job's log row.
 function truncate(text: string, max = 200): string {
@@ -92,7 +91,7 @@ export function executeTool(cwd: string, name: string, args: Record<string, unkn
       return listFilesRecursively(cwd, cwd, EXCLUDED_RESULT_DIRS).join('\n');
     }
     case 'read_file': {
-      const path = resolveInWorkDir(cwd, String(args.path ?? ''));
+      const path = resolveInDir(cwd, String(args.path ?? ''));
       const content = readFileSync(path, 'utf-8');
       const offset = Math.max(0, Math.floor(Number(args.offset ?? 0)) || 0);
       const slice = content.slice(offset, offset + MAX_TOOL_RESULT_CHARS);
@@ -105,7 +104,7 @@ export function executeTool(cwd: string, name: string, args: Record<string, unkn
       return `${slice}\n[truncated: file has ${content.length} chars; ${slice.length} shown from offset ${offset}. Pass offset=${offset + slice.length} to read more]`;
     }
     case 'write_file': {
-      const path = resolveInWorkDir(cwd, String(args.path ?? ''));
+      const path = resolveInDir(cwd, String(args.path ?? ''));
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, String(args.content ?? ''), 'utf-8');
       return 'ok';

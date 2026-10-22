@@ -5,7 +5,7 @@ import type { PackedAsset, PackedFile } from '@pipe/protocol';
 
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 import type { ExtractedParcel } from './parcel.js';
-import { resolveInDir } from './resolveInDir.js';
+import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 function isExcludedResultPath(relPath: string): boolean {
   return relPath.split(/[\\/]/).some((segment) => EXCLUDED_RESULT_DIRS.has(segment));
