@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
+import {
+  In,
+  IsNull,
+  MoreThan,
+  MoreThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 
 import { DeploymentAccessService } from '../auth/deployment-access';
 import { ContextUsageRegistry } from '../context/context-usage';
@@ -27,6 +34,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
+import { FailureSummary, groupFailures } from './failure-summary';
 import { INFRA_FAILURE_MESSAGES } from './infra-failure';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
@@ -498,6 +506,28 @@ export class WorkerService implements OnModuleInit {
     const history = await this.runHistory(userId, taskKeyOf(sourceFile));
 
     return { count: history?.count ?? 0 };
+  }
+
+  // The caller's jobs that finished (succeeded or failed) within the last `days` days, with the
+  // failed ones grouped by normalized error.
+  async failureSummary(userId: number, days: number): Promise<FailureSummary> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const updatedAt = MoreThanOrEqual(since);
+    const [failedRows, succeeded] = await Promise.all([
+      this.jobRepository.find({
+        where: { userId, status: JobStatus.Failed, updatedAt },
+        select: { id: true, errorMessage: true, updatedAt: true },
+      }),
+      this.jobRepository.count({
+        where: { userId, status: JobStatus.Succeeded, updatedAt },
+      }),
+    ]);
+
+    return {
+      total: succeeded + failedRows.length,
+      failed: failedRows.length,
+      groups: groupFailures(failedRows),
+    };
   }
 
   // `updatedAfter` lets the frontend poll for only what changed since its last fetch instead of

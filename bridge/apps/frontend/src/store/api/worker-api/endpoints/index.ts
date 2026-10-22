@@ -46,6 +46,19 @@ export interface ClaudeRunUsage {
   cacheCreationTokens: number;
 }
 
+export interface FailureGroup {
+  message: string;
+  count: number;
+  lastJobId: number;
+  infra: boolean;
+}
+
+export interface FailureSummary {
+  total: number;
+  failed: number;
+  groups: FailureGroup[];
+}
+
 export interface WorkerJob {
   id: number;
   sourceFileId: number | null;
@@ -285,6 +298,11 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось создать задачу';
       },
     }),
+    // Failed jobs of the last days grouped by normalized error.
+    getFailureSummary: builder.query<FailureSummary, number | void>({
+      query: (days) => `worker/jobs/failure-summary?days=${days ?? 7}`,
+      providesTags: ['WorkerJob'],
+    }),
     // How many earlier runs of this parcel's task could be mixed in at launch.
     getJobHistoryPreview: builder.query<{ count: number }, number>({
       query: (sourceFileId) => `worker/jobs/history?sourceFileId=${sourceFileId}`,
@@ -496,6 +514,7 @@ export const {
   useCreateJobMutation,
   useCancelJobMutation,
   useGetJobHistoryPreviewQuery,
+  useGetFailureSummaryQuery,
   useRetryJobMutation,
   useDeleteJobMutation,
   useDownloadJobResultMutation,
