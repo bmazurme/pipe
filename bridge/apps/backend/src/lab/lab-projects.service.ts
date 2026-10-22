@@ -78,16 +78,24 @@ export class LabProjectsService {
   ): Promise<LabProjectView> {
     const project = await this.findOwned(id, userId);
 
-    if (input.name !== undefined) project.name = input.name;
-    if (input.baseBranch !== undefined) project.baseBranch = input.baseBranch;
-    if (input.token !== undefined) {
-      project.token = input.token;
-      project.tokenHint = input.token.slice(-4);
+    // A new token or branch is verified on the candidate values before the entity changes: one that fails is refused with the
+    // reasons, and the stored token and branch stay as they were (the token is write-only, a broken one pasted over it is unrecoverable).
+    if (input.baseBranch !== undefined || input.token !== undefined) {
+      const baseBranch = input.baseBranch ?? project.baseBranch;
+      const token = input.token ?? project.token;
+      const check = await checkRepo(project.repo, token, baseBranch);
+
+      if (!check.canRead || !check.branchFound)
+        throw new BadRequestException(check.problems.join('. '));
+
+      project.baseBranch = baseBranch;
+      project.token = token;
+      project.tokenHint = token.slice(-4);
+      project.checkedAt = new Date();
+      project.canWrite = check.canWrite;
     }
 
-    // A new token or branch must be re-verified, or the stored canWrite would describe something else.
-    if (input.baseBranch !== undefined || input.token !== undefined)
-      await this.applyCheck(project);
+    if (input.name !== undefined) project.name = input.name;
 
     return toView(await this.projects.save(project));
   }
