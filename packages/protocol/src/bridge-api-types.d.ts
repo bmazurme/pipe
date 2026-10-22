@@ -338,6 +338,22 @@ export interface paths {
         patch: operations["ChatController_renameChat"];
         trace?: never;
     };
+    "/api/v1/chat/chats/{id}/run-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ChatController_attachRunResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/chat/chats/{id}/messages": {
         parameters: {
             query?: never;
@@ -2224,6 +2240,9 @@ export interface components {
         RenameChatDto: {
             title: string;
         };
+        AttachRunResultDto: {
+            jobId: number;
+        };
         ChatAttachmentResponseDto: {
             id: number;
             name: string;
@@ -3424,6 +3443,31 @@ export interface operations {
         };
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponseDto"];
+                };
+            };
+        };
+    };
+    ChatController_attachRunResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachRunResultDto"];
+            };
+        };
+        responses: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -8,7 +8,7 @@ import type {
   HeaderMenuItem,
   TChatMessage,
 } from '@gravity-ui/aikit';
-import { ArrowDownToLine, BookOpen, Pencil } from '@gravity-ui/icons';
+import { ArrowDownToLine, BookOpen, Paperclip, Pencil } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Select, Text, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../shared/ui/Dialog';
 
@@ -35,6 +35,7 @@ import { hasStreamedText, pendingBubbleText } from './chat/chatProgress';
 import { MergePrCard } from './chat/MergePrCard';
 import { PrFixCard } from './chat/PrFixCard';
 import { buildChatMarkdown, buildContextDraft, chatMarkdownFilename, ContextDraft } from './chat/chatContext';
+import { AttachRunResultDialog } from './chat/AttachRunResultDialog';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
 import { useChatComposer } from './chat/useChatComposer';
 import { useAttachmentUrls } from './chat/useAttachmentUrls';
@@ -273,6 +274,7 @@ export function ChatPage() {
     setPollingInterval(hasPendingReply ? MESSAGES_POLL_INTERVAL_MS : NO_REPLY_PENDING_POLL_MS);
   }, [hasPendingReply]);
 
+  const [isAttachRunOpen, setIsAttachRunOpen] = useState(false);
   const [contextDraft, setContextDraft] = useState<ContextDraft | null>(null);
 
   // The composer is visible and enabled even with no chat selected yet
@@ -429,6 +431,12 @@ export function ChatPage() {
           onClick: handleOpenRenameDialog,
         },
         {
+          id: 'attach-run-result',
+          label: 'Прикрепить результат задачи',
+          icon: <Icon data={Paperclip} size={16} />,
+          onClick: () => setIsAttachRunOpen(true),
+        },
+        {
           id: 'save-to-context',
           label: 'Сохранить в Context',
           icon: <Icon data={BookOpen} size={16} />,
@@ -540,6 +548,7 @@ export function ChatPage() {
         </div>
       )}
 
+      {isAttachRunOpen && activeChatId !== null && <AttachRunResultDialog chatId={activeChatId} onClose={() => setIsAttachRunOpen(false)} />}
       {contextDraft && <SaveToContextDialog draft={contextDraft} onClose={() => setContextDraft(null)} />}
 
       <Dialog open={chatToDelete !== null} onClose={() => setChatToDelete(null)} maxWidth="s">

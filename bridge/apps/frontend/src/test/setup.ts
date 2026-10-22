@@ -48,3 +48,42 @@ globalThis.ResizeObserver =
     unobserve() {}
     disconnect() {}
   };
+
+// Node 25+ ships its own experimental `localStorage` global, which (without --localstorage-file) is a broken stub that
+// shadows jsdom's and has no working methods — tests touching localStorage then fail on newer Node than CI's pinned 22.
+// Install a plain in-memory Storage whenever the one in place is unusable.
+function storageWorks(): boolean {
+  try {
+    return typeof window.localStorage?.clear === 'function';
+  } catch {
+    return false;
+  }
+}
+
+if (!storageWorks()) {
+  const makeStorage = (): Storage => {
+    let data = new Map<string, string>();
+
+    return {
+      get length() {
+        return data.size;
+      },
+      clear: () => {
+        data = new Map();
+      },
+      getItem: (key) => data.get(key) ?? null,
+      key: (index) => [...data.keys()][index] ?? null,
+      removeItem: (key) => {
+        data.delete(key);
+      },
+      setItem: (key, value) => {
+        data.set(key, String(value));
+      },
+    };
+  };
+
+  for (const name of ['localStorage', 'sessionStorage'] as const) {
+    Object.defineProperty(window, name, { value: makeStorage(), configurable: true });
+    Object.defineProperty(globalThis, name, { value: window[name], configurable: true });
+  }
+}
