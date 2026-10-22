@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -174,5 +174,21 @@ describe('JobDetailDialog', () => {
     // Finished: the stage line is replaced by the outcome, not removed.
     expect(await screen.findByText('Готово — результат можно скачать')).toBeInTheDocument();
     expect(within((await screen.findByText('Worker')).closest('div') as HTMLElement).getByText('pi-blue')).toBeInTheDocument();
+  });
+});
+
+describe('JobDetailDialog time limit', () => {
+  it('shows the limit chosen at launch, and nothing when the worker setting applies', async () => {
+    routes['GET worker/jobs/31'] = () => json({ ...job(31), timeoutSec: 7200 });
+    routes['GET worker/jobs/32'] = () => json({ ...job(32), timeoutSec: null });
+
+    renderDialog(31);
+    const fields = (await screen.findByText('Лимит времени')).closest('dl') as HTMLElement;
+    expect(within(fields).getByText('2 ч')).toBeInTheDocument();
+    cleanup();
+
+    renderDialog(32);
+    expect(await screen.findByText('Worker')).toBeInTheDocument();
+    expect(screen.queryByText('Лимит времени')).toBeNull();
   });
 });

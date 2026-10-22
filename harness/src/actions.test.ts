@@ -4,8 +4,18 @@ import assert from 'node:assert/strict';
 import { resolveProjectName, runAction, type ActionDeps, type ActionResult } from './actions.js';
 
 describe('resolveProjectName', () => {
-  it('uses the override when given, without consulting the config at all', () => {
-    assert.equal(resolveProjectName({ projects: [] }, '173', 'explicit-name'), 'explicit-name');
+  it('uses the override when it names a configured project', () => {
+    const config = { projects: [{ name: 'bff', gitlabProjectId: '402' }, { name: 'explicit-name' }] };
+    assert.equal(resolveProjectName(config, '402', 'explicit-name'), 'explicit-name');
+  });
+
+  it('refuses an override that is not a configured project, naming it', () => {
+    assert.throws(() => resolveProjectName({ projects: [] }, '173', 'explicit-name'), /unknown project "explicit-name"/);
+  });
+
+  it('refuses an override that looks like an option, even if configured', () => {
+    const config = { projects: [{ name: '--force' }] };
+    assert.throws(() => resolveProjectName(config, '173', '--force'), /unknown project "--force"/);
   });
 
   it('resolves by an exact gitlabProjectId match', () => {
@@ -136,7 +146,7 @@ describe('runAction', () => {
     const result = await runAction('pull', '402:6', { yes: true, dryRun: false }, deps);
 
     assert.equal(result.code, 0);
-    assert.deepEqual(deps.calls.runSyncCli[0][0], ['pull-issue', 'bff', '402', '6']);
+    assert.deepEqual(deps.calls.runSyncCli[0][0], ['pull-issue', '--', 'bff', '402', '6']);
   });
 
   it('aborts when the interactive confirmation is declined', async () => {
@@ -153,7 +163,7 @@ describe('runAction', () => {
     const result = await runAction('retry', '402:6', { yes: true, dryRun: false }, deps);
 
     assert.equal(result.code, 0);
-    assert.deepEqual(deps.calls.runSyncCli[0][0], ['push-issue', 'bff', '402', '6']);
+    assert.deepEqual(deps.calls.runSyncCli[0][0], ['push-issue', '--', 'bff', '402', '6']);
   });
 
   it('calls the publish endpoint with the key split into projectId/iid, bypassing sync config entirely', async () => {
@@ -191,10 +201,12 @@ describe('runAction', () => {
   });
 
   it('honors --project as an override even when the config would otherwise resolve unambiguously', async () => {
-    const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: [string[], string][] } };
+    const deps = makeDeps({
+      loadSyncConfig: () => ({ projects: [{ name: 'bff', gitlabProjectId: '402' }, { name: 'other-name' }] }),
+    }) as ActionDeps & { calls: { runSyncCli: [string[], string][] } };
     await runAction('pull', '402:6', { yes: true, dryRun: false, project: 'other-name' }, deps);
 
-    assert.deepEqual(deps.calls.runSyncCli[0][0], ['pull-issue', 'other-name', '402', '6']);
+    assert.deepEqual(deps.calls.runSyncCli[0][0], ['pull-issue', '--', 'other-name', '402', '6']);
   });
 
   it('uses a custom --reports-url for publish', async () => {
@@ -203,4 +215,45 @@ describe('runAction', () => {
 
     assert.equal(deps.calls.callPublish[0][0], 'http://127.0.0.1:5000');
   });
+});
+
+describe('runAction — untrusted project and reports URL', () => {
+  it('refuses a project that looks like an option without calling runSyncCli', async () => {
+    const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
+    const result = await runAction('retry', '402:6', { yes: true, dryRun: false, project: '--force' }, deps);
+
+    assert.equal(result.code, 1);
+    assert.match(result.output, /unknown project "--force"/);
+    assert.equal(deps.calls.runSyncCli.length, 0);
+  });
+
+  it('refuses a project that is not in the sync config without calling runSyncCli', async () => {
+    const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
+    const result = await runAction('pull', '402:6', { yes: true, dryRun: false, project: 'nope' }, deps);
+
+    assert.equal(result.code, 1);
+    assert.match(result.output, /unknown project "nope"/);
+    assert.equal(deps.calls.runSyncCli.length, 0);
+  });
+
+  for (const badUrl of ['https://example.com', 'http://example.com:4000', 'file:///etc/passwd', 'not a url', 'http://127.0.0.1.example.com']) {
+    it(`refuses reports URL ${JSON.stringify(badUrl)} without calling callPublish`, async () => {
+      const deps = makeDeps() as ActionDeps & { calls: { callPublish: unknown[] } };
+      const result = await runAction('publish', '402:6', { yes: true, dryRun: false, reportsBaseUrl: badUrl }, deps);
+
+      assert.equal(result.code, 1);
+      assert.match(result.output, /Invalid reports URL/);
+      assert.equal(deps.calls.callPublish.length, 0);
+    });
+  }
+
+  for (const goodUrl of ['http://127.0.0.1:4000', 'http://localhost:4000', 'http://[::1]:4000']) {
+    it(`accepts loopback reports URL ${goodUrl}`, async () => {
+      const deps = makeDeps() as ActionDeps & { calls: { callPublish: [string, string, string][] } };
+      const result = await runAction('publish', '402:6', { yes: true, dryRun: false, reportsBaseUrl: goodUrl }, deps);
+
+      assert.equal(result.code, 0);
+      assert.equal(deps.calls.callPublish[0][0], goodUrl);
+    });
+  }
 });

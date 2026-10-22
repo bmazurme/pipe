@@ -328,6 +328,7 @@ export class WorkerService {
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
       requiredCapability: dto.requiredCapability ?? null,
+      timeoutSec: dto.timeoutSec ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
       resultPublicKey: dto.resultPublicKey ?? null,
       notBefore: dto.notBefore ?? carried?.notBefore ?? null,
@@ -395,6 +396,7 @@ export class WorkerService {
         ...(providerCredentialId !== null ? { providerCredentialId } : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
         ...(requiredCapability !== null ? { requiredCapability } : {}),
+        ...(job.timeoutSec != null ? { timeoutSec: job.timeoutSec } : {}),
         ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
         ...(job.resultPublicKey
           ? { resultPublicKey: job.resultPublicKey }

@@ -310,6 +310,7 @@ describe('WorkerController', () => {
       claudeCredentialId: null,
       contextName: null,
       historyCount: null,
+      timeoutSec: null,
       taskKey: '173:628',
       status: 'running',
       logs: 'first chunk\nsecond chunk\n',

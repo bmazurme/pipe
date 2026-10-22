@@ -179,3 +179,29 @@ describe('ImproveHandoffService.handToWorker', () => {
     });
   });
 });
+
+describe('ImproveHandoffService base and PR-head snapshot caches', () => {
+  const head = { sha: 'head-sha', branch: 'improve/7' };
+
+  it('keeps the base snapshot cached across a PR-head hand-off', async () => {
+    const { service, github } = setup();
+
+    await service.prepareSnapshot();
+    await service.handToWorker(3, 'opus', task, 'improve:7', 'f.zip', head);
+    await service.prepareSnapshot();
+
+    expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+    expect(github.downloadZipball).toHaveBeenNthCalledWith(1, 'base-sha');
+    expect(github.downloadZipball).toHaveBeenNthCalledWith(2, 'head-sha');
+  });
+
+  it('downloads one PR head once for consecutive hand-offs', async () => {
+    const { service, github } = setup();
+
+    await service.handToWorker(3, 'opus', task, 'improve:7', 'f.zip', head);
+    await service.handToWorker(3, 'opus', task, 'improve:7', 'f.zip', head);
+
+    expect(github.downloadZipball).toHaveBeenCalledTimes(1);
+    expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
+  });
+});

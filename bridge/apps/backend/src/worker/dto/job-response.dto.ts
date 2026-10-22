@@ -23,6 +23,8 @@ export class JobResponseDto {
   historyCount: number | null;
   // The task the job works on (parcel taskKey, or `file:<id>`), or null for older jobs.
   taskKey: string | null;
+  // The run's time limit in seconds chosen at launch, or null = the worker's own setting.
+  timeoutSec: number | null;
   status: JobStatus;
   logs: string;
   // Only with ?logsFrom=N: then `logs` holds just the characters after the first N,
@@ -57,6 +59,7 @@ export class JobResponseDto {
       contextName: job.contextName ?? null,
       historyCount: job.historyCount ?? null,
       taskKey: job.taskKey ?? null,
+      timeoutSec: job.timeoutSec ?? null,
       status: job.status,
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',

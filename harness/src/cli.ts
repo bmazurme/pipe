@@ -101,7 +101,7 @@ Options:
   --project <name>           override the local project name
                               --pull/--retry resolve from sync.config.json —
                               needed when that resolution is ambiguous
-  --reports-url <url>        override reports' base URL for --publish
+  --reports-url <url>        override reports' base URL for --publish (loopback only)
                               (default: http://127.0.0.1:4000)
   --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
   --sync-state <path>        override .sync-state.json's path

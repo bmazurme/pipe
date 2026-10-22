@@ -31,6 +31,8 @@ export interface RemoteJob {
   // A capability the job needs of its worker (bridge only hands it to a worker that has it): 'fusion' = Autodesk Fusion 360 is
   // open on this machine and the pipe add-in is running.
   requiredCapability?: string | null;
+  // The run's time limit in seconds the owner chose at launch; null/absent = this worker's own jobTimeoutSec.
+  timeoutSec?: number | null;
   status: RemoteJobStatus;
 }
 

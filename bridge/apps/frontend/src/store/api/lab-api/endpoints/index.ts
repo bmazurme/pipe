@@ -2,7 +2,7 @@ import labApi from '..';
 
 export type LabExecutor = 'any' | 'fusion';
 
-export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'no_changes' | 'failed' | 'cancelled';
+export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'issue_open' | 'no_changes' | 'failed' | 'cancelled';
 
 export interface LabProject {
   id: number;
@@ -63,6 +63,9 @@ export interface LabRun {
   branch: string | null;
   prNumber: number | null;
   prUrl: string | null;
+  // Set when the worker's result asked bridge to open a GitHub Issue; independent of prNumber/prUrl.
+  issueNumber: number | null;
+  issueUrl: string | null;
   note: string | null;
   error: string | null;
   createdAt: string;

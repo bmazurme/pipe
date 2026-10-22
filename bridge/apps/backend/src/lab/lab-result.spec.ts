@@ -169,4 +169,12 @@ describe('what the worker is told about its place', () => {
     expect(text).toContain('pull request');
     expect(text).toContain('Nobody can answer a question during the run');
   });
+
+  it('tells the worker how to ask for a GitHub Issue instead of changing files', async () => {
+    const { labEnvironment, ISSUE_MARKER_PATH } = await import('./lab-result');
+    const text = labEnvironment('bmazurme/exp2', 'main');
+
+    expect(text).toContain(ISSUE_MARKER_PATH);
+    expect(text).toContain('open a GitHub Issue');
+  });
 });

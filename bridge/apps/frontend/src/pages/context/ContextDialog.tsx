@@ -18,21 +18,33 @@ import { isTextFile } from '../storage/textFiles';
 interface ContextDialogProps {
   /** The context being edited, or null to create a new one. */
   contextId: number | null;
+  /** Start a new context from a copy of this one instead; `contextId` is ignored then. */
+  copyFromId?: number;
   onClose: () => void;
 }
 
+const COPY_SUFFIX = ' (копия)';
+
+// The copy's name keeps the suffix, so the source name is what gets cut to the limit.
+const copyName = (name: string) => name.slice(0, MAX_CONTEXT_NAME_LENGTH - COPY_SUFFIX.length) + COPY_SUFFIX;
+
 // The list only carries summaries, so an existing context's text is fetched when it is
 // opened; the form itself mounts once that has arrived, so it starts from the real text.
-export function ContextDialog({ contextId, onClose }: ContextDialogProps) {
-  const { data: context, isLoading, isError } = useGetContextQuery(contextId ?? 0, { skip: contextId === null });
+export function ContextDialog({ contextId, copyFromId, onClose }: ContextDialogProps) {
+  const sourceId = copyFromId ?? contextId;
+  const { data: context, isLoading, isError } = useGetContextQuery(sourceId ?? 0, { skip: sourceId === null });
 
-  if (contextId === null) return <ContextForm context={null} onClose={onClose} />;
+  if (sourceId === null) return <ContextForm context={null} onClose={onClose} />;
+
+  // A copy is a new context that starts from the source's text: saving creates, never updates the source.
+  if (context && copyFromId !== undefined)
+    return <ContextForm key={`copy-${context.id}`} context={null} initialName={copyName(context.name)} initialContent={context.content} onClose={onClose} />;
 
   if (context) return <ContextForm key={context.id} context={context} onClose={onClose} />;
 
   return (
     <Dialog open onClose={onClose} maxWidth="l" aria-labelledby="context-dialog-title">
-      <Dialog.Header caption="Изменить контекст" id="context-dialog-title" />
+      <Dialog.Header caption={copyFromId !== undefined ? 'Новый контекст' : 'Изменить контекст'} id="context-dialog-title" />
       <Dialog.Body>
         {isLoading && <Loader size="m" />}
         {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить контекст" />}
@@ -42,11 +54,19 @@ export function ContextDialog({ contextId, onClose }: ContextDialogProps) {
   );
 }
 
-function ContextForm({ context, onClose }: { context: SavedContext | null; onClose: () => void }) {
+interface ContextFormProps {
+  context: SavedContext | null;
+  /** Starting values for a new context (a copy); an existing context starts from its own. */
+  initialName?: string;
+  initialContent?: string;
+  onClose: () => void;
+}
+
+function ContextForm({ context, initialName = context?.name ?? '', initialContent = context?.content ?? '', onClose }: ContextFormProps) {
   const [createContext, { isLoading: isCreating }] = useCreateContextMutation();
   const [updateContext, { isLoading: isUpdating }] = useUpdateContextMutation();
-  const [name, setName] = useState(context?.name ?? '');
-  const [content, setContent] = useState(context?.content ?? '');
+  const [name, setName] = useState(initialName);
+  const [content, setContent] = useState(initialContent);
   const [error, setError] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,7 +78,7 @@ function ContextForm({ context, onClose }: { context: SavedContext | null; onClo
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const isSaving = isCreating || isUpdating;
   // Anything typed or loaded that is not saved yet: closing then asks first, so a stray Escape does not throw it away.
-  const isDirty = name !== (context?.name ?? '') || content !== (context?.content ?? '');
+  const isDirty = name !== initialName || content !== initialContent;
   const nearLimit = content.length > MAX_CONTEXT_LENGTH * 0.9;
 
   // The form can be taller than the window: bring a new error into view instead of leaving it below the fold.

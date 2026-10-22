@@ -23,6 +23,11 @@ import { describeOutcome, describeStage } from './jobStage';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
+// A limit chosen at launch is whole hours from the form, but the API takes any number of seconds.
+function describeTimeout(seconds: number): string {
+  return seconds % 3600 === 0 ? `${seconds / 3600} ч` : `${Math.round(seconds / 60)} мин`;
+}
+
 interface JobDetailDialogProps {
   jobId: number;
   onClose: () => void;
@@ -80,6 +85,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     { label: 'Worker', value: job.workerName ?? '—' },
     job.contextName ? { label: 'Контекст', value: job.contextName } : null,
     job.taskKey ? { label: 'Задача', value: job.taskKey } : null,
+    job.timeoutSec ? { label: 'Лимит времени', value: describeTimeout(job.timeoutSec) } : null,
     job.historyCount ? { label: 'Итоги прошлых запусков', value: String(job.historyCount) } : null,
     job.usage ? { label: 'Расход', value: describeUsage(job.usage) } : null,
   ].filter((field): field is { label: string; value: string } => field !== null);

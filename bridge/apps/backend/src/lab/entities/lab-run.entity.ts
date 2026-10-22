@@ -12,6 +12,9 @@ export enum LabRunStatus {
   // The job succeeded; bridge is committing the result to a branch and opening the pull request.
   Publishing = 'publishing',
   PrOpen = 'pr_open',
+  // The worker asked for a GitHub Issue (see ISSUE_MARKER_PATH in lab-publish.service.ts) instead of, or in
+  // addition to, file changes; one was opened for this run, and there was nothing left worth a pull request.
+  IssueOpen = 'issue_open',
   // The run finished but changed nothing worth a pull request.
   NoChanges = 'no_changes',
   Failed = 'failed',
@@ -90,6 +93,14 @@ export class LabRun extends BaseEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   prUrl: string | null;
+
+  // Set when the worker's result included an issue request (see ISSUE_MARKER_PATH); independent of prNumber/prUrl —
+  // a run can open an issue, a pull request, both, or neither.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  issueNumber: number | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  issueUrl: string | null;
 
   @Column({ type: 'text', nullable: true })
   note: string | null;

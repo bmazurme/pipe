@@ -6,6 +6,7 @@ import { ConflictException } from '@nestjs/common';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
+import { ImproveCiService } from './improve-ci.service';
 import { ImproveHandoffService } from './improve-handoff.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
@@ -907,6 +908,128 @@ describe('ImproveService change of a PR from the chat', () => {
       ctx.service.startPrFix(3, 304, 'x y z', 'sonnet'),
     ).rejects.toThrow(/уже исправляется/);
     expect(ctx.workers.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImproveService PR reservation while a start is handing off', () => {
+  const open = {
+    number: 304,
+    title: 'Allowlist',
+    state: 'open',
+    merged: false,
+    headSha: 'head-sha',
+    headRef: 'improve/issue-297-run-78',
+    headRepo: 'o/r',
+    htmlUrl: 'https://gh/pr/304',
+  };
+  const zipball = zipSync({ 'o-r-sha/a.ts': strToU8('one') });
+
+  // The PR head's download stays open until release() — the slow part of a real handoff.
+  const heldDownload = () => {
+    let release = () => {};
+    let reached = () => {};
+    const downloading = new Promise<void>((resolve) => (reached = resolve));
+    const downloadZipball = jest.fn(
+      () =>
+        new Promise<Uint8Array>((resolve) => {
+          release = () => resolve(zipball);
+          reached();
+        }),
+    );
+
+    return { downloadZipball, downloading, release: () => release() };
+  };
+
+  it('lets only one of two simultaneous changes of a PR start a worker job', async () => {
+    const held = heldDownload();
+    const ctx = setup({
+      runs: { count: jest.fn().mockResolvedValue(0) },
+      github: {
+        getPull: jest.fn().mockResolvedValue(open),
+        downloadZipball: held.downloadZipball,
+      },
+    });
+
+    const first = ctx.service.startPrFix(3, 304, 'one', 'sonnet');
+
+    await held.downloading;
+
+    await expect(
+      ctx.service.startPrFix(3, 304, 'two', 'sonnet'),
+    ).rejects.toThrow(/уже исправляется/);
+
+    held.release();
+    await expect(first).resolves.toMatchObject({ prNumber: 304 });
+    expect(ctx.workers.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes the CI check skip a PR whose change is still handing off', async () => {
+    const held = heldDownload();
+    const ctx = setup({
+      runs: { count: jest.fn().mockResolvedValue(0) },
+      github: {
+        getPull: jest.fn().mockResolvedValue(open),
+        downloadZipball: held.downloadZipball,
+        ciState: jest.fn().mockResolvedValue('failure'),
+        failedChecks: jest.fn().mockResolvedValue([
+          {
+            name: 'bridge',
+            conclusion: 'failure',
+            summary: '',
+            annotations: [],
+          },
+        ]),
+      },
+    });
+    const ci = new ImproveCiService(
+      ctx.runs as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
+      ctx.github as never,
+      ctx.service,
+      ctx.notifier as never,
+    );
+
+    const fix = ctx.service.startPrFix(3, 304, 'one', 'sonnet');
+
+    await held.downloading;
+
+    expect(
+      await ci.checkOne({
+        id: 9,
+        userId: 3,
+        kind: 'issue',
+        issueNumber: 7,
+        issueTitle: 'Fix it',
+        model: 'sonnet',
+        branch: 'improve/issue-297-run-78',
+        prNumber: 304,
+      } as never),
+    ).toBe('repair-running');
+    expect(ctx.notifier.send).not.toHaveBeenCalled();
+
+    held.release();
+    await fix;
+    expect(ctx.workers.create).toHaveBeenCalledTimes(1);
+    expect(held.downloadZipball).toHaveBeenCalledTimes(1);
+  });
+
+  it('frees the PR again after a start that failed', async () => {
+    const getPull = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('GitHub is down'))
+      .mockResolvedValue(open);
+    const ctx = setup({
+      runs: { count: jest.fn().mockResolvedValue(0) },
+      github: { getPull },
+    });
+
+    await expect(
+      ctx.service.startPrFix(3, 304, 'one', 'sonnet'),
+    ).rejects.toThrow('GitHub is down');
+    await expect(
+      ctx.service.startPrFix(3, 304, 'one', 'sonnet'),
+    ).resolves.toMatchObject({ prNumber: 304 });
+    expect(ctx.workers.create).toHaveBeenCalledTimes(1);
   });
 });
 

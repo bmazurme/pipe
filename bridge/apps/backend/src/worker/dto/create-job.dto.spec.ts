@@ -55,3 +55,26 @@ describe('CreateJobDto notBefore', () => {
     expect(errors[0].property).toBe('notBefore');
   });
 });
+
+describe('CreateJobDto timeoutSec', () => {
+  const timeoutErrors = (timeoutSec: unknown) =>
+    validate(
+      plainToInstance(CreateJobDto, {
+        sourceFileId: 1,
+        model: 'sonnet',
+        timeoutSec,
+      }),
+    );
+
+  it('accepts 5 minutes to 4 hours', async () => {
+    for (const timeoutSec of [300, 3600, 7200, 14400]) {
+      expect(await timeoutErrors(timeoutSec)).toHaveLength(0);
+    }
+  });
+
+  it.each([299, 14401, 0, 1800.5, '7200'])('rejects %p', async (value) => {
+    const errors = await timeoutErrors(value);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].property).toBe('timeoutSec');
+  });
+});

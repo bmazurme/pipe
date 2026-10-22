@@ -19,6 +19,10 @@ import {
 export const LAB_MAX_CHANGED_FILES = 200;
 export const LAB_MAX_CHANGED_BYTES = 50 * 1024 * 1024;
 
+// A worker writes this file to ask bridge to open a GitHub Issue instead of, or alongside, a pull request — Lab's only
+// output channel otherwise. lab-publish.service.ts reads and removes it; it is never committed to the repository.
+export const ISSUE_MARKER_PATH = '.lab/issue.json';
+
 export interface LabResult {
   /** Text files left on disk (edited, new, untouched), by path. */
   files: Map<string, Uint8Array>;
@@ -138,6 +142,7 @@ export function labEnvironment(repo: string, baseBranch: string): string {
     'About where you work (Lab):',
     `- The working directory is a snapshot of the repository ${repo} (branch ${baseBranch}) WITHOUT .git. The repository is private and access to it is already arranged: do not clone it, and do not ask who does.`,
     '- Do not commit, push, create branches or open pull requests, and do not look for credentials for it. When you finish, bridge publishes every file you created or changed (text and binary; not `.github/workflows/` and `.git/`) as a branch and a pull request in that repository, which the owner reviews and merges. Just leave the files in the working directory, in the places the project describes (for example calc/ and cad/).',
+    `- If the task specifically asks to open a GitHub Issue (to track or report something) rather than change files, write exactly one file at \`${ISSUE_MARKER_PATH}\` with JSON \`{"title": "...", "body": "..."}\`: bridge opens that Issue for you and never commits this file. Use it only for that — not as a way to leave yourself a note, and not together with unrelated file changes.`,
     '- Nobody can answer a question during the run. If something is unclear or missing, make the most reasonable assumption, say so where the project keeps its decisions and open questions (its documents), and carry on with everything that does not depend on it. A question only blocks the part that really needs the answer, never the whole run.',
   ].join('\n');
 }

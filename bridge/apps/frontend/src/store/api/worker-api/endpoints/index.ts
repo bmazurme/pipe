@@ -64,6 +64,8 @@ export interface WorkerJob {
   historyCount: number | null;
   /** The task the job works on (`173:628`, or `file:<id>`), null for older jobs. */
   taskKey?: string | null;
+  /** The run's time limit in seconds chosen at launch; null = the worker's own setting. */
+  timeoutSec?: number | null;
   status: WorkerJobStatus;
   logs: string;
   /**
@@ -267,6 +269,8 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         contextId?: number;
         includeHistory?: boolean;
         notifyOnFinish?: boolean;
+        /** The run's time limit in seconds (300–14400); absent = the worker's own job timeout. */
+        timeoutSec?: number;
         /** Do not start before this moment (ISO time, a future one, at most 7 days ahead). */
         notBefore?: string;
         /** RSA public key (PEM): the worker encrypts the result parcel with it before uploading. */

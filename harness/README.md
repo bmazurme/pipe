@@ -73,8 +73,8 @@ below.
                             (see "Running actions" below)
 --yes                      skip the confirmation prompt before an action
 --dry-run                  print what an action would do instead of doing it
---project <name>           override project-name resolution for --pull/--retry
---reports-url <url>        override reports' base URL for --publish
+--project <name>           override project-name resolution for --pull/--retry (a configured name)
+--reports-url <url>        override reports' base URL for --publish (loopback only)
 --watch <seconds>          re-run and re-print on an interval (Ctrl+C to stop)
 --sync-state <path>        override .sync-state.json's path
 --sync-agent-state <path>  override .sync-agent-state.json's path
@@ -356,7 +356,10 @@ declares it, or by falling back to the single tracked project when there's
 only one and it declares none at all (the same "no gitlabProjectId = claims
 anything" rule `gitlab-worker` itself uses). Anything more ambiguous than
 that refuses to guess — pass `--project <name>` instead of risking a wrong
-one.
+one. `--project` must itself be a `name` from `sync.config.json` (anything
+else, or anything starting with `-`, is refused), and `--reports-url` must be
+an http(s) URL on `localhost`, `127.0.0.1` or `::1` — both can come from a
+model through `pipe-mcp`, so neither is passed through unchecked.
 
 Every one of these three **requires confirmation** before doing anything:
 interactively, a `[y/N]` prompt; non-interactively (no TTY on stdin,

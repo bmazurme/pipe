@@ -16,6 +16,11 @@ import {
 
 const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
 
+type CachedSnapshot = {
+  files: SnapshotFile[];
+  baseline: Record<string, string>;
+};
+
 export type PreparedSnapshot = {
   baseSha: string;
   files: SnapshotFile[];
@@ -26,12 +31,18 @@ export type PreparedSnapshot = {
 // across consecutive launches) → parcel with the task as its manifest → Storage → job.
 @Injectable()
 export class ImproveHandoffService {
-  // One repo snapshot, reused by consecutive launches on the same base SHA and shared by
-  // concurrent ones. The baseline hashes are cached with it: hashing the whole repo is synchronous.
-  private readonly snapshots = new SharedAsyncCache<{
-    files: SnapshotFile[];
-    baseline: Record<string, string>;
-  }>({ ttlMs: ZIP_CACHE_TTL_MS, maxEntries: 1 });
+  // Repo snapshots, reused by consecutive launches on the same SHA and shared by concurrent
+  // ones. The baseline hashes are cached with them: hashing the whole repo is synchronous.
+  // The base branch (issue runs, analyses) and PR heads (CI repairs, chat PR fixes) have a
+  // cache each, so a repair does not evict the base branch: at most two snapshots in memory.
+  private readonly baseSnapshots = new SharedAsyncCache<CachedSnapshot>({
+    ttlMs: ZIP_CACHE_TTL_MS,
+    maxEntries: 1,
+  });
+  private readonly headSnapshots = new SharedAsyncCache<CachedSnapshot>({
+    ttlMs: ZIP_CACHE_TTL_MS,
+    maxEntries: 1,
+  });
 
   constructor(
     private readonly github: GithubApiService,
@@ -39,14 +50,22 @@ export class ImproveHandoffService {
     private readonly workers: WorkerService,
   ) {}
 
+  // Snapshot of a base-branch commit.
   snapshotAt(sha: string) {
-    return this.snapshots.get(sha, async () => {
-      const files = selectParcelFiles(
-        await readZipball(await this.github.downloadZipball(sha)),
-      );
+    return this.baseSnapshots.get(sha, () => this.loadSnapshot(sha));
+  }
 
-      return { files, baseline: snapshotBaseline(files) };
-    });
+  // Snapshot of a PR head, kept apart from the base branch's.
+  private headSnapshotAt(sha: string) {
+    return this.headSnapshots.get(sha, () => this.loadSnapshot(sha));
+  }
+
+  private async loadSnapshot(sha: string): Promise<CachedSnapshot> {
+    const files = selectParcelFiles(
+      await readZipball(await this.github.downloadZipball(sha)),
+    );
+
+    return { files, baseline: snapshotBaseline(files) };
   }
 
   // Base-branch SHA + parcel files; independent of the task, so it can start early.
@@ -80,7 +99,7 @@ export class ImproveHandoffService {
       (snapshot
         ? {
             baseSha: snapshot.sha,
-            ...(await this.snapshotAt(snapshot.sha)),
+            ...(await this.headSnapshotAt(snapshot.sha)),
           }
         : await this.prepareSnapshot(baseBranch));
     const { buffer } = await buildIssueParcel(
