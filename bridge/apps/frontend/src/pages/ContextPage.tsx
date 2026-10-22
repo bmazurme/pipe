@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
+import { BookOpen, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Loader, Text } from '@gravity-ui/uikit';
 import { Dialog } from '../shared/ui/Dialog';
 
@@ -13,8 +13,8 @@ import styles from './ContextPage.module.css';
 export function ContextPage() {
   const { data: contexts, isLoading, isError } = useListContextsQuery();
   const [deleteContext, { isLoading: isDeleting }] = useDeleteContextMutation();
-  // `undefined` = dialog closed; `null` = creating; an id = editing that context.
-  const [editing, setEditing] = useState<number | null | undefined>(undefined);
+  // `undefined` = dialog closed; `null` = creating; otherwise editing that context, or creating a copy of it.
+  const [editing, setEditing] = useState<{ mode: 'edit' | 'copy'; id: number } | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<ContextSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -71,8 +71,11 @@ export function ContextPage() {
                 </Text>
               </div>
               <div className={styles.rowActions}>
-                <Button view="flat-secondary" size="s" aria-label={`Изменить: ${context.name}`} onClick={() => setEditing(context.id)}>
+                <Button view="flat-secondary" size="s" aria-label={`Изменить: ${context.name}`} onClick={() => setEditing({ mode: 'edit', id: context.id })}>
                   <Icon data={Pencil} size={16} />
+                </Button>
+                <Button view="flat-secondary" size="s" aria-label={`Дублировать: ${context.name}`} onClick={() => setEditing({ mode: 'copy', id: context.id })}>
+                  <Icon data={Copy} size={16} />
                 </Button>
                 <Button
                   view="flat-danger"
@@ -91,7 +94,13 @@ export function ContextPage() {
         </ul>
       )}
 
-      {editing !== undefined && <ContextDialog contextId={editing} onClose={() => setEditing(undefined)} />}
+      {editing !== undefined && (
+        <ContextDialog
+          contextId={editing?.mode === 'edit' ? editing.id : null}
+          copyFromId={editing?.mode === 'copy' ? editing.id : undefined}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
 
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} maxWidth="s" aria-labelledby="delete-context-title">
         <Dialog.Header caption={`Удалить «${deleting?.name ?? ''}»?`} id="delete-context-title" />
