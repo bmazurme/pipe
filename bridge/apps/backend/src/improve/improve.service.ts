@@ -19,6 +19,7 @@ import {
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService } from '../loop/github-api.service';
+import { ZIP_TOTAL_MS } from '../lab/lab-github';
 import { MergeService } from '../loop/merge.service';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -63,6 +64,10 @@ export const ADVANCE_EVERY_MS = 15_000;
 const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
 // A run claimed for publishing and untouched this long was lost to a restart.
 const PUBLISHING_STALE_MS = 10 * 60_000;
+// A run still preparing after the longest possible download plus a margin was lost to a restart.
+const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
+const PREPARE_ABANDONED_ERROR =
+  'Подготовка прервана перезапуском — запустите задачу снова';
 const PUBLISH_ABANDONED_ERROR =
   'Публикация прервана (bridge перезапускался); запустите задачу заново';
 export const AUTOSTART_MIN_AGE_SECONDS = 10;
@@ -232,33 +237,13 @@ export class ImproveService {
       );
     }
 
-    // The base snapshot does not depend on the issue: fetch both together. A
-    // not-open issue is still rejected before any file or job is created.
-    const [issue, prepared] = await Promise.all([
-      this.github.getIssue(issueNumber),
-      this.handoff.prepareSnapshot(),
-    ]);
+    const issue = await this.github.getIssue(issueNumber);
 
     if (issue.isPull || issue.state !== 'open') {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
     }
 
-    const { job, baseSha, baseline, fileCount } =
-      await this.handoff.handToWorker(
-        userId,
-        model,
-        {
-          number: issue.number,
-          title: issue.title,
-          body: withDefinitionOfDone(issue.body),
-        },
-        `improve:${issue.number}`,
-        `improve-${issue.number}.subscription.zip`,
-        undefined,
-        prepared,
-        contextId,
-      );
-
+    // Recorded before the slow part so that a second start of the same issue sees it as active.
     const run = await this.runs.save(
       this.runs.create({
         userId,
@@ -268,25 +253,87 @@ export class ImproveService {
         model,
         trigger,
         scheduleId,
-        status: ImproveRunStatus.Queued,
-        jobId: job.id,
-        baseSha,
-        baseline: JSON.stringify(baseline),
+        status: ImproveRunStatus.Preparing,
+        jobId: null,
       }),
     );
 
-    this.log(
-      'info',
-      'improve.run_started',
-      `Run ${run.id}: issue #${issue.number} → job ${job.id} (${model}, ${trigger})`,
-      {
-        runId: run.id,
-        jobId: job.id,
-        files: fileCount,
-      },
+    this.prepareRun(run, issue, contextId).catch((error) =>
+      this.logger.warn(
+        `Run ${run.id} could not be prepared: ${message(error)}`,
+      ),
     );
 
     return run;
+  }
+
+  // The slow part of a start: the snapshot download and the parcel. Its outcome lands on the run
+  // row (Queued with the job, or Failed with the reason); it never rejects.
+  private async prepareRun(
+    run: ImproveRun,
+    issue: { number: number; title: string; body: string },
+    contextId: number | null,
+  ): Promise<void> {
+    try {
+      const prepared = await this.handoff.prepareSnapshot();
+      const { job, baseSha, baseline, fileCount } =
+        await this.handoff.handToWorker(
+          run.userId,
+          run.model,
+          {
+            number: issue.number,
+            title: issue.title,
+            body: withDefinitionOfDone(issue.body),
+          },
+          `improve:${issue.number}`,
+          `improve-${issue.number}.subscription.zip`,
+          undefined,
+          prepared,
+          contextId,
+        );
+
+      // Guarded by status: a run that was failed as lost in the meantime stays so.
+      const res = await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Preparing },
+        {
+          status: ImproveRunStatus.Queued,
+          jobId: job.id,
+          baseSha,
+          baseline: JSON.stringify(baseline),
+        },
+      );
+
+      if (res.affected !== 1) {
+        await this.workers.cancel(job.id, run.userId).catch(() => undefined);
+
+        return;
+      }
+
+      run.status = ImproveRunStatus.Queued;
+      run.jobId = job.id;
+      run.baseSha = baseSha;
+      this.log(
+        'info',
+        'improve.run_started',
+        `Run ${run.id}: issue #${issue.number} → job ${job.id} (${run.model}, ${run.trigger})`,
+        { runId: run.id, jobId: job.id, files: fileCount },
+      );
+    } catch (error) {
+      await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Preparing },
+        {
+          status: ImproveRunStatus.Failed,
+          error: message(error),
+          finishedAt: new Date(),
+        },
+      );
+      this.log(
+        'warn',
+        'improve.run_prepare_failed',
+        `Run ${run.id}: issue #${issue.number} could not be prepared: ${message(error)}`,
+        { runId: run.id },
+      );
+    }
   }
 
   // CI went red on an open Improve PR: a worker gets the PR's branch as it is now, with the failing
@@ -687,6 +734,18 @@ export class ImproveService {
   // good. The claim bumps `updatedAt`; one untouched for longer than the bound is
   // dead. Not retried on its own: a half-made branch or PR may already exist.
   private async abandonStalePublishing(): Promise<void> {
+    await this.runs.update(
+      {
+        status: ImproveRunStatus.Preparing,
+        updatedAt: LessThan(new Date(Date.now() - PREPARING_STALE_MS)),
+      },
+      {
+        status: ImproveRunStatus.Failed,
+        error: PREPARE_ABANDONED_ERROR,
+        finishedAt: new Date(),
+      },
+    );
+
     const stale = await this.runs.find({
       where: {
         status: ImproveRunStatus.Publishing,

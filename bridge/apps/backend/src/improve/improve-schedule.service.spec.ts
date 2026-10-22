@@ -279,6 +279,7 @@ describe('schedules', () => {
       });
 
       await service.fire({ ...base, kind: 'issues', contextId: 4 } as never);
+      for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
 
       expect(workers.create).toHaveBeenCalledWith(
         3,

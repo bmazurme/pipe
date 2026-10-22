@@ -2,7 +2,7 @@ import type { AnalysisCategory, AnalysisItem, ImproveRun, ImproveRunStatus, Impr
 import { MODEL_OPTIONS } from '../worker/constants';
 
 export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
-  preparing: 'Готовим запуск',
+  preparing: 'Готовится',
   queued: 'В очереди',
   running: 'Выполняется',
   publishing: 'Открываем PR',
@@ -29,7 +29,7 @@ export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'suc
   cancelled: 'warning',
 };
 
-export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['queued', 'running', 'publishing'];
+export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['preparing', 'queued', 'running', 'publishing'];
 
 export const isActiveRun = (run: Pick<ImproveRun, 'status'> | null | undefined): boolean =>
   Boolean(run) && ACTIVE_RUN_STATUSES.includes((run as ImproveRun).status);

@@ -3,6 +3,8 @@ import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../base.entity';
 
 export enum ImproveRunStatus {
+  // The run is recorded; the snapshot and the parcel are still being built in the background.
+  Preparing = 'preparing',
   // The worker job exists and has not finished (queued/claimed vs running).
   Queued = 'queued',
   Running = 'running',
@@ -20,6 +22,7 @@ export enum ImproveRunStatus {
 }
 
 export const ACTIVE_RUN_STATUSES = [
+  ImproveRunStatus.Preparing,
   ImproveRunStatus.Queued,
   ImproveRunStatus.Running,
   ImproveRunStatus.Publishing,
