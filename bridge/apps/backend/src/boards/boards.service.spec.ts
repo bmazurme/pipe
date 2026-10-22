@@ -127,6 +127,42 @@ describe('BoardsService.recordReport', () => {
     expect(again.notifier.send).not.toHaveBeenCalled();
   });
 
+  it('keeps retrying the announcement while Telegram does not deliver it', async () => {
+    const failed = setup(null);
+
+    failed.notifier.sendWithButtons.mockResolvedValue(false);
+    await failed.service.recordReport(
+      7,
+      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
+    );
+
+    expect(failed.saved[0].announcedKey).toBeNull();
+
+    const again = setup({ ...fresh(), announcedKey: null });
+
+    await again.service.recordReport(
+      7,
+      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
+    );
+
+    expect(again.notifier.sendWithButtons).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the old key when the "current again" message is not delivered', async () => {
+    const { service, notifier, saved } = setup({
+      ...fresh(),
+      announcedKey: 'old',
+    });
+
+    notifier.send.mockResolvedValue(false);
+    await service.recordReport(
+      7,
+      dto([script('infra/scriptcheck/check-scripts.sh', 'current')]),
+    );
+
+    expect(saved[0].announcedKey).toBe('old');
+  });
+
   it('says so once when the board is current again', async () => {
     const { service, notifier, saved } = setup({
       ...fresh(),
