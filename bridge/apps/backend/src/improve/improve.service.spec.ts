@@ -131,11 +131,18 @@ function setup(
   };
 }
 
+// The slow part of a start runs in the background: let it settle.
+const settle = async () => {
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+};
+
 describe('ImproveService.startRun', () => {
-  it('snapshots the repo, stores the parcel, starts a worker job and records the run', async () => {
+  it('records the run, then snapshots the repo, stores the parcel and starts a worker job', async () => {
     const { service, github, storage, workers, runs } = setup();
 
     const run = await service.startRun(3, 7, 'sonnet');
+
+    await settle();
 
     expect(github.getBranchSha).toHaveBeenCalledWith('main');
     expect(github.downloadZipball).toHaveBeenCalledWith('base-sha');
@@ -156,13 +163,72 @@ describe('ImproveService.startRun', () => {
     expect(runs.save).toHaveBeenCalledWith(
       expect.objectContaining({
         issueNumber: 7,
-        jobId: 321,
-        baseSha: 'base-sha',
-        status: 'queued',
+        jobId: null,
+        status: 'preparing',
       }),
     );
-    expect(JSON.parse(run.baseline as string)).toEqual(
-      JSON.parse(baselineOf(BASE)),
+
+    const [where, patch] = runs.update.mock.calls[0];
+
+    expect(where).toEqual({ id: run.id, status: 'preparing' });
+    expect(patch).toMatchObject({
+      jobId: 321,
+      baseSha: 'base-sha',
+      status: 'queued',
+    });
+    expect(JSON.parse(patch.baseline)).toEqual(JSON.parse(baselineOf(BASE)));
+  });
+
+  it('answers before a slow snapshot has finished', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    const slow = setup({
+      github: {
+        getBranchSha: jest.fn(
+          () => new Promise((resolve) => (release = resolve)),
+        ),
+      },
+    });
+
+    const run = await slow.service.startRun(3, 7, 'sonnet');
+
+    expect(run.status).toBe(ImproveRunStatus.Preparing);
+    expect(slow.workers.create).not.toHaveBeenCalled();
+    release('base-sha');
+    await settle();
+    expect(slow.workers.create).toHaveBeenCalled();
+  });
+
+  it('marks the run failed with the reason when the snapshot cannot be taken', async () => {
+    const broken = setup({
+      github: {
+        getBranchSha: jest.fn().mockRejectedValue(new Error('github is down')),
+      },
+    });
+
+    const run = await broken.service.startRun(3, 7, 'sonnet');
+
+    await settle();
+    expect(broken.runs.update).toHaveBeenCalledWith(
+      { id: run.id, status: 'preparing' },
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('github is down'),
+      }),
+    );
+    expect(broken.workers.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a second start of an issue whose run is still preparing', async () => {
+    const preparing = setup({
+      runs: {
+        findOne: jest
+          .fn()
+          .mockResolvedValue({ status: ImproveRunStatus.Preparing }),
+      },
+    });
+
+    await expect(preparing.service.startRun(3, 7, 'sonnet')).rejects.toThrow(
+      ConflictException,
     );
   });
 
@@ -351,6 +417,7 @@ describe('ImproveService.startRun task text', () => {
     const { service, storage } = setup();
 
     await service.startRun(3, 7, 'sonnet');
+    await settle();
 
     const parcel = unzipSync(
       new Uint8Array(storage.createFromBuffer.mock.calls[0][1]),
@@ -672,7 +739,10 @@ describe('ImproveService.advance — stale publishing runs', () => {
 
     await service.advance();
 
-    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.anything() }),
+      expect.anything(),
+    );
   });
 });
 
@@ -708,7 +778,10 @@ describe('ImproveService.cancelRun', () => {
     await expect(service.cancelRun(5, 1)).rejects.toBeInstanceOf(
       ConflictException,
     );
-    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.anything() }),
+      expect.anything(),
+    );
     expect(runs.save).not.toHaveBeenCalled();
     expect(workers.cancel).not.toHaveBeenCalled();
   });
@@ -801,7 +874,10 @@ describe('ImproveService following a retried job', () => {
     await service.advance();
 
     expect(workers.findRetriesOf).toHaveBeenCalledWith([]);
-    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.anything() }),
+      expect.anything(),
+    );
   });
 
   it('leaves a run alone when its job was not retried', async () => {
@@ -809,7 +885,10 @@ describe('ImproveService following a retried job', () => {
 
     await service.advance();
 
-    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.anything() }),
+      expect.anything(),
+    );
   });
 
   it('never follows a job that belongs to someone else', async () => {
@@ -821,7 +900,10 @@ describe('ImproveService following a retried job', () => {
 
     await service.advance();
 
-    expect(runs.update).not.toHaveBeenCalled();
+    expect(runs.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.anything() }),
+      expect.anything(),
+    );
   });
 });
 

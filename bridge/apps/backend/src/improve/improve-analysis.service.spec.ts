@@ -418,8 +418,8 @@ describe('ImproveService start concurrency', () => {
     await expect(started).resolves.toMatchObject({ jobId: 321 });
   });
 
-  it('fetches the issue and the base SHA together and creates nothing for a closed issue', async () => {
-    const { service, github, storage, workers } = setup();
+  it('creates no run and no job for a closed issue', async () => {
+    const { service, github, storage, workers, runs } = setup();
     let releaseIssue!: (v: unknown) => void;
 
     const getIssue = jest.fn(
@@ -433,10 +433,11 @@ describe('ImproveService start concurrency', () => {
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(getIssue).toHaveBeenCalledTimes(1);
-    expect(github.getBranchSha).toHaveBeenCalledTimes(1);
+    expect(github.getBranchSha).not.toHaveBeenCalled();
 
     releaseIssue({ number: 7, title: 't', body: '', state: 'closed' });
     await assertion;
+    expect(runs.save).not.toHaveBeenCalled();
     expect(storage.createFromBuffer).not.toHaveBeenCalled();
     expect(workers.create).not.toHaveBeenCalled();
   });
@@ -476,7 +477,10 @@ describe('ImproveService in-process start guard', () => {
     let release!: (v: Uint8Array) => void;
 
     Object.assign(github, {
-      getIssue: jest.fn(async (n: number) => openIssue(n)),
+      getIssue: jest.fn(
+        (n: number) =>
+          new Promise((resolve) => setTimeout(() => resolve(openIssue(n)), 20)),
+      ),
     });
     github.downloadZipball.mockReturnValue(
       new Promise<Uint8Array>((resolve) => (release = resolve)),
@@ -492,6 +496,7 @@ describe('ImproveService in-process start guard', () => {
 
     release(zipSync({ 'o-r-sha/a.ts': strToU8('one') }));
     await Promise.all([a, b]);
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
     expect(workers.create).toHaveBeenCalledTimes(2);
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { blocksNewRun, describeSchedule, formatTime, isActiveRun, parseTime } from './improveLabels';
+import { blocksNewRun, describeSchedule, formatTime, isActiveRun, parseTime, RUN_STATUS_LABEL } from './improveLabels';
 
 describe('improve labels', () => {
   it('describes a schedule in words, with the right Russian plural', () => {
@@ -70,5 +70,13 @@ describe('validateScheduleForm', () => {
     expect(validateScheduleForm({ ...form, time: '25:00' })).toMatch(/ЧЧ:ММ/);
     expect(validateScheduleForm({ ...form, count: '0' })).toMatch(/от 1 до 20/);
     expect(validateScheduleForm({ ...form, count: '2.5' })).toMatch(/от 1 до 20/);
+  });
+});
+
+describe('a preparing run', () => {
+  it('is labelled, active and blocks a new run', () => {
+    expect(RUN_STATUS_LABEL.preparing).toBe('Готовится');
+    expect(isActiveRun({ status: 'preparing' })).toBe(true);
+    expect(blocksNewRun({ status: 'preparing' })).toBe(true);
   });
 });
