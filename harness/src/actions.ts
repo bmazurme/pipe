@@ -44,9 +44,16 @@ export function loadMinimalSyncConfig(configPath: string): MinimalSyncConfig {
 // setups often omit it (gitlabWorker.ts's own "no gitlabProjectId = claims
 // anything" fallback, mirrored in the single-project branch below) — so
 // this is a best-effort resolution with an explicit escape hatch
-// (--project), not a guarantee for every possible config.
+// (--project), not a guarantee for every possible config. The override can
+// come from model-generated MCP tool arguments, so it must name a project
+// that is actually configured — and never look like an option to sync-cli.
 export function resolveProjectName(config: MinimalSyncConfig, projectId: string, override?: string): string {
-  if (override) return override;
+  if (override !== undefined) {
+    if (override.startsWith('-') || !config.projects.some((p) => p.name === override)) {
+      throw new Error(`unknown project "${override}" — see "sync-cli list"`);
+    }
+    return override;
+  }
 
   const exact = config.projects.filter((p) => p.gitlabProjectId === projectId);
   if (exact.length === 1) return exact[0].name;
@@ -63,6 +70,22 @@ export function resolveProjectName(config: MinimalSyncConfig, projectId: string,
   throw new Error(
     `can't tell which tracked project corresponds to GitLab project ${projectId} — pass --project <name> (see "sync-cli list")`,
   );
+}
+
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+// reports only listens on loopback by default (packages/server/src/index.ts),
+// and the URL can come from model-generated MCP tool arguments — anything
+// else would let a model make this machine POST to an arbitrary host and
+// read the reply back in the tool output.
+export function isLoopbackHttpUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTNAMES.has(url.hostname);
 }
 
 export interface ActionOptions {
@@ -194,6 +217,9 @@ export async function runAction(
   }
 
   const reportsBaseUrl = options.reportsBaseUrl ?? DEFAULT_REPORTS_BASE_URL;
+  if (!isLoopbackHttpUrl(reportsBaseUrl)) {
+    return { code: 1, output: `Invalid reports URL "${reportsBaseUrl}" — expected an http(s) URL on localhost, 127.0.0.1 or ::1` };
+  }
 
   let name: string | undefined;
   if (kind !== 'publish') {
@@ -232,5 +258,6 @@ export async function runAction(
 
   const cliPath = options.syncCliPath ?? DEFAULT_SYNC_CLI_PATH;
   const command = kind === 'pull' ? 'pull-issue' : 'push-issue';
-  return deps.runSyncCli([command, name!, projectId, iid], cliPath);
+  // `--` so no positional value can ever be parsed as an option by commander.
+  return deps.runSyncCli([command, '--', name!, projectId, iid], cliPath);
 }

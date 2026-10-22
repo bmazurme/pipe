@@ -140,7 +140,7 @@ describe('pipe-mcp', () => {
     const result = await c.callTool({ name: 'retry', arguments: { key: '402:6', yes: true } });
 
     assert.equal(result.isError, false);
-    assert.deepEqual(calls[0][0], ['push-issue', 'bff', '402', '6']);
+    assert.deepEqual(calls[0][0], ['push-issue', '--', 'bff', '402', '6']);
   });
 
   it('publish surfaces a failure as isError, with the real message as the tool text', async () => {
@@ -156,5 +156,33 @@ describe('pipe-mcp', () => {
 
     assert.equal(result.isError, true);
     assert.match(content[0].text, /publish failed \(500\): boom/);
+  });
+
+  it('retry refuses a project override that looks like an option, without calling runSyncCli', async () => {
+    const calls: unknown[][] = [];
+    const actionDeps = makeFakeActionDeps({ runSyncCli: async (...args) => (calls.push(args), { code: 0, output: '' }) });
+
+    const c = await connect({ actionDeps });
+    const result = await c.callTool({ name: 'retry', arguments: { key: '402:6', yes: true, project: '--force' } });
+    const content = result.content as { type: string; text: string }[];
+
+    assert.equal(result.isError, true);
+    assert.match(content[0].text, /unknown project "--force"/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('publish refuses a non-loopback reportsUrl, without calling callPublish', async () => {
+    const calls: unknown[][] = [];
+    const actionDeps = makeFakeActionDeps({
+      callPublish: async (...args) => {
+        calls.push(args);
+      },
+    });
+
+    const c = await connect({ actionDeps });
+    const result = await c.callTool({ name: 'publish', arguments: { key: '402:6', yes: true, reportsUrl: 'https://example.com' } });
+
+    assert.equal(result.isError, true);
+    assert.equal(calls.length, 0);
   });
 });
