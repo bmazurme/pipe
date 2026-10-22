@@ -74,6 +74,12 @@ export class OauthService {
         );
         return this.fail(response, 'disabled');
       }
+      if (!(await this.deploymentAccess.isUserAllowed(identity.userId))) {
+        this.logger.warn(
+          `Blocked sign-in for user ${identity.userId}: not in EMAILS`,
+        );
+        return this.fail(response, 'not-allowed');
+      }
       await this.identitiesService.markUsed(identity, providerUserId, email);
       userId = identity.userId;
     } else {
