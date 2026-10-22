@@ -77,6 +77,11 @@ export class WorkerBridgeClient {
     return reportClaudeUsage(this.apiUrl, this.apiKey, report, jobId);
   }
 
+  // The open questions a run left, for bridge's Questions page; the caller treats a failure as non-fatal.
+  async reportQuestions(jobId: number, questions: string[]): Promise<void> {
+    await this.post(`/${jobId}/questions`, `Reporting questions for job ${jobId}`, { questions });
+  }
+
   async downloadParcel(jobId: number): Promise<Buffer> {
     const response = await this.get(`/${jobId}/parcel`, `Downloading parcel for job ${jobId}`, TRANSFER_TIMEOUT_MS);
 

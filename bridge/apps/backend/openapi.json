@@ -1499,6 +1499,36 @@
         }
       }
     },
+    "/api/v1/worker/jobs/{id}/questions": {
+      "post": {
+        "operationId": "WorkerController_reportQuestions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportQuestionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}/logs": {
       "post": {
         "operationId": "WorkerController_appendLog",
@@ -1926,6 +1956,73 @@
         "responses": {
           "204": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/questions": {
+      "get": {
+        "operationId": "QuestionsController_list",
+        "parameters": [
+          {
+            "name": "archived",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionCardDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/questions/{id}": {
+      "patch": {
+        "operationId": "QuestionsController_resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveQuestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionItemDto"
+                }
+              }
+            }
           }
         }
       }
@@ -5203,6 +5300,21 @@
           "status"
         ]
       },
+      "ReportQuestionsDto": {
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "required": [
+          "questions"
+        ]
+      },
       "AppendJobLogDto": {
         "type": "object",
         "properties": {
@@ -5850,6 +5962,77 @@
         },
         "required": [
           "failedJobs"
+        ]
+      },
+      "QuestionItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          },
+          "resolved": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "resolved",
+          "createdAt"
+        ]
+      },
+      "QuestionCardDto": {
+        "type": "object",
+        "properties": {
+          "taskKey": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionItemDto"
+            }
+          },
+          "openCount": {
+            "type": "number"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskKey",
+          "project",
+          "questions",
+          "openCount",
+          "archived",
+          "updatedAt"
+        ]
+      },
+      "ResolveQuestionDto": {
+        "type": "object",
+        "properties": {
+          "resolved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resolved"
         ]
       },
       "CreateImproveIssueDto": {

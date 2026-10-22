@@ -26,8 +26,10 @@ export { default as improveApi } from './improve-api';
 export { default as contextApi } from './context-api';
 export { default as labApi } from './lab-api';
 export { default as boardsApi } from './boards-api';
+export { default as questionsApi } from './questions-api';
 
 export * from './auth-api/endpoints';
+export * from './questions-api/endpoints';
 export * from './users-api/endpoints';
 export * from './storage-api/endpoints';
 export * from './purge-api/endpoints';

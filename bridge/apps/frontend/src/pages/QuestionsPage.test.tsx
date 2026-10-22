@@ -1,0 +1,100 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@gravity-ui/uikit';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { store } from '../store';
+import { questionsApi } from '../store/api';
+import { QuestionsPage } from './QuestionsPage';
+
+const CARD = {
+  taskKey: '173:628',
+  project: '173',
+  questions: [
+    { id: 1, text: 'Какую ветку брать за основу?', resolved: false, createdAt: '2026-10-22T10:00:00.000Z' },
+    { id: 2, text: 'Нужна ли миграция?', resolved: true, createdAt: '2026-10-22T10:00:00.000Z' },
+  ],
+  openCount: 1,
+  archived: false,
+  updatedAt: '2026-10-22T10:05:00.000Z',
+};
+
+type Sent = { method: string; path: string; body: unknown };
+let sent: Sent[];
+let cards: Record<string, unknown[]>;
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+beforeEach(() => {
+  sent = [];
+  cards = { false: [CARD], true: [] };
+  store.dispatch(questionsApi.util.resetApiState());
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      const path = url.pathname.replace('/api/v1/', '');
+
+      if (request.method === 'GET') {
+        sent.push({ method: 'GET', path: path + url.search, body: undefined });
+        return json(cards[url.searchParams.get('archived') ?? 'false']);
+      }
+
+      sent.push({ method: request.method, path, body: await request.json().catch(() => undefined) });
+      return json({ id: 1, text: 'x', resolved: true, createdAt: 'x' });
+    }),
+  );
+});
+
+const renderPage = () =>
+  render(
+    <Provider store={store}>
+      <ThemeProvider theme="light">
+        <MemoryRouter>
+          <QuestionsPage />
+        </MemoryRouter>
+      </ThemeProvider>
+    </Provider>,
+  );
+
+describe('QuestionsPage', () => {
+  it('shows a card tagged with the project number and its questions as checkboxes', async () => {
+    renderPage();
+
+    expect(await screen.findByText('Проект 173')).toBeTruthy();
+    expect(screen.getByText('173:628')).toBeTruthy();
+    expect(screen.getByLabelText('Какую ветку брать за основу?')).not.toBeChecked();
+    expect(screen.getByLabelText('Нужна ли миграция?')).toBeChecked();
+    expect(screen.getByText(/открыто: 1 из 2/)).toBeTruthy();
+  });
+
+  it('ticking a question sends it as resolved', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Какую ветку брать за основу?'));
+
+    await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { resolved: true } }]));
+  });
+
+  it('the archive tab asks for archived cards', async () => {
+    const user = userEvent.setup();
+    cards.true = [{ ...CARD, questions: CARD.questions.map((q) => ({ ...q, resolved: true })), openCount: 0, archived: true }];
+    renderPage();
+
+    await screen.findByText('Проект 173');
+    await user.click(screen.getByText('Архив'));
+
+    expect(await screen.findByText(/все закрыты/)).toBeTruthy();
+    expect(sent.some((s) => s.path === 'questions?archived=true')).toBe(true);
+  });
+
+  it('shows an empty state when nothing is open', async () => {
+    cards.false = [];
+    renderPage();
+
+    expect(await screen.findByText('Открытых вопросов нет')).toBeTruthy();
+  });
+});

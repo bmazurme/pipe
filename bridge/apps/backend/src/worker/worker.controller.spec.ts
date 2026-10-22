@@ -5,6 +5,7 @@ import request from 'supertest';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
+import { QuestionsService } from '../questions/questions.service';
 import { ClaudeUsageService } from './claude-usage.service';
 import { LimitAlertsService } from './limit-alerts.service';
 import { RunCredentialsService } from './run-credentials.service';
@@ -18,6 +19,7 @@ describe('WorkerController', () => {
   let controller: WorkerController;
   let workerService: { recordHeartbeat: jest.Mock; assertHeldBy: jest.Mock };
   let workersService: { touch: jest.Mock };
+  const questionsService = { addFromRun: jest.fn() };
   const claudeUsage = {
     recordReport: jest.fn(),
     recordUsedCredential: jest.fn(),
@@ -38,6 +40,7 @@ describe('WorkerController', () => {
         { provide: WorkersService, useValue: workersService },
         { provide: LimitAlertsService, useValue: limitAlerts },
         { provide: ClaudeUsageService, useValue: claudeUsage },
+        { provide: QuestionsService, useValue: questionsService },
       ],
     })
       .overrideGuard(JwtOrApiKeyGuard)
@@ -93,6 +96,7 @@ describe('WorkerController', () => {
           },
           { provide: LimitAlertsService, useValue: limitAlerts },
           { provide: ClaudeUsageService, useValue: claudeUsage },
+          { provide: QuestionsService, useValue: questionsService },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)
@@ -342,6 +346,7 @@ describe('WorkerController', () => {
           { provide: WorkersService, useValue: workersService },
           { provide: LimitAlertsService, useValue: limitAlerts },
           { provide: ClaudeUsageService, useValue: claudeUsage },
+          { provide: QuestionsService, useValue: questionsService },
         ],
       })
         .overrideGuard(JwtOrApiKeyGuard)

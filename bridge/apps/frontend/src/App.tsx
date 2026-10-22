@@ -24,6 +24,9 @@ const ProfilePage = lazy(() =>
 const StoragePage = lazy(() =>
   import('./pages/StoragePage').then((m) => ({ default: m.StoragePage })),
 );
+const QuestionsPage = lazy(() =>
+  import('./pages/QuestionsPage').then((m) => ({ default: m.QuestionsPage })),
+);
 const ContextPage = lazy(() =>
   import('./pages/ContextPage').then((m) => ({ default: m.ContextPage })),
 );
@@ -107,6 +110,7 @@ export function App() {
                   }
                 />
                 <Route path="/context" element={<ContextPage />} />
+                <Route path="/questions" element={<QuestionsPage />} />
                 <Route path="/keys" element={<KeysPage />} />
                 <Route path="/secrets" element={<SecretsPage />} />
                 <Route path="/time" element={<TimePage />} />

@@ -1,5 +1,6 @@
 import {
   Bucket,
+  CircleQuestion,
   BookOpen,
   Clock,
   Comments,
@@ -127,6 +128,14 @@ export const SERVICES: ServiceLink[] = [
     description: 'Сохранённый контекст для задач ИИ-агента: заметки о проекте и правила, которые можно прикрепить при запуске.',
     icon: BookOpen,
     path: '/context',
+    group: 'agent',
+  },
+  {
+    id: 'questions',
+    title: 'Questions',
+    description: 'Открытые вопросы по задачам: worker достаёт их из вывода запуска, а вы отмечаете закрытые. Закрыты все — карточка уходит в архив.',
+    icon: CircleQuestion,
+    path: '/questions',
     group: 'agent',
   },
   {
