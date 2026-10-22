@@ -16,6 +16,7 @@ import { AddWorkerDialog } from './AddWorkerDialog';
 import { DeleteWorkerDialog } from './DeleteWorkerDialog';
 import { WORKER_STATUS_POLL_INTERVAL_MS } from './constants';
 import { WorkerCard } from './WorkerCard';
+import { ReconnectWorkerDialog } from './ReconnectWorkerDialog';
 import { WorkerSettingsDialog } from './WorkerSettingsDialog';
 
 interface WorkersTabProps {
@@ -38,6 +39,7 @@ export function WorkersTab({ jobs, onOpenJob }: WorkersTabProps) {
   const [enrolling, setEnrolling] = useState<CreatedFleetWorker | undefined>(undefined);
   const [editing, setEditing] = useState<FleetWorker | undefined>(undefined);
   const [deleting, setDeleting] = useState<FleetWorker | undefined>(undefined);
+  const [reconnecting, setReconnecting] = useState<FleetWorker | undefined>(undefined);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
   // A new code for a worker that already exists: the old key (if it had one) stops working now.
@@ -106,7 +108,7 @@ export function WorkersTab({ jobs, onOpenJob }: WorkersTabProps) {
                 activeJob={activeJobOf(worker)}
                 onOpenJob={onOpenJob}
                 onSettings={setEditing}
-                onReconnect={(target) => void handleReconnect(target)}
+                onReconnect={(target) => (target.state === 'pending' ? void handleReconnect(target) : setReconnecting(target))}
                 onDelete={setDeleting}
               />
             </li>
@@ -116,6 +118,16 @@ export function WorkersTab({ jobs, onOpenJob }: WorkersTabProps) {
 
       <AddWorkerDialog open={isAddOpen || enrolling !== undefined} onClose={closeEnrollDialog} existing={enrolling} />
       {editing && <WorkerSettingsDialog worker={editing} onClose={() => setEditing(undefined)} />}
+      {reconnecting && (
+        <ReconnectWorkerDialog
+          worker={reconnecting}
+          onConfirm={() => {
+            void handleReconnect(reconnecting);
+            setReconnecting(undefined);
+          }}
+          onClose={() => setReconnecting(undefined)}
+        />
+      )}
       {deleting && <DeleteWorkerDialog worker={deleting} onClose={() => setDeleting(undefined)} />}
     </div>
   );
