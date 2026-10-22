@@ -690,8 +690,29 @@ describe('WorkersTab — reconnecting and deleting', () => {
 
     await user.click(await screen.findByRole('button', { name: /Подключить заново/ }));
 
+    // Nothing is issued until the owner confirms: the old key stops working the moment a code is.
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText(/текущий ключ worker'а перестанет действовать сразу/)).toBeTruthy();
+    expect(sent('POST', '/workers/1/enroll-code')).toHaveLength(0);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Подключить заново' }));
+
     expect(await screen.findByText('brn_AGAIN')).toBeTruthy();
     expect(sent('POST', '/workers/1/enroll-code')).toHaveLength(1);
+  });
+
+  it('cancelling the reconnect confirmation issues no code', async () => {
+    const user = userEvent.setup();
+
+    workers = [fleetWorker({ id: 1 })];
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: /Подключить заново/ }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Отмена' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent('POST', '/workers/1/enroll-code')).toHaveLength(0);
   });
 
   it('asks before deleting, says what will happen, then deletes', async () => {
