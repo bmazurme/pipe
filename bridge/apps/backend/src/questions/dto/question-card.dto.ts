@@ -2,6 +2,7 @@ export class QuestionItemDto {
   id: number;
   text: string;
   resolved: boolean;
+  answer: string | null;
   createdAt: Date;
 }
 

@@ -13,8 +13,8 @@ const CARD = {
   taskKey: '173:628',
   project: '173',
   questions: [
-    { id: 1, text: 'Какую ветку брать за основу?', resolved: false, createdAt: '2026-10-22T10:00:00.000Z' },
-    { id: 2, text: 'Нужна ли миграция?', resolved: true, createdAt: '2026-10-22T10:00:00.000Z' },
+    { id: 1, text: 'Какую ветку брать за основу?', resolved: false, answer: null, createdAt: '2026-10-22T10:00:00.000Z' },
+    { id: 2, text: 'Нужна ли миграция?', resolved: true, answer: 'Нужна', createdAt: '2026-10-22T10:00:00.000Z' },
   ],
   openCount: 1,
   archived: false,
@@ -77,6 +77,20 @@ describe('QuestionsPage', () => {
     await user.click(await screen.findByLabelText('Какую ветку брать за основу?'));
 
     await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { resolved: true } }]));
+  });
+
+  it('sends an answer for an open question and saves the answers as a Context', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await screen.findByLabelText('Ответ: Какую ветку брать за основу?'), '  main ');
+    await user.click(screen.getByText('Ответить'));
+
+    await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { answer: '  main ' } }]));
+
+    await user.click(screen.getByText('Сохранить ответы как Context'));
+
+    await waitFor(() => expect(sent.some((s) => s.method === 'POST' && s.path === 'questions/cards/173%3A628/context')).toBe(true));
   });
 
   it('the archive tab asks for archived cards', async () => {

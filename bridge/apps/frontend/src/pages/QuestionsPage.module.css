@@ -53,3 +53,16 @@
 .question {
   overflow-wrap: anywhere;
 }
+
+.answer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+  margin-left: 24px;
+}
+
+.answerText {
+  margin-left: 24px;
+  white-space: pre-wrap;
+}

@@ -4,6 +4,7 @@ export interface QuestionItem {
   id: number;
   text: string;
   resolved: boolean;
+  answer: string | null;
   createdAt: string;
 }
 
@@ -24,13 +25,17 @@ const questionsApiEndpoints = questionsApi.injectEndpoints({
       query: ({ archived }) => `questions?archived=${archived}`,
       providesTags: ['Questions'],
     }),
+    // The card's answered questions become a Context (named after the task) to attach to the next run.
+    saveQuestionsAsContext: builder.mutation<{ contextId: number }, { taskKey: string }>({
+      query: ({ taskKey }) => ({ url: `questions/cards/${encodeURIComponent(taskKey)}/context`, method: 'POST' }),
+    }),
     // Ticking the last open question moves the card to the archive, so both lists are refetched.
-    setQuestionResolved: builder.mutation<QuestionItem, { id: number; resolved: boolean }>({
-      query: ({ id, resolved }) => ({ url: `questions/${id}`, method: 'PATCH', body: { resolved } }),
+    setQuestionResolved: builder.mutation<QuestionItem, { id: number; resolved?: boolean; answer?: string }>({
+      query: ({ id, ...body }) => ({ url: `questions/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['Questions'],
     }),
   }),
 });
 
-export const { useListQuestionCardsQuery, useSetQuestionResolvedMutation } = questionsApiEndpoints;
+export const { useListQuestionCardsQuery, useSetQuestionResolvedMutation, useSaveQuestionsAsContextMutation } = questionsApiEndpoints;
 export { questionsApiEndpoints };

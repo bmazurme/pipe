@@ -2054,6 +2054,26 @@
         }
       }
     },
+    "/api/v1/questions/cards/{taskKey}/context": {
+      "post": {
+        "operationId": "QuestionsController_saveAsContext",
+        "parameters": [
+          {
+            "name": "taskKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/nodes": {
       "get": {
         "operationId": "DashboardController_getNodes",
@@ -6003,6 +6023,10 @@
           "resolved": {
             "type": "boolean"
           },
+          "answer": {
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -6012,6 +6036,7 @@
           "id",
           "text",
           "resolved",
+          "answer",
           "createdAt"
         ]
       },
@@ -6056,11 +6081,12 @@
         "properties": {
           "resolved": {
             "type": "boolean"
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 2000
           }
-        },
-        "required": [
-          "resolved"
-        ]
+        }
       },
       "CreateImproveIssueDto": {
         "type": "object",

@@ -1090,6 +1090,22 @@ export interface paths {
         patch: operations["QuestionsController_resolve"];
         trace?: never;
     };
+    "/api/v1/questions/cards/{taskKey}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["QuestionsController_saveAsContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/nodes": {
         parameters: {
             query?: never;
@@ -2644,6 +2660,7 @@ export interface components {
             id: number;
             text: string;
             resolved: boolean;
+            answer: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -2657,7 +2674,8 @@ export interface components {
             updatedAt: string;
         };
         ResolveQuestionDto: {
-            resolved: boolean;
+            resolved?: boolean;
+            answer?: string;
         };
         CreateImproveIssueDto: {
             title: string;
@@ -4772,6 +4790,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["QuestionItemDto"];
                 };
+            };
+        };
+    };
+    QuestionsController_saveAsContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
