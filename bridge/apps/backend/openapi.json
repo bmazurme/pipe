@@ -1275,6 +1275,33 @@
         }
       }
     },
+    "/api/v1/worker/jobs/failure-summary": {
+      "get": {
+        "operationId": "WorkerController_failureSummary",
+        "parameters": [
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}": {
       "get": {
         "operationId": "WorkerController_get",
