@@ -123,6 +123,7 @@ Worker добавляется на странице **Worker → Worker'ы → �
 
 | `WORKER_PROXY_URL` | нет | HTTP-прокси для обращений к AI-провайдерам, например `http://vpn-client:1080` — **не SOCKS5**: ни claude CLI (`HTTP_PROXY`/`HTTPS_PROXY`), ни undici `ProxyAgent` (используется для OpenAI-совместимых запросов) не поддерживают SOCKS5, только HTTP-прокси (`claude` явно падает с `UnsupportedProxyProtocol`, если указать `socks5://`). Намеренно не затрагивает обращения к самому bridge (тот должен быть доступен напрямую оттуда, где запущен worker) |
 | `LOG_LEVEL` | нет (по умолчанию `info`) | уровень для структурного JSON-логгера (`pino`, см. `worker/src/logger.ts`) — `debug`/`info`/`warn`/`error`. Каждая запись по задаче/реплике чата несёт `jobId`/`chatId` в контексте, удобно фильтровать под systemd (`journalctl -u pipe-worker -o cat \| jq`) или в Swarm (`docker service logs`) |
+| `PIPE_FUSION_CONFIG` | нет (по умолчанию `~/.pipe-fusion/config.json`) | только для worker'а на Mac рядом с Fusion 360: файл, из которого worker и `fusionctl` берут порт и токен add-in'а. Add-in читает ту же переменную из окружения процесса Fusion — значение должно совпадать, см. «macOS + Fusion 360» ниже |
 
 **Что задаётся на странице, а не здесь (для добавленного через интерфейс worker'а).** Интервал опроса, таймаут задачи и прокси
 к провайдерам берутся из настроек worker'а в bridge и главнее `POLL_INTERVAL_SEC`, `WORKER_JOB_TIMEOUT_SEC`, `WORKER_PROXY_URL`
@@ -221,6 +222,10 @@ Worker может работать на Mac рядом с **Fusion 360**. Так
    ```
 2. Add-in в Fusion: `worker/fusion-addin/install.sh`, затем в Fusion «Scripts and Add-Ins» → PipeFusion → Run on Startup + Run.
    Проверка: `node worker/dist/fusion/fusionctl.js health`.
+   Add-in пишет порт и токен в `~/.pipe-fusion/config.json`, worker и `fusionctl` читают их оттуда же. Другой путь задаёт
+   `PIPE_FUSION_CONFIG` — одинаковый для обеих сторон: у Fusion он должен попасть в окружение самого приложения (`export` в профиле
+   терминала до Fusion, запущенного из Dock, обычно не доходит; подойдёт `launchctl setenv` и перезапуск Fusion), у worker'а — в
+   `EnvironmentVariables` launch agent'а из шага 4. Подробности в [fusion-addin/README.md](fusion-addin/README.md).
 3. В bridge: **Worker → Worker'ы → Добавить** (имя, например `mac-fusion`). Подключите код как выше, без Docker:
    ```bash
    cd ~/pipe/worker && BRIDGE_API_URL=https://api.bridge.example.com node dist/enrollCli.js brn_…
