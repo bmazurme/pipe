@@ -27,19 +27,29 @@ function Harness({ initial = [] as Attachment[] }) {
 }
 
 describe('toAttachments', () => {
-  it('reads a picture as base64 and refuses what is not one, too big, or over the limit', async () => {
+  it('reads any file as base64 — a picture with a preview, anything else without — and refuses an empty one, a too big one, or one over the limit', async () => {
     const { added, problems } = await toAttachments(
-      [png('a.png', 3), new File(['x'], 'notes.txt', { type: 'text/plain' }), png('big.png', MAX_ATTACHMENT_BYTES + 1)],
+      [png('a.png', 3), new File(['{"a":1}'], 'data.json', { type: 'application/json' }), new File([''], 'empty.txt'), png('big.png', MAX_ATTACHMENT_BYTES + 1)],
       0,
     );
 
-    expect(added.map((item) => item.name)).toEqual(['a.png']);
+    expect(added.map((item) => item.name)).toEqual(['a.png', 'data.json']);
     expect(added[0].base64).toBe(btoa(String.fromCharCode(0, 0, 0)));
+    expect(added[0].previewUrl).toBe('blob:preview');
+    expect(added[1].previewUrl).toBe('');
+    expect(atob(added[1].base64)).toBe('{"a":1}');
     expect(problems).toHaveLength(2);
 
     const full = await toAttachments([png('late.png')], MAX_ATTACHMENTS);
     expect(full.added).toEqual([]);
     expect(full.problems[0]).toMatch(/Не больше/);
+  });
+
+  it('takes a file with no type at all, such as a .msg', async () => {
+    const { added, problems } = await toAttachments([new File(['mail'], 'letter.msg')], 0);
+
+    expect(problems).toEqual([]);
+    expect(added[0]).toMatchObject({ name: 'letter.msg', previewUrl: '' });
   });
 });
 
@@ -48,7 +58,7 @@ describe('ScreenshotAttachments', () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.upload(screen.getByLabelText('Выбрать скриншоты'), png('crash.png'));
+    await user.upload(screen.getByLabelText('Выбрать файлы'), png('crash.png'));
 
     expect(await screen.findByText('crash.png')).toBeInTheDocument();
     expect(screen.getByTestId('count')).toHaveTextContent('1');
@@ -58,13 +68,26 @@ describe('ScreenshotAttachments', () => {
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('0'));
   });
 
-  it('says why a file was not taken', async () => {
-    const user = userEvent.setup({ applyAccept: false });
+  it('attaches a file that is not a picture, and says that attachments are not anonymized', async () => {
+    const user = userEvent.setup();
     render(<Harness />);
 
-    await user.upload(screen.getByLabelText('Выбрать скриншоты'), new File(['x'], 'notes.txt', { type: 'text/plain' }));
+    expect(screen.getByText(/не проходят ни замену по словарю, ни проверку/)).toBeInTheDocument();
+    await user.upload(screen.getByLabelText('Выбрать файлы'), [new File(['mail'], 'letter.msg'), new File(['{}'], 'data.json', { type: 'application/json' })]);
 
-    expect(await screen.findByText(/не PNG, JPEG, GIF или WebP/)).toBeInTheDocument();
+    expect(await screen.findByText('letter.msg')).toBeInTheDocument();
+    expect(screen.getByText('data.json')).toBeInTheDocument();
+    expect(screen.getByTestId('count')).toHaveTextContent('2');
+    expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('says why a file was not taken', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.upload(screen.getByLabelText('Выбрать файлы'), new File([''], 'empty.json'));
+
+    expect(await screen.findByText(/«empty.json» пустой/)).toBeInTheDocument();
     expect(screen.getByTestId('count')).toHaveTextContent('0');
   });
 });

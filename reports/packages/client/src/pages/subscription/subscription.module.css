@@ -314,6 +314,21 @@
   flex: none;
 }
 
+.attachmentFile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-secondary);
+}
+
+.resetOption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
 .attachmentName {
   flex: 1 1 auto;
   min-width: 0;

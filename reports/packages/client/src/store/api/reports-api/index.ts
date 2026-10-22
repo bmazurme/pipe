@@ -266,6 +266,14 @@ const reportsApi = createApi({
       transformResponse: unwrap<SubscriptionStateEntryType>('Не удалось получить посылку из bridge'),
       invalidatesTags: ['SubscriptionIssues'],
     }),
+    resetSubscriptionIssue: builder.mutation<
+      { state: SubscriptionStateEntryType; stashed: boolean },
+      { projectId: number; iid: string; discardFiles: boolean }
+    >({
+      query: ({ projectId, iid, discardFiles }) => ({ url: `subscription/issues/${projectId}/${iid}/reset`, method: 'POST', body: { discardFiles } }),
+      transformResponse: unwrap<{ state: SubscriptionStateEntryType; stashed: boolean }>('Не удалось сбросить прогресс'),
+      invalidatesTags: ['SubscriptionIssues'],
+    }),
     publishSubscriptionIssue: builder.mutation<SubscriptionStateEntryType, { projectId: number; iid: string; payload: SubscriptionPublishPayload }>({
       query: ({ projectId, iid, payload }) => ({
         url: `subscription/issues/${projectId}/${iid}/publish`,
@@ -392,6 +400,7 @@ export const {
   useCreateManualSubscriptionIssueMutation,
   useRemoveSubscriptionIssueMutation,
   usePullSubscriptionIssueMutation,
+  useResetSubscriptionIssueMutation,
   usePublishSubscriptionIssueMutation,
   useGetSubscriptionConfigQuery,
   useAddTrackedProjectMutation,

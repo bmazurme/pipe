@@ -31,8 +31,44 @@ describe('parseAttachments', () => {
     expect(image.relPath).toBe('issue-images/config.png');
   });
 
-  it('refuses something that is not an image, whatever its name says', () => {
-    expect(() => parseAttachments([attach('evil.png', Buffer.from('#!/bin/sh\nrm -rf /'))])).toThrow(/не изображение/);
+  it('takes any other file as it is, into its own folder, under its own extension', () => {
+    const images = parseAttachments([
+      attach('Письмо клиента.msg', Buffer.from('MSG bytes \u0000\u0001')),
+      attach('Config.JSON', Buffer.from('{"a": 1}')),
+      attach('README', Buffer.from('no extension')),
+    ]);
+
+    expect(images.map((image) => image.relPath)).toEqual([
+      'issue-attachments/Письмо-клиента.msg',
+      'issue-attachments/Config.json',
+      'issue-attachments/README',
+    ]);
+    expect(Buffer.from(images[1].base64, 'base64').toString()).toBe('{"a": 1}');
+  });
+
+  it('does not trust the name of a picture: what is not one by its bytes is an ordinary file', () => {
+    const [file] = parseAttachments([attach('evil.png', Buffer.from('#!/bin/sh\nrm -rf /'))]);
+
+    expect(file.relPath).toBe('issue-attachments/evil.png');
+  });
+
+  it('keeps every name inside its folder and every extension harmless', () => {
+    const images = parseAttachments([attach('../../.git/hooks/pre-commit', Buffer.from('x')), attach('a.b/../c.s h', Buffer.from('y')), attach('weird.' + 'x'.repeat(40), Buffer.from('z'))]);
+
+    expect(images.map((image) => image.relPath)).toEqual(['issue-attachments/pre-commit', 'issue-attachments/c', 'issue-attachments/weird']);
+    for (const image of images) expect(image.relPath).toMatch(/^issue-attachments\/[^/]+$/);
+  });
+
+  it('keeps file names unique within their own folder', () => {
+    const images = parseAttachments([attach('data.json', Buffer.from('1')), attach('data.json', Buffer.from('2')), attach('data.png', PNG)]);
+
+    expect(images.map((image) => image.relPath)).toEqual(['issue-attachments/data.json', 'issue-attachments/data-2.json', 'issue-images/data.png']);
+  });
+
+  it('counts every kind of file towards the total limit', () => {
+    const big = Buffer.alloc(MAX_ATTACHMENT_BYTES - 1, 1);
+
+    expect(() => parseAttachments([attach('a.bin', big), attach('b.bin', big), attach('c.bin', big)])).toThrow(/общий лимит/);
   });
 
   it('refuses too many, an empty one and a huge one', () => {
