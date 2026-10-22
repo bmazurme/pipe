@@ -1,26 +1,25 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { encryptBuffer, type PackedAsset, type PackedFile } from '@pipe/protocol';
+import { encryptBuffer } from '@pipe/protocol';
 
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
-import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from './fsWalk.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { runClaude } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
+import { collectResult, writeParcelToDir } from './jobFiles.js';
 import { jobLogger } from './logger.js';
 import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
 import { withContext } from './taskContext.js';
-import { resolveInDir } from './resolveInDir.js';
 
 export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
 
@@ -33,18 +32,6 @@ const LOG_FLUSH_INTERVAL_MS = 1500;
 const CANCEL_POLL_INTERVAL_MS = 3000;
 
 export { HEARTBEAT_INTERVAL_MS };
-
-function isExcludedResultPath(relPath: string): boolean {
-  return relPath.split(/[\\/]/).some((segment) => EXCLUDED_RESULT_DIRS.has(segment));
-}
-
-function decodeUtf8Strict(bytes: Buffer): string | undefined {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    return undefined;
-  }
-}
 
 function resultFilename(job: RemoteJob): string {
   return `worker-result-${job.id}.zip${job.resultPublicKey ? '.enc' : ''}`;
@@ -162,16 +149,7 @@ export async function processJob(
     const parcelBuffer = await client.downloadParcel(job.id);
     const parcel = extractParcel(parcelBuffer);
 
-    for (const file of parcel.files) {
-      const destination = resolveInDir(jobDir, file.relPath);
-      mkdirSync(path.dirname(destination), { recursive: true });
-      writeFileSync(destination, file.content, 'utf-8');
-    }
-    for (const asset of parcel.assets) {
-      const destination = resolveInDir(jobDir, asset.relPath);
-      mkdirSync(path.dirname(destination), { recursive: true });
-      writeFileSync(destination, Buffer.from(asset.base64, 'base64'));
-    }
+    writeParcelToDir(jobDir, parcel);
 
     let prompt = withContext(describeTask(parcel), job.context, job.history);
     // The key stored in bridge for this account wins; the environment is the fallback for a worker not moved yet.
@@ -205,22 +183,7 @@ export async function processJob(
       throw new Error(buildExitFailureMessage(result.exitCode, result.output));
     }
 
-    // Re-reads every file currently on disk (covers edits AND new files the
-    // model created) as the result's file set. Original assets are kept
-    // exactly as extracted. Files that aren't valid UTF-8 (images, archives,
-    // compiled output) can't go through PackedFile's text content without
-    // corruption, so they travel as assets (raw bytes -> base64). Tool state
-    // dirs (.claude/, node_modules/) are never part of the result.
-    const assetPaths = new Set(parcel.assets.map((asset) => asset.relPath));
-    const resultFiles: PackedFile[] = [];
-    const resultAssets: PackedAsset[] = [...parcel.assets];
-    for (const relPath of listFilesRecursively(jobDir, jobDir, EXCLUDED_RESULT_DIRS)) {
-      if (assetPaths.has(relPath) || isExcludedResultPath(relPath)) continue;
-      const bytes = readFileSync(path.join(jobDir, relPath));
-      const text = decodeUtf8Strict(bytes);
-      if (text === undefined) resultAssets.push({ relPath, base64: bytes.toString('base64') });
-      else resultFiles.push({ relPath, content: text });
-    }
+    const { files: resultFiles, assets: resultAssets } = collectResult(jobDir, parcel);
 
     if (cancel.signal.aborted) throw new CancelledError();
 
