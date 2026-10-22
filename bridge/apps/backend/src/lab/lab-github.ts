@@ -61,6 +61,8 @@ export function githubFor(
 
 export interface RepoCheck {
   canRead: boolean;
+  // The base branch exists in the repository (also false when the repository could not be read).
+  branchFound: boolean;
   canWrite: boolean;
   defaultBranch: string | null;
   isPrivate: boolean | null;
@@ -94,6 +96,7 @@ export async function checkRepo(
 ): Promise<RepoCheck> {
   const result: RepoCheck = {
     canRead: false,
+    branchFound: false,
     canWrite: false,
     defaultBranch: null,
     isPrivate: null,
@@ -152,7 +155,9 @@ export async function checkRepo(
     `/git/ref/heads/${baseBranch.split('/').map(encodeURIComponent).join('/')}`,
   ).catch(() => null);
 
-  if (!branch?.ok) {
+  result.branchFound = Boolean(branch?.ok);
+
+  if (!result.branchFound) {
     result.problems.push(
       branch?.status === 409
         ? 'Репозиторий пуст — сделайте в нём первый коммит (например, README), Lab работает с существующей веткой'

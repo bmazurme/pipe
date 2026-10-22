@@ -17,6 +17,7 @@ export interface LabProject {
 
 export interface LabProjectCheck {
   canRead: boolean;
+  branchFound: boolean;
   canWrite: boolean;
   defaultBranch: string | null;
   isPrivate: boolean | null;

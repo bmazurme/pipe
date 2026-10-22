@@ -38,6 +38,7 @@ describe('checkRepo', () => {
 
     await expect(checkRepo('me/boat', 'tok', 'main')).resolves.toMatchObject({
       canRead: true,
+      branchFound: true,
       canWrite: true,
       problems: [],
     });
