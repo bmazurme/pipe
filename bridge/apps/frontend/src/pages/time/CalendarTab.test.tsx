@@ -75,3 +75,70 @@ describe('CalendarTab day type labels', () => {
     for (const b of plain) expect(b.getAttribute('aria-label')).toBe(b.dataset.baseLabel);
   });
 });
+
+describe('CalendarTab .ics download', () => {
+  it('is disabled for a year without entries and enabled once there are some', async () => {
+    const year = new Date().getFullYear();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([])));
+
+    const { unmount } = render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <CalendarTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    await screen.findByText('Сегодня');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Скачать .ics' })).toBeDisabled());
+    unmount();
+    store.dispatch(timeApi.util.resetApiState());
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([{ id: 1, date: `${year}-01-01`, type: 'holiday' }])));
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <CalendarTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Скачать .ics' })).toBeEnabled());
+  });
+});
+
+describe('CalendarTab .ics download', () => {
+  function renderTab() {
+    return render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <CalendarTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+  }
+
+  it('is disabled for a year without entries', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([])));
+    renderTab();
+
+    await screen.findByText('Сегодня');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Скачать .ics' })).toBeDisabled());
+  });
+
+  it('is disabled on a load error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ message: 'boom' }, 500)));
+    renderTab();
+
+    await screen.findByText('Не удалось загрузить дни отдыха');
+    expect(screen.getByRole('button', { name: 'Скачать .ics' })).toBeDisabled();
+  });
+
+  it('is enabled once the year has entries', async () => {
+    const year = new Date().getFullYear();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([{ id: 1, date: `${year}-01-01`, type: 'holiday' }])));
+    renderTab();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Скачать .ics' })).toBeEnabled());
+  });
+});

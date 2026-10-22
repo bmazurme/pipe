@@ -7,6 +7,7 @@ import { useAppSelector } from '../../store/hooks';
 import { timeYearSelector } from '../../store/slices';
 import styles from '../TimePage.module.css';
 import { CalendarMonth } from './CalendarMonth';
+import { downloadDayOffsIcs } from './dayOffIcs';
 import { DAY_TYPE_LABELS } from './dayTypeLabels';
 import { YearSwitcher } from './YearSwitcher';
 
@@ -42,7 +43,17 @@ export function CalendarTab() {
 
   return (
     <div className={styles.tabPanel}>
-      <YearSwitcher />
+      <div className={styles.calendarToolbar}>
+        <YearSwitcher />
+        <Button
+          view="outlined"
+          size="m"
+          disabled={isLoading || isError || dayOffs.length === 0}
+          onClick={() => downloadDayOffsIcs(year, dayOffs)}
+        >
+          Скачать .ics
+        </Button>
+      </div>
 
       {isError && (
         <Alert
