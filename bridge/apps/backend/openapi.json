@@ -2602,6 +2602,26 @@
         }
       }
     },
+    "/api/v1/boards/{host}/updates/cancel": {
+      "post": {
+        "operationId": "BoardsController_cancel",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/lab/projects": {
       "get": {
         "operationId": "LabController_listProjects",

@@ -91,4 +91,12 @@ export class BoardsController {
       status: update.status,
     };
   }
+
+  @Post(':host/updates/cancel')
+  async cancel(
+    @Param('host') host: string,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.boards.cancelPending(user.id, host);
+  }
 }

@@ -105,6 +105,19 @@ describe('BoardsPage', () => {
     expect(screen.queryByRole('button', { name: /Обновить/ })).toBeNull();
   });
 
+  it('lets the owner cancel a waiting decision, and the button comes back', async () => {
+    const user = userEvent.setup();
+    boards = [board({ pending: { id: 5, sha: 'c823ea56' + 'a'.repeat(32), via: 'ui', createdAt: new Date().toISOString() } })];
+    renderPage();
+
+    const cancel = await screen.findByRole('button', { name: 'Отменить' });
+    boards = [board()];
+    await user.click(cancel);
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'boards/ubuntu-red/updates/cancel' }));
+    expect(await screen.findByRole('button', { name: /Обновить \(1\)/ })).toBeTruthy();
+  });
+
   it('says that only the agent itself is outdated and needs a manual copy; disables the button for a board that is offline', async () => {
     boards = [
       board({ host: 'a', outdated: 1, updatable: 0, scripts: [script('infra/boardagent/board-agent.sh', 'outdated')] }),

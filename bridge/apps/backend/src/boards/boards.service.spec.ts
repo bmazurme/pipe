@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { BoardsService, isUpdatable } from './boards.service';
 import { BoardReport } from './entities/board-report.entity';
@@ -331,6 +335,55 @@ describe('BoardsService: the board’s side', () => {
       updatable: 1,
       pending: null,
       lastUpdate: null,
+    });
+  });
+
+  describe('cancelPending', () => {
+    const pendingRow: Partial<ScriptUpdate> = {
+      id: 5,
+      userId: 7,
+      host: 'ubuntu-red',
+      sha: SHA,
+      repoPaths: ['a'],
+      status: 'pending',
+      createdAt: new Date(),
+    };
+
+    it('turns the pending row cancelled and tells the owner', async () => {
+      const { service, updates, notifier } = setup(null);
+
+      updates.findOne.mockResolvedValue(pendingRow);
+      await service.cancelPending(7, 'ubuntu-red');
+
+      expect(updates.update).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({ status: 'cancelled' }),
+      );
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('отменено'),
+      );
+
+      updates.findOne.mockResolvedValue(null);
+      expect(await service.pendingFor(7, 'ubuntu-red')).toBeNull();
+    });
+
+    it('is a 404 when nothing is pending', async () => {
+      const { service } = setup(null);
+
+      await expect(
+        service.cancelPending(7, 'ubuntu-red'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('still records the real result of a cancelled update', async () => {
+      const { service, updates } = setup(null);
+
+      updates.findOne.mockResolvedValue({ ...pendingRow, status: 'cancelled' });
+      await service.recordResult(7, 5, true);
+
+      expect(updates.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'applied' }),
+      );
     });
   });
 });

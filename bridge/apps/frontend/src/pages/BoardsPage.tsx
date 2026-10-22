@@ -3,7 +3,7 @@ import { Alert, Button, Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
 import { Server } from '@gravity-ui/icons';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
-import { type Board, type BoardScript, getErrorMessage, useListBoardsQuery, useRequestBoardUpdateMutation } from '../store/api';
+import { type Board, type BoardScript, getErrorMessage, useCancelBoardUpdateMutation, useListBoardsQuery, useRequestBoardUpdateMutation } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './BoardsPage.module.css';
@@ -28,7 +28,7 @@ const UPDATE_LABEL: Record<string, string> = {
   failed: 'ошибка',
 };
 
-function BoardCard({ board, onUpdate, busy }: { board: Board; onUpdate: (host: string) => void; busy: boolean }) {
+function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate: (host: string) => void; onCancel: (host: string) => void; busy: boolean }) {
   const [showAll, setShowAll] = useState(false);
   const shown = board.scripts.filter((script) => showAll || script.status !== 'current');
   const manualOnly = board.outdated > 0 && board.updatable === 0;
@@ -46,7 +46,12 @@ function BoardCard({ board, onUpdate, busy }: { board: Board; onUpdate: (host: s
         <Label theme={board.online ? 'success' : 'danger'}>{board.online ? 'на связи' : 'не отвечает'}</Label>
         <Label theme={board.outdated === 0 ? 'success' : 'warning'}>{board.outdated === 0 ? 'скрипты актуальны' : `устарело: ${board.outdated}`}</Label>
         {board.pending ? (
-          <Label theme="info">ждёт плату: {board.pending.sha.slice(0, 7)}</Label>
+          <>
+            <Label theme="info">ждёт плату: {board.pending.sha.slice(0, 7)}</Label>
+            <Button view="flat" size="s" disabled={busy} onClick={() => onCancel(board.host)}>
+              Отменить
+            </Button>
+          </>
         ) : (
           <Button view="action" size="m" disabled={board.updatable === 0 || busy || !board.online} loading={busy} onClick={() => onUpdate(board.host)}>
             Обновить{board.updatable > 0 ? ` (${board.updatable})` : ''}
@@ -104,6 +109,7 @@ export function BoardsPage() {
   const [pollingInterval, setPollingInterval] = useState(SLOW_POLL_MS);
   const { data: boards, isLoading, isError, error } = useListBoardsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
   const [request, { isLoading: isRequesting, originalArgs: requestingHost, error: requestError }] = useRequestBoardUpdateMutation();
+  const [cancel, { isLoading: isCancelling, originalArgs: cancellingHost, error: cancelError }] = useCancelBoardUpdateMutation();
   const anyPending = Boolean(boards?.some((board) => board.pending));
 
 
@@ -120,6 +126,7 @@ export function BoardsPage() {
       />
 
       {requestError && <Alert theme="danger" view="filled" message={typeof requestError === 'string' ? requestError : getErrorMessage(requestError, 'Не удалось разрешить обновление')} />}
+      {cancelError && <Alert theme="danger" view="filled" message={typeof cancelError === 'string' ? cancelError : getErrorMessage(cancelError, 'Не удалось отменить обновление')} />}
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message={typeof error === 'string' ? error : getErrorMessage(error, 'Не удалось загрузить платы')} />}
       {boards && boards.length === 0 && (
@@ -127,7 +134,7 @@ export function BoardsPage() {
       )}
 
       {boards?.map((board) => (
-        <BoardCard key={board.host} board={board} busy={isRequesting && requestingHost === board.host} onUpdate={(host) => void request(host)} />
+        <BoardCard key={board.host} board={board} busy={(isRequesting && requestingHost === board.host) || (isCancelling && cancellingHost === board.host)} onUpdate={(host) => void request(host)} onCancel={(host) => void cancel(host)} />
       ))}
     </div>
   );
