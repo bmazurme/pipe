@@ -1,14 +1,11 @@
+import type { components } from '@pipe/protocol/bridge-api-types';
 import workerApi from '..';
 import { deltaSince } from '../../incrementalSince';
 
-export type WorkerJobModel = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
-export type WorkerJobStatus =
-  | 'queued'
-  | 'claimed'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+type Schemas = components['schemas'];
+
+export type WorkerJobModel = Schemas['JobResponseDto']['model'];
+export type WorkerJobStatus = Schemas['JobResponseDto']['status'];
 
 // A job's status keeps moving on its own (the worker process updates it
 // server-side) as long as it isn't in a terminal state — used to decide
@@ -59,47 +56,11 @@ export interface FailureSummary {
   groups: FailureGroup[];
 }
 
-export interface WorkerJob {
-  id: number;
-  sourceFileId: number | null;
-  resultFileId: number | null;
-  model: WorkerJobModel;
-  claudeCredentialId: number | null;
-  /** The stored token the run actually used (also a fallback one), or null. */
-  usedClaudeCredentialName?: string | null;
-  providerCredentialId: number | null;
-  /** The worker that took the job, and the one it was pinned to (null = any free worker). */
-  workerId: number | null;
-  targetWorkerId: number | null;
-  /** The attached context's name, or null — the default. */
-  contextName: string | null;
-  /** How many earlier runs' outcomes were mixed in, or null when none were. */
-  historyCount: number | null;
-  /** The task the job works on (`173:628`, or `file:<id>`), null for older jobs. */
-  taskKey?: string | null;
-  /** The run's time limit in seconds chosen at launch; null = the worker's own setting. */
-  timeoutSec?: number | null;
-  status: WorkerJobStatus;
-  logs: string;
-  /**
-   * The whole log's length in characters as the server counts them (code points), set on
-   * the cached job and on a `?logsFrom=` reply — where `logs` is only what came after.
-   */
-  logsLength?: number;
-  errorMessage: string | null;
+/** Generated from bridge's `JobResponseDto`; only the loosely-typed `usage` is refined by hand. */
+export type WorkerJob = Omit<Schemas['JobResponseDto'], 'usage'> & {
   /** Tokens and cost of a Claude run, or null. */
   usage: ClaudeRunUsage | null;
-  workerName: string | null;
-  claimedAt: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-  /** Set once the owner asked to stop a job a worker holds; cleared by nothing — the job ends 'cancelled'. */
-  cancelRequestedAt: string | null;
-  /** A queued job is not handed to a worker before this time; null = right away. */
-  notBefore?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+};
 
 /** Runs, cost and tokens over the last 7 days; costUsd is null when no run reported one. */
 export interface RecentClaudeUsage {
@@ -140,41 +101,13 @@ export interface ProviderCredential {
  */
 export type FleetWorkerState = 'pending' | 'offline' | 'idle' | 'busy' | 'paused';
 
-export interface FleetWorker {
-  /** null for a legacy worker (a personal API key in its environment): known only by name. */
-  id: number | null;
-  name: string;
+/** Generated from bridge's `WorkerResponseDto`; `kind`, `state` and `claudeLimits` are refined by hand (the schema leaves them open). */
+export type FleetWorker = Omit<Schemas['WorkerResponseDto'], 'kind' | 'state' | 'claudeLimits'> & {
   kind: 'managed' | 'legacy';
   state: FleetWorkerState;
-  enabled: boolean;
-  lastSeenAt: string | null;
-  activeJobs: number;
-  hostname: string | null;
-  version: string | null;
-  /** null = all models. */
-  models: WorkerJobModel[] | null;
-  pollIntervalSec: number;
-  jobTimeoutSec: number;
-  proxyUrl: string | null;
-  /** true when the proxy URL had user:pass@ — it is shown masked (***@) and never sent back. */
-  proxyHasCredentials: boolean;
-  chatEnabled: boolean;
-  keyPrefix: string | null;
-  enrollmentPending: boolean;
-  enrollmentExpiresAt: string | null;
-  createdAt: string | null;
-  /** The Claude token this worker uses by default (null = the account's first). */
-  claudeCredentialId: number | null;
-  /** host:port of the worker's VPN server, or null — the link itself is never shown again. */
-  vpnHost: string | null;
   /** The Claude plan limits the last run on this worker reported, or null before any run did. */
   claudeLimits: ClaudeLimits | null;
-  /** Minutes between automatic probes of the plan limits (0 = only on request), and when the owner last asked for one. */
-  limitsRefreshMin: number;
-  limitsRefreshRequestedAt: string | null;
-  /** What the worker can do besides running a model, e.g. 'fusion' (it runs next to Fusion 360). */
-  capabilities: WorkerCapability[];
-}
+};
 
 /** Returned once, when a worker is created or its enrolment code is renewed. */
 export interface CreatedFleetWorker {
