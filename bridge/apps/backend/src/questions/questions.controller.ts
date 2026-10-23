@@ -49,6 +49,7 @@ export class QuestionsController {
       text: question.text,
       resolved: question.resolvedAt !== null,
       answer: question.answer,
+      jobId: question.jobId ?? null,
       createdAt: question.createdAt,
     };
   }

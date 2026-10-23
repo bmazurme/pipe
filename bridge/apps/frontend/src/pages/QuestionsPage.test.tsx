@@ -13,8 +13,8 @@ const CARD = {
   taskKey: '173:628',
   project: '173',
   questions: [
-    { id: 1, text: 'Какую ветку брать за основу?', resolved: false, answer: null, createdAt: '2026-10-22T10:00:00.000Z' },
-    { id: 2, text: 'Нужна ли миграция?', resolved: true, answer: 'Нужна', createdAt: '2026-10-22T10:00:00.000Z' },
+    { id: 1, text: 'Какую ветку брать за основу?', resolved: false, answer: null, jobId: 41, createdAt: '2026-10-22T10:00:00.000Z' },
+    { id: 2, text: 'Нужна ли миграция?', resolved: true, answer: 'Нужна', jobId: null, createdAt: '2026-10-22T10:00:00.000Z' },
   ],
   openCount: 1,
   archived: false,
@@ -103,6 +103,18 @@ describe('QuestionsPage', () => {
 
     expect(await screen.findByText(/все закрыты/)).toBeTruthy();
     expect(sent.some((s) => s.path === 'questions?archived=true')).toBe(true);
+  });
+
+  it('shows the run a question came from and opens its job dialog', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText('Запуск #41')).toBeTruthy();
+    expect(screen.getAllByText(/Запуск #/)).toHaveLength(1);
+
+    await user.click(screen.getByText('Запуск #41'));
+
+    await waitFor(() => expect(sent.some((s) => s.path.startsWith('worker/jobs/41'))).toBe(true));
   });
 
   it('shows an empty state when nothing is open', async () => {

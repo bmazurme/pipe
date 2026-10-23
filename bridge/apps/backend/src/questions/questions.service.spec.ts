@@ -135,6 +135,7 @@ describe('QuestionsService', () => {
           id: 3,
           taskKey: '173:628',
           project: '173',
+          jobId: 55,
           text: 'c',
           resolvedAt: null,
           createdAt: at('2026-10-21T00:00:00Z'),
@@ -166,6 +167,12 @@ describe('QuestionsService', () => {
         ['b', true],
         ['c', false],
       ]);
+    });
+
+    it('exposes the run each question came from, null when unknown', async () => {
+      const cards = await service.listCards(7, false);
+
+      expect(cards[0].questions.map((q) => q.jobId)).toEqual([null, 55]);
     });
 
     it('moves a card to the archive once every question is resolved', async () => {
