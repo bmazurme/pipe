@@ -3513,7 +3513,9 @@ export interface operations {
     };
     ChatController_listChats: {
         parameters: {
-            query?: never;
+            query?: {
+                q?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

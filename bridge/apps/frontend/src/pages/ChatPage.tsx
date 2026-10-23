@@ -37,6 +37,7 @@ import { PrFixCard } from './chat/PrFixCard';
 import { buildChatMarkdown, buildContextDraft, chatMarkdownFilename, ContextDraft } from './chat/chatContext';
 import { AttachRunResultDialog } from './chat/AttachRunResultDialog';
 import { SaveToContextDialog } from './chat/SaveToContextDialog';
+import { useDebouncedSearch } from './chat/useDebouncedSearch';
 import { useChatComposer } from './chat/useChatComposer';
 import { useAttachmentUrls } from './chat/useAttachmentUrls';
 import styles from './ChatPage.module.css';
@@ -172,7 +173,9 @@ function toChatMessage(message: ChatMessageMeta, imageUrls: Record<number, strin
 
 export function ChatPage() {
   const isMobile = useIsMobile();
-  const { data: chatsData } = useListChatsQuery();
+  const [searchText, setSearchText] = useState('');
+  const searchQuery = useDebouncedSearch(searchText);
+  const { data: chatsData } = useListChatsQuery(searchQuery ? { q: searchQuery } : undefined);
   const [activeChatId, setActiveChatId] = useActiveChatParam();
   const [pollingInterval, setPollingInterval] = useState(MESSAGES_POLL_INTERVAL_MS);
   const { data: messagesData, error: messagesError } = useListMessagesQuery(activeChatId ?? 0, {
@@ -194,7 +197,12 @@ export function ChatPage() {
   const [renameValue, setRenameValue] = useState('');
 
   const chats = useMemo(() => (chatsData ?? []).map(toChatType), [chatsData]);
-  const activeChat = chats.find((chat) => chat.id === String(activeChatId)) ?? null;
+  // A search can hide the open chat from the list; keep showing it rather than blanking the conversation.
+  const lastActiveChat = useRef<ChatType | null>(null);
+  const activeChat =
+    chats.find((chat) => chat.id === String(activeChatId)) ??
+    (lastActiveChat.current?.id === String(activeChatId) ? lastActiveChat.current : null);
+  lastActiveChat.current = activeChat;
   const imageUrls = useAttachmentUrls(messagesData ?? [], accessToken);
   // Ticks once a second while a reply is awaited, so the waiting time on its bubble visibly counts.
   const [now, setNow] = useState(() => Date.now());
@@ -500,6 +508,21 @@ export function ChatPage() {
           onDone={() => setDecidedActions((previous) => new Set(previous).add(lastReply.id))}
         />
       )}
+
+      <div className={styles.search}>
+        <TextInput
+          value={searchText}
+          onUpdate={setSearchText}
+          placeholder="Поиск по чатам и сообщениям"
+          hasClear
+          controlProps={{ 'aria-label': 'Поиск по чатам' }}
+        />
+        {searchQuery && chats.length === 0 && (
+          <Text variant="caption-2" color="secondary">
+            Ничего не найдено
+          </Text>
+        )}
+      </div>
 
       <div className={styles.container}>
         <ChatContainer

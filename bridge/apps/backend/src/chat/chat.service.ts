@@ -100,7 +100,22 @@ export class ChatService {
     return this.chatRepository.save(chat);
   }
 
-  async findAllByUser(userId: number): Promise<Chat[]> {
+  async findAllByUser(userId: number, q?: string): Promise<Chat[]> {
+    if (q !== undefined) {
+      // Escape LIKE wildcards so `%`, `_` and `\` in the input match literally.
+      const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+
+      return this.chatRepository
+        .createQueryBuilder('chat')
+        .where('chat.userId = :userId', { userId })
+        .andWhere(
+          `(chat.title ILIKE :pattern OR EXISTS (SELECT 1 FROM chat_messages m WHERE m."chatId" = chat.id AND m.content ILIKE :pattern))`,
+          { pattern },
+        )
+        .orderBy('chat.updatedAt', 'DESC')
+        .getMany();
+    }
+
     return this.chatRepository.find({
       where: { userId },
       order: { updatedAt: 'DESC' },
