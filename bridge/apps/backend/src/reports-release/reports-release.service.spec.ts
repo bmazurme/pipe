@@ -247,7 +247,7 @@ describe('ReportsReleaseService', () => {
       expect(downloadZipball).toHaveBeenCalledTimes(1);
     });
 
-    it('does not cache a failed build', async () => {
+    it('retries a failed build once the cooldown has passed', async () => {
       const zipball = await validZipball();
       const downloadZipball = jest
         .fn()
@@ -258,8 +258,113 @@ describe('ReportsReleaseService', () => {
       );
 
       await expect(service.downloadReportsZip()).rejects.toThrow('boom');
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 6 * 60_000);
       await expect(service.downloadReportsZip()).resolves.toBeDefined();
+      jest.restoreAllMocks();
       expect(downloadZipball).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('failed build cooldown', () => {
+    const COOLDOWN = 5 * 60_000;
+
+    async function validZipball(): Promise<Uint8Array> {
+      return zipAsync({
+        'owner-pipe-abc1234/reports/package.json': strToU8('{}'),
+        'owner-pipe-abc1234/packages/protocol/package.json': strToU8('{}'),
+      });
+    }
+
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: new Date('2026-01-01T00:00:00Z'),
+        doNotFake: ['setImmediate'],
+      }),
+    );
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('cold path: rejects fast with the remembered message, retries after the cooldown', async () => {
+      const zipball = await validZipball();
+      const downloadZipball = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(zipball);
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball }),
+      );
+
+      await expect(service.getInfo()).rejects.toThrow('boom');
+      jest.setSystemTime(Date.now() + COOLDOWN - 1000);
+      await expect(service.getInfo()).rejects.toThrow('boom');
+      await expect(service.getRelease()).rejects.toThrow('boom');
+      expect(downloadZipball).toHaveBeenCalledTimes(1);
+
+      jest.setSystemTime(Date.now() + 2000);
+      await expect(service.getInfo()).resolves.toMatchObject({
+        sha: 'abc1234567',
+      });
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+    });
+
+    it('warm path: keeps the previous info without another background build', async () => {
+      const first = await validZipball();
+      let sha = 'sha-1';
+      const downloadZipball = jest
+        .fn()
+        .mockResolvedValueOnce(first)
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(first);
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha: async () => sha, downloadZipball }),
+      );
+
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      const old = await service.getInfo();
+
+      sha = 'sha-2';
+      jest.setSystemTime(Date.now() + 2 * 60_000);
+      await expect(service.getInfo()).resolves.toBe(old);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+
+      jest.setSystemTime(Date.now() + 60_000);
+      await expect(service.getInfo()).resolves.toBe(old);
+      await expect(service.getRelease()).rejects.toThrow('boom');
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+
+      jest.setSystemTime(Date.now() + COOLDOWN);
+      await service.getInfo();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(downloadZipball).toHaveBeenCalledTimes(3);
+    });
+
+    it('builds a different sha immediately and a success clears the failure', async () => {
+      const zipball = await validZipball();
+      let sha = 'sha-1';
+      const downloadZipball = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(zipball);
+      const service = new ReportsReleaseService(
+        fakeGithubApi({ getBranchSha: async () => sha, downloadZipball }),
+      );
+
+      await expect(service.getInfo()).rejects.toThrow('boom');
+      sha = 'sha-2';
+      jest.setSystemTime(Date.now() + 2 * 60_000);
+      await expect(service.getInfo()).resolves.toMatchObject({ sha: 'sha-2' });
+      expect(downloadZipball).toHaveBeenCalledTimes(2);
+
+      // The success cleared sha-1's failure, so it is built again right away.
+      sha = 'sha-1';
+      jest.setSystemTime(Date.now() + 2 * 60_000);
+      await service.getInfo();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(downloadZipball).toHaveBeenCalledTimes(3);
     });
   });
 
