@@ -1,10 +1,11 @@
-import { Controller, Get, Res, UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
 import {
   ReportsReleaseInfo,
+  ReportsReleaseInstalled,
   ReportsReleaseService,
 } from './reports-release.service';
 
@@ -17,8 +18,25 @@ export class ReportsReleaseController {
   constructor(private readonly reportsReleaseService: ReportsReleaseService) {}
 
   @Get('info')
-  async info(): Promise<ReportsReleaseInfo> {
+  async info(@Req() req?: Request): Promise<ReportsReleaseInfo> {
+    // Only a running reports (an API key) says which build it has; the browser's own request must not overwrite that.
+    const releaseId = req?.headers['x-reports-release'];
+
+    if (
+      typeof req?.headers['x-api-key'] === 'string' &&
+      typeof releaseId === 'string' &&
+      releaseId.length > 0 &&
+      releaseId.length <= 128
+    ) {
+      this.reportsReleaseService.recordCheckIn({ releaseId, at: new Date() });
+    }
+
     return this.reportsReleaseService.getInfo();
+  }
+
+  @Get('installed')
+  installed(): ReportsReleaseInstalled | null {
+    return this.reportsReleaseService.getInstalled();
   }
 
   @Get('download')

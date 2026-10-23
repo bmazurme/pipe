@@ -13,10 +13,21 @@ export interface ReportsReleaseInfo {
   size: number;
 }
 
+export interface ReportsReleaseInstalled {
+  releaseId: string;
+  shortId: string;
+  checkedAt: string;
+}
+
 const reportsReleaseApiEndpoints = reportsReleaseApi.injectEndpoints({
   endpoints: (builder) => ({
     getReportsReleaseInfo: builder.query<ReportsReleaseInfo, void>({
       query: () => 'reports-release/info',
+    }),
+
+    // What the owner's running reports said it has installed at its last check; null before the first one since bridge started.
+    getReportsInstalled: builder.query<ReportsReleaseInstalled | null, void>({
+      query: () => 'reports-release/installed',
     }),
 
     // Download, not an upload-style fetch — same blob/object-URL/anchor-click
@@ -42,6 +53,7 @@ const reportsReleaseApiEndpoints = reportsReleaseApi.injectEndpoints({
 
 export const {
   useGetReportsReleaseInfoQuery,
+  useGetReportsInstalledQuery,
   useDownloadReportsReleaseMutation,
 } = reportsReleaseApiEndpoints;
 export { reportsReleaseApiEndpoints };
