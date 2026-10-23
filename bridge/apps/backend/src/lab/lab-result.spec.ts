@@ -178,3 +178,66 @@ describe('what the worker is told about its place', () => {
     expect(text).toContain('open a GitHub Issue');
   });
 });
+
+describe('binaries that the worker removed or regenerated', () => {
+  const bin = (name: string) => ({
+    bytes: new Uint8Array([...strToU8(name), 0xff]),
+  });
+
+  it('turns a binary the repository had and the result no longer has into a deletion', () => {
+    const given = {
+      'cad/v1/plan_check.png': sha256(bin('x').bytes),
+      'cad/v1/shot.png': sha256(bin('y').bytes),
+    };
+    const changes = withBinaries(
+      [],
+      new Map([['cad/v1/shot.png', bin('y').bytes]]),
+      given,
+    );
+
+    expect(changes).toEqual([
+      { path: 'cad/v1/plan_check.png', kind: 'deleted' },
+    ]);
+  });
+
+  it('shows a regenerated binary as a replacement next to the deletion of another', () => {
+    const given = {
+      'cad/v1/hull.f3d': sha256(bin('old').bytes),
+      'cad/v1/old.png': sha256(bin('o').bytes),
+    };
+    const regenerated = new Uint8Array([9, 9, 9]);
+    const changes = withBinaries(
+      [],
+      new Map([['cad/v1/hull.f3d', regenerated]]),
+      given,
+    );
+
+    expect(changes.map((change) => `${change.kind} ${change.path}`)).toEqual([
+      'added cad/v1/hull.f3d',
+      'deleted cad/v1/old.png',
+    ]);
+  });
+
+  it('does not call a binary that came back as text a deletion', () => {
+    const given = { 'notes.dat': sha256(bin('z').bytes) };
+
+    expect(
+      withBinaries(
+        [{ path: 'notes.dat', kind: 'added', bytes: strToU8('text now') }],
+        new Map(),
+        given,
+        new Set(['notes.dat']),
+      ),
+    ).toEqual([
+      { path: 'notes.dat', kind: 'added', bytes: strToU8('text now') },
+    ]);
+  });
+
+  it('deletes nothing when no binary was given to the worker', () => {
+    expect(
+      withBinaries([], new Map([['out/new.png', PNG]]), {}).map(
+        (change) => change.kind,
+      ),
+    ).toEqual(['added']);
+  });
+});

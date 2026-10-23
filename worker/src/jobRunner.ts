@@ -201,7 +201,7 @@ export async function processJob(
       }
     }
 
-    const { files: resultFiles, assets: resultAssets } = collectResult(jobDir, parcel);
+    const { files: resultFiles, assets: resultAssets } = collectResult(jobDir);
 
     if (cancel.signal.aborted) throw new CancelledError();
 

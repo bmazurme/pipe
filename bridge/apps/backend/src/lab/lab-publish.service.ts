@@ -110,6 +110,7 @@ export class LabPublishService {
         diffResult(baseline.text, result.files),
         result.binaries,
         baseline.binaries,
+        new Set(result.files.keys()),
       );
       const dropped = changes
         .filter((change) => isBlocked(change.path))

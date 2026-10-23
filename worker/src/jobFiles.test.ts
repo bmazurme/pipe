@@ -50,7 +50,7 @@ describe('writeParcelToDir / collectResult', () => {
     mkdirSync(join(dir, 'sub/node_modules/pkg'), { recursive: true });
     writeFileSync(join(dir, 'sub/node_modules/pkg/index.js'), 'module.exports = 1;');
 
-    const { files, assets } = collectResult(dir, input);
+    const { files, assets } = collectResult(dir);
 
     const byPath = new Map(files.map((f) => [f.relPath, f.content]));
     assert.equal(byPath.get('a.ts'), 'export const a = 2;\n');
@@ -59,7 +59,7 @@ describe('writeParcelToDir / collectResult', () => {
     assert.ok(!byPath.has('out/blob.bin'));
     assert.ok(!byPath.has('img/logo.png'));
 
-    assert.deepEqual(assets[0], input.assets[0]);
+    assert.deepEqual(assets.find((a) => a.relPath === 'img/logo.png'), input.assets[0]);
     assert.equal(assets.filter((a) => a.relPath === 'img/logo.png').length, 1);
     const blob = assets.find((a) => a.relPath === 'out/blob.bin');
     assert.ok(blob, 'binary file should be collected as an asset');
@@ -67,5 +67,40 @@ describe('writeParcelToDir / collectResult', () => {
 
     const all = [...files.map((f) => f.relPath), ...assets.map((a) => a.relPath)];
     assert.ok(!all.some((p) => p.includes('.claude') || p.includes('node_modules')), all.join(', '));
+  });
+
+  it('returns a binary the parcel brought as it is on disk now: unchanged, regenerated, or gone', () => {
+    const input: ExtractedParcel = {
+      ...parcel(),
+      assets: [
+        { relPath: 'cad/v1/hull.f3d', base64: Buffer.from([0xff, 0x01]).toString('base64') },
+        { relPath: 'cad/v1/shot.png', base64: Buffer.from([0x89, 0x50, 0xff, 0x02]).toString('base64') },
+        { relPath: 'cad/v1/plan_check.png', base64: Buffer.from([0x89, 0x50, 0xff, 0x03]).toString('base64') },
+      ],
+    };
+    writeParcelToDir(dir, input);
+
+    const regenerated = Buffer.from([0xff, 0xfe, 0x00, 0x80]);
+
+    writeFileSync(join(dir, 'cad/v1/hull.f3d'), regenerated); // the model rebuilt it (revision 2)
+    rmSync(join(dir, 'cad/v1/plan_check.png')); // and removed a picture it no longer needs
+
+    const { assets } = collectResult(dir);
+    const byPath = new Map(assets.map((asset) => [asset.relPath, Buffer.from(asset.base64, 'base64')]));
+
+    assert.ok(byPath.get('cad/v1/hull.f3d')?.equals(regenerated), 'the regenerated file must come back, not the old one');
+    assert.ok(byPath.get('cad/v1/shot.png')?.equals(Buffer.from([0x89, 0x50, 0xff, 0x02])), 'an untouched file comes back as it was');
+    assert.ok(!byPath.has('cad/v1/plan_check.png'), 'a deleted file must not come back');
+  });
+
+  it('turns a binary the model replaced with text into a text file, not a stale asset', () => {
+    const input: ExtractedParcel = { ...parcel(), assets: [{ relPath: 'notes.dat', base64: Buffer.from([0xff, 0xfe]).toString('base64') }] };
+    writeParcelToDir(dir, input);
+    writeFileSync(join(dir, 'notes.dat'), 'now plain text');
+
+    const { files, assets } = collectResult(dir);
+
+    assert.equal(files.find((file) => file.relPath === 'notes.dat')?.content, 'now plain text');
+    assert.ok(!assets.some((asset) => asset.relPath === 'notes.dat'));
   });
 });
