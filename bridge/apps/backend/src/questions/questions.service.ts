@@ -9,7 +9,7 @@ import { Repository } from 'typeorm';
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { ContextService } from '../context/context.service';
 import { Job } from '../worker/entities/job.entity';
-import { QuestionCardDto } from './dto/question-card.dto';
+import { QuestionCardDto, QuestionItemDto } from './dto/question-card.dto';
 import { TaskQuestion } from './entities/task-question.entity';
 import {
   MAX_QUESTION_LENGTH,
@@ -122,14 +122,7 @@ export class QuestionsService {
       cards.push({
         taskKey,
         project: questions[0].project,
-        questions: ordered.map((q) => ({
-          id: q.id,
-          text: q.text,
-          resolved: q.resolvedAt !== null,
-          answer: q.answer ?? null,
-          jobId: q.jobId ?? null,
-          createdAt: q.createdAt,
-        })),
+        questions: ordered.map(QuestionItemDto.fromEntity),
         openCount,
         archived: openCount === 0,
         updatedAt: new Date(

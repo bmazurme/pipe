@@ -44,14 +44,7 @@ export class QuestionsController {
       dto.answer,
     );
 
-    return {
-      id: question.id,
-      text: question.text,
-      resolved: question.resolvedAt !== null,
-      answer: question.answer,
-      jobId: question.jobId ?? null,
-      createdAt: question.createdAt,
-    };
+    return QuestionItemDto.fromEntity(question);
   }
 
   @Post('cards/:taskKey/context')
