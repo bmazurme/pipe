@@ -37,7 +37,13 @@ export async function fetchLatestRelease(): Promise<BridgeReleaseInfo> {
   }
 
   const url = new URL('/api/v1/reports-release/info', new URL(bridgeApiUrl).origin);
-  const response = await fetch(url, { headers: { 'X-Api-Key': apiKey }, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) }).catch((error) => {
+  // Lets bridge show which build this reports runs; an older bridge ignores the header.
+  const installed = readInstalledRelease();
+  const headers: Record<string, string> = { 'X-Api-Key': apiKey };
+
+  if (installed) headers['X-Reports-Release'] = installed.releaseId;
+
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) }).catch((error) => {
     throw describeFetchError(error, url);
   });
 

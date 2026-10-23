@@ -38,3 +38,50 @@ describe('ReportsReleaseSection for an account that is not the deployment owner'
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('ReportsReleaseSection for the owner', () => {
+  const infoBody = { sha: 's', shortSha: 's', releaseId: 'newnewnewnew1', shortId: 'newnewnewnew', version: null, sha256: 'x', size: 1 };
+
+  async function renderAs(installed: unknown, offered = infoBody) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request) =>
+        Response.json(req.url.endsWith('/installed') ? installed : offered),
+      ),
+    );
+    await store.dispatch(
+      usersApiEndpoints.util.upsertQueryData('getMe', undefined, {
+        id: 1,
+        username: 'o@x.com',
+        status: 'online',
+        isOwner: true,
+      }),
+    );
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <ReportsReleaseSection />
+        </ThemeProvider>
+      </Provider>,
+    );
+  }
+
+  it('says the installed build is current when the ids match', async () => {
+    await renderAs({ releaseId: 'newnewnewnew1', shortId: 'newnewnewnew', checkedAt: new Date().toISOString() });
+
+    expect(await screen.findByText(/сборка newnewnewnew — актуальна/)).toBeTruthy();
+    expect(screen.getByText(/проверял обновления 0 мин назад/)).toBeTruthy();
+  });
+
+  it('names the new build when they differ', async () => {
+    await renderAs({ releaseId: 'old', shortId: 'old', checkedAt: new Date().toISOString() });
+
+    expect(await screen.findByText(/сборка old — доступна новая сборка newnewnewnew/)).toBeTruthy();
+  });
+
+  it('says reports has not been in touch when there is no check-in', async () => {
+    await renderAs(null);
+
+    expect(await screen.findByText('reports ещё не обращался к bridge')).toBeTruthy();
+  });
+});

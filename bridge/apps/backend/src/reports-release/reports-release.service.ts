@@ -36,6 +36,13 @@ export interface ReportsReleaseInfo {
   size: number;
 }
 
+// What the owner's running reports reported about itself at its last check.
+export interface ReportsReleaseInstalled {
+  releaseId: string;
+  shortId: string;
+  checkedAt: string;
+}
+
 // What the zip carries as reports/release.json: the receiver reads its own version from it, and uses `files` to remove
 // what a later release no longer has.
 export interface ReleaseManifest {
@@ -84,7 +91,24 @@ export class ReportsReleaseService {
   private lastBuilt: BuiltRelease | null = null;
   private resolvedSha: { promise: Promise<string>; at: number } | null = null;
 
+  // Which release the owner's running reports said it has, at its last check — in memory, the next check refills it.
+  private checkIn: { releaseId: string; at: Date } | null = null;
+
   constructor(private readonly githubApi: GithubApiService) {}
+
+  recordCheckIn(checkIn: { releaseId: string; at: Date }): void {
+    this.checkIn = checkIn;
+  }
+
+  getInstalled(): ReportsReleaseInstalled | null {
+    if (!this.checkIn) return null;
+
+    return {
+      releaseId: this.checkIn.releaseId,
+      shortId: this.checkIn.releaseId.slice(0, 12),
+      checkedAt: this.checkIn.at.toISOString(),
+    };
+  }
 
   private assertConfigured(): void {
     if (!this.githubApi.isConfigured()) {
