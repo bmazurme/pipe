@@ -54,7 +54,7 @@ npm run build   # tsc -b — must run before consumers (sync/reports/bridge) see
 npm test        # tsc -b && node --test 'dist/**/*.test.js'
 npm run lint    # flat-config ESLint, shared base in the repo root's eslint.config.base.mjs
 ```
-Tests are `.test.ts` files compiled alongside source and run from `dist/` via Node's built-in test runner — no watch mode, re-run `npm test` after edits. `roundtrip.test.ts` is the one genuinely cross-repo test: it verifies sync-shaped and reports-shaped parcels round-trip losslessly, including dictionary-substituted fields.
+Tests are `.test.ts` files compiled alongside source and run from `dist/` via Node's built-in test runner — no watch mode, re-run `npm test` after edits. `roundtrip.test.ts` is the in-process cross-repo round-trip test: it verifies sync-shaped and reports-shaped parcels round-trip losslessly, including dictionary-substituted fields. The full end-to-end one, with real processes talking over HTTP, is `scripts/e2e-cross-repo-pipeline.mjs` (see "cross-repo E2E pipeline" below).
 
 ### sync
 ```bash
@@ -122,8 +122,19 @@ npm test    # tsc -b && node --test 'dist/**/*.test.js'
 npm run lint    # flat-config ESLint, shared base in the repo root's eslint.config.base.mjs
 ```
 
+### cross-repo E2E pipeline
+```bash
+# from the repo root
+npm run e2e:cross-repo   # node scripts/e2e-cross-repo-pipeline.mjs
+```
+Pushes a sync-shaped parcel through a real bridge backend and a real worker job (against a fake model server standing in for an AI provider), then pulls the result back. All three run as separate processes and talk only over HTTP. The script does not set up its own prerequisites, which are the same as for `npm run test:e2e -w backend`:
+- a reachable Postgres with a pre-created `ntlstl-db-test` database;
+- `packages/protocol`, `bridge/apps/backend` and `worker` already built (`npm run build` in each, or `npm run build -w backend` from `bridge/`). The script only runs their `dist/` output.
+
+Environment: `POSTGRES_HOST`/`POSTGRES_PORT`/`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` default to `localhost`/`5432`/`postgres`/`postgres`/`ntlstl-db-test`, the same database bridge's local `docker compose up -d postgres` gives you. `E2E_BRIDGE_PORT` (default `3099`) is the port the spawned bridge listens on, so it does not collide with a dev bridge on :3000. CI runs this nightly via `.github/workflows/nightly-cross-repo-e2e.yml`, not on every push.
+
 ### CI
-`.github/workflows/ci.yml` builds/tests protocol → sync/worker/reports/bridge/harness (each needing protocol built first) — read it for the exact command sequence each project's pipeline runs, since it's the source of truth if any command above drifts. bridge's job also runs its e2e suite and an informational migration-drift check against a real Postgres service container. `.github/workflows/deploy-bridge.yml` builds bridge/worker's Docker images and deploys them to the production Docker Swarm stack; currently `workflow_dispatch`-only. `.github/workflows/nightly-reports-e2e.yml` runs reports' Cypress suite against a real client+server pair, on a nightly schedule rather than every push (slower, more failure-prone than the unit suites).
+`.github/workflows/ci.yml` builds/tests protocol → sync/worker/reports/bridge/harness (each needing protocol built first) — read it for the exact command sequence each project's pipeline runs, since it's the source of truth if any command above drifts. bridge's job also runs its e2e suite and an informational migration-drift check against a real Postgres service container. `.github/workflows/deploy-bridge.yml` builds bridge/worker's Docker images and deploys them to the production Docker Swarm stack; currently `workflow_dispatch`-only. `.github/workflows/nightly-reports-e2e.yml` runs reports' Cypress suite against a real client+server pair, on a nightly schedule rather than every push (slower, more failure-prone than the unit suites). `.github/workflows/nightly-cross-repo-e2e.yml` runs `npm run e2e:cross-repo` against a Postgres service container on the same reasoning: nightly at 04:00 UTC (`cron: '0 4 * * *'`), plus manual `workflow_dispatch`.
 
 ## Architecture notes
 
