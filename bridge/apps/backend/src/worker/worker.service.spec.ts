@@ -1096,6 +1096,61 @@ describe('WorkerService', () => {
       });
     });
 
+    describe('retry with another context', () => {
+      const failed = () => ({
+        id: 5,
+        userId: 7,
+        sourceFileId: 1,
+        model: JobModel.Opus,
+        claudeCredentialId: null,
+        status: JobStatus.Failed,
+        contextName: 'Project notes',
+        contextText: 'Use pnpm.',
+      });
+
+      it('snapshots the chosen context instead of the old one', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+        contextService.findOwned.mockResolvedValue({
+          name: 'Ответы: 1:2',
+          content: 'Answer text',
+        });
+
+        const retried = await service.retry(5, 7, undefined, { contextId: 4 });
+
+        expect(contextService.findOwned).toHaveBeenCalledWith(4, 7);
+        expect(retried).toMatchObject({
+          contextName: 'Ответы: 1:2',
+          contextText: 'Answer text',
+        });
+      });
+
+      it('drops the context when asked to run without one', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+
+        const retried = await service.retry(5, 7, undefined, {
+          withoutContext: true,
+        });
+
+        expect(contextService.findOwned).not.toHaveBeenCalled();
+        expect(retried).toMatchObject({
+          contextName: null,
+          contextText: null,
+        });
+      });
+
+      it('rejects a context the user does not own, creating no job', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+        contextService.findOwned.mockRejectedValue(
+          new NotFoundException('Context not found'),
+        );
+
+        await expect(
+          service.retry(5, 7, undefined, { contextId: 99 }),
+        ).rejects.toThrow(NotFoundException);
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+    });
+
     describe('history of earlier runs', () => {
       const earlier = (id: number, over = {}) => ({
         id,

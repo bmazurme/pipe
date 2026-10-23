@@ -2510,6 +2510,8 @@ export interface components {
             model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
             providerCredentialId?: number;
+            contextId?: number;
+            withoutContext?: boolean;
         };
         UpdateJobStatusDto: {
             /** @enum {string} */

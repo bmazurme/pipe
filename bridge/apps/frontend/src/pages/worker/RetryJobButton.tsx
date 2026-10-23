@@ -6,6 +6,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import {
   getErrorMessage,
   useListClaudeCredentialsQuery,
+  useListContextsQuery,
   useListProviderCredentialsQuery,
   useRetryJobMutation,
   WorkerJob,
@@ -15,6 +16,7 @@ import { limitResetAt } from './claudeLimits';
 import { MODEL_OPTIONS } from './constants';
 
 const SAME = '';
+const NO_CONTEXT = 'none';
 const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
 
 interface RetryJobButtonProps {
@@ -32,10 +34,13 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
   const [otherOpen, setOtherOpen] = useState(false);
   const [newModel, setNewModel] = useState<WorkerJobModel>(job.model);
   const [newCredential, setNewCredential] = useState(SAME);
+  const [newContext, setNewContext] = useState<string | null>(null);
   const failedOnLimit = job.status === 'failed' && /session limit/i.test(job.errorMessage ?? '');
   // Only asked for when it matters: the snapshot of the token the job ran on.
   const { data: credentials } = useListClaudeCredentialsQuery(undefined, { skip: !failedOnLimit && !otherOpen });
   const { data: providerCredentials } = useListProviderCredentialsQuery(undefined, { skip: !otherOpen });
+
+  const { data: contexts } = useListContextsQuery(undefined, { skip: !otherOpen });
 
   if (job.status !== 'failed' && job.status !== 'cancelled') return null;
 
@@ -51,6 +56,15 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
     ).map((item) => ({ value: String(item.id), content: item.name })),
   ];
 
+  // Untouched = the answers saved from the Questions page for this task, when there are any, else the job's own.
+  const answersContext = contexts?.find((item) => item.name === `Ответы: ${job.taskKey}`);
+  const contextValue = newContext ?? (answersContext ? String(answersContext.id) : SAME);
+  const contextOptions = [
+    { value: SAME, content: 'контекст задачи' },
+    { value: NO_CONTEXT, content: 'без контекста' },
+    ...(contexts ?? []).map((item) => ({ value: String(item.id), content: item.name })),
+  ];
+
   const handleModelChange = (value: WorkerJobModel) => {
     setNewModel(value);
     setNewCredential(SAME);
@@ -61,13 +75,14 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
     setOtherOpen(false);
     await handleRetry(undefined, {
       model: newModel,
+      ...(contextValue === NO_CONTEXT ? { withoutContext: true } : contextValue !== SAME ? { contextId: Number(contextValue) } : {}),
       ...(credentialId !== undefined ? (isProvider ? { providerCredentialId: credentialId } : { claudeCredentialId: credentialId }) : {}),
     });
   };
 
   const handleRetry = async (
     notBefore?: string,
-    overrides?: { model?: WorkerJobModel; claudeCredentialId?: number; providerCredentialId?: number },
+    overrides?: { model?: WorkerJobModel; claudeCredentialId?: number; providerCredentialId?: number; contextId?: number; withoutContext?: boolean },
   ) => {
     setError(null);
 
@@ -130,6 +145,13 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
             value={[newCredential]}
             options={tokenOptions}
             onUpdate={(value) => setNewCredential(value[0] ?? SAME)}
+          />
+          <Select
+            label="Context"
+            width="max"
+            value={[contextValue]}
+            options={contextOptions}
+            onUpdate={(value) => setNewContext(value[0] ?? SAME)}
           />
         </Dialog.Body>
         <Dialog.Footer
