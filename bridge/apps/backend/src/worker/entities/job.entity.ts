@@ -38,6 +38,7 @@ export enum JobStatus {
 @Entity({ name: 'jobs' })
 @Index(['userId', 'status'])
 @Index(['userId', 'taskKey'])
+@Index(['sourceFileId'])
 export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: false })
   userId: number;
