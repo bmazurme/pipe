@@ -2661,6 +2661,7 @@ export interface components {
             text: string;
             resolved: boolean;
             answer: string | null;
+            jobId: number | null;
             /** Format: date-time */
             createdAt: string;
         };

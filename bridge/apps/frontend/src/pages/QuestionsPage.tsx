@@ -5,6 +5,7 @@ import { Alert, Button, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Text
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import { getErrorMessage, type QuestionCard, useListQuestionCardsQuery, useSaveQuestionsAsContextMutation, useSetQuestionResolvedMutation } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
+import { JobDetailDialog } from './worker/JobDetailDialog';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './QuestionsPage.module.css';
 
@@ -18,11 +19,12 @@ interface CardViewProps {
   onToggle: (id: number, resolved: boolean) => void;
   onAnswer: (id: number, answer: string) => void;
   onSaveContext: (taskKey: string) => void;
+  onOpenJob: (jobId: number) => void;
   disabled: boolean;
   contextSaved: boolean;
 }
 
-function CardView({ card, onToggle, onAnswer, onSaveContext, disabled, contextSaved }: CardViewProps) {
+function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled, contextSaved }: CardViewProps) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const hasAnswers = card.questions.some((question) => question.answer);
 
@@ -50,6 +52,11 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, disabled, contextSa
                 </Text>
               }
             />
+            {question.jobId !== null && (
+              <Button size="xs" view="flat" onClick={() => onOpenJob(question.jobId as number)}>
+                Запуск #{question.jobId}
+              </Button>
+            )}
             {question.answer && <Text className={styles.answerText}>{question.answer}</Text>}
             {!question.resolved && (
               <div className={styles.answer}>
@@ -101,6 +108,7 @@ export function QuestionsPage() {
   const [saveContext, { isLoading: isSavingContext }] = useSaveQuestionsAsContextMutation();
   const [savedContexts, setSavedContexts] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
 
   const handleToggle = async (id: number, resolved: boolean) => {
     setError(null);
@@ -178,11 +186,14 @@ export function QuestionsPage() {
                 onToggle={(id, resolved) => void handleToggle(id, resolved)}
                 onAnswer={(id, answer) => void handleAnswer(id, answer)}
                 onSaveContext={(taskKey) => void handleSaveContext(taskKey)}
+                onOpenJob={setOpenJobId}
               />
             </li>
           ))}
         </ul>
       )}
+
+      {openJobId !== null && <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />}
     </div>
   );
 }

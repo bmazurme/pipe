@@ -127,6 +127,7 @@ export class QuestionsService {
           text: q.text,
           resolved: q.resolvedAt !== null,
           answer: q.answer ?? null,
+          jobId: q.jobId ?? null,
           createdAt: q.createdAt,
         })),
         openCount,
