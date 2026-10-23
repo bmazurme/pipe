@@ -4468,9 +4468,6 @@
           },
           "scope": {
             "type": "string",
-            "enum": [
-              "boards"
-            ],
             "nullable": true
           },
           "token": {
@@ -4504,9 +4501,6 @@
           },
           "scope": {
             "type": "string",
-            "enum": [
-              "boards"
-            ],
             "nullable": true
           },
           "createdAt": {
