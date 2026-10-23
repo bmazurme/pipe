@@ -4,6 +4,7 @@ export interface ApiKey {
   id: number;
   name: string;
   prefix: string;
+  scope?: 'boards' | null;
   createdAt: string;
   lastUsedAt: string | null;
 }
@@ -18,8 +19,12 @@ const apiKeysApiEndpoints = apiKeysApi.injectEndpoints({
       query: () => 'auth/api-keys',
       providesTags: ['ApiKeys'],
     }),
-    createApiKey: builder.mutation<CreatedApiKey, string>({
-      query: (name) => ({ url: 'auth/api-keys', method: 'POST', body: { name } }),
+    createApiKey: builder.mutation<CreatedApiKey, { name: string; scope?: 'boards' }>({
+      query: ({ name, scope }) => ({
+        url: 'auth/api-keys',
+        method: 'POST',
+        body: scope ? { name, scope } : { name },
+      }),
       invalidatesTags: ['ApiKeys'],
     }),
     revokeApiKey: builder.mutation<void, number>({

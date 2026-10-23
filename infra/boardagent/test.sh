@@ -68,7 +68,7 @@ decision() { # id path…
   local id="$1"; shift
   python3 -c 'import json, sys; print(json.dumps({"update": {"id": int(sys.argv[1]), "sha": sys.argv[2], "repoPaths": sys.argv[3:]}}))' "$id" "${DEC_SHA:-$SHA}" "$@" > "$T/pending.json"
 }
-agent() { "$HERE/board-agent.sh" "$@" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"; }
+agent() { bash "$HERE/board-agent.sh" "$@" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"; }
 check() { if [ "$2" -eq 0 ]; then PASS=$((PASS + 1)); echo "ok   $1"; else FAILED=$((FAILED + 1)); echo "FAIL $1"; sed 's/^/     | /' "$T/stdout" "$T/stderr"; fi; }
 fresh() { rm -rf "$T/state" "$T/calls"; mkdir -p "$T/calls"; unset DEC_SHA; FAKE_COMPARE=behind; board; }
 calls() { ls "$T/calls" | wc -l | tr -d ' '; }

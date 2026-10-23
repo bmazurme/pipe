@@ -92,6 +92,46 @@ describe('JwtOrApiKeyGuard', () => {
     });
   });
 
+  describe('a boards-scoped API key', () => {
+    const boardsContext = () => {
+      const request: { headers: Record<string, string>; user?: unknown } = {
+        headers: { 'x-api-key': `${API_KEY_PREFIX}k` },
+      };
+      const context = {
+        switchToHttp: () => ({ getRequest: () => request }),
+        getHandler: () => undefined,
+        getClass: () => undefined,
+      } as unknown as ExecutionContext;
+
+      return { request, context };
+    };
+
+    it('is refused on a route not marked for the board agent', async () => {
+      apiKeysService.validate.mockResolvedValue({ userId: 5, scope: 'boards' });
+      const { context } = boardsContext();
+
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('is accepted on a route marked for the board agent', async () => {
+      apiKeysService.validate.mockResolvedValue({ userId: 5, scope: 'boards' });
+      reflector.getAllAndOverride.mockReturnValue(true);
+      const { request, context } = boardsContext();
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(request.user).toEqual({ id: 5 });
+    });
+
+    it('leaves a key with no scope working on any route', async () => {
+      apiKeysService.validate.mockResolvedValue({ userId: 5, scope: null });
+      const { context } = boardsContext();
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+  });
+
   it('delegates to JwtGuard when no API key is present, leaving it unaffected', async () => {
     jwtGuard.canActivate.mockResolvedValue(true);
     const context = contextWithHeaders({

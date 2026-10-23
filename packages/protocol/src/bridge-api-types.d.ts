@@ -2280,11 +2280,14 @@ export interface components {
         };
         CreateApiKeyDto: {
             name: string;
+            /** @enum {string} */
+            scope?: "boards";
         };
         CreatedApiKeyResponseDto: {
             id: number;
             name: string;
             prefix: string;
+            scope: string | null;
             token: string;
             /** Format: date-time */
             createdAt: string;
@@ -2293,6 +2296,7 @@ export interface components {
             id: number;
             name: string;
             prefix: string;
+            scope: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

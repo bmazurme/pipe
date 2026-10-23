@@ -26,6 +26,10 @@ export class ApiKey extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   keyHash: string;
 
+  // null = a full key; 'boards' = accepted only on routes marked BoardAgentKeyAllowed (the boards' own agent).
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  scope: 'boards' | null;
+
   @Column({ type: 'timestamp', nullable: true })
   lastUsedAt: Date | null;
 

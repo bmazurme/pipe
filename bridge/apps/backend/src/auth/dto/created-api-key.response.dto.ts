@@ -5,6 +5,7 @@ export class CreatedApiKeyResponseDto {
   id: number;
   name: string;
   prefix: string;
+  scope: 'boards' | null;
   token: string;
   createdAt: Date;
 

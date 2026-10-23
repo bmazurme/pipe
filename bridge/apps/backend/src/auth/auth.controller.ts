@@ -114,7 +114,11 @@ export class AuthController {
     @Body() dto: CreateApiKeyDto,
     @CurrentUser() currentUser: { id: number },
   ) {
-    const created = await this.apiKeysService.create(currentUser.id, dto.name);
+    const created = await this.apiKeysService.create(
+      currentUser.id,
+      dto.name,
+      dto.scope ?? null,
+    );
     return CreatedApiKeyResponseDto.fromCreatedApiKey(created);
   }
 

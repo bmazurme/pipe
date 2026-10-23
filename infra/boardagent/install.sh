@@ -3,7 +3,7 @@
 # Installs the board agent (run as root, on each board — by hand, like every script of this kind; the agent never updates itself):
 #
 #   scp -r infra/boardagent pi@HOST:~/ && ssh -t pi@HOST 'sudo bash ~/boardagent/install.sh'
-#   then, once per board:  sudo nano /etc/pipe-boardagent.env      # BRIDGE_API_KEY = the owner's personal API key (brk_…)
+#   then, once per board:  sudo nano /etc/pipe-boardagent.env      # BRIDGE_API_KEY = a boards-only API key of the owner (brk_…)
 #
 #   install.sh --remove     stop and remove it
 #
@@ -35,7 +35,8 @@ if [ ! -f /etc/pipe-boardagent.env ]; then
   umask 077
   cat > /etc/pipe-boardagent.env <<'ENV'
 BRIDGE_API_URL=https://api.bridge.ntlstl.dev
-# The OWNER's personal API key (bridge: Profile → API keys). Without it the agent does nothing.
+# A boards-only API key of the OWNER (bridge: Profile → API keys → «только для плат»): it can call the board agent's routes and nothing
+# else, so a key lifted from a board does not open the owner's account. Without it the agent does nothing.
 BRIDGE_API_KEY=
 # BOARD_HOST=ubuntu-red      # the name shown in bridge; default is the hostname
 # BRIDGE_PI_DIR=/home/pi/bridge-pi
@@ -92,4 +93,4 @@ fi
 
 systemctl daemon-reload
 systemctl enable --now pipe-boardagent-report.timer pipe-boardagent-apply.timer
-echo "installed. Put the owner's API key into /etc/pipe-boardagent.env, then: sudo systemctl start pipe-boardagent-report.service"
+echo "installed. Put a boards-only API key of the owner into /etc/pipe-boardagent.env, then: sudo systemctl start pipe-boardagent-report.service"

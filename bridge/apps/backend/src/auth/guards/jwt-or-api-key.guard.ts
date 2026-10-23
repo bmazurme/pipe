@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 
 import { API_KEY_PREFIX, ApiKeysService } from '../api-keys.service';
+import { BOARD_AGENT_KEY_ALLOWED } from '../decorators/board-agent-key-allowed.decorator';
 import { WORKER_KEY_ALLOWED } from '../decorators/worker-key-allowed.decorator';
 import { WORKER_KEY_PREFIX, WorkerKeysService } from '../worker-keys.service';
 import { JwtGuard } from './jwt.guard';
@@ -72,6 +73,19 @@ export class JwtOrApiKeyGuard implements CanActivate {
 
       if (!apiKey) {
         throw new UnauthorizedException('Invalid or revoked API key');
+      }
+
+      if (apiKey.scope === 'boards') {
+        const allowed = this.reflector.getAllAndOverride<boolean>(
+          BOARD_AGENT_KEY_ALLOWED,
+          [context.getHandler(), context.getClass()],
+        );
+
+        if (!allowed) {
+          throw new ForbiddenException(
+            'A boards-only key cannot call this route',
+          );
+        }
       }
 
       (request as Request & { user?: unknown }).user = { id: apiKey.userId };

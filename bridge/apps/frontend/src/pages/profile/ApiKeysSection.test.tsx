@@ -194,3 +194,33 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByText('Ключей ещё нет')).toBeNull();
   });
 });
+
+describe('ApiKeysSection boards-only key', () => {
+  it('sends scope "boards" when the checkbox is ticked', async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST') {
+          return jsonResponse({ ...KEYS[0], scope: 'boards', token: 'brk_board-token' });
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+    renderSection();
+    await screen.findByText('Ключей ещё нет');
+
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+    await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'board-1');
+    await user.click(screen.getByLabelText('только для плат'));
+    await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
+
+    await screen.findByText('brk_board-token');
+    const posts = requests.filter((r) => r.method === 'POST');
+    expect(JSON.parse(await posts[0].text())).toEqual({ name: 'board-1', scope: 'boards' });
+  });
+});

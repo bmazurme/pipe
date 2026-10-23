@@ -84,7 +84,7 @@ describe('ApiKeysService', () => {
 
       const result = await service.validate(`${API_KEY_PREFIX}real-token`);
 
-      expect(result).toEqual({ userId: apiKey.userId });
+      expect(result).toEqual({ userId: apiKey.userId, scope: null });
     });
 
     it('bumps lastUsedAt on a successful validation', async () => {
@@ -118,7 +118,7 @@ describe('ApiKeysService', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       process.off('unhandledRejection', unhandled);
-      expect(result).toEqual({ userId: apiKey.userId });
+      expect(result).toEqual({ userId: apiKey.userId, scope: null });
       expect(unhandled).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
 

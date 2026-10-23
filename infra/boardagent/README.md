@@ -33,7 +33,7 @@ Telegram или на странице «Платы» в bridge, — не зах�
 
 ```bash
 scp -r infra/boardagent pi@HOST:~/ && ssh -t pi@HOST 'sudo bash ~/boardagent/install.sh'
-ssh -t pi@HOST 'sudo nano /etc/pipe-boardagent.env'     # BRIDGE_API_KEY = персональный API-ключ ВЛАДЕЛЬЦА (bridge: Профиль → API-ключи)
+ssh -t pi@HOST 'sudo nano /etc/pipe-boardagent.env'     # BRIDGE_API_KEY = API-ключ ВЛАДЕЛЬЦА только для плат (bridge: Профиль → API-ключи → «только для плат»; полный ключ не нужен)
 ssh pi@HOST 'sudo systemctl start pipe-boardagent-report.service && sudo journalctl -u pipe-boardagent-report.service -n 5 --no-pager'
 ```
 

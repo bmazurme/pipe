@@ -6,6 +6,7 @@ export class ApiKeyResponseDto {
   id: number;
   name: string;
   prefix: string;
+  scope: 'boards' | null;
   createdAt: Date;
   lastUsedAt: Date | null;
 
@@ -14,6 +15,7 @@ export class ApiKeyResponseDto {
       id: apiKey.id,
       name: apiKey.name,
       prefix: apiKey.prefix,
+      scope: apiKey.scope ?? null,
       createdAt: apiKey.createdAt,
       lastUsedAt: apiKey.lastUsedAt,
     };
