@@ -620,7 +620,7 @@ export interface paths {
         get: operations["WorkerController_list"];
         put?: never;
         post: operations["WorkerController_create"];
-        delete?: never;
+        delete: operations["WorkerController_clearFinished"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4109,6 +4109,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobResponseDto"];
                 };
+            };
+        };
+    };
+    WorkerController_clearFinished: {
+        parameters: {
+            query: {
+                olderThanDays: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

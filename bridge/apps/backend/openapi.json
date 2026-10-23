@@ -1190,6 +1190,26 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "WorkerController_clearFinished",
+        "parameters": [
+          {
+            "name": "olderThanDays",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 365,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/v1/worker/jobs/claim": {

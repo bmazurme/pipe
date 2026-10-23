@@ -296,6 +296,24 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось удалить задачу';
       },
     }),
+    clearFinishedJobs: builder.mutation<{ removed: number }, number>({
+      query: (olderThanDays) => ({ url: `worker/jobs?olderThanDays=${olderThanDays}`, method: 'DELETE' }),
+      invalidatesTags: ['WorkerJob'],
+      // listJobs is incremental (see above) and the deleted ids are not known here, so the cache is emptied:
+      // the refetch that the invalidation triggers then reads the whole list again.
+      async onQueryStarted(_days, { dispatch, queryFulfilled }) {
+        await queryFulfilled;
+        dispatch(
+          workerApiEndpoints.util.updateQueryData('listJobs', undefined, (draft) => {
+            draft.splice(0, draft.length);
+          }),
+        );
+      },
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        return message ?? 'Не удалось удалить задачи';
+      },
+    }),
     listClaudeCredentials: builder.query<ClaudeCredential[], void>({
       query: () => 'worker/claude-credentials',
       providesTags: ['ClaudeCredential'],
@@ -458,6 +476,7 @@ export const {
   useGetFailureSummaryQuery,
   useRetryJobMutation,
   useDeleteJobMutation,
+  useClearFinishedJobsMutation,
   useDownloadJobResultMutation,
   usePeekJobResultMutation,
   useListClaudeCredentialsQuery,

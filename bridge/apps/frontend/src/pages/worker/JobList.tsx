@@ -9,6 +9,7 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 import { CancelJobButton } from './CancelJobButton';
+import { ClearFinishedJobsButton } from './ClearFinishedJobsButton';
 import { RetryJobButton } from './RetryJobButton';
 import {
   isActive,
@@ -116,6 +117,7 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
               { value: 'failed', content: failedCount > 0 ? `С ошибкой (${failedCount})` : 'С ошибкой' },
             ]}
           />
+          <ClearFinishedJobsButton />
           {taskFilter !== null && (
             <Label
               theme="info"

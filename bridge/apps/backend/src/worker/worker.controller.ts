@@ -31,6 +31,7 @@ import { MulterExceptionFilter } from '../storage/filters/multer-exception.filte
 import { respondDownloadError } from '../storage/file-store/send-stored-file';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
+import { ClearFinishedJobsDto } from './dto/clear-finished-jobs.dto';
 import { CancelJobDto } from './dto/cancel-job.dto';
 import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -300,6 +301,18 @@ export class WorkerController {
     } = await this.workerService.getCancelState(id, currentUser.id);
 
     return { id: jobId, status, cancelRequestedAt };
+  }
+
+  // Declared before `:id` so that `DELETE /worker/jobs` is not taken for a job id.
+  @Delete()
+  async clearFinished(
+    @Query() query: ClearFinishedJobsDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<{ removed: number }> {
+    return this.workerService.removeFinishedOlderThan(
+      currentUser.id,
+      query.olderThanDays,
+    );
   }
 
   @Delete(':id')
