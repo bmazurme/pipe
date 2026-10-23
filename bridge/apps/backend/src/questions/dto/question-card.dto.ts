@@ -1,3 +1,5 @@
+import { TaskQuestion } from '../entities/task-question.entity';
+
 export class QuestionItemDto {
   id: number;
   text: string;
@@ -6,6 +8,17 @@ export class QuestionItemDto {
   // The run the question came from, or null when unknown.
   jobId: number | null;
   createdAt: Date;
+
+  static fromEntity(q: TaskQuestion): QuestionItemDto {
+    return {
+      id: q.id,
+      text: q.text,
+      resolved: q.resolvedAt !== null,
+      answer: q.answer ?? null,
+      jobId: q.jobId ?? null,
+      createdAt: q.createdAt,
+    };
+  }
 }
 
 export class QuestionCardDto {
