@@ -1096,6 +1096,61 @@ describe('WorkerService', () => {
       });
     });
 
+    describe('retry with another context', () => {
+      const failed = () => ({
+        id: 5,
+        userId: 7,
+        sourceFileId: 1,
+        model: JobModel.Opus,
+        claudeCredentialId: null,
+        status: JobStatus.Failed,
+        contextName: 'Project notes',
+        contextText: 'Use pnpm.',
+      });
+
+      it('snapshots the chosen context instead of the old one', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+        contextService.findOwned.mockResolvedValue({
+          name: 'Ответы: 1:2',
+          content: 'Answer text',
+        });
+
+        const retried = await service.retry(5, 7, undefined, { contextId: 4 });
+
+        expect(contextService.findOwned).toHaveBeenCalledWith(4, 7);
+        expect(retried).toMatchObject({
+          contextName: 'Ответы: 1:2',
+          contextText: 'Answer text',
+        });
+      });
+
+      it('drops the context when asked to run without one', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+
+        const retried = await service.retry(5, 7, undefined, {
+          withoutContext: true,
+        });
+
+        expect(contextService.findOwned).not.toHaveBeenCalled();
+        expect(retried).toMatchObject({
+          contextName: null,
+          contextText: null,
+        });
+      });
+
+      it('rejects a context the user does not own, creating no job', async () => {
+        repository.findOne!.mockResolvedValue(failed());
+        contextService.findOwned.mockRejectedValue(
+          new NotFoundException('Context not found'),
+        );
+
+        await expect(
+          service.retry(5, 7, undefined, { contextId: 99 }),
+        ).rejects.toThrow(NotFoundException);
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+    });
+
     describe('history of earlier runs', () => {
       const earlier = (id: number, over = {}) => ({
         id,
@@ -2012,6 +2067,53 @@ describe('WorkerService', () => {
             providerCredentialId: 3,
           }),
         ).rejects.toThrow('Provider credential not found');
+      });
+    });
+
+    describe('findHeld', () => {
+      it('returns the job for a personal API key', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, undefined)).resolves.toMatchObject({
+          id: 1,
+        });
+        expect(repository.findOne).toHaveBeenCalledTimes(1);
+      });
+
+      it('returns the job for the worker holding it', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, 5)).resolves.toMatchObject({
+          id: 1,
+        });
+      });
+
+      it('403s for a job held by another worker', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, 6)).rejects.toThrow(
+          'not held by this worker',
+        );
+      });
+
+      it('404s for an unknown or foreign job', async () => {
+        repository.findOne!.mockResolvedValue(null);
+
+        await expect(service.findHeld(1, 7, 5)).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
 

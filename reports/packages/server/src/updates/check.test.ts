@@ -4,6 +4,8 @@ import type { ReleaseInfoType } from '@reports/shared';
 
 const state = vi.hoisted(() => ({ settings: {} as Record<string, string> }));
 vi.mock('../settings/props', () => ({ getSettings: () => state.settings }));
+const installedState = vi.hoisted(() => ({ release: null as { releaseId: string; shortId: string; version: string | null } | null }));
+vi.mock('./release', async (importOriginal) => ({ ...(await importOriginal<typeof import('./release')>()), readInstalledRelease: () => installedState.release }));
 
 import { DOWNLOAD_TIMEOUT_MS } from './apply';
 import { CHECK_TIMEOUT_MS, createUpdateChecker, fetchLatestRelease } from './check';
@@ -164,6 +166,23 @@ describe('fetchLatestRelease', () => {
 
     expect(seen).toEqual({ url: 'https://api.bridge.example/api/v1/reports-release/info', key: 'brk_two' });
     expect(info).toMatchObject({ version: '1.2.0', size: 10 });
+  });
+
+  it('tells bridge the installed release in X-Reports-Release, and sends no such header when none is installed', async () => {
+    state.settings = { bridgeApiUrl: 'https://b.example/x', bridgeApiKey: 'k' };
+    const seen: Array<Record<string, string>> = [];
+    globalThis.fetch = (async (_url: URL, init: RequestInit) => {
+      seen.push(init.headers as Record<string, string>);
+      return Response.json({ releaseId: 'c'.repeat(64), sha256: 'd' });
+    }) as unknown as typeof fetch;
+
+    installedState.release = { releaseId: 'a'.repeat(64), shortId: 'a'.repeat(12), version: '1.0.0' };
+    await fetchLatestRelease();
+    installedState.release = null;
+    await fetchLatestRelease();
+
+    expect(seen[0]['X-Reports-Release']).toBe('a'.repeat(64));
+    expect(seen[1]).not.toHaveProperty('X-Reports-Release');
   });
 
   it('asks for the settings when bridge is not configured', async () => {

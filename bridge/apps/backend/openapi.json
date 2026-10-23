@@ -3648,6 +3648,24 @@
         }
       }
     },
+    "/api/v1/reports-release/installed": {
+      "get": {
+        "operationId": "ReportsReleaseController_installed",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports-release/download": {
       "get": {
         "operationId": "ReportsReleaseController_download",
@@ -5357,6 +5375,13 @@
           "providerCredentialId": {
             "type": "number",
             "minimum": 1
+          },
+          "contextId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "withoutContext": {
+            "type": "boolean"
           }
         }
       },
