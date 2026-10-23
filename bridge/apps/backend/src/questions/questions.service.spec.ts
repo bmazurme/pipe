@@ -2,7 +2,6 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
-import { Job } from '../worker/entities/job.entity';
 import { TaskQuestion } from './entities/task-question.entity';
 import { ContextService } from '../context/context.service';
 import { projectOf, QuestionsService } from './questions.service';
@@ -22,7 +21,7 @@ describe('projectOf', () => {
 
 describe('QuestionsService', () => {
   let service: QuestionsService;
-  let job: { id: number; taskKey: string | null } | null;
+  let job: { id: number; taskKey: string | null };
   let open: Row[];
   let stored: Row[];
   let save: jest.Mock;
@@ -69,10 +68,6 @@ describe('QuestionsService', () => {
             },
           },
         },
-        {
-          provide: getRepositoryToken(Job),
-          useValue: { findOne: () => Promise.resolve(job) },
-        },
       ],
     }).compile();
 
@@ -81,7 +76,7 @@ describe('QuestionsService', () => {
 
   describe('addFromRun', () => {
     it('stores new questions under the job’s task, tagged with the project', async () => {
-      const added = await service.addFromRun(5, 7, [
+      const added = await service.addFromRun(job, 7, [
         '  Which branch?  ',
         'Is X ok?',
       ]);
@@ -102,7 +97,7 @@ describe('QuestionsService', () => {
     it('skips a question already open on the task, and repeats within the report', async () => {
       open = [{ id: 1, taskKey: '173:628', text: 'Which branch?' }];
 
-      const added = await service.addFromRun(5, 7, [
+      const added = await service.addFromRun(job, 7, [
         'which  branch?',
         'New one',
         'new one',
@@ -114,19 +109,17 @@ describe('QuestionsService', () => {
       ]);
     });
 
+    it('keeps only the first MAX_QUESTIONS_PER_REPORT questions of a report', async () => {
+      const texts = Array.from({ length: 25 }, (_, i) => `Question ${i}`);
+
+      expect(await service.addFromRun(job, 7, texts)).toBe(20);
+    });
+
     it('stores nothing for a job without a task key', async () => {
       job = { id: 5, taskKey: null };
 
-      expect(await service.addFromRun(5, 7, ['Q?'])).toBe(0);
+      expect(await service.addFromRun(job, 7, ['Q?'])).toBe(0);
       expect(save).not.toHaveBeenCalled();
-    });
-
-    it('404s for a job that is not the caller’s', async () => {
-      job = null;
-
-      await expect(service.addFromRun(5, 7, ['Q?'])).rejects.toThrow(
-        NotFoundException,
-      );
     });
   });
 
