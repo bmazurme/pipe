@@ -5,6 +5,8 @@ export interface QuestionItem {
   text: string;
   resolved: boolean;
   answer: string | null;
+  /** The run the question came from, if known. */
+  jobId: number | null;
   createdAt: string;
 }
 

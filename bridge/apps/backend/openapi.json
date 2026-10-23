@@ -6027,6 +6027,10 @@
             "type": "string",
             "nullable": true
           },
+          "jobId": {
+            "type": "number",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -6037,6 +6041,7 @@
           "text",
           "resolved",
           "answer",
+          "jobId",
           "createdAt"
         ]
       },

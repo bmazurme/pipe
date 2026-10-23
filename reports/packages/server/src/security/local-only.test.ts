@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Request, Response } from 'express';
 
-import { corsOrigin, hostnameOf, isTrustedHostname, isTrustedOrigin, localOnly } from './local-only';
+import { corsOrigin, hostnameOf, isTrustedHostname, isTrustedOriginHost, isTrustedOrigin, localOnly } from './local-only';
 
 const env = (values: Record<string, string> = {}) => values as NodeJS.ProcessEnv;
 
@@ -90,5 +90,38 @@ describe('localOnly middleware', () => {
 
   it('lets through a request with neither header', () => {
     expect(run({}).next).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('foreign IP origins', () => {
+  it('rejects a public-IP origin in localOnly and corsOrigin', () => {
+    const { next, status } = run({ host: '127.0.0.1:4000', origin: 'http://203.0.113.7' });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(403);
+
+    const results: boolean[] = [];
+
+    corsOrigin('http://203.0.113.7', (_error, allow) => results.push(Boolean(allow)), env());
+    expect(results).toEqual([false]);
+  });
+
+  it('accepts the same-host LAN origin', () => {
+    const { next } = run({ host: '192.168.1.5:4000', origin: 'http://192.168.1.5:4000' });
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a different LAN IP origin', () => {
+    const { next, status } = run({ host: '192.168.1.5:4000', origin: 'http://192.168.1.6:4000' });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(403);
+  });
+
+  it('trusts loopback ranges and CLIENT_ORIGIN regardless of Host', () => {
+    expect(isTrustedOriginHost('127.0.0.2', undefined, env())).toBe(true);
+    expect(isTrustedOriginHost('[::1]', undefined, env())).toBe(true);
+    expect(isTrustedOrigin('https://x.example', env({ CLIENT_ORIGIN: 'https://x.example' }), '10.0.0.1:4000')).toBe(true);
   });
 });

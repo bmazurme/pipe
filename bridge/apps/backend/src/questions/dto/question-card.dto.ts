@@ -3,6 +3,8 @@ export class QuestionItemDto {
   text: string;
   resolved: boolean;
   answer: string | null;
+  // The run the question came from, or null when unknown.
+  jobId: number | null;
   createdAt: Date;
 }
 

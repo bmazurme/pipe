@@ -161,6 +161,53 @@ export class WorkersService {
     ];
   }
 
+  // What the app shell's "is some worker up" poll needs, without the full worker list: no jobs aggregate, and only
+  // the columns it reads (so the encrypted vpnLink is never decrypted). Same answer as list() for these fields.
+  async upHeartbeats(
+    userId: number,
+  ): Promise<{ name: string; lastSeenAt: Date; isUp: boolean }[]> {
+    const now = Date.now();
+    const [managed, legacy] = await Promise.all([
+      this.workers.find({
+        where: { userId },
+        select: {
+          id: true,
+          name: true,
+          enabled: true,
+          keyHash: true,
+          lastSeenAt: true,
+        },
+        order: { id: 'ASC' },
+      }),
+      this.heartbeats.listForUser(userId),
+    ]);
+    const managedNames = new Set(managed.map((worker) => worker.name));
+
+    return [
+      ...managed.flatMap((worker) =>
+        worker.lastSeenAt
+          ? [
+              {
+                name: worker.name,
+                lastSeenAt: worker.lastSeenAt,
+                isUp:
+                  worker.keyHash !== null &&
+                  worker.enabled &&
+                  this.isOnline(worker.lastSeenAt, now),
+              },
+            ]
+          : [],
+      ),
+      ...legacy
+        .filter((entry) => !managedNames.has(entry.name))
+        .map((entry) => ({
+          name: entry.name,
+          lastSeenAt: entry.lastSeenAt,
+          isUp: entry.isUp,
+        })),
+    ];
+  }
+
   async findOwned(id: number, userId: number): Promise<Worker> {
     const worker = await this.workers.findOneBy({ id, userId });
 
