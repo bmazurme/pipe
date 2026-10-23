@@ -175,12 +175,18 @@ export function splitBaseline(baseline: Record<string, string>): {
   return { text, binaries };
 }
 
-// The text changes, plus the binaries the worker made or changed as additions (a binary at an existing path replaces it). A binary
-// whose hash is the one it was given with is not a change — the worker hands every asset back.
+// The text changes, plus what happened to the binaries:
+//  - one the worker made or changed is an addition (a binary at an existing path replaces it); one whose hash is the one it was
+//    given with is not a change;
+//  - one the repository had (it was given to the worker) and the result no longer has is a DELETION — the worker now returns what
+//    is on its disk, so a file it removed is simply missing. `textPaths` are the text files of the result: a binary that came back
+//    as text is a change of that file, not a deletion. (A worker from before that returned every binary it was given, even a removed
+//    one: nothing is missing from such a result, so nothing is deleted.)
 export function withBinaries(
   textChanges: Change[],
   binaries: Map<string, Uint8Array>,
   given: Record<string, string> = {},
+  textPaths: ReadonlySet<string> = new Set(),
 ): Change[] {
   const changed = [...binaries].filter(
     ([path, bytes]) => given[path] !== sha256(bytes),
@@ -192,6 +198,12 @@ export function withBinaries(
 
   for (const [path, bytes] of changed)
     changes.push({ path, kind: 'added', bytes });
+
+  for (const path of Object.keys(given)) {
+    if (!binaries.has(path) && !textPaths.has(path)) {
+      changes.push({ path, kind: 'deleted' });
+    }
+  }
 
   return changes.sort((a, b) => a.path.localeCompare(b.path));
 }

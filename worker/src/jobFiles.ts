@@ -33,18 +33,17 @@ export function writeParcelToDir(dir: string, parcel: ExtractedParcel): void {
   }
 }
 
-// Re-reads every file currently on disk (covers edits AND new files the
-// model created) as the result's file set. Original assets are kept
-// exactly as extracted. Files that aren't valid UTF-8 (images, archives,
-// compiled output) can't go through PackedFile's text content without
-// corruption, so they travel as assets (raw bytes -> base64). Tool state
-// dirs (.claude/, node_modules/) are never part of the result.
-export function collectResult(dir: string, parcel: ExtractedParcel): { files: PackedFile[]; assets: PackedAsset[] } {
-  const assetPaths = new Set(parcel.assets.map((asset) => asset.relPath));
+// Re-reads every file currently on disk as the result's file set: edits, new files the model created — and the binary assets the
+// parcel brought too. What the result says about a file is what is on the disk NOW: a drawing the model regenerated comes back
+// as the new version (it used to come back as the one the parcel brought, so the update was lost), and a file the model deleted
+// is simply not there (it used to be returned all the same, so the deletion was lost). Files that aren't valid UTF-8 (images,
+// archives, compiled output) can't go through PackedFile's text content without corruption, so they travel as assets (raw
+// bytes -> base64). Tool state dirs (.claude/, node_modules/) are never part of the result.
+export function collectResult(dir: string): { files: PackedFile[]; assets: PackedAsset[] } {
   const files: PackedFile[] = [];
-  const assets: PackedAsset[] = [...parcel.assets];
+  const assets: PackedAsset[] = [];
   for (const relPath of listFilesRecursively(dir, dir, EXCLUDED_RESULT_DIRS)) {
-    if (assetPaths.has(relPath) || isExcludedResultPath(relPath)) continue;
+    if (isExcludedResultPath(relPath)) continue;
     const bytes = readFileSync(path.join(dir, relPath));
     const text = decodeUtf8Strict(bytes);
     if (text === undefined) assets.push({ relPath, base64: bytes.toString('base64') });
