@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { ContextService } from '../context/context.service';
@@ -13,7 +13,7 @@ import { QuestionCardDto } from './dto/question-card.dto';
 import { TaskQuestion } from './entities/task-question.entity';
 import {
   MAX_QUESTION_LENGTH,
-  MAX_QUESTIONS_LISTED,
+  MAX_QUESTION_CARDS,
   MAX_QUESTIONS_PER_REPORT,
 } from './questions.limits';
 
@@ -98,31 +98,50 @@ export class QuestionsService {
     userId: number,
     archived: boolean,
   ): Promise<QuestionCardDto[]> {
+    // First pick the tasks of the requested view in SQL (newest activity first), then read only their rows.
+    const tasks = await this.questionRepository
+      .createQueryBuilder('q')
+      .select('q."taskKey"', 'taskKey')
+      .where('q."userId" = :userId', { userId })
+      .groupBy('q."taskKey"')
+      .having(
+        archived
+          ? 'COUNT(*) FILTER (WHERE q."resolvedAt" IS NULL) = 0'
+          : 'COUNT(*) FILTER (WHERE q."resolvedAt" IS NULL) > 0',
+      )
+      .orderBy('MAX(q."updatedAt")', 'DESC')
+      .limit(MAX_QUESTION_CARDS)
+      .getRawMany<{ taskKey: string }>();
+
+    if (tasks.length === 0) return [];
+
     const rows = await this.questionRepository.find({
-      where: { userId },
-      order: { id: 'DESC' },
-      take: MAX_QUESTIONS_LISTED,
+      where: { userId, taskKey: In(tasks.map((t) => t.taskKey)) },
+      order: { id: 'ASC' },
     });
 
     const byTask = new Map<string, TaskQuestion[]>();
 
     for (const row of rows) {
-      byTask.set(row.taskKey, [...(byTask.get(row.taskKey) ?? []), row]);
+      const list = byTask.get(row.taskKey);
+
+      if (list) list.push(row);
+      else byTask.set(row.taskKey, [row]);
     }
 
     const cards: QuestionCardDto[] = [];
 
-    for (const [taskKey, questions] of byTask) {
+    for (const { taskKey } of tasks) {
+      const questions = byTask.get(taskKey);
+
+      if (!questions) continue;
+
       const openCount = questions.filter((q) => q.resolvedAt === null).length;
-
-      if ((openCount === 0) !== archived) continue;
-
-      const ordered = [...questions].sort((a, b) => a.id - b.id);
 
       cards.push({
         taskKey,
-        project: questions[0].project,
-        questions: ordered.map((q) => ({
+        project: questions[questions.length - 1].project,
+        questions: questions.map((q) => ({
           id: q.id,
           text: q.text,
           resolved: q.resolvedAt !== null,
@@ -138,7 +157,7 @@ export class QuestionsService {
       });
     }
 
-    return cards.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return cards;
   }
 
   // `resolved` ticks a question off or back on; a non-empty `answer` is stored and resolves it, an empty one clears it.

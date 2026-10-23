@@ -25,6 +25,7 @@ describe('QuestionsService', () => {
   let job: { id: number; taskKey: string | null } | null;
   let open: Row[];
   let stored: Row[];
+  let archivedView: boolean;
   let save: jest.Mock;
   let createContext: jest.Mock;
   let findContextByName: jest.Mock;
@@ -56,14 +57,66 @@ describe('QuestionsService', () => {
           provide: getRepositoryToken(TaskQuestion),
           useValue: {
             save,
-            find: () => Promise.resolve(stored),
+            find: ({
+              where,
+              order,
+            }: {
+              where: { taskKey?: string | { value: string[] } };
+              order?: { id: 'ASC' | 'DESC' };
+            }) => {
+              const keys = where?.taskKey;
+              const wanted =
+                typeof keys === 'string' ? [keys] : keys ? keys.value : null;
+              const rows = wanted
+                ? stored.filter((q) => wanted.includes(q.taskKey))
+                : stored;
+
+              return Promise.resolve(
+                order?.id === 'ASC'
+                  ? [...rows].sort((a, b) => a.id - b.id)
+                  : rows,
+              );
+            },
             findOne: ({ where }: { where: { id: number } }) =>
               Promise.resolve(stored.find((q) => q.id === where.id) ?? null),
             createQueryBuilder: () => {
               const query = {
+                select: () => query,
+                groupBy: () => query,
+                having: (sql: string) => {
+                  archivedView = sql.endsWith('= 0');
+                  return query;
+                },
+                orderBy: () => query,
+                limit: () => query,
                 where: () => query,
                 andWhere: () => query,
                 getMany: () => Promise.resolve(open),
+                // What the grouping query returns: the tasks of the view, newest activity first.
+                getRawMany: () => {
+                  const groups = new Map<string, Row[]>();
+
+                  for (const row of stored) {
+                    groups.set(row.taskKey, [
+                      ...(groups.get(row.taskKey) ?? []),
+                      row,
+                    ]);
+                  }
+
+                  const latest = (rows: Row[]) =>
+                    Math.max(...rows.map((r) => r.updatedAt?.getTime() ?? 0));
+
+                  return Promise.resolve(
+                    [...groups]
+                      .filter(
+                        ([, rows]) =>
+                          rows.every((r) => r.resolvedAt != null) ===
+                          archivedView,
+                      )
+                      .sort(([, a], [, b]) => latest(b) - latest(a))
+                      .map(([taskKey]) => ({ taskKey })),
+                  );
+                },
               };
               return query;
             },
@@ -184,6 +237,33 @@ describe('QuestionsService', () => {
       const cards = await service.listCards(7, false);
 
       expect(cards[0].questions.map((q) => q.jobId)).toEqual([null, 55]);
+    });
+
+    it('still lists a task whose only open question is older than many newer rows', async () => {
+      stored = [
+        ...Array.from({ length: 1_001 }, (_, i) => ({
+          id: 100 + i,
+          taskKey: '9:1',
+          project: '9',
+          text: `n${i}`,
+          resolvedAt: at('2026-10-22T12:00:00Z'),
+          createdAt: at('2026-10-22T00:00:00Z'),
+          updatedAt: at('2026-10-22T12:00:00Z'),
+        })),
+        {
+          id: 1,
+          taskKey: '5:5',
+          project: '5',
+          text: 'old',
+          resolvedAt: null,
+          createdAt: at('2026-01-01T00:00:00Z'),
+          updatedAt: at('2026-01-01T00:00:00Z'),
+        },
+      ];
+
+      const cards = await service.listCards(7, false);
+
+      expect(cards.map((c) => c.taskKey)).toEqual(['5:5']);
     });
 
     it('moves a card to the archive once every question is resolved', async () => {
