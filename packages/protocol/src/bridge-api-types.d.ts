@@ -2273,8 +2273,6 @@ export interface components {
             prefix: string;
             /** @enum {string|null} */
             scope: "boards" | null;
-            /** @enum {string|null} */
-            scope: "boards" | null;
             token: string;
             /** Format: date-time */
             createdAt: string;
@@ -2283,6 +2281,8 @@ export interface components {
             id: number;
             name: string;
             prefix: string;
+            /** @enum {string|null} */
+            scope: "boards" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
