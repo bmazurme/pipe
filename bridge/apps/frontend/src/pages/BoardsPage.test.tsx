@@ -118,14 +118,22 @@ describe('BoardsPage', () => {
     expect(await screen.findByRole('button', { name: /Обновить \(1\)/ })).toBeTruthy();
   });
 
-  it('says that only the agent itself is outdated and needs a manual copy; disables the button for a board that is offline', async () => {
+  it('lets the agent update itself, and says how that is made safe', async () => {
+    boards = [board({ outdated: 1, updatable: 1, scripts: [script('infra/boardagent/board-agent.sh', 'outdated')] })];
+    renderPage();
+
+    expect(await screen.findByText(/Агент обновит и себя/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Обновить \(1\)/ })).toBeEnabled();
+  });
+
+  it('says what needs a manual copy when that is all that is outdated; disables the button for a board that is offline', async () => {
     boards = [
-      board({ host: 'a', outdated: 1, updatable: 0, scripts: [script('infra/boardagent/board-agent.sh', 'outdated')] }),
+      board({ host: 'a', outdated: 1, updatable: 0, scripts: [script('infra/boardagent/rollback.sh', 'outdated')] }),
       board({ host: 'b', online: false }),
     ];
     renderPage();
 
-    expect(await screen.findByText(/Устарел только сам агент обновлений/)).toBeTruthy();
+    expect(await screen.findByText(/Устарело только то, что ставится вручную/)).toBeTruthy();
     expect(screen.getByText('не отвечает')).toBeTruthy();
     for (const button of screen.getAllByRole('button', { name: /^Обновить/ })) expect(button).toBeDisabled();
   });
