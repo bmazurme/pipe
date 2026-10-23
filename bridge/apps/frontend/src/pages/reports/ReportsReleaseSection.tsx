@@ -1,5 +1,5 @@
 import { ArrowDownToSquare } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Loader, Text } from '@gravity-ui/uikit';
 
 import { describeApiError, useDownloadReportsReleaseMutation, useGetReportsReleaseInfoQuery } from '../../store/api';
 import { useIsNonOwner } from '../../store/hooks';
@@ -10,7 +10,12 @@ import styles from '../ReportsPage.module.css';
 export function ReportsReleaseSection() {
   // Both routes are owner-only: another account gets the notice and no request that is bound to fail.
   const isNonOwner = useIsNonOwner();
-  const { data: info, isError: isInfoError } = useGetReportsReleaseInfoQuery(undefined, { skip: isNonOwner });
+  const {
+    data: info,
+    error: infoError,
+    isFetching: isInfoFetching,
+    refetch: refetchInfo,
+  } = useGetReportsReleaseInfoQuery(undefined, { skip: isNonOwner });
   const [download, { isLoading: isDownloading, error: downloadError }] = useDownloadReportsReleaseMutation();
 
   if (isNonOwner) {
@@ -38,6 +43,15 @@ export function ReportsReleaseSection() {
               {info.version ? `Версия ${info.version} · ` : ''}сборка {info.shortId} · из коммита main {info.shortSha}
             </Text>
           )}
+          {/* A cold build answers in up to a minute: say so instead of showing nothing. */}
+          {!info && !infoError && isInfoFetching && (
+            <div className={styles.loading}>
+              <Loader size="s" />
+              <Text variant="caption-2" color="secondary">
+                Проверяем сборку на bridge — первая сборка после изменений может занять до минуты…
+              </Text>
+            </div>
+          )}
         </div>
         <Button view="action" size="l" loading={isDownloading} onClick={() => void download()}>
           <Icon data={ArrowDownToSquare} size={16} />
@@ -45,8 +59,18 @@ export function ReportsReleaseSection() {
         </Button>
       </div>
 
-      {isInfoError && (
-        <Alert theme="danger" view="filled" message="Не удалось получить информацию о репозитории" />
+      {infoError && !info && (
+        <Alert
+          theme="danger"
+          view="filled"
+          title="Не удалось получить информацию о репозитории"
+          message={describeApiError(infoError)}
+          actions={
+            <Button view="outlined" size="m" loading={isInfoFetching} onClick={() => void refetchInfo()}>
+              Повторить
+            </Button>
+          }
+        />
       )}
       {downloadError && (
         <Alert theme="danger" view="filled" message={describeApiError(downloadError)} />

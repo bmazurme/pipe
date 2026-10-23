@@ -26,3 +26,9 @@
   flex-direction: column;
   gap: 2px;
 }
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
