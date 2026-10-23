@@ -2264,11 +2264,17 @@ export interface components {
         };
         CreateApiKeyDto: {
             name: string;
+            /** @enum {string} */
+            scope?: "boards";
         };
         CreatedApiKeyResponseDto: {
             id: number;
             name: string;
             prefix: string;
+            /** @enum {string|null} */
+            scope: "boards" | null;
+            /** @enum {string|null} */
+            scope: "boards" | null;
             token: string;
             /** Format: date-time */
             createdAt: string;

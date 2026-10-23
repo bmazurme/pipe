@@ -4424,6 +4424,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "boards"
+            ]
           }
         },
         "required": [
@@ -4442,6 +4448,13 @@
           "prefix": {
             "type": "string"
           },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "boards"
+            ],
+            "nullable": true
+          },
           "token": {
             "type": "string"
           },
@@ -4454,6 +4467,7 @@
           "id",
           "name",
           "prefix",
+          "scope",
           "token",
           "createdAt"
         ]
@@ -4470,6 +4484,13 @@
           "prefix": {
             "type": "string"
           },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "boards"
+            ],
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4484,6 +4505,7 @@
           "id",
           "name",
           "prefix",
+          "scope",
           "createdAt",
           "lastUsedAt"
         ]

@@ -12,10 +12,13 @@ export const API_KEY_PREFIX = 'brk_';
 const TOKEN_BYTES = 24;
 const PREFIX_DISPLAY_LENGTH = 12;
 
+export type ApiKeyScope = 'boards';
+
 export interface CreatedApiKey {
   id: number;
   name: string;
   prefix: string;
+  scope: ApiKeyScope | null;
   token: string;
   createdAt: Date;
 }
@@ -37,7 +40,11 @@ export class ApiKeysService {
     return `${API_KEY_PREFIX}${randomBytes(TOKEN_BYTES).toString('base64url')}`;
   }
 
-  async create(userId: number, name: string): Promise<CreatedApiKey> {
+  async create(
+    userId: number,
+    name: string,
+    scope: ApiKeyScope | null = null,
+  ): Promise<CreatedApiKey> {
     const token = this.generateToken();
     const saved = await this.apiKeyRepository.save(
       this.apiKeyRepository.create({
@@ -45,6 +52,7 @@ export class ApiKeysService {
         name,
         prefix: token.slice(0, PREFIX_DISPLAY_LENGTH),
         keyHash: this.hashToken(token),
+        scope,
         lastUsedAt: null,
         revokedAt: null,
       }),
@@ -54,6 +62,7 @@ export class ApiKeysService {
       id: saved.id,
       name: saved.name,
       prefix: saved.prefix,
+      scope: saved.scope ?? null,
       token,
       createdAt: saved.createdAt,
     };
@@ -69,7 +78,9 @@ export class ApiKeysService {
   // Returns the owning userId for a presented token, or null if it doesn't
   // match an active key. Bumps lastUsedAt on success (best-effort — a slow
   // write here shouldn't hold up the request it's authorizing).
-  async validate(rawToken: string): Promise<{ userId: number } | null> {
+  async validate(
+    rawToken: string,
+  ): Promise<{ userId: number; scope: ApiKeyScope | null } | null> {
     if (!rawToken.startsWith(API_KEY_PREFIX)) {
       return null;
     }
@@ -90,7 +101,7 @@ export class ApiKeysService {
         this.logger.warn(`Could not update API key lastUsedAt: ${message}`);
       });
 
-    return { userId: apiKey.userId };
+    return { userId: apiKey.userId, scope: apiKey.scope ?? null };
   }
 
   async revoke(id: number, userId: number): Promise<boolean> {

@@ -5,6 +5,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   ClipboardButton,
   Icon,
   Skeleton,
@@ -41,6 +42,7 @@ export function ApiKeysSection() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState('');
+  const [boardsOnly, setBoardsOnly] = useState(false);
   // Set only right after creation, from the mutation's own response — never
   // persisted to the store, so the plaintext token exists in memory only
   // for as long as this dialog stays open.
@@ -49,6 +51,7 @@ export function ApiKeysSection() {
 
   const handleOpenCreate = () => {
     setName('');
+    setBoardsOnly(false);
     setCreatedToken(null);
     setCreateError(null);
     setIsCreateOpen(true);
@@ -65,7 +68,10 @@ export function ApiKeysSection() {
     setCreateError(null);
 
     try {
-      const created = await createApiKey(name.trim()).unwrap();
+      const created = await createApiKey({
+        name: name.trim(),
+        scope: boardsOnly ? 'boards' : undefined,
+      }).unwrap();
       setCreatedToken(created.token);
     } catch {
       setCreateError('Не удалось создать ключ');
@@ -153,7 +159,7 @@ export function ApiKeysSection() {
                     {apiKey.name}
                   </Text>
                   <Text color="secondary" variant="caption-2" ellipsis>
-                    {apiKey.prefix}… · {apiKey.lastUsedAt
+                    {apiKey.prefix}… · {apiKey.scope === 'boards' ? 'только для плат · ' : ''}{apiKey.lastUsedAt
                       ? `использован ${formatRelativeTime(apiKey.lastUsedAt)}`
                       : 'ещё не использован'}
                   </Text>
@@ -217,6 +223,9 @@ export function ApiKeysSection() {
                   hasClear
                 />
               </label>
+              <Checkbox checked={boardsOnly} onUpdate={setBoardsOnly}>
+                только для плат
+              </Checkbox>
               {createError && <Alert theme="danger" view="filled" message={createError} />}
             </Dialog.Body>
             <Dialog.Footer

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { BoardAgentKeyAllowed } from '../auth/decorators/board-agent-key-allowed.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -26,6 +27,7 @@ import {
 // account is refused — the boards are the owner's.
 @Controller('api/v1/boards/agent')
 @UseGuards(JwtOrApiKeyGuard, OwnerGuard)
+@BoardAgentKeyAllowed()
 export class BoardsAgentController {
   constructor(private readonly boards: BoardsService) {}
 

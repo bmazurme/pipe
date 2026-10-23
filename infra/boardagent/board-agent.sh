@@ -17,8 +17,8 @@
 #     of the decision fails to install or to verify.
 # The result goes back to bridge (a message on Telegram and the page).
 #
-# Settings (/etc/pipe-boardagent.env, mode 600): BRIDGE_API_URL (https://api.bridge.ntlstl.dev), BRIDGE_API_KEY (the OWNER's personal
-# API key, brk_…), OWNER, REPO, BRANCH, STATE_DIR, BRIDGE_PI_DIR, MANIFEST_FILE, CHECK_SCRIPT, BOARD_HOST. Tests: GITHUB_API.
+# Settings (/etc/pipe-boardagent.env, mode 600): BRIDGE_API_URL (https://api.bridge.ntlstl.dev), BRIDGE_API_KEY (a boards-only API key of
+# the OWNER, brk_…), OWNER, REPO, BRANCH, STATE_DIR, BRIDGE_PI_DIR, MANIFEST_FILE, CHECK_SCRIPT, BOARD_HOST. Tests: GITHUB_API.
 set -uo pipefail
 
 OWNER="${OWNER:-bmazurme}"
