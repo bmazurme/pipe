@@ -86,6 +86,7 @@ describe('ImprovePage runs tab', () => {
     renderRuns();
 
     await user.click(await screen.findByRole('button', { name: 'Остановить запуск #9' }));
+    await user.click(await screen.findByRole('button', { name: 'Остановить' }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Остановить запуск #9' }).className).toMatch(/loading/));
     expect(screen.getByRole('button', { name: 'Остановить запуск #10' }).className).not.toMatch(/loading/);

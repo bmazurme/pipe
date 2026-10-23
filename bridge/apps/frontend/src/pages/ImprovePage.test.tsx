@@ -136,6 +136,9 @@ describe('ImprovePage', () => {
     expect(screen.getByText('Выполняется')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Остановить запуск #9' }));
+    // stopping asks first
+    expect(sent).not.toContainEqual({ method: 'POST', path: 'improve/runs/9/cancel', body: undefined });
+    await user.click(await screen.findByRole('button', { name: 'Остановить' }));
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/9/cancel', body: undefined }));
   });
