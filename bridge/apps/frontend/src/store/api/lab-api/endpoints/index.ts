@@ -2,7 +2,7 @@ import labApi from '..';
 
 export type LabExecutor = 'any' | 'fusion';
 
-export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'issue_open' | 'no_changes' | 'failed' | 'cancelled';
+export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'pr_merged' | 'pr_closed' | 'issue_open' | 'no_changes' | 'failed' | 'cancelled';
 
 export interface LabProject {
   id: number;
@@ -86,6 +86,14 @@ export interface StartLabRunInput {
   followUpOf?: number;
 }
 
+// What "Проверить PR" found out about the open pull requests it asked GitHub about.
+export interface LabPrRefresh {
+  checked: number;
+  merged: number;
+  closed: number;
+  failed: number;
+}
+
 function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
@@ -156,6 +164,11 @@ const labApiEndpoints = labApi.injectEndpoints({
       invalidatesTags: ['LabRuns'],
       transformErrorResponse: errorMessage('Не удалось повторить публикацию'),
     }),
+    refreshLabPrs: builder.mutation<LabPrRefresh, void>({
+      query: () => ({ url: 'lab/runs/refresh-prs', method: 'POST' }),
+      invalidatesTags: ['LabRuns'],
+      transformErrorResponse: errorMessage('Не удалось проверить PR'),
+    }),
   }),
 });
 
@@ -173,6 +186,7 @@ export const {
   useStartLabRunMutation,
   useCancelLabRunMutation,
   useRetryLabPublishMutation,
+  useRefreshLabPrsMutation,
 } = labApiEndpoints;
 
 export default labApiEndpoints;

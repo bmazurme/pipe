@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { message, requireImproveModel } from '../improve/improve-shared';
 import { buildIssueParcel, readZipball } from '../improve/parcel';
@@ -25,6 +25,7 @@ import {
   LabTrigger,
 } from './entities/lab-run.entity';
 import {
+  describeGithubError,
   downloadRepoZip,
   githubFor,
   isValidBranch,
@@ -51,6 +52,15 @@ const SNAPSHOT_CACHE_TTL_MS = 10 * 60 * 1000;
 const SNAPSHOT_CACHE_SIZE = 2;
 // A run still preparing after the longest possible download plus a margin was lost to a restart.
 const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
+// How many open pull requests one "Проверить PR" asks GitHub about, newest first.
+const PR_REFRESH_LIMIT = 20;
+
+export type LabPrRefresh = {
+  checked: number;
+  merged: number;
+  closed: number;
+  failed: number;
+};
 
 // Kept here so callers of the run service need not know where publishing lives.
 export { isBlocked } from './lab-publish.service';
@@ -336,6 +346,81 @@ export class LabRunsService {
       await this.workers.cancel(run.jobId, userId);
 
     return (await this.runs.findOne({ where: { id } })) ?? run;
+  }
+
+  // Asks GitHub what became of the caller's open pull requests and moves the merged or closed ones off pr_open.
+  async refreshPrStates(userId: number): Promise<LabPrRefresh> {
+    const result: LabPrRefresh = {
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+    };
+    const open = await this.runs.find({
+      where: {
+        userId,
+        status: LabRunStatus.PrOpen,
+        prNumber: Not(IsNull()),
+        projectId: Not(IsNull()),
+      },
+      order: { id: 'DESC' },
+      take: PR_REFRESH_LIMIT,
+    });
+    const byProject = new Map<number, LabRun[]>();
+
+    for (const run of open) {
+      if (run.projectId === null || run.prNumber === null) continue;
+      byProject.set(run.projectId, [
+        ...(byProject.get(run.projectId) ?? []),
+        run,
+      ]);
+    }
+
+    for (const [projectId, runs] of byProject) {
+      // Disconnected in the meantime: there is no token left to ask GitHub with.
+      const project = await this.projects
+        .findOwned(projectId, userId)
+        .catch(() => null);
+
+      if (!project) continue;
+
+      const github = githubFor(project);
+
+      for (const run of runs) {
+        let next: LabRunStatus | null;
+
+        try {
+          const pull = await github.getPull(run.prNumber!);
+
+          next = pull.merged
+            ? LabRunStatus.PrMerged
+            : pull.state === 'closed'
+              ? LabRunStatus.PrClosed
+              : null;
+          result.checked += 1;
+        } catch (error) {
+          result.failed += 1;
+          this.logger.warn(
+            `Lab run ${run.id}: PR #${run.prNumber} could not be read: ${describeGithubError(error)}`,
+          );
+          continue;
+        }
+
+        if (!next) continue;
+
+        // Only from pr_open: a run that changed since it was loaded keeps its new status.
+        const res = await this.runs.update(
+          { id: run.id, userId, status: LabRunStatus.PrOpen },
+          { status: next },
+        );
+
+        if (res.affected !== 1) continue;
+        if (next === LabRunStatus.PrMerged) result.merged += 1;
+        else result.closed += 1;
+      }
+    }
+
+    return result;
   }
 
   // A publish that failed after the worker had succeeded is repeated from the kept result — no new job.
