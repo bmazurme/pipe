@@ -722,6 +722,32 @@ export class WorkerService implements OnModuleInit {
     await this.jobRepository.delete(job.id);
   }
 
+  // Bulk clean-up: only this account's finished jobs older than `days`, and never one an Improve or Lab run still points at.
+  async removeFinishedOlderThan(
+    userId: number,
+    days: number,
+  ): Promise<{ removed: number }> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const result = await this.jobRepository
+      .createQueryBuilder()
+      .delete()
+      .from(Job)
+      .where('"userId" = :userId', { userId })
+      .andWhere('status IN (:...statuses)', {
+        statuses: [JobStatus.Succeeded, JobStatus.Failed, JobStatus.Cancelled],
+      })
+      .andWhere('"finishedAt" < :cutoff', { cutoff })
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM improve_runs ir WHERE ir."jobId" = jobs.id)',
+      )
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM lab_runs lr WHERE lr."jobId" = jobs.id)',
+      )
+      .execute();
+
+    return { removed: result.affected ?? 0 };
+  }
+
   // Is there a worker of this account that is switched on and set up for `capability`? Used to refuse a run that could never start.
   async hasEnabledWorkerWith(
     userId: number,
