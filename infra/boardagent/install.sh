@@ -17,7 +17,7 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "${1:-}" = "--remove" ]; then
   systemctl disable --now pipe-boardagent-report.timer pipe-boardagent-apply.timer 2>/dev/null || true
-  rm -f /etc/systemd/system/pipe-boardagent-{report,apply}.{service,timer}
+  rm -f /etc/systemd/system/pipe-boardagent-{report,apply}.{service,timer} /etc/systemd/system/pipe-boardagent-rollback.service
   rm -rf "$LIB"
   systemctl daemon-reload
   echo "removed (the settings in /etc/pipe-boardagent.env and the state in /var/lib/pipe-boardagent are left)"
@@ -29,6 +29,7 @@ for tool in curl python3 flock; do command -v "$tool" >/dev/null || { echo "$too
 
 install -d -m 755 "$LIB"
 install -m 755 "$SRC/board-agent.sh" "$LIB/board-agent.sh"
+install -m 755 "$SRC/rollback.sh" "$LIB/rollback.sh"   # never replaced by an update: it restores a broken one
 install -m 644 "$SRC/manifest.txt" "$LIB/manifest.txt"
 
 if [ ! -f /etc/pipe-boardagent.env ]; then
@@ -45,11 +46,14 @@ ENV
 fi
 
 for kind in report apply; do
+  # A crash of the apply run puts the previous agent back, if an update had just replaced it (see rollback.sh).
+  on_failure=""; [ "$kind" = apply ] && on_failure="OnFailure=pipe-boardagent-rollback.service"
   cat > "/etc/systemd/system/pipe-boardagent-$kind.service" <<UNIT
 [Unit]
 Description=pipe board agent ($kind)
 Wants=network-online.target
 After=network-online.target
+$on_failure
 
 [Service]
 Type=oneshot
@@ -60,6 +64,19 @@ ExecStart=$LIB/board-agent.sh $kind
 Nice=10
 UNIT
 done
+
+alert_env=""; [ -x /usr/local/bin/notify-telegram ] && alert_env="Environment=ALERT_CMD=/usr/local/bin/notify-telegram"
+cat > /etc/systemd/system/pipe-boardagent-rollback.service <<UNIT
+[Unit]
+Description=pipe board agent: put the previous version back after a failed self-update
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/pipe-boardagent.env
+Environment=STATE_DIR=/var/lib/pipe-boardagent
+$alert_env
+ExecStart=$LIB/rollback.sh
+UNIT
 
 cat > /etc/systemd/system/pipe-boardagent-report.timer <<'UNIT'
 [Unit]

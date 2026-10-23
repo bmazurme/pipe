@@ -61,7 +61,12 @@ function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate
 
       {manualOnly && (
         <Text variant="caption-2" color="secondary">
-          Устарел только сам агент обновлений: его меняют вручную (scp + install.sh), чтобы ошибка в нём не оставила плату без пути обновления.
+          Устарело только то, что ставится вручную (scp + install.sh): установщик агента и его откат — их не обновляет ни кнопка, ни сам агент.
+        </Text>
+      )}
+      {board.scripts.some((script) => script.repoPath === 'infra/boardagent/board-agent.sh' && script.status === 'outdated') && (
+        <Text variant="caption-2" color="secondary">
+          Агент обновит и себя: новая версия сначала проверяется самопроверкой, старая сохраняется, а если новая не запустится, плата сама вернёт старую.
         </Text>
       )}
       {!board.online && (

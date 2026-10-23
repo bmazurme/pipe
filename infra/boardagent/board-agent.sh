@@ -4,6 +4,8 @@
 #
 #   board-agent.sh report   hourly: tell bridge which of this board's scripts are older than `main` (check-scripts.sh --json). Bridge
 #                           announces an outdated board once on Telegram, with a button, and shows it on the page «Платы».
+#   board-agent.sh selftest checks this agent (syntax, manifest, bridge reachable and answering, check-scripts --json) — what a new version has
+#                           to pass before it replaces the running one
 #   board-agent.sh apply    every minute: ask bridge whether the owner pressed that button for THIS board and, if so, install what it
 #                           names. One request; nothing is done without a waiting decision.
 #
@@ -12,7 +14,10 @@
 #   - only scripts listed in the agent's own manifest (manifest.txt, copied by hand with the agent), to the place THAT list gives;
 #   - only scripts that are already installed here (it does not put new files on a board);
 #   - only from a commit that is on `main` (GitHub's compare says "behind" or "identical"), fetched from GitHub at that commit;
-#   - never the agent itself (infra/boardagent/): an error in it would leave the board with no way to be fixed from here;
+#   - the agent itself (board-agent.sh, manifest.txt — nothing else of infra/boardagent/) only through the self-update below: a broken
+#     agent would leave the board with no way to be fixed from here, so the new version must first pass its own `selftest` (run from a
+#     staging copy), the old one is kept in STATE_DIR/agent-prev, and if the new one then crashes on its first run the rollback unit
+#     (rollback.sh, installed by hand with the agent) puts the old one back;
 #   - every shell script passes `bash -n` before it replaces anything; the old file is kept, and everything is put back if any file
 #     of the decision fails to install or to verify.
 # The result goes back to bridge (a message on Telegram and the page).
@@ -83,9 +88,67 @@ restore() { # put every backed-up file back
   done
 }
 
+# What a new version of the agent has to pass before it replaces the running one. Keep it working in every future version: the version
+# that is running calls it on the NEXT one.
+do_selftest() {
+  bash -n "$0" || { echo "selftest: syntax error in $0" >&2; return 1; }
+  [ -s "$MANIFEST_FILE" ] || { echo "selftest: no manifest $MANIFEST_FILE" >&2; return 1; }
+  awk -F'|' 'NF == 2 && $2 ~ /^infra\// { good++; next } NF { bad = 1 } END { exit (bad || good < 5) }' "$MANIFEST_FILE" \
+    || { echo "selftest: the manifest is malformed (every line is 'installed path|infra/…', at least five lines)" >&2; return 1; }
+  bridge GET "/api/v1/boards/agent/pending?host=$HOST" | python3 -c 'import json, sys; json.load(sys.stdin)["update"]' 2>/dev/null \
+    || { echo "selftest: bridge does not answer the way the agent expects" >&2; return 1; }
+  "$CHECK_SCRIPT" --json | python3 -c 'import json, sys; assert json.load(sys.stdin)["scripts"]' 2>/dev/null \
+    || { echo "selftest: check-scripts.sh --json gives no usable report" >&2; return 1; }
+  echo "selftest ok"
+}
+
+# The first run of a freshly installed agent that gets an answer from bridge proves it works: the marker the update left is dropped.
+verify_self_update() {
+  [ -f "$STATE_DIR/agent-update.pending" ] || return 0
+  rm -f "$STATE_DIR/agent-update.pending"
+  log "agent update verified"
+}
+
+# Replaces the agent (and its manifest) with the versions of this decision, safely. Only after `selftest` of the NEW pair passed.
+update_self() { # work-dir, then the repo paths of the agent files that changed
+  local work="$1"; shift
+  local stage="$work/self" f dest base
+  mkdir -p "$stage" "$STATE_DIR/agent-prev" || { finish false "cannot prepare the agent update"; return 1; }
+  local agent_dest manifest_dest
+  agent_dest="$(installed_path_of infra/boardagent/board-agent.sh)" || { finish false "the agent is not in the manifest"; return 1; }
+  manifest_dest="$(installed_path_of infra/boardagent/manifest.txt)" || { finish false "the agent manifest is not in the manifest"; return 1; }
+  # The staging pair: the new file where the decision has one, the installed one otherwise.
+  cp "$agent_dest" "$stage/board-agent.sh" && cp "$manifest_dest" "$stage/manifest.txt" || { finish false "cannot copy the installed agent for the check"; return 1; }
+  for f in "$@"; do cp "$work/$(basename "$f")" "$stage/$(basename "$f")"; done
+  chmod 755 "$stage/board-agent.sh"
+
+  local out
+  out="$(MANIFEST_FILE="$stage/manifest.txt" bash "$stage/board-agent.sh" selftest 2>&1)" \
+    || { finish false "the new agent did not pass its own check — nothing replaced: $(printf '%s' "$out" | tail -c 400)"; return 1; }
+
+  rm -rf "$STATE_DIR/agent-prev"; mkdir -p "$STATE_DIR/agent-prev"
+  cp -p "$agent_dest" "$STATE_DIR/agent-prev/board-agent.sh" && cp -p "$manifest_dest" "$STATE_DIR/agent-prev/manifest.txt" \
+    || { finish false "could not keep the old agent — nothing replaced"; return 1; }
+  echo "$UPDATE_ID $(date +%s)" > "$STATE_DIR/agent-update.pending"
+
+  for f in "$@"; do
+    base="$(basename "$f")"
+    case "$base" in board-agent.sh) dest="$agent_dest" ;; *) dest="$manifest_dest" ;; esac
+    if ! cp "$stage/$base" "$dest.new.$$" || ! chmod "$(stat -c %a "$dest" 2>/dev/null || stat -f %Lp "$dest" 2>/dev/null || echo 755)" "$dest.new.$$" || ! mv -f "$dest.new.$$" "$dest"; then
+      rm -f "$dest.new.$$"
+      cp -p "$STATE_DIR/agent-prev/board-agent.sh" "$agent_dest"; cp -p "$STATE_DIR/agent-prev/manifest.txt" "$manifest_dest"
+      rm -f "$STATE_DIR/agent-update.pending"
+      finish false "could not install the new agent — the old one is back"
+      return 1
+    fi
+  done
+  return 0
+}
+
 do_apply() {
   local pending
   pending="$(bridge GET "/api/v1/boards/agent/pending?host=$HOST")" || { log "bridge unreachable — nothing done"; return 0; }
+  verify_self_update
   # id, sha, then one repo path per line; nothing at all when there is no decision
   local parsed
   parsed="$(printf '%s' "$pending" | python3 -c '
@@ -121,7 +184,10 @@ if update:
   while IFS= read -r rp; do
     [ -n "$rp" ] || continue
     if ! printf '%s' "$rp" | grep -qE '^infra/[A-Za-z0-9_./-]+$' || printf '%s' "$rp" | grep -q '\.\.'; then finish false "refused a path: $rp"; return 0; fi
-    case "$rp" in infra/boardagent/*) finish false "refused: the agent does not update itself ($rp)"; return 0 ;; esac
+    case "$rp" in
+      infra/boardagent/board-agent.sh|infra/boardagent/manifest.txt) ;;
+      infra/boardagent/*) finish false "refused: only the agent and its manifest can be updated from here ($rp)"; return 0 ;;
+    esac
     dest="$(installed_path_of "$rp")" || { finish false "refused: $rp is not in this board's manifest"; return 0; }
     [ -f "$dest" ] || { log "$rp is not installed here — skipped"; continue; }
     plan+=("$rp|$dest")
@@ -146,10 +212,12 @@ if update:
   BACKUP="$STATE_DIR/backup/$UPDATE_ID"
   mkdir -p "$BACKUP" || { finish false "cannot write $STATE_DIR"; return 0; }
   DONE=()
-  local changed=() unchanged=0 mode tmp base
+  local changed=() unchanged=0 mode tmp base self_changed=()
   for item in "${plan[@]}"; do
     rp="${item%%|*}"; dest="${item#*|}"; base="$(basename "$rp")"
     if cmp -s "$work/$base" "$dest"; then unchanged=$((unchanged + 1)); continue; fi
+    # The agent's own files go last, through update_self (self-check, kept copy, rollback).
+    case "$rp" in infra/boardagent/*) self_changed+=("$rp"); continue ;; esac
     cp -p "$dest" "$BACKUP/$(basename "$dest")" || { restore; finish false "could not back up $dest"; return 0; }
     DONE+=("$dest|$rp")
     mode="$(stat -c %a "$dest" 2>/dev/null || stat -f %Lp "$dest" 2>/dev/null || echo 755)"
@@ -159,20 +227,30 @@ if update:
     changed+=("$base")
   done
 
-  finish true "${#changed[@]} installed (${changed[*]:-none}), $unchanged already current; commit ${sha:0:7}"
-  log "applied decision $UPDATE_ID: ${#changed[@]} installed, $unchanged current"
+  local note=""
+  if [ "${#self_changed[@]}" -gt 0 ]; then
+    if ! update_self "$work" "${self_changed[@]}"; then
+      # update_self reported its own failure; the other files of the decision stay installed (they were fine).
+      return 0
+    fi
+    note="; the agent itself updated (${self_changed[*]##*/}), kept as agent-prev until its first run succeeds"
+  fi
+
+  finish true "${#changed[@]} installed (${changed[*]:-none}), $unchanged already current; commit ${sha:0:7}$note"
+  log "applied decision $UPDATE_ID: ${#changed[@]} installed, $unchanged current$note"
   # Tell bridge the new state at once, so the board shows as current without waiting for the hourly report.
   do_report || true
   return 0
 }
 
 case "${1:-}" in
-  report|apply) ;;
-  *) echo "usage: board-agent.sh report|apply" >&2; exit 2 ;;
+  report|apply|selftest) ;;
+  *) echo "usage: board-agent.sh report|apply|selftest" >&2; exit 2 ;;
 esac
 
 need BRIDGE_API_URL
 need BRIDGE_API_KEY
+if [ "$1" = selftest ]; then do_selftest; exit $?; fi
 mkdir -p "$STATE_DIR" 2>/dev/null || { log "cannot write $STATE_DIR — nothing done"; exit 0; }
 # One lock per kind of run: the minute check must never make the hourly report skip itself (and a report never delays a decision).
 exec 9>"$STATE_DIR/lock-$1"

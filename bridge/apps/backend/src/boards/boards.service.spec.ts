@@ -83,8 +83,12 @@ const fresh = (over: Partial<BoardReport> = {}): Partial<BoardReport> => ({
 });
 
 describe('the scripts that can be updated from here', () => {
-  it('leaves the agent that installs them to a manual copy', () => {
-    expect(isUpdatable('infra/boardagent/board-agent.sh')).toBe(false);
+  it('lets the agent update itself — its script and manifest — and nothing else of infra/boardagent', () => {
+    expect(isUpdatable('infra/boardagent/board-agent.sh')).toBe(true);
+    expect(isUpdatable('infra/boardagent/manifest.txt')).toBe(true);
+    // what installs and restores it stays a manual copy
+    expect(isUpdatable('infra/boardagent/rollback.sh')).toBe(false);
+    expect(isUpdatable('infra/boardagent/install.sh')).toBe(false);
     expect(isUpdatable('infra/scriptcheck/check-scripts.sh')).toBe(true);
   });
 });
@@ -180,12 +184,12 @@ describe('BoardsService.recordReport', () => {
     expect(saved[0].announcedKey).toBeNull();
   });
 
-  it('sends no button when only the agent itself is outdated, and says it needs a manual copy', async () => {
+  it('sends no button when only what needs a manual copy is outdated (rollback.sh), and says so', async () => {
     const { service, notifier } = setup(null);
 
     await service.recordReport(
       7,
-      dto([script('infra/boardagent/board-agent.sh', 'outdated')]),
+      dto([script('infra/boardagent/rollback.sh', 'outdated')]),
     );
 
     expect(notifier.sendWithButtons).not.toHaveBeenCalled();
@@ -234,11 +238,12 @@ describe('BoardsService.requestUpdate', () => {
     );
   });
 
-  it('never includes the agent itself', async () => {
+  it('includes the agent itself, but never what installs and restores it', async () => {
     const { service } = setup(
       fresh({
         scripts: [
           script('infra/boardagent/board-agent.sh', 'outdated'),
+          script('infra/boardagent/rollback.sh', 'outdated'),
           script('infra/notify/notify-telegram', 'outdated'),
         ],
       }),
@@ -246,7 +251,10 @@ describe('BoardsService.requestUpdate', () => {
 
     expect(
       (await service.requestUpdate(7, 'ubuntu-red', 'ui')).repoPaths,
-    ).toEqual(['infra/notify/notify-telegram']);
+    ).toEqual([
+      'infra/boardagent/board-agent.sh',
+      'infra/notify/notify-telegram',
+    ]);
   });
 
   it('refuses a button made for another commit, an old report, an unknown board and nothing to do', async () => {
@@ -356,7 +364,7 @@ describe('BoardsService: the board’s side', () => {
       fresh({
         scripts: [
           script('infra/scriptcheck/check-scripts.sh', 'outdated'),
-          script('infra/boardagent/board-agent.sh', 'outdated'),
+          script('infra/boardagent/rollback.sh', 'outdated'),
         ],
       }),
     );
