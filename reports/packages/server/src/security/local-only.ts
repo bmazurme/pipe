@@ -7,7 +7,8 @@ import type { NextFunction, Request, Response } from 'express';
 //  - DNS rebinding: a hostile name that first resolves to the attacker, then to 127.0.0.1, makes
 //    the browser treat this server as that site's own origin.
 // Both are closed by trusting only requests that name this machine: loopback names, IP literals
-// (a rebinding attack needs a *name*), and whatever the owner lists in ALLOWED_HOSTS.
+// (a rebinding attack needs a *name*; for a browser Origin only loopback or the request's own
+// Host address counts), and whatever the owner lists in ALLOWED_HOSTS.
 
 function extraHosts(env: NodeJS.ProcessEnv): string[] {
   return (env.ALLOWED_HOSTS ?? '')
@@ -39,7 +40,34 @@ export function isTrustedHostname(hostname: string, env: NodeJS.ProcessEnv = pro
   );
 }
 
-export function isTrustedOrigin(origin: string, env: NodeJS.ProcessEnv = process.env): boolean {
+function isLoopbackIp(name: string): boolean {
+  if (isIP(name) === 4) return name.startsWith('127.');
+
+  return name === '::1' || name.startsWith('::ffff:127.');
+}
+
+// A browser Origin is stricter than Host: a page served from a public IP is a foreign site too,
+// so an IP literal is trusted only if it is loopback or is the very address the request was sent to
+// (a LAN page opened from http://192.168.1.5:4000 is same-origin with its own Host).
+export function isTrustedOriginHost(
+  originHost: string,
+  requestHost: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const name = originHost.toLowerCase().replace(/^\[|\]$/g, '');
+
+  if (name === 'localhost' || name.endsWith('.localhost') || extraHosts(env).includes(name)) return true;
+  if (isIP(name) === 0) return false;
+  if (isLoopbackIp(name)) return true;
+
+  return requestHost !== undefined && hostnameOf(requestHost) === name;
+}
+
+export function isTrustedOrigin(
+  origin: string,
+  env: NodeJS.ProcessEnv = process.env,
+  requestHost?: string,
+): boolean {
   const explicit = (env.CLIENT_ORIGIN ?? '')
     .split(',')
     .map((value) => value.trim().replace(/\/$/, ''))
@@ -48,7 +76,7 @@ export function isTrustedOrigin(origin: string, env: NodeJS.ProcessEnv = process
   if (explicit.includes(origin.replace(/\/$/, ''))) return true;
 
   try {
-    return isTrustedHostname(new URL(origin).hostname, env);
+    return isTrustedOriginHost(new URL(origin).hostname, requestHost, env);
   } catch {
     return false;
   }
@@ -76,7 +104,7 @@ export function localOnly(env: NodeJS.ProcessEnv = process.env) {
       return;
     }
 
-    if (typeof origin === 'string' && !isTrustedOrigin(origin, env)) {
+    if (typeof origin === 'string' && !isTrustedOrigin(origin, env, host)) {
       res.status(403).json({ type: 'error', data: 'Запросы с чужих сайтов запрещены' });
       return;
     }
