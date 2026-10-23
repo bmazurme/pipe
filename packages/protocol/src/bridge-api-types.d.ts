@@ -1634,6 +1634,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/runs/refresh-prs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LabController_refreshPrs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/runs/{id}/cancel": {
         parameters: {
             query?: never;
@@ -2876,7 +2892,7 @@ export interface components {
             model: string;
             executor: Record<string, never>;
             /** @enum {string} */
-            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "issue_open" | "no_changes" | "failed" | "cancelled";
+            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "pr_merged" | "pr_closed" | "issue_open" | "no_changes" | "failed" | "cancelled";
             jobId: number | null;
             baseBranch: string | null;
             baseSha: string | null;
@@ -5710,6 +5726,23 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LabRun"];
                 };
+            };
+        };
+    };
+    LabController_refreshPrs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

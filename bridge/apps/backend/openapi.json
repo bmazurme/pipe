@@ -3101,6 +3101,17 @@
         }
       }
     },
+    "/api/v1/lab/runs/refresh-prs": {
+      "post": {
+        "operationId": "LabController_refreshPrs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/lab/runs/{id}/cancel": {
       "post": {
         "operationId": "LabController_cancelRun",
@@ -6920,6 +6931,8 @@
               "running",
               "publishing",
               "pr_open",
+              "pr_merged",
+              "pr_closed",
               "issue_open",
               "no_changes",
               "failed",

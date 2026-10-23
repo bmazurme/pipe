@@ -12,6 +12,9 @@ export enum LabRunStatus {
   // The job succeeded; bridge is committing the result to a branch and opening the pull request.
   Publishing = 'publishing',
   PrOpen = 'pr_open',
+  // Found out with "Проверить PR": the pull request was merged, or closed without merging, on GitHub.
+  PrMerged = 'pr_merged',
+  PrClosed = 'pr_closed',
   // The worker asked for a GitHub Issue (see ISSUE_MARKER_PATH in lab-publish.service.ts) instead of, or in
   // addition to, file changes; one was opened for this run, and there was nothing left worth a pull request.
   IssueOpen = 'issue_open',

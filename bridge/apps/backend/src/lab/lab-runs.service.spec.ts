@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { IsNull, Not } from 'typeorm';
 
 import {
   ACTIVE_LAB_RUN_STATUSES,
@@ -581,5 +582,151 @@ describe('LabRunsService: follow-up of a pull request', () => {
 
     runs.findOne.mockResolvedValue({ ...parent, status: LabRunStatus.Failed });
     await expect(launch()).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('LabRunsService.refreshPrStates', () => {
+  const project = { id: 3, repo: 'o/r', token: 't', baseBranch: 'main' };
+  let rows: Array<Partial<LabRun>>;
+  let runs: { find: jest.Mock; update: jest.Mock };
+  let projects: { findOwned: jest.Mock };
+  let getPull: jest.Mock;
+  let service: LabRunsService;
+
+  const row = (id: number, prNumber: number, over: Partial<LabRun> = {}) => ({
+    id,
+    userId: 1,
+    projectId: 3,
+    status: LabRunStatus.PrOpen,
+    prNumber,
+    ...over,
+  });
+
+  beforeEach(() => {
+    rows = [row(1, 11), row(2, 12), row(3, 13)];
+    runs = {
+      // The query itself is asserted separately; here every row stands for what it returned.
+      find: jest.fn(async () => rows.map((r) => ({ ...r }))),
+      update: jest.fn(
+        async (
+          where: { id: number; userId: number; status: LabRunStatus },
+          patch: Partial<LabRun>,
+        ) => {
+          const target = rows.find(
+            (r) =>
+              r.id === where.id &&
+              r.userId === where.userId &&
+              r.status === where.status,
+          );
+
+          if (!target) return { affected: 0 };
+          Object.assign(target, patch);
+
+          return { affected: 1 };
+        },
+      ),
+    };
+    projects = { findOwned: jest.fn().mockResolvedValue(project) };
+    getPull = jest.fn(async (number: number) => ({
+      state: number === 11 || number === 12 ? 'closed' : 'open',
+      merged: number === 11,
+    }));
+    (githubFor as jest.Mock).mockReturnValue({ getPull });
+    service = new LabRunsService(
+      runs as never,
+      projects as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  });
+
+  afterEach(() => (githubFor as jest.Mock).mockReset());
+
+  it('marks a merged PR pr_merged, a closed one pr_closed and leaves an open one', async () => {
+    const result = await service.refreshPrStates(1);
+
+    expect(rows.map((r) => r.status)).toEqual([
+      LabRunStatus.PrMerged,
+      LabRunStatus.PrClosed,
+      LabRunStatus.PrOpen,
+    ]);
+    expect(result).toEqual({ checked: 3, merged: 1, closed: 1, failed: 0 });
+    expect(githubFor).toHaveBeenCalledTimes(1);
+    expect(githubFor).toHaveBeenCalledWith(project);
+  });
+
+  it('still checks the other PRs when GitHub fails on one, and counts it', async () => {
+    getPull.mockImplementation(async (number: number) => {
+      if (number === 11) throw new Error('GitHub 502');
+
+      return { state: 'closed', merged: true };
+    });
+
+    const result = await service.refreshPrStates(1);
+
+    expect(rows.map((r) => r.status)).toEqual([
+      LabRunStatus.PrOpen,
+      LabRunStatus.PrMerged,
+      LabRunStatus.PrMerged,
+    ]);
+    expect(result).toEqual({ checked: 2, merged: 2, closed: 0, failed: 1 });
+  });
+
+  it('does not overwrite a run whose status changed after it was loaded', async () => {
+    runs.find.mockImplementation(async () => {
+      const loaded = rows.map((r) => ({ ...r }));
+
+      rows[0].status = LabRunStatus.Cancelled;
+
+      return loaded;
+    });
+
+    const result = await service.refreshPrStates(1);
+
+    expect(rows[0].status).toBe(LabRunStatus.Cancelled);
+    expect(result.merged).toBe(0);
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, userId: 1, status: LabRunStatus.PrOpen },
+      { status: LabRunStatus.PrMerged },
+    );
+  });
+
+  it("asks only for the caller's open runs with a PR and a live project, newest first", async () => {
+    await service.refreshPrStates(1);
+
+    const [query] = runs.find.mock.calls[0] as [
+      {
+        where: Record<string, unknown>;
+        order: unknown;
+        take: number;
+      },
+    ];
+
+    expect(query.where).toEqual({
+      userId: 1,
+      status: LabRunStatus.PrOpen,
+      prNumber: Not(IsNull()),
+      projectId: Not(IsNull()),
+    });
+    expect(query.order).toEqual({ id: 'DESC' });
+    expect(query.take).toBe(20);
+    expect(projects.findOwned).toHaveBeenCalledWith(3, 1);
+  });
+
+  it('never sends runs of a deleted project or without a PR number to GitHub', async () => {
+    rows = [
+      row(1, 11, { projectId: null }),
+      row(2, 0, { prNumber: null }),
+      row(3, 13, { projectId: 4 }),
+    ];
+    projects.findOwned.mockRejectedValue(new NotFoundException());
+
+    const result = await service.refreshPrStates(1);
+
+    expect(getPull).not.toHaveBeenCalled();
+    expect(projects.findOwned).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ checked: 0, merged: 0, closed: 0, failed: 0 });
   });
 });

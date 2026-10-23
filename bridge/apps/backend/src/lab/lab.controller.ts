@@ -126,6 +126,12 @@ export class LabController {
     return this.runs.start(user.id, dto);
   }
 
+  @Post('runs/refresh-prs')
+  @HttpCode(HttpStatus.OK)
+  refreshPrs(@CurrentUser() user: { id: number }) {
+    return this.runs.refreshPrStates(user.id);
+  }
+
   @Post('runs/:id/cancel')
   @HttpCode(HttpStatus.OK)
   cancelRun(

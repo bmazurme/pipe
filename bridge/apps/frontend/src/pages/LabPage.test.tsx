@@ -423,3 +423,60 @@ describe('LabPage: follow-up of a pull request', () => {
     expect(screen.queryByRole('button', { name: 'Доработать' })).toBeNull();
   });
 });
+
+describe('LabPage: checking pull requests on GitHub', () => {
+  const prRun = {
+    id: 5,
+    projectId: 1,
+    repo: 'me/boat',
+    scheduleId: null,
+    trigger: 'manual',
+    title: 'Задача',
+    task: 'Почистить код',
+    model: 'opus',
+    status: 'pr_open',
+    jobId: 3,
+    baseBranch: 'main',
+    branch: 'lab/run-5-task',
+    prUrl: 'https://github.com/me/boat/pull/8',
+    prNumber: 8,
+    error: null,
+    note: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  it('asks bridge to check the PRs, shows a merged run as merged and stops offering a follow-up for it', async () => {
+    const user = userEvent.setup();
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    runs = [prRun];
+    vi.mocked(fetch).mockImplementation(async (request) => {
+      const path = new URL((request as Request).url).pathname.replace('/api/v1/', '');
+
+      if (path === 'lab/runs/refresh-prs') {
+        sent.push({ path, method: (request as Request).method, body: undefined });
+        runs = [{ ...prRun, status: 'pr_merged' }];
+
+        return json({ checked: 1, merged: 1, closed: 0, failed: 0 });
+      }
+
+      return original(request as Request);
+    });
+    renderPage('/lab?tab=runs');
+
+    expect(await screen.findByRole('button', { name: 'Доработать' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Проверить PR' }));
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/runs/refresh-prs')).toMatchObject({ method: 'POST' }));
+    expect(await screen.findByText('PR влит')).toBeInTheDocument();
+    expect(screen.getByText(/Проверено PR: 1 · влито: 1 · закрыто: 0/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Доработать' })).toBeNull();
+  });
+
+  it('labels a PR closed without merging', async () => {
+    runs = [{ ...prRun, status: 'pr_closed' }];
+    renderPage('/lab?tab=runs');
+
+    expect(await screen.findByText('PR закрыт')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Доработать' })).toBeNull();
+  });
+});

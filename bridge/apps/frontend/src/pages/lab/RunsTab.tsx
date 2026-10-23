@@ -7,10 +7,13 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
   getErrorMessage,
   type LabExecutor,
+  type LabPrRefresh,
+  type LabRunStatus,
   useCancelLabRunMutation,
   useListContextsQuery,
   useListLabProjectsQuery,
   useListLabRunsQuery,
+  useRefreshLabPrsMutation,
   useRetryLabPublishMutation,
   useStartLabRunMutation,
 } from '../../store/api';
@@ -24,6 +27,13 @@ const FAST_POLL_MS = 5000;
 const SLOW_POLL_MS = 30000;
 const ACTIVE = ['preparing', 'queued', 'running', 'publishing'];
 
+// Improve's labels plus what only Lab learns about a pull request after it was opened.
+const STATUS_LABEL: Record<LabRunStatus, string> = { ...RUN_STATUS_LABEL, pr_merged: 'PR влит', pr_closed: 'PR закрыт' };
+const STATUS_THEME: Record<LabRunStatus, (typeof RUN_STATUS_THEME)[keyof typeof RUN_STATUS_THEME]> = { ...RUN_STATUS_THEME, pr_merged: 'success', pr_closed: 'normal' };
+
+const describeRefresh = ({ checked, merged, closed, failed }: LabPrRefresh) =>
+  `Проверено PR: ${checked} · влито: ${merged} · закрыто: ${closed}${failed ? ` · не удалось проверить: ${failed}` : ''}`;
+
 export function RunsTab() {
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const { data: runs, isLoading, isError } = useListLabRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
@@ -32,6 +42,8 @@ export function RunsTab() {
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId }] = useCancelLabRunMutation();
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
+  const [refreshPrs, { isLoading: isRefreshing }] = useRefreshLabPrsMutation();
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
@@ -56,6 +68,17 @@ export function RunsTab() {
     }
   };
 
+  const handleRefreshPrs = async () => {
+    setError(null);
+    setRefreshNote(null);
+
+    try {
+      setRefreshNote(describeRefresh(await refreshPrs().unwrap()));
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось проверить PR'));
+    }
+  };
+
   return (
     <div className={styles.panel}>
       <div className={styles.toolbar}>
@@ -72,8 +95,12 @@ export function RunsTab() {
           <Icon data={Plus} size={16} />
           Новый запуск
         </Button>
+        <Button view="outlined" size="m" loading={isRefreshing} disabled={!runs?.some((run) => run.status === 'pr_open' && run.prNumber !== null && run.projectId !== null)} onClick={() => void handleRefreshPrs()}>
+          Проверить PR
+        </Button>
       </div>
 
+      {refreshNote && <Alert theme="info" view="outlined" message={refreshNote} onClose={() => setRefreshNote(null)} />}
       {error && !form && <Alert theme="danger" view="filled" message={error} />}
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить запуски" />}
@@ -97,7 +124,7 @@ export function RunsTab() {
             )}
           </div>
           <div className={styles.rowActions}>
-            <Label theme={RUN_STATUS_THEME[run.status]}>{RUN_STATUS_LABEL[run.status]}</Label>
+            <Label theme={STATUS_THEME[run.status]}>{STATUS_LABEL[run.status]}</Label>
             {run.prUrl && (
               <a href={run.prUrl} target="_blank" rel="noreferrer noopener" aria-label={`PR #${run.prNumber}`}>
                 <Icon data={ArrowUpRightFromSquare} size={16} />
