@@ -3,6 +3,7 @@ import { ArrowUpRightFromSquare, Rocket, Stop } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Label, SegmentedRadioGroup, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
+import { Dialog } from '../../shared/ui/Dialog';
 import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
@@ -34,6 +35,7 @@ export function RunsTab() {
   const hasActive = Boolean(runs?.some((run) => isActiveRun(run)));
   const [filter, setFilter] = useState<RunFilter>('all');
   const [showAll, setShowAll] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState<{ id: number } | null>(null);
 
   useEffect(() => {
     setPollingInterval(hasActive ? FAST_POLL_MS : SLOW_POLL_MS);
@@ -123,7 +125,7 @@ export function RunsTab() {
               </Button>
             )}
             {isActiveRun(run) && run.status !== 'publishing' && (
-              <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
+              <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => setConfirmCancel({ id: run.id })}>
                 <Icon data={Stop} size={16} />
               </Button>
             )}
@@ -136,6 +138,23 @@ export function RunsTab() {
           Показать ещё {hiddenCount}
         </Button>
       )}
+
+      <Dialog open={confirmCancel !== null} onClose={() => setConfirmCancel(null)} maxWidth="s" aria-labelledby="run-cancel-title">
+        <Dialog.Header caption={`Остановить запуск #${confirmCancel?.id}?`} id="run-cancel-title" />
+        <Dialog.Body>
+          <Text variant="body-2">Запуск будет остановлен, вернуть его нельзя.</Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Не останавливать"
+          textButtonApply="Остановить"
+          propsButtonApply={{ view: 'outlined-danger' }}
+          onClickButtonCancel={() => setConfirmCancel(null)}
+          onClickButtonApply={() => {
+            if (confirmCancel) void cancel(confirmCancel.id);
+            setConfirmCancel(null);
+          }}
+        />
+      </Dialog>
     </div>
   );
 }
