@@ -10,7 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { message, requireImproveModel } from '../improve/improve-shared';
-import { buildIssueParcel, readZipball } from '../improve/parcel';
+import { readZipball } from '../common/zip';
+import { buildIssueParcel } from '../improve/parcel';
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { ContextService } from '../context/context.service';
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
