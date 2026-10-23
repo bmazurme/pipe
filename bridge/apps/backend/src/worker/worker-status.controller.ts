@@ -18,18 +18,7 @@ export class WorkerStatusController {
     @CurrentUser() currentUser: { id: number },
   ): Promise<WorkerStatusResponseDto> {
     // Workers added in the UI and the ones still on a personal API key, together: "is anything able to take work".
-    const workers = await this.workersService.list(currentUser.id);
-    const heartbeats = workers.flatMap((worker) =>
-      worker.lastSeenAt
-        ? [
-            {
-              name: worker.name,
-              lastSeenAt: worker.lastSeenAt,
-              isUp: worker.state === 'idle' || worker.state === 'busy',
-            },
-          ]
-        : [],
-    );
+    const heartbeats = await this.workersService.upHeartbeats(currentUser.id);
 
     return WorkerStatusResponseDto.fromHeartbeats(heartbeats);
   }
