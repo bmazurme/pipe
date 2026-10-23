@@ -81,6 +81,10 @@ export class ContextService {
     return context;
   }
 
+  async findByName(userId: number, name: string): Promise<Context | null> {
+    return this.repository.findOne({ where: { userId, name: name.trim() } });
+  }
+
   async create(userId: number, dto: CreateContextDto): Promise<Context> {
     await this.assertNameFree(userId, dto.name);
 

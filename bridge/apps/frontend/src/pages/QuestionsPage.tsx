@@ -22,9 +22,10 @@ interface CardViewProps {
   onOpenJob: (jobId: number) => void;
   disabled: boolean;
   contextSaved: boolean;
+  contextUpdated: boolean;
 }
 
-function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled, contextSaved }: CardViewProps) {
+function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled, contextSaved, contextUpdated }: CardViewProps) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const hasAnswers = card.questions.some((question) => question.answer);
 
@@ -89,7 +90,7 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
           </Button>
           {contextSaved && (
             <Text variant="caption-2" color="secondary" className={styles.answerText}>
-              Context «Ответы: {card.taskKey}» создан — выберите его при запуске следующего Worker job.
+              Context «Ответы: {card.taskKey}» {contextUpdated ? 'обновлён' : 'создан'} — выберите его при запуске следующего Worker job.
             </Text>
           )}
         </div>
@@ -106,7 +107,7 @@ export function QuestionsPage() {
   );
   const [setResolved, { isLoading: isSaving }] = useSetQuestionResolvedMutation();
   const [saveContext, { isLoading: isSavingContext }] = useSaveQuestionsAsContextMutation();
-  const [savedContexts, setSavedContexts] = useState<string[]>([]);
+  const [savedContexts, setSavedContexts] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
 
@@ -134,8 +135,8 @@ export function QuestionsPage() {
     setError(null);
 
     try {
-      await saveContext({ taskKey }).unwrap();
-      setSavedContexts((current) => [...current, taskKey]);
+      const { updated } = await saveContext({ taskKey }).unwrap();
+      setSavedContexts((current) => ({ ...current, [taskKey]: updated }));
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось создать Context'));
     }
@@ -182,7 +183,8 @@ export function QuestionsPage() {
               <CardView
                 card={card}
                 disabled={isSaving || isSavingContext}
-                contextSaved={savedContexts.includes(card.taskKey)}
+                contextSaved={card.taskKey in savedContexts}
+                contextUpdated={savedContexts[card.taskKey] === true}
                 onToggle={(id, resolved) => void handleToggle(id, resolved)}
                 onAnswer={(id, answer) => void handleAnswer(id, answer)}
                 onSaveContext={(taskKey) => void handleSaveContext(taskKey)}

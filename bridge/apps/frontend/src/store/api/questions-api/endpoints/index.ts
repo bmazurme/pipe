@@ -28,7 +28,7 @@ const questionsApiEndpoints = questionsApi.injectEndpoints({
       providesTags: ['Questions'],
     }),
     // The card's answered questions become a Context (named after the task) to attach to the next run.
-    saveQuestionsAsContext: builder.mutation<{ contextId: number }, { taskKey: string }>({
+    saveQuestionsAsContext: builder.mutation<{ contextId: number; updated: boolean }, { taskKey: string }>({
       query: ({ taskKey }) => ({ url: `questions/cards/${encodeURIComponent(taskKey)}/context`, method: 'POST' }),
     }),
     // Ticking the last open question moves the card to the archive, so both lists are refetched.

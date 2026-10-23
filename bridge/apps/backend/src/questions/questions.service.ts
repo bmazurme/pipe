@@ -183,8 +183,12 @@ export class QuestionsService {
       .slice(0, MAX_CONTEXT_LENGTH);
   }
 
-  // Saves a card's answers as a Context to attach to the task's next run; returns its id.
-  async createContext(userId: number, taskKey: string): Promise<number> {
+  // Saves a card's answers as a Context to attach to the task's next run; a context
+  // saved earlier for the card is updated in place (jobs keep their own snapshot).
+  async createContext(
+    userId: number,
+    taskKey: string,
+  ): Promise<{ contextId: number; updated: boolean }> {
     const rows = await this.questionRepository.find({
       where: { userId, taskKey },
       order: { id: 'ASC' },
@@ -193,11 +197,19 @@ export class QuestionsService {
 
     if (!content) throw new NotFoundException('No answered questions');
 
-    const context = await this.contextService.create(userId, {
-      name: `Ответы: ${taskKey}`,
-      content,
-    });
+    const name = `Ответы: ${taskKey}`;
+    const existing = await this.contextService.findByName(userId, name);
 
-    return context.id;
+    if (existing) {
+      const context = await this.contextService.update(existing.id, userId, {
+        content,
+      });
+
+      return { contextId: context.id, updated: true };
+    }
+
+    const context = await this.contextService.create(userId, { name, content });
+
+    return { contextId: context.id, updated: false };
   }
 }
