@@ -52,6 +52,7 @@ manifest() {
 /usr/local/lib/pipe-scriptcheck/check-scripts.sh|infra/scriptcheck/check-scripts.sh
 /usr/local/lib/pipe-boardagent/board-agent.sh|infra/boardagent/board-agent.sh
 /usr/local/lib/pipe-boardagent/manifest.txt|infra/boardagent/manifest.txt
+/usr/local/lib/pipe-boardagent/rollback.sh|infra/boardagent/rollback.sh
 @BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh
 @BRIDGE_PI@/deploy-worker.sh|infra/bridge-pi/deploy-worker.sh
 @BRIDGE_PI@/enroll-worker.sh|infra/bridge-pi/enroll-worker.sh

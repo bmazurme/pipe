@@ -55,14 +55,15 @@ printf '#!/usr/bin/env bash\necho pull v2\n' > "$T/repo/$SHA/infra/backup/upload
 printf '#!/usr/bin/env bash\necho backup v1\n' > "$T/repo/$SHA/infra/backup/backup.sh"
 printf '#!/usr/bin/env bash\necho notify v2\n' > "$T/repo/$SHA/infra/notify/notify-telegram"
 cp "$T/repo/$SHA/infra/backup/"* "$T/repo/main/infra/backup/"; cp "$T/repo/$SHA/infra/notify/"* "$T/repo/main/infra/notify/"
-printf '%s|infra/backup/uploads-pull.sh\n%s|infra/backup/backup.sh\n%s|infra/notify/notify-telegram\n@BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh\n%s|infra/backup/not-on-this-board.sh\n%s|infra/boardagent/board-agent.sh\n' \
-  "$T/board/uploads-pull.sh" "$T/board/backup.sh" "$T/board/notify-telegram" "$T/board/nothing.sh" "$T/board/agent.sh" > "$T/manifest.txt"
+printf '%s|infra/backup/uploads-pull.sh\n%s|infra/backup/backup.sh\n%s|infra/notify/notify-telegram\n@BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh\n%s|infra/backup/not-on-this-board.sh\n%s|infra/boardagent/board-agent.sh\n%s|infra/boardagent/manifest.txt\n' \
+  "$T/board/uploads-pull.sh" "$T/board/backup.sh" "$T/board/notify-telegram" "$T/board/nothing.sh" "$T/board/agent.sh" "$T/board/manifest.txt" > "$T/manifest.txt"
 
 board() { # what the board has: uploads-pull old, the others as in the repository
   printf '#!/usr/bin/env bash\necho pull v1\n' > "$T/board/uploads-pull.sh"; chmod 750 "$T/board/uploads-pull.sh"
   cp "$T/repo/$SHA/infra/backup/backup.sh" "$T/board/backup.sh"
   printf '#!/usr/bin/env bash\necho notify v1\n' > "$T/board/notify-telegram"; chmod 755 "$T/board/notify-telegram"
   printf '#!/usr/bin/env bash\necho agent\n' > "$T/board/agent.sh"
+  printf 'old manifest\n' > "$T/board/manifest.txt"
 }
 decision() { # id path…
   local id="$1"; shift
@@ -130,8 +131,8 @@ board_has uploads-pull.sh 'pull v1' && grep -q '"ok": false' <<< "$(last_result)
 fresh; FAKE_COMPARE=diverged; decision 15 infra/backup/uploads-pull.sh; agent apply
 board_has uploads-pull.sh 'pull v1'; check "…also a diverged one" $?
 
-fresh; decision 16 infra/boardagent/board-agent.sh; agent apply
-board_has agent.sh 'echo agent' && grep -q 'does not update itself' <<< "$(last_result)"; check "refuses to update the agent itself" $?
+fresh; decision 16 infra/boardagent/rollback.sh; agent apply
+grep -q 'only the agent and its manifest' <<< "$(last_result)"; check "refuses the rest of infra/boardagent (the installer and the rollback stay manual)" $?
 
 fresh; decision 17 infra/backup/uploads-pull.sh infra/evil/other.sh; agent apply
 board_has uploads-pull.sh 'pull v1' && grep -q 'not in this board' <<< "$(last_result)"; check "refuses a path outside its own manifest — and then changes nothing at all" $?
@@ -150,6 +151,54 @@ printf '#!/usr/bin/env bash\necho notify v2\n' > "$T/repo/$SHA/infra/notify/noti
 fresh; decision 21 infra/backup/uploads-pull.sh; rm -f "$T/repo/$SHA/infra/backup/uploads-pull.sh"; agent apply
 board_has uploads-pull.sh 'pull v1' && grep -q 'could not fetch' <<< "$(last_result)"; check "a file that cannot be fetched at that commit changes nothing" $?
 printf '#!/usr/bin/env bash\necho pull v2\n' > "$T/repo/$SHA/infra/backup/uploads-pull.sh"
+
+# ---- the agent updates itself: checked first, old one kept, a marker until the new one has run
+mkdir -p "$T/repo/$SHA/infra/boardagent"
+new_agent() { # selftest result (ok|fail), marker text the new manifest must contain
+  printf '#!/usr/bin/env bash\n[ "${1:-}" = selftest ] && { grep -q NEW-MANIFEST "$MANIFEST_FILE" || exit 3; [ "%s" = ok ] && { echo selftest ok; exit 0; }; echo "selftest: broken" >&2; exit 1; }\necho agent v2\n' "$1" > "$T/repo/$SHA/infra/boardagent/board-agent.sh"
+  printf 'NEW-MANIFEST\n' > "$T/repo/$SHA/infra/boardagent/manifest.txt"
+}
+
+fresh; new_agent ok; decision 30 infra/boardagent/board-agent.sh infra/boardagent/manifest.txt; agent apply
+board_has agent.sh 'agent v2' && board_has manifest.txt 'NEW-MANIFEST'; check "the agent and its manifest are replaced once the new pair passes its self-check (which saw the NEW manifest)" $?
+grep -q 'echo agent' "$T/state/agent-prev/board-agent.sh" && grep -q 'old manifest' "$T/state/agent-prev/manifest.txt"; check "…the old pair is kept" $?
+[ -f "$T/state/agent-update.pending" ] && grep -q '^30 ' "$T/state/agent-update.pending"; check "…a marker stays until the new agent has run" $?
+grep -q '"ok": true' <<< "$(last_result)" && grep -q 'the agent itself updated' <<< "$(last_result)"; check "…and bridge is told the agent was updated" $?
+
+echo '{"update": null}' > "$T/pending.json"; agent apply
+[ ! -f "$T/state/agent-update.pending" ]; check "the first run that gets an answer from bridge removes the marker (the update is verified)" $?
+
+fresh; new_agent fail; decision 31 infra/boardagent/board-agent.sh infra/boardagent/manifest.txt; agent apply
+board_has agent.sh 'echo agent' && board_has manifest.txt 'old manifest' && [ ! -e "$T/state/agent-update.pending" ] && grep -q 'did not pass its own check' <<< "$(last_result)" && grep -q 'selftest: broken' <<< "$(last_result)"; check "a new agent that fails its self-check replaces nothing, and says why" $?
+
+fresh; new_agent ok; printf '#!/usr/bin/env bash\nif then fi\n' > "$T/repo/$SHA/infra/boardagent/board-agent.sh"; decision 32 infra/boardagent/board-agent.sh; agent apply
+board_has agent.sh 'echo agent' && grep -q 'bash -n' <<< "$(last_result)"; check "a new agent with a syntax error is refused before anything" $?
+
+fresh; new_agent ok; decision 33 infra/backup/uploads-pull.sh infra/boardagent/board-agent.sh infra/boardagent/manifest.txt; agent apply
+board_has uploads-pull.sh 'pull v2' && board_has agent.sh 'agent v2'; check "the other scripts of the decision are installed too, the agent last" $?
+
+# the real self-check of this agent
+fresh; echo '{"update": null}' > "$T/pending.json"; agent selftest
+[ "$(cat "$T/code")" = 0 ] && grep -q 'selftest ok' "$T/stdout"; check "selftest: the agent as it is passes" $?
+printf 'not a manifest line\n' > "$T/bad-manifest.txt"; MANIFEST_FILE="$T/bad-manifest.txt" agent selftest
+[ "$(cat "$T/code")" != 0 ] && grep -q 'manifest is malformed' "$T/stderr"; check "selftest: a malformed manifest fails it" $?
+echo 'not json' > "$T/pending.json"; agent selftest
+[ "$(cat "$T/code")" != 0 ] && grep -q 'bridge does not answer' "$T/stderr"; check "selftest: a bridge that does not answer as expected fails it" $?
+echo '{"update": null}' > "$T/pending.json"
+
+# ---- rollback.sh: the previous agent comes back after a crashed first run
+mkdir -p "$T/rb/state/agent-prev" "$T/rb/lib"
+printf 'broken new agent\n' > "$T/rb/lib/board-agent.sh"; printf 'new manifest\n' > "$T/rb/lib/manifest.txt"
+printf 'old agent\n' > "$T/rb/state/agent-prev/board-agent.sh"; printf 'old manifest\n' > "$T/rb/state/agent-prev/manifest.txt"
+STATE_DIR="$T/rb/state" LIB="$T/rb/lib" "$HERE/rollback.sh" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"
+[ "$(cat "$T/code")" = 0 ] && grep -q 'broken new agent' "$T/rb/lib/board-agent.sh" && grep -q 'new manifest' "$T/rb/lib/manifest.txt"; check "rollback.sh: without a marker (the agent ran fine) it does nothing" $?
+echo "30 1" > "$T/rb/state/agent-update.pending"
+ALERT_CMD="echo ALERTED" STATE_DIR="$T/rb/state" LIB="$T/rb/lib" "$HERE/rollback.sh" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"
+[ "$(cat "$T/code")" = 0 ] && grep -q 'old agent' "$T/rb/lib/board-agent.sh" && grep -q 'old manifest' "$T/rb/lib/manifest.txt" && [ ! -e "$T/rb/state/agent-update.pending" ]; check "rollback.sh: with the marker it puts the old pair back and drops the marker" $?
+grep -q 'ALERTED' "$T/stdout"; check "…and says so through ALERT_CMD" $?
+echo "31 1" > "$T/rb/state/agent-update.pending"; rm -rf "$T/rb/state/agent-prev"
+STATE_DIR="$T/rb/state" LIB="$T/rb/lib" "$HERE/rollback.sh" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"
+[ "$(cat "$T/code")" = 1 ] && grep -q 'was not kept' "$T/stderr"; check "rollback.sh: with no kept copy it says so instead of guessing" $?
 
 # ---- apply: a failure half-way puts the first file back
 if [ "$(id -u)" != 0 ]; then

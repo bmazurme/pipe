@@ -20,12 +20,19 @@ export const ONLINE_WITHIN_MS = 3 * 60 * 60 * 1000;
 export const REPORT_FRESH_MS = 48 * 60 * 60 * 1000;
 // A decision nobody picked up (the board is off) is dropped, so it cannot be applied by surprise much later.
 export const PENDING_EXPIRES_MS = 60 * 60 * 1000;
-// The installer of the updates is never replaced by an update it carries out: if it were broken, the board would be left with no way
-// to be fixed from here. It stays a manual copy.
-export const NOT_UPDATABLE_PREFIXES = ['infra/boardagent/'];
+// The agent can update itself — its script and its manifest, nothing else of infra/boardagent/ — because the agent checks the new
+// version before replacing the running one, keeps the old, and a rollback unit restores it if the new one crashes. Everything else
+// there (install.sh, rollback.sh, the units) stays a manual copy: rollback.sh in particular must not depend on what it restores.
+export const SELF_UPDATABLE = [
+  'infra/boardagent/board-agent.sh',
+  'infra/boardagent/manifest.txt',
+];
 
 export function isUpdatable(repoPath: string): boolean {
-  return !NOT_UPDATABLE_PREFIXES.some((prefix) => repoPath.startsWith(prefix));
+  return (
+    !repoPath.startsWith('infra/boardagent/') ||
+    SELF_UPDATABLE.includes(repoPath)
+  );
 }
 
 export interface BoardView {
