@@ -281,6 +281,48 @@ describe('WorkerController', () => {
     });
   });
 
+  describe('reportQuestions', () => {
+    it('hands the held job’s id and task key to the questions service', async () => {
+      (workerService as Record<string, jest.Mock>).findHeld = jest
+        .fn()
+        .mockResolvedValue({ id: 5, taskKey: '173:628', userId: 7 });
+
+      await controller.reportQuestions(
+        5,
+        { questions: ['Q?'] },
+        {
+          id: 7,
+          workerId: 3,
+        },
+      );
+
+      expect(questionsService.addFromRun).toHaveBeenCalledWith(
+        { id: 5, taskKey: '173:628' },
+        7,
+        ['Q?'],
+      );
+    });
+
+    it('stores nothing when the job is not held by this worker', async () => {
+      questionsService.addFromRun.mockClear();
+      (workerService as Record<string, jest.Mock>).findHeld = jest
+        .fn()
+        .mockRejectedValue(new Error('not held'));
+
+      await expect(
+        controller.reportQuestions(
+          5,
+          { questions: ['Q?'] },
+          {
+            id: 7,
+            workerId: 3,
+          },
+        ),
+      ).rejects.toThrow('not held');
+      expect(questionsService.addFromRun).not.toHaveBeenCalled();
+    });
+  });
+
   describe('cancelState', () => {
     it('returns only id, status and cancelRequestedAt', async () => {
       const cancelRequestedAt = new Date('2026-01-01T00:00:00Z');

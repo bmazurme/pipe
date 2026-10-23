@@ -2015,6 +2015,53 @@ describe('WorkerService', () => {
       });
     });
 
+    describe('findHeld', () => {
+      it('returns the job for a personal API key', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, undefined)).resolves.toMatchObject({
+          id: 1,
+        });
+        expect(repository.findOne).toHaveBeenCalledTimes(1);
+      });
+
+      it('returns the job for the worker holding it', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, 5)).resolves.toMatchObject({
+          id: 1,
+        });
+      });
+
+      it('403s for a job held by another worker', async () => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          userId: 7,
+          workerId: 5,
+        });
+
+        await expect(service.findHeld(1, 7, 6)).rejects.toThrow(
+          'not held by this worker',
+        );
+      });
+
+      it('404s for an unknown or foreign job', async () => {
+        repository.findOne!.mockResolvedValue(null);
+
+        await expect(service.findHeld(1, 7, 5)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+    });
+
     describe('assertHeldBy', () => {
       it('lets a personal API key through (account-wide reach)', async () => {
         await expect(

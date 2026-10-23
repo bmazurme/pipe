@@ -408,12 +408,17 @@ export class WorkerController {
     @Body() dto: ReportQuestionsDto,
     @CurrentUser() currentUser: { id: number; workerId?: number },
   ): Promise<void> {
-    await this.workerService.assertHeldBy(
+    const job = await this.workerService.findHeld(
       id,
       currentUser.id,
       currentUser.workerId,
     );
-    await this.questionsService.addFromRun(id, currentUser.id, dto.questions);
+
+    await this.questionsService.addFromRun(
+      { id: job.id, taskKey: job.taskKey },
+      currentUser.id,
+      dto.questions,
+    );
   }
 
   @Post(':id/logs')

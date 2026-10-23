@@ -8,7 +8,6 @@ import { In, Repository } from 'typeorm';
 
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { ContextService } from '../context/context.service';
-import { Job } from '../worker/entities/job.entity';
 import { QuestionCardDto } from './dto/question-card.dto';
 import { TaskQuestion } from './entities/task-question.entity';
 import {
@@ -33,24 +32,16 @@ export class QuestionsService {
   constructor(
     @InjectRepository(TaskQuestion)
     private readonly questionRepository: Repository<TaskQuestion>,
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
     private readonly contextService: ContextService,
   ) {}
 
   // What a worker found in a run's output. A question already open on the same task is not added again (a re-run
   // usually asks the same thing); one that was ticked off and comes back is added as new.
   async addFromRun(
-    jobId: number,
+    job: { id: number; taskKey: string | null },
     userId: number,
     texts: string[],
   ): Promise<number> {
-    const job = await this.jobRepository.findOne({
-      where: { id: jobId, userId },
-      select: { id: true, taskKey: true },
-    });
-
-    if (!job) throw new NotFoundException('Job not found');
     // Older jobs have no task key; they have nothing to group their questions under.
     if (!job.taskKey) return 0;
 
@@ -82,7 +73,7 @@ export class QuestionsService {
     await this.questionRepository.save(
       fresh.map((text) => ({
         userId,
-        jobId,
+        jobId: job.id,
         taskKey: job.taskKey as string,
         project: projectOf(job.taskKey as string),
         text,
