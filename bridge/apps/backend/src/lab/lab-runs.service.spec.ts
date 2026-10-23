@@ -12,7 +12,8 @@ import { LabProjectsService, toView } from './lab-projects.service';
 import { LabProject } from './entities/lab-project.entity';
 import { LabRun } from './entities/lab-run.entity';
 import { readLabResult } from './lab-result';
-import { buildIssueParcel, readZipball } from '../improve/parcel';
+import { readZipball } from '../common/zip';
+import { buildIssueParcel } from '../improve/parcel';
 
 jest.mock('./lab-github', () => ({
   ...jest.requireActual<object>('./lab-github'),
@@ -23,13 +24,16 @@ jest.mock('./lab-result', () => ({
   ...jest.requireActual<object>('./lab-result'),
   readLabResult: jest.fn(),
 }));
+jest.mock('../common/zip', () => ({
+  ...jest.requireActual<object>('../common/zip'),
+  readZipball: jest.fn(),
+}));
 jest.mock('../improve/parcel', () => {
   const actual =
     jest.requireActual<typeof import('../improve/parcel')>('../improve/parcel');
 
   return {
     ...actual,
-    readZipball: jest.fn(),
     buildIssueParcel: jest.fn(actual.buildIssueParcel),
   };
 });
@@ -87,9 +91,12 @@ describe('LabRunsService repo snapshot cache', () => {
         baseline: {},
       }),
     }));
+    jest.doMock('../common/zip', () => ({
+      ...jest.requireActual('../common/zip'),
+      readZipball: async () => [],
+    }));
     jest.doMock('../improve/parcel', () => ({
       ...jest.requireActual('../improve/parcel'),
-      readZipball: async () => [],
       buildIssueParcel: async () => ({ buffer: Buffer.from('x') }),
     }));
 

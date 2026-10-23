@@ -9,7 +9,6 @@ import {
   MANIFEST_ENTRY,
   PARCEL_SCHEMA_VERSION,
   readResultParcel,
-  readZipball,
   selectParcelFiles,
   sha256,
   snapshotBaseline,
@@ -19,21 +18,6 @@ import {
 const file = (path: string, text: string): SnapshotFile => ({
   path,
   bytes: strToU8(text),
-});
-
-describe('readZipball', () => {
-  it('strips the top-level folder and ignores directories', async () => {
-    const zip = zipSync({
-      'owner-repo-abc/': new Uint8Array(),
-      'owner-repo-abc/src/a.ts': strToU8('a'),
-      'owner-repo-abc/README.md': strToU8('r'),
-    });
-
-    expect((await readZipball(zip)).map((entry) => entry.path).sort()).toEqual([
-      'README.md',
-      'src/a.ts',
-    ]);
-  });
 });
 
 describe('selectParcelFiles', () => {

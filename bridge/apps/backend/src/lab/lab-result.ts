@@ -1,4 +1,9 @@
 import {
+  type SnapshotFile,
+  unzipBounded,
+  type UnzipLimits,
+} from '../common/zip';
+import {
   ASSET_PREFIX,
   Change,
   isExcludedPath,
@@ -7,9 +12,6 @@ import {
   selectParcelFiles,
   sha256,
   snapshotBaseline,
-  type SnapshotFile,
-  unzipBounded,
-  type UnzipLimits,
 } from '../improve/parcel';
 
 // Lab, unlike Improve, publishes what a worker made as it is — drawings, images and other binaries included. The worker sends the
