@@ -40,7 +40,8 @@ export function RunsTab() {
   const { data: projects } = useListLabProjectsQuery();
   const { data: contexts } = useListContextsQuery();
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
-  const [cancel, { isLoading: isCancelling, originalArgs: cancellingId }] = useCancelLabRunMutation();
+  const [cancel, { isLoading: isCancelling, originalArgs: cancellingId, error: cancelError }] = useCancelLabRunMutation();
+  const [confirmCancel, setConfirmCancel] = useState<{ id: number } | null>(null);
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
   const [refreshPrs, { isLoading: isRefreshing }] = useRefreshLabPrsMutation();
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export function RunsTab() {
 
       {refreshNote && <Alert theme="info" view="outlined" message={refreshNote} onClose={() => setRefreshNote(null)} />}
       {error && !form && <Alert theme="danger" view="filled" message={error} />}
+      {cancelError && <Alert theme="danger" view="filled" message={getErrorMessage(cancelError, 'Не удалось остановить')} />}
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить запуски" />}
       {runs && runs.length === 0 && <EmptyState icon={Rocket} title="Запусков ещё не было" description="Запустите задачу вручную или дождитесь расписания." />}
@@ -165,13 +167,30 @@ export function RunsTab() {
               </Button>
             )}
             {(run.status === 'queued' || run.status === 'running') && (
-              <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => void cancel(run.id)}>
+              <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => setConfirmCancel({ id: run.id })}>
                 <Icon data={Stop} size={16} />
               </Button>
             )}
           </div>
         </div>
       ))}
+
+      <Dialog open={confirmCancel !== null} onClose={() => setConfirmCancel(null)} maxWidth="s" aria-labelledby="lab-run-cancel-title">
+        <Dialog.Header caption={`Остановить запуск #${confirmCancel?.id}?`} id="lab-run-cancel-title" />
+        <Dialog.Body>
+          <Text variant="body-2">Запуск будет остановлен, вернуть его нельзя.</Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Не останавливать"
+          textButtonApply="Остановить"
+          propsButtonApply={{ view: 'outlined-danger' }}
+          onClickButtonCancel={() => setConfirmCancel(null)}
+          onClickButtonApply={() => {
+            if (confirmCancel) void cancel(confirmCancel.id);
+            setConfirmCancel(null);
+          }}
+        />
+      </Dialog>
 
       <Dialog open={form !== null} onClose={() => setForm(null)} maxWidth="s" aria-labelledby="lab-run-title">
         <Dialog.Header caption={form?.followUpOf ? "Доработать PR" : "Новый запуск"} id="lab-run-title" />
