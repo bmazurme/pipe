@@ -5,14 +5,17 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { strToU8, unzip, zip, type Unzipped, type Zippable } from 'fflate';
+import { strToU8, type Zippable } from 'fflate';
 
 import { SharedAsyncCache } from '../common/shared-async-cache';
+import { readZipball, zipAsync } from '../common/zip';
 import { GithubApiService } from '../loop/github-api.service';
 
 const BASE_BRANCH = 'main';
 // How long the resolved head of main is trusted before GitHub is asked again.
 const SHA_TTL_MS = 60_000;
+// After a build of a sha fails, it is not started again for this long — each attempt downloads the whole-repo zipball.
+const BUILD_FAILURE_COOLDOWN_MS = 5 * 60_000;
 // reports/package.json depends on @pipe/protocol via a plain relative
 // `file:../../../packages/protocol` path (not rewritten here, not a
 // workspace range) — bundling protocol alongside reports/, at the same
@@ -61,24 +64,6 @@ interface BuiltRelease {
   info: ReportsReleaseInfo;
 }
 
-// fflate's callback forms run on worker threads in Node — see improve/parcel.ts
-// for the same pattern (this module deliberately doesn't import from there:
-// parcel.ts's helpers are module-private and shaped around a different,
-// worker-job-specific manifest).
-function unzipAsync(data: Uint8Array): Promise<Unzipped> {
-  return new Promise((resolve, reject) => {
-    unzip(data, (err, out) => (err ? reject(err) : resolve(out)));
-  });
-}
-
-function zipAsync(entries: Zippable): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    zip(entries, { level: 6 }, (err, out) =>
-      err ? reject(err) : resolve(out),
-    );
-  });
-}
-
 @Injectable()
 export class ReportsReleaseService {
   // Single-entry cache: the output depends only on the base SHA.
@@ -89,6 +74,8 @@ export class ReportsReleaseService {
   private readonly logger = new Logger(ReportsReleaseService.name);
   // The last release that was built successfully: `info` answers from it while a newer one is being built.
   private lastBuilt: BuiltRelease | null = null;
+  // The last build that failed: until the cooldown passes nobody retries that sha.
+  private failedBuild: { sha: string; error: Error; at: number } | null = null;
   private resolvedSha: { promise: Promise<string>; at: number } | null = null;
 
   // Which release the owner's running reports said it has, at its last check — in memory, the next check refills it.
@@ -124,8 +111,13 @@ export class ReportsReleaseService {
     const sha = await this.resolveSha();
     const last = this.lastBuilt;
 
-    if (!last) return (await this.buildFor(sha)).info;
+    if (!last) {
+      this.assertNotCoolingDown(sha);
+
+      return (await this.buildFor(sha)).info;
+    }
     if (last.sha === sha) return last.info;
+    if (this.isCoolingDown(sha)) return last.info;
 
     // main moved: build the new release in the background and answer with the previous one.
     this.buildFor(sha).catch((err: unknown) => {
@@ -155,9 +147,38 @@ export class ReportsReleaseService {
     return promise;
   }
 
-  private async buildFor(sha: string): Promise<BuiltRelease> {
-    const built = await this.releases.get(sha, () => this.buildReportsZip(sha));
+  private isCoolingDown(sha: string): boolean {
+    const failed = this.failedBuild;
 
+    return (
+      failed !== null &&
+      failed.sha === sha &&
+      Date.now() - failed.at < BUILD_FAILURE_COOLDOWN_MS
+    );
+  }
+
+  private assertNotCoolingDown(sha: string): void {
+    if (this.isCoolingDown(sha)) {
+      throw new ServiceUnavailableException(this.failedBuild?.error.message);
+    }
+  }
+
+  private async buildFor(sha: string): Promise<BuiltRelease> {
+    let built: BuiltRelease;
+
+    try {
+      built = await this.releases.get(sha, () => this.buildReportsZip(sha));
+    } catch (err) {
+      this.failedBuild = {
+        sha,
+        error: err instanceof Error ? err : new Error(String(err)),
+        at: Date.now(),
+      };
+
+      throw err;
+    }
+
+    this.failedBuild = null;
     this.lastBuilt = built;
 
     return built;
@@ -177,34 +198,27 @@ export class ReportsReleaseService {
   async getRelease(): Promise<{ bytes: Uint8Array; info: ReportsReleaseInfo }> {
     this.assertConfigured();
 
-    return this.buildFor(await this.resolveSha());
+    const sha = await this.resolveSha();
+
+    this.assertNotCoolingDown(sha);
+
+    return this.buildFor(sha);
   }
 
   private async buildReportsZip(sha: string): Promise<BuiltRelease> {
     const zipball = await this.githubApi.downloadZipball(sha);
-    const unzipped = await unzipAsync(zipball);
-    const paths = Object.keys(unzipped);
+    // readZipball strips the zipball's single "<owner>-<repo>-<shortsha>/" root folder.
+    const snapshot = await readZipball(zipball);
 
-    if (paths.length === 0) {
+    if (snapshot.length === 0) {
       throw new Error('GitHub вернул пустой архив');
     }
 
-    // GitHub names the zipball's single root folder "<owner>-<repo>-<shortsha>/".
-    const rootPrefix = `${paths[0].split('/')[0]}/`;
-    const includedPrefixes = INCLUDED_SEGMENTS.map(
-      (segment) => `${rootPrefix}${segment}`,
-    );
-
     const output: Zippable = {};
 
-    for (const path of paths) {
-      if (
-        path.endsWith('/') ||
-        !includedPrefixes.some((prefix) => path.startsWith(prefix))
-      )
-        continue;
-
-      output[path.slice(rootPrefix.length)] = unzipped[path];
+    for (const { path, bytes } of snapshot) {
+      if (INCLUDED_SEGMENTS.some((segment) => path.startsWith(segment)))
+        output[path] = bytes;
     }
 
     if (!Object.keys(output).some((path) => path.startsWith('reports/'))) {
@@ -231,7 +245,7 @@ export class ReportsReleaseService {
 
     output[RELEASE_MANIFEST_PATH] = strToU8(JSON.stringify(manifest, null, 2));
 
-    const bytes = await zipAsync(output);
+    const bytes = await zipAsync(output, 6);
 
     return {
       sha,

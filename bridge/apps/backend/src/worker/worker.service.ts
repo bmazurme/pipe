@@ -832,6 +832,21 @@ export class WorkerService implements OnModuleInit {
     }
   }
 
+  // The job a worker (or a personal API key) reports on, loaded once: 404 if it is not the caller's, 403 if held by another worker.
+  async findHeld(
+    id: number,
+    userId: number,
+    workerId: number | undefined,
+  ): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (workerId !== undefined && job.workerId !== workerId) {
+      throw new ForbiddenException('This job is not held by this worker');
+    }
+
+    return job;
+  }
+
   async getSourceFile(id: number, userId: number): Promise<StoredFile> {
     const job = await this.findOwned(id, userId);
 
