@@ -27,6 +27,8 @@ describe('QuestionsService', () => {
   let stored: Row[];
   let save: jest.Mock;
   let createContext: jest.Mock;
+  let findContextByName: jest.Mock;
+  let updateContext: jest.Mock;
 
   const at = (iso: string) => new Date(iso);
 
@@ -35,12 +37,21 @@ describe('QuestionsService', () => {
     open = [];
     stored = [];
     createContext = jest.fn(() => Promise.resolve({ id: 41 }));
+    findContextByName = jest.fn(() => Promise.resolve(null));
+    updateContext = jest.fn(() => Promise.resolve({ id: 41 }));
     save = jest.fn((value: unknown) => Promise.resolve(value));
 
     const module = await Test.createTestingModule({
       providers: [
         QuestionsService,
-        { provide: ContextService, useValue: { create: createContext } },
+        {
+          provide: ContextService,
+          useValue: {
+            create: createContext,
+            findByName: findContextByName,
+            update: updateContext,
+          },
+        },
         {
           provide: getRepositoryToken(TaskQuestion),
           useValue: {
@@ -238,11 +249,29 @@ describe('QuestionsService', () => {
         { id: 2, taskKey: '1:1', text: 'B?', answer: null },
       ];
 
-      expect(await service.createContext(7, '1:1')).toBe(41);
+      expect(await service.createContext(7, '1:1')).toEqual({
+        contextId: 41,
+        updated: false,
+      });
       expect(createContext).toHaveBeenCalledWith(7, {
         name: 'Ответы: 1:1',
         content: 'Вопрос: A?\nОтвет: yes',
       });
+    });
+
+    it('updates the existing context instead of creating a second one', async () => {
+      stored = [{ id: 1, taskKey: '1:1', text: 'A?', answer: 'later' }];
+      findContextByName.mockResolvedValue({ id: 41 });
+
+      expect(await service.createContext(7, '1:1')).toEqual({
+        contextId: 41,
+        updated: true,
+      });
+      expect(findContextByName).toHaveBeenCalledWith(7, 'Ответы: 1:1');
+      expect(updateContext).toHaveBeenCalledWith(41, 7, {
+        content: 'Вопрос: A?\nОтвет: later',
+      });
+      expect(createContext).not.toHaveBeenCalled();
     });
 
     it('404s when nothing is answered', async () => {

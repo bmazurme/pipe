@@ -57,12 +57,7 @@ export class QuestionsController {
   async saveAsContext(
     @Param('taskKey') taskKey: string,
     @CurrentUser() currentUser: { id: number },
-  ): Promise<{ contextId: number }> {
-    return {
-      contextId: await this.questionsService.createContext(
-        currentUser.id,
-        taskKey,
-      ),
-    };
+  ): Promise<{ contextId: number; updated: boolean }> {
+    return this.questionsService.createContext(currentUser.id, taskKey);
   }
 }

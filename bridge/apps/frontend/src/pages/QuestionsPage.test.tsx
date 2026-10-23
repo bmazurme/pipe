@@ -24,11 +24,13 @@ const CARD = {
 type Sent = { method: string; path: string; body: unknown };
 let sent: Sent[];
 let cards: Record<string, unknown[]>;
+let contextUpdated = false;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 beforeEach(() => {
   sent = [];
+  contextUpdated = false;
   cards = { false: [CARD], true: [] };
   store.dispatch(questionsApi.util.resetApiState());
   vi.stubGlobal(
@@ -43,6 +45,8 @@ beforeEach(() => {
       }
 
       sent.push({ method: request.method, path, body: await request.json().catch(() => undefined) });
+      if (path.endsWith('/context')) return json({ contextId: 5, updated: contextUpdated });
+
       return json({ id: 1, text: 'x', resolved: true, createdAt: 'x' });
     }),
   );
@@ -87,10 +91,24 @@ describe('QuestionsPage', () => {
     await user.click(screen.getByText('Ответить'));
 
     await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { answer: '  main ' } }]));
-
+    await waitFor(() => expect(screen.getByText('Сохранить ответы как Context').closest('button')).not.toBeDisabled());
     await user.click(screen.getByText('Сохранить ответы как Context'));
 
     await waitFor(() => expect(sent.some((s) => s.method === 'POST' && s.path === 'questions/cards/173%3A628/context')).toBe(true));
+  });
+
+  it('says the Context was updated when it already existed', async () => {
+    const user = userEvent.setup();
+    contextUpdated = true;
+    renderPage();
+
+    await user.type(await screen.findByLabelText('Ответ: Какую ветку брать за основу?'), 'main');
+    await user.click(screen.getByText('Ответить'));
+    await waitFor(() => expect(sent.some((s) => s.method === 'PATCH')).toBe(true));
+    await waitFor(() => expect(screen.getByText('Сохранить ответы как Context').closest('button')).not.toBeDisabled());
+    await user.click(screen.getByText('Сохранить ответы как Context'));
+
+    expect(await screen.findByText(/обновлён/)).toBeTruthy();
   });
 
   it('the archive tab asks for archived cards', async () => {
