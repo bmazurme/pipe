@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDate,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Min,
+} from 'class-validator';
 
 import { JobModel } from '../entities/job.entity';
 import { MaxFutureDate, MinFutureDate } from './not-before.validators';
@@ -28,4 +35,15 @@ export class RetryJobDto {
   @IsInt()
   @Min(1)
   providerCredentialId?: number;
+
+  // Attach this saved context instead of the failed job's own; absent = keep the job's.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number;
+
+  // Run without any context (the job's own is dropped); ignored when contextId is set.
+  @IsOptional()
+  @IsBoolean()
+  withoutContext?: boolean;
 }

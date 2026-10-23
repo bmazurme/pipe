@@ -376,6 +376,8 @@ export class WorkerController {
         model: dto.model,
         claudeCredentialId: dto.claudeCredentialId,
         providerCredentialId: dto.providerCredentialId,
+        contextId: dto.contextId,
+        withoutContext: dto.withoutContext,
       },
     );
 
