@@ -255,7 +255,15 @@ const workerApiEndpoints = workerApi.injectEndpoints({
     // Queues a new job over a failed/stopped job's parcel, model and credential.
     retryJob: builder.mutation<
       WorkerJob,
-      { id: number; notBefore?: string; model?: WorkerJobModel; claudeCredentialId?: number; providerCredentialId?: number }
+      {
+        id: number;
+        notBefore?: string;
+        model?: WorkerJobModel;
+        claudeCredentialId?: number;
+        providerCredentialId?: number;
+        contextId?: number;
+        withoutContext?: boolean;
+      }
     >({
       query: ({ id, notBefore, ...overrides }) => ({
         url: `worker/jobs/${id}/retry`,

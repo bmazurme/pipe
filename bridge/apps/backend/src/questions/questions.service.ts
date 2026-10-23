@@ -4,16 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { ContextService } from '../context/context.service';
-import { Job } from '../worker/entities/job.entity';
 import { QuestionCardDto, QuestionItemDto } from './dto/question-card.dto';
 import { TaskQuestion } from './entities/task-question.entity';
 import {
   MAX_QUESTION_LENGTH,
-  MAX_QUESTIONS_LISTED,
+  MAX_QUESTION_CARDS,
   MAX_QUESTIONS_PER_REPORT,
 } from './questions.limits';
 
@@ -33,24 +32,16 @@ export class QuestionsService {
   constructor(
     @InjectRepository(TaskQuestion)
     private readonly questionRepository: Repository<TaskQuestion>,
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
     private readonly contextService: ContextService,
   ) {}
 
   // What a worker found in a run's output. A question already open on the same task is not added again (a re-run
   // usually asks the same thing); one that was ticked off and comes back is added as new.
   async addFromRun(
-    jobId: number,
+    job: { id: number; taskKey: string | null },
     userId: number,
     texts: string[],
   ): Promise<number> {
-    const job = await this.jobRepository.findOne({
-      where: { id: jobId, userId },
-      select: { id: true, taskKey: true },
-    });
-
-    if (!job) throw new NotFoundException('Job not found');
     // Older jobs have no task key; they have nothing to group their questions under.
     if (!job.taskKey) return 0;
 
@@ -82,7 +73,7 @@ export class QuestionsService {
     await this.questionRepository.save(
       fresh.map((text) => ({
         userId,
-        jobId,
+        jobId: job.id,
         taskKey: job.taskKey as string,
         project: projectOf(job.taskKey as string),
         text,
@@ -98,31 +89,50 @@ export class QuestionsService {
     userId: number,
     archived: boolean,
   ): Promise<QuestionCardDto[]> {
+    // First pick the tasks of the requested view in SQL (newest activity first), then read only their rows.
+    const tasks = await this.questionRepository
+      .createQueryBuilder('q')
+      .select('q."taskKey"', 'taskKey')
+      .where('q."userId" = :userId', { userId })
+      .groupBy('q."taskKey"')
+      .having(
+        archived
+          ? 'COUNT(*) FILTER (WHERE q."resolvedAt" IS NULL) = 0'
+          : 'COUNT(*) FILTER (WHERE q."resolvedAt" IS NULL) > 0',
+      )
+      .orderBy('MAX(q."updatedAt")', 'DESC')
+      .limit(MAX_QUESTION_CARDS)
+      .getRawMany<{ taskKey: string }>();
+
+    if (tasks.length === 0) return [];
+
     const rows = await this.questionRepository.find({
-      where: { userId },
-      order: { id: 'DESC' },
-      take: MAX_QUESTIONS_LISTED,
+      where: { userId, taskKey: In(tasks.map((t) => t.taskKey)) },
+      order: { id: 'ASC' },
     });
 
     const byTask = new Map<string, TaskQuestion[]>();
 
     for (const row of rows) {
-      byTask.set(row.taskKey, [...(byTask.get(row.taskKey) ?? []), row]);
+      const list = byTask.get(row.taskKey);
+
+      if (list) list.push(row);
+      else byTask.set(row.taskKey, [row]);
     }
 
     const cards: QuestionCardDto[] = [];
 
-    for (const [taskKey, questions] of byTask) {
+    for (const { taskKey } of tasks) {
+      const questions = byTask.get(taskKey);
+
+      if (!questions) continue;
+
       const openCount = questions.filter((q) => q.resolvedAt === null).length;
-
-      if ((openCount === 0) !== archived) continue;
-
-      const ordered = [...questions].sort((a, b) => a.id - b.id);
 
       cards.push({
         taskKey,
-        project: questions[0].project,
-        questions: ordered.map(QuestionItemDto.fromEntity),
+        project: questions[questions.length - 1].project,
+        questions: questions.map(QuestionItemDto.fromEntity),
         openCount,
         archived: openCount === 0,
         updatedAt: new Date(
@@ -131,7 +141,7 @@ export class QuestionsService {
       });
     }
 
-    return cards.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return cards;
   }
 
   // `resolved` ticks a question off or back on; a non-empty `answer` is stored and resolves it, an empty one clears it.

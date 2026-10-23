@@ -1892,6 +1892,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports-release/installed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ReportsReleaseController_installed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports-release/download": {
         parameters: {
             query?: never;
@@ -2510,6 +2526,8 @@ export interface components {
             model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             claudeCredentialId?: number;
             providerCredentialId?: number;
+            contextId?: number;
+            withoutContext?: boolean;
         };
         UpdateJobStatusDto: {
             /** @enum {string} */
@@ -6095,6 +6113,25 @@ export interface operations {
         };
     };
     ReportsReleaseController_info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ReportsReleaseController_installed: {
         parameters: {
             query?: never;
             header?: never;

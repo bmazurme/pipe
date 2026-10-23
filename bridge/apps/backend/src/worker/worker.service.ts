@@ -365,6 +365,8 @@ export class WorkerService implements OnModuleInit {
       model?: JobModel;
       claudeCredentialId?: number;
       providerCredentialId?: number;
+      contextId?: number;
+      withoutContext?: boolean;
     } = {},
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
@@ -404,6 +406,17 @@ export class WorkerService implements OnModuleInit {
     const providerCredentialId =
       overrides.providerCredentialId ??
       (model === job.model ? job.providerCredentialId : null);
+    // A context chosen for the retry replaces the job's snapshot.
+    const context =
+      overrides.contextId !== undefined
+        ? await this.contextService
+            .findOwned(overrides.contextId, userId)
+            .then((found) => ({ name: found.name, text: found.content }))
+        : overrides.withoutContext
+          ? undefined
+          : job.contextText !== null && job.contextName !== null
+            ? { name: job.contextName, text: job.contextText }
+            : undefined;
     const retried = await this.create(
       userId,
       {
@@ -420,10 +433,7 @@ export class WorkerService implements OnModuleInit {
           : {}),
       },
       {
-        context:
-          job.contextText !== null && job.contextName !== null
-            ? { name: job.contextName, text: job.contextText }
-            : undefined,
+        context,
         history:
           job.historyText !== null && job.historyCount !== null
             ? { text: job.historyText, count: job.historyCount }
@@ -830,6 +840,21 @@ export class WorkerService implements OnModuleInit {
     if (job.workerId !== workerId) {
       throw new ForbiddenException('This job is not held by this worker');
     }
+  }
+
+  // The job a worker (or a personal API key) reports on, loaded once: 404 if it is not the caller's, 403 if held by another worker.
+  async findHeld(
+    id: number,
+    userId: number,
+    workerId: number | undefined,
+  ): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (workerId !== undefined && job.workerId !== workerId) {
+      throw new ForbiddenException('This job is not held by this worker');
+    }
+
+    return job;
   }
 
   async getSourceFile(id: number, userId: number): Promise<StoredFile> {
