@@ -209,3 +209,31 @@ describe('readResultParcel limits', () => {
     expect([...(await readResultParcel(data)).keys()]).toEqual(['a.md']);
   });
 });
+
+describe('buildIssueParcel: the binaries of a parcel are stored, not deflated', () => {
+  it('keeps assets uncompressed (method 0) while text is still compressed, and the content is unchanged', async () => {
+    const png = new Uint8Array(5000).map((_, i) => (i * 7) % 251);
+    const { buffer } = await buildIssueParcel(
+      [
+        { path: 'README.md', bytes: strToU8('hello '.repeat(500)) },
+        { path: '__issue_assets__/refs/a.png', bytes: png },
+      ],
+      { number: 'lab', title: 't', body: 'b', repo: 'o/r', baseBranch: 'main' },
+    );
+    const methods: Record<string, number> = {};
+    const out = unzipSync(new Uint8Array(buffer), {
+      filter: (entry) => {
+        methods[entry.name] = entry.compression;
+
+        return true;
+      },
+    });
+
+    expect(methods['__issue_assets__/refs/a.png']).toBe(0);
+    expect(methods['README.md']).toBe(8);
+    expect(
+      Buffer.from(out['__issue_assets__/refs/a.png']).equals(Buffer.from(png)),
+    ).toBe(true);
+    expect(strFromU8(out['README.md'])).toBe('hello '.repeat(500));
+  });
+});
