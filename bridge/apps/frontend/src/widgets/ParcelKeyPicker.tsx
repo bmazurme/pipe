@@ -17,6 +17,7 @@ export function ParcelKeyPicker({ keys, onPick, placeholder = 'Сохранён�
 
   return (
     <Select
+      aria-label="Сохранённый ключ"
       placeholder={placeholder}
       value={[]}
       onUpdate={([id]) => {
