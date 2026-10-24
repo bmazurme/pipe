@@ -47,8 +47,9 @@ export interface ChatMessageMeta {
 
 const chatApiEndpoints = chatApi.injectEndpoints({
   endpoints: (builder) => ({
-    listChats: builder.query<ChatMeta[], void>({
-      query: () => 'chat/chats',
+    // `q` (2+ chars) narrows the list to chats whose title or messages contain it; without it the key stays `undefined`.
+    listChats: builder.query<ChatMeta[], { q?: string } | void>({
+      query: (args) => (args && args.q ? { url: 'chat/chats', params: { q: args.q } } : 'chat/chats'),
       providesTags: ['Chat'],
     }),
     createChat: builder.mutation<ChatMeta, { model: ChatModelId; contextId?: number }>({

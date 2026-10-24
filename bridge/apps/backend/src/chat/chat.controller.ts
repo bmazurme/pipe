@@ -27,6 +27,7 @@ import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { ListChatsQueryDto } from './dto/list-chats-query.dto';
 import { RunCredentialsService } from '../worker/run-credentials.service';
 import { WorkersService } from '../worker/workers.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
@@ -77,8 +78,9 @@ export class ChatController {
   @Get('chats')
   async listChats(
     @CurrentUser() currentUser: { id: number },
+    @Query() query: ListChatsQueryDto,
   ): Promise<ChatResponseDto[]> {
-    const chats = await this.chatService.findAllByUser(currentUser.id);
+    const chats = await this.chatService.findAllByUser(currentUser.id, query.q);
     return chats.map(ChatResponseDto.fromEntity);
   }
 

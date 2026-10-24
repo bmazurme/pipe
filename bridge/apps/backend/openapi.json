@@ -432,7 +432,18 @@
     "/api/v1/chat/chats": {
       "get": {
         "operationId": "ChatController_listChats",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minLength": 2,
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
