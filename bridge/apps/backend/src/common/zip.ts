@@ -1,5 +1,6 @@
 import {
   unzip,
+  unzipSync,
   zip,
   type Unzipped,
   type Zippable,
@@ -30,60 +31,51 @@ export function unzipBounded(
   const tooBig = (what: string) =>
     new Error(`Слишком большой результат worker: ${what}`);
 
+  // Synchronous on purpose (the sizes are bounded above): the async form starts a worker thread per larger file, each with its own
+  // copy of the data, which is how a result with many binaries could exhaust memory.
   return new Promise((resolve, reject) => {
     let entries = 0;
     let declared = 0;
 
     try {
-      unzip(
-        data,
-        {
-          filter: (file) => {
-            entries += 1;
-            declared += file.originalSize;
+      const out = unzipSync(data, {
+        filter: (file) => {
+          entries += 1;
+          declared += file.originalSize;
 
-            if (entries > limits.maxEntries)
-              throw tooBig(`больше ${limits.maxEntries} файлов в архиве`);
+          if (entries > limits.maxEntries)
+            throw tooBig(`больше ${limits.maxEntries} файлов в архиве`);
 
-            if (file.originalSize > limits.maxEntryBytes)
-              throw tooBig(
-                `«${file.name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
-              );
-
-            if (declared > limits.maxTotalBytes)
-              throw tooBig(
-                `общий размер после распаковки больше ${mb(limits.maxTotalBytes)} (на «${file.name}»)`,
-              );
-
-            return true;
-          },
-        },
-        (err, out) => {
-          if (err) return reject(err);
-
-          let total = 0;
-
-          for (const [name, bytes] of Object.entries(out)) {
-            total += bytes.length;
-
-            if (bytes.length > limits.maxEntryBytes)
-              return reject(
-                tooBig(
-                  `«${name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
-                ),
-              );
-          }
-
-          if (total > limits.maxTotalBytes)
-            return reject(
-              tooBig(
-                `общий размер после распаковки больше ${mb(limits.maxTotalBytes)}`,
-              ),
+          if (file.originalSize > limits.maxEntryBytes)
+            throw tooBig(
+              `«${file.name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
             );
 
-          resolve(out);
+          if (declared > limits.maxTotalBytes)
+            throw tooBig(
+              `общий размер после распаковки больше ${mb(limits.maxTotalBytes)} (на «${file.name}»)`,
+            );
+
+          return true;
         },
-      );
+      });
+      let total = 0;
+
+      for (const [name, bytes] of Object.entries(out)) {
+        total += bytes.length;
+
+        if (bytes.length > limits.maxEntryBytes)
+          throw tooBig(
+            `«${name}» после распаковки больше ${mb(limits.maxEntryBytes)}`,
+          );
+      }
+
+      if (total > limits.maxTotalBytes)
+        throw tooBig(
+          `общий размер после распаковки больше ${mb(limits.maxTotalBytes)}`,
+        );
+
+      resolve(out);
     } catch (error) {
       reject(error);
     }
@@ -105,8 +97,34 @@ export interface SnapshotFile {
   bytes: Uint8Array;
 }
 
+const withoutTopFolder = (name: string) => name.split('/').slice(1).join('/');
+
 // A repository zipball has one top-level folder ("owner-repo-<sha>/"); strip it.
-export async function readZipball(data: Uint8Array): Promise<SnapshotFile[]> {
+//
+// With `accept` (asked per file, by its path and the size it will have once inflated) only the files it takes are inflated — and
+// they are inflated here, in one go, not by fflate's worker threads: the async form starts a thread per larger file, each holding
+// its own copy of the data, and a repository with a hundred binary files took bridge past its memory limit (the kernel killed it).
+export async function readZipball(
+  data: Uint8Array,
+  accept?: (path: string, size: number) => boolean,
+): Promise<SnapshotFile[]> {
+  if (accept) {
+    const picked = unzipSync(data, {
+      filter: (file) => {
+        if (file.name.endsWith('/')) return false;
+
+        const path = withoutTopFolder(file.name);
+
+        return path !== '' && accept(path, file.originalSize);
+      },
+    });
+
+    return Object.entries(picked).map(([name, bytes]) => ({
+      path: withoutTopFolder(name),
+      bytes,
+    }));
+  }
+
   const entries = await unzipAsync(data);
   const files: SnapshotFile[] = [];
 

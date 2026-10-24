@@ -6,6 +6,9 @@ import {
   LAB_MAX_BINARY_FILE_BYTES,
   parcelEntries,
   readLabResult,
+  labZipFilter,
+  LAB_MAX_BINARY_TOTAL_BYTES,
+  LAB_MAX_UNPACKED_BYTES,
   selectLabSnapshot,
   splitBaseline,
   taskWithSkipped,
@@ -239,5 +242,63 @@ describe('binaries that the worker removed or regenerated', () => {
         (change) => change.kind,
       ),
     ).toEqual(['added']);
+  });
+});
+
+describe('labZipFilter: what is worth inflating, decided before inflating', () => {
+  const MB = 1024 * 1024;
+
+  it('takes the text-sized files, drops excluded paths and empty files', () => {
+    const { accept, skipped } = labZipFilter();
+
+    expect(accept('README.md', 1000)).toBe(true);
+    expect(accept('src/a.ts', 200 * 1024)).toBe(true);
+    expect(accept('node_modules/x/y.js', 10)).toBe(false);
+    expect(accept('dist/out.js', 10)).toBe(false);
+    expect(accept('empty.txt', 0)).toBe(false);
+    expect(skipped).toEqual([]);
+  });
+
+  it('skips a binary over the size of one file, and names it', () => {
+    const { accept, skipped } = labZipFilter();
+
+    expect(accept('models/huge.3mf', 11 * MB)).toBe(false);
+    expect(skipped).toEqual(['models/huge.3mf (11 МБ — больше 10 МБ)']);
+  });
+
+  it('takes binaries only until the total limit, then names what did not fit', () => {
+    const { accept, skipped } = labZipFilter();
+    const taken: string[] = [];
+
+    for (let i = 0; i < 10; i += 1)
+      if (accept(`m/${i}.stl`, 9 * MB)) taken.push(`m/${i}.stl`);
+
+    expect(taken.length).toBe(
+      Math.floor(LAB_MAX_BINARY_TOTAL_BYTES / (9 * MB)),
+    );
+    expect(skipped.length).toBe(10 - taken.length);
+    expect(skipped[0]).toContain('общий размер вложений превысил 40 МБ');
+  });
+
+  it('bounds everything it takes, small files too', () => {
+    const { accept, skipped } = labZipFilter();
+    let taken = 0;
+
+    for (let i = 0; i < 1000; i += 1)
+      if (accept(`f/${i}.txt`, 200 * 1024)) taken += 200 * 1024;
+
+    expect(taken).toBeLessThanOrEqual(LAB_MAX_UNPACKED_BYTES);
+    expect(skipped.some((line) => line.includes('слишком большой'))).toBe(true);
+  });
+
+  it('hands what it skipped on to the snapshot, next to its own', () => {
+    const snapshot = selectLabSnapshot(
+      [{ path: 'README.md', bytes: new TextEncoder().encode('x') }],
+      ['models/huge.3mf (11 МБ — больше 10 МБ)'],
+    );
+
+    expect(snapshot.skipped).toEqual([
+      'models/huge.3mf (11 МБ — больше 10 МБ)',
+    ]);
   });
 });

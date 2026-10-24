@@ -285,7 +285,12 @@ export async function downloadRepoZip(
       chunks.push(value);
     }
 
-    return new Uint8Array(Buffer.concat(chunks));
+    // One copy of the archive, not three (the chunks, their concatenation, and a Uint8Array made from it).
+    const all = Buffer.concat(chunks, received);
+
+    chunks.length = 0;
+
+    return new Uint8Array(all.buffer, all.byteOffset, all.byteLength);
   } catch (error) {
     if (abort.signal.aborted)
       throw new Error(
