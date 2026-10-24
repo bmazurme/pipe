@@ -33,6 +33,8 @@ vi.mock('../store/api', async (importOriginal) => {
   };
 });
 
+vi.mock('./dashboard/GithubConnectionCard', () => ({ GithubConnectionCard: () => null }));
+
 import { DashboardPage } from './DashboardPage';
 
 const last = (list: Array<number | undefined>) => list[list.length - 1];
