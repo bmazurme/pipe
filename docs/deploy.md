@@ -59,12 +59,16 @@ allowed"` for refresh attempts from a server/datacenter context, not just a
 bad token, so it can't be made to work from bridge's backend.
 `POST /api/v1/vpn/provision` (the page's "Новый VPN-сервер" form) pushes
 `VPN_PROVISION_HOST`/`VPN_PROVISION_SSH_USER`/`VPN_PROVISION_SSH_PASSWORD`
-(transient — overwritten on every run) and dispatches
-`.github/workflows/provision-vpn-server.yml`, which SSHes in and installs
-AdGuard Home + 3x-ui (`bridge/deploy/provision-vpn-server.sh`), creating the
-initial Reality inbound — it no longer pushes the resulting panel URL/token
-as secrets (bridge doesn't read those anymore); add the provisioned panel
-by hand via "Доступные VPN" once the workflow's own log prints it.
+(transient — overwritten on every run) and dispatches the workflow
+`provision-vpn-server.yml` by name (`bridge/apps/backend/src/vpn/vpn.service.ts`).
+**That workflow is not in the repository**: `.github/workflows/` holds only
+`ci.yml`, `deploy-bridge.yml`, `nightly-cross-repo-e2e.yml`,
+`nightly-reports-e2e.yml` and `publish-images.yml`, and the script the code
+comments refer to, `bridge/deploy/provision-vpn-server.sh`, is missing too
+(`bridge/deploy/` has only `runner/` and `swarm/`). Until both are restored,
+the "Новый VPN-сервер" button cannot provision anything, and this document
+does not describe what they would do. Add an existing panel by hand via
+"Доступные VPN" instead.
 Deploy-only: `YC_SA_JSON_CREDENTIALS`, `CR_*` (registry, including
 `CR_WORKER_IMAGE`), `SWARM_*` (SSH access), `BACKEND_PUBLISHED_PORT`/`FRONTEND_PUBLISHED_PORT`/`HOST`,
 `WORKER_BRIDGE_API_URL`/`WORKER_BRIDGE_API_KEY`/`WORKER_CLAUDE_CODE_OAUTH_TOKEN`/`WORKER_OPENAI_API_KEY`/`WORKER_DEEPSEEK_API_KEY`/`WORKER_QWEN_API_KEY`
