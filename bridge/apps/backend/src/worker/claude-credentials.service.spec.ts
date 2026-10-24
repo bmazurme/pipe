@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job } from './entities/job.entity';
@@ -185,8 +185,56 @@ describe('ClaudeCredentialsService', () => {
         token: 'first',
       });
       expect(repository.findOne).toHaveBeenCalledWith({
-        where: { userId: 1 },
+        where: { userId: 1, authFailedAt: IsNull() },
         order: { id: 'ASC' },
+      });
+    });
+
+    describe('with rejected tokens', () => {
+      const stub = (marked: number[]) =>
+        repository.findOne!.mockImplementation(
+          ({ where }: { where: Record<string, unknown> }) =>
+            Promise.resolve(
+              [1, 2]
+                .map((id) => ({
+                  id,
+                  token: `t${id}`,
+                  authFailedAt: marked.includes(id) ? new Date() : null,
+                }))
+                .find(
+                  (t) =>
+                    (where.id === undefined || where.id === t.id) &&
+                    (where.authFailedAt === undefined ||
+                      t.authFailedAt === null),
+                ) ?? null,
+            ),
+        );
+
+      it('skips a marked token in the last fallback', async () => {
+        stub([1]);
+
+        await expect(service.resolveForRun(1, null)).resolves.toEqual({
+          id: 2,
+          token: 't2',
+        });
+      });
+
+      it('still returns the oldest token when every token is marked', async () => {
+        stub([1, 2]);
+
+        await expect(service.resolveForRun(1, null)).resolves.toEqual({
+          id: 1,
+          token: 't1',
+        });
+      });
+
+      it('keeps an explicit pick even when it is marked', async () => {
+        stub([1]);
+
+        await expect(service.resolveForRun(1, 1)).resolves.toEqual({
+          id: 1,
+          token: 't1',
+        });
       });
     });
 
