@@ -5493,7 +5493,12 @@
         "type": "object",
         "properties": {
           "minutes": {
-            "type": "number"
+            "type": "number",
+            "enum": [
+              15,
+              30,
+              60
+            ]
           }
         },
         "required": [

@@ -2573,7 +2573,8 @@ export interface components {
             force?: boolean;
         };
         ExtendJobDto: {
-            minutes: number;
+            /** @enum {number} */
+            minutes: 15 | 30 | 60;
         };
         RetryJobDto: {
             /** Format: date-time */
