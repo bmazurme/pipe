@@ -17,6 +17,20 @@ All three task-state files already agree on the `projectId:iid` key (e.g.
 `"173:628"`), which is what makes `pipe-status` (in `harness/`) able to
 merge them into one view instead of requiring separate lookups.
 
+**Other files that are not task state.** These are settings and data, not
+progress; they have no `projectId:iid` key and `pipe-status` does not read
+them. Listed here for anyone backing up or moving a machine, or deciding what
+must never be committed. Paths are relative to `reports/` unless noted.
+
+| File | Owner | What it holds | Secrets | Gitignored / self-update |
+|---|---|---|---|---|
+| `packages/server/src/settings/settings.json` | reports | GitLab and bridge tokens, company data from the Settings page | yes | gitignored (`reports/.gitignore`); `.json` under `packages/server/src/` is never overwritten by self-update |
+| `packages/server/src/subscription/subscription-config.json` | reports | anonymization dictionary, tracked projects, comment templates, encryption keys | yes — the RSA private key | gitignored; never overwritten by self-update |
+| `packages/server/src/counts/props.json` | reports | calendar of days off; path overridable with `REPORTS_PROPS_PATH` | no | not in `.gitignore`; never overwritten by self-update |
+| `packages/server/src/reports/project-dict.json` | reports | project dictionary | no | not in `.gitignore`; never overwritten by self-update |
+| `.update/status.json`, `.update/update.log` (and `.update/backup/`) | reports | self-update progress, log and file backup | no | outside `packages/server/src/`; written by the update process |
+| `credentials.json` in `WORKER_STATE_DIR` (default `.worker-state`) | worker | the `brw_…` key received at enrolment, and the bridge it belongs to | yes — written with mode 0600 | not part of any repo; keep the directory as a volume |
+
 **worker's job state lives in bridge's own Postgres**, not a local file —
 the `jobs` table (`bridge/apps/backend/src/worker/entities/job.entity.ts`,
 migration `1790100000000-AddWorkerJobs`), one row per job: which
