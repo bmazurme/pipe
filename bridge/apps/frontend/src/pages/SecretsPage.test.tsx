@@ -294,3 +294,60 @@ describe('SecretsPage revealed value handling', () => {
     expect(screen.getAllByText('••••••••')).toHaveLength(2);
   });
 });
+
+describe('SecretsPage search', () => {
+  function stubList() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+  }
+
+  it('filters by name, case-insensitively, and restores the list when cleared', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    const input = screen.getByLabelText('Поиск по секретам');
+    await user.type(input, 'API-K');
+    expect(screen.queryByText('github-token')).toBeNull();
+    expect(screen.getByText('api-key')).toBeTruthy();
+
+    await user.clear(input);
+    expect(screen.getByText('github-token')).toBeTruthy();
+    expect(screen.getByText('api-key')).toBeTruthy();
+  });
+
+  it('filters by description', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.type(screen.getByLabelText('Поиск по секретам'), 'ci acc');
+    expect(screen.getByText('github-token')).toBeTruthy();
+    expect(screen.queryByText('api-key')).toBeNull();
+  });
+
+  it('shows "nothing found" rather than the empty-vault state when nothing matches', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.type(screen.getByLabelText('Поиск по секретам'), 'zzz');
+    expect(screen.getByText('Ничего не найдено')).toBeTruthy();
+    expect(screen.queryByText('Секретов пока нет')).toBeNull();
+  });
+
+  it('does not show the search input when there are no secrets', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
+    renderPage();
+    await screen.findByText('Секретов пока нет');
+    expect(screen.queryByLabelText('Поиск по секретам')).toBeNull();
+  });
+});

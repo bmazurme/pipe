@@ -1,5 +1,6 @@
-import { Key } from '@gravity-ui/icons';
-import { Alert, Card, Loader } from '@gravity-ui/uikit';
+import { useMemo, useState } from 'react';
+import { Key, Magnifier } from '@gravity-ui/icons';
+import { Alert, Card, Icon, Loader, TextInput } from '@gravity-ui/uikit';
 
 import { useListSecretsQuery } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
@@ -11,6 +12,19 @@ import { useSecretsEditing } from './useSecretsEditing';
 export function SecretListCard() {
   const { data: secrets, isLoading, isError } = useListSecretsQuery();
   const editing = useSecretsEditing();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSecrets = useMemo(() => {
+    if (!secrets) return [];
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return secrets;
+
+    return secrets.filter(
+      (secret) =>
+        secret.name.toLowerCase().includes(query) ||
+        (secret.description ?? '').toLowerCase().includes(query),
+    );
+  }, [secrets, searchQuery]);
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -18,6 +32,19 @@ export function SecretListCard() {
 
       {editing.deleteError && <Alert theme="danger" view="filled" message={editing.deleteError} />}
       {editing.revealError && <Alert theme="danger" view="filled" message={editing.revealError} />}
+
+      {!isLoading && !isError && secrets && secrets.length > 0 && (
+        <TextInput
+          value={searchQuery}
+          onUpdate={setSearchQuery}
+          placeholder="Поиск по имени или описанию"
+          controlProps={{ 'aria-label': 'Поиск по секретам' }}
+          size="m"
+          hasClear
+          startContent={<Icon data={Magnifier} size={16} className={styles.searchIcon} />}
+          className={styles.search}
+        />
+      )}
 
       {isLoading && (
         <div className={styles.centered}>
@@ -35,9 +62,17 @@ export function SecretListCard() {
         />
       )}
 
-      {!isLoading && secrets && secrets.length > 0 && (
+      {!isLoading && secrets && secrets.length > 0 && filteredSecrets.length === 0 && (
+        <EmptyState
+          icon={Magnifier}
+          title="Ничего не найдено"
+          description="Попробуйте другой запрос или очистите поиск."
+        />
+      )}
+
+      {!isLoading && filteredSecrets.length > 0 && (
         <ul className={styles.entryList}>
-          {secrets.map((secret) => (
+          {filteredSecrets.map((secret) => (
             <SecretRow
               key={secret.id}
               secret={secret}
