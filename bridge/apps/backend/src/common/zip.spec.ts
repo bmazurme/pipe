@@ -66,3 +66,60 @@ describe('zipAsync / unzipAsync', () => {
     expect((await unzipAsync(deflated))['a.txt']).toEqual(text);
   });
 });
+
+describe('readZipball with a filter', () => {
+  const archive = () =>
+    zipSync({
+      'repo-abc/README.md': strToU8('# hi'),
+      'repo-abc/models/big.stl': new Uint8Array(3000).fill(7),
+      'repo-abc/models/small.bin': new Uint8Array(10).fill(1),
+      'repo-abc/node_modules/x/y.js': strToU8('x'),
+    });
+
+  it('inflates only the files it takes, asked by path and by the size they will have', async () => {
+    const asked: [string, number][] = [];
+    const files = await readZipball(archive(), (path, size) => {
+      asked.push([path, size]);
+
+      return !path.startsWith('node_modules/') && size <= 1000;
+    });
+
+    expect(files.map((file) => file.path).sort()).toEqual([
+      'README.md',
+      'models/small.bin',
+    ]);
+    expect(Object.fromEntries(asked)).toMatchObject({
+      'models/big.stl': 3000,
+      'models/small.bin': 10,
+    });
+  });
+
+  it('never asks about a folder, and strips the top folder from the paths', async () => {
+    const seen: string[] = [];
+    const files = await readZipball(
+      zipSync({
+        'repo-abc/': new Uint8Array(0),
+        'repo-abc/a.txt': strToU8('a'),
+      }),
+      (path) => {
+        seen.push(path);
+
+        return true;
+      },
+    );
+
+    expect(seen).toEqual(['a.txt']);
+    expect(files.map((file) => file.path)).toEqual(['a.txt']);
+  });
+
+  it('still reads everything when no filter is given', async () => {
+    expect(
+      (await readZipball(archive())).map((file) => file.path).sort(),
+    ).toEqual([
+      'README.md',
+      'models/big.stl',
+      'models/small.bin',
+      'node_modules/x/y.js',
+    ]);
+  });
+});

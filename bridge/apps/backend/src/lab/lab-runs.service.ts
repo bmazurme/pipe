@@ -39,6 +39,7 @@ import { LabProjectsService } from './lab-projects.service';
 import { LabPublishService } from './lab-publish.service';
 import {
   labEnvironment,
+  labZipFilter,
   parcelEntries,
   LabSnapshot,
   selectLabSnapshot,
@@ -319,15 +320,17 @@ export class LabRunsService {
   ): Promise<LabSnapshot> {
     const key = `${project.id}:${project.updatedAt?.getTime()}:${baseSha}`;
 
-    return this.snapshots.get(key, async () =>
-      selectLabSnapshot(
-        await readZipball(
-          await readStep('скачивание репозитория', () =>
-            downloadRepoZip(project.repo, project.token, baseSha),
-          ),
+    return this.snapshots.get(key, async () => {
+      const { accept, skipped } = labZipFilter();
+      const files = await readZipball(
+        await readStep('скачивание репозитория', () =>
+          downloadRepoZip(project.repo, project.token, baseSha),
         ),
-      ),
-    );
+        accept,
+      );
+
+      return selectLabSnapshot(files, skipped);
+    });
   }
 
   async cancel(id: number, userId: number): Promise<LabRun> {
