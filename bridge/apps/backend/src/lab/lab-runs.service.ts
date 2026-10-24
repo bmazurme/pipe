@@ -54,6 +54,8 @@ const SNAPSHOT_CACHE_SIZE = 2;
 // A run still preparing after the longest possible download plus a margin was lost to a restart.
 const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
 // How many open pull requests one "Проверить PR" asks GitHub about, newest first.
+// GitHub reads in flight at once during a refresh.
+const PR_REFRESH_CONCURRENCY = 4;
 const PR_REFRESH_LIMIT = 20;
 
 export type LabPrRefresh = {
@@ -377,6 +379,11 @@ export class LabRunsService {
       ]);
     }
 
+    const checks: Array<{
+      run: LabRun;
+      github: ReturnType<typeof githubFor>;
+    }> = [];
+
     for (const [projectId, runs] of byProject) {
       // Disconnected in the meantime: there is no token left to ask GitHub with.
       const project = await this.projects
@@ -387,39 +394,54 @@ export class LabRunsService {
 
       const github = githubFor(project);
 
-      for (const run of runs) {
-        let next: LabRunStatus | null;
+      for (const run of runs) checks.push({ run, github });
+    }
 
-        try {
-          const pull = await github.getPull(run.prNumber!);
+    const checkOne = async ({ run, github }: (typeof checks)[number]) => {
+      let next: LabRunStatus | null;
 
-          next = pull.merged
-            ? LabRunStatus.PrMerged
-            : pull.state === 'closed'
-              ? LabRunStatus.PrClosed
-              : null;
-          result.checked += 1;
-        } catch (error) {
-          result.failed += 1;
-          this.logger.warn(
-            `Lab run ${run.id}: PR #${run.prNumber} could not be read: ${describeGithubError(error)}`,
-          );
-          continue;
-        }
+      try {
+        const pull = await github.getPull(run.prNumber!);
 
-        if (!next) continue;
-
-        // Only from pr_open: a run that changed since it was loaded keeps its new status.
-        const res = await this.runs.update(
-          { id: run.id, userId, status: LabRunStatus.PrOpen },
-          { status: next },
+        next = pull.merged
+          ? LabRunStatus.PrMerged
+          : pull.state === 'closed'
+            ? LabRunStatus.PrClosed
+            : null;
+        result.checked += 1;
+      } catch (error) {
+        result.failed += 1;
+        this.logger.warn(
+          `Lab run ${run.id}: PR #${run.prNumber} could not be read: ${describeGithubError(error)}`,
         );
 
-        if (res.affected !== 1) continue;
-        if (next === LabRunStatus.PrMerged) result.merged += 1;
-        else result.closed += 1;
+        return;
       }
-    }
+
+      if (!next) return;
+
+      // Only from pr_open: a run that changed since it was loaded keeps its new status.
+      const res = await this.runs.update(
+        { id: run.id, userId, status: LabRunStatus.PrOpen },
+        { status: next },
+      );
+
+      if (res.affected !== 1) return;
+      if (next === LabRunStatus.PrMerged) result.merged += 1;
+      else result.closed += 1;
+    };
+
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < checks.length) await checkOne(checks[cursor++]);
+    };
+
+    await Promise.all(
+      Array.from(
+        { length: Math.min(PR_REFRESH_CONCURRENCY, checks.length) },
+        worker,
+      ),
+    );
 
     return result;
   }

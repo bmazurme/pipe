@@ -736,4 +736,41 @@ describe('LabRunsService.refreshPrStates', () => {
     expect(projects.findOwned).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ checked: 0, merged: 0, closed: 0, failed: 0 });
   });
+
+  it('asks GitHub about several PRs at once, never more than the pool size', async () => {
+    rows = Array.from({ length: 10 }, (_, i) => row(i + 1, 100 + i));
+    const pending: Array<() => void> = [];
+    let inFlight = 0;
+    let peak = 0;
+
+    getPull.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          pending.push(() => {
+            inFlight -= 1;
+            resolve({ state: 'open', merged: false });
+          });
+        }),
+    );
+
+    const done = service.refreshPrStates(1);
+
+    for (let i = 0; i < 20 && pending.length < 4; i++)
+      await new Promise((r) => setImmediate(r));
+
+    expect(inFlight).toBe(4);
+
+    while (pending.length) {
+      pending.shift()!();
+      await new Promise((r) => setImmediate(r));
+    }
+
+    const result = await done;
+
+    expect(peak).toBe(4);
+    expect(getPull).toHaveBeenCalledTimes(10);
+    expect(result).toEqual({ checked: 10, merged: 0, closed: 0, failed: 0 });
+  });
 });
