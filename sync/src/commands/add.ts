@@ -4,6 +4,8 @@ import path from 'node:path';
 import { loadConfig, saveConfig } from '../config.js';
 import { log } from '../log.js';
 import { resolveDictionaryPath } from '../paths.js';
+import { loadState } from '../state.js';
+import type { SyncState } from '../types.js';
 
 export function assertProjectPaths(name: string, projectPath: string, dictionary?: string): void {
   const resolved = path.resolve(projectPath);
@@ -56,8 +58,31 @@ export function removeCommand(name: string): void {
   log.info(`Stopped tracking "${name}".`);
 }
 
-export function listCommand(): void {
+export function listCommand(options: { json?: boolean } = {}): void {
   const config = loadConfig();
+
+  let state: SyncState = {};
+  try {
+    state = loadState();
+  } catch (error) {
+    log.warn(`Could not read sync state, showing every project as never synced: ${(error as Error).message}`);
+  }
+
+  if (options.json) {
+    log.info(
+      JSON.stringify(
+        config.projects.map((p) => ({
+          name: p.name,
+          path: p.path,
+          dictionary: p.dictionary ?? null,
+          lastSyncedAt: state[p.name]?.lastSyncedAt ?? null,
+        })),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
 
   if (config.projects.length === 0) {
     log.info('No projects tracked yet. Use "sync-cli add <name> <path> [dictionary]".');
@@ -65,6 +90,10 @@ export function listCommand(): void {
   }
 
   for (const project of config.projects) {
-    log.info(`${project.name}\t${project.path}\t${project.dictionary ?? '(no dictionary)'}`);
+    const lastSyncedAt = state[project.name]?.lastSyncedAt;
+    log.info(
+      `${project.name}\t${project.path}\t${project.dictionary ?? '(no dictionary)'}\t` +
+        (lastSyncedAt ? `synced ${lastSyncedAt}` : 'never synced'),
+    );
   }
 }
