@@ -1,3 +1,4 @@
+import { githubDispatcher } from '../common/github-dispatcher';
 import { ConfigService } from '@nestjs/config';
 
 import { GithubApiService } from '../loop/github-api.service';
@@ -85,7 +86,8 @@ async function repoRequest(
       Authorization: `Bearer ${token}`,
     },
     signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+    dispatcher: githubDispatcher(),
+  } as RequestInit);
 }
 
 // Can this token read the repository, find the base branch there, and write?
@@ -249,7 +251,8 @@ export async function downloadRepoZip(
         Authorization: `Bearer ${token}`,
       },
       signal: abort.signal,
-    });
+      dispatcher: githubDispatcher(),
+    } as RequestInit);
 
     if (!response.ok || !response.body)
       throw new Error(`GitHub ${response.status} при скачивании архива`);

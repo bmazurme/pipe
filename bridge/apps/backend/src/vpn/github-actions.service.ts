@@ -1,3 +1,4 @@
+import { githubDispatcher } from '../common/github-dispatcher';
 import {
   BadGatewayException,
   Injectable,
@@ -36,7 +37,8 @@ export class GithubActionsService {
         ...init,
         headers,
         signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
-      });
+        dispatcher: githubDispatcher(),
+      } as RequestInit);
 
       if (!response.ok) {
         throw new BadGatewayException(

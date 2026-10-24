@@ -199,3 +199,37 @@ describe('branch names', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe('the calls to GitHub and GITHUB_PROXY_URL', () => {
+  const saved = process.env.GITHUB_PROXY_URL;
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env.GITHUB_PROXY_URL;
+    else process.env.GITHUB_PROXY_URL = saved;
+  });
+
+  const seenInit = async (): Promise<Record<string, unknown>> => {
+    let seen: Record<string, unknown> = {};
+
+    jest.spyOn(global, 'fetch').mockImplementation((_url, init) => {
+      seen = (init ?? {}) as Record<string, unknown>;
+
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    });
+    await checkRepo('me/boat', 'tok', 'main');
+
+    return seen;
+  };
+
+  it('go through the proxy when it is set', async () => {
+    process.env.GITHUB_PROXY_URL = 'http://vpn-client:1080';
+
+    expect((await seenInit()).dispatcher).toBeDefined();
+  });
+
+  it('go direct otherwise', async () => {
+    delete process.env.GITHUB_PROXY_URL;
+
+    expect((await seenInit()).dispatcher).toBeUndefined();
+  });
+});

@@ -97,6 +97,10 @@ services:
       # consumer per bot may poll, so never run a second backend with the same token.
       TELEGRAM_PROXY_URL: http://vpn-client:1080
       TELEGRAM_POLLING: 'true'
+      # api.github.com answers slowly or not at all from here at times ("The operation was aborted due to timeout" in Improve runs, CI
+      # checks, Lab): set GITHUB_PROXY_URL=http://vpn-client:1080 in ~/.pipe/bridge.env to send the calls to GitHub through the same
+      # VPN client. Empty (the default) = direct.
+      GITHUB_PROXY_URL: ${GITHUB_PROXY_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       # Improve (analysis, issue runs, nightly schedules) and the loop's merge button talk to this repository.
