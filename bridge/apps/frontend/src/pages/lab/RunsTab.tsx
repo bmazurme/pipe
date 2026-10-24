@@ -19,6 +19,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
+import { JobDetailDialog } from '../worker/JobDetailDialog';
 import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
 import styles from '../ImprovePage.module.css';
 import { modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from '../improve/improveLabels';
@@ -47,6 +48,7 @@ export function RunsTab() {
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
 
@@ -127,6 +129,11 @@ export function RunsTab() {
           </div>
           <div className={styles.rowActions}>
             <Label theme={STATUS_THEME[run.status]}>{STATUS_LABEL[run.status]}</Label>
+            {run.jobId !== null && (
+              <Button size="xs" view="flat" onClick={() => setOpenJobId(run.jobId)}>
+                Запуск #{run.jobId}
+              </Button>
+            )}
             {run.prUrl && (
               <a href={run.prUrl} target="_blank" rel="noreferrer noopener" aria-label={`PR #${run.prNumber}`}>
                 <Icon data={ArrowUpRightFromSquare} size={16} />
@@ -174,6 +181,8 @@ export function RunsTab() {
           </div>
         </div>
       ))}
+
+      {openJobId !== null && <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />}
 
       <Dialog open={confirmCancel !== null} onClose={() => setConfirmCancel(null)} maxWidth="s" aria-labelledby="lab-run-cancel-title">
         <Dialog.Header caption={`Остановить запуск #${confirmCancel?.id}?`} id="lab-run-cancel-title" />
