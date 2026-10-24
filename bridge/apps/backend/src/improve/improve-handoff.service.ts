@@ -9,6 +9,8 @@ import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import {
   buildIssueParcel,
+  isExcludedPath,
+  MAX_FILE_BYTES,
   selectParcelFiles,
   snapshotBaseline,
 } from './parcel';
@@ -60,8 +62,13 @@ export class ImproveHandoffService {
   }
 
   private async loadSnapshot(sha: string): Promise<CachedSnapshot> {
+    // Excluded and oversize entries are never inflated (and no worker threads are used).
     const files = selectParcelFiles(
-      await readZipball(await this.github.downloadZipball(sha)),
+      await readZipball(
+        await this.github.downloadZipball(sha),
+        (path, size) =>
+          !isExcludedPath(path) && size > 0 && size <= MAX_FILE_BYTES,
+      ),
     );
 
     return { files, baseline: snapshotBaseline(files) };
