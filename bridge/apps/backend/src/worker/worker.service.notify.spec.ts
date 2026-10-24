@@ -1,14 +1,13 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 
-import { DeploymentAccessService } from '../auth/deployment-access';
 import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { StorageService } from '../storage/storage.service';
-import { NotifyService } from '../telegram/notify.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
+import { JobFinishNotifier } from './job-finish-notifier';
 import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
@@ -17,8 +16,7 @@ import { WorkerService } from './worker.service';
 describe('WorkerService finish notification', () => {
   let service: WorkerService;
   let repository: { findOne: jest.Mock; save: jest.Mock };
-  let notify: { send: jest.Mock };
-  let access: { isOwner: jest.Mock };
+  let notifier: { notify: jest.Mock };
   let storage: { findOwned: jest.Mock; create: jest.Mock };
 
   const job = (extra: Partial<Job> = {}) =>
@@ -40,8 +38,7 @@ describe('WorkerService finish notification', () => {
       findOne: jest.fn(),
       save: jest.fn((j: Job) => Promise.resolve(j)),
     };
-    notify = { send: jest.fn().mockResolvedValue(true) };
-    access = { isOwner: jest.fn().mockResolvedValue(true) };
+    notifier = { notify: jest.fn().mockResolvedValue(undefined) };
     storage = {
       findOwned: jest.fn(),
       create: jest.fn().mockResolvedValue({ id: 99 }),
@@ -59,8 +56,7 @@ describe('WorkerService finish notification', () => {
         { provide: ContextUsageRegistry, useValue: { register: jest.fn() } },
         { provide: ProviderCredentialsService, useValue: {} },
         { provide: JobSweepService, useValue: {} },
-        { provide: NotifyService, useValue: notify },
-        { provide: DeploymentAccessService, useValue: access },
+        { provide: JobFinishNotifier, useValue: notifier },
       ],
     }).compile();
 
@@ -69,50 +65,32 @@ describe('WorkerService finish notification', () => {
 
   const file = {} as Express.Multer.File;
 
-  it('notifies once on success when flagged', async () => {
+  it('calls the notifier once after setResult', async () => {
     repository.findOne.mockResolvedValue(job());
 
     await service.setResult(7, 1, file);
 
-    expect(notify.send).toHaveBeenCalledTimes(1);
-    expect(notify.send).toHaveBeenCalledWith(
-      `✅ Задача #7 (${JobModel.Sonnet}) завершена`,
+    expect(notifier.notify).toHaveBeenCalledTimes(1);
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, status: JobStatus.Succeeded }),
     );
   });
 
-  it('notifies on failure with a trimmed error', async () => {
+  it('calls the notifier for a failure that is not re-queued', async () => {
     repository.findOne.mockResolvedValue(job());
 
     await service.updateStatus(7, 1, {
       status: JobStatus.Failed,
-      errorMessage: 'x'.repeat(500),
+      errorMessage: 'boom',
     } as never);
 
-    expect(notify.send).toHaveBeenCalledTimes(1);
-    const text = notify.send.mock.calls[0][0] as string;
-    expect(text).toContain('🔴 Задача #7');
-    expect(text.endsWith('x'.repeat(200))).toBe(true);
-    expect(text).not.toContain('x'.repeat(201));
+    expect(notifier.notify).toHaveBeenCalledTimes(1);
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, status: JobStatus.Failed }),
+    );
   });
 
-  it('stays silent when the flag is off', async () => {
-    repository.findOne.mockResolvedValue(job({ notifyOnFinish: false }));
-
-    await service.setResult(7, 1, file);
-
-    expect(notify.send).not.toHaveBeenCalled();
-  });
-
-  it('stays silent for a non-owner', async () => {
-    access.isOwner.mockResolvedValue(false);
-    repository.findOne.mockResolvedValue(job());
-
-    await service.setResult(7, 1, file);
-
-    expect(notify.send).not.toHaveBeenCalled();
-  });
-
-  it('stays silent when the failed job is re-queued automatically', async () => {
+  it('does not call the notifier when the failed job is re-queued automatically', async () => {
     repository.findOne.mockResolvedValue(job());
     jest.spyOn(service, 'retryAfterInfraFailure').mockResolvedValue(job());
 
@@ -121,15 +99,6 @@ describe('WorkerService finish notification', () => {
       errorMessage: 'lost',
     } as never);
 
-    expect(notify.send).not.toHaveBeenCalled();
-  });
-
-  it('does not fail setResult when Telegram fails', async () => {
-    notify.send.mockRejectedValue(new Error('telegram down'));
-    repository.findOne.mockResolvedValue(job());
-
-    await expect(service.setResult(7, 1, file)).resolves.toMatchObject({
-      status: JobStatus.Succeeded,
-    });
+    expect(notifier.notify).not.toHaveBeenCalled();
   });
 });

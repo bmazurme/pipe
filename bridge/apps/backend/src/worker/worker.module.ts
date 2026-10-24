@@ -20,6 +20,7 @@ import { ProviderCredentialsService } from './provider-credentials.service';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkerHeartbeat } from './entities/worker-heartbeat.entity';
 import { WorkerController } from './worker.controller';
+import { JobFinishNotifier } from './job-finish-notifier';
 import { JobSweepService } from './job-sweep.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerService } from './worker.service';
@@ -53,6 +54,7 @@ import { WorkersService } from './workers.service';
   providers: [
     WorkerService,
     JobSweepService,
+    JobFinishNotifier,
     WorkersService,
     ClaudeCredentialsService,
     LimitAlertsService,

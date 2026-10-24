@@ -19,11 +19,9 @@ import {
   Repository,
 } from 'typeorm';
 
-import { DeploymentAccessService } from '../auth/deployment-access';
 import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { AppLogService } from '../logs/app-log.service';
-import { NotifyService } from '../telegram/notify.service';
 import { StorageService } from '../storage/storage.service';
 import {
   StoredFile,
@@ -36,6 +34,7 @@ import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { Job, JobModel, JobStatus } from './entities/job.entity';
 import { FailureSummary, groupFailures } from './failure-summary';
 import { INFRA_FAILURE_MESSAGES } from './infra-failure';
+import { JobFinishNotifier } from './job-finish-notifier';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
 import { Worker } from './entities/worker.entity';
@@ -86,9 +85,8 @@ export class WorkerService implements OnModuleInit {
     private readonly providerCredentialsService: ProviderCredentialsService,
     private readonly jobSweep: JobSweepService,
     private readonly contextUsage: ContextUsageRegistry,
+    private readonly finishNotifier: JobFinishNotifier,
     @Optional() private readonly appLogs?: AppLogService,
-    @Optional() private readonly notifyService?: NotifyService,
-    @Optional() private readonly deploymentAccess?: DeploymentAccessService,
   ) {
     this.jobSweep.onJobsLost = async (jobs) => {
       for (const job of jobs) {
@@ -101,29 +99,6 @@ export class WorkerService implements OnModuleInit {
     this.contextUsage.register({
       lastUseByName: (userId) => this.lastContextUseByName(userId),
     });
-  }
-
-  // Opt-in, per job: one Telegram message when a job ends. Telegram has a single recipient,
-  // so only the deployment owner's flag counts. Best-effort — never changes the outcome.
-  private async notifyFinished(job: Job): Promise<void> {
-    if (!job.notifyOnFinish || !this.notifyService || !this.deploymentAccess) {
-      return;
-    }
-
-    try {
-      if (!(await this.deploymentAccess.isOwner(job.userId))) return;
-
-      const text =
-        job.status === JobStatus.Succeeded
-          ? `✅ Задача #${job.id} (${job.model}) завершена`
-          : `🔴 Задача #${job.id} (${job.model}) не выполнена: ${(job.errorMessage ?? '').slice(0, 200)}`;
-
-      await this.notifyService.send(text);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to notify about job ${job.id}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   private isInfraFailure(job: Job): boolean {
@@ -1055,7 +1030,7 @@ export class WorkerService implements OnModuleInit {
       const requeued = await this.retryAfterInfraFailure(saved);
 
       if (!requeued) {
-        await this.notifyFinished(saved);
+        await this.finishNotifier.notify(saved);
       }
     }
 
@@ -1143,7 +1118,7 @@ export class WorkerService implements OnModuleInit {
     const saved = await this.jobRepository.save(job);
 
     logJobOutcome(this.appLogs, saved);
-    await this.notifyFinished(saved);
+    await this.finishNotifier.notify(saved);
 
     if (consumed) {
       try {
