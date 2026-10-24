@@ -124,4 +124,66 @@ describe('pushCommand', () => {
     assert.equal(uploads.length, 0);
     assert.equal(getLastHash(NAME), undefined);
   });
+
+  describe('--dry-run', () => {
+    async function capture(fn: () => Promise<void>): Promise<string> {
+      const lines: string[] = [];
+      const push = (...a: unknown[]): void => void lines.push(a.join(' '));
+      const logSpy = mock.method(console, 'log', push);
+      const warnSpy = mock.method(console, 'warn', push);
+      try {
+        await fn();
+      } finally {
+        logSpy.mock.restore();
+        warnSpy.mock.restore();
+      }
+      return lines.join('\n');
+    }
+
+    it('does not upload and does not store the hash', async () => {
+      writeFileSync(path.join(projectPath, 'a.ts'), 'export const a = 1;');
+
+      await pushCommand(NAME, { dryRun: true });
+
+      assert.equal(uploads.length, 0);
+      assert.equal(getLastHash(NAME), undefined);
+    });
+
+    it('reports file count, size, changed state and leak findings', async () => {
+      writeFileSync(path.join(projectPath, 'a.ts'), LEAK);
+
+      const out = await capture(() => pushCommand(NAME, { dryRun: true }));
+
+      assert.match(out, /Files: 1/);
+      assert.match(out, /Archive size: \d+ bytes/);
+      assert.match(out, /Changed since the last push/);
+      assert.match(out, /Leak findings: [1-9]/);
+      assert.match(out, /a\.ts/);
+    });
+
+    it('says unchanged when the hash matches the last push', async () => {
+      writeFileSync(path.join(projectPath, 'a.ts'), 'export const a = 1;');
+      await pushCommand(NAME, {});
+
+      const out = await capture(() => pushCommand(NAME, { dryRun: true }));
+
+      assert.match(out, /Unchanged since the last push/);
+      assert.equal(uploads.length, 1);
+    });
+
+    it('--dry-run --strict still fails on a leak', async () => {
+      writeFileSync(path.join(projectPath, 'a.ts'), LEAK);
+
+      await assert.rejects(pushCommand(NAME, { dryRun: true, strict: true }), /--strict/);
+      assert.equal(uploads.length, 0);
+    });
+
+    it('prints the same "No files matched" message and uploads nothing', async () => {
+      const out = await capture(() => pushCommand(NAME, { dryRun: true }));
+
+      assert.match(out, /No files matched/);
+      assert.equal(uploads.length, 0);
+      assert.equal(getLastHash(NAME), undefined);
+    });
+  });
 });

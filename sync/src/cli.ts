@@ -70,6 +70,7 @@ program
   .description('Transform (value->key) and upload a tracked project to bridge')
   .option('-f, --force', 'push even if content hash is unchanged')
   .option('--strict', 'abort instead of just warning when the leak scan finds something')
+  .option('--dry-run', 'show files, size, hash and leak findings without uploading')
   .action((name, options) => pushCommand(name, options));
 
 program
