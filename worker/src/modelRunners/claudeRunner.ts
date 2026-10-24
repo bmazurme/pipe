@@ -90,7 +90,7 @@ export function runClaude(
     // tools built on common HTTP libraries do). Set whichever flavor it
     // reads; unused ones are harmless.
     const env = buildClaudeEnv(process.env, proxyUrl, claudeToken);
-    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env });
+    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env, detached: process.platform !== 'win32' });
 
     let output = '';
     const collect = (text: string) => {
@@ -105,14 +105,27 @@ export function runClaude(
     // it goes into the result's tail too, not just the streamed log.
     child.stderr?.on('data', (chunk: Buffer) => collect(chunk.toString('utf-8')));
 
+    // The CLI leads its own process group, so the tool subprocesses it started die with it.
+    const killTree = (sig: NodeJS.Signals) => {
+      if (process.platform !== 'win32' && child.pid) {
+        try {
+          process.kill(-child.pid, sig);
+          return;
+        } catch {
+          // no such group any more — fall back to the CLI itself
+        }
+      }
+      child.kill(sig);
+    };
+
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
     const timeoutTimer =
       timeoutMs && timeoutMs > 0
         ? setTimeout(() => {
             timedOut = true;
-            child.kill('SIGTERM');
-            killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs);
+            killTree('SIGTERM');
+            killTimer = setTimeout(() => killTree('SIGKILL'), killGraceMs);
           }, timeoutMs)
         : undefined;
     // The owner's stop request: same SIGTERM → SIGKILL ladder as the deadline, but
@@ -121,9 +134,9 @@ export function runClaude(
     const onAbort = () => {
       if (cancelled) return;
       cancelled = true;
-      child.kill('SIGTERM');
+      killTree('SIGTERM');
       clearTimeout(killTimer);
-      killTimer = setTimeout(() => child.kill('SIGKILL'), killGraceMs);
+      killTimer = setTimeout(() => killTree('SIGKILL'), killGraceMs);
     };
     signal?.addEventListener('abort', onAbort, { once: true });
     const clearTimers = () => {
@@ -143,6 +156,8 @@ export function runClaude(
 
     child.on('close', (code) => {
       clearTimers();
+      // A grandchild that ignored SIGTERM must not outlive the CLI.
+      if (timedOut || cancelled) killTree('SIGKILL');
       stream.end();
       const report = stream.report.limits || stream.report.usage ? stream.report : undefined;
       if (cancelled) {
