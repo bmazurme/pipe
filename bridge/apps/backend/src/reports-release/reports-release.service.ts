@@ -207,19 +207,22 @@ export class ReportsReleaseService {
 
   private async buildReportsZip(sha: string): Promise<BuiltRelease> {
     const zipball = await this.githubApi.downloadZipball(sha);
-    // readZipball strips the zipball's single "<owner>-<repo>-<shortsha>/" root folder.
-    const snapshot = await readZipball(zipball);
+    let anyFile = false;
+    // readZipball strips the zipball's single "<owner>-<repo>-<shortsha>/" root folder. Only reports/ and packages/protocol/
+    // are inflated — the rest of the monorepo (bridge, worker, docs…) is skipped without being decompressed.
+    const snapshot = await readZipball(zipball, (path) => {
+      anyFile = true;
 
-    if (snapshot.length === 0) {
+      return INCLUDED_SEGMENTS.some((segment) => path.startsWith(segment));
+    });
+
+    if (!anyFile) {
       throw new Error('GitHub вернул пустой архив');
     }
 
     const output: Zippable = {};
 
-    for (const { path, bytes } of snapshot) {
-      if (INCLUDED_SEGMENTS.some((segment) => path.startsWith(segment)))
-        output[path] = bytes;
-    }
+    for (const { path, bytes } of snapshot) output[path] = bytes;
 
     if (!Object.keys(output).some((path) => path.startsWith('reports/'))) {
       throw new Error('В репозитории не нашлось папки reports/');

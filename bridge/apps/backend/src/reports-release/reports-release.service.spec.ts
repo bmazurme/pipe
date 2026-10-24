@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { strToU8, unzip, zip, type Zippable } from 'fflate';
 
 import { ReportsReleaseService } from './reports-release.service';
+import * as zipModule from '../common/zip';
 import type { GithubApiService } from '../loop/github-api.service';
 
 function zipAsync(entries: Zippable): Promise<Uint8Array> {
@@ -479,6 +480,62 @@ describe('ReportsReleaseService', () => {
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(
         info.sha256,
       );
+    });
+  });
+
+  describe('inflating only what goes into the release', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('inflates only reports/ and packages/protocol/ and keeps the release id of the same content', async () => {
+      const largeBridgeFile = 'x'.repeat(2_000_000);
+      const mixed = await releaseZipball('1.4.0', {
+        'bridge/apps/backend/big.bin': largeBridgeFile,
+        'worker/src/index.ts': '// worker',
+      });
+      const plain = await releaseZipball('1.4.0');
+      const readZipball = jest.spyOn(zipModule, 'readZipball');
+
+      const mixedService = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball: async () => mixed }),
+      );
+      const { bytes, info } = await mixedService.getRelease();
+
+      expect(readZipball).toHaveBeenCalledWith(mixed, expect.any(Function));
+      const accept = readZipball.mock.calls[0][1]!;
+      expect(accept('reports/package.json', 10)).toBe(true);
+      expect(accept('packages/protocol/src/pack.ts', 10)).toBe(true);
+      expect(accept('bridge/apps/backend/big.bin', 2_000_000)).toBe(false);
+      expect(accept('README.md', 10)).toBe(false);
+
+      const inflated = (await readZipball.mock.results[0].value) as {
+        path: string;
+      }[];
+      expect(inflated.map((file) => file.path).sort()).toEqual([
+        'packages/protocol/package.json',
+        'reports/package.json',
+        'reports/src/index.ts',
+      ]);
+
+      const unzipped = await unzipAsync(bytes);
+      expect(Object.keys(unzipped).sort()).toEqual([
+        'packages/protocol/package.json',
+        'reports/package.json',
+        'reports/release.json',
+        'reports/src/index.ts',
+      ]);
+      const manifest = JSON.parse(
+        Buffer.from(unzipped['reports/release.json']).toString(),
+      ) as { files: string[] };
+      expect(manifest.files).toEqual([
+        'packages/protocol/package.json',
+        'reports/package.json',
+        'reports/src/index.ts',
+      ]);
+
+      const plainService = new ReportsReleaseService(
+        fakeGithubApi({ downloadZipball: async () => plain }),
+      );
+      expect((await plainService.getInfo()).releaseId).toBe(info.releaseId);
     });
   });
 });
