@@ -17,10 +17,12 @@ SHA="$(printf 'c823ea56%032d' 0)"
 cat > "$T/bin/curl" <<'SH'
 #!/usr/bin/env bash
 out=""; url=""; method=GET; data=""
+printf '%s\n' "$@" >> "$FAKE_ARGV"
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     -X) method="$2"; shift 2 ;;
+    -K) cat >> "$FAKE_STDIN"; shift 2 ;;
     --data) data="$2"; shift 2 ;;
     -H|--max-time) shift 2 ;;
     -*) shift ;;
@@ -45,7 +47,7 @@ chmod +x "$T/bin/curl"
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/flock"; chmod +x "$T/bin/flock"
 
 export BRIDGE_API_URL="https://bridge.example" BRIDGE_API_KEY="brk_test" GITHUB_API="https://api.github.example" RAW_HOST="https://raw.example"
-export RAW_BASE="https://raw.example/o/r/main" FAKE_REPO="$T/repo" FAKE_PENDING="$T/pending.json" FAKE_CALLS="$T/calls" FAKE_COMPARE=behind
+export RAW_BASE="https://raw.example/o/r/main" FAKE_REPO="$T/repo" FAKE_PENDING="$T/pending.json" FAKE_CALLS="$T/calls" FAKE_COMPARE=behind FAKE_ARGV="$T/argv" FAKE_STDIN="$T/stdin"
 export STATE_DIR="$T/state" BOARD_HOST="ubuntu-red" BRIDGE_PI_DIR="$T/board/bridge-pi" MANIFEST_FILE="$T/manifest.txt"
 export CHECK_SCRIPT="$HERE/../scriptcheck/check-scripts.sh" SCRIPTCHECK_MANIFEST="$T/manifest.txt" MAIN_SHA="$SHA" STATE_DIR_CHECK="$T/check-state"
 export STATE_DIR="$T/state"
@@ -210,6 +212,12 @@ if [ "$(id -u)" != 0 ]; then
 else
   echo "skip a failure half-way (running as root)"
 fi
+
+# ---- the bridge key never appears on curl's command line, only in the config on its stdin
+fresh; : > "$T/argv"; : > "$T/stdin"; decision 40 infra/backup/uploads-pull.sh; agent apply
+[ -s "$T/argv" ] && ! grep -q 'brk_test' "$T/argv" && ! grep -qi 'authorization' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "apply: the bridge key is on curl's stdin, not in its argv" $?
+: > "$T/argv"; : > "$T/stdin"; agent selftest
+! grep -q 'brk_test' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "selftest: the bridge key is on curl's stdin, not in its argv" $?
 
 echo
 echo "passed $PASS, failed $FAILED"

@@ -42,11 +42,12 @@ log() { echo "[$(date -u +%FT%TZ)] $*"; }
 need() { [ -n "${!1:-}" ] || { log "$1 is not set (/etc/pipe-boardagent.env) — nothing done"; exit 0; }; }
 
 bridge() { # method path [json-body] → body on stdout; fails on a non-2xx
+  # The key goes to curl as a config on stdin (printf is a builtin), never in argv, where any local user could read it via ps.
   local method="$1" path="$2" body="${3:-}"
   if [ -n "$body" ]; then
-    curl -fsS --max-time 30 -X "$method" -H "Authorization: Bearer $BRIDGE_API_KEY" -H 'Content-Type: application/json' --data "$body" "$BRIDGE_API_URL$path"
+    printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" | curl -K - -fsS --max-time 30 -X "$method" -H 'Content-Type: application/json' --data "$body" "$BRIDGE_API_URL$path"
   else
-    curl -fsS --max-time 30 -X "$method" -H "Authorization: Bearer $BRIDGE_API_KEY" "$BRIDGE_API_URL$path"
+    printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" | curl -K - -fsS --max-time 30 -X "$method" "$BRIDGE_API_URL$path"
   fi
 }
 
