@@ -15,6 +15,7 @@ import {
 } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
+import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import styles from './DashboardPage.module.css';
 import { formatBytes } from './vpn/formatBytes';
 import { useFailureAwarePollInterval } from './vpn/statusPollInterval';
@@ -213,6 +214,8 @@ export function DashboardPage() {
             </div>
           )}
         </Card>
+
+        <GithubConnectionCard />
       </div>
     </div>
   );

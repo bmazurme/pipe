@@ -1138,6 +1138,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/github-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getGithubConnection"];
+        put: operations["DashboardController_saveGithubConnection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/github-connection/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DashboardController_checkGithubConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/status": {
         parameters: {
             query?: never;
@@ -2715,6 +2747,13 @@ export interface components {
         ResolveQuestionDto: {
             resolved?: boolean;
             answer?: string;
+        };
+        SaveGithubConnectionDto: {
+            enabled: boolean;
+            url?: string;
+        };
+        CheckGithubConnectionDto: {
+            url?: string;
         };
         CreateImproveIssueDto: {
             title: string;
@@ -4899,6 +4938,71 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    DashboardController_getGithubConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    DashboardController_saveGithubConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveGithubConnectionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    DashboardController_checkGithubConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckGithubConnectionDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
