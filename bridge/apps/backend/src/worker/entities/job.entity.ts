@@ -39,6 +39,9 @@ export enum JobStatus {
 @Index(['userId', 'status'])
 @Index(['userId', 'taskKey'])
 @Index(['sourceFileId'])
+// Serves the Worker page's delta poll (`updatedAfter`, see WorkerService.findAllByUser). Named
+// explicitly so migration:check matches the name the migration creates.
+@Index('IDX_jobs_userId_updatedAt', ['userId', 'updatedAt'])
 export class Job extends BaseEntity {
   @Column({ type: 'int', unsigned: true, nullable: false })
   userId: number;
