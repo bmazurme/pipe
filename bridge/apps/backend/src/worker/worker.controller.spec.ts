@@ -324,7 +324,7 @@ describe('WorkerController', () => {
   });
 
   describe('cancelState', () => {
-    it('returns only id, status and cancelRequestedAt', async () => {
+    it('returns only id, status, cancelRequestedAt and extraTimeoutSec', async () => {
       const cancelRequestedAt = new Date('2026-01-01T00:00:00Z');
       (workerService as Record<string, jest.Mock>).getCancelState = jest
         .fn()
@@ -332,6 +332,7 @@ describe('WorkerController', () => {
           id: 5,
           status: 'running',
           cancelRequestedAt,
+          extraTimeoutSec: 1800,
           logs: 'should not leak',
           contextText: 'should not leak',
         });
@@ -341,7 +342,12 @@ describe('WorkerController', () => {
       expect(
         (workerService as Record<string, jest.Mock>).getCancelState,
       ).toHaveBeenCalledWith(5, 7);
-      expect(result).toEqual({ id: 5, status: 'running', cancelRequestedAt });
+      expect(result).toEqual({
+        id: 5,
+        status: 'running',
+        cancelRequestedAt,
+        extraTimeoutSec: 1800,
+      });
       expect(result).not.toHaveProperty('logs');
       expect(result).not.toHaveProperty('contextText');
     });

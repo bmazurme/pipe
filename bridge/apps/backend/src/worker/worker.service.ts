@@ -31,7 +31,12 @@ import { isWorkerCapability } from './capabilities';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
-import { Job, JobModel, JobStatus } from './entities/job.entity';
+import {
+  CLAUDE_JOB_MODELS,
+  Job,
+  JobModel,
+  JobStatus,
+} from './entities/job.entity';
 import { FailureSummary, groupFailures } from './failure-summary';
 import { INFRA_FAILURE_MESSAGES } from './infra-failure';
 import { JobFinishNotifier } from './job-finish-notifier';
@@ -50,6 +55,9 @@ import {
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
+
+// The most a job's whole time limit (launch limit + extensions) can reach.
+const MAX_TOTAL_TIMEOUT_SEC = 6 * 3600;
 
 // More than the history keeps, so a few unreadable rows cannot starve it.
 const HISTORY_LOOKUP = 12;
@@ -672,9 +680,16 @@ export class WorkerService implements OnModuleInit {
   async getCancelState(
     id: number,
     userId: number,
-  ): Promise<Pick<Job, 'id' | 'status' | 'cancelRequestedAt'>> {
+  ): Promise<
+    Pick<Job, 'id' | 'status' | 'cancelRequestedAt' | 'extraTimeoutSec'>
+  > {
     const job = await this.jobRepository.findOne({
-      select: { id: true, status: true, cancelRequestedAt: true },
+      select: {
+        id: true,
+        status: true,
+        cancelRequestedAt: true,
+        extraTimeoutSec: true,
+      },
       where: { id, userId },
     });
 
@@ -683,6 +698,65 @@ export class WorkerService implements OnModuleInit {
     }
 
     return job;
+  }
+
+  // Adds time to the limit of a job that is running right now (Claude models only). The worker picks the
+  // new value up on its cancel-state poll. The total limit (launch limit + everything added) stays within
+  // MAX_TOTAL_TIMEOUT_SEC; one conditional UPDATE so a job that finishes meanwhile is never touched.
+  async extend(id: number, userId: number, minutes: number): Promise<Job> {
+    const job = await this.findOwned(id, userId);
+
+    if (!CLAUDE_JOB_MODELS.includes(job.model)) {
+      throw new BadRequestException(
+        'The time limit can only be extended for Claude jobs',
+      );
+    }
+
+    if (job.status !== JobStatus.Claimed && job.status !== JobStatus.Running) {
+      throw new BadRequestException(
+        'Only a running job can be given more time',
+      );
+    }
+
+    if (job.cancelRequestedAt) {
+      throw new BadRequestException('The job is being stopped');
+    }
+
+    const worker = job.workerId
+      ? await this.workerRepository.findOneBy({ id: job.workerId })
+      : null;
+    const baseSec = job.timeoutSec ?? worker?.jobTimeoutSec ?? 0;
+    const nextExtra = (job.extraTimeoutSec ?? 0) + minutes * 60;
+
+    if (baseSec + nextExtra > MAX_TOTAL_TIMEOUT_SEC) {
+      throw new BadRequestException(
+        `The total time limit cannot exceed ${MAX_TOTAL_TIMEOUT_SEC / 3600} h`,
+      );
+    }
+
+    const [rows]: [Job[], number] = await this.jobRepository.query(
+      `UPDATE jobs SET "extraTimeoutSec" = COALESCE("extraTimeoutSec", 0) + $1,
+         logs = COALESCE(logs, '') || $2, "updatedAt" = now()
+       WHERE id = $3 AND "userId" = $4 AND status IN ($5, $6)
+         AND "cancelRequestedAt" IS NULL
+         AND COALESCE("extraTimeoutSec", 0) = $7
+       RETURNING *`,
+      [
+        minutes * 60,
+        `\n[time limit extended by ${minutes} min by the owner]\n`,
+        id,
+        userId,
+        JobStatus.Claimed,
+        JobStatus.Running,
+        job.extraTimeoutSec ?? 0,
+      ],
+    );
+
+    if (rows.length === 0) {
+      throw new ConflictException('The job changed meanwhile — try again');
+    }
+
+    return rows[0];
   }
 
   async remove(id: number, userId: number): Promise<void> {

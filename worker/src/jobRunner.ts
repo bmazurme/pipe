@@ -10,7 +10,7 @@ import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
-import { runClaude } from './modelRunners/claudeRunner.js';
+import { runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
 import { collectResult, writeParcelToDir } from './jobFiles.js';
@@ -88,16 +88,28 @@ export async function processJob(
   // The owner's "stop": polled on its own timer (a CLI printing nothing sends no log
   // chunks to piggyback on), never overlapping, and a failed poll just tries again.
   const cancel = new AbortController();
+  // The time limit can be raised while a claude run goes: the poll below moves it.
+  const deadline: RunDeadline = { extendTo: () => {} };
+  let baseTimeoutSec = 0;
+  let extendedBySec = 0;
   let polling = false;
   const cancelPoll = setInterval(() => {
     if (polling || cancel.signal.aborted) return;
     polling = true;
     client
-      .isCancelRequested(job.id)
-      .then((requested) => {
-        if (requested) {
+      .getRunState(job.id)
+      .then((state) => {
+        if (state.cancelRequested) {
           log('Stop requested — stopping the run...\n');
           cancel.abort();
+          return;
+        }
+        const extra = state.extraTimeoutSec ?? 0;
+        if (extra > extendedBySec && baseTimeoutSec > 0) {
+          extendedBySec = extra;
+          const totalSec = baseTimeoutSec + extra;
+          deadline.extendTo(totalSec * 1000);
+          log(`Time limit extended to ${totalSec}s\n`);
         }
       })
       .catch((error) => jlog.warn({ err: error }, 'could not check for a stop request'))
@@ -175,12 +187,13 @@ export async function processJob(
 
     // A limit chosen for this job at launch wins over the worker-wide setting.
     const timeoutSec = job.timeoutSec ?? config.jobTimeoutSec;
+    if (provider.tool === 'claude') baseTimeoutSec = timeoutSec;
     log(`Time limit: ${timeoutSec}s${job.timeoutSec != null ? ' (set for this job)' : ''}\n`);
 
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 
     const result = provider.tool === 'claude'
-      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, timeoutSec * 1000, undefined, cancel.signal)
+      ? await runClaude(jobDir, prompt, provider.claudeModel, log, config.proxyUrl, job.claudeToken, timeoutSec * 1000, undefined, cancel.signal, undefined, [], deadline)
       : await runOpenAiCompatible(jobDir, prompt, provider, log, config.proxyUrl, timeoutSec * 1000, cancel.signal);
 
     // Plan limits and cost, reported before the final status (a job can no longer be touched once it is done).

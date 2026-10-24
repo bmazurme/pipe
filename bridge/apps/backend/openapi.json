@@ -1483,6 +1483,43 @@
         }
       }
     },
+    "/api/v1/worker/jobs/{id}/extend": {
+      "post": {
+        "operationId": "WorkerController_extend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worker/jobs/{id}/retry": {
       "post": {
         "operationId": "WorkerController_retry",
@@ -5249,6 +5286,10 @@
             "type": "number",
             "nullable": true
           },
+          "extraTimeoutSec": {
+            "type": "number",
+            "nullable": true
+          },
           "status": {
             "enum": [
               "queued",
@@ -5324,6 +5365,7 @@
           "historyCount",
           "taskKey",
           "timeoutSec",
+          "extraTimeoutSec",
           "status",
           "logs",
           "errorMessage",
@@ -5446,6 +5488,17 @@
             "type": "boolean"
           }
         }
+      },
+      "ExtendJobDto": {
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "minutes"
+        ]
       },
       "RetryJobDto": {
         "type": "object",

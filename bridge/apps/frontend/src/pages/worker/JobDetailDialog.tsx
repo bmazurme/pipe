@@ -18,6 +18,7 @@ import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
 import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
+import { ExtendJobButton } from './ExtendJobButton';
 import { JobLogs } from './JobLogs';
 import { describeOutcome, describeStage } from './jobStage';
 import { RetryJobButton } from './RetryJobButton';
@@ -85,7 +86,15 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     { label: 'Worker', value: job.workerName ?? '—' },
     job.contextName ? { label: 'Контекст', value: job.contextName } : null,
     job.taskKey ? { label: 'Задача', value: job.taskKey } : null,
-    job.timeoutSec ? { label: 'Лимит времени', value: describeTimeout(job.timeoutSec) } : null,
+    job.timeoutSec
+      ? {
+          label: 'Лимит времени',
+          value: describeTimeout(job.timeoutSec + (job.extraTimeoutSec ?? 0)),
+        }
+      : null,
+    !job.timeoutSec && job.extraTimeoutSec
+      ? { label: 'Добавлено времени', value: describeTimeout(job.extraTimeoutSec) }
+      : null,
     job.historyCount ? { label: 'Итоги прошлых запусков', value: String(job.historyCount) } : null,
     job.usage ? { label: 'Расход', value: describeUsage(job.usage) } : null,
   ].filter((field): field is { label: string; value: string } => field !== null);
@@ -200,6 +209,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         })}
         onClickButtonCancel={onClose}
       >
+        <ExtendJobButton job={job} />
         <CancelJobButton job={job} />
         <RetryJobButton job={job} />
         {canDelete && (
