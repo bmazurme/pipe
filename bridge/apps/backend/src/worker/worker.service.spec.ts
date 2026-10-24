@@ -17,6 +17,7 @@ import { buildRunHistory, LOG_TAIL_CHARS } from './run-history';
 import type { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { Worker } from './entities/worker.entity';
+import { JobFinishNotifier } from './job-finish-notifier';
 import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
@@ -112,6 +113,7 @@ describe('WorkerService', () => {
       providers: [
         WorkerService,
         JobSweepService,
+        { provide: JobFinishNotifier, useValue: { notify: jest.fn() } },
         { provide: getRepositoryToken(Job), useValue: repository },
         { provide: StorageService, useValue: storageService },
         {

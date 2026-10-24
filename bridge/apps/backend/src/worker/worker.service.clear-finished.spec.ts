@@ -8,6 +8,7 @@ import { StorageService } from '../storage/storage.service';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { Job, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
+import { JobFinishNotifier } from './job-finish-notifier';
 import { JobSweepService } from './job-sweep.service';
 import { ProviderCredentialsService } from './provider-credentials.service';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
@@ -40,6 +41,7 @@ describe('WorkerService.removeFinishedOlderThan', () => {
         },
         { provide: getRepositoryToken(Worker), useValue: {} },
         { provide: JobSweepService, useValue: {} },
+        { provide: JobFinishNotifier, useValue: { notify: jest.fn() } },
         { provide: StorageService, useValue: {} },
         { provide: ClaudeCredentialsService, useValue: {} },
         { provide: WorkerHeartbeatService, useValue: {} },
