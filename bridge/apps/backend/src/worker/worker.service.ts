@@ -836,7 +836,16 @@ export class WorkerService implements OnModuleInit {
   ): Promise<void> {
     if (workerId === undefined) return;
 
-    const job = await this.findOwned(id, userId);
+    // Only the ownership columns: this guard runs on every log flush, so it must not load
+    // (and decrypt) the whole row with its growing log.
+    const job = await this.jobRepository.findOne({
+      select: { id: true, workerId: true },
+      where: { id, userId },
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
 
     if (job.workerId !== workerId) {
       throw new ForbiddenException('This job is not held by this worker');
