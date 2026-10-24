@@ -73,20 +73,77 @@ function setup(runOverrides: Record<string, unknown> = {}) {
   return { service, filing, runs, github, workers, storage, appLogs };
 }
 
+// The background preparation of a run runs after the start call has returned.
+async function settle() {
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+}
+
 describe('ImproveService analysis', () => {
   it('hands an analysis to the worker with the existing titles in the prompt', async () => {
     const { service, runs, workers } = setup();
 
     const run = await service.startAnalysis(3, 'sonnet');
 
-    expect(workers.create).toHaveBeenCalled();
     expect(run).toMatchObject({
       kind: 'analysis',
       issueNumber: null,
-      status: ImproveRunStatus.Queued,
-      jobId: 321,
+      status: ImproveRunStatus.Preparing,
+      jobId: null,
     });
     expect(runs.save).toHaveBeenCalled();
+
+    await settle();
+    expect(workers.create).toHaveBeenCalled();
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, status: ImproveRunStatus.Preparing },
+      { status: ImproveRunStatus.Queued, jobId: 321, baseSha: 'base-sha' },
+    );
+    expect(run).toMatchObject({
+      status: ImproveRunStatus.Queued,
+      jobId: 321,
+      baseSha: 'base-sha',
+    });
+  });
+
+  it('answers while the snapshot never resolves', async () => {
+    const { service, github, workers } = setup();
+
+    github.downloadZipball.mockReturnValue(new Promise(() => undefined));
+
+    await expect(service.startAnalysis(3, 'sonnet')).resolves.toMatchObject({
+      status: ImproveRunStatus.Preparing,
+    });
+    await settle();
+    expect(workers.create).not.toHaveBeenCalled();
+  });
+
+  it('fails the run with the reason when the snapshot fails, without throwing', async () => {
+    const { service, github, runs } = setup();
+
+    github.downloadZipball.mockRejectedValue(new Error('zip down'));
+
+    await expect(service.startAnalysis(3, 'sonnet')).resolves.toBeDefined();
+    await settle();
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, status: ImproveRunStatus.Preparing },
+      expect.objectContaining({
+        status: ImproveRunStatus.Failed,
+        error: 'zip down',
+      }),
+    );
+  });
+
+  it('cancels the job when the run left Preparing in the meantime', async () => {
+    const { service, runs, workers } = setup({
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    });
+    const cancel = jest.fn().mockResolvedValue(undefined);
+
+    Object.assign(workers, { cancel });
+    await service.startAnalysis(3, 'sonnet');
+    await settle();
+    expect(runs.update).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledWith(321, 3);
   });
 
   it('attaches a saved context to the worker job, and none by default', async () => {
@@ -102,6 +159,7 @@ describe('ImproveService analysis', () => {
       false,
       4,
     );
+    await settle();
     expect(withContext.workers.create).toHaveBeenCalledWith(
       3,
       expect.objectContaining({ contextId: 4 }),
@@ -110,6 +168,7 @@ describe('ImproveService analysis', () => {
     const without = setup();
 
     await without.service.startAnalysis(3, 'sonnet');
+    await settle();
     expect(without.workers.create.mock.calls[0][1]).not.toHaveProperty(
       'contextId',
     );
@@ -179,6 +238,7 @@ describe('ImproveService analysis', () => {
     await expect(service.startAnalysis(3, 'sonnet')).resolves.toMatchObject({
       kind: 'analysis',
     });
+    await settle();
     expect(workers.create).toHaveBeenCalled();
   });
 
@@ -195,6 +255,7 @@ describe('ImproveService analysis', () => {
     });
 
     await service.startAnalysis(3, 'sonnet');
+    await settle();
 
     const { unzipSync, strFromU8 } = await import('fflate');
     const files = unzipSync(
@@ -224,6 +285,7 @@ describe('ImproveService analysis', () => {
     ]);
 
     await service.startAnalysis(3, 'sonnet');
+    await settle();
 
     expect(appLogs.list).toHaveBeenCalledWith({
       days: 7,
@@ -395,7 +457,7 @@ describe('ImproveService partial issue filing', () => {
 
 describe('ImproveService start concurrency', () => {
   it('starts the titles lookup and the base-SHA lookup before either resolves', async () => {
-    const { service, github } = setup();
+    const { service, github, workers } = setup();
     let releaseTitles!: (v: unknown[]) => void;
     let releaseSha!: (v: string) => void;
 
@@ -406,7 +468,7 @@ describe('ImproveService start concurrency', () => {
       new Promise((resolve) => (releaseSha = resolve)),
     );
 
-    const started = service.startAnalysis(3, 'sonnet');
+    await service.startAnalysis(3, 'sonnet');
 
     await new Promise((resolve) => setImmediate(resolve));
     expect(github.listIssueTitles).toHaveBeenCalledTimes(1);
@@ -414,8 +476,9 @@ describe('ImproveService start concurrency', () => {
 
     releaseTitles([]);
     releaseSha('base-sha');
+    await settle();
 
-    await expect(started).resolves.toMatchObject({ jobId: 321 });
+    expect(workers.create).toHaveBeenCalledTimes(1);
   });
 
   it('creates no run and no job for a closed issue', async () => {
@@ -453,22 +516,21 @@ describe('ImproveService in-process start guard', () => {
   });
 
   it('lets only one of two concurrent analyses reach the worker', async () => {
-    const { service, github, workers } = setup();
+    const { service, github, workers, runs } = setup();
     let release!: (v: Uint8Array) => void;
 
     github.downloadZipball.mockReturnValue(
       new Promise<Uint8Array>((resolve) => (release = resolve)),
     );
 
-    const first = service.startAnalysis(3, 'sonnet');
-
-    await new Promise((resolve) => setImmediate(resolve));
+    await service.startAnalysis(3, 'sonnet');
+    runs.findOne.mockResolvedValue({ id: 1, status: 'preparing' });
     await expect(service.startAnalysis(3, 'sonnet')).rejects.toThrow(
       'Анализ уже выполняется',
     );
 
     release(zipSync({ 'o-r-sha/a.ts': strToU8('one') }));
-    await first;
+    await settle();
     expect(workers.create).toHaveBeenCalledTimes(1);
   });
 
@@ -504,8 +566,10 @@ describe('ImproveService in-process start guard', () => {
     const { service, github, workers } = setup();
 
     github.downloadZipball.mockRejectedValueOnce(new Error('boom'));
-    await expect(service.startAnalysis(3, 'sonnet')).rejects.toThrow('boom');
+    await service.startAnalysis(3, 'sonnet');
+    await settle();
     await expect(service.startAnalysis(3, 'sonnet')).resolves.toBeDefined();
+    await settle();
     expect(workers.create).toHaveBeenCalledTimes(1);
   });
 });

@@ -893,33 +893,7 @@ export class ImproveService {
       throw new ConflictException('Анализ уже выполняется');
     }
 
-    const started = Date.now();
-    const timed = async <T>(work: Promise<T>) => {
-      const value = await work;
-
-      return { value, ms: Date.now() - started };
-    };
-    const [titlesStep, digestStep, prepStep] = await Promise.all([
-      timed(this.github.listIssueTitles()),
-      timed(this.logDigest()),
-      timed(this.handoff.prepareSnapshot()),
-    ]);
-    const titles = titlesStep.value.map((issue) => issue.title);
-    const date = new Date().toISOString().slice(0, 10);
-    const { job, baseSha, fileCount } = await this.handoff.handToWorker(
-      userId,
-      model,
-      {
-        number: `analysis-${date}`,
-        title: `Analysis ${date}`,
-        body: buildAnalysisPrompt(titles, categories, digestStep.value),
-      },
-      'improve:analysis',
-      `improve-analysis-${date}.subscription.zip`,
-      undefined,
-      prepStep.value,
-      contextId,
-    );
+    // Recorded before the slow part so that a second start sees it as active.
     const run = await this.runs.save(
       this.runs.create({
         userId,
@@ -932,9 +906,8 @@ export class ImproveService {
         model,
         trigger,
         scheduleId,
-        status: ImproveRunStatus.Queued,
-        jobId: job.id,
-        baseSha,
+        status: ImproveRunStatus.Preparing,
+        jobId: null,
         result: JSON.stringify({
           categories,
           autoCreate,
@@ -944,24 +917,100 @@ export class ImproveService {
       }),
     );
 
-    this.log(
-      'info',
-      'improve.analysis_started',
-      `Run ${run.id}: analysis (${categories.join(', ')}) → job ${job.id} (${model}, ${trigger})`,
-      {
-        runId: run.id,
-        jobId: job.id,
-        files: fileCount,
-        phaseMs: {
-          titles: titlesStep.ms,
-          logDigest: digestStep.ms,
-          snapshot: prepStep.ms,
-          total: Date.now() - started,
-        },
-      },
+    this.prepareAnalysis(run, categories, contextId).catch((error) =>
+      this.logger.warn(
+        `Analysis ${run.id} could not be prepared: ${message(error)}`,
+      ),
     );
 
     return run;
+  }
+
+  // The slow part of an analysis start: titles, log digest, snapshot and parcel. Its outcome lands
+  // on the run row (Queued with the job, or Failed with the reason); it never rejects.
+  private async prepareAnalysis(
+    run: ImproveRun,
+    categories: AnalysisCategory[],
+    contextId: number | null,
+  ): Promise<void> {
+    try {
+      const started = Date.now();
+      const timed = async <T>(work: Promise<T>) => {
+        const value = await work;
+
+        return { value, ms: Date.now() - started };
+      };
+      const [titlesStep, digestStep, prepStep] = await Promise.all([
+        timed(this.github.listIssueTitles()),
+        timed(this.logDigest()),
+        timed(this.handoff.prepareSnapshot()),
+      ]);
+      const titles = titlesStep.value.map((issue) => issue.title);
+      const date = new Date().toISOString().slice(0, 10);
+      const { job, baseSha, fileCount } = await this.handoff.handToWorker(
+        run.userId,
+        run.model,
+        {
+          number: `analysis-${date}`,
+          title: `Analysis ${date}`,
+          body: buildAnalysisPrompt(titles, categories, digestStep.value),
+        },
+        'improve:analysis',
+        `improve-analysis-${date}.subscription.zip`,
+        undefined,
+        prepStep.value,
+        contextId,
+      );
+
+      // Guarded by status: a run cancelled or swept while preparing stays so.
+      const res = await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Preparing },
+        { status: ImproveRunStatus.Queued, jobId: job.id, baseSha },
+      );
+
+      if (res.affected !== 1) {
+        await this.workers.cancel(job.id, run.userId).catch(() => undefined);
+
+        return;
+      }
+
+      run.status = ImproveRunStatus.Queued;
+      run.jobId = job.id;
+      run.baseSha = baseSha;
+      this.log(
+        'info',
+        'improve.analysis_started',
+        `Run ${run.id}: analysis (${categories.join(', ')}) → job ${job.id} (${run.model}, ${run.trigger})`,
+        {
+          runId: run.id,
+          jobId: job.id,
+          files: fileCount,
+          phaseMs: {
+            titles: titlesStep.ms,
+            logDigest: digestStep.ms,
+            snapshot: prepStep.ms,
+            total: Date.now() - started,
+          },
+        },
+      );
+    } catch (error) {
+      await this.runs
+        .update(
+          { id: run.id, status: ImproveRunStatus.Preparing },
+          {
+            status: ImproveRunStatus.Failed,
+            error: message(error),
+            finishedAt: new Date(),
+          },
+        )
+        .catch(() => undefined);
+      this.log(
+        'warn',
+        'improve.analysis_prepare_failed',
+        `Run ${run.id}: analysis could not be prepared: ${message(error)}`,
+        { runId: run.id },
+      );
+    }
   }
 
   // What the system's own logs say lately (Profile → Logs). Best-effort: an
