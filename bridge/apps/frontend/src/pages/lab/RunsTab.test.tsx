@@ -63,6 +63,8 @@ beforeEach(() => {
       if (path === 'lab/runs' && request.method === 'GET') return json([RUN]);
       if (path === 'lab/runs/7/cancel') return cancelFails ? json({ message: 'conflict' }, 409) : json({ ...RUN, status: 'cancelled' });
 
+      if (path === 'worker/jobs/1') return json({ id: 1, model: 'sonnet', status: 'running', logs: '', createdAt: new Date().toISOString() });
+
       return json([]);
     }),
   );
