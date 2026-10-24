@@ -93,8 +93,29 @@ export class WorkerBridgeClient {
     status: 'running' | 'succeeded' | 'failed' | 'cancelled',
     errorMessage?: string,
     failureKind?: 'shutdown',
+    delaysMs: number[] = UPLOAD_RETRY_DELAYS_MS,
   ): Promise<void> {
-    await this.post(`/${jobId}/status`, `Updating status for job ${jobId}`, { status, errorMessage, failureKind });
+    const what = `Updating status for job ${jobId}`;
+    const body = { status, errorMessage, failureKind };
+
+    if (status === 'running') {
+      await this.post(`/${jobId}/status`, what, body);
+      return;
+    }
+
+    // A lost terminal report makes bridge sweep the job as lost and re-run it, so it is retried; a 409 on a
+    // retry means the first attempt (whose response was lost) was recorded.
+    await this.withTransientRetry(
+      what,
+      () =>
+        bridgeFetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/status`, {
+          method: 'POST',
+          headers: bearer(this.apiKey, true),
+          body: JSON.stringify(body),
+        }),
+      delaysMs,
+      [409],
+    );
   }
 
   // Whether the owner asked to stop this job (or bridge already cancelled it).
@@ -133,38 +154,51 @@ export class WorkerBridgeClient {
     buffer: Buffer,
     delaysMs: number[] = UPLOAD_RETRY_DELAYS_MS,
   ): Promise<void> {
-    for (let attempt = 0; ; attempt++) {
-      let failure: Error;
-      let retryable: boolean;
-
-      try {
+    await this.withTransientRetry(
+      `Uploading result for job ${jobId}`,
+      () => {
         // A used FormData body can't be reused, so rebuild it per attempt.
         const form = new FormData();
         form.append('file', new Blob([new Uint8Array(buffer)]), filename);
 
-        const response = await bridgeFetch(
+        return bridgeFetch(
           `${this.apiUrl}/api/v1/worker/jobs/${jobId}/result`,
           { method: 'POST', headers: bearer(this.apiKey), body: form },
           { timeoutMs: TRANSFER_TIMEOUT_MS },
         );
+      },
+      delaysMs,
+    );
+  }
 
-        if (response.ok) return;
+  // Retries `attempt` on 502/503/504, a network TypeError or a TimeoutError; anything else throws at once.
+  // `deliveredOnRetry` lists statuses that, on a retry only, mean the first attempt got through.
+  private async withTransientRetry(
+    what: string,
+    attempt: () => Promise<Response>,
+    delaysMs: number[],
+    deliveredOnRetry: number[] = [],
+  ): Promise<void> {
+    for (let n = 0; ; n++) {
+      let failure: Error;
+      let retryable: boolean;
 
-        failure = new Error(
-          `Uploading result for job ${jobId} failed (${response.status}): ${await response.text()}`,
-        );
+      try {
+        const response = await attempt();
+
+        if (response.ok || (n > 0 && deliveredOnRetry.includes(response.status))) return;
+
+        failure = new Error(`${what} failed (${response.status}): ${await response.text()}`);
         retryable = RETRYABLE_STATUSES.has(response.status);
       } catch (error) {
         failure = error instanceof Error ? error : new Error(String(error));
         retryable = failure instanceof TypeError || failure.name === 'TimeoutError';
       }
 
-      if (!retryable || attempt >= delaysMs.length) throw failure;
+      if (!retryable || n >= delaysMs.length) throw failure;
 
-      console.warn(
-        `Uploading result for job ${jobId} failed (attempt ${attempt + 1}), retrying in ${delaysMs[attempt]} ms: ${failure.message}`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
+      console.warn(`${what} failed (attempt ${n + 1}), retrying in ${delaysMs[n]} ms: ${failure.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[n]));
     }
   }
 }

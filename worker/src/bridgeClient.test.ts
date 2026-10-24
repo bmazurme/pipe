@@ -75,6 +75,53 @@ describe('WorkerBridgeClient', () => {
 
       assert.deepEqual(capturedBody, { status: 'failed', errorMessage: 'boom' });
     });
+
+    const sequence = (steps: Array<number | 'network' | 'timeout'>) => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        const step = steps[calls++];
+        if (step === 'network') throw new TypeError('fetch failed');
+        if (step === 'timeout') throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+        return new Response('{}', { status: step });
+      }) as typeof fetch;
+      return () => calls;
+    };
+    const client = () => new WorkerBridgeClient('http://bridge.local', 'brk_test');
+
+    it('retries a terminal status after 503, a network error and a timeout', async () => {
+      const calls = sequence([503, 'network', 'timeout', 200]);
+      await client().updateStatus(1, 'failed', 'boom', undefined, [0, 0, 0]);
+      assert.equal(calls(), 4);
+    });
+
+    it('does not retry 400/403/404', async () => {
+      for (const status of [400, 403, 404]) {
+        const calls = sequence([status, 200]);
+        await assert.rejects(client().updateStatus(1, 'cancelled', undefined, undefined, [0, 0]));
+        assert.equal(calls(), 1);
+      }
+    });
+
+    it('throws once the delays are used up', async () => {
+      const calls = sequence([503, 503, 503]);
+      await assert.rejects(client().updateStatus(1, 'succeeded', undefined, undefined, [0, 0]), /503/);
+      assert.equal(calls(), 3);
+    });
+
+    it('treats a 409 on a retry as delivered, but not on the first attempt', async () => {
+      sequence([503, 409]);
+      await client().updateStatus(1, 'failed', 'boom', undefined, [0]);
+
+      const calls = sequence([409, 200]);
+      await assert.rejects(client().updateStatus(1, 'failed', 'boom', undefined, [0]), /409/);
+      assert.equal(calls(), 1);
+    });
+
+    it('sends running as a single request', async () => {
+      const calls = sequence([503, 200]);
+      await assert.rejects(client().updateStatus(1, 'running', undefined, undefined, [0]));
+      assert.equal(calls(), 1);
+    });
   });
 
   describe('isCancelRequested (cancel-state endpoint)', () => {
