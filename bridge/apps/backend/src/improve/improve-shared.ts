@@ -8,6 +8,15 @@ import type { Change } from './parcel';
 
 export const PR_LABEL = 'loop';
 
+export const PREPARE_ABANDONED_ERROR =
+  'Подготовка прервана перезапуском — запустите задачу снова';
+
+// A run still preparing after the longest possible snapshot download plus a margin
+// was lost to a restart.
+export function preparingStaleMs(downloadTotalMs: number): number {
+  return downloadTotalMs + 5 * 60_000;
+}
+
 export interface AnalysisResult {
   categories: AnalysisCategory[];
   autoCreate: boolean;

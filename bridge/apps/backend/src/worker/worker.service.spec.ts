@@ -2232,6 +2232,25 @@ describe('WorkerService', () => {
           'not held by this worker',
         );
       });
+
+      it('selects only id and workerId, never the log or the encrypted texts', async () => {
+        repository.findOne!.mockResolvedValue({ id: 1, workerId: 5 });
+
+        await service.assertHeldBy(1, 7, 5);
+
+        expect(repository.findOne).toHaveBeenCalledWith({
+          select: { id: true, workerId: true },
+          where: { id: 1, userId: 7 },
+        });
+      });
+
+      it('404s for an unknown or foreign job', async () => {
+        repository.findOne!.mockResolvedValue(null);
+
+        await expect(service.assertHeldBy(1, 7, 5)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
     });
   });
 

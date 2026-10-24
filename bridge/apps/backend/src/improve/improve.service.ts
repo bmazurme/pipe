@@ -19,7 +19,6 @@ import {
 
 import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService } from '../loop/github-api.service';
-import { ZIP_TOTAL_MS } from '../lab/lab-github';
 import { MergeService } from '../loop/merge.service';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -51,6 +50,8 @@ import {
   IMPROVE_MODELS,
   message,
   PR_LABEL,
+  PREPARE_ABANDONED_ERROR,
+  preparingStaleMs,
   requireImproveModel,
 } from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
@@ -64,10 +65,9 @@ export const ADVANCE_EVERY_MS = 15_000;
 const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
 // A run claimed for publishing and untouched this long was lost to a restart.
 const PUBLISHING_STALE_MS = 10 * 60_000;
-// A run still preparing after the longest possible download plus a margin was lost to a restart.
-const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
-const PREPARE_ABANDONED_ERROR =
-  'Подготовка прервана перезапуском — запустите задачу снова';
+// Upper bound for the handoff's repository snapshot step.
+const IMPROVE_SNAPSHOT_TOTAL_MS = 10 * 60_000;
+const PREPARING_STALE_MS = preparingStaleMs(IMPROVE_SNAPSHOT_TOTAL_MS);
 const PUBLISH_ABANDONED_ERROR =
   'Публикация прервана (bridge перезапускался); запустите задачу заново';
 export const AUTOSTART_MIN_AGE_SECONDS = 10;

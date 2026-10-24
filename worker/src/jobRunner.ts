@@ -17,6 +17,7 @@ import { collectResult, writeParcelToDir } from './jobFiles.js';
 import { jobLogger } from './logger.js';
 import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
+import { makeRedactor, maxSecretLength } from './redact.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
 import { extractQuestions, withQuestionsInstruction } from './taskQuestions.js';
@@ -65,10 +66,25 @@ export async function processJob(
   // A burst (a large file read, a test run dump) can exceed what bridge accepts in one chunk, so it goes out as
   // several capped pieces. Each piece is chained and caught on its own: one rejected piece leaves a single warning
   // and the rest still arrive, instead of the whole batch silently disappearing.
-  const flushLog = () => {
+  // The job's credentials must never reach bridge's logs. A secret may be split across two chunks, so between
+  // timed flushes the last (longest secret - 1) characters stay in the buffer until more text (or the end) arrives.
+  let providerKey: string | undefined;
+  const secrets = () => [job.claudeToken, providerKey, config.bridgeApiKey];
+  const redact = (text: string) => makeRedactor(secrets())(text);
+
+  const flushLog = (final = false) => {
     if (!pendingLog) return;
-    const pieces = splitLogChunk(pendingLog);
-    pendingLog = '';
+    let text = redact(pendingLog);
+    const hold = final ? 0 : Math.max(0, maxSecretLength(secrets()) - 1);
+    if (hold > 0) {
+      const cut = Math.max(0, text.length - hold);
+      pendingLog = text.slice(cut);
+      text = text.slice(0, cut);
+    } else {
+      pendingLog = '';
+    }
+    if (!text) return;
+    const pieces = splitLogChunk(text);
     for (const piece of pieces) {
       flushed = flushed.then(() =>
         client.appendLog(job.id, piece).catch((error) => {
@@ -83,7 +99,7 @@ export async function processJob(
     process.stdout.write(chunk);
   };
 
-  const flushInterval = setInterval(flushLog, LOG_FLUSH_INTERVAL_MS);
+  const flushInterval = setInterval(() => flushLog(), LOG_FLUSH_INTERVAL_MS);
 
   // The owner's "stop": polled on its own timer (a CLI printing nothing sends no log
   // chunks to piggyback on), never overlapping, and a failed poll just tries again.
@@ -167,6 +183,7 @@ export async function processJob(
     let prompt = withContext(describeTask(parcel), job.context, job.history);
     // The key stored in bridge for this account wins; the environment is the fallback for a worker not moved yet.
     const provider = resolveProvider(job.model, process.env, job.provider);
+    if (provider.tool === 'openai-compatible') providerKey = provider.apiKey;
 
     if (job.context?.trim()) log('Attached context: yes\n');
     if (job.history?.trim()) log('Attached context: outcomes of earlier runs\n');
@@ -214,7 +231,7 @@ export async function processJob(
       }
     }
 
-    const { files: resultFiles, assets: resultAssets } = collectResult(jobDir);
+    const { files: resultFiles, assets: resultAssets } = collectResult(jobDir, redact, log);
 
     if (cancel.signal.aborted) throw new CancelledError();
 
@@ -256,7 +273,7 @@ export async function processJob(
         jlog.error({ err: statusError }, 'could not confirm the stop to bridge');
       }
     } else {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = redact(error instanceof Error ? error.message : String(error));
       log(`Failed: ${message}\n`);
       jlog.error({ err: error }, 'failed');
 
@@ -274,7 +291,7 @@ export async function processJob(
     if (graceTimer) clearTimeout(graceTimer);
     options.shutdown?.removeEventListener('abort', onShutdown);
     options.forceShutdown?.removeEventListener('abort', hardStop);
-    flushLog();
+    flushLog(true);
     await flushed;
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });
   }

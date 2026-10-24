@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,10 @@ function writeFakeClaude(dir: string): void {
       "console.log(`BRIDGEKEY:${process.env.BRIDGE_API_KEY ?? ''}`);",
       "if (process.env.NODE_FAKE_STREAM) for (const event of JSON.parse(process.env.NODE_FAKE_STREAM)) console.log(JSON.stringify(event));",
       "if (process.env.NODE_FAKE_STDERR) process.stderr.write(process.env.NODE_FAKE_STDERR);",
+      "if (process.env.NODE_FAKE_CHILD_PIDFILE) {",
+      "  const kid = require('node:child_process').spawn('sleep', ['60'], { stdio: 'ignore' });",
+      "  require('node:fs').writeFileSync(process.env.NODE_FAKE_CHILD_PIDFILE, String(kid.pid));",
+      '}',
       "if (process.env.NODE_FAKE_HANG) {",
       "  if (process.env.NODE_FAKE_IGNORE_SIGTERM) process.on('SIGTERM', () => {});",
       "  setInterval(() => {}, 1000);",
@@ -51,6 +55,7 @@ afterEach(() => {
   if (originalExitCode === undefined) delete process.env.NODE_FAKE_EXIT_CODE;
   else process.env.NODE_FAKE_EXIT_CODE = originalExitCode;
   delete process.env.NODE_FAKE_HANG;
+  delete process.env.NODE_FAKE_CHILD_PIDFILE;
   delete process.env.NODE_FAKE_STREAM;
   delete process.env.NODE_FAKE_IGNORE_SIGTERM;
   if (originalStderr === undefined) delete process.env.NODE_FAKE_STDERR;
@@ -234,6 +239,33 @@ describe('runClaude', () => {
   it('rejects with a clear message when the claude binary is not on PATH', async () => {
     process.env.PATH = '/nonexistent-bin-dir';
     await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}), /claude.*binary not found/);
+  });
+});
+
+describe('runClaude process group', { skip: process.platform === 'win32' }, () => {
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+    // A killed orphan can linger as a zombie when PID 1 does not reap it (bare containers); that is dead.
+    try {
+      return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, 'utf-8'));
+    } catch {
+      return true;
+    }
+  };
+
+  it('kills the subprocesses the CLI started on timeout', async () => {
+    const pidFile = path.join(mkdtempSync(path.join(tmpdir(), 'worker-claude-pid-')), 'pid');
+    process.env.NODE_FAKE_CHILD_PIDFILE = pidFile;
+    process.env.NODE_FAKE_HANG = '1';
+    await assert.rejects(runClaude('/tmp', 'p', 'opus', () => {}, undefined, null, 700, 200), /timed out/);
+    assert.ok(existsSync(pidFile));
+    const pid = Number(readFileSync(pidFile, 'utf-8'));
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(alive(pid), false);
   });
 });
 

@@ -9,7 +9,12 @@ import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 
-import { message, requireImproveModel } from '../improve/improve-shared';
+import {
+  message,
+  PREPARE_ABANDONED_ERROR,
+  preparingStaleMs,
+  requireImproveModel,
+} from '../improve/improve-shared';
 import { readZipball } from '../common/zip';
 import { buildIssueParcel } from '../improve/parcel';
 import { SharedAsyncCache } from '../common/shared-async-cache';
@@ -53,7 +58,7 @@ const PUBLISHING_STALE_MS = 10 * 60_000;
 const SNAPSHOT_CACHE_TTL_MS = 10 * 60 * 1000;
 const SNAPSHOT_CACHE_SIZE = 2;
 // A run still preparing after the longest possible download plus a margin was lost to a restart.
-const PREPARING_STALE_MS = ZIP_TOTAL_MS + 5 * 60_000;
+const PREPARING_STALE_MS = preparingStaleMs(ZIP_TOTAL_MS);
 // How many open pull requests one "Проверить PR" asks GitHub about, newest first.
 // GitHub reads in flight at once during a refresh.
 const PR_REFRESH_CONCURRENCY = 4;
@@ -505,7 +510,7 @@ export class LabRunsService {
         .update()
         .set({
           status: LabRunStatus.Failed,
-          error: 'Подготовка прервана перезапуском — запустите задачу снова',
+          error: PREPARE_ABANDONED_ERROR,
           finishedAt: new Date(),
         })
         .where('status = :status AND "updatedAt" < :before', {
