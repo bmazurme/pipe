@@ -205,3 +205,21 @@ describe('ImproveHandoffService base and PR-head snapshot caches', () => {
     expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
   });
 });
+
+describe('ImproveHandoffService snapshot filtering', () => {
+  it('never inflates excluded or oversize entries', async () => {
+    const { service, github } = setup();
+    github.downloadZipball.mockResolvedValue(
+      zipSync({
+        'o-r-sha/a.ts': strToU8('one'),
+        'o-r-sha/node_modules/x.js': strToU8('excluded'),
+        'o-r-sha/big.txt': strToU8('x'.repeat(parcel.MAX_FILE_BYTES + 1)),
+      }),
+    );
+
+    const { files, baseline } = await service.snapshotAt('sha-f');
+
+    expect(files.map((f) => f.path)).toEqual(['a.ts']);
+    expect(Object.keys(baseline)).toEqual(['a.ts']);
+  });
+});
