@@ -130,10 +130,16 @@ export class ClaudeCredentialsService {
       if (token) return { id, token };
     }
 
-    const first = await this.repository.findOne({
-      where: { userId },
-      order: { id: 'ASC' },
-    });
+    // Last fallback only: skip tokens Anthropic rejected while an unmarked one exists.
+    const first =
+      (await this.repository.findOne({
+        where: { userId, authFailedAt: IsNull() },
+        order: { id: 'ASC' },
+      })) ??
+      (await this.repository.findOne({
+        where: { userId },
+        order: { id: 'ASC' },
+      }));
 
     return first ? { id: first.id, token: first.token } : null;
   }

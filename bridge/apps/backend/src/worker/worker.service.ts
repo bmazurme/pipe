@@ -1142,6 +1142,19 @@ export class WorkerService implements OnModuleInit {
 
     const saved = await this.jobRepository.save(job);
 
+    if (saved.usedClaudeCredentialId != null) {
+      try {
+        await this.claudeCredentialsService.clearAuthFailed(
+          saved.usedClaudeCredentialId,
+          userId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to clear rejected mark of Claude token ${saved.usedClaudeCredentialId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     logJobOutcome(this.appLogs, saved);
     await this.notifyFinished(saved);
 

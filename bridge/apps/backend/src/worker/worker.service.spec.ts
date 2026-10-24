@@ -1706,6 +1706,27 @@ describe('WorkerService', () => {
   });
 
   describe('setResult', () => {
+    it('clears the rejected mark of the token the job ran on', async () => {
+      const job = {
+        id: 1,
+        sourceFileId: null,
+        resultFileId: null,
+        status: JobStatus.Running,
+        usedClaudeCredentialId: 3,
+      } as Job;
+      repository.findOne!.mockResolvedValue(job);
+      storageService.create!.mockResolvedValue({ id: 99 });
+      repository.save!.mockImplementation((j) => Promise.resolve(j));
+
+      await service.setResult(1, 7, {} as Express.Multer.File);
+
+      expect(claudeCredentialsService.clearAuthFailed).toHaveBeenCalledTimes(1);
+      expect(claudeCredentialsService.clearAuthFailed).toHaveBeenCalledWith(
+        3,
+        7,
+      );
+    });
+
     it('creates a StoredFile, links it, and marks the job succeeded', async () => {
       const job: Job = {
         id: 1,
