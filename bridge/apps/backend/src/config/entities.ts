@@ -29,6 +29,7 @@ import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
+import { SystemSettings } from '../dashboard/entities/system-settings.entity';
 import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
 import { Job } from '../worker/entities/job.entity';
 import { LimitAlertState } from '../worker/entities/limit-alert-state.entity';
@@ -42,6 +43,7 @@ import { WorkerHeartbeat } from '../worker/entities/worker-heartbeat.entity';
 // here still boots, then fails its first query with EntityMetadataNotFoundError.
 // entities.spec.ts checks every forFeature entity is listed.
 export const ENTITIES = [
+  SystemSettings,
   TaskQuestion,
   BoardReport,
   ScriptUpdate,
