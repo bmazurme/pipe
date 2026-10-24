@@ -299,14 +299,19 @@ describe('WorkerService', () => {
   });
 
   describe('getCancelState', () => {
-    it('selects only id, status and cancelRequestedAt for the owner', async () => {
+    it('selects only id, status, cancelRequestedAt and extraTimeoutSec for the owner', async () => {
       const row = { id: 3, status: JobStatus.Running, cancelRequestedAt: null };
       repository.findOne!.mockResolvedValue(row);
 
       await expect(service.getCancelState(3, 7)).resolves.toEqual(row);
 
       expect(repository.findOne).toHaveBeenCalledWith({
-        select: { id: true, status: true, cancelRequestedAt: true },
+        select: {
+          id: true,
+          status: true,
+          cancelRequestedAt: true,
+          extraTimeoutSec: true,
+        },
         where: { id: 3, userId: 7 },
       });
     });
@@ -862,6 +867,73 @@ describe('WorkerService', () => {
       expect(builder.setParameter).toHaveBeenCalledWith('chunk', 'a');
       expect(builder.setParameter).toHaveBeenCalledWith('chunk', 'b');
       expect(repository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('extend', () => {
+    const running = (over: Partial<Job> = {}) =>
+      ({
+        id: 5,
+        model: JobModel.Sonnet,
+        status: JobStatus.Running,
+        timeoutSec: 3600,
+        extraTimeoutSec: null,
+        cancelRequestedAt: null,
+        workerId: null,
+        ...over,
+      }) as Job;
+
+    it('adds the minutes with one conditional UPDATE', async () => {
+      repository.findOne!.mockResolvedValue(running());
+      repository.query!.mockResolvedValue([
+        [{ id: 5, extraTimeoutSec: 1800 }],
+        1,
+      ]);
+
+      const result = await service.extend(5, 7, 30);
+
+      expect(result.extraTimeoutSec).toBe(1800);
+      const [sql, params] = repository.query!.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('"extraTimeoutSec"');
+      expect(params[0]).toBe(1800);
+    });
+
+    it('refuses a job that is not running', async () => {
+      repository.findOne!.mockResolvedValue(
+        running({ status: JobStatus.Queued }),
+      );
+
+      await expect(service.extend(5, 7, 30)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.query).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-Claude job', async () => {
+      repository.findOne!.mockResolvedValue(running({ model: JobModel.Gpt }));
+
+      await expect(service.extend(5, 7, 30)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('refuses to pass a 6 h total', async () => {
+      repository.findOne!.mockResolvedValue(
+        running({ timeoutSec: 6 * 3600 - 600 }),
+      );
+
+      await expect(service.extend(5, 7, 15)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('is not found for a foreign job', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.extend(5, 7, 30)).rejects.toThrow(NotFoundException);
     });
   });
 

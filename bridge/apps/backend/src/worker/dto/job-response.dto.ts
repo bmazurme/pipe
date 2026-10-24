@@ -25,6 +25,8 @@ export class JobResponseDto {
   taskKey: string | null;
   // The run's time limit in seconds chosen at launch, or null = the worker's own setting.
   timeoutSec: number | null;
+  // Seconds added to that limit while the job ran, or null.
+  extraTimeoutSec: number | null;
   status: JobStatus;
   logs: string;
   // Only with ?logsFrom=N: then `logs` holds just the characters after the first N,
@@ -60,6 +62,7 @@ export class JobResponseDto {
       historyCount: job.historyCount ?? null,
       taskKey: job.taskKey ?? null,
       timeoutSec: job.timeoutSec ?? null,
+      extraTimeoutSec: job.extraTimeoutSec ?? null,
       status: job.status,
       // Undefined when the list query deliberately skipped the column.
       logs: job.logs ?? '',

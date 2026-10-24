@@ -59,6 +59,11 @@ export function buildClaudeEnv(
 // worker MUST run each job in an isolated environment (this process's own
 // dedicated, unprivileged OS user is the minimum bar; a container/VM is
 // better). Do not point this at a shared server user account.
+// Handle runClaude fills in: extendTo(totalMs) moves the limit to a new total, counted from the start.
+export interface RunDeadline {
+  extendTo: (totalMs: number) => void;
+}
+
 export function runClaude(
   cwd: string,
   prompt: string,
@@ -73,6 +78,8 @@ export function runClaude(
   onDelta?: (delta: StreamDelta) => void,
   // Extra CLI arguments appended as they are (the limits probe uses a bare system prompt and no tools).
   extraArgs: string[] = [],
+  // Lets the caller move the time limit while the CLI runs (the owner's "+30 мин").
+  deadline?: RunDeadline,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     // Already asked to stop before there was anything to stop.
@@ -120,14 +127,27 @@ export function runClaude(
 
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
-    const timeoutTimer =
-      timeoutMs && timeoutMs > 0
-        ? setTimeout(() => {
-            timedOut = true;
-            killTree('SIGTERM');
-            killTimer = setTimeout(() => killTree('SIGKILL'), killGraceMs);
-          }, timeoutMs)
-        : undefined;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let limitMs = timeoutMs && timeoutMs > 0 ? timeoutMs : 0;
+    const startedAt = Date.now();
+    const armDeadline = () => {
+      clearTimeout(timeoutTimer);
+      if (limitMs <= 0) return;
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        killTree('SIGTERM');
+        killTimer = setTimeout(() => killTree('SIGKILL'), killGraceMs);
+      }, Math.max(0, limitMs - (Date.now() - startedAt)));
+    };
+    armDeadline();
+    if (deadline) {
+      deadline.extendTo = (totalMs: number) => {
+        // Only ever later, and only while the limit has not fired yet.
+        if (limitMs <= 0 || timedOut || totalMs <= limitMs) return;
+        limitMs = totalMs;
+        armDeadline();
+      };
+    }
     // The owner's stop request: same SIGTERM → SIGKILL ladder as the deadline, but
     // the outcome is "cancelled", not "timed out".
     let cancelled = false;
@@ -165,7 +185,7 @@ export function runClaude(
         return;
       }
       if (timedOut) {
-        reject(new ClaudeRunError(`claude timed out after ${Math.round((timeoutMs ?? 0) / 1000)}s and was killed`, report));
+        reject(new ClaudeRunError(`claude timed out after ${Math.round(limitMs / 1000)}s and was killed`, report));
         return;
       }
       resolve({

@@ -80,7 +80,7 @@ function fakeClient(downloadParcelResult: Buffer): FakeClient & Record<string, u
       },
       { calls: appendLogCalls },
     ),
-    isCancelRequested: async () => false,
+    getRunState: async () => ({ cancelRequested: false, extraTimeoutSec: null }),
     downloadParcel: async () => downloadParcelResult,
     uploadResult: Object.assign(
       async (...args: unknown[]) => {
@@ -169,7 +169,7 @@ describe('processJob heartbeat', () => {
       updateStatus: async () => {},
       appendLog: async () => {},
       uploadResult: async () => {},
-      isCancelRequested: async () => false,
+      getRunState: async () => ({ cancelRequested: false, extraTimeoutSec: null }),
       downloadParcel,
       heartbeat,
     };
@@ -347,7 +347,7 @@ describe('processJob stop requests', () => {
 
     const client = fakeClient(fakeParcel());
     let asked = 0;
-    client.isCancelRequested = async () => ++asked >= 2; // not yet on the first poll
+    client.getRunState = async () => ({ cancelRequested: ++asked >= 2, extraTimeoutSec: null }); // not yet on the first poll
     const job: RemoteJob = { id: 21, sourceFileId: 30, resultFileId: null, model: 'gpt', status: 'claimed' };
     const keepAlive = setTimeout(() => {}, 10_000);
 
@@ -383,7 +383,7 @@ describe('processJob worker shutdown', () => {
     }) as typeof fetch;
 
     const client = fakeClient(fakeParcel());
-    client.isCancelRequested = async () => false;
+    client.getRunState = async () => ({ cancelRequested: false, extraTimeoutSec: null });
     const job: RemoteJob = { id: 22, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
     const keepAlive = setTimeout(() => {}, 10_000);
 
@@ -502,7 +502,7 @@ describe('processJob shutdown grace period', () => {
     const shutdown = new AbortController();
     hangingModel(shutdown, 100);
     const client = fakeClient(fakeParcel());
-    client.isCancelRequested = async () => false;
+    client.getRunState = async () => ({ cancelRequested: false, extraTimeoutSec: null });
     const job: RemoteJob = { id: 23, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
 
     await processJob(client as never, job, { ...fakeConfig(workDir), shutdownGraceSec: 60 }, { cancelPollMs: 1000, shutdown: shutdown.signal });
@@ -519,7 +519,7 @@ describe('processJob shutdown grace period', () => {
     hangingModel(shutdown, null);
     setTimeout(() => force.abort(), 80);
     const client = fakeClient(fakeParcel());
-    client.isCancelRequested = async () => false;
+    client.getRunState = async () => ({ cancelRequested: false, extraTimeoutSec: null });
     const job: RemoteJob = { id: 24, sourceFileId: 31, resultFileId: null, model: 'gpt', status: 'claimed' };
     const keepAlive = setTimeout(() => {}, 10_000);
 
@@ -669,6 +669,37 @@ describe('processJob time limit chosen at launch', () => {
 
     assert.match(logsOf(client), /Time limit: 1800s\n/);
     assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
+describe('processJob time limit extended by the owner', () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
+  it('outlives the original limit after an extension and is killed at the new one', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-extend-'));
+    const binDir = path.join(workDir, 'bin');
+    mkdirSync(binDir);
+    const script = path.join(binDir, 'claude');
+    writeFileSync(script, ['#!/usr/bin/env node', 'setInterval(() => {}, 1000);', ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${binDir}:${originalPath}`;
+
+    const client = fakeClient(fakeParcel());
+    client.reportClaudeUsage = async () => {};
+    client.getRunState = async () => ({ cancelRequested: false, extraTimeoutSec: 1 });
+    const job: RemoteJob = { id: 31, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 0.3, status: 'claimed' };
+    const started = Date.now();
+    await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 50 });
+
+    const logs = client.appendLog.calls.map((call) => String(call[1])).join('');
+    assert.match(logs, /Time limit extended to 1\.3s/);
+    assert.ok(Date.now() - started >= 1200, 'ran past the original 0.3 s limit');
+    assert.ok(client.updateStatus.calls.some((call) => call[1] === 'failed'));
     rmSync(workDir, { recursive: true, force: true });
   });
 });

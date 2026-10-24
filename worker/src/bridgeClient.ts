@@ -101,11 +101,19 @@ export class WorkerBridgeClient {
   // Polled while a job runs — a CLI that prints nothing for minutes sends no log
   // chunks to piggyback the answer on, so it needs a request of its own.
   async isCancelRequested(jobId: number): Promise<boolean> {
+    return (await this.getRunState(jobId)).cancelRequested;
+  }
+
+  // The same poll also carries the seconds the owner added to the time limit (null = never extended).
+  async getRunState(jobId: number): Promise<{ cancelRequested: boolean; extraTimeoutSec: number | null }> {
     const response = await this.get(`/${jobId}/cancel-state`, `Checking job ${jobId}`);
 
-    const job = (await response.json()) as { status?: string; cancelRequestedAt?: string | null };
+    const job = (await response.json()) as { status?: string; cancelRequestedAt?: string | null; extraTimeoutSec?: number | null };
 
-    return job.status === 'cancelled' || Boolean(job.cancelRequestedAt);
+    return {
+      cancelRequested: job.status === 'cancelled' || Boolean(job.cancelRequestedAt),
+      extraTimeoutSec: job.extraTimeoutSec ?? null,
+    };
   }
 
   // Best-effort by design: a log line that fails to reach bridge shouldn't

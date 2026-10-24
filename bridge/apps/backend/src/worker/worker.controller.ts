@@ -33,6 +33,7 @@ import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
 import { ClearFinishedJobsDto } from './dto/clear-finished-jobs.dto';
 import { CancelJobDto } from './dto/cancel-job.dto';
+import { ExtendJobDto } from './dto/extend-job.dto';
 import { ClaimJobDto } from './dto/claim-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { HeartbeatDto } from './dto/heartbeat.dto';
@@ -288,6 +289,7 @@ export class WorkerController {
     id: number;
     status: string;
     cancelRequestedAt: Date | null;
+    extraTimeoutSec: number | null;
   }> {
     await this.workerService.assertHeldBy(
       id,
@@ -298,9 +300,15 @@ export class WorkerController {
       id: jobId,
       status,
       cancelRequestedAt,
+      extraTimeoutSec,
     } = await this.workerService.getCancelState(id, currentUser.id);
 
-    return { id: jobId, status, cancelRequestedAt };
+    return {
+      id: jobId,
+      status,
+      cancelRequestedAt,
+      extraTimeoutSec: extraTimeoutSec ?? null,
+    };
   }
 
   // Declared before `:id` so that `DELETE /worker/jobs` is not taken for a job id.
@@ -369,6 +377,22 @@ export class WorkerController {
       id,
       currentUser.id,
       dto.force === true,
+    );
+
+    return JobResponseDto.fromEntity(job);
+  }
+
+  // Gives a running Claude job more time — see WorkerService.extend.
+  @Post(':id/extend')
+  async extend(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ExtendJobDto,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.extend(
+      id,
+      currentUser.id,
+      dto.minutes,
     );
 
     return JobResponseDto.fromEntity(job);

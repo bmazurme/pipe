@@ -252,6 +252,15 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось остановить задачу';
       },
     }),
+    // Gives a running Claude job more time before its limit kills it.
+    extendJob: builder.mutation<WorkerJob, { id: number; minutes: 15 | 30 | 60 }>({
+      query: ({ id, minutes }) => ({ url: `worker/jobs/${id}/extend`, method: 'POST', body: { minutes } }),
+      invalidatesTags: ['WorkerJob'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        return message ?? 'Не удалось продлить задачу';
+      },
+    }),
     // Queues a new job over a failed/stopped job's parcel, model and credential.
     retryJob: builder.mutation<
       WorkerJob,
@@ -472,6 +481,7 @@ export const {
   useGetWorkerStatusQuery,
   useCreateJobMutation,
   useCancelJobMutation,
+  useExtendJobMutation,
   useGetJobHistoryPreviewQuery,
   useGetFailureSummaryQuery,
   useRetryJobMutation,

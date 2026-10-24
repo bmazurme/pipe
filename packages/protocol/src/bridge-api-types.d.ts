@@ -786,6 +786,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/{id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_extend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/jobs/{id}/retry": {
         parameters: {
             query?: never;
@@ -2498,6 +2514,7 @@ export interface components {
             historyCount: number | null;
             taskKey: string | null;
             timeoutSec: number | null;
+            extraTimeoutSec: number | null;
             /** @enum {string} */
             status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled";
             logs: string;
@@ -2554,6 +2571,10 @@ export interface components {
         };
         CancelJobDto: {
             force?: boolean;
+        };
+        ExtendJobDto: {
+            /** @enum {number} */
+            minutes: 15 | 30 | 60;
         };
         RetryJobDto: {
             /** Format: date-time */
@@ -4386,6 +4407,31 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CancelJobDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponseDto"];
+                };
+            };
+        };
+    };
+    WorkerController_extend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtendJobDto"];
             };
         };
         responses: {

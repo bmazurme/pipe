@@ -133,6 +133,10 @@ export class Job extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   timeoutSec: number | null;
 
+  // Seconds the owner added to the limit while the job runs; null = never extended.
+  @Column({ type: 'int', nullable: true })
+  extraTimeoutSec: number | null;
+
   // Opt-in Telegram message when the job ends (honoured for the deployment owner only).
   @Column({ type: 'boolean', default: false })
   notifyOnFinish: boolean;

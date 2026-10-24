@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
-import { buildClaudeEnv, runClaude } from './claudeRunner.js';
+import { buildClaudeEnv, runClaude, type RunDeadline } from './claudeRunner.js';
 
 // The fake is steered by NODE_FAKE_* variables on purpose: runClaude now hands the CLI only an
 // allowlisted environment (NODE_* is on it), so differently named variables never reach it.
@@ -301,5 +301,30 @@ describe('runClaude failed runs keep the CLI report', () => {
         return true;
       },
     );
+  });
+});
+
+describe('runClaude deadline extension', () => {
+  it('is killed at the extended limit, not the original one', async () => {
+    process.env.NODE_FAKE_HANG = '1';
+    const deadline: RunDeadline = { extendTo: () => {} };
+    setTimeout(() => deadline.extendTo(1000), 100);
+    const started = Date.now();
+
+    await assert.rejects(
+      runClaude('/tmp', 'p', 'sonnet', () => {}, undefined, null, 300, 50, undefined, undefined, [], deadline),
+      /timed out after 1s/,
+    );
+    assert.ok(Date.now() - started >= 900, 'outlived the original 300 ms limit');
+  });
+
+  it('ignores an extension to a smaller limit', async () => {
+    process.env.NODE_FAKE_HANG = '1';
+    const deadline: RunDeadline = { extendTo: () => {} };
+    setTimeout(() => deadline.extendTo(100), 50);
+    const started = Date.now();
+
+    await assert.rejects(runClaude('/tmp', 'p', 'sonnet', () => {}, undefined, null, 400, 50, undefined, undefined, [], deadline), /timed out/);
+    assert.ok(Date.now() - started >= 350);
   });
 });
