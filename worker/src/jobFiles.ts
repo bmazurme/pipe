@@ -39,7 +39,11 @@ export function writeParcelToDir(dir: string, parcel: ExtractedParcel): void {
 // is simply not there (it used to be returned all the same, so the deletion was lost). Files that aren't valid UTF-8 (images,
 // archives, compiled output) can't go through PackedFile's text content without corruption, so they travel as assets (raw
 // bytes -> base64). Tool state dirs (.claude/, node_modules/) are never part of the result.
-export function collectResult(dir: string): { files: PackedFile[]; assets: PackedAsset[] } {
+export function collectResult(
+  dir: string,
+  redact?: (text: string) => string,
+  log?: (message: string) => void,
+): { files: PackedFile[]; assets: PackedAsset[] } {
   const files: PackedFile[] = [];
   const assets: PackedAsset[] = [];
   for (const relPath of listFilesRecursively(dir, dir, EXCLUDED_RESULT_DIRS)) {
@@ -47,7 +51,11 @@ export function collectResult(dir: string): { files: PackedFile[]; assets: Packe
     const bytes = readFileSync(path.join(dir, relPath));
     const text = decodeUtf8Strict(bytes);
     if (text === undefined) assets.push({ relPath, base64: bytes.toString('base64') });
-    else files.push({ relPath, content: text });
+    else {
+      const masked = redact ? redact(text) : text;
+      if (masked !== text) log?.(`Masked a credential in ${relPath}\n`);
+      files.push({ relPath, content: masked });
+    }
   }
   return { files, assets };
 }

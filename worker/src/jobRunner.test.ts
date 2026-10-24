@@ -672,3 +672,47 @@ describe('processJob time limit chosen at launch', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob credential masking', () => {
+  const KEY = 'sk-provider-key-0123456789';
+
+  it('masks the provider key in logs and in result files, and names the file', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-mask-'));
+    let wrote = false;
+    globalThis.fetch = (async () => {
+      if (!wrote) {
+        wrote = true;
+        const jobDir = path.join(workDir, readdirSync(workDir).find((name) => name.startsWith('job-'))!);
+        writeFileSync(path.join(jobDir, 'notes.md'), `key: ${KEY}\n`);
+      }
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: `my key is ${KEY}` } }] }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = {
+      id: 30,
+      sourceFileId: 40,
+      resultFileId: null,
+      model: 'gpt',
+      status: 'claimed',
+      provider: { apiKey: KEY },
+    };
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const logs = client.appendLog.calls.map((call) => call[1] as string).join('');
+    assert.ok(!logs.includes(KEY), logs);
+    assert.ok(logs.includes('Masked a credential in notes.md'), logs);
+
+    const uploaded = new AdmZip(client.uploadResult.calls[0][2] as Buffer);
+    const notes = uploaded.getEntry('notes.md')!.getData().toString('utf-8');
+    assert.equal(notes, 'key: [redacted]\n');
+    for (const entry of uploaded.getEntries()) {
+      assert.ok(!entry.getData().toString('utf-8').includes(KEY), entry.entryName);
+    }
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
