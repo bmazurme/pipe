@@ -8,6 +8,7 @@ import {
   Change,
   isExcludedPath,
   MANIFEST_ENTRY,
+  MAX_FILE_BYTES,
   MAX_TOTAL_BYTES,
   selectParcelFiles,
   sha256,
@@ -90,10 +91,65 @@ export interface LabSnapshot {
   baseline: Record<string, string>;
 }
 
-export function selectLabSnapshot(all: SnapshotFile[]): LabSnapshot {
+// Decides which files of the repository archive are worth inflating at all — BEFORE they are inflated, from the sizes its headers
+// declare: a repository of a hundred binaries must not be unpacked whole only to throw most of it away (that took bridge over its
+// memory limit). A file up to the size of a text file is taken; a bigger one can only be a binary and is taken within the limits of
+// one file and of all of them; the rest is named in `skipped`. `accept` is for readZipball.
+export const LAB_MAX_UNPACKED_BYTES = 80 * 1024 * 1024;
+
+export function labZipFilter(): {
+  accept: (path: string, size: number) => boolean;
+  skipped: string[];
+} {
+  const skipped: string[] = [];
+  let total = 0;
+  let large = 0;
+
+  return {
+    skipped,
+    accept: (path, size) => {
+      if (isExcludedPath(path) || size === 0) return false;
+
+      if (size > MAX_FILE_BYTES) {
+        if (size > LAB_MAX_BINARY_FILE_BYTES) {
+          skipped.push(
+            `${path} (${Math.round(size / 1024 / 1024)} МБ — больше ${LAB_MAX_BINARY_FILE_BYTES / 1024 / 1024} МБ)`,
+          );
+
+          return false;
+        }
+        if (large + size > LAB_MAX_BINARY_TOTAL_BYTES) {
+          skipped.push(
+            `${path} (общий размер вложений превысил ${LAB_MAX_BINARY_TOTAL_BYTES / 1024 / 1024} МБ)`,
+          );
+
+          return false;
+        }
+
+        large += size;
+      }
+
+      // A bound on everything taken, small files included: the number of files is not.
+      if (total + size > LAB_MAX_UNPACKED_BYTES) {
+        skipped.push(`${path} (репозиторий слишком большой для передачи)`);
+
+        return false;
+      }
+
+      total += size;
+
+      return true;
+    },
+  };
+}
+
+export function selectLabSnapshot(
+  all: SnapshotFile[],
+  alreadySkipped: string[] = [],
+): LabSnapshot {
   const files = selectParcelFiles(all);
   const binaries: SnapshotFile[] = [];
-  const skipped: string[] = [];
+  const skipped: string[] = [...alreadySkipped];
   let total = 0;
 
   for (const file of all) {

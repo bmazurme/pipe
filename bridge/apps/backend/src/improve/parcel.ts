@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 
-import { strFromU8, strToU8 } from 'fflate';
+import { strFromU8, strToU8, type Zippable } from 'fflate';
 
 import {
   type SnapshotFile,
@@ -26,7 +26,7 @@ export const PARCEL_SCHEMA_VERSION = 2;
 export const MANIFEST_ENTRY = '__subscription_manifest__.json';
 export const ASSET_PREFIX = '__issue_assets__/';
 
-const MAX_FILE_BYTES = 256 * 1024;
+export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 const EXCLUDED_DIRS = new Set([
   'node_modules',
@@ -132,10 +132,14 @@ export async function buildIssueParcel(
   now = new Date(),
   baseline: Record<string, string> = snapshotBaseline(files),
 ): Promise<BuiltParcel> {
-  const entries: Record<string, Uint8Array> = {};
+  const entries: Zippable = {};
 
   for (const file of files) {
-    entries[file.path] = file.bytes;
+    // Binary assets are stored as they are: a picture or a model is already compressed, deflating it only costs time and memory
+    // (and an async deflate of each large entry runs in a thread of its own).
+    entries[file.path] = file.path.startsWith(ASSET_PREFIX)
+      ? [file.bytes, { level: 0 }]
+      : file.bytes;
   }
 
   entries[MANIFEST_ENTRY] = strToU8(
@@ -157,7 +161,13 @@ export async function buildIssueParcel(
   );
 
   // A parcel is a short-lived transfer artifact: speed matters more than ratio.
-  return { buffer: Buffer.from(await zipAsync(entries, 1)), baseline };
+  const zipped = await zipAsync(entries, 1);
+
+  // A view of the zip, not a second copy of it.
+  return {
+    buffer: Buffer.from(zipped.buffer, zipped.byteOffset, zipped.byteLength),
+    baseline,
+  };
 }
 
 // What was sent is at most MAX_TOTAL_BYTES of text; the result may add the changes (MAX_CHANGED_BYTES) on top.
