@@ -1,3 +1,4 @@
+import { githubDispatcher } from '../common/github-dispatcher';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -440,7 +441,8 @@ export class GithubApiService {
         Authorization: `Bearer ${this.token()}`,
       },
       signal: AbortSignal.timeout(timeoutMs),
-    });
+      dispatcher: githubDispatcher(),
+    } as RequestInit);
 
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as {
