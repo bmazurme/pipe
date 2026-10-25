@@ -6996,6 +6996,9 @@
               "type": "number"
             }
           },
+          "onlyOnNewCommits": {
+            "type": "boolean"
+          },
           "model": {
             "type": "string"
           },
@@ -7043,6 +7046,7 @@
           "minute",
           "timezone",
           "weekdays",
+          "onlyOnNewCommits",
           "model",
           "executor",
           "task",
@@ -7066,6 +7070,9 @@
               "maximum": 7,
               "minimum": 1
             }
+          },
+          "onlyOnNewCommits": {
+            "type": "boolean"
           },
           "contextId": {
             "type": "number",
