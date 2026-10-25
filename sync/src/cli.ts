@@ -57,8 +57,9 @@ program
 
 program
   .command('list')
-  .description('List tracked projects')
-  .action(listCommand);
+  .description('List tracked projects with their last push time')
+  .option('--json', 'print the projects as JSON')
+  .action((options) => listCommand(options));
 
 program
   .command('doctor [name]')
