@@ -53,7 +53,13 @@ export function OpenEncryptedFileDialog({ file, onClose }: OpenEncryptedFileDial
         </Text>
         <div className={styles.decryptField}>
           <ParcelKeyPicker keys={keys} onPick={setKey} />
-          <TextArea value={key} onUpdate={setKey} rows={3} placeholder="-----BEGIN PRIVATE KEY-----" />
+          <TextArea
+            value={key}
+            onUpdate={setKey}
+            rows={3}
+            controlProps={{ 'aria-label': 'Приватный ключ (PEM)' }}
+            placeholder="-----BEGIN PRIVATE KEY-----"
+          />
         </div>
         {error && <Alert theme="danger" view="filled" message={error} />}
       </Dialog.Body>

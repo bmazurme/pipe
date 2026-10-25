@@ -61,11 +61,17 @@ export function ParcelKeysCard() {
       )}
 
       <div className={styles.keyForm}>
-        <TextInput value={name} onUpdate={setName} placeholder="Название (например, личный)" />
+        <TextInput
+          value={name}
+          onUpdate={setName}
+          controlProps={{ 'aria-label': 'Название ключа' }}
+          placeholder="Название (например, личный)"
+        />
         <TextArea
           value={pem}
           onUpdate={setPem}
           rows={2}
+          controlProps={{ 'aria-label': 'Ключ в формате PEM' }}
           placeholder="-----BEGIN PRIVATE KEY----- или -----BEGIN PUBLIC KEY-----"
         />
         <Button view="normal" disabled={!name.trim() || !pem.trim()} onClick={handleAdd}>
