@@ -43,6 +43,7 @@ type ScheduleInput = Pick<
   contextId?: number | null;
   weekdays?: number[] | null;
   executor?: LabExecutor;
+  onlyOnNewCommits?: boolean;
 };
 
 const WEEKDAY_NUMBERS: Record<string, number> = {
@@ -141,6 +142,7 @@ export class LabSchedulesService implements OnModuleInit {
       ...input,
       contextId: input.contextId ?? null,
       executor: input.executor ?? 'any',
+      onlyOnNewCommits: input.onlyOnNewCommits ?? false,
       weekdays: input.weekdays?.length
         ? [...input.weekdays].sort((a, b) => a - b)
         : null,
@@ -188,6 +190,28 @@ export class LabSchedulesService implements OnModuleInit {
           .execute();
 
         if (claim.affected !== 1) continue;
+
+        if (schedule.onlyOnNewCommits) {
+          const unchanged = await this.runs.unchangedSinceLastRun(
+            schedule.userId,
+            schedule.projectId,
+            schedule.id,
+          );
+
+          if (unchanged) {
+            await this.schedules
+              .update(schedule.id, {
+                lastResult: `пропущено: в ${unchanged.branch} нет новых коммитов (${unchanged.sha.slice(0, 7)})`,
+              })
+              .catch((error) =>
+                this.logger.warn(
+                  `Lab schedule ${schedule.id} skip could not be recorded: ${message(error)}`,
+                ),
+              );
+
+            continue;
+          }
+        }
 
         await this.fire(schedule).catch((error) =>
           this.logger.warn(

@@ -122,6 +122,30 @@ export class LabRunsService {
     });
   }
 
+  // The base branch and its head, when the head is the very commit the schedule's latest run worked on; null otherwise
+  // (no previous run, a new commit, or GitHub did not answer — a skipped night is never worth a missed one).
+  async unchangedSinceLastRun(
+    userId: number,
+    projectId: number,
+    scheduleId: number,
+  ): Promise<{ branch: string; sha: string } | null> {
+    try {
+      const last = await this.runs.findOne({
+        where: { scheduleId, projectId, userId },
+        order: { id: 'DESC' },
+      });
+
+      if (!last?.baseSha) return null;
+
+      const project = await this.projects.findOwned(projectId, userId);
+      const sha = await githubFor(project).getBranchSha(project.baseBranch);
+
+      return sha === last.baseSha ? { branch: project.baseBranch, sha } : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Answers as soon as the run is recorded: the slow part goes on in the background, and its
   // outcome lands on the run row itself (Queued, or Failed with the step message).
   async start(

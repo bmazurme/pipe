@@ -38,13 +38,14 @@ interface Form {
   time: string;
   timezone: string;
   weekdays: number[];
+  onlyOnNewCommits: boolean;
   model: string;
   executor: LabExecutor;
   task: string;
   contextId: string;
 }
 
-const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, model: 'sonnet', executor: 'any', task: '', contextId: '' };
+const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, onlyOnNewCommits: false, model: 'sonnet', executor: 'any', task: '', contextId: '' };
 
 export function SchedulesTab() {
   const { data: schedules, isLoading, isError } = useListLabSchedulesQuery();
@@ -74,6 +75,7 @@ export function SchedulesTab() {
               time: formatTime(schedule.hour, schedule.minute),
               timezone: schedule.timezone,
               weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
+              onlyOnNewCommits: schedule.onlyOnNewCommits ?? false,
               model: schedule.model,
               executor: schedule.executor ?? 'any',
               task: schedule.task,
@@ -107,6 +109,7 @@ export function SchedulesTab() {
           minute: time.minute,
           timezone: form.timezone,
           weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b),
+          onlyOnNewCommits: form.onlyOnNewCommits,
           model: form.model,
           executor: form.executor,
           task: form.task.trim(),
@@ -291,6 +294,7 @@ export function SchedulesTab() {
                 options={[{ value: '', content: 'Без контекста' }, ...(Array.isArray(contexts) ? contexts : []).map((context) => ({ value: String(context.id), content: context.name }))]}
                 width="max"
               />
+              <Switch checked={editing.form.onlyOnNewCommits} onUpdate={(onlyOnNewCommits) => update({ onlyOnNewCommits })} content="Только если в ветке появились новые коммиты" />
               <Switch checked={editing.form.enabled} onUpdate={(enabled) => update({ enabled })} content="Включено" />
               {error && <Alert theme="danger" view="filled" message={error} />}
             </div>

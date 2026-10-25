@@ -35,6 +35,8 @@ export interface LabSchedule {
   timezone: string;
   /** ISO weekdays (1 = Mon … 7 = Sun) the schedule fires on; null = every day. */
   weekdays: number[] | null;
+  /** Skip a scheduled run while the base branch has no new commits since the previous run. */
+  onlyOnNewCommits: boolean;
   model: string;
   /** Where it runs: any worker, or only one set up for Fusion 360. */
   executor: LabExecutor;

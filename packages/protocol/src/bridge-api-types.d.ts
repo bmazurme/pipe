@@ -2935,6 +2935,7 @@ export interface components {
             minute: number;
             timezone: string;
             weekdays: number[] | null;
+            onlyOnNewCommits: boolean;
             model: string;
             executor: Record<string, never>;
             task: string;
@@ -2951,6 +2952,7 @@ export interface components {
         };
         SaveLabScheduleDto: {
             weekdays?: number[] | null;
+            onlyOnNewCommits?: boolean;
             contextId?: number | null;
             /** @enum {string} */
             executor?: "any" | "fusion";

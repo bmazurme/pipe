@@ -162,6 +162,12 @@ export class SaveLabScheduleDto {
   @Max(7, { each: true })
   weekdays?: number[] | null;
 
+  // Skip a scheduled run while the base branch has no commits since the schedule's previous run.
+  @ApiPropertyOptional({ type: Boolean })
+  @IsOptional()
+  @IsBoolean()
+  onlyOnNewCommits?: boolean;
+
   @IsString()
   model: string;
 

@@ -33,6 +33,10 @@ export class LabSchedule extends BaseEntity {
   @Column({ type: 'smallint', array: true, nullable: true })
   weekdays: number[] | null;
 
+  // Scheduled runs are skipped while the base branch head is the commit the previous run worked on.
+  @Column({ type: 'boolean', default: false })
+  onlyOnNewCommits: boolean;
+
   @Column({ type: 'varchar', length: 16 })
   model: string;
 

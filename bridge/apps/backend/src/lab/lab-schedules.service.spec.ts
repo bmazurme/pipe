@@ -36,6 +36,7 @@ const setup = (schedule: LabSchedule) => {
     createQueryBuilder: jest.fn(() => builder),
   };
   const runs = {
+    unchangedSinceLastRun: jest.fn().mockResolvedValue(null),
     launch: jest
       .fn()
       .mockResolvedValue({ run: { id: 42 }, prepared: Promise.resolve() }),
@@ -50,7 +51,7 @@ const setup = (schedule: LabSchedule) => {
     { register: jest.fn() } as never,
   );
 
-  return { service, runs };
+  return { service, runs, repo };
 };
 
 describe('LabSchedulesService: weekdays', () => {
@@ -189,5 +190,49 @@ describe('LabSchedulesService.fire', () => {
       lastResult: 'не запущено: Эта задача в этом проекте уже выполняется',
     });
     expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LabSchedulesService: onlyOnNewCommits', () => {
+  const monday = new Date('2026-10-26T09:00:00Z');
+
+  it('skips the night and records why when the head has not moved', async () => {
+    const { service, runs, repo } = setup(
+      makeSchedule({ onlyOnNewCommits: true }),
+    );
+    runs.unchangedSinceLastRun.mockResolvedValue({
+      branch: 'main',
+      sha: 'abcdef1234567',
+    });
+    await service.tick(monday);
+
+    expect(runs.launch).not.toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalledWith(1, {
+      lastResult: 'пропущено: в main нет новых коммитов (abcdef1)',
+    });
+  });
+
+  it('launches when there is something new', async () => {
+    const { service, runs } = setup(makeSchedule({ onlyOnNewCommits: true }));
+    runs.unchangedSinceLastRun.mockResolvedValue(null);
+    await service.tick(monday);
+
+    expect(runs.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not look at the branch when the flag is off', async () => {
+    const { service, runs } = setup(makeSchedule());
+    await service.tick(monday);
+
+    expect(runs.unchangedSinceLastRun).not.toHaveBeenCalled();
+    expect(runs.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it('runNow ignores the flag', async () => {
+    const { service, runs } = setup(makeSchedule({ onlyOnNewCommits: true }));
+    await service.runNow(1, 7);
+
+    expect(runs.unchangedSinceLastRun).not.toHaveBeenCalled();
+    expect(runs.launch).toHaveBeenCalledTimes(1);
   });
 });
