@@ -6706,6 +6706,15 @@
       "SaveScheduleDto": {
         "type": "object",
         "properties": {
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 7,
+              "minimum": 1
+            }
+          },
           "contextId": {
             "type": "number",
             "nullable": true,
@@ -6731,15 +6740,6 @@
           "timezone": {
             "type": "string",
             "maxLength": 64
-          },
-          "weekdays": {
-            "nullable": true,
-            "type": "array",
-            "items": {
-              "type": "number",
-              "maximum": 7,
-              "minimum": 1
-            }
           },
           "count": {
             "type": "number",

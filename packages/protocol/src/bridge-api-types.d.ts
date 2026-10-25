@@ -2865,13 +2865,13 @@ export interface components {
             updatedAt: string;
         };
         SaveScheduleDto: {
+            weekdays?: number[] | null;
             contextId?: number | null;
             name: string;
             enabled: boolean;
             hour: number;
             minute: number;
             timezone: string;
-            weekdays?: number[] | null;
             count: number;
             model: string;
             label?: string;
