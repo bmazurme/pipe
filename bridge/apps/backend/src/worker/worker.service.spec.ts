@@ -2044,9 +2044,10 @@ describe('WorkerService', () => {
 
         await service.claim(7, undefined, 5);
 
-        expect(workerRepository.update).toHaveBeenCalledWith(5, {
-          lastSeenAt: expect.any(Date) as Date,
-        });
+        expect(workerRepository.update).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 5 }),
+          { lastSeenAt: expect.any(Date) as Date },
+        );
         const sweep = (repository.query as jest.Mock).mock.calls.find(
           (call: unknown[]) => (call[0] as string).includes('"workerId" ='),
         ) as [string, unknown[]] | undefined;

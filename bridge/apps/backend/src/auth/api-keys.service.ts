@@ -23,6 +23,8 @@ export interface CreatedApiKey {
   createdAt: Date;
 }
 
+const LAST_USED_TOUCH_EVERY_MS = 60_000;
+
 @Injectable()
 export class ApiKeysService {
   private readonly logger = new Logger(ApiKeysService.name);
@@ -93,13 +95,21 @@ export class ApiKeysService {
       return null;
     }
 
-    // Fire-and-forget: an unhandled rejection would terminate the process.
-    void this.apiKeyRepository
-      .update(apiKey.id, { lastUsedAt: new Date() })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Could not update API key lastUsedAt: ${message}`);
-      });
+    // Only shown on the Keys page, so a value under a minute old is as good as a fresh one.
+    const lastUsed = apiKey.lastUsedAt
+      ? new Date(apiKey.lastUsedAt).getTime()
+      : 0;
+
+    if (Date.now() - lastUsed >= LAST_USED_TOUCH_EVERY_MS) {
+      // Fire-and-forget: an unhandled rejection would terminate the process.
+      void this.apiKeyRepository
+        .update(apiKey.id, { lastUsedAt: new Date() })
+        .catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(`Could not update API key lastUsedAt: ${message}`);
+        });
+    }
 
     return { userId: apiKey.userId, scope: apiKey.scope ?? null };
   }

@@ -24,6 +24,7 @@ import {
   WorkerResponseDto,
 } from './dto/worker-fleet.dto';
 import { parseVlessLink } from './vless-link';
+import { touchWorker } from './worker-touch';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
@@ -420,7 +421,7 @@ export class WorkersService {
 
   // Called on every worker request that proves it is alive.
   async touch(workerId: number): Promise<void> {
-    await this.workers.update(workerId, { lastSeenAt: new Date() });
+    await touchWorker(this.workers, workerId);
   }
 
   async configFor(workerId: number): Promise<WorkerConfigResponseDto> {
@@ -430,7 +431,7 @@ export class WorkersService {
       throw new UnauthorizedException('Invalid or revoked worker key');
     }
 
-    await this.touch(worker.id);
+    await touchWorker(this.workers, worker.id, worker.lastSeenAt);
 
     return {
       id: worker.id,
@@ -468,7 +469,7 @@ export class WorkersService {
 
     if (!worker) return false;
 
-    await this.touch(worker.id);
+    await touchWorker(this.workers, worker.id, worker.lastSeenAt);
 
     return worker.enabled && worker.chatEnabled;
   }
