@@ -245,6 +245,11 @@
   margin: 0;
 }
 
+.logs:focus-visible {
+  outline: 2px solid var(--g-color-line-focus);
+  outline-offset: 1px;
+}
+
 .logs {
   box-sizing: border-box;
   width: 100%;

@@ -28,7 +28,7 @@ describe('JobLogs', () => {
   it('counts the lines and shows the text', () => {
     renderLogs();
 
-    expect(screen.getByText(/3 строк/)).toBeInTheDocument();
+    expect(screen.getByText(/3 строки/)).toBeInTheDocument();
     expect(screen.getByText(/one/)).toBeInTheDocument();
   });
 
@@ -87,6 +87,44 @@ describe('JobLogs', () => {
     fireEvent.scroll(box);
 
     expect(screen.queryByRole('button', { name: /К концу/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [1, '1 строка'],
+    [3, '3 строки'],
+    [5, '5 строк'],
+    [21, '21 строка'],
+    [22, '22 строки'],
+  ])('pluralizes %i lines', (count, text) => {
+    renderLogs({ logs: Array.from({ length: count }, (_, i) => `l${i}`).join('\n') });
+
+    expect(screen.getByText(new RegExp(text))).toBeInTheDocument();
+  });
+
+  it('makes the log focusable with an accessible name', () => {
+    renderLogs();
+
+    expect(screen.getByRole('region', { name: 'Лог задачи' })).toHaveAttribute('tabindex', '0');
+  });
+
+  it('reports a failed copy', async () => {
+    const user = userEvent.setup();
+    renderLogs();
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+
+    await user.click(screen.getByRole('button', { name: /Копировать/ }));
+
+    expect(await screen.findByText('Не удалось скопировать')).toBeInTheDocument();
+  });
+
+  it('confirms a successful copy', async () => {
+    const user = userEvent.setup();
+    renderLogs();
+    vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+
+    await user.click(screen.getByRole('button', { name: /Копировать/ }));
+
+    expect(await screen.findByText('Скопировано')).toBeInTheDocument();
   });
 
   it('downloads the log as a .log file named after the job', async () => {

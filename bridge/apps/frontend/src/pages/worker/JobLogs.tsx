@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowDownToLine, Copy } from '@gravity-ui/icons';
 import { Button, Icon, Text } from '@gravity-ui/uikit';
 
+import { plural } from '../../shared/lib/plural';
 import { triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import styles from '../WorkerPage.module.css';
 
@@ -21,7 +22,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
   const ref = useRef<HTMLPreElement>(null);
   const pinnedRef = useRef(true);
   const [pinned, setPinned] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
 
   useEffect(() => {
     const element = ref.current;
@@ -53,11 +54,11 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(logs);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied('ok');
     } catch {
-      setCopied(false);
+      setCopied('failed');
     }
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const lines = logs ? logs.replace(/\n$/, '').split('\n').length : 0;
@@ -70,7 +71,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
           {lines > 0 && (
             <Text color="secondary" variant="body-1">
               {' '}
-              · {lines} {lines === 1 ? 'строка' : 'строк'}
+              · {lines} {plural(lines, ['строка', 'строки', 'строк'])}
             </Text>
           )}
         </Text>
@@ -78,7 +79,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
           <div className={styles.logsActions}>
             <Button view="flat-secondary" size="s" onClick={() => void handleCopy()}>
               <Icon data={Copy} size={14} />
-              {copied ? 'Скопировано' : 'Копировать'}
+              {copied === 'ok' ? 'Скопировано' : copied === 'failed' ? 'Не удалось скопировать' : 'Копировать'}
             </Button>
             <Button
               view="flat-secondary"
@@ -92,7 +93,14 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
         )}
       </div>
       <div className={styles.logsWrap}>
-        <pre ref={ref} className={styles.logs} onScroll={handleScroll}>
+        <pre
+          ref={ref}
+          className={styles.logs}
+          onScroll={handleScroll}
+          tabIndex={0}
+          role="region"
+          aria-label="Лог задачи"
+        >
           {logs || '(пока пусто)'}
         </pre>
         {active && !pinned && (
