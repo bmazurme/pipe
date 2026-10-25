@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CircleQuestion } from '@gravity-ui/icons';
-import { Alert, Button, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Select, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import { getErrorMessage, type QuestionCard, useListQuestionCardsQuery, useSaveQuestionsAsContextMutation, useSetQuestionResolvedMutation } from '../store/api';
@@ -13,6 +13,10 @@ const POLL_INTERVAL_MS = 30_000;
 const MAX_ANSWER_LENGTH = 2000;
 
 type View = 'open' | 'archive';
+
+const ALL_PROJECTS = 'all';
+const NO_PROJECT = 'none';
+const projectValue = (project: string) => `project:${project}`;
 
 interface CardViewProps {
   card: QuestionCard;
@@ -110,6 +114,23 @@ export function QuestionsPage() {
   const [savedContexts, setSavedContexts] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
+  const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS);
+
+  const projectOptions = useMemo(() => {
+    const projects = [...new Set((cards ?? []).flatMap((card) => (card.project ? [card.project] : [])))].sort((a, b) => Number(a) - Number(b));
+    const options = projects.map((project) => ({ value: projectValue(project), content: `Проект ${project}` }));
+
+    if ((cards ?? []).some((card) => !card.project)) options.push({ value: NO_PROJECT, content: 'Без проекта' });
+
+    return options;
+  }, [cards]);
+
+  // A chosen project that is gone from the polled data falls back to "all".
+  const activeFilter = projectOptions.some((option) => option.value === projectFilter) ? projectFilter : ALL_PROJECTS;
+  const visibleCards = (cards ?? []).filter(
+    (card) => activeFilter === ALL_PROJECTS || (activeFilter === NO_PROJECT ? !card.project : projectValue(card.project ?? '') === activeFilter),
+  );
+  const filterLabel = projectOptions.find((option) => option.value === activeFilter)?.content;
 
   const handleToggle = async (id: number, resolved: boolean) => {
     setError(null);
@@ -148,10 +169,20 @@ export function QuestionsPage() {
         title="Questions"
         description="Открытые вопросы по задачам. Worker достаёт их из вывода запуска; отметьте вопрос, когда он закрыт. Когда закрыты все вопросы задачи, её карточка уходит в архив — новый вопрос по ней вернёт её обратно."
         actions={
-          <SegmentedRadioGroup value={view} onUpdate={(value) => setView(value as View)} aria-label="Показать">
-            <SegmentedRadioGroup.Option value="open">Открытые</SegmentedRadioGroup.Option>
-            <SegmentedRadioGroup.Option value="archive">Архив</SegmentedRadioGroup.Option>
-          </SegmentedRadioGroup>
+          <>
+            {projectOptions.length >= 2 && (
+              <Select
+                label="Проект"
+                value={[activeFilter]}
+                options={[{ value: ALL_PROJECTS, content: 'Все проекты' }, ...projectOptions]}
+                onUpdate={(value) => setProjectFilter(value[0] ?? ALL_PROJECTS)}
+              />
+            )}
+            <SegmentedRadioGroup value={view} onUpdate={(value) => setView(value as View)} aria-label="Показать">
+              <SegmentedRadioGroup.Option value="open">Открытые</SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="archive">Архив</SegmentedRadioGroup.Option>
+            </SegmentedRadioGroup>
+          </>
         }
       />
 
@@ -176,9 +207,13 @@ export function QuestionsPage() {
         />
       )}
 
-      {cards && cards.length > 0 && (
+      {cards && cards.length > 0 && visibleCards.length === 0 && (
+        <EmptyState icon={CircleQuestion} title={`Нет вопросов по проекту ${(filterLabel ?? '').replace('Проект ', '')}`.trim()} />
+      )}
+
+      {visibleCards.length > 0 && (
         <ul className={styles.list}>
-          {cards.map((card) => (
+          {visibleCards.map((card) => (
             <li key={card.taskKey}>
               <CardView
                 card={card}
