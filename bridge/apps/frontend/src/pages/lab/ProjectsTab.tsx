@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpRightFromSquare, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowUpRightFromSquare, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 import { LogoGithub } from '@gravity-ui/icons';
@@ -12,18 +12,56 @@ import {
   useCreateLabProjectMutation,
   useDeleteLabProjectMutation,
   useListLabProjectsQuery,
+  useUpdateLabProjectMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
 
 const EMPTY = { name: '', repo: '', token: '', baseBranch: 'main' };
 
+// GitHub tokens are far longer than this; it only catches an accidental fragment. Matches the backend's minimum.
+const MIN_TOKEN_LENGTH = 10;
+
+// The lab API turns a server refusal into the bare message (a string, or a list of them for field validation), which getErrorMessage
+// deliberately does not unwrap — it would show the generic fallback and hide why a token or branch was refused.
+function errorReason(error: unknown, fallback: string): string {
+  if (typeof error === 'string' && error) return error;
+  if (Array.isArray(error) && error.length > 0) return error.join('. ');
+
+  return getErrorMessage(error, fallback);
+}
+
+// The edit dialog works on a copy of the project; the token field starts empty because the stored token never comes back.
+interface EditForm {
+  project: LabProject;
+  name: string;
+  baseBranch: string;
+  token: string;
+}
+
+// Only what the owner actually changed is sent: an empty token field keeps the stored token, and an untouched branch is not re-verified.
+function buildPatch(form: EditForm): { name?: string; baseBranch?: string; token?: string } {
+  const patch: { name?: string; baseBranch?: string; token?: string } = {};
+  const name = form.name.trim();
+  const baseBranch = form.baseBranch.trim();
+  const token = form.token.trim();
+
+  if (name && name !== form.project.name) patch.name = name;
+  if (baseBranch && baseBranch !== form.project.baseBranch) patch.baseBranch = baseBranch;
+  if (token) patch.token = token;
+
+  return patch;
+}
+
 export function ProjectsTab() {
   const { data: projects, isLoading, isError } = useListLabProjectsQuery();
   const [create, { isLoading: isCreating }] = useCreateLabProjectMutation();
   const [check, { isLoading: isChecking, originalArgs: checkingId }] = useCheckLabProjectMutation();
   const [remove] = useDeleteLabProjectMutation();
+  const [updateProject, { isLoading: isUpdating }] = useUpdateLabProjectMutation();
   const [form, setForm] = useState<typeof EMPTY | null>(null);
+  const [edit, setEdit] = useState<EditForm | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<LabProject | null>(null);
@@ -43,7 +81,7 @@ export function ProjectsTab() {
       setForm(null);
       setError(null);
     } catch (err) {
-      setError(getErrorMessage(err, 'Не удалось подключить проект'));
+      setError(errorReason(err, 'Не удалось подключить проект'));
     }
   };
 
@@ -57,7 +95,57 @@ export function ProjectsTab() {
       if (result.problems.length) setError(`${project.name}: ${result.problems.join('. ')}`);
       else setNotice(`${project.name}: чтение и запись работают`);
     } catch (err) {
-      setError(getErrorMessage(err, 'Не удалось проверить проект'));
+      setError(errorReason(err, 'Не удалось проверить проект'));
+    }
+  };
+
+  const startEdit = (project: LabProject) => {
+    setNotice(null);
+    setError(null);
+    setEditError(null);
+    setEdit({ project, name: project.name, baseBranch: project.baseBranch, token: '' });
+  };
+
+  const closeEdit = () => {
+    setEdit(null);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!edit) return;
+
+    if (!edit.name.trim() || !edit.baseBranch.trim()) {
+      setEditError('Название и ветка не могут быть пустыми');
+
+      return;
+    }
+
+    if (edit.token.trim() && edit.token.trim().length < MIN_TOKEN_LENGTH) {
+      setEditError('Токен GitHub слишком короткий. Чтобы не менять токен, оставьте поле пустым');
+
+      return;
+    }
+
+    const patch = buildPatch(edit);
+
+    if (Object.keys(patch).length === 0) {
+      closeEdit();
+
+      return;
+    }
+
+    try {
+      // A new token or branch is verified against the repository before anything is stored; a refusal leaves the old values in place.
+      const project = await updateProject({ id: edit.project.id, ...patch }).unwrap();
+      const access = project.canWrite ? 'чтение и запись работают' : 'токен читает, но не может писать — запуски не стартуют';
+
+      if (patch.token) setNotice(`Токен проекта «${project.name}» обновлён: ${access}`);
+      else if (patch.baseBranch) setNotice(`Ветка проекта «${project.name}» изменена на ${project.baseBranch}: ${access}`);
+      else setNotice(`Проект «${project.name}» сохранён`);
+
+      closeEdit();
+    } catch (err) {
+      setEditError(errorReason(err, 'Не удалось сохранить проект'));
     }
   };
 
@@ -71,7 +159,7 @@ export function ProjectsTab() {
     try {
       await remove(id).unwrap();
     } catch (err) {
-      setError(getErrorMessage(err, 'Не удалось отключить проект'));
+      setError(errorReason(err, 'Не удалось отключить проект'));
     }
   };
 
@@ -114,6 +202,9 @@ export function ProjectsTab() {
             <Button view="outlined" size="s" loading={isChecking && checkingId === project.id} onClick={() => void handleCheck(project)}>
               Проверить
             </Button>
+            <Button view="flat" size="s" aria-label={`Изменить: ${project.name}`} title="Изменить проект или обновить токен" onClick={() => startEdit(project)}>
+              <Icon data={Pencil} size={16} />
+            </Button>
             <Button view="flat-danger" size="s" aria-label={`Отключить: ${project.name}`} onClick={() => setConfirmDelete(project)}>
               <Icon data={TrashBin} size={16} />
             </Button>
@@ -132,6 +223,41 @@ export function ProjectsTab() {
           propsButtonApply={{ view: 'outlined-danger' }}
           onClickButtonCancel={() => setConfirmDelete(null)}
           onClickButtonApply={() => void handleDelete()}
+        />
+      </Dialog>
+
+      <Dialog open={edit !== null} onClose={closeEdit} maxWidth="s" aria-labelledby="lab-project-edit-title">
+        <Dialog.Header caption="Изменить проект" id="lab-project-edit-title" />
+        <Dialog.Body>
+          {edit && (
+            <div className={styles.form}>
+              <TextInput label="Название" value={edit.name} onUpdate={(name) => setEdit({ ...edit, name })} />
+              <TextInput label="Репозиторий" value={edit.project.repo} disabled />
+              <Text variant="caption-2" color="secondary">
+                Репозиторий изменить нельзя: к нему привязаны расписания и история запусков. Чтобы сменить репозиторий, отключите проект и подключите заново.
+              </Text>
+              <TextInput label="Ветка" value={edit.baseBranch} onUpdate={(baseBranch) => setEdit({ ...edit, baseBranch })} />
+              <TextInput
+                label="Новый токен GitHub"
+                type="password"
+                placeholder="оставьте пустым, чтобы не менять"
+                value={edit.token}
+                onUpdate={(token) => setEdit({ ...edit, token })}
+                controlProps={{ autoComplete: 'off' }}
+              />
+              <Text variant="caption-2" color="secondary">
+                Сейчас сохранён токен …{edit.project.tokenHint}. Новый токен и ветка сначала проверяются на репозитории: если проверка не пройдена, прежние значения остаются.
+              </Text>
+              {editError && <Alert theme="danger" view="filled" message={editError} />}
+            </div>
+          )}
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Сохранить"
+          propsButtonApply={{ loading: isUpdating, disabled: !edit || Object.keys(buildPatch(edit)).length === 0 }}
+          onClickButtonCancel={closeEdit}
+          onClickButtonApply={() => void handleSaveEdit()}
         />
       </Dialog>
 

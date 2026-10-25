@@ -14,6 +14,9 @@ let sent: Sent[];
 let projects: unknown[];
 let schedules: unknown[];
 let runs: unknown[];
+// What the server answers to PATCH lab/projects/1: a refusal (e.g. the new token cannot read the repository) or whether the token can write.
+let patchError: { status: number; message: string | string[] } | null;
+let patchCanWrite: boolean;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -22,6 +25,8 @@ beforeEach(() => {
   projects = [{ id: 1, name: 'Катер', repo: 'me/boat', baseBranch: 'main', tokenHint: 'abcd', checkedAt: null, canWrite: true }];
   schedules = [];
   runs = [];
+  patchError = null;
+  patchCanWrite = true;
   store.dispatch(labApi.util.resetApiState());
   store.dispatch(contextApi.util.resetApiState());
   vi.stubGlobal(
@@ -30,7 +35,15 @@ beforeEach(() => {
       const path = new URL(request.url).pathname.replace('/api/v1/', '');
 
       if (request.method !== 'GET') {
-        sent.push({ path, method: request.method, body: await request.json().catch(() => undefined) });
+        const body = await request.json().catch(() => undefined);
+
+        sent.push({ path, method: request.method, body });
+
+        if (request.method === 'PATCH' && path === 'lab/projects/1') {
+          if (patchError) return json({ message: patchError.message }, patchError.status);
+
+          return json({ ...(projects[0] as object), ...(body as object), canWrite: patchCanWrite });
+        }
 
         return json({ id: 9 });
       }
@@ -84,6 +97,124 @@ describe('LabPage', () => {
     await waitFor(() => expect(sent.find((call) => call.path === 'lab/projects')).toBeDefined());
     expect(sent.find((call) => call.path === 'lab/projects')?.body).toMatchObject({ name: 'Самолёт', repo: 'me/plane', token: 'github_pat_1234567890', baseBranch: 'main' });
     expect(dialog).toBeDefined();
+  });
+
+  describe('edit project', () => {
+    const openEdit = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(await screen.findByRole('button', { name: 'Изменить: Катер' }));
+
+      return screen.findByRole('dialog');
+    };
+    const patches = () => sent.filter((call) => call.method === 'PATCH');
+
+    it('opens prefilled from the project, with the repository locked and the token field empty', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await openEdit(user);
+
+      expect(await screen.findByLabelText('Название')).toHaveValue('Катер');
+      expect(screen.getByLabelText('Репозиторий')).toHaveValue('me/boat');
+      expect(screen.getByLabelText('Репозиторий')).toBeDisabled();
+      expect(screen.getByLabelText('Ветка')).toHaveValue('main');
+      expect(screen.getByLabelText('Новый токен GitHub')).toHaveValue('');
+      expect(screen.getByText(/Сейчас сохранён токен …abcd/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+    });
+
+    it('updates only the token when only the token is typed, and says what the new token can do', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'github_pat_new_token_123');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(patches()).toHaveLength(1));
+      expect(patches()[0]).toEqual({ path: 'lab/projects/1', method: 'PATCH', body: { token: 'github_pat_new_token_123' } });
+      expect(await screen.findByText('Токен проекта «Катер» обновлён: чтение и запись работают')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('sends the changed name and branch and leaves the stored token alone', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await openEdit(user);
+
+      const name = await screen.findByLabelText('Название');
+      await user.clear(name);
+      await user.type(name, 'Катер 2');
+      const branch = screen.getByLabelText('Ветка');
+      await user.clear(branch);
+      await user.type(branch, 'develop');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(patches()).toHaveLength(1));
+      expect(patches()[0].body).toEqual({ name: 'Катер 2', baseBranch: 'develop' });
+      expect(await screen.findByText(/Ветка проекта «Катер 2» изменена на develop/)).toBeInTheDocument();
+    });
+
+    it('warns when the new token cannot write, instead of calling it a success', async () => {
+      const user = userEvent.setup();
+      patchCanWrite = false;
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'github_pat_read_only_1');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(await screen.findByText(/токен читает, но не может писать — запуски не стартуют/)).toBeInTheDocument();
+    });
+
+    it('refuses a fragment of a token without calling the server', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'short');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(await screen.findByText(/Токен GitHub слишком короткий/)).toBeInTheDocument();
+      expect(patches()).toHaveLength(0);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('keeps the dialog open and shows the server\'s reason when the new token is refused', async () => {
+      const user = userEvent.setup();
+      patchError = { status: 400, message: 'Токен не читает репозиторий me/boat' };
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'github_pat_bad_token_1');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(await screen.findByText('Токен не читает репозиторий me/boat')).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.queryByText(/Токен проекта «Катер» обновлён/)).toBeNull();
+    });
+
+    it('joins the field-validation messages the server returns as a list', async () => {
+      const user = userEvent.setup();
+      patchError = { status: 400, message: ['Ветка main не найдена', 'токен должен быть не короче 10 символов'] };
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'github_pat_whatever_1');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(await screen.findByText('Ветка main не найдена. токен должен быть не короче 10 символов')).toBeInTheDocument();
+    });
+
+    it('does not send anything when cancelled', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await openEdit(user);
+
+      await user.type(await screen.findByLabelText('Новый токен GitHub'), 'github_pat_unused_123');
+      await user.click(screen.getByRole('button', { name: 'Отмена' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(patches()).toHaveLength(0);
+    });
   });
 
   it('makes a schedule whose task is free text, not checkboxes', async () => {
