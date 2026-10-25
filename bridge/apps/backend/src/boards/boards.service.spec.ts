@@ -23,8 +23,50 @@ const script = (
 
 function setup(report: Partial<BoardReport> | null = null) {
   const saved: Record<string, unknown>[] = [];
+  let row: Partial<BoardReport> | null = report ? { ...report } : null;
   const reports = {
-    findOne: jest.fn(async () => report),
+    row: () => row,
+    upsert: jest.fn(async (values: Partial<BoardReport>) => {
+      row = { announcedKey: null, ...row, ...values };
+    }),
+    createQueryBuilder: jest.fn(() => {
+      let value: string | null = null;
+      let condition = '';
+      let params: Record<string, string> = {};
+      const builder = {
+        update: () => builder,
+        set: (set: { announcedKey: string | null }) => {
+          value = set.announcedKey;
+
+          return builder;
+        },
+        where: () => builder,
+        andWhere: (sql: string, p: Record<string, string> = {}) => {
+          condition = sql;
+          params = p;
+
+          return builder;
+        },
+        execute: async () => {
+          const current = row?.announcedKey ?? null;
+          const matches = condition.includes('IS NOT NULL')
+            ? current !== null
+            : condition.includes('IS DISTINCT FROM')
+              ? current !== params.next
+              : condition.includes('IS NULL')
+                ? current === null
+                : current === params.claimed;
+
+          if (!row || !matches) return { affected: 0 };
+          row = { ...row, announcedKey: value };
+
+          return { affected: 1 };
+        },
+      };
+
+      return builder;
+    }),
+    findOne: jest.fn(async () => row),
     find: jest.fn(async () => (report ? [report] : [])),
     create: jest.fn((row: Record<string, unknown>) => row),
     save: jest.fn(async (row: Record<string, unknown>) => {
@@ -94,13 +136,13 @@ describe('the scripts that can be updated from here', () => {
 });
 
 describe('BoardsService.recordReport', () => {
-  it('announces an outdated board once, with a button naming the board and the commit', async () => {
-    const { service, notifier, saved } = setup(null);
+  const outdatedDto = () =>
+    dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]);
 
-    await service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
-    );
+  it('announces an outdated board once, with a button naming the board and the commit', async () => {
+    const { service, notifier, reports } = setup(null);
+
+    await service.recordReport(7, outdatedDto());
 
     expect(notifier.sendWithButtons).toHaveBeenCalledTimes(1);
     const [text, buttons] = notifier.sendWithButtons.mock
@@ -109,51 +151,93 @@ describe('BoardsService.recordReport', () => {
     expect(text).toContain('ubuntu-red');
     expect(text).toContain('infra/scriptcheck/check-scripts.sh');
     expect(buttons[0][0].callback_data).toBe('su:ubuntu-red:c823ea5');
-    expect(saved[0].announcedKey).toBeTruthy();
+    expect(reports.row()?.announcedKey).toBeTruthy();
   });
 
   it('does not announce the same outdated set again', async () => {
-    const first = setup(null);
+    const { service, notifier } = setup(null);
 
-    await first.service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
-    );
-    const key = first.saved[0].announcedKey as string;
-    const again = setup({ ...fresh(), announcedKey: key });
+    await service.recordReport(7, outdatedDto());
+    await service.recordReport(7, outdatedDto());
 
-    await again.service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
-    );
-
-    expect(again.notifier.sendWithButtons).not.toHaveBeenCalled();
-    expect(again.notifier.send).not.toHaveBeenCalled();
+    expect(notifier.sendWithButtons).toHaveBeenCalledTimes(1);
+    expect(notifier.send).not.toHaveBeenCalled();
   });
 
   it('keeps retrying the announcement while Telegram does not deliver it', async () => {
-    const failed = setup(null);
+    const { service, notifier, reports } = setup(null);
 
-    failed.notifier.sendWithButtons.mockResolvedValue(false);
-    await failed.service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
+    notifier.sendWithButtons.mockResolvedValueOnce(false);
+    await service.recordReport(7, outdatedDto());
+
+    expect(reports.row()?.announcedKey).toBeNull();
+
+    await service.recordReport(7, outdatedDto());
+
+    expect(notifier.sendWithButtons).toHaveBeenCalledTimes(2);
+    expect(reports.row()?.announcedKey).toBeTruthy();
+  });
+
+  it('releases the claim when sending throws, and still saves the report', async () => {
+    const { service, notifier, reports } = setup(null);
+
+    notifier.sendWithButtons.mockRejectedValueOnce(new Error('boom'));
+    await service.recordReport(7, outdatedDto());
+
+    expect(reports.row()?.announcedKey).toBeNull();
+    expect(reports.row()?.scripts).toHaveLength(1);
+    expect(reports.row()?.reportedAt).toBeInstanceOf(Date);
+  });
+
+  it('saves the report before Telegram answers', async () => {
+    const { service, notifier, reports } = setup(null);
+    let finish: (ok: boolean) => void = () => undefined;
+
+    notifier.sendWithButtons.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
     );
+    const pending = service.recordReport(7, outdatedDto());
 
-    expect(failed.saved[0].announcedKey).toBeNull();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(reports.row()?.scripts).toHaveLength(1);
+    finish(true);
+    await pending;
+  });
 
-    const again = setup({ ...fresh(), announcedKey: null });
+  it('sends exactly one message for two concurrent reports of an outdated board', async () => {
+    const { service, notifier, reports } = setup(fresh());
 
-    await again.service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
-    );
+    await Promise.all([
+      service.recordReport(7, outdatedDto()),
+      service.recordReport(7, outdatedDto()),
+    ]);
 
-    expect(again.notifier.sendWithButtons).toHaveBeenCalledTimes(1);
+    expect(notifier.sendWithButtons).toHaveBeenCalledTimes(1);
+    expect(reports.row()?.announcedKey).toBeTruthy();
+  });
+
+  it('lets two concurrent first reports of a new host both succeed with one row', async () => {
+    const { service, notifier, reports } = setup(null);
+
+    await expect(
+      Promise.all([
+        service.recordReport(7, outdatedDto()),
+        service.recordReport(7, outdatedDto()),
+      ]),
+    ).resolves.toBeDefined();
+
+    expect(reports.upsert).toHaveBeenCalledTimes(2);
+    expect(reports.upsert).toHaveBeenCalledWith(expect.anything(), [
+      'userId',
+      'host',
+    ]);
+    expect(notifier.sendWithButtons).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the old key when the "current again" message is not delivered', async () => {
-    const { service, notifier, saved } = setup({
+    const { service, notifier, reports } = setup({
       ...fresh(),
       announcedKey: 'old',
     });
@@ -164,24 +248,28 @@ describe('BoardsService.recordReport', () => {
       dto([script('infra/scriptcheck/check-scripts.sh', 'current')]),
     );
 
-    expect(saved[0].announcedKey).toBe('old');
+    expect(reports.row()?.announcedKey).toBe('old');
   });
 
   it('says so once when the board is current again', async () => {
-    const { service, notifier, saved } = setup({
+    const { service, notifier, reports } = setup({
       ...fresh(),
       announcedKey: 'old',
     });
+    const current = dto([
+      script('infra/scriptcheck/check-scripts.sh', 'current'),
+    ]);
 
-    await service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'current')]),
-    );
+    await Promise.all([
+      service.recordReport(7, current),
+      service.recordReport(7, current),
+    ]);
 
+    expect(notifier.send).toHaveBeenCalledTimes(1);
     expect(notifier.send).toHaveBeenCalledWith(
       expect.stringContaining('актуальны'),
     );
-    expect(saved[0].announcedKey).toBeNull();
+    expect(reports.row()?.announcedKey).toBeNull();
   });
 
   it('sends no button when only what needs a manual copy is outdated (rollback.sh), and says so', async () => {
@@ -208,10 +296,7 @@ describe('BoardsService.recordReport', () => {
       sha: SHA,
       via: 'ui',
     });
-    await service.recordReport(
-      7,
-      dto([script('infra/scriptcheck/check-scripts.sh', 'outdated')]),
-    );
+    await service.recordReport(7, outdatedDto());
 
     expect(notifier.sendWithButtons).not.toHaveBeenCalled();
   });
