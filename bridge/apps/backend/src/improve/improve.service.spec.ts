@@ -931,6 +931,11 @@ describe('ImproveService change of a PR from the chat', () => {
 
     const run = await service.startPrFix(3, 304, 'Rename the helper', 'sonnet');
 
+    expect(runs.save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'preparing', jobId: null }),
+    );
+    await settle();
+
     expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
 
     const manifest = strFromU8(
@@ -950,7 +955,43 @@ describe('ImproveService change of a PR from the chat', () => {
       baseSha: 'head-sha',
       prUrl: 'https://gh/pr/304',
     });
-    expect(runs.save).toHaveBeenCalled();
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, status: 'preparing' },
+      expect.objectContaining({
+        status: 'queued',
+        jobId: 321,
+        baseSha: 'head-sha',
+        baseline: expect.any(String),
+      }),
+    );
+  });
+
+  it('answers with a preparing run without waiting for the handoff', async () => {
+    const { service, workers } = start(open);
+
+    workers.create.mockReturnValue(new Promise(() => undefined));
+
+    await expect(
+      service.startPrFix(3, 304, 'Rename the helper', 'sonnet'),
+    ).resolves.toMatchObject({ status: 'preparing', jobId: null });
+  });
+
+  it('fails the run with the reason when preparation throws', async () => {
+    const { service, workers, runs } = start(open);
+
+    workers.create.mockRejectedValue(new Error('upload broke'));
+
+    await service.startPrFix(3, 304, 'Rename the helper', 'sonnet');
+    await settle();
+
+    expect(runs.update).toHaveBeenCalledWith(
+      { id: 1, status: 'preparing' },
+      expect.objectContaining({
+        status: 'failed',
+        error: 'upload broke',
+        finishedAt: expect.any(Date),
+      }),
+    );
   });
 
   it('refuses a closed or merged PR', async () => {
@@ -1024,31 +1065,48 @@ describe('ImproveService PR reservation while a start is handing off', () => {
 
   it('lets only one of two simultaneous changes of a PR start a worker job', async () => {
     const held = heldDownload();
+    let saved = 0;
     const ctx = setup({
-      runs: { count: jest.fn().mockResolvedValue(0) },
+      runs: {
+        count: jest.fn(async () => saved),
+        save: jest.fn(async (run: object) => {
+          saved += 1;
+
+          return { id: 1, ...run };
+        }),
+      },
       github: {
         getPull: jest.fn().mockResolvedValue(open),
         downloadZipball: held.downloadZipball,
       },
     });
 
-    const first = ctx.service.startPrFix(3, 304, 'one', 'sonnet');
+    const first = await ctx.service.startPrFix(3, 304, 'one', 'sonnet');
 
     await held.downloading;
 
+    expect(first).toMatchObject({ prNumber: 304, status: 'preparing' });
     await expect(
       ctx.service.startPrFix(3, 304, 'two', 'sonnet'),
-    ).rejects.toThrow(/уже исправляется/);
+    ).rejects.toThrow(/PR #304 уже исправляется/);
 
     held.release();
-    await expect(first).resolves.toMatchObject({ prNumber: 304 });
+    await settle();
     expect(ctx.workers.create).toHaveBeenCalledTimes(1);
   });
 
   it('makes the CI check skip a PR whose change is still handing off', async () => {
     const held = heldDownload();
+    let saved = 0;
     const ctx = setup({
-      runs: { count: jest.fn().mockResolvedValue(0) },
+      runs: {
+        count: jest.fn(async () => saved),
+        save: jest.fn(async (run: object) => {
+          saved += 1;
+
+          return { id: 1, ...run };
+        }),
+      },
       github: {
         getPull: jest.fn().mockResolvedValue(open),
         downloadZipball: held.downloadZipball,
@@ -1071,7 +1129,7 @@ describe('ImproveService PR reservation while a start is handing off', () => {
       ctx.notifier as never,
     );
 
-    const fix = ctx.service.startPrFix(3, 304, 'one', 'sonnet');
+    await ctx.service.startPrFix(3, 304, 'one', 'sonnet');
 
     await held.downloading;
 
@@ -1090,7 +1148,7 @@ describe('ImproveService PR reservation while a start is handing off', () => {
     expect(ctx.notifier.send).not.toHaveBeenCalled();
 
     held.release();
-    await fix;
+    await settle();
     expect(ctx.workers.create).toHaveBeenCalledTimes(1);
     expect(held.downloadZipball).toHaveBeenCalledTimes(1);
   });
@@ -1111,6 +1169,7 @@ describe('ImproveService PR reservation while a start is handing off', () => {
     await expect(
       ctx.service.startPrFix(3, 304, 'one', 'sonnet'),
     ).resolves.toMatchObject({ prNumber: 304 });
+    await settle();
     expect(ctx.workers.create).toHaveBeenCalledTimes(1);
   });
 });

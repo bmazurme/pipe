@@ -480,26 +480,7 @@ export class ImproveService {
       (await this.runs.count({
         where: { kind: 'repair', prNumber, trigger: 'chat' },
       })) + 1;
-    const { job, baseSha, baseline, fileCount } =
-      await this.handoff.handToWorker(
-        userId,
-        model,
-        {
-          number: `pr-${prNumber}`,
-          title: `Change PR #${prNumber}: ${pull.title}`,
-          body: withDefinitionOfDone(
-            prFixBody({
-              prNumber,
-              prTitle: pull.title,
-              branch: pull.headRef,
-              instruction,
-            }),
-          ),
-        },
-        `improve:pr-${prNumber}:chat:${attempt}`,
-        `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
-        { sha: pull.headSha, branch: pull.headRef },
-      );
+    // Recorded before the slow part so that a second fix of the same PR sees it as active.
     const run = await this.runs.save(
       this.runs.create({
         userId,
@@ -508,10 +489,8 @@ export class ImproveService {
         issueTitle: pull.title.slice(0, 255),
         model,
         trigger: 'chat',
-        status: ImproveRunStatus.Queued,
-        jobId: job.id,
-        baseSha,
-        baseline: JSON.stringify(baseline),
+        status: ImproveRunStatus.Preparing,
+        jobId: null,
         branch: pull.headRef,
         prNumber,
         prUrl: pull.htmlUrl,
@@ -519,14 +498,89 @@ export class ImproveService {
       }),
     );
 
-    this.log(
-      'info',
-      'improve.pr_fix_started',
-      `Run ${run.id}: chat change of PR #${prNumber} → job ${job.id} (${model})`,
-      { runId: run.id, jobId: job.id, prNumber, files: fileCount },
+    this.preparePrFix(run, pull, instruction, attempt).catch((error) =>
+      this.logger.warn(
+        `Run ${run.id} could not be prepared: ${message(error)}`,
+      ),
     );
 
     return run;
+  }
+
+  // The slow part of a PR fix: the PR head's snapshot and the parcel. Its outcome lands on the run
+  // row (Queued with the job, or Failed with the reason); it never rejects.
+  private async preparePrFix(
+    run: ImproveRun,
+    pull: { title: string; headRef: string; headSha: string },
+    instruction: string,
+    attempt: number,
+  ): Promise<void> {
+    const prNumber = run.prNumber as number;
+
+    try {
+      const { job, baseSha, baseline, fileCount } =
+        await this.handoff.handToWorker(
+          run.userId,
+          run.model,
+          {
+            number: `pr-${prNumber}`,
+            title: `Change PR #${prNumber}: ${pull.title}`,
+            body: withDefinitionOfDone(
+              prFixBody({
+                prNumber,
+                prTitle: pull.title,
+                branch: pull.headRef,
+                instruction,
+              }),
+            ),
+          },
+          `improve:pr-${prNumber}:chat:${attempt}`,
+          `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
+          { sha: pull.headSha, branch: pull.headRef },
+        );
+
+      // Guarded by status: a run that was failed as lost in the meantime stays so.
+      const res = await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Preparing },
+        {
+          status: ImproveRunStatus.Queued,
+          jobId: job.id,
+          baseSha,
+          baseline: JSON.stringify(baseline),
+        },
+      );
+
+      if (res.affected !== 1) {
+        await this.workers.cancel(job.id, run.userId).catch(() => undefined);
+
+        return;
+      }
+
+      run.status = ImproveRunStatus.Queued;
+      run.jobId = job.id;
+      run.baseSha = baseSha;
+      this.log(
+        'info',
+        'improve.pr_fix_started',
+        `Run ${run.id}: chat change of PR #${prNumber} → job ${job.id} (${run.model})`,
+        { runId: run.id, jobId: job.id, prNumber, files: fileCount },
+      );
+    } catch (error) {
+      await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Preparing },
+        {
+          status: ImproveRunStatus.Failed,
+          error: message(error),
+          finishedAt: new Date(),
+        },
+      );
+      this.log(
+        'warn',
+        'improve.pr_fix_prepare_failed',
+        `Run ${run.id}: chat change of PR #${prNumber} could not be prepared: ${message(error)}`,
+        { runId: run.id },
+      );
+    }
   }
 
   // The chat's "merge this PR" card, after the person confirmed it — a direct,
