@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ClaudeStreamParser, parseLimits, parseUsage } from './claudeUsage.js';
+import { ClaudeStreamParser, MAX_PENDING_LINE_CHARS, parseLimits, parseUsage, type StreamDelta } from './claudeUsage.js';
 
 const line = (event: unknown) => `${JSON.stringify(event)}\n`;
 
@@ -124,5 +124,114 @@ describe('ClaudeStreamParser', () => {
 
     assert.deepEqual(texts, ['Error: something broke\n', '{"just":"an object"}\n']);
     assert.deepEqual(parser.report, {});
+  });
+});
+
+describe('ClaudeStreamParser chunking', () => {
+  const delta = (text: string) => line({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } } });
+
+  const run = (chunks: string[]) => {
+    const texts: string[] = [];
+    const deltas: StreamDelta[] = [];
+    const parser = new ClaudeStreamParser((text) => texts.push(text), (d) => deltas.push(d));
+
+    for (const chunk of chunks) parser.push(chunk);
+    parser.end();
+
+    return { texts, deltas, report: parser.report, finalText: parser.finalText };
+  };
+
+  // A small seeded generator, so a failing split can be reproduced.
+  const random = (seed: number) => () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+
+    return seed / 2147483648;
+  };
+
+  const stream = [
+    line({ type: 'system', subtype: 'init' }),
+    delta('Hel'),
+    delta('lo, wörld 🌍'),
+    'plain text error\n',
+    '\n',
+    line({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working on it' }] } }),
+    line(LIMIT_EVENT),
+    line({ type: 'result', result: 'All done', total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 2 } }),
+    'trailing line with no newline',
+  ].join('');
+
+  it('gives the same result fed in one piece, byte by byte and in random-size chunks', () => {
+    const whole = run([stream]);
+
+    assert.deepEqual(whole.texts, ['plain text error\n', 'Working on it\n', 'trailing line with no newline\n']);
+    assert.equal(whole.deltas.length, 2);
+    assert.equal(whole.finalText, 'All done');
+
+    assert.deepEqual(run([...stream]), whole);
+
+    for (let seed = 1; seed <= 20; seed++) {
+      const next = random(seed);
+      const chunks: string[] = [];
+
+      for (let at = 0; at < stream.length; ) {
+        const size = 1 + Math.floor(next() * 40);
+
+        chunks.push(stream.slice(at, at + size));
+        at += size;
+      }
+
+      assert.deepEqual(run(chunks), whole, `seed ${seed}`);
+    }
+  });
+
+  it('parses a 5 MB line delivered in 64 KB chunks as one event', () => {
+    const big = 'x'.repeat(5 * 1024 * 1024);
+    const whole = line({ type: 'assistant', message: { content: [{ type: 'text', text: big }] } });
+    const chunks: string[] = [];
+
+    for (let at = 0; at < whole.length; at += 64 * 1024) chunks.push(whole.slice(at, at + 64 * 1024));
+
+    const { texts } = run(chunks);
+
+    assert.equal(texts.length, 1);
+    assert.equal(texts[0], `${big}\n`);
+  });
+
+  it('passes a line past the cap on once as raw text and does not keep growing it', () => {
+    const texts: string[] = [];
+    const parser = new ClaudeStreamParser((text) => texts.push(text));
+    const runaway = 'y'.repeat(MAX_PENDING_LINE_CHARS + 1);
+
+    parser.push(runaway);
+    assert.deepEqual(texts, [`${runaway}\n`]);
+
+    // The rest of that line starts from an empty buffer; the next line parses as usual.
+    parser.push('tail\n');
+    parser.push(line({ type: 'result', result: 'ok' }));
+    parser.end();
+
+    assert.equal(texts.length, 2);
+    assert.equal(texts[1], 'tail\n');
+    assert.equal(parser.finalText, 'ok');
+  });
+
+  it('parses in linear time: 10,000 short lines in one chunk, and a 5 MB line in 64 KB chunks', () => {
+    const many = Array.from({ length: 10_000 }, (_, i) => delta(`d${i}`)).join('');
+    let started = performance.now();
+    const { deltas } = run([many]);
+
+    assert.equal(deltas.length, 10_000);
+    assert.ok(performance.now() - started < 1000, `10,000 lines took ${performance.now() - started} ms`);
+
+    const whole = line({ type: 'assistant', message: { content: [{ type: 'text', text: 'z'.repeat(5 * 1024 * 1024) }] } });
+    const chunks: string[] = [];
+
+    for (let at = 0; at < whole.length; at += 64 * 1024) chunks.push(whole.slice(at, at + 64 * 1024));
+
+    started = performance.now();
+    const { texts } = run(chunks);
+
+    assert.equal(texts.length, 1);
+    assert.ok(performance.now() - started < 1000, `the 5 MB line took ${performance.now() - started} ms`);
   });
 });

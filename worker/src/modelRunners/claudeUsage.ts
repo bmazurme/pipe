@@ -76,6 +76,9 @@ export interface StreamDelta {
   text: string;
 }
 
+/** How long a single stdout line may grow before the parser stops waiting for its newline. */
+export const MAX_PENDING_LINE_CHARS = 8 * 1024 * 1024;
+
 export class ClaudeStreamParser {
   readonly report: ClaudeReport = {};
   /** The final reply, from the CLI's own `result` event, when it sent one. */
@@ -89,15 +92,26 @@ export class ClaudeStreamParser {
     private readonly onDelta?: (delta: StreamDelta) => void,
   ) {}
 
+  // One pass per chunk: the newline search starts where the previous chunk ended (the pending partial line has
+  // no newline in it), and the buffer is cut once — re-slicing it per line was quadratic with
+  // --include-partial-messages (hundreds of short lines per chunk) and with a multi-megabyte tool-result line.
   push(chunk: string): void {
-    this.buffer += chunk;
-
-    let newline = this.buffer.indexOf('\n');
+    const buffer = this.buffer + chunk;
+    let start = 0;
+    let newline = buffer.indexOf('\n', this.buffer.length);
 
     while (newline >= 0) {
-      this.line(this.buffer.slice(0, newline));
-      this.buffer = this.buffer.slice(newline + 1);
-      newline = this.buffer.indexOf('\n');
+      this.line(buffer.slice(start, newline));
+      start = newline + 1;
+      newline = buffer.indexOf('\n', start);
+    }
+
+    this.buffer = start > 0 ? buffer.slice(start) : buffer;
+
+    // A runaway line is passed on as raw text, like any line that does not parse, instead of growing unbounded.
+    if (this.buffer.length > MAX_PENDING_LINE_CHARS) {
+      this.onText(`${this.buffer}\n`);
+      this.buffer = '';
     }
   }
 
