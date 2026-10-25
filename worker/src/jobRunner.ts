@@ -29,6 +29,14 @@ export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the
 // into one append every LOG_FLUSH_INTERVAL_MS instead.
 const LOG_FLUSH_INTERVAL_MS = 1500;
 
+// While bridge is slow or unreachable the unsent log waits in memory, but never more than this: past it the
+// oldest text is dropped and one marker says how much.
+const MAX_PENDING_LOG_CHARS = 2_000_000;
+
+// At the end of a job the unsent log tail gets this long to reach bridge. The final status is already reported
+// by then, and a worker stuck draining logs neither heartbeats nor claims the next job.
+const LOG_DRAIN_TIMEOUT_MS = 30_000;
+
 // How often a running job asks bridge whether its owner pressed "stop".
 const CANCEL_POLL_INTERVAL_MS = 3000;
 
@@ -48,23 +56,34 @@ export async function processJob(
   client: WorkerBridgeClient,
   job: RemoteJob,
   config: WorkerConfig,
-  options: { cancelPollMs?: number; shutdown?: AbortSignal; forceShutdown?: AbortSignal } = {},
+  options: {
+    cancelPollMs?: number;
+    shutdown?: AbortSignal;
+    forceShutdown?: AbortSignal;
+    logFlushMs?: number;
+    logDrainMs?: number;
+    maxPendingLogChars?: number;
+  } = {},
 ): Promise<void> {
   let jobDir: string | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
   // from `log` below, which forwards the model's textual output to bridge.
   const jlog = jobLogger(job.id);
 
-  // `flushed` chains each send onto the previous one, so chunks reach bridge
-  // in the order they were produced and never overlap in flight — bridge
-  // appends atomically, but it cannot reorder requests that arrive out of
-  // order.
+  // At most one send is in flight: `flushed` is that send, and text logged meanwhile stays in `pendingLog` until
+  // the first tick after it finished, so chunks reach bridge in order and a slow bridge cannot pile up a queue of
+  // requests (each of which may wait out the whole API timeout).
   let pendingLog = '';
   let flushed: Promise<void> = Promise.resolve();
+  let sending = false;
+  // Characters of the send in flight not attempted yet — what a timed-out final drain leaves behind.
+  let inFlightChars = 0;
+  let droppedChars = 0;
+  const maxPendingLog = options.maxPendingLogChars ?? MAX_PENDING_LOG_CHARS;
 
   // A burst (a large file read, a test run dump) can exceed what bridge accepts in one chunk, so it goes out as
-  // several capped pieces. Each piece is chained and caught on its own: one rejected piece leaves a single warning
-  // and the rest still arrive, instead of the whole batch silently disappearing.
+  // several capped pieces. Each piece is caught on its own: one rejected piece leaves a single warning and the
+  // rest still arrive, instead of the whole batch silently disappearing.
   // The job's credentials must never reach bridge's logs. A secret may be split across two chunks, so between
   // timed flushes the last (longest secret - 1) characters stay in the buffer until more text (or the end) arrives.
   let providerKey: string | undefined;
@@ -72,7 +91,7 @@ export async function processJob(
   const redact = (text: string) => makeRedactor(secrets())(text);
 
   const flushLog = (final = false) => {
-    if (!pendingLog) return;
+    if (sending || (!pendingLog && !droppedChars)) return;
     let text = redact(pendingLog);
     const hold = final ? 0 : Math.max(0, maxSecretLength(secrets()) - 1);
     if (hold > 0) {
@@ -82,23 +101,54 @@ export async function processJob(
     } else {
       pendingLog = '';
     }
+    if (droppedChars) {
+      text = `[… ${droppedChars} chars of log dropped while bridge was unreachable]\n${text}`;
+      droppedChars = 0;
+    }
     if (!text) return;
     const pieces = splitLogChunk(text);
-    for (const piece of pieces) {
-      flushed = flushed.then(() =>
-        client.appendLog(job.id, piece).catch((error) => {
+    sending = true;
+    inFlightChars = text.length;
+    flushed = (async () => {
+      for (const piece of pieces) {
+        try {
+          await client.appendLog(job.id, piece);
+        } catch (error) {
           jlog.warn({ err: error, chars: piece.length }, 'failed to forward a log chunk to bridge');
-        }),
-      );
+        }
+        inFlightChars -= piece.length;
+      }
+    })().finally(() => {
+      sending = false;
+      inFlightChars = 0;
+    });
+  };
+
+  // Sends everything still buffered, one send after another, until nothing is left.
+  let drainGivenUp = false;
+  const drainLog = async () => {
+    for (;;) {
+      await flushed;
+      if (drainGivenUp || (!pendingLog && !droppedChars)) return;
+      flushLog(true);
     }
   };
 
   const log = (chunk: string) => {
     pendingLog += chunk;
+    if (pendingLog.length > maxPendingLog) {
+      // Masked before cutting, so the cut can never leave the tail of a credential at the head of the buffer.
+      pendingLog = redact(pendingLog);
+      const excess = pendingLog.length - maxPendingLog;
+      if (excess > 0) {
+        pendingLog = pendingLog.slice(excess);
+        droppedChars += excess;
+      }
+    }
     process.stdout.write(chunk);
   };
 
-  const flushInterval = setInterval(() => flushLog(), LOG_FLUSH_INTERVAL_MS);
+  const flushInterval = setInterval(() => flushLog(), options.logFlushMs ?? LOG_FLUSH_INTERVAL_MS);
 
   // The owner's "stop": polled on its own timer (a CLI printing nothing sends no log
   // chunks to piggyback on), never overlapping, and a failed poll just tries again.
@@ -290,8 +340,20 @@ export async function processJob(
     if (graceTimer) clearTimeout(graceTimer);
     options.shutdown?.removeEventListener('abort', onShutdown);
     options.forceShutdown?.removeEventListener('abort', hardStop);
-    flushLog(true);
-    await flushed;
+    // Bounded: a bridge that does not answer must not keep a finished worker from heartbeating and claiming.
+    let drainTimer: NodeJS.Timeout | undefined;
+    const drained = await Promise.race([
+      drainLog().then(() => true),
+      new Promise<false>((resolve) => {
+        drainTimer = setTimeout(() => resolve(false), options.logDrainMs ?? LOG_DRAIN_TIMEOUT_MS);
+      }),
+    ]);
+    clearTimeout(drainTimer);
+    if (!drained) {
+      drainGivenUp = true;
+      const unsentChars = inFlightChars + pendingLog.length;
+      jlog.warn({ unsentChars }, `gave up forwarding the job log to bridge: ${unsentChars} chars left unsent`);
+    }
     if (jobDir) rmSync(jobDir, { recursive: true, force: true });
   }
 }

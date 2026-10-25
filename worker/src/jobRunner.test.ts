@@ -11,6 +11,7 @@ import type { RemoteJob } from './bridgeClient.js';
 import type { WorkerConfig } from './config.js';
 import { processJob, SHUTDOWN_FAILURE_MESSAGE } from './jobRunner.js';
 import { MAX_LOG_CHUNK_CHARS } from './logChunks.js';
+import { logger } from './logger.js';
 
 const originalFetch = globalThis.fetch;
 const originalOpenAiKey = process.env.OPENAI_API_KEY;
@@ -743,6 +744,116 @@ describe('processJob credential masking', () => {
     for (const entry of uploaded.getEntries()) {
       assert.ok(!entry.getData().toString('utf-8').includes(KEY), entry.entryName);
     }
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});
+
+describe('processJob log sends while bridge is slow', () => {
+  it('keeps at most one log send in flight and sends text logged meanwhile with the next one, in order', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-slow-log-'));
+    stubOpenAiCompletion('model output here');
+
+    const client = fakeClient(fakeParcel());
+    const sent: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    client.appendLog = Object.assign(
+      async (_jobId: number, chunk: string) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        sent.push(chunk);
+        inFlight -= 1;
+      },
+      { calls: [] },
+    );
+    const job: RemoteJob = { id: 60, sourceFileId: 70, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir), { logFlushMs: 10 });
+
+    assert.equal(maxInFlight, 1);
+    const text = sent.join('');
+    const order = ['Claimed job 60', 'model output here', 'Uploading result parcel'].map((part) => text.indexOf(part));
+    assert.ok(order.every((index) => index >= 0), text);
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'arrived in the order it was logged');
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('returns within the drain deadline when bridge never answers, and warns how much was left unsent', async (t) => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-hung-log-'));
+    stubOpenAiCompletion('done');
+
+    const warnings: { obj: unknown; msg: string }[] = [];
+    const quiet = () => {};
+    t.mock.method(logger, 'child', () => ({
+      info: quiet,
+      error: quiet,
+      debug: quiet,
+      warn: (obj: unknown, msg: string) => warnings.push({ obj, msg }),
+    }));
+
+    const client = fakeClient(fakeParcel());
+    client.appendLog = Object.assign(() => new Promise<void>(() => {}), { calls: [] });
+    const job: RemoteJob = { id: 61, sourceFileId: 71, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    const started = Date.now();
+    await processJob(client as never, job, fakeConfig(workDir), { logFlushMs: 10, logDrainMs: 200 });
+
+    assert.ok(Date.now() - started < 5000, 'did not wait for the hung sends');
+    assert.equal(client.uploadResult.calls.length, 1);
+    const warning = warnings.find((w) => /chars left unsent/.test(w.msg));
+    assert.ok(warning, JSON.stringify(warnings));
+    const unsent = (warning.obj as { unsentChars: number }).unsentChars;
+    assert.ok(unsent > 0);
+    assert.match(warning.msg, new RegExp(`${unsent} chars left unsent`));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('caps the unsent log and marks the dropped stretch once', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-capped-log-'));
+    // The model answers only after a first log send is already under way, and bridge holds that send.
+    globalThis.fetch = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'z'.repeat(5000) } }] }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const cap = 1000;
+
+    const client = fakeClient(fakeParcel());
+    const sent: string[] = [];
+    let release!: () => void;
+    const bridgeBack = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    client.appendLog = Object.assign(
+      async (_jobId: number, chunk: string) => {
+        sent.push(chunk);
+        if (sent.length === 1) await bridgeBack;
+      },
+      { calls: [] },
+    );
+    client.uploadResult = Object.assign(
+      async () => {
+        release();
+      },
+      { calls: [] },
+    );
+    const job: RemoteJob = { id: 62, sourceFileId: 72, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir), { logFlushMs: 10, maxPendingLogChars: cap });
+
+    assert.match(sent[0], /Claimed job 62/);
+    assert.doesNotMatch(sent[0], /zzz/);
+    const afterOutage = sent.slice(1).join('');
+    const markers = afterOutage.match(/\[… \d+ chars of log dropped while bridge was unreachable\]\n/g) ?? [];
+    assert.equal(markers.length, 1, afterOutage);
+    assert.ok(afterOutage.length - markers[0].length <= cap, 'never more than the cap was kept');
+    assert.match(afterOutage, /Uploading result parcel/);
 
     rmSync(workDir, { recursive: true, force: true });
   });
