@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { mkdirSync, rmSync } from 'node:fs';
 
 import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { attachmentRelPath, stageAttachments } from './chatAttachments.js';
@@ -7,7 +6,7 @@ import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { buildExitFailureMessage } from '../failureMessage.js';
 import { createProgressReporter } from './progress.js';
 import { withContext } from '../taskContext.js';
-import { runClaude } from '../modelRunners/claudeRunner.js';
+import { makeRunDir, runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 import type { ClaudeModel } from '../providers.js';
 
@@ -63,7 +62,7 @@ export async function claudeChat(
   signal?: AbortSignal,
 ): Promise<{ text: string; reasoning: string | null }> {
   mkdirSync(workDir, { recursive: true });
-  const turnDir = mkdtempSync(path.join(workDir, 'chat-'));
+  const turnDir = makeRunDir(workDir, 'chat-');
 
   try {
     const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();

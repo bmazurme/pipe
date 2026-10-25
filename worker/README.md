@@ -109,6 +109,7 @@ Worker добавляется на странице **Worker → Worker'ы → �
 |---|---|---|
 | `BRIDGE_API_URL` | да | URL bridge backend, например `https://bridge.example.com` |
 | `WORKER_STATE_DIR` | нет (по умолчанию `./.worker-state`, в Docker `/app/.worker-state`) | где подключённый worker хранит свой ключ. Должен переживать перезапуск (том) |
+| `WORKER_RUN_AS` | нет (в образе Docker задавайте `pipe-runner`) | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет `sudo -n -u … true` и не стартует, если не получилось. См. «Два пользователя ОС» |
 | `WORKER_ENROLL_CODE` | нет | одноразовый код со страницы Worker: при старте, если ключа ещё нет, обменивается на ключ. Допускает `WORKER_ENROLL_CODE_FILE` |
 | `BRIDGE_API_KEY` | нет (устарело) | персональный API-ключ bridge (`brk_...`) — прежний способ; пока задан, он главнее подключения кодом |
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
@@ -401,3 +402,19 @@ Settings → VPN takes a `vless://` Reality link. The worker starts its own Xray
 ## Resource limits of a worker started with the UI's command
 
 The `docker run` command the Add-worker dialog generates caps the container: `--cpus` = half the machine's cores (at least 1), `--memory 4g`, `--cpu-shares 512` (low priority). A job runs `npm ci`, the linter and the tests, which on a small board is several cores for minutes — enough to trip a load alarm or starve a Swarm manager running on the same machine. Edit the numbers in the command if the machine is dedicated to the worker.
+
+## Два пользователя ОС (`WORKER_RUN_AS`)
+
+Задача запускает `claude --dangerously-skip-permissions` — это произвольный код, поэтому он не должен выполняться от
+пользователя, которому принадлежат ключ worker'а (`credentials.json`) и конфиг VPN (`xray-tunnel.json`). Образ Docker
+содержит двух пользователей:
+
+- `pipe-worker` — сам процесс worker'а; владеет `/app/.worker-state` (`0700`);
+- `pipe-runner` — от его имени работает CLI; к `.worker-state` доступа нет (`Permission denied`).
+
+Оба входят в группу `pipe-jobs`, которой принадлежит `/app/.worker-work` (`2770`). Рабочая директория каждой задачи
+создаётся с правами `2770`, поэтому результат, записанный моделью, worker по-прежнему собирает. В sudoers одно правило:
+`pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude`. Переменные окружения для CLI — по-прежнему
+только из белого списка `buildClaudeEnv`; `HOME`/`USER` worker'а не передаются. В образе задайте `-e WORKER_RUN_AS=pipe-runner`.
+Файлы, созданные моделью с `umask 022`, в подкаталогах worker'у доступны только на чтение — если нужна и очистка, задайте
+пользователю `pipe-runner` `umask 007`. Без `WORKER_RUN_AS` поведение прежнее (CLI от пользователя worker'а).
