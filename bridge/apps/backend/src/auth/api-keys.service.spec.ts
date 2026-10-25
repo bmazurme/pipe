@@ -101,6 +101,31 @@ describe('ApiKeysService', () => {
       });
     });
 
+    it('does not write lastUsedAt again while it is under a minute old', async () => {
+      const apiKey = baseApiKey({
+        keyHash: hash(`${API_KEY_PREFIX}real-token`),
+        lastUsedAt: new Date(Date.now() - 10_000),
+      });
+      repository.findOne!.mockResolvedValue(apiKey);
+
+      await service.validate(`${API_KEY_PREFIX}real-token`);
+
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('writes lastUsedAt again once it is older than a minute', async () => {
+      const apiKey = baseApiKey({
+        keyHash: hash(`${API_KEY_PREFIX}real-token`),
+        lastUsedAt: new Date(Date.now() - 120_000),
+      });
+      repository.findOne!.mockResolvedValue(apiKey);
+      repository.update!.mockResolvedValue({ affected: 1 });
+
+      await service.validate(`${API_KEY_PREFIX}real-token`);
+
+      expect(repository.update).toHaveBeenCalledTimes(1);
+    });
+
     it('still resolves the user, logs a warning and raises no unhandled rejection when the lastUsedAt update fails', async () => {
       const apiKey = baseApiKey({
         keyHash: hash(`${API_KEY_PREFIX}real-token`),

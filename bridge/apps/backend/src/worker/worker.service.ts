@@ -52,6 +52,7 @@ import {
   FINISHED_STATUSES,
   LOG_TAIL_CHARS,
 } from './run-history';
+import { touchWorker } from './worker-touch';
 import { WorkerHeartbeatService } from './worker-heartbeat.service';
 
 const ENCRYPTED_SUFFIX = '.enc';
@@ -842,7 +843,7 @@ export class WorkerService implements OnModuleInit {
       if (!worker) return null;
 
       name = worker.name;
-      await this.workerRepository.update(worker.id, { lastSeenAt: new Date() });
+      await touchWorker(this.workerRepository, worker.id, worker.lastSeenAt);
 
       // It is asking for work, so it is idle: whatever it still "holds" is lost (the process was restarted).
       // Immediately — unlike a legacy name, a key belongs to exactly one process.
