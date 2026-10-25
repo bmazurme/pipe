@@ -142,3 +142,50 @@ describe('QuestionsPage', () => {
     expect(await screen.findByText('Открытых вопросов нет')).toBeTruthy();
   });
 });
+
+describe('QuestionsPage project filter', () => {
+  const OTHER = { ...CARD, taskKey: '42:7', project: '42', questions: [{ ...CARD.questions[0], id: 3, text: 'Другой вопрос?' }] };
+  const NONE = { ...CARD, taskKey: 'local-1', project: null, questions: [{ ...CARD.questions[0], id: 4, text: 'Вопрос без проекта?' }] };
+
+  const choose = async (user: ReturnType<typeof userEvent.setup>, option: string) => {
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: option }));
+  };
+
+  it('narrows the cards to the chosen project and back to all', async () => {
+    const user = userEvent.setup();
+    cards.false = [CARD, OTHER];
+    renderPage();
+
+    await screen.findByText('173:628');
+    await choose(user, 'Проект 42');
+
+    expect(screen.getByText('42:7')).toBeTruthy();
+    expect(screen.queryByText('173:628')).toBeNull();
+
+    await choose(user, 'Все проекты');
+
+    expect(screen.getByText('173:628')).toBeTruthy();
+    expect(screen.getByText('42:7')).toBeTruthy();
+  });
+
+  it('"Без проекта" shows only cards without a project', async () => {
+    const user = userEvent.setup();
+    cards.false = [CARD, NONE];
+    renderPage();
+
+    await screen.findByText('173:628');
+    await choose(user, 'Без проекта');
+
+    expect(screen.getByText('local-1')).toBeTruthy();
+    expect(screen.queryByText('173:628')).toBeNull();
+  });
+
+  it('hides the selector when every card belongs to the same project', async () => {
+    cards.false = [CARD, { ...CARD, taskKey: '173:700' }];
+    renderPage();
+
+    await screen.findByText('173:700');
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+});
