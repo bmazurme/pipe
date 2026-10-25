@@ -8,9 +8,11 @@ import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
 import { log } from '../log.js';
 
+const DRY_RUN_PREVIEW_LIMIT = 20;
+
 export async function pushCommand(
   name: string,
-  options: { force?: boolean; strict?: boolean },
+  options: { force?: boolean; strict?: boolean; dryRun?: boolean },
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
@@ -37,8 +39,29 @@ export async function pushCommand(
 
   const { buffer, manifest } = buildArchive(name, files);
 
-  if (!options.force && manifest.contentHash === getLastHash(name)) {
+  if (!options.dryRun && !options.force && manifest.contentHash === getLastHash(name)) {
     log.info('Nothing changed since the last push.');
+    return;
+  }
+
+  if (options.dryRun) {
+    const unchanged = manifest.contentHash === getLastHash(name);
+    const preview = files.slice(0, DRY_RUN_PREVIEW_LIMIT);
+    log.info(`Dry run for "${name}" — nothing will be uploaded.`);
+    log.info(`Files: ${files.length}`);
+    log.info(`Archive size: ${buffer.length} bytes`);
+    log.info(`Content hash: ${manifest.contentHash}`);
+    log.info(
+      unchanged
+        ? 'Unchanged since the last push — a real push would be skipped (unless --force).'
+        : 'Changed since the last push — a real push would upload.',
+    );
+    for (const f of preview) log.info(`  ${f.relPath}`);
+    if (files.length > preview.length) {
+      log.info(`  … and ${files.length - preview.length} more (use -v to list all)`);
+      for (const f of files.slice(preview.length)) log.debug(`  ${f.relPath}`);
+    }
+    log.info(leaks.length > 0 ? `Leak findings: ${leaks.length}` : 'Leak findings: none');
     return;
   }
 

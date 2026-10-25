@@ -146,6 +146,10 @@ node dist/cli.js pull bridge
 - `--strict` (`push`, `push-issue`, `gitlab-worker`) — при находках leak-scan
   `push`/`push-issue` прерываются, а `gitlab-worker` пропускает такую задачу
   (без флага только предупреждение).
+- `--dry-run` (`push`) — ничего не отправлять и не обновлять сохранённый хеш:
+  показать число файлов, размер архива, хеш, изменился ли он с прошлой отправки,
+  первые 20 путей (все — с `-v`) и находки leak-scan. Вместе с `--strict` при
+  находках по-прежнему завершается ошибкой.
 - `-w, --watch <seconds>` (`pull-issue`, `gitlab-worker`, `agent-runner`) —
   опрашивать каждые `<seconds>` секунд. Для `pull-issue` — пока не появится
   результат, затем уведомление и выход; для `gitlab-worker` и `agent-runner` —
