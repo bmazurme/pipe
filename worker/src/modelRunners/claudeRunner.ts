@@ -1,4 +1,6 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync } from 'node:fs';
+import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
 import { ClaudeStreamParser, type ClaudeReport, type StreamDelta } from './claudeUsage.js';
@@ -49,6 +51,32 @@ export function buildClaudeEnv(
   return env;
 }
 
+// The command that starts the CLI. With WORKER_RUN_AS set it goes through `sudo -n -E -u <user>`, so job code runs as
+// another OS user that cannot read the worker's own key and VPN config (see README "Two OS users").
+export function claudeCommand(
+  args: string[],
+  runAs: string | undefined = process.env.WORKER_RUN_AS?.trim() || undefined,
+): { command: string; args: string[] } {
+  if (!runAs) return { command: 'claude', args };
+  return { command: 'sudo', args: ['-n', '-E', '-u', runAs, 'claude', ...args] };
+}
+
+// A scratch directory for one run. With WORKER_RUN_AS it is group-writable (setgid), so the other user can write
+// its results there and the worker can still collect them.
+export function makeRunDir(parent: string, prefix: string, runAs: string | undefined = process.env.WORKER_RUN_AS?.trim() || undefined): string {
+  const dir = mkdtempSync(path.join(parent, prefix));
+  if (runAs) chmodSync(dir, 0o2770);
+  return dir;
+}
+
+// Startup check for WORKER_RUN_AS: throws when the worker may not run commands as that user.
+export function verifyRunAs(runAs: string): void {
+  const result = spawnSync('sudo', ['-n', '-u', runAs, 'true'], { stdio: 'ignore' });
+  if (result.error || result.status !== 0) {
+    throw new Error(`WORKER_RUN_AS=${runAs} is set but "sudo -n -u ${runAs} true" failed — check the sudoers rule (see worker/README.md)`);
+  }
+}
+
 // Unattended, non-interactive run: `-p` (print mode) makes Claude Code do one
 // turn and exit instead of opening its REPL, and
 // `--dangerously-skip-permissions` is required for that turn to actually
@@ -97,7 +125,13 @@ export function runClaude(
     // tools built on common HTTP libraries do). Set whichever flavor it
     // reads; unused ones are harmless.
     const env = buildClaudeEnv(process.env, proxyUrl, claudeToken);
-    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env, detached: process.platform !== 'win32' });
+    // The worker's own HOME/USER are not the other user's; sudo sets them for the target user.
+    if (process.env.WORKER_RUN_AS?.trim()) {
+      delete env.HOME;
+      delete env.USER;
+    }
+    const cmd = claudeCommand(args);
+    const child = spawn(cmd.command, cmd.args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env, detached: process.platform !== 'win32' });
 
     let output = '';
     const collect = (text: string) => {

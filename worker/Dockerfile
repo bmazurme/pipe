@@ -43,6 +43,16 @@ WORKDIR /app
 # systemd/pipe-worker.service) uses for the same reason.
 RUN addgroup -S pipe-worker && adduser -S pipe-worker -G pipe-worker
 
+# A second user for the claude CLI (WORKER_RUN_AS=pipe-runner): job code is arbitrary code execution, so it must not run
+# as the user that owns the worker's key and VPN config in .worker-state. Both users share the group pipe-jobs, which
+# owns the work directory; sudo lets pipe-worker start the CLI (and only that) as pipe-runner.
+RUN addgroup -S pipe-jobs && adduser -S -h /home/pipe-runner -G pipe-jobs pipe-runner \
+ && mkdir -p /home/pipe-runner && chown pipe-runner:pipe-jobs /home/pipe-runner \
+ && addgroup pipe-worker pipe-jobs && addgroup pipe-runner pipe-jobs \
+ && apk add --no-cache sudo \
+ && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude' > /etc/sudoers.d/pipe-worker \
+ && chmod 0440 /etc/sudoers.d/pipe-worker
+
 # The claude CLI — same package Worker jobs and chat sonnet/opus turns spawn
 # on a bare-metal install. Needs a real npm registry install, not file-copied
 # from the builder stage (it's a separate published package, not part of
@@ -73,7 +83,11 @@ COPY --from=builder /app/packages/protocol /app/node_modules/@pipe/protocol
 
 # .worker-state holds the key a worker added in the UI receives at enrolment — mount a volume there so a restart or a new
 # image keeps it (the named volume inherits this directory's ownership).
-RUN mkdir -p /app/.worker-work /app/.worker-state && chown -R pipe-worker:pipe-worker /app
+RUN mkdir -p /app/.worker-work /app/.worker-state \
+ && chown -R pipe-worker:pipe-worker /app \
+ && chown pipe-worker:pipe-jobs /app/.worker-work \
+ && chmod 0700 /app/.worker-state \
+ && chmod 2770 /app/.worker-work
 ENV WORKER_STATE_DIR=/app/.worker-state
 USER pipe-worker
 

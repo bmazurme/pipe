@@ -30,6 +30,8 @@ export interface WorkerConfig {
   // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): off by
   // default; `read` looks at jobs/files/worker status, `write` may also start jobs.
   chatTools: ChatToolsMode;
+  // OS user the claude CLI runs as (via sudo), so job code cannot read the worker's own key; absent: the worker's user.
+  runAs?: string;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -96,5 +98,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     chatTimeoutSec: parseChatTimeoutSec(env.WORKER_CHAT_TIMEOUT_SEC),
     shutdownGraceSec: parseShutdownGraceSec(env.WORKER_SHUTDOWN_GRACE_SEC),
     chatTools: parseChatToolsMode(env.WORKER_CHAT_TOOLS),
+    runAs: env.WORKER_RUN_AS?.trim() || undefined,
   };
 }

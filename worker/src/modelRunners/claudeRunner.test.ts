@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
-import { buildClaudeEnv, runClaude, type RunDeadline } from './claudeRunner.js';
+import { buildClaudeEnv, claudeCommand, runClaude, type RunDeadline } from './claudeRunner.js';
 
 // The fake is steered by NODE_FAKE_* variables on purpose: runClaude now hands the CLI only an
 // allowlisted environment (NODE_* is on it), so differently named variables never reach it.
@@ -326,5 +326,20 @@ describe('runClaude deadline extension', () => {
 
     await assert.rejects(runClaude('/tmp', 'p', 'sonnet', () => {}, undefined, null, 400, 50, undefined, undefined, [], deadline), /timed out/);
     assert.ok(Date.now() - started >= 350);
+  });
+});
+
+describe('claudeCommand (WORKER_RUN_AS)', () => {
+  const args = ['-p', 'hi', '--model', 'sonnet'];
+
+  it('runs claude directly when WORKER_RUN_AS is unset', () => {
+    assert.deepEqual(claudeCommand(args, undefined), { command: 'claude', args });
+  });
+
+  it('wraps the CLI in sudo -n -E -u when WORKER_RUN_AS is set', () => {
+    assert.deepEqual(claudeCommand(args, 'pipe-runner'), {
+      command: 'sudo',
+      args: ['-n', '-E', '-u', 'pipe-runner', 'claude', ...args],
+    });
   });
 });

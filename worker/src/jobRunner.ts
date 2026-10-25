@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { encryptBuffer } from '@pipe/protocol';
@@ -10,7 +9,7 @@ import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
-import { runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
+import { makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
 import { collectResult, writeParcelToDir } from './jobFiles.js';
@@ -170,7 +169,7 @@ export async function processJob(
 
   try {
     mkdirSync(config.workDir, { recursive: true });
-    jobDir = mkdtempSync(path.join(config.workDir, `job-${job.id}-`));
+    jobDir = makeRunDir(config.workDir, `job-${job.id}-`);
 
     await client.updateStatus(job.id, 'running');
     log(`Claimed job ${job.id} (model: ${job.model})\n`);

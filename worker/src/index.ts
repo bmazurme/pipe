@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadConfig } from './config.js';
+import { verifyRunAs } from './modelRunners/claudeRunner.js';
 import { processChatTurn } from './chatTurn.js';
 import { withHeartbeat } from './heartbeat.js';
 import { processJob } from './jobRunner.js';
@@ -24,6 +25,8 @@ const forceShutdown = new AbortController();
 async function main(): Promise<void> {
   resolveFileSecrets(process.env, SECRET_ENV_KEYS);
   const baseConfig = loadConfig();
+  // Fail loudly rather than silently run job code as the worker's own user.
+  if (baseConfig.runAs) verifyRunAs(baseConfig.runAs);
 
   logger.info(
     { bridgeApiUrl: baseConfig.bridgeApiUrl, stateDir: baseConfig.stateDir, mode: baseConfig.bridgeApiKey ? 'api-key (legacy)' : 'enrolment' },
