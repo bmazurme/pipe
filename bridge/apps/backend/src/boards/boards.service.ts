@@ -82,9 +82,6 @@ export class BoardsService {
   // The board's own account of itself. A board that stays outdated is announced once (with the button), and once more when it is
   // current again.
   async recordReport(userId: number, dto: BoardReportDto): Promise<void> {
-    const existing = await this.reports.findOne({
-      where: { userId, host: dto.host },
-    });
     const scripts: BoardScript[] = dto.scripts.map((script) => ({
       installed: script.installed,
       repoPath: script.repoPath,
@@ -94,44 +91,107 @@ export class BoardsService {
     }));
     const outdated = scripts.filter((script) => script.status === 'outdated');
     const next = outdated.length > 0 ? key(dto.mainSha, outdated) : null;
-    const hasPending = !!(await this.pendingRow(userId, dto.host));
-    let announcedKey = existing?.announcedKey ?? null;
 
-    if (next && next !== announcedKey && !hasPending) {
-      // Recorded only once Telegram took the message, so the next report retries a failed send.
-      if (await this.announce(dto.host, dto.mainSha, outdated)) {
-        announcedKey = next;
-      } else {
-        this.logger.warn(
-          `Could not announce outdated scripts on ${dto.host}; will retry on the next report`,
-        );
-      }
-    } else if (!next && announcedKey) {
-      const sent = await this.notifier.send(
-        `✅ Скрипты на ${dto.host} актуальны (main ${dto.mainSha.slice(0, 7)})`,
-      );
-
-      if (sent) {
-        announcedKey = null;
-      } else {
-        this.logger.warn(
-          `Could not announce current scripts on ${dto.host}; will retry on the next report`,
-        );
-      }
-    }
-
-    await this.reports.save(
-      this.reports.create({
-        ...(existing ?? {}),
+    // Saved first and without touching announcedKey: a slow Telegram must not hold the report back, and two overlapping reports
+    // of a new board must not both INSERT.
+    await this.reports.upsert(
+      {
         userId,
         host: dto.host,
         reportedAt: new Date(),
         mainSha: dto.mainSha,
         agentVersion: dto.agentVersion ?? null,
         scripts,
-        announcedKey,
-      }),
+      },
+      ['userId', 'host'],
     );
+
+    const previous =
+      (await this.reports.findOne({ where: { userId, host: dto.host } }))
+        ?.announcedKey ?? null;
+
+    if (next && next !== previous) {
+      if (await this.pendingRow(userId, dto.host)) return;
+      if (!(await this.claim(userId, dto.host, next))) return;
+
+      // The claim is released when Telegram did not take the message, so the next report retries.
+      const sent = await this.safely(() =>
+        this.announce(dto.host, dto.mainSha, outdated),
+      );
+
+      if (!sent) {
+        await this.release(userId, dto.host, next, previous);
+        this.logger.warn(
+          `Could not announce outdated scripts on ${dto.host}; will retry on the next report`,
+        );
+      }
+    } else if (!next && previous) {
+      if (!(await this.claim(userId, dto.host, null))) return;
+
+      const sent = await this.safely(() =>
+        this.notifier.send(
+          `✅ Скрипты на ${dto.host} актуальны (main ${dto.mainSha.slice(0, 7)})`,
+        ),
+      );
+
+      if (!sent) {
+        await this.release(userId, dto.host, null, previous);
+        this.logger.warn(
+          `Could not announce current scripts on ${dto.host}; will retry on the next report`,
+        );
+      }
+    }
+  }
+
+  private async safely(send: () => Promise<boolean>): Promise<boolean> {
+    try {
+      return await send();
+    } catch {
+      return false;
+    }
+  }
+
+  // Compare-and-set on announcedKey: true for the one request whose update changed the row, which is the one that sends.
+  private async claim(
+    userId: number,
+    host: string,
+    next: string | null,
+  ): Promise<boolean> {
+    const query = this.reports
+      .createQueryBuilder()
+      .update(BoardReport)
+      .set({ announcedKey: next })
+      .where('"userId" = :userId AND host = :host', { userId, host });
+
+    if (next === null) {
+      query.andWhere('"announcedKey" IS NOT NULL');
+    } else {
+      query.andWhere('"announcedKey" IS DISTINCT FROM :next', { next });
+    }
+
+    return ((await query.execute()).affected ?? 0) > 0;
+  }
+
+  // Gives the claim back, only if it is still ours.
+  private async release(
+    userId: number,
+    host: string,
+    claimed: string | null,
+    previous: string | null,
+  ): Promise<void> {
+    const query = this.reports
+      .createQueryBuilder()
+      .update(BoardReport)
+      .set({ announcedKey: previous })
+      .where('"userId" = :userId AND host = :host', { userId, host });
+
+    if (claimed === null) {
+      query.andWhere('"announcedKey" IS NULL');
+    } else {
+      query.andWhere('"announcedKey" = :claimed', { claimed });
+    }
+
+    await query.execute();
   }
 
   private async announce(
