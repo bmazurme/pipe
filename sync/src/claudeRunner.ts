@@ -14,9 +14,14 @@ import { spawn } from 'node:child_process';
 export const DEFAULT_AGENT_TIMEOUT_SEC = 30 * 60;
 const OUTPUT_TAIL_BYTES = 64 * 1024;
 
-function defaultTimeoutMs(): number {
-  const sec = Number(process.env.SYNC_AGENT_TIMEOUT_SEC);
+// Any value that is not a positive finite number of seconds falls back to the default.
+export function resolveAgentTimeoutMs(raw: string | undefined): number {
+  const sec = Number(raw);
   return (Number.isFinite(sec) && sec > 0 ? sec : DEFAULT_AGENT_TIMEOUT_SEC) * 1000;
+}
+
+function defaultTimeoutMs(): number {
+  return resolveAgentTimeoutMs(process.env.SYNC_AGENT_TIMEOUT_SEC);
 }
 
 // A hung CLI would otherwise block `--watch` forever, so the run has a
