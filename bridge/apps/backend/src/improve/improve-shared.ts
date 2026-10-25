@@ -113,3 +113,28 @@ export function isDue(
     localMinutes(now, schedule.timezone) >= schedule.hour * 60 + schedule.minute
   );
 }
+
+const WEEKDAY_NUMBERS: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+
+// Whether `now` falls on one of the schedule's weekdays in its own time zone; no weekdays = every day.
+export function onAllowedWeekday(
+  schedule: { weekdays?: number[] | null; timezone: string },
+  now: Date,
+): boolean {
+  if (!schedule.weekdays?.length) return true;
+
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: schedule.timezone,
+    weekday: 'short',
+  }).format(now);
+
+  return schedule.weekdays.includes(WEEKDAY_NUMBERS[weekday]);
+}

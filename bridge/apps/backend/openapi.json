@@ -6621,6 +6621,13 @@
           "timezone": {
             "type": "string"
           },
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "kind": {
             "type": "object"
           },
@@ -6679,6 +6686,7 @@
           "hour",
           "minute",
           "timezone",
+          "weekdays",
           "kind",
           "categories",
           "autoCreateIssues",
@@ -6723,6 +6731,15 @@
           "timezone": {
             "type": "string",
             "maxLength": 64
+          },
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 7,
+              "minimum": 1
+            }
           },
           "count": {
             "type": "number",

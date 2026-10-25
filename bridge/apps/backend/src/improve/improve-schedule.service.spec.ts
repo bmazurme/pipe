@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveScheduleService } from './improve-schedule.service';
-import { isDue, localDate } from './improve-shared';
+import { isDue, localDate, onAllowedWeekday } from './improve-shared';
 import { ImproveHandoffService } from './improve-handoff.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
@@ -340,5 +340,84 @@ describe('schedules', () => {
         }),
       ).rejects.toThrow('Context not found');
     });
+  });
+});
+
+describe('schedule weekdays', () => {
+  // 2026-10-24 is a Saturday, 2026-10-26 a Monday; 09:00Z is 12:00 in Moscow.
+  const row = {
+    id: 1,
+    userId: 3,
+    name: 'night',
+    enabled: true,
+    count: 2,
+    model: 'sonnet',
+    label: 'loop',
+    hour: 2,
+    minute: 0,
+    timezone: 'Europe/Moscow',
+    lastRunOn: null as string | null,
+  };
+
+  it('does not fire or claim the slot on a day that is not chosen, but fires on one that is', async () => {
+    const { service, schedules, qbExecute } = setup();
+    schedules.find.mockResolvedValue([{ ...row, weekdays: [1, 2, 3, 4, 5] }]);
+    const fire = jest
+      .spyOn(service, 'fire')
+      .mockResolvedValue({ started: [], skipped: [] });
+
+    await service.tickSchedules(new Date('2026-10-24T09:00:00Z'));
+    expect(fire).not.toHaveBeenCalled();
+    expect(qbExecute).not.toHaveBeenCalled();
+
+    await service.tickSchedules(new Date('2026-10-26T09:00:00Z'));
+    expect(fire).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the weekday in the schedule time zone', () => {
+    // 22:00Z on Friday is already Saturday 01:00 in Moscow.
+    const at = new Date('2026-10-23T22:00:00Z');
+
+    expect(
+      onAllowedWeekday({ weekdays: [5], timezone: 'Europe/Moscow' }, at),
+    ).toBe(false);
+    expect(onAllowedWeekday({ weekdays: [5], timezone: 'UTC' }, at)).toBe(true);
+  });
+
+  it.each([null, undefined, []])(
+    'fires every day with weekdays %j',
+    async (weekdays) => {
+      const { service, schedules } = setup();
+      schedules.find.mockResolvedValue([{ ...row, weekdays }]);
+      const fire = jest
+        .spyOn(service, 'fire')
+        .mockResolvedValue({ started: [], skipped: [] });
+
+      await service.tickSchedules(new Date('2026-10-24T09:00:00Z'));
+      expect(fire).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('stores weekdays sorted and unique, or null when empty', async () => {
+    const { service, schedules } = setup();
+    const repo = schedules as unknown as Record<string, jest.Mock>;
+    repo.create = jest.fn((s: object) => ({ ...s }));
+    repo.save = jest.fn(async (s: object) => s);
+    const input = {
+      name: 'n',
+      hour: 1,
+      minute: 0,
+      timezone: 'UTC',
+      count: 1,
+      model: 'sonnet',
+      enabled: true,
+    };
+
+    await expect(
+      service.saveSchedule(3, { ...input, weekdays: [5, 1, 3, 1] }),
+    ).resolves.toMatchObject({ weekdays: [1, 3, 5] });
+    await expect(
+      service.saveSchedule(3, { ...input, weekdays: [] }),
+    ).resolves.toMatchObject({ weekdays: null });
   });
 });

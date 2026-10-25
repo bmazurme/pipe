@@ -1,5 +1,6 @@
 import type { AnalysisCategory, AnalysisItem, ImproveRun, ImproveRunStatus, ImproveSchedule, ImproveScheduleInput } from '../../store/api';
 import { MODEL_OPTIONS } from '../worker/constants';
+import { ALL_WEEKDAYS, formatWeekdays } from '../lab/weekdays';
 
 export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
   preparing: 'Готовится',
@@ -99,19 +100,19 @@ const pad = (value: number) => String(value).padStart(2, '0');
 export const formatTime = (hour: number, minute: number): string => `${pad(hour)}:${pad(minute)}`;
 
 export function describeSchedule(
-  schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'count' | 'model'> & Partial<Pick<ImproveSchedule, 'kind' | 'categories'>>,
+  schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'count' | 'model'> & Partial<Pick<ImproveSchedule, 'kind' | 'categories' | 'weekdays'>>,
 ): string {
   if (schedule.kind === 'analysis') {
     const chosen = schedule.categories ? schedule.categories.split(',').filter((c): c is AnalysisCategory => c in CATEGORY_LABEL) : DEFAULT_CATEGORIES;
     const what = chosen.length === DEFAULT_CATEGORIES.length && !chosen.some((category) => OPT_IN_CATEGORIES.includes(category)) ? 'анализ: 5 направлений' : `анализ: ${chosen.map((c) => CATEGORY_LABEL[c]).join(', ')}`;
 
-    return `каждый день в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${what} · ${modelLabel(schedule.model)}`;
+    return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${what} · ${modelLabel(schedule.model)}`;
   }
 
   const count = schedule.count;
   const noun = count % 10 === 1 && count % 100 !== 11 ? 'задача' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20) ? 'задачи' : 'задач';
 
-  return `каждый день в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${count} ${noun} · ${modelLabel(schedule.model)}`;
+  return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${count} ${noun} · ${modelLabel(schedule.model)}`;
 }
 
 /** "HH:MM" from an <input type="time">, or null when it is not a valid time. */
@@ -139,16 +140,20 @@ export interface ScheduleForm {
   autoStartIssues?: boolean;
   /** A saved Context id as the Select's string value; '' = none. Left out = untouched. */
   contextId?: string;
+  /** ISO weekdays; left out = untouched (every day). */
+  weekdays?: number[];
 }
 
 /** The API input, or the first problem to show the user. */
 export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput | string {
   const time = parseTime(form.time);
   const count = Number(form.count);
+  const weekdays = form.weekdays === undefined ? {} : { weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b) };
   const context = form.contextId === undefined ? {} : { contextId: form.contextId ? Number(form.contextId) : null };
 
   if (!form.name.trim()) return 'Укажите название';
   if (!time) return 'Укажите время в формате ЧЧ:ММ';
+  if (form.weekdays?.length === 0) return 'Выберите хотя бы один день недели';
   if (form.kind === 'analysis') {
     if (!form.categories?.length) return 'Выберите хотя бы одно направление';
 
@@ -165,9 +170,10 @@ export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput |
       autoCreateIssues: form.autoCreateIssues ?? true,
       autoStartIssues: form.autoStartIssues ?? false,
       ...context,
+      ...weekdays,
     };
   }
   if (!Number.isInteger(count) || count < 1 || count > 20) return 'Количество задач — от 1 до 20';
 
-  return { name: form.name.trim(), enabled: form.enabled, hour: time.hour, minute: time.minute, timezone: form.timezone, count, model: form.model, ...context };
+  return { name: form.name.trim(), enabled: form.enabled, hour: time.hour, minute: time.minute, timezone: form.timezone, count, model: form.model, ...context, ...weekdays };
 }

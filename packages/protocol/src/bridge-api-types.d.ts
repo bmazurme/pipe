@@ -2845,6 +2845,7 @@ export interface components {
             hour: number;
             minute: number;
             timezone: string;
+            weekdays: number[] | null;
             kind: Record<string, never>;
             categories: string | null;
             autoCreateIssues: boolean;
@@ -2870,6 +2871,7 @@ export interface components {
             hour: number;
             minute: number;
             timezone: string;
+            weekdays?: number[] | null;
             count: number;
             model: string;
             label?: string;

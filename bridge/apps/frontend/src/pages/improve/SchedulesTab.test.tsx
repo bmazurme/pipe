@@ -226,4 +226,41 @@ describe('SchedulesTab', () => {
       expect(sent.find((call) => call.path === 'improve/schedules')?.body).not.toHaveProperty('contextId');
     });
   });
+
+  describe('weekdays', () => {
+    it('lists the chosen days in the row', async () => {
+      schedules = [{ ...makeSchedule(1, 'Будничное'), weekdays: [1, 2, 3, 4, 5] }, makeSchedule(2, 'Ежедневное')];
+      renderTab();
+
+      expect(await screen.findByText(/Пн–Пт в 02:00/)).toBeInTheDocument();
+      expect(screen.getByText(/каждый день в 02:00/)).toBeInTheDocument();
+    });
+
+    it('saves the workday preset sorted, and null for every day', async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Новое расписание/ }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Будни' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent.some((call) => call.path === 'improve/schedules')).toBe(true));
+      expect(sent.find((call) => call.path === 'improve/schedules')?.body).toMatchObject({ weekdays: [1, 2, 3, 4, 5] });
+    });
+
+    it('refuses to save with no day selected', async () => {
+      schedules = [{ ...makeSchedule(1, 'Одно'), weekdays: [3] }];
+      const user = userEvent.setup();
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: 'Изменить: Одно' }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(within(dialog).getByRole('group', { name: 'Дни недели' })).getByRole('button', { name: 'Ср' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      expect(await within(dialog).findByText('Выберите хотя бы один день недели')).toBeInTheDocument();
+      expect(sent).toEqual([]);
+    });
+  });
 });
