@@ -26,8 +26,10 @@ import { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { multerConfig } from '../storage/config/multer.config';
-import { MulterExceptionFilter } from '../storage/filters/multer-exception.filter';
+import {
+  WorkerResultExceptionFilter,
+  workerResultMulterConfig,
+} from './config/result-upload.config';
 import { respondDownloadError } from '../storage/file-store/send-stored-file';
 import { AppendJobLogDto } from './dto/append-job-log.dto';
 import { ClaimedJobResponseDto } from './dto/claimed-job-response.dto';
@@ -478,8 +480,8 @@ export class WorkerController {
 
   @Post(':id/result')
   @WorkerKeyAllowed()
-  @UseFilters(MulterExceptionFilter)
-  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @UseFilters(WorkerResultExceptionFilter)
+  @UseInterceptors(FileInterceptor('file', workerResultMulterConfig))
   async uploadResult(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
