@@ -58,12 +58,14 @@ beforeEach(() => {
     vi.fn(async (request: Request) => {
       const path = new URL(request.url).pathname.replace('/api/v1/', '');
 
-      if (request.method === 'GET') gets.push(path);
+      if (request.method === 'GET') gets.push(path + new URL(request.url).search);
       if (request.method !== 'GET') calls.push(`${request.method} ${path}`);
       if (path === 'lab/runs' && request.method === 'GET') return json([RUN]);
       if (path === 'lab/runs/7/cancel') return cancelFails ? json({ message: 'conflict' }, 409) : json({ ...RUN, status: 'cancelled' });
 
       if (path === 'worker/jobs/1') return json({ id: 1, model: 'sonnet', status: 'running', logs: '', createdAt: new Date().toISOString() });
+
+      if (path === 'lab/projects') return json([{ id: 1, name: 'Проект Один', repo: 'o/r', baseBranch: 'main', canWrite: true }]);
 
       return json([]);
     }),
@@ -109,5 +111,19 @@ describe('lab RunsTab job dialog', () => {
 
     expect(await screen.findByText('Задача #1')).toBeInTheDocument();
     await waitFor(() => expect(gets.some((path) => path.startsWith('worker/jobs/1'))).toBe(true));
+  });
+});
+
+describe('lab RunsTab project filter', () => {
+  it('requests the runs of the chosen project', async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await screen.findByRole('button', { name: 'Запуск #1' });
+    expect(gets).toContain('lab/runs');
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Проект Один (o/r)'));
+
+    await waitFor(() => expect(gets).toContain('lab/runs?projectId=1'));
   });
 });

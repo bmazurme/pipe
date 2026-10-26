@@ -114,9 +114,9 @@ export class LabRunsService {
     private readonly publisher: LabPublishService,
   ) {}
 
-  list(userId: number, limit = 50): Promise<LabRun[]> {
+  list(userId: number, limit = 50, projectId?: number): Promise<LabRun[]> {
     return this.runs.find({
-      where: { userId },
+      where: projectId === undefined ? { userId } : { userId, projectId },
       order: { id: 'DESC' },
       take: limit,
     });

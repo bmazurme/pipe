@@ -5887,7 +5887,9 @@ export interface operations {
     };
     LabController_listRuns: {
         parameters: {
-            query?: never;
+            query?: {
+                projectId?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
