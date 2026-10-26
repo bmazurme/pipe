@@ -23,7 +23,7 @@
     "@clack/prompts": "^1.8.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@pipe/protocol": "*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
