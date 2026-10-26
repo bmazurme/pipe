@@ -43,6 +43,7 @@ export function EmergencyLoginForm() {
         value={key}
         onUpdate={setKey}
         placeholder="Аварийный ключ (bre_…)"
+        controlProps={{ "aria-label": "Аварийный ключ" }}
         autoFocus
         hasClear
         autoComplete="off"

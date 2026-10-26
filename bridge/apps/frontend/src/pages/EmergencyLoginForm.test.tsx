@@ -45,14 +45,14 @@ describe("EmergencyLoginForm", () => {
     renderForm();
 
     expect(screen.getByRole("button", { name: "Аварийный вход по ключу" })).toBeTruthy();
-    expect(screen.queryByPlaceholderText(/Аварийный ключ/)).toBeNull();
+    expect(screen.queryByLabelText("Аварийный ключ")).toBeNull();
   });
 
   it("sends the key, trimmed, to the emergency-login endpoint", async () => {
     renderForm();
 
     await userEvent.click(screen.getByRole("button", { name: "Аварийный вход по ключу" }));
-    await userEvent.type(screen.getByPlaceholderText(/Аварийный ключ/), "  bre_the-key  ");
+    await userEvent.type(screen.getByLabelText("Аварийный ключ"), "  bre_the-key  ");
     await userEvent.click(screen.getByRole("button", { name: "Войти по ключу" }));
 
     await waitFor(() =>
@@ -76,7 +76,7 @@ describe("EmergencyLoginForm", () => {
     renderForm();
 
     await userEvent.click(screen.getByRole("button", { name: "Аварийный вход по ключу" }));
-    await userEvent.type(screen.getByPlaceholderText(/Аварийный ключ/), "bre_wrong");
+    await userEvent.type(screen.getByLabelText("Аварийный ключ"), "bre_wrong");
     await userEvent.click(screen.getByRole("button", { name: "Войти по ключу" }));
 
     expect(await screen.findByText("Неверный или отозванный ключ")).toBeTruthy();
@@ -87,7 +87,7 @@ describe("EmergencyLoginForm", () => {
     renderForm();
 
     await userEvent.click(screen.getByRole("button", { name: "Аварийный вход по ключу" }));
-    await userEvent.type(screen.getByPlaceholderText(/Аварийный ключ/), "bre_x");
+    await userEvent.type(screen.getByLabelText("Аварийный ключ"), "bre_x");
     await userEvent.click(screen.getByRole("button", { name: "Войти по ключу" }));
 
     expect(await screen.findByText(/Слишком много попыток/)).toBeTruthy();
