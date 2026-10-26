@@ -100,6 +100,27 @@ export class ClaudeCredentialsService {
     );
   }
 
+  // Rotation: a fresh token value into the same row, so the id, the name and every worker/job reference stay.
+  // The rejected mark and the limits described the old token, so they go.
+  async replaceToken(
+    id: number,
+    userId: number,
+    token: string,
+  ): Promise<ClaudeCredential> {
+    const credential = await this.repository.findOne({ where: { id, userId } });
+
+    if (!credential) {
+      throw new NotFoundException('Claude credential not found');
+    }
+
+    credential.token = token;
+    credential.authFailedAt = null;
+    credential.authFailedJobId = null;
+    credential.limits = null;
+
+    return this.repository.save(credential);
+  }
+
   // Ascending id — the oldest (first added) credential is the frontend's
   // default pick, so this order is load-bearing, not cosmetic.
   async findAllByUser(userId: number): Promise<ClaudeCredential[]> {

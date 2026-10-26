@@ -18,6 +18,10 @@ describe('ClaudeCredentialsController guards', () => {
     expect(guardsOf(proto.remove)).toEqual([JwtGuard]);
   });
 
+  it('requires a browser session to replace a token', () => {
+    expect(guardsOf(proto.replaceToken)).toEqual([JwtGuard]);
+  });
+
   it('still lets an API key read the list', () => {
     expect(guardsOf(proto.list)).toEqual([JwtOrApiKeyGuard]);
   });
@@ -47,5 +51,32 @@ describe('ClaudeCredentialsController list usage7d', () => {
     expect(result[0].usage7d).toEqual({ runs: 2, costUsd: 1.5, tokens: 10 });
     expect(result[1].usage7d).toBeNull();
     expect(service.recentUsage).toHaveBeenCalledWith(5, expect.any(Date));
+  });
+});
+
+describe('ClaudeCredentialsController replaceToken', () => {
+  it('returns the credential without the token', async () => {
+    const service = {
+      replaceToken: jest.fn().mockResolvedValue({
+        id: 3,
+        name: 'a',
+        token: 'secret',
+        createdAt: new Date(),
+        limits: null,
+        authFailedAt: null,
+        authFailedJobId: null,
+      }),
+    };
+    const controller = new ClaudeCredentialsController(service as never);
+
+    const result = await controller.replaceToken(
+      3,
+      { token: 'secret' },
+      { id: 5 },
+    );
+
+    expect(service.replaceToken).toHaveBeenCalledWith(3, 5, 'secret');
+    expect(result).not.toHaveProperty('token');
+    expect(result.authFailedAt).toBeNull();
   });
 });
