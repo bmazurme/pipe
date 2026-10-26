@@ -24,6 +24,7 @@ import { ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { MachineOnly } from '../auth/decorators/machine-only.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import {
@@ -127,6 +128,7 @@ export class WorkerController {
   // body (the worker's self-reported name). Being POST also means it can't
   // collide with the GET ':id' route below regardless of registration order.
   @Post('claim')
+  @MachineOnly()
   @WorkerKeyAllowed()
   async claim(
     @Body() dto: ClaimJobDto,

@@ -14,6 +14,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { MachineOnly } from '../auth/decorators/machine-only.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -69,6 +70,7 @@ export class WorkersController {
 
   // Declared before ':id' so "me" is never read as an id.
   @Get('me/config')
+  @MachineOnly()
   @UseGuards(JwtOrApiKeyGuard)
   @WorkerKeyAllowed()
   async config(
