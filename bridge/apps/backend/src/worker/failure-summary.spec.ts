@@ -57,6 +57,21 @@ describe('groupFailures', () => {
   });
 });
 
+describe('groupFailures infra by failureKind', () => {
+  it('flags a shutdown failure with an arbitrary message as infra', () => {
+    const groups = groupFailures([
+      {
+        id: 1,
+        errorMessage: 'Воркер остановлен',
+        failureKind: 'shutdown',
+        updatedAt: new Date('2026-10-01'),
+      },
+    ]);
+
+    expect(groups[0].infra).toBe(true);
+  });
+});
+
 describe('WorkerService.failureSummary', () => {
   it('queries only the caller failed jobs inside the window', async () => {
     const repository = {
