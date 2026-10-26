@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { renderWithTheme } from '../../test/render';
 import { WorkerJob } from '../../store/api';
 import { JobList } from './JobList';
 
@@ -20,7 +21,7 @@ const renderList = (props: {
   isLoading?: boolean;
   isError?: boolean;
 }) =>
-  render(
+  renderWithTheme(
     <JobList
       jobs={props.jobs ?? []}
       isLoading={props.isLoading ?? false}
@@ -75,7 +76,7 @@ describe('JobList task filter', () => {
 
   it('filters to one task without opening the job, and clears', () => {
     const onOpenJob = vi.fn();
-    render(<JobList jobs={jobs} isLoading={false} onOpenJob={onOpenJob} />);
+    renderWithTheme(<JobList jobs={jobs} isLoading={false} onOpenJob={onOpenJob} />);
     fireEvent.click(screen.getAllByRole('button', { name: '173:628' })[0]);
     expect(onOpenJob).not.toHaveBeenCalled();
     expect(screen.getByText('Задача #1')).toBeInTheDocument();
@@ -94,6 +95,58 @@ describe('JobList task filter', () => {
     fireEvent.click(screen.getByText(/С ошибкой/));
     expect(screen.getByText('Задача #1')).toBeInTheDocument();
     expect(screen.queryByText('Задача #2')).not.toBeInTheDocument();
+  });
+});
+
+describe('JobList search', () => {
+  const mk = (id: number, over: Record<string, unknown>) =>
+    ({ ...job, id, taskKey: null, ...over }) as unknown as WorkerJob;
+  const jobs = [
+    mk(11, { status: 'failed', errorMessage: 'OAuth token revoked' }),
+    mk(12, { status: 'succeeded', errorMessage: 'OAuth token revoked earlier' }),
+    mk(13, { status: 'failed', errorMessage: 'claude timed out' }),
+    mk(14, { model: 'opus', taskKey: '173:628' }),
+  ];
+  const search = (value: string) =>
+    fireEvent.change(screen.getByLabelText('Поиск по запускам'), { target: { value } });
+
+  it('matches on the error message, ignoring case', () => {
+    renderList({ jobs });
+    search('oauth');
+    expect(screen.getByText('Задача #11')).toBeInTheDocument();
+    expect(screen.getByText('Задача #12')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #13')).not.toBeInTheDocument();
+  });
+
+  it('matches on the job id, the task key and the model', () => {
+    renderList({ jobs });
+    search('#13');
+    expect(screen.getByText('Задача #13')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #11')).not.toBeInTheDocument();
+    search('173:628');
+    expect(screen.getByText('Задача #14')).toBeInTheDocument();
+    search('opus');
+    expect(screen.getByText('Задача #14')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #13')).not.toBeInTheDocument();
+  });
+
+  it('combines with the failed filter and restores the list when cleared', () => {
+    renderList({ jobs });
+    fireEvent.click(screen.getByText(/С ошибкой/));
+    search('oauth');
+    expect(screen.getByText('Задача #11')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #12')).not.toBeInTheDocument();
+
+    search('');
+    expect(screen.getByText('Задача #13')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #14')).not.toBeInTheDocument();
+  });
+
+  it('says so when nothing matches', () => {
+    renderList({ jobs });
+    search('no such thing');
+    expect(screen.getByText('Ничего не найдено по запросу')).toBeInTheDocument();
+    expect(screen.queryByText('Задача #11')).not.toBeInTheDocument();
   });
 });
 
