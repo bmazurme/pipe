@@ -36,6 +36,7 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
   // just taken — it survives independently so a copy (which only clears
   // `notice`'s cousin, the field itself) doesn't silently drop the warning.
   const [leakWarning, setLeakWarning] = useState<LeakFinding[] | null>(null);
+  const [previousText, setPreviousText] = useState<string | null>(null);
   const [createEntryTrigger] = useCreateEntryMutation();
   // Keyed by findingKey(), not array index — findings get removed from the
   // list as they're resolved, which would shift indices out from under an
@@ -79,6 +80,9 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
     const { result, count } = applyDictionary(text, dictionary);
 
     dispatch(draftTextChanged(result));
+    // In memory only; a no-op substitution must not arm undo, and must not
+    // leave a stale snapshot from an earlier apply either.
+    setPreviousText(result !== text ? text : null);
     setNotice({
       text: count > 0 ? `Заменено слов: ${count}` : 'Совпадений со словарём не найдено',
       isError: false,
@@ -92,6 +96,15 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
     setLeakWarning(findings.length > 0 ? findings : null);
   };
 
+  const handleUndo = () => {
+    if (previousText === null) return;
+
+    dispatch(draftTextChanged(previousText));
+    setPreviousText(null);
+    setNotice({ text: 'Текст возвращён', isError: false });
+    setLeakWarning(null);
+  };
+
   // The result stays in the field (and in localStorage, via PurgePage's sync
   // effects) until this succeeds — only a confirmed copy clears it, so a
   // failed clipboard write never loses the text.
@@ -101,6 +114,7 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
     try {
       await navigator.clipboard.writeText(text);
       dispatch(draftTextChanged(''));
+      setPreviousText(null);
       setNotice({ text: 'Скопировано в буфер обмена — поле очищено', isError: false });
       setLeakWarning(null);
     } catch {
@@ -157,6 +171,15 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
                 onClick={handleApply}
               >
                 Сохранить
+              </Button>
+              <Button
+                view="flat"
+                size="m"
+                disabled={previousText === null}
+                title="Вернуть текст до последней замены"
+                onClick={handleUndo}
+              >
+                Отменить
               </Button>
               <Button
                 view="outlined"
@@ -226,6 +249,7 @@ export function PurgeApplyTab({ onGoToDictionary }: PurgeApplyTabProps) {
             value={text}
             onUpdate={(value) => {
               dispatch(draftTextChanged(value));
+              setPreviousText(null);
               setNotice(null);
               setLeakWarning(null);
             }}
