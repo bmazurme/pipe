@@ -911,7 +911,7 @@ export interface paths {
         delete: operations["ClaudeCredentialsController_remove"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["ClaudeCredentialsController_replaceToken"];
         trace?: never;
     };
     "/api/v1/worker/provider-credentials": {
@@ -2624,6 +2624,9 @@ export interface components {
         };
         CreateClaudeCredentialDto: {
             name: string;
+            token: string;
+        };
+        UpdateClaudeCredentialDto: {
             token: string;
         };
         ProviderCredentialResponseDto: {
@@ -4605,6 +4608,31 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaudeCredentialResponseDto"];
+                };
+            };
+        };
+    };
+    ClaudeCredentialsController_replaceToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateClaudeCredentialDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

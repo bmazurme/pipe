@@ -295,4 +295,59 @@ describe('ClaudeCredentialsService', () => {
       });
     });
   });
+
+  describe('replaceToken', () => {
+    it('stores the new token on the same row and clears the old rejection and limits', async () => {
+      const row = {
+        id: 3,
+        userId: 7,
+        name: 'личный',
+        token: 'old',
+        limits: { windows: [] },
+        authFailedAt: new Date(),
+        authFailedJobId: 9,
+      };
+      repository.findOne!.mockResolvedValue(row);
+      repository.save!.mockImplementation(async (value) => value);
+
+      const result = await service.replaceToken(3, 7, 'new');
+
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { id: 3, userId: 7 },
+      });
+      expect(result).toMatchObject({
+        id: 3,
+        name: 'личный',
+        token: 'new',
+        limits: null,
+        authFailedAt: null,
+        authFailedJobId: null,
+      });
+    });
+
+    it("throws 404 when the token is not the caller's", async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.replaceToken(3, 8, 'new')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('keeps a worker-pinned token resolvable, now to the new value', async () => {
+      const row = { id: 3, userId: 7, token: 'old' };
+      repository.findOne!.mockImplementation(async () => ({ ...row }));
+      repository.save!.mockImplementation(async (value) => {
+        row.token = value.token;
+        return value;
+      });
+
+      await service.replaceToken(3, 7, 'new');
+
+      await expect(service.resolveForRun(7, null, 3)).resolves.toEqual({
+        id: 3,
+        token: 'new',
+      });
+    });
+  });
 });

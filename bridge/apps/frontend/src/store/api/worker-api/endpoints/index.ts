@@ -339,6 +339,23 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось сохранить токен';
       },
     }),
+    // Rotation: a new token value into the same credential, so workers and jobs keep pointing at it.
+    updateClaudeCredential: builder.mutation<
+      ClaudeCredential,
+      { id: number; token: string }
+    >({
+      query: ({ id, token }) => ({
+        url: `worker/claude-credentials/${id}`,
+        method: 'PATCH',
+        body: { token },
+      }),
+      invalidatesTags: ['ClaudeCredential'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)
+          ?.message;
+        return message ?? 'Не удалось заменить токен';
+      },
+    }),
     deleteClaudeCredential: builder.mutation<void, number>({
       query: (id) => ({ url: `worker/claude-credentials/${id}`, method: 'DELETE' }),
       invalidatesTags: ['ClaudeCredential'],
@@ -491,6 +508,7 @@ export const {
   usePeekJobResultMutation,
   useListClaudeCredentialsQuery,
   useCreateClaudeCredentialMutation,
+  useUpdateClaudeCredentialMutation,
   useDeleteClaudeCredentialMutation,
   useListWorkersQuery,
   useCreateWorkerMutation,

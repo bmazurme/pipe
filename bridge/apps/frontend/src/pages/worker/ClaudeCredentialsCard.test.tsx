@@ -151,3 +151,63 @@ describe('ClaudeCredentialsCard accessible names', () => {
     expect(screen.getByLabelText('Claude-токен')).toBeTruthy();
   });
 });
+
+describe('ClaudeCredentialsCard replace token', () => {
+  let patchReply: () => Response;
+  let patchBody: unknown;
+  let rejected: boolean;
+
+  beforeEach(() => {
+    rejected = true;
+    patchBody = null;
+    patchReply = () => {
+      rejected = false;
+      return json({ id: 3, name: 'личный', createdAt: '2026-10-08T00:00:00Z' });
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.method === 'PATCH') {
+          patchBody = await request.json();
+          return patchReply();
+        }
+
+        return json([
+          {
+            id: 3,
+            name: 'личный',
+            createdAt: '2026-10-08T00:00:00Z',
+            ...(rejected ? { authFailedAt: new Date().toISOString(), authFailedJobId: 57 } : {}),
+          },
+        ]);
+      }),
+    );
+  });
+
+  it('replaces the token and drops the rejected label after refetch', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    expect(await screen.findByText(/Отклонён Anthropic/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Заменить токен: личный' }));
+    await user.type(await screen.findByLabelText('Новый Claude-токен'), ' fresh ');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(screen.queryByText(/Отклонён Anthropic/)).toBeNull());
+    expect(patchBody).toEqual({ token: 'fresh' });
+    await waitFor(() => expect(screen.queryByLabelText('Новый Claude-токен')).toBeNull());
+  });
+
+  it('shows the error in the dialog when saving fails', async () => {
+    const user = userEvent.setup();
+    patchReply = () => json({ message: 'token rejected' }, 400);
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Заменить токен: личный' }));
+    await user.type(await screen.findByLabelText('Новый Claude-токен'), 'bad');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(await screen.findByText('token rejected')).toBeTruthy();
+    expect(screen.getByLabelText('Новый Claude-токен')).toBeTruthy();
+  });
+});

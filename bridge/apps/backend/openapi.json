@@ -1729,6 +1729,41 @@
       }
     },
     "/api/v1/worker/claude-credentials/{id}": {
+      "patch": {
+        "operationId": "ClaudeCredentialsController_replaceToken",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClaudeCredentialDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeCredentialResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "ClaudeCredentialsController_remove",
         "parameters": [
@@ -5697,6 +5732,17 @@
         },
         "required": [
           "name",
+          "token"
+        ]
+      },
+      "UpdateClaudeCredentialDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
           "token"
         ]
       },

@@ -8,6 +8,7 @@ import {
   useCreateClaudeCredentialMutation,
   useDeleteClaudeCredentialMutation,
   useListClaudeCredentialsQuery,
+  useUpdateClaudeCredentialMutation,
 } from '../../store/api';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { ClaudeLimitsView } from './ClaudeLimitsView';
@@ -22,6 +23,10 @@ export function ClaudeCredentialsCard() {
   const [createClaudeCredential, { isLoading: isCreating }] = useCreateClaudeCredentialMutation();
   const [deleteClaudeCredential] = useDeleteClaudeCredentialMutation();
   const [createError, setCreateErrorState] = useState<string | null>(null);
+  const [updateClaudeCredential, { isLoading: isReplacing }] = useUpdateClaudeCredentialMutation();
+  const [pendingReplace, setPendingReplace] = useState<ClaudeCredential | null>(null);
+  const [replaceToken, setReplaceToken] = useState('');
+  const [replaceError, setReplaceError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClaudeCredential | null>(null);
@@ -36,6 +41,24 @@ export function ClaudeCredentialsCard() {
       setToken('');
     } catch (err) {
       setCreateErrorState(typeof err === 'string' ? err : 'Не удалось сохранить токен');
+    }
+  };
+
+  const closeReplace = () => {
+    setPendingReplace(null);
+    setReplaceToken('');
+    setReplaceError(null);
+  };
+
+  const handleReplace = async () => {
+    if (!pendingReplace || !replaceToken.trim()) return;
+    setReplaceError(null);
+
+    try {
+      await updateClaudeCredential({ id: pendingReplace.id, token: replaceToken.trim() }).unwrap();
+      closeReplace();
+    } catch (err) {
+      setReplaceError(typeof err === 'string' ? err : 'Не удалось заменить токен');
     }
   };
 
@@ -94,7 +117,7 @@ export function ClaudeCredentialsCard() {
                       {formatRelativeTime(credential.authFailedAt)}
                     </Label>
                     <Text color="secondary" variant="caption-2">
-                      Токен больше не принимается — замените его новым.
+                      Токен больше не принимается — нажмите «Заменить» и вставьте новый.
                     </Text>
                   </>
                 )}
@@ -103,6 +126,14 @@ export function ClaudeCredentialsCard() {
                   {describeRecentUsage(credential.usage7d)}
                 </Text>
               </div>
+              <Button
+                view="outlined"
+                size="s"
+                aria-label={`Заменить токен: ${credential.name}`}
+                onClick={() => setPendingReplace(credential)}
+              >
+                Заменить
+              </Button>
               <Button
                 view="flat-danger"
                 size="s"
@@ -147,6 +178,37 @@ export function ClaudeCredentialsCard() {
 
       {createError && <Alert theme="danger" view="filled" message={createError} />}
       {deleteError && <Alert theme="danger" view="filled" message={deleteError} />}
+
+      <Dialog
+        open={pendingReplace !== null}
+        onClose={closeReplace}
+        maxWidth="s"
+        aria-labelledby="replace-claude-credential-title"
+      >
+        <Dialog.Header caption="Заменить токен" id="replace-claude-credential-title" />
+        <Dialog.Body>
+          <Text color="secondary">
+            Новое значение для «{pendingReplace?.name}» — название и привязки к worker'ам и задачам
+            сохранятся.
+          </Text>
+          <TextInput
+            type="password"
+            value={replaceToken}
+            onUpdate={setReplaceToken}
+            placeholder="claude setup-token"
+            controlProps={{ 'aria-label': 'Новый Claude-токен' }}
+          />
+          {replaceError && <Alert theme="danger" view="filled" message={replaceError} />}
+        </Dialog.Body>
+        <Dialog.Footer
+          loading={isReplacing}
+          textButtonCancel="Отмена"
+          textButtonApply="Сохранить"
+          propsButtonApply={{ disabled: !replaceToken.trim() }}
+          onClickButtonCancel={closeReplace}
+          onClickButtonApply={() => void handleReplace()}
+        />
+      </Dialog>
 
       <Dialog
         open={pendingDelete !== null}
