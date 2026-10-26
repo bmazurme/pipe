@@ -10,14 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  In,
-  IsNull,
-  MoreThan,
-  MoreThanOrEqual,
-  Not,
-  Repository,
-} from 'typeorm';
+import { In, MoreThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
 
 import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
@@ -38,7 +31,7 @@ import {
   JobStatus,
 } from './entities/job.entity';
 import { FailureSummary, groupFailures } from './failure-summary';
-import { INFRA_FAILURE_MESSAGES } from './infra-failure';
+import { infraFailureWhere, isInfraFailure } from './infra-failure';
 import { JobFinishNotifier } from './job-finish-notifier';
 import { logJobOutcome } from './job-outcome-log';
 import { JobSweepService } from './job-sweep.service';
@@ -110,17 +103,6 @@ export class WorkerService implements OnModuleInit {
     });
   }
 
-  private isInfraFailure(job: Job): boolean {
-    if (job.failureKind) return true;
-
-    // Legacy fallback for workers that do not send failureKind yet.
-    // TODO: remove once every worker is upgraded.
-    return (
-      job.errorMessage !== null &&
-      INFRA_FAILURE_MESSAGES.includes(job.errorMessage)
-    );
-  }
-
   // A job lost to a worker stop/restart says nothing about the task, so it is queued
   // once more automatically — but only once per parcel (an earlier infrastructure
   // failure on the same parcel means this already was the retry), so a crash-looping
@@ -129,27 +111,17 @@ export class WorkerService implements OnModuleInit {
     if (
       job.status !== JobStatus.Failed ||
       job.sourceFileId === null ||
-      !this.isInfraFailure(job)
+      !isInfraFailure(job)
     ) {
       return null;
     }
 
     try {
       const earlier = await this.jobRepository.count({
-        where: [
-          {
-            sourceFileId: job.sourceFileId,
-            failureKind: Not(IsNull()),
-            id: Not(job.id),
-          },
-          // Legacy fallback for workers that do not send failureKind yet.
-          // TODO: remove once every worker is upgraded.
-          {
-            sourceFileId: job.sourceFileId,
-            errorMessage: In(INFRA_FAILURE_MESSAGES),
-            id: Not(job.id),
-          },
-        ],
+        where: infraFailureWhere({
+          sourceFileId: job.sourceFileId,
+          id: Not(job.id),
+        }),
       });
 
       if (earlier > 0) return null;
@@ -510,7 +482,12 @@ export class WorkerService implements OnModuleInit {
     const [failedRows, succeeded] = await Promise.all([
       this.jobRepository.find({
         where: { userId, status: JobStatus.Failed, updatedAt },
-        select: { id: true, errorMessage: true, updatedAt: true },
+        select: {
+          id: true,
+          errorMessage: true,
+          failureKind: true,
+          updatedAt: true,
+        },
       }),
       this.jobRepository.count({
         where: { userId, status: JobStatus.Succeeded, updatedAt },
