@@ -6621,6 +6621,13 @@
           "timezone": {
             "type": "string"
           },
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "kind": {
             "type": "object"
           },
@@ -6679,6 +6686,7 @@
           "hour",
           "minute",
           "timezone",
+          "weekdays",
           "kind",
           "categories",
           "autoCreateIssues",
@@ -6698,6 +6706,15 @@
       "SaveScheduleDto": {
         "type": "object",
         "properties": {
+          "weekdays": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 7,
+              "minimum": 1
+            }
+          },
           "contextId": {
             "type": "number",
             "nullable": true,

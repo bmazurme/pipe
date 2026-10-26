@@ -92,11 +92,15 @@ export interface ImproveSchedule {
   autoStartIssues: boolean;
   /** A saved Context attached to every run of this schedule, or null. */
   contextId: number | null;
+  /** ISO weekdays (1 = Mon … 7 = Sun) it fires on; null = every day. */
+  weekdays: number[] | null;
   lastRunAt: string | null;
   lastResult: string | null;
 }
 
-export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues' | 'contextId'> & {
+export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues' | 'contextId' | 'weekdays'> & {
+  /** null or omitted = every day. */
+  weekdays?: number[] | null;
   kind?: 'issues' | 'analysis';
   categories?: string[];
   autoCreateIssues?: boolean;

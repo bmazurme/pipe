@@ -2845,6 +2845,7 @@ export interface components {
             hour: number;
             minute: number;
             timezone: string;
+            weekdays: number[] | null;
             kind: Record<string, never>;
             categories: string | null;
             autoCreateIssues: boolean;
@@ -2864,6 +2865,7 @@ export interface components {
             updatedAt: string;
         };
         SaveScheduleDto: {
+            weekdays?: number[] | null;
             contextId?: number | null;
             name: string;
             enabled: boolean;

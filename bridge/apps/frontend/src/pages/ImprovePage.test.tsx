@@ -169,7 +169,7 @@ describe('ImprovePage', () => {
       expect(sent).toContainEqual({
         method: 'POST',
         path: 'improve/schedules',
-        body: { name: 'Ночной запуск', enabled: true, hour: 2, minute: 0, timezone: 'Europe/Moscow', count: 3, model: 'sonnet' },
+        body: { name: 'Ночной запуск', enabled: true, hour: 2, minute: 0, timezone: 'Europe/Moscow', count: 3, model: 'sonnet', weekdays: null },
       }),
     );
   });

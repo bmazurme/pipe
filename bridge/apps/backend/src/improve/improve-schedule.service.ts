@@ -19,7 +19,7 @@ import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
-import { isDue, localDate, PR_LABEL } from './improve-shared';
+import { isDue, localDate, onAllowedWeekday, PR_LABEL } from './improve-shared';
 import { ImproveService } from './improve.service';
 
 const SCHEDULE_TICK_MS = 60_000;
@@ -81,6 +81,7 @@ export class ImproveScheduleService implements OnModuleInit {
       autoCreateIssues?: boolean;
       autoStartIssues?: boolean;
       contextId?: number | null;
+      weekdays?: number[] | null;
     },
     id?: number,
   ): Promise<ImproveSchedule> {
@@ -117,6 +118,9 @@ export class ImproveScheduleService implements OnModuleInit {
       autoCreateIssues: input.autoCreateIssues ?? true,
       autoStartIssues: input.autoStartIssues ?? false,
       contextId: input.contextId ?? null,
+      weekdays: input.weekdays?.length
+        ? [...new Set(input.weekdays)].sort((a, b) => a - b)
+        : null,
     });
 
     return this.schedules.save(schedule);
@@ -146,7 +150,7 @@ export class ImproveScheduleService implements OnModuleInit {
       for (const schedule of await this.schedules.find({
         where: { enabled: true },
       })) {
-        if (!isDue(schedule, now)) continue;
+        if (!isDue(schedule, now) || !onAllowedWeekday(schedule, now)) continue;
 
         // Claim today's slot first (compare-and-set), so two ticks — or two
         // bridge instances — never fire the same schedule twice.

@@ -23,9 +23,10 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
+import { ALL_WEEKDAYS, WEEKDAYS, WEEKEND_DAYS, WORKDAYS } from '../lab/weekdays';
 import { describeSchedule, formatTime, ScheduleForm, validateScheduleForm } from './improveLabels';
 
-const DEFAULT_FORM: ScheduleForm = { name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', count: '5', model: 'sonnet' };
+const DEFAULT_FORM: ScheduleForm = { name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, count: '5', model: 'sonnet' };
 type Form = ScheduleForm;
 
 function toForm(schedule: ImproveSchedule): Form {
@@ -34,6 +35,7 @@ function toForm(schedule: ImproveSchedule): Form {
     enabled: schedule.enabled,
     time: formatTime(schedule.hour, schedule.minute),
     timezone: schedule.timezone,
+    weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
     count: String(schedule.count),
     model: schedule.model,
     kind: schedule.kind,
@@ -45,6 +47,8 @@ function toForm(schedule: ImproveSchedule): Form {
 }
 
 const NO_CONTEXT = '';
+
+const sameDays = (a: number[], b: number[]) => a.length === b.length && [...a].sort().every((day, index) => day === [...b].sort()[index]);
 
 function AutoStartCard() {
   const { data } = useGetImproveSettingsQuery();
@@ -163,6 +167,10 @@ export function SchedulesTab() {
     }
   };
 
+  const toggleWeekday = (day: number) =>
+    editing &&
+    update({ weekdays: (editing.form.weekdays ?? ALL_WEEKDAYS).includes(day) ? (editing.form.weekdays ?? ALL_WEEKDAYS).filter((d) => d !== day) : [...(editing.form.weekdays ?? ALL_WEEKDAYS), day] });
+
   const update = (patch: Partial<Form>) => editing && setEditing({ ...editing, form: { ...editing.form, ...patch } });
 
   return (
@@ -259,6 +267,29 @@ export function SchedulesTab() {
                 filterable
                 width="max"
               />
+              <Text variant="body-2">Дни недели</Text>
+              <div role="group" aria-label="Готовые наборы дней" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Каждый день', days: ALL_WEEKDAYS },
+                  { label: 'Будни', days: WORKDAYS },
+                  { label: 'Выходные', days: WEEKEND_DAYS },
+                ].map(({ label, days }) => (
+                  <Button key={label} size="s" view="flat-secondary" selected={sameDays(editing.form.weekdays ?? ALL_WEEKDAYS, days)} onClick={() => update({ weekdays: days })}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <div role="group" aria-label="Дни недели" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {WEEKDAYS.map(({ day, short }) => {
+                  const on = (editing.form.weekdays ?? ALL_WEEKDAYS).includes(day);
+
+                  return (
+                    <Button key={day} size="s" view={on ? 'action' : 'outlined'} selected={on} onClick={() => toggleWeekday(day)}>
+                      {short}
+                    </Button>
+                  );
+                })}
+              </div>
               <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
               <Select
                 label="Контекст"

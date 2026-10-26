@@ -95,6 +95,17 @@ export class SaveScheduleDto {
   @MaxLength(64)
   timezone: string;
 
+  // ISO weekdays (1 = Mon … 7 = Sun) to fire on; absent or null = every day.
+  @ApiPropertyOptional({ type: [Number], nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(7)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  weekdays?: number[] | null;
+
   @IsInt()
   @Min(1)
   @Max(20)

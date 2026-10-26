@@ -109,3 +109,34 @@ describe('CreateImproveIssueDto', () => {
     ).toHaveLength(0);
   });
 });
+
+describe('SaveScheduleDto weekdays', () => {
+  const base = {
+    model: 'm',
+    name: 'n',
+    enabled: true,
+    hour: 1,
+    minute: 1,
+    timezone: 'UTC',
+    count: 1,
+  };
+
+  it('accepts absent, null and ISO weekdays', async () => {
+    expect(await errorsFor(SaveScheduleDto, base)).toHaveLength(0);
+    expect(
+      await errorsFor(SaveScheduleDto, { ...base, weekdays: null }),
+    ).toHaveLength(0);
+    expect(
+      await errorsFor(SaveScheduleDto, { ...base, weekdays: [1, 2, 3, 4, 5] }),
+    ).toHaveLength(0);
+  });
+
+  it.each([[[0]], [[8]], [[1.5]], [['1']], [[1, 1]]])(
+    'rejects %j',
+    async (weekdays) => {
+      expect(
+        await errorsFor(SaveScheduleDto, { ...base, weekdays }),
+      ).not.toHaveLength(0);
+    },
+  );
+});
