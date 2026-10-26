@@ -112,8 +112,14 @@ function errorMessage(fallback: string) {
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
     getImproveStatus: builder.query<ImproveStatus, void>({ query: () => 'improve/status' }),
-    listImproveIssues: builder.query<ImproveIssue[], { all?: boolean } | void>({
-      query: (arg) => (arg && arg.all ? 'improve/issues?all=1' : 'improve/issues'),
+    listImproveIssues: builder.query<ImproveIssue[], { all?: boolean; fresh?: boolean } | void>({
+      query: (arg) => {
+        const params = [arg && arg.all ? 'all=1' : '', arg && arg.fresh ? 'fresh=1' : ''].filter(Boolean);
+
+        return params.length ? `improve/issues?${params.join('&')}` : 'improve/issues';
+      },
+      // `fresh` only changes how the server answers, so it shares the cache entry with the plain query.
+      serializeQueryArgs: ({ endpointName, queryArgs }) => `${endpointName}(${queryArgs && queryArgs.all ? 'all' : ''})`,
       providesTags: ['ImproveIssues'],
       transformErrorResponse: errorMessage('Не удалось загрузить задачи'),
     }),
@@ -214,6 +220,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 export const {
   useGetImproveStatusQuery,
   useListImproveIssuesQuery,
+  useLazyListImproveIssuesQuery,
   useCreateImproveIssueMutation,
   useListImproveRunsQuery,
   useGetImproveRunQuery,

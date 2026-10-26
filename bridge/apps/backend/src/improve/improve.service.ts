@@ -17,8 +17,9 @@ import {
   Repository,
 } from 'typeorm';
 
+import { SharedAsyncCache } from '../common/shared-async-cache';
 import { AppLogService } from '../logs/app-log.service';
-import { GithubApiService } from '../loop/github-api.service';
+import { GithubApiService, IssueInfo } from '../loop/github-api.service';
 import { MergeService } from '../loop/merge.service';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -76,6 +77,8 @@ export const AUTOSTART_MIN_AGE_SECONDS = 10;
 // and the issue to a worker, and turn what comes back into a branch and a pull
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
+const OPEN_ISSUES_TTL_MS = 60_000;
+
 @Injectable()
 export class ImproveService {
   private readonly logger = new Logger(ImproveService.name);
@@ -98,7 +101,16 @@ export class ImproveService {
     private readonly issueFiling: ImproveIssueFilingService,
     private readonly publisher: ImprovePublishService,
     private readonly handoff: ImproveHandoffService,
-  ) {}
+  ) {
+    // Issues filed by bridge itself change the list: the next read goes to GitHub.
+    if (this.issueFiling)
+      this.issueFiling.onIssuesChanged = () => this.openIssues.clear();
+  }
+
+  private readonly openIssues = new SharedAsyncCache<IssueInfo[]>({
+    ttlMs: OPEN_ISSUES_TTL_MS,
+    maxEntries: 8,
+  });
 
   // ---------------------------------------------------------------- status
 
@@ -114,10 +126,17 @@ export class ImproveService {
 
   // The open `loop` issues, each with its latest run (if any), for the page.
   // `all` lists every open issue, labelled or not.
-  async listIssues(label = PR_LABEL, all = false) {
+  // The GitHub part is cached briefly (runs are looked up live); `fresh` bypasses the cache.
+  async listIssues(label = PR_LABEL, all = false, fresh = false) {
     this.requireConfigured();
 
-    const issues = await this.github.listOpenIssues(all ? '' : label, 100);
+    const key = all ? '' : label;
+
+    if (fresh) this.openIssues.clear();
+
+    const issues = await this.openIssues.get(key, () =>
+      this.github.listOpenIssues(key, 100),
+    );
     const latest = new Map<number, Omit<ImproveRun, 'result' | 'baseline'>>();
 
     if (issues.length) {

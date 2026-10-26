@@ -17,6 +17,9 @@ import { AnalysisResult, message, PR_LABEL } from './improve-shared';
 // warnings and partial-failure bookkeeping.
 @Injectable()
 export class ImproveIssueFilingService {
+  // Set by ImproveService: called after this service changes the open-issue list on GitHub.
+  onIssuesChanged?: () => void;
+
   constructor(
     @InjectRepository(ImproveRun)
     private readonly runs: Repository<ImproveRun>,
@@ -59,6 +62,7 @@ export class ImproveIssueFilingService {
           body: issueBody(item),
           labels: [PR_LABEL, `risk:${item.risk}`, `category:${item.category}`],
         });
+        this.onIssuesChanged?.();
       } catch (error) {
         failure = new Error(
           `Не удалось создать issue для «${item.title}» (предложение ${index + 1}): ${message(error)}; уже создано: ${created}`,
@@ -127,6 +131,7 @@ export class ImproveIssueFilingService {
       body: input.body ?? '',
       labels: [PR_LABEL],
     });
+    this.onIssuesChanged?.();
     const result = {
       number: issue.number,
       htmlUrl: issue.htmlUrl,

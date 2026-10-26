@@ -55,8 +55,16 @@ export class ImproveController {
   }
 
   @Get('issues')
-  issues(@Query('label') label?: string, @Query('all') all?: string) {
-    return this.improve.listIssues(label || undefined, all === '1');
+  issues(
+    @Query('label') label?: string,
+    @Query('all') all?: string,
+    @Query('fresh') fresh?: string,
+  ) {
+    return this.improve.listIssues(
+      label || undefined,
+      all === '1',
+      fresh === '1',
+    );
   }
 
   // Files a hand-written issue labelled for Improve, optionally starting a run on it.

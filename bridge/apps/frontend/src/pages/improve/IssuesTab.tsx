@@ -3,7 +3,7 @@ import { ArrowUpRightFromSquare, Rocket } from '@gravity-ui/icons';
 import { Alert, Button, Checkbox, Icon, Label, Select, Skeleton, Switch, Text } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
-import { getErrorMessage, ImproveIssue, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
+import { getErrorMessage, ImproveIssue, useLazyListImproveIssuesQuery, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { NewIssueDialog } from './NewIssueDialog';
 import { MODEL_OPTIONS } from '../worker/constants';
@@ -12,7 +12,8 @@ import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS
 
 export function IssuesTab({ configured }: { configured: boolean }) {
   const [showAll, setShowAll] = useState(false);
-  const { data: issues, isLoading, isError, error, refetch, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
+  const { data: issues, isLoading, isError, error, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
+  const [loadFresh] = useLazyListImproveIssuesQuery();
   const [start, { isLoading: isStarting }] = useStartImproveRunMutation();
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
@@ -101,7 +102,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         <Button view="outlined" size="m" onClick={() => setNewIssueOpen(true)}>
           Новая задача
         </Button>
-        <Button view="outlined" size="m" loading={isFetching} onClick={() => void refetch()}>
+        <Button view="outlined" size="m" loading={isFetching} onClick={() => void loadFresh({ all: showAll, fresh: true })}>
           Обновить
         </Button>
         {launching.length > 0 && (
