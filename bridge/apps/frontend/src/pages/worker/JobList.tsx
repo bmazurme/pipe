@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, FaceRobot } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Label, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Label, Loader, SegmentedRadioGroup, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { jobDuration } from '../../shared/lib/formatDuration';
@@ -42,6 +42,17 @@ function matches(job: WorkerJob, filter: JobFilter): boolean {
   return true;
 }
 
+// Case-insensitive match on what the owner remembers about a run: its id, task, model or error.
+function matchesQuery(job: WorkerJob, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+
+  if (needle === '') return true;
+
+  return [`#${job.id}`, job.taskKey, job.model, job.errorMessage].some((field) =>
+    field?.toLowerCase().includes(needle),
+  );
+}
+
 // "запуск в HH:MM" for a retry held back until a limit resets (with the date when it is not today).
 function delayedLine(notBefore: string): string {
   const at = new Date(notBefore);
@@ -73,8 +84,13 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState<JobFilter>('all');
   const [taskFilter, setTaskFilter] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const searching = query.trim() !== '';
   const filtered = jobs.filter(
-    (job) => matches(job, filter) && (taskFilter === null || job.taskKey === taskFilter),
+    (job) =>
+      matches(job, filter) &&
+      (taskFilter === null || job.taskKey === taskFilter) &&
+      matchesQuery(job, query),
   );
   const visibleJobs = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE_JOBS);
   const hiddenCount = filtered.length - visibleJobs.length;
@@ -117,6 +133,17 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
               { value: 'failed', content: failedCount > 0 ? `С ошибкой (${failedCount})` : 'С ошибкой' },
             ]}
           />
+          <TextInput
+            size="m"
+            hasClear
+            value={query}
+            onUpdate={(value) => {
+              setQuery(value);
+              setShowAll(false);
+            }}
+            placeholder="Поиск: задача, модель, ошибка, #id"
+            controlProps={{ 'aria-label': 'Поиск по запускам' }}
+          />
           <ClearFinishedJobsButton />
           {taskFilter !== null && (
             <Label
@@ -150,7 +177,9 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
         <EmptyState
           icon={FaceRobot}
           title={
-            filter === 'active'
+            searching
+              ? 'Ничего не найдено по запросу'
+              : filter === 'active'
               ? 'Активных задач нет'
               : filter === 'failed'
                 ? 'Задач с ошибкой нет'
