@@ -4617,6 +4617,25 @@ export interface operations {
             };
         };
     };
+    ClaudeCredentialsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ClaudeCredentialsController_replaceToken: {
         parameters: {
             query?: never;
@@ -4639,25 +4658,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ClaudeCredentialResponseDto"];
                 };
-            };
-        };
-    };
-    ClaudeCredentialsController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
