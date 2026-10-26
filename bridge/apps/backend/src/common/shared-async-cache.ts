@@ -7,6 +7,8 @@ export class SharedAsyncCache<V> {
   // Oldest first.
   private readonly values = new Map<string, { value: V; at: number }>();
   private readonly pending = new Map<string, Promise<V>>();
+  // Bumped by clear(): a build started before it must not store its (possibly stale) value.
+  private epoch = 0;
 
   constructor({ ttlMs, maxEntries }: { ttlMs?: number; maxEntries: number }) {
     this.ttlMs = ttlMs;
@@ -27,9 +29,12 @@ export class SharedAsyncCache<V> {
     if (pending) return pending;
 
     // Started on a microtask, so even a build that throws synchronously ends up as a rejection.
+    const epoch = this.epoch;
     const promise = Promise.resolve()
       .then(build)
       .then((value) => {
+        if (epoch !== this.epoch) return value;
+
         this.values.delete(key);
         this.values.set(key, { value, at: Date.now() });
         while (this.values.size > this.maxEntries)
@@ -45,5 +50,12 @@ export class SharedAsyncCache<V> {
     promise.then(clear, clear);
 
     return promise;
+  }
+
+  // Forgets every stored value and detaches in-flight builds, so the next get() builds anew.
+  clear(): void {
+    this.epoch += 1;
+    this.values.clear();
+    this.pending.clear();
   }
 }

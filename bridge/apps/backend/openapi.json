@@ -2280,6 +2280,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "fresh",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

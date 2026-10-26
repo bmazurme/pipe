@@ -234,3 +234,89 @@ describe('ImproveService.listIssues latest run', () => {
     ).toEqual([5, 9, null]);
   });
 });
+
+describe('ImproveService.listIssues GitHub cache', () => {
+  const build = () => {
+    const getMany = jest.fn().mockResolvedValue([]);
+    const qb: Record<string, jest.Mock> = { getMany };
+
+    for (const name of [
+      'select',
+      'distinctOn',
+      'where',
+      'andWhere',
+      'orderBy',
+      'addOrderBy',
+    ]) {
+      qb[name] = jest.fn().mockReturnValue(qb);
+    }
+
+    const repo = {
+      metadata: { columns: [{ propertyName: 'id' }] },
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+    const github = {
+      isReady: () => true,
+      listOpenIssues: jest.fn().mockResolvedValue([{ number: 1 }]),
+    };
+    const filing: { onIssuesChanged?: () => void } = {};
+    const service = new ImproveService(
+      repo as never,
+      github as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      filing as never,
+      {} as never,
+      {} as never,
+    );
+
+    jest
+      .spyOn(
+        service as never as { requireConfigured: () => void },
+        'requireConfigured',
+      )
+      .mockImplementation(() => undefined);
+
+    return { service, github, filing, getMany };
+  };
+
+  it('fetches from GitHub once within the TTL but reads runs live', async () => {
+    const { service, github, getMany } = build();
+
+    const first = await service.listIssues();
+
+    getMany.mockResolvedValue([{ id: 7, issueNumber: 1 }]);
+
+    const second = await service.listIssues();
+
+    expect(github.listOpenIssues).toHaveBeenCalledTimes(1);
+    expect(first[0].run).toBeNull();
+    expect((second[0].run as { id: number }).id).toBe(7);
+  });
+
+  it('refetches on fresh=1 and after bridge files an issue', async () => {
+    const { service, github, filing } = build();
+
+    await service.listIssues();
+    await service.listIssues(undefined, false, true);
+    expect(github.listOpenIssues).toHaveBeenCalledTimes(2);
+
+    filing.onIssuesChanged?.();
+    await service.listIssues();
+    expect(github.listOpenIssues).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not cache a rejected GitHub fetch', async () => {
+    const { service, github } = build();
+
+    github.listOpenIssues.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(service.listIssues()).rejects.toThrow('boom');
+    await expect(service.listIssues()).resolves.toHaveLength(1);
+    expect(github.listOpenIssues).toHaveBeenCalledTimes(2);
+  });
+});

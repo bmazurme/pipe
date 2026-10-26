@@ -5086,6 +5086,7 @@ export interface operations {
             query: {
                 label: string;
                 all: string;
+                fresh: string;
             };
             header?: never;
             path?: never;
