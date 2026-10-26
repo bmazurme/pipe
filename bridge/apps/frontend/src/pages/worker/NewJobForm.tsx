@@ -73,7 +73,7 @@ interface NewJobFormProps {
 }
 
 export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
-  const { data: filesData, isLoading: isLoadingFiles } = useListFilesQuery();
+  const { data: filesData, isLoading: isLoadingFiles, isError: isFilesError, refetch: refetchFiles } = useListFilesQuery();
   const { data: claudeCredentialsData } = useListClaudeCredentialsQuery();
   const { data: contextsData } = useListContextsQuery();
   const { data: workers } = useListWorkersQuery(undefined, {
@@ -253,7 +253,17 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
     <Card view="outlined" className={styles.card}>
       <SectionHeader title="Новая задача" />
 
-      {files.length === 0 && !isLoadingFiles ? (
+      {isFilesError && files.length === 0 ? (
+        <Alert
+          theme="danger"
+          title="Не удалось загрузить список посылок"
+          actions={
+            <Button view="outlined" onClick={() => refetchFiles()}>
+              Повторить
+            </Button>
+          }
+        />
+      ) : files.length === 0 && !isLoadingFiles ? (
         <Text color="secondary">В Storage нет посылок — загрузите файл на странице Storage.</Text>
       ) : (
         <>
