@@ -34,6 +34,42 @@ export function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// A failure worth another try: a timeout/abort, a network error or a GitHub 5xx. A GitHub 4xx is not.
+export function isTransientError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    ['TimeoutError', 'AbortError'].includes(error.name)
+  ) {
+    return true;
+  }
+
+  const text = message(error);
+
+  return (
+    /fetch failed|aborted due to timeout|operation was aborted/i.test(text) ||
+    /^GitHub 5\d\d\b/.test(text)
+  );
+}
+
+// Runs `fn`; on a transient error waits `delayMs` and tries once more, whose result (or error) is final.
+export async function withTransientRetry<T>(
+  fn: () => Promise<T>,
+  opts: { delayMs: number; onRetry?: (error: unknown) => void },
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!isTransientError(error)) {
+      throw error;
+    }
+
+    opts.onRetry?.(error);
+    await new Promise((resolve) => setTimeout(resolve, opts.delayMs));
+
+    return fn();
+  }
+}
+
 // Maps in order, at most `size` calls in flight; the first rejection rejects the whole map.
 export async function mapInBatches<T, R>(
   items: T[],

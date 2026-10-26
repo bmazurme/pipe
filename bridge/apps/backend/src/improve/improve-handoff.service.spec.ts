@@ -223,3 +223,54 @@ describe('ImproveHandoffService snapshot filtering', () => {
     expect(Object.keys(baseline)).toEqual(['a.ts']);
   });
 });
+
+describe('ImproveHandoffService snapshot download retry', () => {
+  const zip = zipSync({ 'o-r-sha/a.ts': strToU8('one') });
+
+  function retrySetup() {
+    const ctx = setup();
+    (ctx.service as unknown as { retryDelayMs: number }).retryDelayMs = 1;
+
+    return ctx;
+  }
+
+  it('retries a timed-out download once and serves all concurrent callers', async () => {
+    const { service, github } = retrySetup();
+    const timeout = Object.assign(new Error('timed out'), {
+      name: 'TimeoutError',
+    });
+    github.downloadZipball
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValue(zip);
+
+    const [a, b] = await Promise.all([
+      service.snapshotAt('s'),
+      service.snapshotAt('s'),
+    ]);
+
+    expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+    expect(a.files).toHaveLength(1);
+    expect(b).toBe(a);
+  });
+
+  it.each(['GitHub 404: Not Found', 'GitHub 401: Bad credentials'])(
+    'does not retry %s',
+    async (text) => {
+      const { service, github } = retrySetup();
+      github.downloadZipball.mockRejectedValue(new Error(text));
+
+      await expect(service.snapshotAt('s')).rejects.toThrow(text);
+      expect(github.downloadZipball).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects with the last error after two transient failures', async () => {
+    const { service, github } = retrySetup();
+    github.downloadZipball
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockRejectedValueOnce(new Error('GitHub 502: bad gateway'));
+
+    await expect(service.snapshotAt('s')).rejects.toThrow('GitHub 502');
+    expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+  });
+});
