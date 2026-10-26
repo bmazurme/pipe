@@ -9,4 +9,9 @@ export class CreateApiKeyDto {
   @IsOptional()
   @IsIn(['boards'])
   scope?: 'boards';
+
+  // Omitted = never expires.
+  @IsOptional()
+  @IsIn([30, 90, 365])
+  expiresInDays?: 30 | 90 | 365;
 }

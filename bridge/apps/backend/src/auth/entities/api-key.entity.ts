@@ -33,6 +33,10 @@ export class ApiKey extends BaseEntity {
   @Column({ type: 'timestamp', nullable: true })
   lastUsedAt: Date | null;
 
+  // null = never expires; a key past this moment is refused by validate().
+  @Column({ type: 'timestamp', nullable: true })
+  expiresAt: Date | null;
+
   @Column({ type: 'timestamp', nullable: true })
   revokedAt: Date | null;
 }

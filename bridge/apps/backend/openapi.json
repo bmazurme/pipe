@@ -4605,6 +4605,14 @@
             "enum": [
               "boards"
             ]
+          },
+          "expiresInDays": {
+            "type": "number",
+            "enum": [
+              30,
+              90,
+              365
+            ]
           }
         },
         "required": [
@@ -4630,6 +4638,11 @@
           "token": {
             "type": "string"
           },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4641,6 +4654,7 @@
           "prefix",
           "scope",
           "token",
+          "expiresAt",
           "createdAt"
         ]
       },
@@ -4668,6 +4682,11 @@
             "format": "date-time",
             "type": "string",
             "nullable": true
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -4676,7 +4695,8 @@
           "prefix",
           "scope",
           "createdAt",
-          "lastUsedAt"
+          "lastUsedAt",
+          "expiresAt"
         ]
       },
       "EmergencyKeyStatusResponseDto": {

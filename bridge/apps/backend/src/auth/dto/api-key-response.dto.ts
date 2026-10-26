@@ -9,6 +9,7 @@ export class ApiKeyResponseDto {
   scope: 'boards' | null;
   createdAt: Date;
   lastUsedAt: Date | null;
+  expiresAt: Date | null;
 
   static fromEntity(apiKey: ApiKey): ApiKeyResponseDto {
     return {
@@ -18,6 +19,7 @@ export class ApiKeyResponseDto {
       scope: apiKey.scope ?? null,
       createdAt: apiKey.createdAt,
       lastUsedAt: apiKey.lastUsedAt,
+      expiresAt: apiKey.expiresAt ?? null,
     };
   }
 }

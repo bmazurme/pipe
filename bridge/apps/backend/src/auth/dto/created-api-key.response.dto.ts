@@ -7,6 +7,7 @@ export class CreatedApiKeyResponseDto {
   prefix: string;
   scope: 'boards' | null;
   token: string;
+  expiresAt: Date | null;
   createdAt: Date;
 
   static fromCreatedApiKey(apiKey: CreatedApiKey): CreatedApiKeyResponseDto {

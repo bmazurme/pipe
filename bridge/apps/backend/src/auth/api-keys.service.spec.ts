@@ -54,6 +54,36 @@ describe('ApiKeysService', () => {
     service = module.get(ApiKeysService);
   });
 
+  describe('expiry', () => {
+    it('create sets expiresAt from expiresInDays, null when omitted', async () => {
+      repository.save!.mockImplementation(async (e) => ({
+        id: 1,
+        createdAt: new Date(),
+        ...e,
+      }));
+      const withExpiry = await service.create(2, 'k', null, 30);
+      const diff = withExpiry.expiresAt!.getTime() - Date.now();
+      expect(Math.abs(diff - 30 * 86_400_000)).toBeLessThan(5_000);
+      const without = await service.create(2, 'k');
+      expect(without.expiresAt).toBeNull();
+    });
+
+    it('validate refuses an expired key and accepts a future or null expiry', async () => {
+      const token = `${API_KEY_PREFIX}abc`;
+      repository.findOne!.mockResolvedValue(
+        baseApiKey({ expiresAt: new Date(Date.now() - 1000) }),
+      );
+      expect(await service.validate(token)).toBeNull();
+      repository.update!.mockResolvedValue({});
+      repository.findOne!.mockResolvedValue(
+        baseApiKey({ expiresAt: new Date(Date.now() + 100_000) }),
+      );
+      expect(await service.validate(token)).toEqual({ userId: 2, scope: null });
+      repository.findOne!.mockResolvedValue(baseApiKey({ expiresAt: null }));
+      expect(await service.validate(token)).toEqual({ userId: 2, scope: null });
+    });
+  });
+
   describe('create', () => {
     it('generates a brk_-prefixed token, saves only its hash, and returns the plaintext once', async () => {
       repository.save!.mockImplementation(async (entity) => ({

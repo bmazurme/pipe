@@ -224,3 +224,51 @@ describe('ApiKeysSection boards-only key', () => {
     expect(JSON.parse(await posts[0].text())).toEqual({ name: 'board-1', scope: 'boards' });
   });
 });
+
+describe('ApiKeysSection expiry', () => {
+  it('sends expiresInDays when an expiry is chosen', async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST') return jsonResponse({ ...KEYS[0], token: 'brk_x' });
+        return jsonResponse([]);
+      }),
+    );
+
+    renderSection();
+    await screen.findByText('Ключей ещё нет');
+
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+    await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'sync-cli');
+    await user.click(await screen.findByText('Бессрочно'));
+    await user.click(await screen.findByText('90 дней'));
+    await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
+
+    await screen.findByText('brk_x');
+    const post = requests.find((r) => r.method === 'POST')!;
+    expect(JSON.parse(await post.text())).toEqual({ name: 'sync-cli', expiresInDays: 90 });
+  });
+
+  it('marks an expired key and shows the date of a live one', async () => {
+    const future = new Date(Date.now() + 10 * 86_400_000).toISOString();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse([
+          { ...KEYS[0], expiresAt: '2020-01-01T00:00:00.000Z' },
+          { ...KEYS[1], expiresAt: future },
+        ]),
+      ),
+    );
+
+    renderSection();
+    await screen.findByText('sync-cli');
+
+    expect(screen.getByText(/истёк/)).toBeTruthy();
+    expect(screen.getByText(/действует до \d/)).toBeTruthy();
+  });
+});
