@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { readZipball, type SnapshotFile } from '../common/zip';
@@ -7,6 +7,7 @@ import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
+import { message, withTransientRetry } from './improve-shared';
 import {
   buildIssueParcel,
   isExcludedPath,
@@ -16,6 +17,7 @@ import {
 } from './parcel';
 
 const ZIP_CACHE_TTL_MS = 10 * 60 * 1000;
+const SNAPSHOT_RETRY_DELAY_MS = 2000;
 
 type CachedSnapshot = {
   files: SnapshotFile[];
@@ -45,6 +47,9 @@ export class ImproveHandoffService {
     maxEntries: 1,
   });
 
+  private readonly logger = new Logger(ImproveHandoffService.name);
+  protected retryDelayMs = SNAPSHOT_RETRY_DELAY_MS;
+
   constructor(
     private readonly github: GithubApiService,
     private readonly storage: StorageService,
@@ -65,7 +70,13 @@ export class ImproveHandoffService {
     // Excluded and oversize entries are never inflated (and no worker threads are used).
     const files = selectParcelFiles(
       await readZipball(
-        await this.github.downloadZipball(sha),
+        await withTransientRetry(() => this.github.downloadZipball(sha), {
+          delayMs: this.retryDelayMs,
+          onRetry: (error) =>
+            this.logger.warn(
+              `improve.snapshot_retry: ${sha}: ${message(error)}`,
+            ),
+        }),
         (path, size) =>
           !isExcludedPath(path) && size > 0 && size <= MAX_FILE_BYTES,
       ),
