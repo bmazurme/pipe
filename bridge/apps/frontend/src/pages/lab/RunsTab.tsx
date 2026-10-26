@@ -37,7 +37,8 @@ const describeRefresh = ({ checked, merged, closed, failed }: LabPrRefresh) =>
 
 export function RunsTab() {
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
-  const { data: runs, isLoading, isError } = useListLabRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
+  const [filterProjectId, setFilterProjectId] = useState('');
+  const { data: runs, isLoading, isError } = useListLabRunsQuery(filterProjectId ? { projectId: Number(filterProjectId) } : undefined, { pollingInterval, skipPollingIfUnfocused: true });
   const { data: projects } = useListLabProjectsQuery();
   const { data: contexts } = useListContextsQuery();
   const [start, { isLoading: isStarting }] = useStartLabRunMutation();
@@ -98,6 +99,12 @@ export function RunsTab() {
           <Icon data={Plus} size={16} />
           Новый запуск
         </Button>
+        <Select
+          aria-label="Проект"
+          value={[filterProjectId]}
+          onUpdate={([projectId]) => setFilterProjectId(projectId ?? '')}
+          options={[{ value: '', content: 'Все проекты' }, ...(projects ?? []).map((project) => ({ value: String(project.id), content: `${project.name} (${project.repo})` }))]}
+        />
         <Button view="outlined" size="m" loading={isRefreshing} disabled={!runs?.some((run) => run.status === 'pr_open' && run.prNumber !== null && run.projectId !== null)} onClick={() => void handleRefreshPrs()}>
           Проверить PR
         </Button>
@@ -108,7 +115,7 @@ export function RunsTab() {
       {cancelError && <Alert theme="danger" view="filled" message={getErrorMessage(cancelError, 'Не удалось остановить')} />}
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить запуски" />}
-      {runs && runs.length === 0 && <EmptyState icon={Rocket} title="Запусков ещё не было" description="Запустите задачу вручную или дождитесь расписания." />}
+      {runs && runs.length === 0 && <EmptyState icon={Rocket} title={filterProjectId ? 'В этом проекте запусков ещё не было' : 'Запусков ещё не было'} description="Запустите задачу вручную или дождитесь расписания." />}
 
       {runs?.map((run) => (
         <div key={run.id} className={styles.row}>

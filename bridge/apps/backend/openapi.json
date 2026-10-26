@@ -3205,7 +3205,16 @@
     "/api/v1/lab/runs": {
       "get": {
         "operationId": "LabController_listRuns",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",

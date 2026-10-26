@@ -10,8 +10,11 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
+
+import { ApiQuery } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -117,8 +120,13 @@ export class LabController {
   }
 
   @Get('runs')
-  listRuns(@CurrentUser() user: { id: number }) {
-    return this.runs.list(user.id);
+  @ApiQuery({ name: 'projectId', required: false, type: Number })
+  listRuns(
+    @CurrentUser() user: { id: number },
+    @Query('projectId', new ParseIntPipe({ optional: true }))
+    projectId?: number,
+  ) {
+    return this.runs.list(user.id, undefined, projectId);
   }
 
   @Post('runs')

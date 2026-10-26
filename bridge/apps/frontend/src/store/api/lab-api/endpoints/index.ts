@@ -146,8 +146,8 @@ const labApiEndpoints = labApi.injectEndpoints({
       query: (id) => ({ url: `lab/schedules/${id}/run`, method: 'POST' }),
       invalidatesTags: ['LabSchedules', 'LabRuns'],
     }),
-    listLabRuns: builder.query<LabRun[], void>({
-      query: () => 'lab/runs',
+    listLabRuns: builder.query<LabRun[], { projectId?: number } | void>({
+      query: (args) => (args && args.projectId !== undefined ? `lab/runs?projectId=${args.projectId}` : 'lab/runs'),
       providesTags: ['LabRuns'],
       transformErrorResponse: errorMessage('Не удалось загрузить запуски'),
     }),

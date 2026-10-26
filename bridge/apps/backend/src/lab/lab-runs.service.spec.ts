@@ -774,3 +774,43 @@ describe('LabRunsService.refreshPrStates', () => {
     expect(result).toEqual({ checked: 10, merged: 0, closed: 0, failed: 0 });
   });
 });
+
+describe('LabRunsService.list', () => {
+  const build = () => {
+    const runs = { find: jest.fn().mockResolvedValue([]) };
+    const service = new LabRunsService(
+      runs as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    return { service, runs };
+  };
+
+  it('lists every project of the owner without a filter', async () => {
+    const { service, runs } = build();
+
+    await service.list(1);
+
+    expect(runs.find).toHaveBeenCalledWith({
+      where: { userId: 1 },
+      order: { id: 'DESC' },
+      take: 50,
+    });
+  });
+
+  it('narrows the list to one project, still of the owner', async () => {
+    const { service, runs } = build();
+
+    await service.list(1, 50, 2);
+
+    expect(runs.find).toHaveBeenCalledWith({
+      where: { userId: 1, projectId: 2 },
+      order: { id: 'DESC' },
+      take: 50,
+    });
+  });
+});
