@@ -123,6 +123,21 @@ describe('Worker fleet (e2e)', () => {
         .expect(401);
     });
 
+    it('refuses a browser session on the routes that hand out stored secrets', async () => {
+      const { accessToken } = await owner();
+
+      await as(request(server()).post('/api/v1/worker/jobs/claim'), accessToken)
+        .send({})
+        .expect(403);
+      await as(request(server()).post('/api/v1/chat/turns/claim'), accessToken)
+        .send({})
+        .expect(403);
+      await as(
+        request(server()).get('/api/v1/workers/me/config'),
+        accessToken,
+      ).expect(403);
+    });
+
     it('a new worker is pending until it redeems its one-time code, then it holds its own key', async () => {
       const { accessToken } = await owner();
       const { worker, enrollCode } = await addWorker(accessToken, 'green');

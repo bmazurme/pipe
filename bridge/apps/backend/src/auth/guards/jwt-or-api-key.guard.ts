@@ -10,6 +10,7 @@ import { Request } from 'express';
 
 import { API_KEY_PREFIX, ApiKeysService } from '../api-keys.service';
 import { BOARD_AGENT_KEY_ALLOWED } from '../decorators/board-agent-key-allowed.decorator';
+import { MACHINE_ONLY } from '../decorators/machine-only.decorator';
 import { WORKER_KEY_ALLOWED } from '../decorators/worker-key-allowed.decorator';
 import { WORKER_KEY_PREFIX, WorkerKeysService } from '../worker-keys.service';
 import { JwtGuard } from './jwt.guard';
@@ -90,6 +91,15 @@ export class JwtOrApiKeyGuard implements CanActivate {
 
       (request as Request & { user?: unknown }).user = { id: apiKey.userId };
       return true;
+    }
+
+    const machineOnly = this.reflector.getAllAndOverride<boolean>(
+      MACHINE_ONLY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (machineOnly) {
+      throw new ForbiddenException('This route is for workers only');
     }
 
     return this.jwtGuard.canActivate(context) as Promise<boolean>;

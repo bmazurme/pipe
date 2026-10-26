@@ -21,6 +21,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { MachineOnly } from '../auth/decorators/machine-only.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
@@ -258,6 +259,7 @@ export class ChatController {
   // Worker-only from here down.
 
   @Post('turns/claim')
+  @MachineOnly()
   @WorkerKeyAllowed()
   async claim(
     @CurrentUser() currentUser: { id: number; workerId?: number },

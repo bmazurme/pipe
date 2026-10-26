@@ -14,6 +14,8 @@ function contextWithHeaders(headers: Record<string, string>): ExecutionContext {
 
   return {
     switchToHttp: () => ({ getRequest: () => request }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
   } as unknown as ExecutionContext;
 }
 
@@ -188,5 +190,62 @@ describe('JwtOrApiKeyGuard', () => {
       UnauthorizedException,
     );
     expect(jwtGuard.canActivate).not.toHaveBeenCalled();
+  });
+});
+
+describe('JwtOrApiKeyGuard on a machine-only route', () => {
+  const build = (machineOnly: boolean) => {
+    const jwtGuard = { canActivate: jest.fn().mockResolvedValue(true) };
+    const apiKeysService = {
+      validate: jest.fn().mockResolvedValue({ userId: 42 }),
+    };
+    const reflector = {
+      getAllAndOverride: jest.fn((key: string) =>
+        key === 'machineOnly' ? machineOnly : false,
+      ),
+    };
+    const guard = new JwtOrApiKeyGuard(
+      jwtGuard as never,
+      apiKeysService as never,
+      { validate: jest.fn() } as never,
+      reflector as unknown as Reflector,
+    );
+
+    return { guard, jwtGuard, apiKeysService };
+  };
+
+  it('refuses a browser JWT with 403 and never reaches JwtGuard', async () => {
+    const { guard, jwtGuard } = build(true);
+    const context = contextWithHeaders({ authorization: 'Bearer a.b.c' });
+
+    await expect(guard.canActivate(context)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(jwtGuard.canActivate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a request with no credentials at all', async () => {
+    const { guard } = build(true);
+
+    await expect(guard.canActivate(contextWithHeaders({}))).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('still accepts a personal API key', async () => {
+    const { guard } = build(true);
+    const context = contextWithHeaders({
+      'x-api-key': `${API_KEY_PREFIX}real-key`,
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it('still lets a JWT through on a route without the decorator', async () => {
+    const { guard, jwtGuard } = build(false);
+    const context = contextWithHeaders({ authorization: 'Bearer a.b.c' });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(jwtGuard.canActivate).toHaveBeenCalled();
   });
 });
