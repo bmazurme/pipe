@@ -20,6 +20,7 @@ export interface CreatedApiKey {
   prefix: string;
   scope: ApiKeyScope | null;
   token: string;
+  expiresAt: Date | null;
   createdAt: Date;
 }
 
@@ -46,7 +47,11 @@ export class ApiKeysService {
     userId: number,
     name: string,
     scope: ApiKeyScope | null = null,
+    expiresInDays: number | null = null,
   ): Promise<CreatedApiKey> {
+    const expiresAt = expiresInDays
+      ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+      : null;
     const token = this.generateToken();
     const saved = await this.apiKeyRepository.save(
       this.apiKeyRepository.create({
@@ -55,6 +60,7 @@ export class ApiKeysService {
         prefix: token.slice(0, PREFIX_DISPLAY_LENGTH),
         keyHash: this.hashToken(token),
         scope,
+        expiresAt,
         lastUsedAt: null,
         revokedAt: null,
       }),
@@ -66,6 +72,7 @@ export class ApiKeysService {
       prefix: saved.prefix,
       scope: saved.scope ?? null,
       token,
+      expiresAt: saved.expiresAt ?? null,
       createdAt: saved.createdAt,
     };
   }
@@ -92,6 +99,13 @@ export class ApiKeysService {
     });
 
     if (!apiKey) {
+      return null;
+    }
+
+    if (
+      apiKey.expiresAt &&
+      new Date(apiKey.expiresAt).getTime() <= Date.now()
+    ) {
       return null;
     }
 

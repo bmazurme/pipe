@@ -8,6 +8,7 @@ import {
   Checkbox,
   ClipboardButton,
   Icon,
+  Select,
   Skeleton,
   Text,
   TextInput,
@@ -20,6 +21,7 @@ import { SectionHeader } from '../../widgets/SectionHeader';
 import {
   API_URL,
   ApiKey,
+  ApiKeyExpiryDays,
   useCreateApiKeyMutation,
   useListApiKeysQuery,
   useRevokeApiKeyMutation,
@@ -27,6 +29,20 @@ import {
 import { useAppSelector } from '../../store/hooks';
 import { apiKeysSelector } from '../../store/slices';
 import styles from '../ProfilePage.module.css';
+
+const EXPIRY_OPTIONS = [
+  { value: 'never', content: 'Бессрочно' },
+  { value: '30', content: '30 дней' },
+  { value: '90', content: '90 дней' },
+  { value: '365', content: '1 год' },
+];
+
+function describeExpiry(expiresAt: string | null | undefined): string {
+  if (!expiresAt) return '';
+  const date = new Date(expiresAt);
+  if (date.getTime() <= Date.now()) return 'истёк · ';
+  return `действует до ${date.toLocaleDateString('ru-RU')} · `;
+}
 
 const SKELETON_ROWS = [0, 1, 2];
 const USAGE_EXAMPLE = `curl -H "X-Api-Key: brk_…" ${API_URL}/api/v1/worker/status`;
@@ -43,6 +59,7 @@ export function ApiKeysSection() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [boardsOnly, setBoardsOnly] = useState(false);
+  const [expiry, setExpiry] = useState('never');
   // Set only right after creation, from the mutation's own response — never
   // persisted to the store, so the plaintext token exists in memory only
   // for as long as this dialog stays open.
@@ -52,6 +69,7 @@ export function ApiKeysSection() {
   const handleOpenCreate = () => {
     setName('');
     setBoardsOnly(false);
+    setExpiry('never');
     setCreatedToken(null);
     setCreateError(null);
     setIsCreateOpen(true);
@@ -71,6 +89,7 @@ export function ApiKeysSection() {
       const created = await createApiKey({
         name: name.trim(),
         scope: boardsOnly ? 'boards' : undefined,
+        expiresInDays: expiry === 'never' ? undefined : (Number(expiry) as ApiKeyExpiryDays),
       }).unwrap();
       setCreatedToken(created.token);
     } catch {
@@ -107,7 +126,7 @@ export function ApiKeysSection() {
 
         <Text color="secondary" variant="caption-2">
           Единственный способ подключить интеграцию — sync-cli, reports, worker,
-          ntlstl.time, свои скрипты. Ключ действует до отзыва; в запросе его
+          ntlstl.time, свои скрипты. Ключ действует до отзыва или до выбранного срока; в запросе его
           передают заголовком <code>X-Api-Key</code>.
         </Text>
 
@@ -159,7 +178,7 @@ export function ApiKeysSection() {
                     {apiKey.name}
                   </Text>
                   <Text color="secondary" variant="caption-2" ellipsis>
-                    {apiKey.prefix}… · {apiKey.scope === 'boards' ? 'только для плат · ' : ''}{apiKey.lastUsedAt
+                    {apiKey.prefix}… · {describeExpiry(apiKey.expiresAt)}{apiKey.scope === 'boards' ? 'только для плат · ' : ''}{apiKey.lastUsedAt
                       ? `использован ${formatRelativeTime(apiKey.lastUsedAt)}`
                       : 'ещё не использован'}
                   </Text>
@@ -221,6 +240,18 @@ export function ApiKeysSection() {
                   placeholder="sync-cli на ноутбуке"
                   autoFocus
                   hasClear
+                />
+              </label>
+              <label className={styles.field}>
+                <Text variant="body-2" color="secondary">
+                  Срок действия
+                </Text>
+                <Select
+                  aria-label="Срок действия"
+                  value={[expiry]}
+                  onUpdate={([value]) => setExpiry(value ?? 'never')}
+                  options={EXPIRY_OPTIONS}
+                  width="max"
                 />
               </label>
               <Checkbox checked={boardsOnly} onUpdate={setBoardsOnly}>

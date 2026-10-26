@@ -2330,6 +2330,8 @@ export interface components {
             name: string;
             /** @enum {string} */
             scope?: "boards";
+            /** @enum {number} */
+            expiresInDays?: 30 | 90 | 365;
         };
         CreatedApiKeyResponseDto: {
             id: number;
@@ -2337,6 +2339,8 @@ export interface components {
             prefix: string;
             scope: string | null;
             token: string;
+            /** Format: date-time */
+            expiresAt: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -2349,6 +2353,8 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             lastUsedAt: string | null;
+            /** Format: date-time */
+            expiresAt: string | null;
         };
         EmergencyKeyStatusResponseDto: {
             exists: boolean;

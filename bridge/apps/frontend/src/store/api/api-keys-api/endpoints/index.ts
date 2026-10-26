@@ -7,7 +7,10 @@ export interface ApiKey {
   scope?: 'boards' | null;
   createdAt: string;
   lastUsedAt: string | null;
+  expiresAt?: string | null;
 }
+
+export type ApiKeyExpiryDays = 30 | 90 | 365;
 
 export interface CreatedApiKey extends ApiKey {
   token: string;
@@ -19,11 +22,11 @@ const apiKeysApiEndpoints = apiKeysApi.injectEndpoints({
       query: () => 'auth/api-keys',
       providesTags: ['ApiKeys'],
     }),
-    createApiKey: builder.mutation<CreatedApiKey, { name: string; scope?: 'boards' }>({
-      query: ({ name, scope }) => ({
+    createApiKey: builder.mutation<CreatedApiKey, { name: string; scope?: 'boards'; expiresInDays?: ApiKeyExpiryDays }>({
+      query: ({ name, scope, expiresInDays }) => ({
         url: 'auth/api-keys',
         method: 'POST',
-        body: scope ? { name, scope } : { name },
+        body: { name, ...(scope ? { scope } : {}), ...(expiresInDays ? { expiresInDays } : {}) },
       }),
       invalidatesTags: ['ApiKeys'],
     }),

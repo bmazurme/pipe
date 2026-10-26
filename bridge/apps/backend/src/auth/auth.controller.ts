@@ -118,6 +118,7 @@ export class AuthController {
       currentUser.id,
       dto.name,
       dto.scope ?? null,
+      dto.expiresInDays ?? null,
     );
     return CreatedApiKeyResponseDto.fromCreatedApiKey(created);
   }
