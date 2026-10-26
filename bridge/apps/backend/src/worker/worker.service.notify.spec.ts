@@ -15,7 +15,12 @@ import { WorkerService } from './worker.service';
 
 describe('WorkerService finish notification', () => {
   let service: WorkerService;
-  let repository: { findOne: jest.Mock; save: jest.Mock };
+  let repository: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    update: jest.Mock;
+    metadata: { columns: { propertyName: string }[] };
+  };
   let notifier: { notify: jest.Mock };
   let storage: { findOwned: jest.Mock; create: jest.Mock };
 
@@ -37,6 +42,12 @@ describe('WorkerService finish notification', () => {
     repository = {
       findOne: jest.fn(),
       save: jest.fn((j: Job) => Promise.resolve(j)),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      metadata: {
+        columns: ['id', 'userId', 'status'].map((propertyName) => ({
+          propertyName,
+        })),
+      },
     };
     notifier = { notify: jest.fn().mockResolvedValue(undefined) };
     storage = {
@@ -74,6 +85,17 @@ describe('WorkerService finish notification', () => {
     expect(notifier.notify).toHaveBeenCalledWith(
       expect.objectContaining({ id: 7, status: JobStatus.Succeeded }),
     );
+  });
+
+  it('does not wait for the notifier before setResult resolves', async () => {
+    repository.findOne.mockResolvedValue(job());
+    notifier.notify.mockReturnValue(new Promise<void>(() => undefined));
+
+    await expect(service.setResult(7, 1, file)).resolves.toMatchObject({
+      id: 7,
+      status: JobStatus.Succeeded,
+    });
+    expect(notifier.notify).toHaveBeenCalledTimes(1);
   });
 
   it('calls the notifier for a failure that is not re-queued', async () => {

@@ -1890,9 +1890,9 @@ describe('WorkerService', () => {
       it('saves the job before deleting, so the delete cannot orphan the link', async () => {
         setup({ id: 5, channel: 'issue', taskKey: '402:6' });
         const order: string[] = [];
-        repository.save!.mockImplementation((j) => {
+        repository.update!.mockImplementation(() => {
           order.push('save');
-          return Promise.resolve(j);
+          return Promise.resolve({ affected: 1 });
         });
         (storageService.delete as jest.Mock).mockImplementation(async () => {
           order.push('delete');
@@ -1922,6 +1922,70 @@ describe('WorkerService', () => {
 
         expect(result.status).toBe(JobStatus.Succeeded);
         expect(result.resultFileId).toBe(99);
+      });
+    });
+
+    describe('a lean read and a targeted write', () => {
+      const file = { originalname: 'result.zip' } as Express.Multer.File;
+
+      beforeEach(() => {
+        repository.findOne!.mockResolvedValue({
+          id: 1,
+          sourceFileId: null,
+          resultFileId: null,
+          status: JobStatus.Running,
+        } as Job);
+        storageService.create!.mockResolvedValue({ id: 99 });
+      });
+
+      it('never selects the log or the encrypted context/history columns', async () => {
+        (repository as { metadata?: unknown }).metadata = {
+          columns: [
+            'id',
+            'userId',
+            'status',
+            'logs',
+            'contextText',
+            'historyText',
+            'resultFileId',
+          ].map((propertyName) => ({ propertyName })),
+        };
+
+        await service.setResult(1, 7, file);
+
+        expect(repository.findOne).toHaveBeenCalledWith({
+          where: { id: 1, userId: 7 },
+          select: ['id', 'userId', 'status', 'resultFileId'],
+        });
+      });
+
+      it('writes only the changed columns with one update, never save', async () => {
+        const result = await service.setResult(1, 7, file);
+
+        expect(repository.save).not.toHaveBeenCalled();
+        expect(repository.update).toHaveBeenCalledTimes(1);
+        expect(repository.update).toHaveBeenCalledWith(
+          { id: 1, userId: 7 },
+          {
+            resultFileId: 99,
+            status: JobStatus.Succeeded,
+            finishedAt: expect.any(Date),
+          },
+        );
+        expect(result).toMatchObject({
+          id: 1,
+          resultFileId: 99,
+          status: JobStatus.Succeeded,
+        });
+      });
+
+      it('answers 404 for a job that is not the caller’s', async () => {
+        repository.findOne!.mockResolvedValue(null);
+
+        await expect(service.setResult(1, 7, file)).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(repository.update).not.toHaveBeenCalled();
       });
     });
   });

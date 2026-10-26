@@ -507,6 +507,7 @@ export class WorkerController {
 
     const job = await this.workerService.setResult(id, currentUser.id, file);
 
-    return JobResponseDto.fromEntity(job);
+    // setResult skips the log (up to 2M chars); the worker ignores the body anyway.
+    return JobResponseDto.fromEntity({ ...job, logs: '' });
   }
 }
