@@ -233,3 +233,62 @@ describe('PurgeApplyTab', () => {
     expect(textarea().value).toBe('Иванов');
   });
 });
+
+describe('PurgeApplyTab undo', () => {
+  const undo = () => screen.getByRole('button', { name: 'Отменить' });
+
+  it('restores the exact previous text, then disables itself', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+    expect(undo()).toBeDisabled();
+
+    await user.type(textarea(), 'Иванов и Петров');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(undo()).toBeEnabled();
+
+    await user.click(undo());
+    expect(textarea().value).toBe('Иванов и Петров');
+    expect(screen.getByText('Текст возвращён')).toBeTruthy();
+    expect(undo()).toBeDisabled();
+  });
+
+  it('is not armed by a substitution with no matches', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'ничего общего');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(undo()).toBeDisabled();
+  });
+
+  it('is disabled again after the user types in the field', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'Иванов');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(undo()).toBeEnabled();
+
+    await user.type(textarea(), '!');
+    expect(undo()).toBeDisabled();
+  });
+
+  it('is disabled after a successful copy', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    renderTab();
+    await screen.findByRole('button', { name: 'Сохранить' });
+
+    await user.type(textarea(), 'Иванов');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    await user.click(screen.getByRole('button', { name: /Копировать/ }));
+
+    await waitFor(() => expect(textarea().value).toBe(''));
+    expect(undo()).toBeDisabled();
+  });
+});
