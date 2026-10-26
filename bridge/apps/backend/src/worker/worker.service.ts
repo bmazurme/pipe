@@ -619,12 +619,7 @@ export class WorkerService implements OnModuleInit {
     userId: number,
     logsFrom: number,
   ): Promise<{ job: Job; logsTail: string; logsLength: number }> {
-    const columns = this.jobRepository.metadata.columns
-      .map((column) => column.propertyName)
-      .filter(
-        (name) =>
-          name !== 'logs' && name !== 'contextText' && name !== 'historyText',
-      );
+    const columns = this.leanJobColumns();
 
     // CAST: an untyped parameter would make SUBSTRING(... FROM $n) pick the regex form.
     const { entities, raw } = await this.jobRepository
@@ -651,6 +646,17 @@ export class WorkerService implements OnModuleInit {
       logsTail: raw[0]?.logsTail ?? '',
       logsLength: Number(raw[0]?.logsLength ?? 0),
     };
+  }
+
+  // Every Job column except the unbounded `logs` and the encrypted context/history
+  // text — reading those costs a multi-MB transfer and two decryptions.
+  private leanJobColumns(): (keyof Job)[] {
+    return this.jobRepository.metadata.columns
+      .map((column) => column.propertyName as keyof Job)
+      .filter(
+        (name) =>
+          name !== 'logs' && name !== 'contextText' && name !== 'historyText',
+      );
   }
 
   // Polled by the worker every few seconds while a job runs, so it reads only the
@@ -1126,7 +1132,16 @@ export class WorkerService implements OnModuleInit {
     userId: number,
     file: Express.Multer.File,
   ): Promise<Job> {
-    const job = await this.findOwned(id, userId);
+    // Lean: the returned job carries no `logs`/context/history — the result
+    // response never sends them back.
+    const job = await this.jobRepository.findOne({
+      where: { id, userId },
+      select: this.leanJobColumns(),
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
 
     if (job.status === JobStatus.Cancelled) {
       throw new ConflictException(
@@ -1161,9 +1176,13 @@ export class WorkerService implements OnModuleInit {
         : {},
     );
 
-    job.resultFileId = stored.id;
-    job.status = JobStatus.Succeeded;
-    job.finishedAt = new Date();
+    const changes: Partial<
+      Pick<Job, 'resultFileId' | 'status' | 'finishedAt' | 'sourceFileId'>
+    > = {
+      resultFileId: stored.id,
+      status: JobStatus.Succeeded,
+      finishedAt: new Date(),
+    };
 
     // A pipeline parcel (addressed by taskKey) is single-use: once its job
     // has succeeded it has been taken and acted on, so it must not linger in
@@ -1173,10 +1192,13 @@ export class WorkerService implements OnModuleInit {
     const consumed = sourceFile?.taskKey ? sourceFile : null;
 
     if (consumed) {
-      job.sourceFileId = null;
+      changes.sourceFileId = null;
     }
 
-    const saved = await this.jobRepository.save(job);
+    // A targeted UPDATE: `save` would re-select the whole row (log included)
+    // just to diff these few columns.
+    await this.jobRepository.update({ id, userId }, changes);
+    const saved: Job = Object.assign(job, changes);
 
     if (saved.usedClaudeCredentialId != null) {
       try {
@@ -1192,7 +1214,9 @@ export class WorkerService implements OnModuleInit {
     }
 
     logJobOutcome(this.appLogs, saved);
-    await this.finishNotifier.notify(saved);
+    // Not awaited: a slow Telegram must not hold up the worker's result upload.
+    // notify() catches and logs its own errors.
+    void this.finishNotifier.notify(saved);
 
     if (consumed) {
       try {

@@ -459,4 +459,25 @@ describe('WorkerController', () => {
       expect(workerService.recordHeartbeat).toHaveBeenCalledWith(7, 'worker-a');
     });
   });
+
+  describe('uploadResult', () => {
+    it('answers with an empty log, whatever the job carries', async () => {
+      (workerService as Record<string, jest.Mock>).setResult = jest
+        .fn()
+        .mockResolvedValue({
+          id: 5,
+          status: 'succeeded',
+          logs: 'x'.repeat(10),
+        });
+
+      const result = await controller.uploadResult(
+        5,
+        { path: '/tmp/r.zip' } as Express.Multer.File,
+        { id: 7, workerId: 3 },
+      );
+
+      expect(result.logs).toBe('');
+      expect(result.status).toBe('succeeded');
+    });
+  });
 });
