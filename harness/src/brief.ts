@@ -1,3 +1,4 @@
+import { DEFAULT_RECENT_HOURS } from './args.js';
 import type { LiveWorkerInfo } from './bridgeLive.js';
 import type { StatusPaths } from './collect.js';
 import { readRecentEvents, type EventsPaths, type TaskEvent } from './events.js';
@@ -18,7 +19,7 @@ import { buildReportData } from './reportBuilder.js';
 // job (pairing --brief with the existing --notify, see its own comment)
 // — Telegram/web-push delivery is a distinct, separate item (3.3, not
 // started), not folded into this one.
-export const DEFAULT_RECENT_HOURS = 24;
+export { DEFAULT_RECENT_HOURS };
 
 export interface BriefOptions {
   paths?: Partial<StatusPaths>;
