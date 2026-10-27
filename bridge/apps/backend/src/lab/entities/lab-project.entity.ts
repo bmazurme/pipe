@@ -35,6 +35,10 @@ export class LabProject extends BaseEntity {
   @Column({ type: 'timestamp', nullable: true })
   checkedAt: Date | null;
 
+  // When the token expires, as GitHub reported on the last check; null for a token without expiry.
+  @Column({ type: 'timestamp', nullable: true })
+  tokenExpiresAt: Date | null;
+
   @Column({ type: 'boolean', default: false })
   canWrite: boolean;
 }

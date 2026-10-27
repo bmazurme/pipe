@@ -16,6 +16,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
+import { describeTokenExpiry } from './tokenExpiry';
 
 const EMPTY = { name: '', repo: '', token: '', baseBranch: 'main' };
 
@@ -185,16 +186,21 @@ export function ProjectsTab() {
 
       {projects && projects.length === 0 && <EmptyState icon={LogoGithub} title="Проектов нет" description="Подключите репозиторий GitHub, чтобы запускать в нём задачи и расписания." />}
 
-      {projects?.map((project) => (
+      {projects?.map((project) => {
+        const expiry = describeTokenExpiry(project.tokenExpiresAt);
+
+        return (
         <div key={project.id} className={styles.row}>
           <div className={styles.rowMain}>
             <Text variant="body-2">{project.name}</Text>
             <Text variant="caption-2" color="secondary">
               {project.repo} · ветка {project.baseBranch} · токен …{project.tokenHint}
+              {expiry && ` · ${expiry.text}`}
               {project.checkedAt && ` · проверен ${formatRelativeTime(project.checkedAt)}`}
             </Text>
           </div>
           <div className={styles.rowActions}>
+            {expiry?.label && <Label theme={expiry.label.theme}>{expiry.label.text}</Label>}
             <Label theme={project.canWrite ? 'success' : 'danger'}>{project.canWrite ? 'чтение и запись' : 'нет записи'}</Label>
             <a href={`https://github.com/${project.repo}`} target="_blank" rel="noreferrer noopener" aria-label={`Открыть ${project.repo} на GitHub`}>
               <Icon data={ArrowUpRightFromSquare} size={16} />
@@ -210,7 +216,8 @@ export function ProjectsTab() {
             </Button>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} maxWidth="s" aria-labelledby="lab-project-delete-title">
         <Dialog.Header caption="Отключить проект" id="lab-project-delete-title" />

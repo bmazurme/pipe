@@ -12,6 +12,8 @@ export interface LabProject {
   /** The last characters of the stored token; the token itself never comes back. */
   tokenHint: string;
   checkedAt: string | null;
+  /** When the GitHub token expires; null for a token without expiry. */
+  tokenExpiresAt: string | null;
   canWrite: boolean;
 }
 

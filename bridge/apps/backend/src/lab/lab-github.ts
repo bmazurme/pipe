@@ -67,8 +67,23 @@ export interface RepoCheck {
   canWrite: boolean;
   defaultBranch: string | null;
   isPrivate: boolean | null;
+  // When the token expires (GitHub's github-authentication-token-expiration header); null for a token without expiry.
+  tokenExpiresAt: Date | null;
   // What the owner has to fix, in words.
   problems: string[];
+}
+
+// '2026-11-30 12:00:00 UTC' -> Date; null when absent or unparseable.
+export function parseTokenExpiry(header: string | null): Date | null {
+  const match = header
+    ?.trim()
+    .match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\s*(?:UTC|Z))?$/);
+
+  if (!match) return null;
+
+  const date = new Date(`${match[1]}T${match[2]}Z`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 async function repoRequest(
@@ -102,6 +117,7 @@ export async function checkRepo(
     canWrite: false,
     defaultBranch: null,
     isPrivate: null,
+    tokenExpiresAt: null,
     problems: [],
   };
 
@@ -140,6 +156,10 @@ export async function checkRepo(
 
     return result;
   }
+
+  result.tokenExpiresAt = parseTokenExpiry(
+    info.headers.get('github-authentication-token-expiration'),
+  );
 
   const data = (await info.json()) as {
     default_branch?: string;
