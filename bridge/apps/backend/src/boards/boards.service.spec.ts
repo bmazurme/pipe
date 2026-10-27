@@ -79,6 +79,7 @@ function setup(report: Partial<BoardReport> | null = null) {
   const updateRows: Partial<ScriptUpdate>[] = [];
   const updates = {
     findOne: jest.fn(async () => null as Partial<ScriptUpdate> | null),
+    find: jest.fn(async () => [] as Partial<ScriptUpdate>[]),
     create: jest.fn((row: Partial<ScriptUpdate>) => ({
       id: 5,
       createdAt: new Date(),
@@ -445,7 +446,7 @@ describe('BoardsService: the board’s side', () => {
   });
 
   it('shows each board with what is outdated, what can be updated, and its decisions', async () => {
-    const { service, updates } = setup(
+    const { service } = setup(
       fresh({
         scripts: [
           script('infra/scriptcheck/check-scripts.sh', 'outdated'),
@@ -454,7 +455,6 @@ describe('BoardsService: the board’s side', () => {
       }),
     );
 
-    updates.findOne.mockResolvedValue(null);
     const [view] = await service.list(7);
 
     expect(view).toMatchObject({
@@ -464,6 +464,61 @@ describe('BoardsService: the board’s side', () => {
       updatable: 1,
       pending: null,
       lastUpdate: null,
+    });
+  });
+
+  describe('list decisions', () => {
+    const row = (
+      id: number,
+      host: string,
+      status: string,
+      createdAt = new Date(),
+    ): Partial<ScriptUpdate> => ({
+      id,
+      host,
+      status: status as ScriptUpdate['status'],
+      sha: SHA,
+      createdAt,
+    });
+
+    it('loads decisions of all boards in one query', async () => {
+      const { service, reports, updates } = setup(null);
+      const boards = ['a', 'b', 'c'].map((host) => fresh({ host }));
+
+      reports.find.mockResolvedValue(boards as never);
+      updates.find.mockResolvedValue([
+        row(9, 'a', 'pending'),
+        row(8, 'b', 'failed'),
+        row(7, 'b', 'applied'),
+      ]);
+
+      const views = await service.list(7);
+
+      expect(updates.find).toHaveBeenCalledTimes(1);
+      expect(updates.findOne).not.toHaveBeenCalled();
+      expect(views.map((v) => v.pending?.id ?? null)).toEqual([9, null, null]);
+      expect(views.map((v) => v.lastUpdate?.id ?? null)).toEqual([
+        null,
+        8,
+        null,
+      ]);
+      expect(updates.update).not.toHaveBeenCalled();
+    });
+
+    it('reports an expired pending row as none and marks it expired', async () => {
+      const { service, updates } = setup(fresh());
+
+      updates.find.mockResolvedValue([
+        row(4, 'ubuntu-red', 'pending', new Date(Date.now() - 3 * 3600_000)),
+      ]);
+      const [view] = await service.list(7);
+
+      expect(view.pending).toBeNull();
+      expect(updates.update).toHaveBeenCalledTimes(1);
+      expect(updates.update).toHaveBeenCalledWith(
+        { id: expect.anything() },
+        expect.objectContaining({ status: 'expired' }),
+      );
     });
   });
 
