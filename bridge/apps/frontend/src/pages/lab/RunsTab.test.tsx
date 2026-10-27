@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
+import { MemoryRouter } from 'react-router-dom';
 
 import { RunsTab } from './RunsTab';
 import { store } from '../../store';
@@ -41,9 +42,9 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 function renderTab() {
   return render(
     <Provider store={store}>
-      <ThemeProvider theme="light">
+      <ThemeProvider theme="light"><MemoryRouter>
         <RunsTab />
-      </ThemeProvider>
+      </MemoryRouter></ThemeProvider>
     </Provider>,
   );
 }
