@@ -1,6 +1,7 @@
-import { Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
+import { useState } from 'react';
+import { Alert, Button, Card, Label, Skeleton, Spin, Text } from '@gravity-ui/uikit';
 
-import type { FleetWorker, WorkerJob } from '../../store/api';
+import { type FleetWorker, useUpdateWorkerMutation, type WorkerJob } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { deriveTaskState, isActive, TASK_STATE_LABEL, TASK_STATE_THEME } from './constants';
 import { fleetCounts } from './fleet';
@@ -18,6 +19,28 @@ export function WorkerFleetSummary({ workers, isLoading, jobs }: WorkerFleetSumm
   const taskState = deriveTaskState(jobs);
   const queued = jobs.filter((job) => job.status === 'queued').length;
   const running = jobs.filter((job) => isActive(job.status) && job.status !== 'queued').length;
+  const [updateWorker] = useUpdateWorkerMutation();
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  // Same set the per-card switch is shown for: managed workers that have connected at least once.
+  const switchable = (workers ?? []).filter((worker) => worker.kind !== 'legacy' && worker.state !== 'pending');
+  const pauseAll = switchable.some((worker) => worker.enabled);
+
+  const handleBulk = async () => {
+    const targets = switchable.filter((worker) => worker.enabled === pauseAll);
+
+    setBulkPending(true);
+    setBulkError(null);
+
+    const results = await Promise.allSettled(
+      targets.map((worker) => updateWorker({ id: worker.id as number, enabled: !pauseAll }).unwrap()),
+    );
+    const failed = results.filter((result) => result.status === 'rejected').length;
+
+    if (failed > 0) setBulkError(`Не удалось изменить: ${failed} из ${targets.length}`);
+    setBulkPending(false);
+  };
+
   const nobodyOnline = counts.total > 0 && counts.online === 0;
 
   return (
@@ -51,9 +74,16 @@ export function WorkerFleetSummary({ workers, isLoading, jobs }: WorkerFleetSumm
                 ждут подключения: {counts.pending}
               </Text>
             )}
+            {switchable.length > 0 && (
+              <Button view="flat" size="s" disabled={bulkPending} onClick={() => void handleBulk()}>
+                {bulkPending && <Spin size="xs" />}
+                {pauseAll ? 'Приостановить всех' : 'Возобновить всех'}
+              </Button>
+            )}
           </div>
         )}
       </div>
+      {bulkError && <Alert theme="danger" message={bulkError} />}
       <div className={styles.statusRow}>
         <Text color="secondary" variant="body-2">
           Задачи
