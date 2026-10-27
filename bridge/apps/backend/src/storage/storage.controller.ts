@@ -22,6 +22,7 @@ import { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { DiscardUploadOnErrorInterceptor } from '../uploads/discard-upload-on-error.interceptor';
 import { multerConfig } from './config/multer.config';
 import { ListFilesQueryDto } from './dto/list-files-query.dto';
 import { StoredFileResponseDto } from './dto/stored-file-response.dto';
@@ -54,7 +55,10 @@ export class StorageController {
 
   @Post()
   @UseFilters(MulterExceptionFilter)
-  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @UseInterceptors(
+    FileInterceptor('file', multerConfig),
+    DiscardUploadOnErrorInterceptor,
+  )
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Body() meta: UploadFileMetaDto,
