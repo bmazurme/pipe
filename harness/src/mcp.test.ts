@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -9,7 +9,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 import type { ActionDeps } from './actions.js';
 import type { StatusPaths } from './collect.js';
-import { createPipeMcpServer } from './mcp.js';
+import { createPipeMcpServer, mcpRunSyncCli } from './mcp.js';
 
 // Real protocol round-trip (InMemoryTransport.createLinkedPair — a real
 // Client talking real MCP JSON-RPC to a real McpServer, just without a
@@ -184,5 +184,55 @@ describe('pipe-mcp', () => {
 
     assert.equal(result.isError, true);
     assert.equal(calls.length, 0);
+  });
+});
+
+describe('mcpRunSyncCli', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'pipe-mcp-cli-'));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps the final line of a large output from a child that exits immediately', async () => {
+    const script = path.join(dir, 'big.js');
+    writeFileSync(script, "process.stdout.write('x'.repeat(500000) + '\\nFINAL-LINE\\n'); process.exitCode = 3;");
+    const result = await mcpRunSyncCli([], script, { outputCap: 1024 * 1024 });
+    assert.equal(result.code, 3);
+    assert.ok(result.output.endsWith('FINAL-LINE'));
+  });
+
+  it('times out a child that never exits and kills it', async () => {
+    const script = path.join(dir, 'hang.js');
+    const pidFile = path.join(dir, 'pid');
+    writeFileSync(
+      script,
+      `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`,
+    );
+    const result = await mcpRunSyncCli([], script, { timeoutMs: 500 });
+    assert.equal(result.code, 1);
+    assert.match(result.output, /timed out after 500 ms/);
+    const pid = Number(readFileSync(pidFile, 'utf8'));
+    let alive = true;
+    for (let i = 0; i < 50 && alive; i++) {
+      try {
+        process.kill(pid, 0);
+        await new Promise((r) => setTimeout(r, 50));
+      } catch {
+        alive = false;
+      }
+    }
+    assert.equal(alive, false);
+  });
+
+  it('truncates output beyond the cap from the front', async () => {
+    const script = path.join(dir, 'cap.js');
+    writeFileSync(script, "process.stdout.write('HEAD' + 'y'.repeat(5000) + 'TAIL');");
+    const result = await mcpRunSyncCli([], script, { outputCap: 100 });
+    assert.ok(result.output.startsWith('[…truncated]'));
+    assert.ok(result.output.endsWith('TAIL'));
+    assert.ok(!result.output.includes('HEAD'));
   });
 });
