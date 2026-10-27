@@ -1,7 +1,3 @@
-import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-
-import { Worker } from '../worker/entities/worker.entity';
 import {
   ENROLL_CODE_PREFIX,
   generateEnrollCode,
@@ -40,42 +36,40 @@ describe('worker keys and enrollment codes', () => {
 });
 
 describe('WorkerKeysService.validate', () => {
-  const repository = { findOneBy: jest.fn() };
+  const lookup = jest.fn();
   let service: WorkerKeysService;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.resetAllMocks();
-    const module = await Test.createTestingModule({
-      providers: [
-        WorkerKeysService,
-        { provide: getRepositoryToken(Worker), useValue: repository },
-      ],
-    }).compile();
-
-    service = module.get(WorkerKeysService);
+    service = new WorkerKeysService();
+    service.useLookup(lookup);
   });
 
   it('refuses anything that is not a worker key without a lookup', async () => {
     await expect(service.validate('brk_personal')).resolves.toBeNull();
     await expect(service.validate('')).resolves.toBeNull();
-    expect(repository.findOneBy).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
   });
 
   it('finds the worker by the hash of the key', async () => {
-    repository.findOneBy.mockResolvedValue({ id: 5, userId: 7 });
+    lookup.mockResolvedValue({ id: 5, userId: 7 });
 
     await expect(service.validate('brw_secret')).resolves.toEqual({
       userId: 7,
       workerId: 5,
     });
-    expect(repository.findOneBy).toHaveBeenCalledWith({
-      keyHash: hashSecret('brw_secret'),
-    });
+    expect(lookup).toHaveBeenCalledWith(hashSecret('brw_secret'));
   });
 
   it('is null for a key that matches no worker (deleted, or renewed)', async () => {
-    repository.findOneBy.mockResolvedValue(null);
+    lookup.mockResolvedValue(null);
 
     await expect(service.validate('brw_gone')).resolves.toBeNull();
+  });
+
+  it('fails closed while no lookup is registered', async () => {
+    await expect(
+      new WorkerKeysService().validate('brw_secret'),
+    ).resolves.toBeNull();
   });
 });

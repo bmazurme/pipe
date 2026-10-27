@@ -1,10 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-
-import { Worker } from '../worker/entities/worker.entity';
 
 // A worker's own key — distinct from a personal API key ('brk_'): it is created at enrollment, lives only on the worker
 // and is accepted only on the routes a worker needs (see WorkerKeyAllowed). One enrollment code is single-use ('brn_').
@@ -43,22 +39,27 @@ export function generateEnrollCode(): { code: string; hash: string } {
   return { code, hash: hashSecret(code) };
 }
 
+// How the guard finds the worker a key hash belongs to. The module that owns workers registers it (see useLookup).
+export type WorkerKeyLookup = (
+  keyHash: string,
+) => Promise<{ id: number; userId: number } | null>;
+
 @Injectable()
 export class WorkerKeysService {
-  constructor(
-    @InjectRepository(Worker)
-    private readonly workers: Repository<Worker>,
-  ) {}
+  private lookup: WorkerKeyLookup | null = null;
 
-  // The worker a presented key belongs to, or null. A deleted worker's key simply stops matching.
+  useLookup(lookup: WorkerKeyLookup): void {
+    this.lookup = lookup;
+  }
+
+  // The worker a presented key belongs to, or null. A deleted worker's key simply stops matching;
+  // until a lookup is registered nothing matches.
   async validate(rawKey: string): Promise<WorkerPrincipal | null> {
-    if (!rawKey.startsWith(WORKER_KEY_PREFIX)) {
+    if (!rawKey.startsWith(WORKER_KEY_PREFIX) || !this.lookup) {
       return null;
     }
 
-    const worker = await this.workers.findOneBy({
-      keyHash: hashSecret(rawKey),
-    });
+    const worker = await this.lookup(hashSecret(rawKey));
 
     return worker ? { userId: worker.userId, workerId: worker.id } : null;
   }
