@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Text, TextInput } from '@gravity-ui/uikit';
 
-import { useProvisionVpnServerMutation } from '../../store/api';
+import { describeApiError, useProvisionVpnServerMutation } from '../../store/api';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../VpnPage.module.css';
 
@@ -11,6 +11,7 @@ export function ProvisionServerForm() {
   const [sshPassword, setSshPassword] = useState('');
   const [provisionVpnServer, { isLoading }] = useProvisionVpnServerMutation();
   const [result, setResult] = useState<'success' | 'error' | null>(null);
+  const [errorText, setErrorText] = useState('');
 
   const canSubmit = Boolean(host.trim() && sshUser.trim() && sshPassword.trim());
 
@@ -22,7 +23,8 @@ export function ProvisionServerForm() {
       await provisionVpnServer({ host: host.trim(), sshUser: sshUser.trim(), sshPassword }).unwrap();
       setSshPassword('');
       setResult('success');
-    } catch {
+    } catch (err) {
+      setErrorText(describeApiError(err));
       setResult('error');
     }
   };
@@ -65,11 +67,15 @@ export function ProvisionServerForm() {
         <Alert
           theme="success"
           view="filled"
-          message="Запущена настройка сервера (~5-10 минут). Следите за логом workflow — он печатает URL и API-токен новой панели."
+          message="Запущена настройка сервера (~5-10 минут). Откройте вкладку «Actions» GitHub-репозитория и найдите запуск workflow настройки VPN-сервера — его лог печатает URL и API-токен новой панели."
         />
       )}
       {result === 'error' && (
-        <Alert theme="danger" view="filled" message="Не удалось запустить настройку сервера" />
+        <Alert
+          theme="danger"
+          view="filled"
+          message={`Не удалось запустить настройку сервера — ${errorText}`}
+        />
       )}
     </Card>
   );
