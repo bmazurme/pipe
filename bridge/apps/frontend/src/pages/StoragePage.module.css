@@ -173,3 +173,10 @@
   max-height: 320px;
   overflow-y: auto;
 }
+
+.fileFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}

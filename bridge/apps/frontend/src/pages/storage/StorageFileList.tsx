@@ -1,13 +1,25 @@
+import { useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
   File,
   FileText,
   FileZipper,
   LockOpen,
+  Magnifier,
   Picture,
   TrashBin,
 } from '@gravity-ui/icons';
-import { ActionTooltip, Alert, Button, Icon, IconData, Skeleton, Text } from '@gravity-ui/uikit';
+import {
+  ActionTooltip,
+  Alert,
+  Button,
+  Icon,
+  IconData,
+  SegmentedRadioGroup,
+  Skeleton,
+  Text,
+  TextInput,
+} from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { isEncryptedFile } from '../../shared/lib/parcelCrypto';
@@ -28,6 +40,20 @@ function getFileIcon(name: string): IconData {
 }
 
 const SKELETON_ROWS = [0, 1, 2];
+
+type DirectionFilter = 'all' | 'outbound' | 'result';
+
+const DIRECTION_LABEL = {
+  outbound: '→ задача',
+  result: '← результат',
+} as const;
+
+function getParcelCaption(file: StoredFileMeta): string {
+  const parts: string[] = [];
+  if (file.direction) parts.push(DIRECTION_LABEL[file.direction]);
+  if (file.taskKey) parts.push(file.taskKey);
+  return parts.join(' · ');
+}
 
 interface StorageFileListProps {
   files: StoredFileMeta[];
@@ -55,6 +81,20 @@ export function StorageFileList({
   onDeleteRequest,
 }: StorageFileListProps) {
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const [direction, setDirection] = useState<DirectionFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const visibleFiles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return files.filter((file) => {
+      if (direction !== 'all' && file.direction !== direction) return false;
+      if (!query) return true;
+      return (
+        file.originalName.toLowerCase().includes(query) ||
+        (file.taskKey ?? '').toLowerCase().includes(query)
+      );
+    });
+  }, [files, direction, searchQuery]);
 
   return (
     <>
@@ -62,6 +102,27 @@ export function StorageFileList({
         title="Файлы"
         meta={files.length > 0 ? `${files.length} · ${formatSize(totalSize)}` : undefined}
       />
+
+      {!isLoading && !isError && files.length > 0 && (
+        <div className={styles.fileFilters}>
+          <SegmentedRadioGroup
+            value={direction}
+            onUpdate={(value) => setDirection(value as DirectionFilter)}
+          >
+            <SegmentedRadioGroup.Option value="all">Все</SegmentedRadioGroup.Option>
+            <SegmentedRadioGroup.Option value="outbound">Задачи</SegmentedRadioGroup.Option>
+            <SegmentedRadioGroup.Option value="result">Результаты</SegmentedRadioGroup.Option>
+          </SegmentedRadioGroup>
+          <TextInput
+            value={searchQuery}
+            onUpdate={setSearchQuery}
+            placeholder="Поиск по имени и задаче"
+            controlProps={{ 'aria-label': 'Поиск по файлам' }}
+            hasClear
+            startContent={<Icon data={Magnifier} size={16} />}
+          />
+        </div>
+      )}
 
       {isLoading && (
         <ul className={styles.fileList}>
@@ -95,12 +156,20 @@ export function StorageFileList({
         />
       )}
 
+      {!isLoading && !isError && files.length > 0 && visibleFiles.length === 0 && (
+        <EmptyState
+          icon={Magnifier}
+          title="Ничего не найдено"
+          description="Попробуйте другой запрос или смените фильтр."
+        />
+      )}
+
       {/* One row layout for every width. The desktop table used to be a
           separate component tree, which is why it looked nothing like the
           devices list on the profile page. */}
-      {!isLoading && files.length > 0 && (
+      {!isLoading && visibleFiles.length > 0 && (
         <ul className={styles.fileList}>
-          {files.map((file) => (
+          {visibleFiles.map((file) => (
             <li key={file.id} className={styles.fileRow}>
               <span className={styles.fileIcon}>
                 <Icon data={getFileIcon(file.originalName)} size={16} />
@@ -111,7 +180,9 @@ export function StorageFileList({
                   {file.originalName}
                 </Text>
                 <Text color="secondary" variant="caption-2" ellipsis>
-                  {formatSize(file.size)} · {formatRelativeTime(file.createdAt)}
+                  {[getParcelCaption(file), formatSize(file.size), formatRelativeTime(file.createdAt)]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Text>
               </div>
 
