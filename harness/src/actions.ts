@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import type { ActionKind } from './args.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYNC_ROOT = path.resolve(__dirname, '..', '..', 'sync');
@@ -19,7 +20,7 @@ export const DEFAULT_SYNC_CLI_PATH = path.join(SYNC_ROOT, 'dist', 'cli.js');
 // overridable via --reports-url for anything else.
 export const DEFAULT_REPORTS_BASE_URL = 'http://127.0.0.1:4000';
 
-export type ActionKind = 'pull' | 'retry' | 'publish';
+export type { ActionKind };
 
 interface MinimalProjectConfig {
   name: string;

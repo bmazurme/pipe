@@ -10,6 +10,7 @@ export * from './deriveStatus.js';
 export * from './events.js';
 export * from './gitlabLive.js';
 export * from './render.js';
+export * from './args.js';
 export * from './cli.js';
 
 // Guards against running main() as a side effect of a test file importing
