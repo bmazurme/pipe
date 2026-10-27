@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Receipt } from '@gravity-ui/icons';
 import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
@@ -17,7 +17,7 @@ import { useIsNonOwner } from '../../store/hooks';
 import { OwnerOnlyNotice } from '../../widgets/OwnerOnly';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../ProfilePage.module.css';
-import { formatMs, formatPercent } from './logFormat';
+import { formatMs, formatPercent, searchTermFromNormalized } from './logFormat';
 
 const LEVEL_THEME: Record<LogLevel, 'normal' | 'warning' | 'danger'> = { info: 'normal', warn: 'warning', error: 'danger' };
 const SOURCE_OPTIONS: { value: LogSource | 'all'; content: string }[] = [
@@ -36,6 +36,8 @@ export function LogsSection() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
+  const [activeRow, setActiveRow] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
 
@@ -68,6 +70,29 @@ export function LogsSection() {
   const [exportLogs, { isLoading: isExporting }] = useExportLogsMutation();
 
   const visible = entries ?? [];
+
+  const applyDrillDown = (rowKey: string, message: string, problemsOnly: boolean) => {
+    if (activeRow === rowKey) {
+      setActiveRow(null);
+      setSearch('');
+
+      return;
+    }
+
+    const term = searchTermFromNormalized(message);
+
+    if (!term) return;
+
+    setActiveRow(rowKey);
+    setSearch(term);
+    if (problemsOnly) setOnlyProblems(true);
+    listRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleSearchChange = (value: string) => {
+    setActiveRow(null);
+    setSearch(value);
+  };
 
   const handleExport = async () => {
     setExportError(null);
@@ -152,10 +177,17 @@ export function LogsSection() {
           <div className={styles.logBlock}>
             <Text variant="subheader-1">Частые причины сбоев</Text>
             {summary.topErrors.map((item) => (
-              <div key={item.message} className={styles.logRow}>
+              <button
+                key={item.message}
+                type="button"
+                className={`${styles.logRow} ${styles.logRowButton}`}
+                aria-pressed={activeRow === `error:${item.message}`}
+                aria-label={`Показать события: ${item.message}, ${item.count}`}
+                onClick={() => applyDrillDown(`error:${item.message}`, item.message, true)}
+              >
                 <Text variant="body-2" ellipsis title={item.message}>{item.message}</Text>
                 <Label theme="danger" size="s">×{item.count}</Label>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -164,10 +196,17 @@ export function LogsSection() {
           <div className={styles.logBlock}>
             <Text variant="subheader-1">Самые медленные запросы</Text>
             {summary.slowestRoutes.map((item) => (
-              <div key={item.route} className={styles.logRow}>
+              <button
+                key={item.route}
+                type="button"
+                className={`${styles.logRow} ${styles.logRowButton}`}
+                aria-pressed={activeRow === `route:${item.route}`}
+                aria-label={`Показать события: ${item.route}, до ${formatMs(item.maxMs)}`}
+                onClick={() => applyDrillDown(`route:${item.route}`, item.route, false)}
+              >
                 <Text variant="code-inline-2" ellipsis title={item.route}>{item.route}</Text>
                 <Label theme="warning" size="s">до {formatMs(item.maxMs)}</Label>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -185,8 +224,9 @@ export function LogsSection() {
             <SegmentedRadioGroup.Option value="all">Все события</SegmentedRadioGroup.Option>
           </SegmentedRadioGroup>
         </div>
-        <TextInput value={search} onUpdate={setSearch} placeholder="Поиск по сообщению" label="Поиск по сообщению" hasClear size="m" />
+        <TextInput value={search} onUpdate={handleSearchChange} placeholder="Поиск по сообщению" label="Поиск по сообщению" hasClear size="m" />
 
+        <div ref={listRef} />
         {isListLoading ? (
           <Skeleton className={styles.logsSkeleton} />
         ) : isListError ? (

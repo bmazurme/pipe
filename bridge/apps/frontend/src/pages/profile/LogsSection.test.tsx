@@ -151,3 +151,31 @@ describe('LogsSection server-side filters', () => {
     expect(await screen.findByText('Job 6 succeeded')).toBeTruthy();
   });
 });
+
+describe('LogsSection drill-down', () => {
+  it('filters the list by a top failure and resets on a second click', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText('50%');
+    const row = screen.getByRole('button', { name: /Показать события: Job N failed: timed out after Ns/ });
+    await user.click(row);
+
+    await waitFor(() => expect(requested.some((path) => path.startsWith('/api/v1/logs?') && path.includes('q=failed%3A+timed+out+after'))).toBe(true));
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('failed: timed out after');
+
+    await user.click(row);
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('');
+  });
+
+  it('is activatable from the keyboard for slow routes', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText('50%');
+    screen.getByRole('button', { name: /Показать события: \/api\/v1\/storage/ }).focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(requested.some((path) => path.startsWith('/api/v1/logs?') && path.includes('q=%2Fapi%2Fv1%2Fstorage'))).toBe(true));
+  });
+});
