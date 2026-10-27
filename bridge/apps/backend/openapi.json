@@ -5727,7 +5727,9 @@
             "maxLength": 255
           },
           "token": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "/^[\\x21-\\x7E]+$/"
           }
         },
         "required": [
@@ -5739,7 +5741,9 @@
         "type": "object",
         "properties": {
           "token": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000,
+            "pattern": "/^[\\x21-\\x7E]+$/"
           }
         },
         "required": [
