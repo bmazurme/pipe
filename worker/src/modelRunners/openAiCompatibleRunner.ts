@@ -1,12 +1,12 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
-import { resolveInDir } from '@pipe/protocol/resolveInDir';
+import { resolveInDir } from "@pipe/protocol/resolveInDir";
 
-import { CancelledError } from '../cancelled.js';
-import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from '../fsWalk.js';
-import { resolveDispatcher } from '../proxyAgent.js';
-import type { RunResult } from './claudeRunner.js';
+import { CancelledError } from "../cancelled.js";
+import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from "../fsWalk.js";
+import { resolveDispatcher } from "../proxyAgent.js";
+import type { RunResult } from "./claudeRunner.js";
 
 const MAX_TURNS = 20;
 
@@ -15,53 +15,81 @@ const MAX_TURNS = 20;
 // timeout at all, a provider that just hangs would block the job forever.
 const COMPLETION_TIMEOUT_MS = 300_000;
 
+const TURN_RETRY_DELAY_MS = 2000;
+
+// Resolves after `ms`, or as soon as any of `signals` aborts.
+function sleepUnlessAborted(ms: number, signals: AbortSignal[]): Promise<void> {
+  return new Promise((resolve) => {
+    const all = AbortSignal.any(signals);
+    if (all.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      all.removeEventListener("abort", done);
+      resolve();
+    }
+    all.addEventListener("abort", done);
+  });
+}
+
 // A read_file result is pushed into `messages` and re-sent on every later
 // turn, so one huge file (e.g. a lockfile) could overflow the context window.
 export const MAX_TOOL_RESULT_CHARS = 50_000;
 
 const SYSTEM_PROMPT = [
-  'You are a coding agent working in a plain directory (not a git repository).',
-  'Use the read_file/list_files/write_file tools to inspect and edit files as needed.',
-  'There is no shell/run_command tool available — make changes purely by reading and writing files.',
-  'When you are done, reply with a plain text summary of what you changed and stop calling tools.',
-].join(' ');
+  "You are a coding agent working in a plain directory (not a git repository).",
+  "Use the read_file/list_files/write_file tools to inspect and edit files as needed.",
+  "There is no shell/run_command tool available — make changes purely by reading and writing files.",
+  "When you are done, reply with a plain text summary of what you changed and stop calling tools.",
+].join(" ");
 
 const TOOLS = [
   {
-    type: 'function',
+    type: "function",
     function: {
-      name: 'list_files',
-      description: 'List every file path in the working directory, recursively.',
-      parameters: { type: 'object', properties: {} },
+      name: "list_files",
+      description:
+        "List every file path in the working directory, recursively.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
-    type: 'function',
+    type: "function",
     function: {
-      name: 'read_file',
+      name: "read_file",
       description: `Read a file as UTF-8 text. Output is capped at ${MAX_TOOL_RESULT_CHARS} characters; use offset to read further.`,
       parameters: {
-        type: 'object',
+        type: "object",
         properties: {
-          path: { type: 'string', description: 'Path relative to the working directory' },
-          offset: { type: 'integer', description: 'Character offset to start reading from (default 0)' },
+          path: {
+            type: "string",
+            description: "Path relative to the working directory",
+          },
+          offset: {
+            type: "integer",
+            description: "Character offset to start reading from (default 0)",
+          },
         },
-        required: ['path'],
+        required: ["path"],
       },
     },
   },
   {
-    type: 'function',
+    type: "function",
     function: {
-      name: 'write_file',
-      description: 'Create or overwrite a file with the given UTF-8 text content.',
+      name: "write_file",
+      description:
+        "Create or overwrite a file with the given UTF-8 text content.",
       parameters: {
-        type: 'object',
+        type: "object",
         properties: {
-          path: { type: 'string', description: 'Path relative to the working directory' },
-          content: { type: 'string' },
+          path: {
+            type: "string",
+            description: "Path relative to the working directory",
+          },
+          content: { type: "string" },
         },
-        required: ['path', 'content'],
+        required: ["path", "content"],
       },
     },
   },
@@ -82,17 +110,23 @@ interface ChatMessage {
 // Keeps log lines bounded — write_file's arguments carry the entire file
 // content, which would otherwise be copied in full into the job's log row.
 function truncate(text: string, max = 200): string {
-  return text.length > max ? `${text.slice(0, max)}…(+${text.length - max} chars)` : text;
+  return text.length > max
+    ? `${text.slice(0, max)}…(+${text.length - max} chars)`
+    : text;
 }
 
-export function executeTool(cwd: string, name: string, args: Record<string, unknown>): string {
+export function executeTool(
+  cwd: string,
+  name: string,
+  args: Record<string, unknown>,
+): string {
   switch (name) {
-    case 'list_files': {
-      return listFilesRecursively(cwd, cwd, EXCLUDED_RESULT_DIRS).join('\n');
+    case "list_files": {
+      return listFilesRecursively(cwd, cwd, EXCLUDED_RESULT_DIRS).join("\n");
     }
-    case 'read_file': {
-      const path = resolveInDir(cwd, String(args.path ?? ''));
-      const content = readFileSync(path, 'utf-8');
+    case "read_file": {
+      const path = resolveInDir(cwd, String(args.path ?? ""));
+      const content = readFileSync(path, "utf-8");
       const offset = Math.max(0, Math.floor(Number(args.offset ?? 0)) || 0);
       const slice = content.slice(offset, offset + MAX_TOOL_RESULT_CHARS);
       if (offset === 0 && content.length <= MAX_TOOL_RESULT_CHARS) {
@@ -103,11 +137,11 @@ export function executeTool(cwd: string, name: string, args: Record<string, unkn
       }
       return `${slice}\n[truncated: file has ${content.length} chars; ${slice.length} shown from offset ${offset}. Pass offset=${offset + slice.length} to read more]`;
     }
-    case 'write_file': {
-      const path = resolveInDir(cwd, String(args.path ?? ''));
+    case "write_file": {
+      const path = resolveInDir(cwd, String(args.path ?? ""));
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, String(args.content ?? ''), 'utf-8');
-      return 'ok';
+      writeFileSync(path, String(args.content ?? ""), "utf-8");
+      return "ok";
     }
     default:
       return `Unknown tool: ${name}`;
@@ -134,53 +168,82 @@ export async function runOpenAiCompatible(
   proxyUrl?: string,
   timeoutMs?: number,
   signal?: AbortSignal,
+  retryDelayMs = TURN_RETRY_DELAY_MS,
 ): Promise<RunResult> {
-  const timeoutError = () => new Error(`${options.model} job timed out after ${(timeoutMs ?? 0) / 1000}s`);
-  const deadlineSignal = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
+  const timeoutError = () =>
+    new Error(
+      `${options.model} job timed out after ${(timeoutMs ?? 0) / 1000}s`,
+    );
+  const deadlineSignal =
+    timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: prompt },
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: prompt },
   ];
 
-  let output = '';
+  let output = "";
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     if (signal?.aborted) throw new CancelledError();
     if (deadlineSignal?.aborted) throw timeoutError();
 
-    const completionSignal = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
     let data: { choices?: { message?: ChatMessage }[] };
-    try {
-      const response = await fetch(`${options.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${options.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: options.model,
-          messages,
-          tools: TOOLS,
-          tool_choice: 'auto',
-        }),
-        // `dispatcher` is a Node/undici-specific fetch extension not in the
-        // standard RequestInit type — real at runtime, just untyped here.
-        dispatcher: resolveDispatcher(proxyUrl),
-        signal: AbortSignal.any([completionSignal, ...(deadlineSignal ? [deadlineSignal] : []), ...(signal ? [signal] : [])]),
-      } as RequestInit);
+    for (let attempt = 0; ; attempt++) {
+      const completionSignal = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
+      let retryable = false;
+      try {
+        const response = await fetch(`${options.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${options.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: options.model,
+            messages,
+            tools: TOOLS,
+            tool_choice: "auto",
+          }),
+          // `dispatcher` is a Node/undici-specific fetch extension not in the
+          // standard RequestInit type — real at runtime, just untyped here.
+          dispatcher: resolveDispatcher(proxyUrl),
+          signal: AbortSignal.any([
+            completionSignal,
+            ...(deadlineSignal ? [deadlineSignal] : []),
+            ...(signal ? [signal] : []),
+          ]),
+        } as RequestInit);
 
-      if (!response.ok) {
-        throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);
+        if (!response.ok) {
+          retryable = response.status === 429 || response.status >= 500;
+          throw new Error(
+            `${options.model} API error (${response.status}): ${await response.text()}`,
+          );
+        }
+
+        data = (await response.json()) as {
+          choices?: { message?: ChatMessage }[];
+        };
+        break;
+      } catch (error) {
+        // The owner's stop wins over everything else; then only the job deadline is
+        // rewritten — a per-request timeout keeps its own message.
+        if (signal?.aborted) throw new CancelledError();
+        if (deadlineSignal?.aborted) throw timeoutError();
+        if (error instanceof TypeError) retryable = true;
+        // One retry of the same turn on a network blip, 429 or 5xx; nothing was appended to `messages`.
+        if (!retryable || attempt >= 1) throw error;
+        onOutput(
+          `retrying ${options.model} turn after: ${(error as Error).message}\n`,
+        );
+        await sleepUnlessAborted(retryDelayMs, [
+          ...(deadlineSignal ? [deadlineSignal] : []),
+          ...(signal ? [signal] : []),
+        ]);
+        if (signal?.aborted) throw new CancelledError();
+        if (deadlineSignal?.aborted) throw timeoutError();
       }
-
-      data = (await response.json()) as { choices?: { message?: ChatMessage }[] };
-    } catch (error) {
-      // The owner's stop wins over everything else; then only the job deadline is
-      // rewritten — a per-request timeout keeps its own message.
-      if (signal?.aborted) throw new CancelledError();
-      if (deadlineSignal?.aborted) throw timeoutError();
-      throw error;
     }
     const message = data.choices?.[0]?.message;
 
@@ -191,8 +254,8 @@ export async function runOpenAiCompatible(
     messages.push(message);
 
     if (message.content) {
-      output += message.content + '\n';
-      onOutput(message.content + '\n');
+      output += message.content + "\n";
+      onOutput(message.content + "\n");
     }
 
     const toolCalls = message.tool_calls ?? [];
@@ -203,17 +266,23 @@ export async function runOpenAiCompatible(
     for (const call of toolCalls) {
       let result: string;
       try {
-        const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+        const args = call.function.arguments
+          ? JSON.parse(call.function.arguments)
+          : {};
         result = executeTool(cwd, call.function.name, args);
       } catch (error) {
         result = `Error: ${(error as Error).message}`;
       }
 
-      onOutput(`[tool] ${call.function.name}(${truncate(call.function.arguments)}) -> ${truncate(result)}\n`);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: result });
+      onOutput(
+        `[tool] ${call.function.name}(${truncate(call.function.arguments)}) -> ${truncate(result)}\n`,
+      );
+      messages.push({ role: "tool", tool_call_id: call.id, content: result });
     }
   }
 
-  onOutput(`Stopped after ${MAX_TURNS} turns without the model signaling completion.\n`);
+  onOutput(
+    `Stopped after ${MAX_TURNS} turns without the model signaling completion.\n`,
+  );
   return { exitCode: 1, output };
 }
