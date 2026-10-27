@@ -28,7 +28,17 @@ const UPDATE_LABEL: Record<string, string> = {
   failed: 'ошибка',
 };
 
-function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate: (host: string) => void; onCancel: (host: string) => void; busy: boolean }) {
+type BoardCardProps = {
+  board: Board;
+  onUpdate: (host: string) => void;
+  onCancel: (host: string) => void;
+  busy: boolean;
+  cancelling: boolean;
+  error: string | null;
+  onDismissError: () => void;
+};
+
+function BoardCard({ board, onUpdate, onCancel, busy, cancelling, error, onDismissError }: BoardCardProps) {
   const [showAll, setShowAll] = useState(false);
   const shown = board.scripts.filter((script) => showAll || script.status !== 'current');
   const manualOnly = board.outdated > 0 && board.updatable === 0;
@@ -48,16 +58,18 @@ function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate
         {board.pending ? (
           <>
             <Label theme="info">ждёт плату: {board.pending.sha.slice(0, 7)}</Label>
-            <Button view="flat" size="s" disabled={busy} onClick={() => onCancel(board.host)}>
+            <Button view="flat" size="s" disabled={busy} loading={cancelling} aria-label={`Отменить обновление на ${board.host}`} onClick={() => onCancel(board.host)}>
               Отменить
             </Button>
           </>
         ) : (
-          <Button view="action" size="m" disabled={board.updatable === 0 || busy || !board.online} loading={busy} onClick={() => onUpdate(board.host)}>
+          <Button view="action" size="m" aria-label={`Обновить скрипты на ${board.host}`} disabled={board.updatable === 0 || busy || !board.online} loading={busy} onClick={() => onUpdate(board.host)}>
             Обновить{board.updatable > 0 ? ` (${board.updatable})` : ''}
           </Button>
         )}
       </div>
+
+      {error && <Alert theme="danger" view="filled" message={error} onClose={onDismissError} />}
 
       {manualOnly && (
         <Text variant="caption-2" color="secondary">
@@ -91,7 +103,12 @@ function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate
       )}
       {board.scripts.some((script) => script.status === 'current') && (
         <div>
-          <Button view="flat-secondary" size="s" onClick={() => setShowAll((value) => !value)}>
+          <Button
+            view="flat-secondary"
+            size="s"
+            aria-expanded={showAll}
+            aria-label={showAll ? `Скрыть актуальные скрипты на ${board.host}` : `Показать все скрипты на ${board.host} (${board.scripts.length})`}
+            onClick={() => setShowAll((value) => !value)}>
             {showAll ? 'Скрыть актуальные' : `Показать все (${board.scripts.length})`}
           </Button>
         </div>
@@ -113,10 +130,20 @@ function BoardCard({ board, onUpdate, onCancel, busy }: { board: Board; onUpdate
 export function BoardsPage() {
   const [pollingInterval, setPollingInterval] = useState(SLOW_POLL_MS);
   const { data: boards, isLoading, isError, error } = useListBoardsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
-  const [request, { isLoading: isRequesting, originalArgs: requestingHost, error: requestError }] = useRequestBoardUpdateMutation();
-  const [cancel, { isLoading: isCancelling, originalArgs: cancellingHost, error: cancelError }] = useCancelBoardUpdateMutation();
+  const [request, { isLoading: isRequesting, originalArgs: requestingHost, error: requestError, reset: resetRequest }] = useRequestBoardUpdateMutation();
+  const [cancel, { isLoading: isCancelling, originalArgs: cancellingHost, error: cancelError, reset: resetCancel }] = useCancelBoardUpdateMutation();
   const anyPending = Boolean(boards?.some((board) => board.pending));
 
+  const errorFor = (host: string): string | null => {
+    if (requestError && requestingHost === host) return typeof requestError === 'string' ? requestError : getErrorMessage(requestError, 'Не удалось разрешить обновление');
+    if (cancelError && cancellingHost === host) return typeof cancelError === 'string' ? cancelError : getErrorMessage(cancelError, 'Не удалось отменить обновление');
+
+    return null;
+  };
+  const dismissError = (host: string) => {
+    if (requestError && requestingHost === host) resetRequest();
+    if (cancelError && cancellingHost === host) resetCancel();
+  };
 
   // Fast while a decision waits for its board, slow otherwise.
   useEffect(() => {
@@ -130,8 +157,6 @@ export function BoardsPage() {
         description="Скрипты, установленные на платах, против main. Кнопка «Обновить» разрешает плате поставить именно этот коммит: она проверяет, что он влит в main, и отчитывается о результате."
       />
 
-      {requestError && <Alert theme="danger" view="filled" message={typeof requestError === 'string' ? requestError : getErrorMessage(requestError, 'Не удалось разрешить обновление')} />}
-      {cancelError && <Alert theme="danger" view="filled" message={typeof cancelError === 'string' ? cancelError : getErrorMessage(cancelError, 'Не удалось отменить обновление')} />}
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message={typeof error === 'string' ? error : getErrorMessage(error, 'Не удалось загрузить платы')} />}
       {boards && boards.length === 0 && (
@@ -139,7 +164,14 @@ export function BoardsPage() {
       )}
 
       {boards?.map((board) => (
-        <BoardCard key={board.host} board={board} busy={(isRequesting && requestingHost === board.host) || (isCancelling && cancellingHost === board.host)} onUpdate={(host) => void request(host)} onCancel={(host) => void cancel(host)} />
+        <BoardCard
+          key={board.host}
+          board={board}
+          busy={(isRequesting && requestingHost === board.host) || (isCancelling && cancellingHost === board.host)}
+          cancelling={isCancelling && cancellingHost === board.host}
+          error={errorFor(board.host)}
+          onDismissError={() => dismissError(board.host)}
+          onUpdate={(host) => void request(host)} onCancel={(host) => void cancel(host)} />
       ))}
     </div>
   );

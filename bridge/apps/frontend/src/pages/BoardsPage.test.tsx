@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
@@ -74,7 +74,7 @@ describe('BoardsPage', () => {
     expect(screen.queryByText('infra/notify/notify-telegram')).toBeNull();
     expect(screen.getByText(/main c823ea5/)).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /Показать все \(2\)/ }));
+    await user.click(screen.getByRole('button', { name: /Показать все скрипты на ubuntu-red/ }));
     expect(screen.getByText('infra/notify/notify-telegram')).toBeTruthy();
   });
 
@@ -82,7 +82,7 @@ describe('BoardsPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: /Обновить \(1\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'Обновить скрипты на ubuntu-red' }));
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'boards/ubuntu-red/updates' }));
   });
@@ -92,7 +92,7 @@ describe('BoardsPage', () => {
     failUpdate = 'Кнопка устарела: main изменился';
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: /Обновить \(1\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'Обновить скрипты на ubuntu-red' }));
 
     expect(await screen.findByText('Кнопка устарела: main изменился')).toBeTruthy();
   });
@@ -110,12 +110,12 @@ describe('BoardsPage', () => {
     boards = [board({ pending: { id: 5, sha: 'c823ea56' + 'a'.repeat(32), via: 'ui', createdAt: new Date().toISOString() } })];
     renderPage();
 
-    const cancel = await screen.findByRole('button', { name: 'Отменить' });
+    const cancel = await screen.findByRole('button', { name: 'Отменить обновление на ubuntu-red' });
     boards = [board()];
     await user.click(cancel);
 
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'boards/ubuntu-red/updates/cancel' }));
-    expect(await screen.findByRole('button', { name: /Обновить \(1\)/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Обновить скрипты на ubuntu-red' })).toBeTruthy();
   });
 
   it('lets the agent update itself, and says how that is made safe', async () => {
@@ -123,7 +123,7 @@ describe('BoardsPage', () => {
     renderPage();
 
     expect(await screen.findByText(/Агент обновит и себя/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Обновить \(1\)/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Обновить скрипты на ubuntu-red' })).toBeEnabled();
   });
 
   it('says what needs a manual copy when that is all that is outdated; disables the button for a board that is offline', async () => {
@@ -135,7 +135,7 @@ describe('BoardsPage', () => {
 
     expect(await screen.findByText(/Устарело только то, что ставится вручную/)).toBeTruthy();
     expect(screen.getByText('не отвечает')).toBeTruthy();
-    for (const button of screen.getAllByRole('button', { name: /^Обновить/ })) expect(button).toBeDisabled();
+    for (const button of screen.getAllByRole('button', { name: /^Обновить скрипты/ })) expect(button).toBeDisabled();
   });
 
   it('shows the result of the last update', async () => {
@@ -151,5 +151,46 @@ describe('BoardsPage', () => {
     renderPage();
 
     expect(await screen.findByText('Плат пока нет')).toBeTruthy();
+  });
+
+  it('names the board in the buttons, one button per board, and exposes the toggle state', async () => {
+    const user = userEvent.setup();
+    boards = [board(), board({ host: 'ubuntu-blue' })];
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Обновить скрипты на ubuntu-red' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Обновить скрипты на ubuntu-blue' })).toHaveLength(1);
+
+    const toggle = screen.getByRole('button', { name: /Показать все скрипты на ubuntu-red/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(screen.getByRole('button', { name: 'Скрыть актуальные скрипты на ubuntu-red' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('names the board in the cancel button', async () => {
+    const pending = { id: 5, sha: 'c823ea56' + 'a'.repeat(32), via: 'ui', createdAt: new Date().toISOString() };
+    boards = [board({ pending }), board({ host: 'ubuntu-blue', pending })];
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Отменить обновление на ubuntu-red' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Отменить обновление на ubuntu-blue' })).toHaveLength(1);
+  });
+
+  it('shows a failed request only in the card of its board, and the alert can be closed', async () => {
+    const user = userEvent.setup();
+    failUpdate = 'Кнопка устарела: main изменился';
+    boards = [board(), board({ host: 'ubuntu-blue' })];
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Обновить скрипты на ubuntu-blue' }));
+
+    const message = await screen.findByText('Кнопка устарела: main изменился');
+    expect(screen.getAllByText('Кнопка устарела: main изменился')).toHaveLength(1);
+    const card = screen.getByText('ubuntu-blue').closest('.g-card') as HTMLElement;
+    expect(within(card).getByText('Кнопка устарела: main изменился')).toBe(message);
+    expect(within(screen.getByText('ubuntu-red').closest('.g-card') as HTMLElement).queryByText('Кнопка устарела: main изменился')).toBeNull();
+
+    await user.click(within(card).getByRole('button', { name: /close|закрыть/i }));
+    await waitFor(() => expect(screen.queryByText('Кнопка устарела: main изменился')).toBeNull());
   });
 });
