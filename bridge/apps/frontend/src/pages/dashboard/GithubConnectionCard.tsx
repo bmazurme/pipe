@@ -71,10 +71,15 @@ export function GithubConnectionCard() {
           </Text>
           <Switch
             checked={data.enabled}
-            disabled={isSaving}
-            onUpdate={(enabled) => void save({ enabled, url: url.trim() || undefined })}
+            disabled={isSaving || urlChanged}
+            onUpdate={(enabled) => void save({ enabled, url: data.url ?? undefined })}
             content="Через прокси (VPN-клиент)"
           />
+          {urlChanged && (
+            <Text color="secondary" variant="caption-2">
+              Сначала сохраните адрес
+            </Text>
+          )}
           <TextInput label="Адрес прокси" value={url} onUpdate={setUrl} disabled={isSaving} placeholder="http://vpn-client:1080" />
           <div className={styles.row}>
             {urlChanged && (
@@ -89,10 +94,13 @@ export function GithubConnectionCard() {
           {saveError && <Alert theme="danger" view="filled" message={typeof saveError === 'string' ? saveError : getErrorMessage(saveError, 'Не удалось сохранить настройку')} />}
           {checkError && <Alert theme="danger" view="filled" message={typeof checkError === 'string' ? checkError : getErrorMessage(checkError, 'Не удалось проверить связь')} />}
           {result && (
-            <div className={styles.list} onClick={() => reset()}>
+            <div className={styles.list}>
               <Text variant="caption-2">Напрямую: {describeSamples(result.direct)}</Text>
               <Text variant="caption-2">Через прокси: {result.proxy ? describeSamples(result.proxy) : '—'}</Text>
               <Alert theme={verdict(result).theme} view="outlined" message={verdict(result).text} />
+              <Button view="flat" size="s" onClick={() => reset()}>
+                Скрыть
+              </Button>
             </div>
           )}
         </>
