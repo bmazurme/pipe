@@ -1,7 +1,8 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { PickType } from '@nestjs/swagger';
 
-export class UpdateClaudeCredentialDto {
-  @IsString()
-  @IsNotEmpty()
-  token: string;
-}
+import { CreateClaudeCredentialDto } from './create-claude-credential.dto';
+
+export class UpdateClaudeCredentialDto extends PickType(
+  CreateClaudeCredentialDto,
+  ['token'] as const,
+) {}
