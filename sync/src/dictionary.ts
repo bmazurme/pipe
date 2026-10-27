@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 
-import { applyDictionary as applySubstitution } from '@pipe/protocol';
+import { compileDictionary } from '@pipe/protocol';
 
 import { resolveDictionaryPath } from './paths.js';
 
@@ -67,11 +67,31 @@ export function loadOptionalDictionary(dictionaryRef: string | undefined): Dicti
 // suggests a same-length random "value" as the placeholder. The actual
 // longest-first, Unicode-boundary substitution lives in @pipe/protocol,
 // shared with reports and bridge (see that package for the algorithm).
-export function toRemote(dictionary: Dictionary, text: string): string {
-  return applySubstitution(text, new Map(Object.entries(dictionary))).result;
+export type CompileDictionary = typeof compileDictionary;
+
+// Build the substitution once per command and reuse it for every file;
+// toRemote/toLocal below are thin wrappers for one-off strings.
+export function remoteTransform(
+  dictionary: Dictionary,
+  compile: CompileDictionary = compileDictionary,
+): (text: string) => string {
+  const apply = compile(new Map(Object.entries(dictionary)));
+  return (text) => apply(text).result;
 }
 
 // pull direction: placeholder (value) -> real value (key), after it arrives.
+export function localTransform(
+  dictionary: Dictionary,
+  compile: CompileDictionary = compileDictionary,
+): (text: string) => string {
+  const apply = compile(new Map(Object.entries(dictionary).map(([key, value]) => [value, key])));
+  return (text) => apply(text).result;
+}
+
+export function toRemote(dictionary: Dictionary, text: string): string {
+  return remoteTransform(dictionary)(text);
+}
+
 export function toLocal(dictionary: Dictionary, text: string): string {
-  return applySubstitution(text, new Map(Object.entries(dictionary).map(([key, value]) => [value, key]))).result;
+  return localTransform(dictionary)(text);
 }

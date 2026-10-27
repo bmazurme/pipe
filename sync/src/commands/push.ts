@@ -2,7 +2,7 @@ import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
-import { loadOptionalDictionary, toRemote } from '../dictionary.js';
+import { loadOptionalDictionary, remoteTransform } from '../dictionary.js';
 import { buildArchive, readAndTransform } from '../pack.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
@@ -24,7 +24,7 @@ export async function pushCommand(
     return;
   }
 
-  const files = readAndTransform(project.path, relPaths, (text) => toRemote(dictionary, text));
+  const files = readAndTransform(project.path, relPaths, remoteTransform(dictionary));
 
   const leaks = scanForLeaks(files.map((f) => ({ source: f.relPath, content: f.content })));
   if (leaks.length > 0) {

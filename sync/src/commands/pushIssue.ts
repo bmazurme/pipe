@@ -5,7 +5,7 @@ import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
-import { loadOptionalDictionary, toRemote } from '../dictionary.js';
+import { loadOptionalDictionary, remoteTransform } from '../dictionary.js';
 import { encryptBuffer } from '../encryption.js';
 import { getCurrentBranch } from '../gitStatus.js';
 import { getIssue, getIssueImages, type GitlabIssue } from '../gitlabClient.js';
@@ -60,9 +60,10 @@ export async function buildAndUploadIssueParcel(
     return null;
   }
 
-  const files = readAndTransform(project.path, relPaths, (text) => toRemote(dictionary, text));
-  const issueTitle = toRemote(dictionary, issue.title);
-  const issueDescription = toRemote(dictionary, issue.description ?? '');
+  const transform = remoteTransform(dictionary);
+  const files = readAndTransform(project.path, relPaths, transform);
+  const issueTitle = transform(issue.title);
+  const issueDescription = transform(issue.description ?? '');
   const images = config.gitlab?.apiUrl
     ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '', issue.project_id)
     : [];
