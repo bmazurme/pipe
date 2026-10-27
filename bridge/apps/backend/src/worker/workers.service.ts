@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  OnModuleInit,
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
@@ -12,6 +13,7 @@ import {
   generateEnrollCode,
   generateWorkerKey,
   hashSecret,
+  WorkerKeysService,
 } from '../auth/worker-keys.service';
 import {
   CreateWorkerDto,
@@ -42,7 +44,7 @@ export const WORKER_DELETED_MESSAGE =
 const ACTIVE_STATUSES = [JobStatus.Claimed, JobStatus.Running];
 
 @Injectable()
-export class WorkersService {
+export class WorkersService implements OnModuleInit {
   constructor(
     @InjectRepository(Worker)
     private readonly workers: Repository<Worker>,
@@ -51,7 +53,22 @@ export class WorkersService {
     @InjectRepository(ClaudeCredential)
     private readonly credentials: Repository<ClaudeCredential>,
     private readonly heartbeats: WorkerHeartbeatService,
+    private readonly workerKeys: WorkerKeysService,
   ) {}
+
+  onModuleInit(): void {
+    this.workerKeys.useLookup((hash) => this.findPrincipalByKeyHash(hash));
+  }
+
+  // What the worker-key guard needs and nothing more: the worker a key hash belongs to.
+  findPrincipalByKeyHash(
+    keyHash: string,
+  ): Promise<{ id: number; userId: number } | null> {
+    return this.workers.findOne({
+      where: { keyHash },
+      select: { id: true, userId: true },
+    });
+  }
 
   // A worker can only be bound to one of the owner's own tokens.
   private async assertCredentialOwned(

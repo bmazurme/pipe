@@ -6,7 +6,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TelegramModule } from '../telegram/telegram.module';
 import { UsersModule } from '../users/users.module';
-import { Worker } from '../worker/entities/worker.entity';
 
 import { ApiKeysService } from './api-keys.service';
 import { AuthController } from './auth.controller';
@@ -28,13 +27,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Session,
-      ApiKey,
-      AuthIdentity,
-      EmergencyKey,
-      Worker,
-    ]),
+    TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity, EmergencyKey]),
     TelegramModule,
     UsersModule,
     PassportModule,

@@ -66,6 +66,7 @@ function build(input: {
     jobsRepo as never,
     {} as never,
     heartbeats as never,
+    {} as never,
   );
 
   return { service, workersRepo, heartbeats };

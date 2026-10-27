@@ -18,6 +18,7 @@ function build(results: { affected: number; raw: unknown[] }[]) {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   return { service, qb, set };
