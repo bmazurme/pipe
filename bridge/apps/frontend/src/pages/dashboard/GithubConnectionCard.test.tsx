@@ -124,6 +124,51 @@ describe('GithubConnectionCard', () => {
   });
 });
 
+describe('GithubConnectionCard: unsaved address and dismissing the result', () => {
+  it('does not save a draft address when the switch is used; the switch waits for the save', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await screen.findByText('напрямую');
+
+    const input = screen.getByLabelText('Адрес прокси');
+
+    await user.clear(input);
+    await user.type(input, 'http://draft:1');
+
+    expect(await screen.findByText('Сначала сохраните адрес')).toBeTruthy();
+    await user.click(screen.getByRole('switch'));
+
+    expect(sent.filter((entry) => entry.method === 'PUT')).toEqual([]);
+  });
+
+  it('sends the saved address when the switch is used with an unchanged field', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await screen.findByText('напрямую');
+    await user.click(screen.getByRole('switch'));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'dashboard/github-connection', body: { enabled: true, url: 'http://vpn-client:1080' } }));
+  });
+
+  it('keeps the check result when its text is clicked and hides it with the button', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await screen.findByText('напрямую');
+    await user.click(screen.getByRole('button', { name: 'Проверить связь' }));
+    await user.click(await screen.findByText(/Напрямую: 11\.3 с · 56 мс/));
+
+    expect(screen.getByText(/Напрямую: 11\.3 с · 56 мс/)).toBeTruthy();
+
+    await user.tab();
+    await user.click(screen.getByRole('button', { name: 'Скрыть' }));
+
+    await waitFor(() => expect(screen.queryByText(/Напрямую: 11\.3 с · 56 мс/)).toBeNull());
+  });
+});
+
 describe('verdict', () => {
   it('advises the proxy when the direct way is slow or fails and the proxy answers', () => {
     expect(verdict({ url: 'u', direct: [sample(100), sample(0, false)], proxy: [sample(200), sample(210)] }).theme).toBe('warning');
