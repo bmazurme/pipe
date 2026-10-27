@@ -18,6 +18,7 @@ import { ParcelKeyPicker } from '../../widgets/ParcelKeyPicker';
 import styles from '../WorkerPage.module.css';
 import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
+import { DiscussInChatButton } from './DiscussInChatButton';
 import { ExtendJobButton } from './ExtendJobButton';
 import { JobLogs } from './JobLogs';
 import { describeOutcome, describeStage } from './jobStage';
@@ -212,6 +213,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         <ExtendJobButton job={job} />
         <CancelJobButton job={job} />
         <RetryJobButton job={job} />
+        <DiscussInChatButton job={job} />
         {canDelete && (
           <Button view="outlined-danger" onClick={() => setConfirmingDelete(true)}>
             <Icon data={TrashBin} size={16} />

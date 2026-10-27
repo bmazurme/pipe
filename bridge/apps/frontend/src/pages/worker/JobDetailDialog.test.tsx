@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { store } from '../../store';
@@ -25,9 +26,9 @@ let routes: Record<string, () => Response | Promise<Response>>;
 const renderDialog = (jobId: number, onClose = vi.fn()) => {
   render(
     <Provider store={store}>
-      <ThemeProvider theme="light">
+      <ThemeProvider theme="light"><MemoryRouter>
         <JobDetailDialog jobId={jobId} onClose={onClose} />
-      </ThemeProvider>
+      </MemoryRouter></ThemeProvider>
     </Provider>,
   );
 
@@ -152,9 +153,9 @@ describe('JobDetailDialog', () => {
 
     const queued = render(
       <Provider store={store}>
-        <ThemeProvider theme="light">
+        <ThemeProvider theme="light"><MemoryRouter>
           <JobDetailDialog jobId={23} onClose={vi.fn()} />
-        </ThemeProvider>
+        </MemoryRouter></ThemeProvider>
       </Provider>,
     );
     // Queued: the worker is not known yet, but its place is there, and so is the stage line and the log box.
@@ -166,9 +167,9 @@ describe('JobDetailDialog', () => {
 
     render(
       <Provider store={store}>
-        <ThemeProvider theme="light">
+        <ThemeProvider theme="light"><MemoryRouter>
           <JobDetailDialog jobId={24} onClose={vi.fn()} />
-        </ThemeProvider>
+        </MemoryRouter></ThemeProvider>
       </Provider>,
     );
     // Finished: the stage line is replaced by the outcome, not removed.
