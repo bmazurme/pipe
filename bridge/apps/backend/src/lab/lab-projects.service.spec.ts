@@ -17,6 +17,7 @@ const passing = (over: Partial<RepoCheck> = {}): RepoCheck => ({
   canWrite: true,
   defaultBranch: 'main',
   isPrivate: true,
+  tokenExpiresAt: null,
   problems: [],
   ...over,
 });
@@ -31,6 +32,7 @@ const makeProject = (over: Partial<LabProject> = {}): LabProject =>
     token: 'ghp_oldtoken1234',
     tokenHint: '1234',
     checkedAt: null,
+    tokenExpiresAt: null,
     canWrite: true,
     ...over,
   }) as LabProject;
@@ -169,6 +171,44 @@ describe('LabProjectsService.update', () => {
       }),
     );
     expect(view).not.toHaveProperty('token');
+  });
+
+  it('stores the token expiry on create and replaces it with a new token', async () => {
+    const first = new Date('2026-11-30T12:00:00Z');
+    const second = new Date('2027-05-01T00:00:00Z');
+
+    checkRepoMock.mockResolvedValueOnce(passing({ tokenExpiresAt: first }));
+    const { service, repo } = setup(makeProject({ tokenExpiresAt: first }));
+
+    await service.create(7, {
+      name: 'x',
+      repo: 'me/boat',
+      token: 'ghp_secretABCD',
+    });
+    expect(repo.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tokenExpiresAt: first }),
+    );
+
+    checkRepoMock.mockResolvedValueOnce(passing({ tokenExpiresAt: second }));
+    await service.update(3, 7, { token: 'ghp_newtokenWXYZ' });
+    expect(repo.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tokenExpiresAt: second }),
+    );
+  });
+
+  it('stores the token expiry on "Проверить"', async () => {
+    const expiry = new Date('2026-11-30T12:00:00Z');
+
+    checkRepoMock.mockResolvedValue(passing({ tokenExpiresAt: expiry }));
+    const { service, repo } = setup();
+
+    const result = await service.check(3, 7);
+
+    expect(repo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenExpiresAt: expiry }),
+    );
+    expect(result.project.tokenExpiresAt).toEqual(expiry);
+    expect(result.project).not.toHaveProperty('token');
   });
 
   it('renames without asking GitHub', async () => {

@@ -26,6 +26,30 @@ function stubGithub(routes: Record<string, Response>) {
 afterEach(() => jest.restoreAllMocks());
 
 describe('checkRepo', () => {
+  it('parses the token expiry header, and gives null without it', async () => {
+    stubGithub({
+      'GET /': new Response(JSON.stringify({ default_branch: 'main' }), {
+        status: 200,
+        headers: {
+          'github-authentication-token-expiration': '2026-11-30 12:00:00 UTC',
+        },
+      }),
+      'GET /git/ref/heads/main': json({}),
+    });
+    await expect(checkRepo('me/boat', 'tok', 'main')).resolves.toMatchObject({
+      tokenExpiresAt: new Date('2026-11-30T12:00:00Z'),
+    });
+
+    jest.restoreAllMocks();
+    stubGithub({
+      'GET /': json({ default_branch: 'main' }),
+      'GET /git/ref/heads/main': json({}),
+    });
+    await expect(checkRepo('me/boat', 'tok', 'main')).resolves.toMatchObject({
+      tokenExpiresAt: null,
+    });
+  });
+
   it('takes the write permission from the repository itself, without changing anything', async () => {
     const calls = stubGithub({
       'GET /': json({

@@ -65,6 +65,7 @@ export class LabProjectsService {
           token: input.token,
           tokenHint: input.token.slice(-4),
           checkedAt: new Date(),
+          tokenExpiresAt: check.tokenExpiresAt,
           canWrite: check.canWrite,
         }),
       ),
@@ -92,6 +93,7 @@ export class LabProjectsService {
       project.token = token;
       project.tokenHint = token.slice(-4);
       project.checkedAt = new Date();
+      project.tokenExpiresAt = check.tokenExpiresAt;
       project.canWrite = check.canWrite;
     }
 
@@ -123,6 +125,7 @@ export class LabProjectsService {
     );
 
     project.checkedAt = new Date();
+    project.tokenExpiresAt = result.tokenExpiresAt;
     project.canWrite = result.canWrite;
 
     return result;
