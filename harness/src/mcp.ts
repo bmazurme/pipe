@@ -27,18 +27,54 @@ import { buildReportData, formatBuiltReport } from './reportBuilder.js';
 // not just the visible output. Capturing stdout+stderr into the tool
 // result instead is the whole reason actions.ts returns { code, output }
 // rather than printing directly; see its own ActionResult comment.
-function mcpRunSyncCli(args: string[], cliPath: string): Promise<ActionResult> {
+export const MCP_SYNC_CLI_TIMEOUT_MS = 5 * 60_000;
+export const MCP_OUTPUT_CAP = 64 * 1024;
+const TRUNCATED_PREFIX = '[…truncated]\n';
+
+// Keeps the tail: the last lines (usually the error) matter most.
+export function capOutputTail(output: string, cap = MCP_OUTPUT_CAP, alreadyTruncated = false): string {
+  if (output.length > cap) return TRUNCATED_PREFIX + output.slice(output.length - cap);
+  return alreadyTruncated ? TRUNCATED_PREFIX + output : output;
+}
+
+export function mcpRunSyncCli(
+  args: string[],
+  cliPath: string,
+  options: { timeoutMs?: number; outputCap?: number } = {},
+): Promise<ActionResult> {
+  const timeoutMs = options.timeoutMs ?? MCP_SYNC_CLI_TIMEOUT_MS;
+  const outputCap = options.outputCap ?? MCP_OUTPUT_CAP;
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cliPath, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
-    child.stdout.on('data', (chunk: Buffer) => {
+    let settled = false;
+    let dropped = false;
+    const settle = (result: ActionResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const collect = (chunk: Buffer) => {
       output += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.on('exit', (code) => resolve({ code: code ?? 1, output: output.trim() }));
-    child.on('error', (error) => resolve({ code: 1, output: `Failed to run sync-cli: ${(error as Error).message}` }));
+      // Trim as we go so a runaway child cannot grow memory without limit.
+      if (output.length > outputCap * 2) {
+        output = output.slice(output.length - outputCap);
+        dropped = true;
+      }
+    };
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      settle({
+        code: 1,
+        output: `${capOutputTail(output.trim(), outputCap, dropped)}\n[pipe-mcp] sync-cli timed out after ${timeoutMs} ms`.trim(),
+      });
+    }, timeoutMs);
+    child.stdout.on('data', collect);
+    child.stderr.on('data', collect);
+    // 'close' (not 'exit') fires only after both pipes are drained.
+    child.on('close', (code) => settle({ code: code ?? 1, output: capOutputTail(output.trim(), outputCap, dropped) }));
+    child.on('error', (error) => settle({ code: 1, output: `Failed to run sync-cli: ${(error as Error).message}` }));
   });
 }
 
