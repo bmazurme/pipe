@@ -36,6 +36,8 @@ export type LabTrigger = 'manual' | 'schedule';
 // One attempt: snapshot of the repository → worker job → branch + pull request.
 @Entity({ name: 'lab_runs' })
 @Index(['userId', 'status'])
+@Index('IDX_lab_runs_status', ['status'])
+@Index('IDX_lab_runs_userId_projectId_id', ['userId', 'projectId', 'id'])
 export class LabRun extends BaseEntity {
   @Column({ type: 'int', unsigned: true })
   userId: number;

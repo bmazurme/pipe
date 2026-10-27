@@ -36,6 +36,7 @@ export type ImproveRunKind = 'issue' | 'analysis' | 'repair';
 // One attempt to implement one GitHub issue: snapshot → worker job → branch + PR.
 @Entity({ name: 'improve_runs' })
 @Index(['issueNumber', 'status'])
+@Index('IDX_improve_runs_status', ['status'])
 export class ImproveRun extends BaseEntity {
   @Column({ type: 'int', unsigned: true })
   userId: number;
