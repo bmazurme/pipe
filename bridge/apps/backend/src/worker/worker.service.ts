@@ -8,6 +8,11 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import {
+  claimEligibilitySql,
+  whyWorkerCannotRun,
+  workerHasCapability,
+} from './worker-eligibility';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
@@ -252,21 +257,13 @@ export class WorkerService implements OnModuleInit {
       if (!target) {
         throw new BadRequestException('Worker not found');
       }
-      if (!target.enabled) {
-        throw new BadRequestException(`Worker "${target.name}" is paused`);
-      }
-      if (target.models !== null && !target.models.includes(dto.model)) {
-        throw new BadRequestException(
-          `Worker "${target.name}" is not set up to run ${dto.model}`,
-        );
-      }
-      if (
-        dto.requiredCapability !== undefined &&
-        !(target.capabilities ?? []).includes(dto.requiredCapability)
-      ) {
-        throw new BadRequestException(
-          `Worker "${target.name}" does not have ${dto.requiredCapability}`,
-        );
+      const why = whyWorkerCannotRun(target, {
+        model: dto.model,
+        requiredCapability: dto.requiredCapability,
+      });
+
+      if (why !== null) {
+        throw new BadRequestException(why);
       }
     }
 
@@ -352,9 +349,7 @@ export class WorkerService implements OnModuleInit {
       : null;
     const pinUsable =
       pinned !== null &&
-      (pinned.models === null || pinned.models.includes(model)) &&
-      (requiredCapability === null ||
-        (pinned.capabilities ?? []).includes(requiredCapability));
+      whyWorkerCannotRun(pinned, { model, requiredCapability }) === null;
     // A stored credential only fits the family (Claude / one provider) it was made for.
     const claudeCredentialId =
       overrides.claudeCredentialId ??
@@ -790,9 +785,7 @@ export class WorkerService implements OnModuleInit {
       where: { userId, enabled: true },
     });
 
-    return workers.some((worker) =>
-      (worker.capabilities ?? []).includes(capability as never),
-    );
+    return workers.some((worker) => workerHasCapability(worker, capability));
   }
 
   // Claim-less liveness ping — a worker busy running one long job never
@@ -855,20 +848,7 @@ export class WorkerService implements OnModuleInit {
       worker?.id ?? null,
     ];
     // A job that requires a capability goes only to a worker that has it; a legacy worker has none.
-    let eligibility =
-      ' AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL';
-
-    if (worker) {
-      eligibility = ' AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5)';
-
-      if (worker.models !== null) {
-        params.push(worker.models);
-        eligibility += ` AND model::text = ANY($${params.length}::text[])`;
-      }
-
-      params.push(worker.capabilities ?? []);
-      eligibility += ` AND ("requiredCapability" IS NULL OR "requiredCapability" = ANY($${params.length}::text[]))`;
-    }
+    const eligibility = claimEligibilitySql(worker ?? null, params);
 
     const [rows]: [{ id: number }[], number] = await this.jobRepository.query(
       `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "workerId" = $5, "updatedAt" = now()
