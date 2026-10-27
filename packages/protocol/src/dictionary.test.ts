@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDictionary } from './dictionary.js';
+import { applyDictionary, compileDictionary } from './dictionary.js';
 
 describe('applyDictionary', () => {
   const toRemote = new Map([
@@ -90,5 +90,35 @@ describe('applyDictionary', () => {
       assert.equal(applyDictionary('a+b (x|y) c*d? [z] e\\f', dict).result, 'P Q R S T');
       assert.equal(applyDictionary('aab x y ccd z', dict).count, 0);
     });
+  });
+});
+
+describe('compileDictionary', () => {
+  const dict = new Map([
+    ['prod-db.internal.example.com', '{{DB_HOST}}'],
+    ['db', '{{DB}}'],
+    ['Газпром', 'Лукойлл'],
+  ]);
+
+  it('gives the same results and counts as applyDictionary', () => {
+    const texts = ['prod-db.internal.example.com and db', 'userId', 'Газпром, Газпромбанк', ''];
+    const apply = compileDictionary(dict);
+    for (const text of texts) {
+      assert.deepEqual(apply(text), applyDictionary(text, dict));
+    }
+    assert.deepEqual(apply('prod-db.internal.example.com and db'), { result: '{{DB_HOST}} and {{DB}}', count: 2 });
+  });
+
+  it('can be applied to several texts in a row', () => {
+    const apply = compileDictionary(dict);
+    assert.deepEqual(apply('db db'), { result: '{{DB}} {{DB}}', count: 2 });
+    assert.deepEqual(apply('no match'), { result: 'no match', count: 0 });
+    assert.deepEqual(apply('x db'), { result: 'x {{DB}}', count: 1 });
+    assert.deepEqual(apply('Газпром'), { result: 'Лукойлл', count: 1 });
+  });
+
+  it('returns the text unchanged with count 0 for an empty dictionary', () => {
+    assert.deepEqual(compileDictionary(new Map())('db'), { result: 'db', count: 0 });
+    assert.deepEqual(compileDictionary(new Map([['', 'x']]))('db'), { result: 'db', count: 0 });
   });
 });

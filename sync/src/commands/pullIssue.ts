@@ -6,7 +6,7 @@ import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
-import { loadOptionalDictionary, toLocal } from '../dictionary.js';
+import { loadOptionalDictionary, localTransform } from '../dictionary.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
@@ -69,7 +69,7 @@ async function tryPullOnce(
 
   // Validate asset paths up front too, so a bad parcel writes nothing at all.
   const assetDestinations = assets.map((asset) => resolveInDir(project.path, asset.relPath));
-  writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
+  writeParcelFiles(project.path, files, localTransform(dictionary));
 
   if (legacyManifest) {
     log.info(

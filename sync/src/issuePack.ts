@@ -11,7 +11,7 @@ import {
 } from '@pipe/protocol';
 import { resolveInDir } from '@pipe/protocol/resolveInDir';
 
-import { type Dictionary, toLocal } from './dictionary.js';
+import { type Dictionary, localTransform } from './dictionary.js';
 
 // The issue-parcel format (manifest name, manifest shape, extraction with a
 // legacy project-mode fallback) lives in @pipe/protocol, shared with reports'
@@ -72,8 +72,9 @@ export function extractIssue(
   parcelId: number,
   assets: PackedAsset[] = [],
 ): { path: string; title: string; description: string; imagePaths: string[] } {
-  const title = toLocal(dictionary, manifest.issueTitle);
-  const description = toLocal(dictionary, manifest.issueDescription);
+  const transform = localTransform(dictionary);
+  const title = transform(manifest.issueTitle);
+  const description = transform(manifest.issueDescription);
 
   const imagePaths = assets.map((asset) => asset.relPath);
   const assetDestinations = assets.map((asset) => resolveInDir(projectPath, asset.relPath));

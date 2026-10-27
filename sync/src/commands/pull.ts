@@ -1,6 +1,6 @@
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
-import { loadOptionalDictionary, toLocal } from '../dictionary.js';
+import { loadOptionalDictionary, localTransform } from '../dictionary.js';
 import { extractArchive } from '../pack.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { getLastHash, setLastHash } from '../state.js';
@@ -43,7 +43,7 @@ export async function pullCommand(name: string, options: { force?: boolean }): P
     return;
   }
 
-  writeParcelFiles(project.path, files, (content) => toLocal(dictionary, content));
+  writeParcelFiles(project.path, files, localTransform(dictionary));
 
   setLastHash(name, manifest.contentHash);
   await client.delete(candidates[0].id);

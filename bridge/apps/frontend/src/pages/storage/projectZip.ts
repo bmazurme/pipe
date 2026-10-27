@@ -1,6 +1,6 @@
 import { Zip, ZipDeflate } from 'fflate';
 
-import { applyDictionary } from '../purge/purgeUtils';
+import { compileDictionary } from '@pipe/protocol/dictionary';
 import { isTextFile } from './textFiles';
 
 const EXCLUDED_DIRS = new Set([
@@ -64,6 +64,8 @@ export async function buildProjectZip(
   let replacedCount = 0;
   let processed = 0;
 
+  const applyToText = compileDictionary(dictionary);
+
   const archiveDone = new Promise<void>((resolve, reject) => {
     const zip = new Zip((err, chunk, final) => {
       if (err) {
@@ -83,7 +85,7 @@ export async function buildProjectZip(
 
           if (isTextFile(file.name) && dictionary.size > 0) {
             const text = await file.text();
-            const { result, count } = applyDictionary(text, dictionary);
+            const { result, count } = applyToText(text);
             replacedCount += count;
             stream.push(new TextEncoder().encode(result), true);
           } else {

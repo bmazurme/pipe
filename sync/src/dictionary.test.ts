@@ -1,10 +1,12 @@
 import { describe, it, before, after } from 'node:test';
+import { compileDictionary } from '@pipe/protocol';
+import { readAndTransform } from './pack.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { loadDictionary, loadOptionalDictionary, toLocal, toRemote } from './dictionary.js';
+import { loadDictionary, loadOptionalDictionary, localTransform, remoteTransform, toLocal, toRemote } from './dictionary.js';
 
 describe('dictionary', () => {
   let dir: string;
@@ -72,5 +74,37 @@ describe('dictionary', () => {
     const remote = toRemote(dictionary, text);
     assert.notEqual(remote, text);
     assert.equal(toLocal(dictionary, remote), text);
+  });
+});
+
+describe('compiled transforms', () => {
+  it('compile the dictionary once for readAndTransform over several files', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'sync-dict-once-'));
+    try {
+      const relPaths = ['a.txt', 'b.txt', 'c.txt'];
+      for (const rel of relPaths) writeFileSync(path.join(dir, rel), 'Acme builds Acme');
+
+      let compiles = 0;
+      const spy: typeof compileDictionary = (map) => {
+        compiles += 1;
+        return compileDictionary(map);
+      };
+
+      const dictionary = { Acme: 'Zzzz' };
+      const remote = readAndTransform(dir, relPaths, remoteTransform(dictionary, spy));
+      assert.equal(compiles, 1);
+      assert.deepEqual(
+        remote.map((f) => f.content),
+        ['Zzzz builds Zzzz', 'Zzzz builds Zzzz', 'Zzzz builds Zzzz'],
+      );
+
+      const local = localTransform(dictionary, spy);
+      assert.equal(compiles, 2);
+      assert.equal(local('Zzzz'), 'Acme');
+      assert.equal(local('Zzzz Zzzz'), 'Acme Acme');
+      assert.equal(compiles, 2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
