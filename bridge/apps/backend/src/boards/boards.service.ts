@@ -238,16 +238,38 @@ export class BoardsService {
     const now = Date.now();
     const views: BoardView[] = [];
 
+    if (reports.length === 0) return views;
+
+    // One query for every board's decisions; newest first, so the first row seen per host and kind is the one that counts.
+    const rows = await this.updates.find({
+      where: {
+        userId,
+        host: In(reports.map((r) => r.host)),
+        status: In(['pending', 'applied', 'failed']),
+      },
+      order: { id: 'DESC' },
+    });
+    const pendingByHost = new Map<string, ScriptUpdate>();
+    const lastByHost = new Map<string, ScriptUpdate>();
+
+    for (const row of rows) {
+      const byHost = row.status === 'pending' ? pendingByHost : lastByHost;
+
+      if (!byHost.has(row.host)) byHost.set(row.host, row);
+    }
+
+    const expiredIds: number[] = [];
+
     for (const report of reports) {
-      const pending = await this.pendingRow(userId, report.host);
-      const last = await this.updates.findOne({
-        where: {
-          userId,
-          host: report.host,
-          status: In(['applied', 'failed']),
-        },
-        order: { id: 'DESC' },
-      });
+      const found = pendingByHost.get(report.host);
+      let pending: ScriptUpdate | null = null;
+
+      if (found) {
+        if (this.isExpired(found, now)) expiredIds.push(found.id);
+        else pending = found;
+      }
+
+      const last = lastByHost.get(report.host);
       const outdated = report.scripts.filter((s) => s.status === 'outdated');
 
       views.push({
@@ -278,6 +300,13 @@ export class BoardsService {
             }
           : null,
       });
+    }
+
+    if (expiredIds.length > 0) {
+      await this.updates.update(
+        { id: In(expiredIds) },
+        { status: 'expired', finishedAt: new Date() },
+      );
     }
 
     return views;
@@ -376,6 +405,10 @@ export class BoardsService {
     return this.pendingRow(userId, host);
   }
 
+  private isExpired(row: ScriptUpdate, now: number): boolean {
+    return now - row.createdAt.getTime() > PENDING_EXPIRES_MS;
+  }
+
   private async pendingRow(
     userId: number,
     host: string,
@@ -386,7 +419,7 @@ export class BoardsService {
     });
 
     if (!row) return null;
-    if (Date.now() - row.createdAt.getTime() > PENDING_EXPIRES_MS) {
+    if (this.isExpired(row, Date.now())) {
       await this.updates.update(row.id, {
         status: 'expired',
         finishedAt: new Date(),
