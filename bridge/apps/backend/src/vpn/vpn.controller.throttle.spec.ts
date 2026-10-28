@@ -1,3 +1,6 @@
+import { JwtGuard } from '../auth/guards/jwt.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
+import { VpnConnectionsController } from './vpn-connections.controller';
 import { VpnController } from './vpn.controller';
 
 const LIMIT_KEY = 'THROTTLER:LIMITdefault';
@@ -23,4 +26,14 @@ describe('VpnController throttle scoping', () => {
       expect(Reflect.getMetadata(TTL_KEY, proto[name])).toBe(60_000);
     },
   );
+});
+
+describe('VPN controllers owner-only', () => {
+  it.each([
+    ['VpnController', VpnController],
+    ['VpnConnectionsController', VpnConnectionsController],
+  ])('%s applies JwtGuard and OwnerGuard', (_name, controller) => {
+    const guards = Reflect.getMetadata('__guards__', controller);
+    expect(guards).toEqual([JwtGuard, OwnerGuard]);
+  });
 });
