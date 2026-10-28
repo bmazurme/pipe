@@ -28,6 +28,7 @@ import { multerExceptionFilterFor } from '../uploads/multer-exception.filter';
 import { contentTypeOf, MAX_ATTACHMENT_BYTES } from './attachments';
 import { attachmentMulterConfig } from './config/attachment-multer.config';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { Chat } from './entities/chat.entity';
 import { ListChatsQueryDto } from './dto/list-chats-query.dto';
 import { RunCredentialsService } from '../worker/run-credentials.service';
 import { WorkersService } from '../worker/workers.service';
@@ -42,7 +43,7 @@ import { CompleteTurnDto } from './dto/complete-turn.dto';
 import { AttachRunResultDto } from './dto/attach-run-result.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { FailTurnDto } from './dto/fail-turn.dto';
-import { RenameChatDto } from './dto/rename-chat.dto';
+import { UpdateChatDto } from './dto/update-chat.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 const AttachmentMulterExceptionFilter = multerExceptionFilterFor(
@@ -95,17 +96,23 @@ export class ChatController {
   }
 
   @Patch('chats/:id')
-  async renameChat(
+  async updateChat(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: RenameChatDto,
+    @Body() dto: UpdateChatDto,
     @CurrentUser() currentUser: { id: number },
   ): Promise<ChatResponseDto> {
-    const chat = await this.chatService.renameChat(
-      id,
-      currentUser.id,
-      dto.title,
-    );
-    return ChatResponseDto.fromEntity(chat);
+    if (dto.title === undefined && dto.model === undefined) {
+      throw new BadRequestException('Нужно указать название или модель');
+    }
+
+    let chat: Chat | undefined;
+    if (dto.model !== undefined) {
+      chat = await this.chatService.changeModel(id, currentUser.id, dto.model);
+    }
+    if (dto.title !== undefined) {
+      chat = await this.chatService.renameChat(id, currentUser.id, dto.title);
+    }
+    return ChatResponseDto.fromEntity(chat as Chat);
   }
 
   @Post('chats/:id/run-results')

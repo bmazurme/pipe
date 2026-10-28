@@ -116,3 +116,50 @@ describe('ChatController listMessages — attachments', () => {
     expect(result[1].attachments.map((a) => a.id)).toEqual([3]);
   });
 });
+
+describe('ChatController updateChat', () => {
+  const chat = {
+    id: 1,
+    userId: 7,
+    title: 'T',
+    model: 'opus',
+    createdAt: new Date('2026-10-16T12:00:00.000Z'),
+    updatedAt: new Date('2026-10-16T12:00:00.000Z'),
+  };
+
+  it('switches the model when only model is given', async () => {
+    const chatService = {
+      changeModel: jest.fn().mockResolvedValue(chat),
+      renameChat: jest.fn(),
+    };
+
+    await controllerWith(chatService).updateChat(
+      1,
+      { model: 'opus' } as never,
+      {
+        id: 7,
+      },
+    );
+
+    expect(chatService.changeModel).toHaveBeenCalledWith(1, 7, 'opus');
+    expect(chatService.renameChat).not.toHaveBeenCalled();
+  });
+
+  it('still renames when only title is given', async () => {
+    const chatService = {
+      changeModel: jest.fn(),
+      renameChat: jest.fn().mockResolvedValue(chat),
+    };
+
+    await controllerWith(chatService).updateChat(1, { title: 'T' }, { id: 7 });
+
+    expect(chatService.renameChat).toHaveBeenCalledWith(1, 7, 'T');
+    expect(chatService.changeModel).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 when neither is given', async () => {
+    await expect(
+      controllerWith({}).updateChat(1, {}, { id: 7 }),
+    ).rejects.toThrow(/название или модель/);
+  });
+});

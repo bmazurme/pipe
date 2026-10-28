@@ -489,7 +489,7 @@
     },
     "/api/v1/chat/chats/{id}": {
       "patch": {
-        "operationId": "ChatController_renameChat",
+        "operationId": "ChatController_updateChat",
         "parameters": [
           {
             "name": "id",
@@ -505,7 +505,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RenameChatDto"
+                "$ref": "#/components/schemas/UpdateChatDto"
               }
             }
           }
@@ -4929,17 +4929,25 @@
           "model"
         ]
       },
-      "RenameChatDto": {
+      "UpdateChatDto": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
             "maxLength": 255
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "sonnet",
+              "opus",
+              "haiku",
+              "gpt",
+              "deepseek",
+              "qwen"
+            ]
           }
-        },
-        "required": [
-          "title"
-        ]
+        }
       },
       "AttachRunResultDto": {
         "type": "object",

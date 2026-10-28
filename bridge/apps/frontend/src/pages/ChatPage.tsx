@@ -24,6 +24,7 @@ import {
   useListContextsQuery,
   useListMessagesQuery,
   useRenameChatMutation,
+  useUpdateChatModelMutation,
   useRetryChatTurnMutation,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from '../store/api';
@@ -187,6 +188,7 @@ export function ChatPage() {
 
   const [deleteChat, { isLoading: isDeletingChat }] = useDeleteChatMutation();
   const [renameChat, { isLoading: isRenamingChat }] = useRenameChatMutation();
+  const [updateChatModel, { isLoading: isChangingModel }] = useUpdateChatModelMutation();
 
   const [chatToDelete, setChatToDelete] = useState<ChatType | null>(null);
   const [newChatModel, setNewChatModel] = useState<ChatModelId>('sonnet');
@@ -375,6 +377,18 @@ export function ChatPage() {
     }
   };
 
+  const handleChangeModel = async (model: ChatModelId) => {
+    if (activeChatId === null || model === activeModel || isChangingModel) return;
+    composer.setChatError(null);
+
+    try {
+      await updateChatModel({ id: activeChatId, model }).unwrap();
+    } catch (error) {
+      const message = (error as { data?: { message?: unknown } })?.data?.message;
+      composer.setChatError(typeof message === 'string' ? message : 'Не удалось сменить модель');
+    }
+  };
+
   const attachButton = (
     <AttachButton
       disabled={!canAttach || composer.isUploading || composer.pendingFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE}
@@ -384,24 +398,24 @@ export function ChatPage() {
   );
 
   // AIKit drops its own attachment slot whenever a custom footer is given, so the paperclip sits in it, beside the model.
-  // Before a chat exists the model can be picked here; once a chat is active its model is fixed, so it is only named —
-  // which also says why the paperclip is off in a GPT/DeepSeek/Qwen chat.
+  // The model can be picked here before a chat exists and switched in an active one (not while a reply is pending);
+  // the paperclip is off in a GPT/DeepSeek/Qwen chat.
   const composerFooter = (
     <div className={styles.modelPicker}>
       {attachButton}
       <span className={styles.modelPickerLabel}>Модель:</span>
-      {activeChat ? (
-        <span className={styles.modelName}>{modelLabel(activeModel)}</span>
-      ) : (
-        <Select
-          size="s"
-          aria-label="Модель"
-          value={[newChatModel]}
-          onUpdate={([value]) => setNewChatModel(value as ChatModelId)}
-          options={MODEL_OPTIONS}
-          width={150}
-        />
-      )}
+      <Select
+        size="s"
+        aria-label="Модель"
+        value={[activeModel]}
+        onUpdate={([value]) => {
+          if (activeChat) void handleChangeModel(value as ChatModelId);
+          else setNewChatModel(value as ChatModelId);
+        }}
+        options={MODEL_OPTIONS}
+        disabled={Boolean(activeChat) && (hasPendingReply || isChangingModel)}
+        width={150}
+      />
       {activeChat ? (
         activeContextName && (
           <>
