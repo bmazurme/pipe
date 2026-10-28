@@ -46,7 +46,7 @@ import { handlePurgeApply } from './subscription/purge-handler';
 import { startAutopilot } from './subscription/autopilot';
 import { handleApplyUpdate, handleUpdateProgress, handleUpdateStatus } from './updates/handler';
 import { corsOrigin, localOnly } from './security/local-only';
-import { setupProxy } from './utils/setup-proxy';
+import { setupProxy } from '@pipe/protocol/proxy';
 import { codeStatus } from './utils/stale-code';
 
 const envPath = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');

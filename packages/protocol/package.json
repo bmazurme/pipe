@@ -70,6 +70,10 @@
     "./notify": {
       "types": "./dist/notify.d.ts",
       "default": "./dist/notify.js"
+    },
+    "./proxy": {
+      "types": "./dist/proxy.d.ts",
+      "default": "./dist/proxy.js"
     }
   },
   "scripts": {
@@ -86,6 +90,7 @@
   "dependencies": {
     "adm-zip": "^0.6.0",
     "fast-glob": "^3.3.3",
+    "undici": "^7.30.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
