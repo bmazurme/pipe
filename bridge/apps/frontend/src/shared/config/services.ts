@@ -112,6 +112,7 @@ export const SERVICES: ServiceLink[] = [
     icon: ShieldKeyhole,
     path: '/vpn',
     group: 'system',
+    ownerOnly: true,
   },
   {
     id: 'improve',

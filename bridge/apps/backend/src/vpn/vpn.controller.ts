@@ -12,12 +12,13 @@ import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import { ConfirmActionDto } from './dto/confirm-action.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
 import { VpnService, VpnStatus } from './vpn.service';
 
-// Browser session only — deliberately not JwtOrApiKeyGuard. This manages
+// Browser session, deployment owner only — deliberately not JwtOrApiKeyGuard. This manages
 // deploy-triggering GitHub credentials and worker provider keys; sync/
 // reports/worker machine clients have no business calling it.
 //
@@ -32,7 +33,7 @@ import { VpnService, VpnStatus } from './vpn.service';
 // which uses the global default), and an audit log line naming who called
 // what and when.
 @Controller('api/v1/vpn')
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, OwnerGuard)
 export class VpnController {
   private readonly logger = new Logger(VpnController.name);
 

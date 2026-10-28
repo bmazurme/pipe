@@ -14,15 +14,16 @@ import {
 } from '@nestjs/common';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
+import { OwnerGuard } from '../auth/guards/owner.guard';
 import { CreateVpnConnectionDto } from './dto/create-vpn-connection.dto';
 import { UpdateVpnConnectionDto } from './dto/update-vpn-connection.dto';
 import { VpnConnectionResponseDto } from './dto/vpn-connection-response.dto';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService, VpnStatus } from './vpn.service';
 
-// Browser session only, same as VpnController.
+// Browser session, deployment owner only, same as VpnController.
 @Controller('api/v1/vpn/connections')
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, OwnerGuard)
 export class VpnConnectionsController {
   constructor(
     private readonly vpnConnectionsService: VpnConnectionsService,

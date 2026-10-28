@@ -93,7 +93,7 @@ describe('the worker status dot', () => {
 });
 
 describe('the owner-only pages', () => {
-  const ownerOnly = ['dashboard', 'improve'];
+  const ownerOnly = ['dashboard', 'improve', 'vpn'];
 
   it('are left out of the sidebar and the burger for an account that is not the owner', () => {
     for (const id of ownerOnly) {
