@@ -201,6 +201,27 @@
   gap: 12px;
 }
 
+.logRowButton {
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logRowButton:hover,
+.logRowButton[aria-pressed='true'] {
+  background: var(--g-color-base-simple-hover);
+}
+
+.logRowButton:focus-visible {
+  outline: 2px solid var(--g-color-line-focus);
+}
+
 .logFilters {
   display: flex;
   flex-wrap: wrap;
