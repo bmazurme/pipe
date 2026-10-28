@@ -7,7 +7,7 @@ import { storageApiEndpoints } from '../../store/api/storage-api/endpoints';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { purgeEntriesSelector } from '../../store/slices';
 import { buildDictionary, Direction } from '../purge/purgeUtils';
-import { formatSize } from './formatters';
+import { formatBytes } from '../../shared/lib/formatBytes';
 import { buildProjectZip, deriveZipName } from './projectZip';
 import styles from '../StoragePage.module.css';
 import { uploadWithProgress } from './uploadWithProgress';
@@ -50,7 +50,7 @@ export function StorageProjectUpload({ onError }: { onError: (message: string | 
 
       if (blob.size > MAX_FILE_SIZE_BYTES) {
         throw new Error(
-          `Архив превышает лимит ${formatSize(MAX_FILE_SIZE_BYTES)} (получилось ${formatSize(blob.size)})`,
+          `Архив превышает лимит ${formatBytes(MAX_FILE_SIZE_BYTES)} (получилось ${formatBytes(blob.size)})`,
         );
       }
 

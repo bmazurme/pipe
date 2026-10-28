@@ -3,7 +3,7 @@ import { Label, Text } from '@gravity-ui/uikit';
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { VpnStatus } from '../../store/api';
 import styles from '../VpnPage.module.css';
-import { formatBytes } from './formatBytes';
+import { formatBytes } from '../../shared/lib/formatBytes';
 
 // Worker's last claim (see vpn-client's own Reality handshake) is the only
 // heartbeat there is — no separate liveness ping exists, so "connected"

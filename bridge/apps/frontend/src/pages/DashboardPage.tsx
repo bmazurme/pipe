@@ -17,7 +17,7 @@ import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
 import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import styles from './DashboardPage.module.css';
-import { formatBytes } from './vpn/formatBytes';
+import { formatBytes } from '../shared/lib/formatBytes';
 import { useFailureAwarePollInterval } from './vpn/statusPollInterval';
 
 const POLL_INTERVAL_MS = 20_000;
