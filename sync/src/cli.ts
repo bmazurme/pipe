@@ -15,9 +15,9 @@ import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
 import { inboxCommand } from './commands/inbox.js';
 import { doctorCommand } from './commands/doctor.js';
 import { log, setVerbose } from './log.js';
-import { setupProxy } from './setupProxy.js';
+import { setupProxy } from '@pipe/protocol/proxy';
 
-setupProxy();
+setupProxy({ log: (msg) => log.info(msg) });
 
 const program = new Command();
 
