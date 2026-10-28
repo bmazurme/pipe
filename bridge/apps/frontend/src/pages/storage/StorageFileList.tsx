@@ -27,7 +27,7 @@ import { getErrorMessage, StoredFileMeta } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../StoragePage.module.css';
-import { formatSize } from './formatters';
+import { formatBytes } from '../../shared/lib/formatBytes';
 
 const EXTENSION_ICON: [RegExp, IconData][] = [
   [/\.(png|jpe?g|gif|webp|svg|avif|heic)$/i, Picture],
@@ -100,7 +100,7 @@ export function StorageFileList({
     <>
       <SectionHeader
         title="Файлы"
-        meta={files.length > 0 ? `${files.length} · ${formatSize(totalSize)}` : undefined}
+        meta={files.length > 0 ? `${files.length} · ${formatBytes(totalSize)}` : undefined}
       />
 
       {!isLoading && !isError && files.length > 0 && (
@@ -180,7 +180,7 @@ export function StorageFileList({
                   {file.originalName}
                 </Text>
                 <Text color="secondary" variant="caption-2" ellipsis>
-                  {[getParcelCaption(file), formatSize(file.size), formatRelativeTime(file.createdAt)]
+                  {[getParcelCaption(file), formatBytes(file.size), formatRelativeTime(file.createdAt)]
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>

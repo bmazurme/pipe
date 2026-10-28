@@ -12,13 +12,6 @@ export const ATTACHMENT_ACCEPT = ALLOWED_EXTENSIONS.join(',');
 
 export const isClaudeModel = (model: string | undefined): boolean => model === 'sonnet' || model === 'opus' || model === 'haiku';
 
-export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
-}
-
 /** The reason a file cannot be attached, or null when it can. */
 export function attachmentProblem(file: Pick<File, 'name' | 'size'>): string | null {
   const dot = file.name.lastIndexOf('.');
