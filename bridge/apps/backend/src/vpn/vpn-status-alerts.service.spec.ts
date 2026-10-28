@@ -13,11 +13,13 @@ function setup() {
     failureAlertedAt: null,
   } as VpnConnection;
   const connections = {
-    markFailureAlerted: jest.fn(async () => {
+    claimFailureAlert: jest.fn(async () => {
       connection.failureAlertedAt = new Date();
+      return true;
     }),
-    clearFailureAlert: jest.fn(async () => {
+    claimRecovery: jest.fn(async () => {
       connection.failureAlertedAt = null;
+      return true;
     }),
   };
   const appLogs = { record: jest.fn() };
@@ -98,7 +100,7 @@ describe('VpnStatusAlertsService', () => {
     alerts.recordRecovered(connection);
     await flush();
 
-    expect(connections.clearFailureAlert).toHaveBeenCalledWith(1);
+    expect(connections.claimRecovery).toHaveBeenCalledWith(1);
     expect(notifier.send).toHaveBeenLastCalledWith(
       '✅ VPN «primary» снова отвечает',
     );
@@ -135,6 +137,37 @@ describe('VpnStatusAlertsService', () => {
     expect(() => alerts.recordFailure(connection, failure())).not.toThrow();
     await flush();
 
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('pages once when concurrent polls both hold a stale entity', async () => {
+    const { alerts, connection, connections, notifier } = setup();
+    connections.claimFailureAlert
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const stale = { ...connection } as VpnConnection;
+
+    alerts.recordFailure(connection, failure());
+    alerts.recordFailure(stale, failure());
+    await flush();
+
+    expect(connections.claimFailureAlert).toHaveBeenCalledTimes(2);
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the recovery message once when concurrent polls both hold a stale entity', async () => {
+    const { alerts, connection, connections, notifier } = setup();
+    connection.failureAlertedAt = new Date();
+    connections.claimRecovery
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const stale = { ...connection } as VpnConnection;
+
+    alerts.recordRecovered(connection);
+    alerts.recordRecovered(stale);
+    await flush();
+
+    expect(connections.claimRecovery).toHaveBeenCalledTimes(2);
     expect(notifier.send).toHaveBeenCalledTimes(1);
   });
 });

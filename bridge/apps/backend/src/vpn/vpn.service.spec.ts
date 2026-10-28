@@ -38,8 +38,8 @@ function fakeVpnConnectionsService(
       }
       return connection;
     }),
-    markFailureAlerted: jest.fn(async () => undefined),
-    clearFailureAlert: jest.fn(async () => undefined),
+    claimFailureAlert: jest.fn(async () => true),
+    claimRecovery: jest.fn(async () => true),
   } as unknown as VpnConnectionsService;
 }
 

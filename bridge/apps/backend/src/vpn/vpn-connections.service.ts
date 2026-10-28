@@ -109,13 +109,26 @@ export class VpnConnectionsService {
     await this.repository.delete(id);
   }
 
-  // Dedup state for the "panel unreachable" Telegram alert — set once a failure
-  // is announced, cleared on the next status check that succeeds.
-  async markFailureAlerted(id: number): Promise<void> {
-    await this.repository.update(id, { failureAlertedAt: new Date() });
+  // Dedup state for the "panel unreachable" Telegram alert. Both methods are
+  // conditional claims: concurrent status polls all read the same stale entity,
+  // so only the call that actually flips the column (true) may send the message.
+  async claimFailureAlert(id: number): Promise<boolean> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(VpnConnection)
+      .set({ failureAlertedAt: () => 'now()' })
+      .where('id = :id AND "failureAlertedAt" IS NULL', { id })
+      .execute();
+    return result.affected === 1;
   }
 
-  async clearFailureAlert(id: number): Promise<void> {
-    await this.repository.update(id, { failureAlertedAt: null });
+  async claimRecovery(id: number): Promise<boolean> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(VpnConnection)
+      .set({ failureAlertedAt: null })
+      .where('id = :id AND "failureAlertedAt" IS NOT NULL', { id })
+      .execute();
+    return result.affected === 1;
   }
 }
