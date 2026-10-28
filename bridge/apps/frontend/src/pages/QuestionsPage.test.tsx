@@ -97,6 +97,21 @@ describe('QuestionsPage', () => {
     await waitFor(() => expect(sent.some((s) => s.method === 'POST' && s.path === 'questions/cards/173%3A628/context')).toBe(true));
   });
 
+  it('submits an answer with Enter and ignores Enter on a blank field', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const field = await screen.findByLabelText('Ответ: Какую ветку брать за основу?');
+    await user.type(field, '   {Enter}');
+    expect(sent.filter((s) => s.method === 'PATCH')).toEqual([]);
+
+    await user.clear(field);
+    await user.type(field, 'main{Enter}');
+
+    await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { answer: 'main' } }]));
+    await waitFor(() => expect(field).toHaveValue(''));
+  });
+
   it('says the Context was updated when it already existed', async () => {
     const user = userEvent.setup();
     contextUpdated = true;

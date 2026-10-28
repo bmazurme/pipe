@@ -33,6 +33,15 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const hasAnswers = card.questions.some((question) => question.answer);
 
+  const submitAnswer = (id: number) => {
+    const draft = drafts[id] ?? '';
+
+    if (disabled || !draft.trim()) return;
+
+    onAnswer(id, draft);
+    setDrafts((current) => ({ ...current, [id]: '' }));
+  };
+
   return (
     <Card type="container" view="outlined" className={styles.card}>
       <div className={styles.cardHeader}>
@@ -64,7 +73,13 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
             )}
             {question.answer && <Text className={styles.answerText}>{question.answer}</Text>}
             {!question.resolved && (
-              <div className={styles.answer}>
+              <form
+                className={styles.answer}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitAnswer(question.id);
+                }}
+              >
                 <TextInput
                   size="s"
                   placeholder="Ответ"
@@ -74,15 +89,12 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
                 />
                 <Button
                   size="s"
+                  type="submit"
                   disabled={disabled || !(drafts[question.id] ?? '').trim()}
-                  onClick={() => {
-                    onAnswer(question.id, drafts[question.id]);
-                    setDrafts((current) => ({ ...current, [question.id]: '' }));
-                  }}
                 >
                   Ответить
                 </Button>
-              </div>
+              </form>
             )}
           </li>
         ))}
