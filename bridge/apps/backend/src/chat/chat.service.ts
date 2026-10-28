@@ -31,6 +31,17 @@ export const STALE_TURN_MS = 30 * 60 * 1000;
 export const STALE_TURN_MESSAGE =
   'Воркер не завершил ответ — отправьте сообщение ещё раз';
 
+// Everything ChatResponseDto returns — the encrypted contextText is left out of lists.
+const LIST_COLUMNS = [
+  'id',
+  'userId',
+  'model',
+  'title',
+  'contextName',
+  'createdAt',
+  'updatedAt',
+] as const satisfies readonly (keyof Chat)[];
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -107,6 +118,7 @@ export class ChatService {
 
       return this.chatRepository
         .createQueryBuilder('chat')
+        .select(LIST_COLUMNS.map((c) => `chat.${c}`))
         .where('chat.userId = :userId', { userId })
         .andWhere(
           `(chat.title ILIKE :pattern OR EXISTS (SELECT 1 FROM chat_messages m WHERE m."chatId" = chat.id AND m.content ILIKE :pattern))`,
@@ -117,9 +129,22 @@ export class ChatService {
     }
 
     return this.chatRepository.find({
+      select: [...LIST_COLUMNS],
       where: { userId },
       order: { updatedAt: 'DESC' },
     });
+  }
+
+  // Ownership check that does not load (and decrypt) the chat's context snapshot.
+  private async assertOwnedChat(id: number, userId: number): Promise<void> {
+    const chat = await this.chatRepository.findOne({
+      select: ['id'],
+      where: { id, userId },
+    });
+
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
   }
 
   async findOwnedChat(id: number, userId: number): Promise<Chat> {
@@ -161,7 +186,7 @@ export class ChatService {
     userId: number,
     updatedAfter?: Date,
   ): Promise<ChatMessage[]> {
-    await this.findOwnedChat(chatId, userId);
+    await this.assertOwnedChat(chatId, userId);
 
     return this.messageRepository.find({
       where: {
@@ -332,7 +357,7 @@ export class ChatService {
       throw new NotFoundException('Message not found');
     }
 
-    await this.findOwnedChat(message.chatId, userId);
+    await this.assertOwnedChat(message.chatId, userId);
 
     return message;
   }
