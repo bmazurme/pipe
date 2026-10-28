@@ -128,6 +128,44 @@ describe('buildAndUploadIssueParcel', () => {
     rmSync(projectPath, { recursive: true, force: true });
   });
 
+  it('--dry-run previews and uploads nothing', async () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-dry-'));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'export const a = 1;');
+
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error('should not be called');
+    }) as typeof fetch;
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    const result = await buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token', {
+      dryRun: true,
+    });
+
+    assert.equal(result, null);
+    assert.equal(fetchCalled, false);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('--dry-run --strict still aborts on a leak finding', async () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-dry-strict-'));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'const contact = "oncall@acme-corp.example";');
+
+    globalThis.fetch = (async () => {
+      throw new Error('should not be called');
+    }) as typeof fetch;
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    await assert.rejects(
+      buildAndUploadIssueParcel(project, config, issue, 'task/173-628', 'gitlab-token', { dryRun: true, strict: true }),
+      /--strict/,
+    );
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
   it('returns null and uploads nothing when no files match', async () => {
     const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-empty-'));
     mkdirSync(projectPath, { recursive: true });

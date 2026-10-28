@@ -2,13 +2,12 @@ import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
+import { logFilePreview } from '../dryRunPreview.js';
 import { loadOptionalDictionary, remoteTransform } from '../dictionary.js';
 import { buildArchive, readAndTransform } from '../pack.js';
 import { getLastHash, setLastHash } from '../state.js';
 import { walkProjectFiles } from '../walk.js';
 import { log } from '../log.js';
-
-const DRY_RUN_PREVIEW_LIMIT = 20;
 
 export async function pushCommand(
   name: string,
@@ -46,7 +45,6 @@ export async function pushCommand(
 
   if (options.dryRun) {
     const unchanged = manifest.contentHash === getLastHash(name);
-    const preview = files.slice(0, DRY_RUN_PREVIEW_LIMIT);
     log.info(`Dry run for "${name}" — nothing will be uploaded.`);
     log.info(`Files: ${files.length}`);
     log.info(`Archive size: ${buffer.length} bytes`);
@@ -56,12 +54,7 @@ export async function pushCommand(
         ? 'Unchanged since the last push — a real push would be skipped (unless --force).'
         : 'Changed since the last push — a real push would upload.',
     );
-    for (const f of preview) log.info(`  ${f.relPath}`);
-    if (files.length > preview.length) {
-      log.info(`  … and ${files.length - preview.length} more (use -v to list all)`);
-      for (const f of files.slice(preview.length)) log.debug(`  ${f.relPath}`);
-    }
-    log.info(leaks.length > 0 ? `Leak findings: ${leaks.length}` : 'Leak findings: none');
+    logFilePreview(files, leaks.length);
     return;
   }
 

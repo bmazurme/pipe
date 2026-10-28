@@ -5,6 +5,7 @@ import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
+import { logFilePreview } from '../dryRunPreview.js';
 import { loadOptionalDictionary, remoteTransform } from '../dictionary.js';
 import { encryptBuffer } from '../encryption.js';
 import { getCurrentBranch } from '../gitStatus.js';
@@ -43,14 +44,15 @@ export interface PushedIssueParcel {
 // below (one issue, current git branch) and by gitlab-worker (one issue per
 // loop iteration, a synthetic branch name — see commands/gitlabWorker.ts).
 // Returns null when there's nothing to send (no files matched the project's
-// include/exclude patterns), same early-out the CLI command always had.
+// include/exclude patterns, same early-out the CLI command always had) or
+// under dryRun, which prints a preview and stops before anything is uploaded.
 export async function buildAndUploadIssueParcel(
   project: ProjectConfig,
   config: SyncConfig,
   issue: GitlabIssue,
   branch: string,
   gitlabToken: string,
-  options: { strict?: boolean } = {},
+  options: { strict?: boolean; dryRun?: boolean } = {},
 ): Promise<PushedIssueParcel | null> {
   const dictionary = loadOptionalDictionary(project.dictionary);
 
@@ -90,6 +92,19 @@ export async function buildAndUploadIssueParcel(
     }
   }
 
+  const shouldEncrypt = Boolean(project.publicKeyPath);
+  const filename = issueParcelName(String(issue.project_id), String(issue.iid), shouldEncrypt);
+
+  if (options.dryRun) {
+    log.info(`Dry run for issue #${issue.iid} (project ${issue.project_id}) — nothing will be uploaded.`);
+    log.info(`Files: ${files.length}`);
+    log.info(`Images: ${images.length}`);
+    log.info(`Parcel: ${filename}`);
+    log.info(shouldEncrypt ? 'Encrypted: yes' : 'Encrypted: no');
+    logFilePreview(files, leaks.length);
+    return null;
+  }
+
   const archive = buildIssueArchive(
     files,
     {
@@ -104,12 +119,10 @@ export async function buildAndUploadIssueParcel(
     images,
   );
 
-  const shouldEncrypt = Boolean(project.publicKeyPath);
   const buffer = shouldEncrypt
     ? encryptBuffer(archive, readFileSync(resolveFromRoot(project.publicKeyPath!), 'utf-8'))
     : archive;
 
-  const filename = issueParcelName(String(issue.project_id), String(issue.iid), shouldEncrypt);
   const client = new BridgeClient(config.bridge.apiUrl);
   const stored = await client.upload(filename, buffer, {
     channel: 'issue',
@@ -130,7 +143,7 @@ export async function pushIssueCommand(
   name: string,
   projectId: string,
   iid: string,
-  options: { strict?: boolean } = {},
+  options: { strict?: boolean; dryRun?: boolean } = {},
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
