@@ -23,6 +23,7 @@ export function useSecretsEditing() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editExpiresOn, setEditExpiresOn] = useState('');
   // Left empty means "keep the current value" — the edit form never shows
   // the existing value, so there's nothing to leave unchanged except by
   // omitting it from the request entirely.
@@ -123,6 +124,7 @@ export function useSecretsEditing() {
     setEditingId(secret.id);
     setEditName(secret.name);
     setEditDescription(secret.description ?? '');
+    setEditExpiresOn(secret.expiresOn ?? '');
     setEditValue('');
     setEditError(null);
     setConfirmDeleteId(null);
@@ -144,6 +146,7 @@ export function useSecretsEditing() {
         id,
         name,
         description: editDescription.trim(),
+        expiresOn: editExpiresOn || null,
         ...(editValue.trim() ? { value: editValue.trim() } : {}),
       }).unwrap();
       // The old value must not stay on screen as if it were current.
@@ -168,6 +171,7 @@ export function useSecretsEditing() {
     editingId,
     editName,
     editDescription,
+    editExpiresOn,
     editValue,
     editError,
     deleteError,
@@ -178,6 +182,7 @@ export function useSecretsEditing() {
     revealError,
     setEditName,
     setEditDescription,
+    setEditExpiresOn,
     setEditValue,
     handleStartEdit,
     handleCancelEdit,

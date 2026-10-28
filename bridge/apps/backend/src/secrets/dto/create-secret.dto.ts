@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateSecretDto {
   @IsString()
@@ -14,4 +20,9 @@ export class CreateSecretDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  // An explicit null (on update) clears the date.
+  @IsOptional()
+  @IsDateString()
+  expiresOn?: string | null;
 }

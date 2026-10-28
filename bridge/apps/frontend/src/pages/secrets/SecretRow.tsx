@@ -1,8 +1,9 @@
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Check, Copy, Eye, EyeSlash, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
-import { Button, Icon, Text, TextInput } from '@gravity-ui/uikit';
+import { Button, Icon, Label, Text, TextInput } from '@gravity-ui/uikit';
 
 import { Secret } from '../../store/api';
+import { describeSecretExpiry } from './secretExpiry';
 import styles from '../SecretsPage.module.css';
 
 interface SecretRowProps {
@@ -10,6 +11,7 @@ interface SecretRowProps {
   isEditing: boolean;
   editName: string;
   editDescription: string;
+  editExpiresOn: string;
   editValue: string;
   editError: string | null;
   isEditSaving: boolean;
@@ -18,6 +20,7 @@ interface SecretRowProps {
   isRevealing: boolean;
   onEditNameChange: (value: string) => void;
   onEditDescriptionChange: (value: string) => void;
+  onEditExpiresOnChange: (value: string) => void;
   onEditValueChange: (value: string) => void;
   onEditKeyDown: (event: KeyboardEvent) => void;
   onSaveEdit: () => void;
@@ -32,6 +35,7 @@ export function SecretRow({
   isEditing,
   editName,
   editDescription,
+  editExpiresOn,
   editValue,
   editError,
   isEditSaving,
@@ -40,6 +44,7 @@ export function SecretRow({
   isRevealing,
   onEditNameChange,
   onEditDescriptionChange,
+  onEditExpiresOnChange,
   onEditValueChange,
   onEditKeyDown,
   onSaveEdit,
@@ -72,6 +77,7 @@ export function SecretRow({
       setCopyError('Не удалось скопировать');
     }
   };
+  const expiryBadge = describeSecretExpiry(secret.expiresOn);
   const copyLabel = `Скопировать значение ${secret.name}`;
   const editLabel = `Изменить ${secret.name}`;
   const deleteLabel = `Удалить ${secret.name}`;
@@ -98,6 +104,15 @@ export function SecretRow({
             placeholder="Описание (опционально)"
             controlProps={{ 'aria-label': `Описание секрета ${secret.name}` }}
             size="s"
+          />
+          <input
+            type="date"
+            className={styles.dateInput}
+            value={editExpiresOn}
+            onChange={(event) => onEditExpiresOnChange(event.target.value)}
+            onKeyDown={onEditKeyDown}
+            aria-label={`Действует до для ${secret.name}`}
+            title="Действует до"
           />
           <TextInput
             value={editValue}
@@ -140,6 +155,11 @@ export function SecretRow({
     <li className={styles.entryRow}>
       <div className={styles.entryInfo}>
         <Text ellipsis>{secret.name}</Text>
+        {expiryBadge && (
+          <Label theme={expiryBadge.theme} size="xs">
+            {expiryBadge.text}
+          </Label>
+        )}
         {secret.description && (
           <Text color="secondary" variant="caption-2" ellipsis>
             {secret.description}

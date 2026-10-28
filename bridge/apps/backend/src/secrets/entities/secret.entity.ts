@@ -30,6 +30,10 @@ export class Secret extends BaseEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   description: string | null;
 
+  // Optional calendar day (YYYY-MM-DD) the secret stops being valid; null = none.
+  @Column({ type: 'date', nullable: true })
+  expiresOn: string | null;
+
   // Encrypted at rest (AES-256-GCM via encryptedColumn, same transformer as
   // ClaudeCredential.token/VpnConnection.panelApiToken) — a DB dump or
   // pgadmin access no longer hands over a usable secret.

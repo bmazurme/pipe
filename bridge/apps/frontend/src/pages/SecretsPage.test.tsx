@@ -34,6 +34,12 @@ beforeEach(() => {
   store.dispatch(secretsApi.util.resetApiState());
 });
 
+function dayFromNow(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 describe('SecretsPage', () => {
   it('lists existing secrets with their description, values masked by default', async () => {
     vi.stubGlobal(
@@ -166,7 +172,7 @@ describe('SecretsPage', () => {
     await user.click(screen.getByLabelText('Сохранить'));
 
     await waitFor(() =>
-      expect(updatedBody).toEqual({ name: 'renamed-key', description: '' }),
+      expect(updatedBody).toEqual({ name: 'renamed-key', description: '', expiresOn: null }),
     );
   });
 
@@ -349,5 +355,63 @@ describe('SecretsPage search', () => {
     renderPage();
     await screen.findByText('Секретов пока нет');
     expect(screen.queryByLabelText('Поиск по секретам')).toBeNull();
+  });
+});
+
+describe('SecretsPage expiry', () => {
+  const stubSecrets = (expiresOn: string | null) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) {
+          return jsonResponse([{ ...SECRETS[1], expiresOn }]);
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+  it('warns about a secret expiring in 3 days', async () => {
+    stubSecrets(dayFromNow(3));
+    renderPage();
+    await screen.findByText('истекает через 3 дн.');
+  });
+
+  it('marks a past date as expired', async () => {
+    stubSecrets('2020-01-01');
+    renderPage();
+    await screen.findByText('истёк');
+  });
+
+  it('shows no badge without a date', async () => {
+    stubSecrets(null);
+    renderPage();
+    await screen.findByText('api-key');
+    expect(screen.queryByText(/истекает|истёк/)).toBeNull();
+  });
+
+  it('sends the date entered in the add form', async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets') && request.method === 'POST') {
+          createdBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...SECRETS[1], id: 3 });
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Секретов пока нет');
+
+    await user.type(screen.getByLabelText('Имя секрета'), 'n');
+    await user.type(screen.getByLabelText('Значение секрета'), 'v');
+    await user.type(screen.getByLabelText('Действует до'), '2026-12-01');
+    await user.click(screen.getByText('Добавить'));
+
+    await waitFor(() => expect(createdBody).toEqual({ name: 'n', value: 'v', expiresOn: '2026-12-01' }));
   });
 });
