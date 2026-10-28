@@ -17,6 +17,7 @@ describe('ChatService.findAllByUser search', () => {
   beforeEach(async () => {
     find = jest.fn().mockResolvedValue([]);
     builder = {
+      select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
@@ -44,6 +45,7 @@ describe('ChatService.findAllByUser search', () => {
 
     expect(find).toHaveBeenCalledWith({
       where: { userId: 7 },
+      select: expect.not.arrayContaining(['contextText']),
       order: { updatedAt: 'DESC' },
     });
     expect(builder.where).not.toHaveBeenCalled();
@@ -75,5 +77,13 @@ describe('ChatService.findAllByUser search', () => {
       { pattern: string },
     ];
     expect(params.pattern).toBe('%50\\%\\_a\\\\b%');
+  });
+
+  it('the search branch selects no contextText', async () => {
+    await service.findAllByUser(7, 'x');
+
+    const cols = builder.select.mock.calls[0][0] as string[];
+    expect(cols).toContain('chat.title');
+    expect(cols).not.toContain('chat.contextText');
   });
 });

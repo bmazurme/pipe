@@ -132,6 +132,28 @@ describe('ChatService', () => {
     });
   });
 
+  describe('without loading the context snapshot', () => {
+    it('findAllByUser selects no contextText', async () => {
+      chatRepository.find!.mockResolvedValue([]);
+      await service.findAllByUser(7);
+
+      const arg = chatRepository.find!.mock.calls[0][0];
+      expect(arg.select).toContain('title');
+      expect(arg.select).not.toContain('contextText');
+    });
+
+    it('listMessages checks ownership with a select of id only', async () => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1 });
+      messageRepository.find!.mockResolvedValue([]);
+      await service.listMessages(1, 7);
+
+      expect(chatRepository.findOne).toHaveBeenCalledWith({
+        select: ['id'],
+        where: { id: 1, userId: 7 },
+      });
+    });
+  });
+
   describe('listMessages', () => {
     it('throws NotFoundException for a chat owned by someone else', async () => {
       chatRepository.findOne!.mockResolvedValue(null);
