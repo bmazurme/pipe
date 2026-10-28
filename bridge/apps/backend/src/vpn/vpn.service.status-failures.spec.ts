@@ -42,8 +42,8 @@ function service(connection: VpnConnection | null = CONNECTION) {
       return connection;
     }),
     findOne: jest.fn(async () => CONNECTION),
-    markFailureAlerted: jest.fn(async () => undefined),
-    clearFailureAlert: jest.fn(async () => undefined),
+    claimFailureAlert: jest.fn(async () => true),
+    claimRecovery: jest.fn(async () => true),
   } as unknown as VpnConnectionsService;
   const github = {} as unknown as GithubActionsService;
 

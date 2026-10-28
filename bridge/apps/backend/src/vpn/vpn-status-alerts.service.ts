@@ -64,8 +64,11 @@ export class VpnStatusAlertsService {
     try {
       // Saved first: if sending fails the owner misses one message, but a failing
       // Telegram channel can't turn into a repeat alert on every subsequent poll.
-      await this.vpnConnectionsService.markFailureAlerted(connection.id);
-      if (VPN_ALERTS_OFF()) return;
+      // Conditional claim: concurrent polls hold the same stale entity, only the winner sends.
+      const claimed = await this.vpnConnectionsService.claimFailureAlert(
+        connection.id,
+      );
+      if (!claimed || VPN_ALERTS_OFF()) return;
 
       await this.notifier?.send(
         `🔌 VPN «${connection.name}» не отвечает: ${reason}`,
@@ -79,8 +82,10 @@ export class VpnStatusAlertsService {
 
   private async notifyRecovered(connection: VpnConnection): Promise<void> {
     try {
-      await this.vpnConnectionsService.clearFailureAlert(connection.id);
-      if (VPN_ALERTS_OFF()) return;
+      const claimed = await this.vpnConnectionsService.claimRecovery(
+        connection.id,
+      );
+      if (!claimed || VPN_ALERTS_OFF()) return;
 
       await this.notifier?.send(`✅ VPN «${connection.name}» снова отвечает`);
     } catch (err) {

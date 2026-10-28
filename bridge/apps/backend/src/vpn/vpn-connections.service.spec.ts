@@ -53,9 +53,11 @@ function createMockRepository(): MockRepository {
 describe('VpnConnectionsService', () => {
   let service: VpnConnectionsService;
   let repository: ReturnType<typeof createMockRepository>;
+  let queryBuilder: MockQueryBuilder;
 
   beforeEach(async () => {
     repository = createMockRepository();
+    queryBuilder = repository.createQueryBuilder() as MockQueryBuilder;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -207,6 +209,31 @@ describe('VpnConnectionsService', () => {
     it('deletes by id', async () => {
       await service.remove(5);
       expect(repository.delete).toHaveBeenCalledWith(5);
+    });
+  });
+
+  describe('alert claims', () => {
+    it('claimFailureAlert wins only while the alert is unset', async () => {
+      expect(await service.claimFailureAlert(1)).toBe(true);
+      expect(queryBuilder.where).toHaveBeenCalledWith(
+        'id = :id AND "failureAlertedAt" IS NULL',
+        { id: 1 },
+      );
+
+      queryBuilder.execute.mockResolvedValueOnce({ affected: 0 });
+      expect(await service.claimFailureAlert(1)).toBe(false);
+    });
+
+    it('claimRecovery wins only while the alert is set', async () => {
+      expect(await service.claimRecovery(1)).toBe(true);
+      expect(queryBuilder.set).toHaveBeenCalledWith({ failureAlertedAt: null });
+      expect(queryBuilder.where).toHaveBeenCalledWith(
+        'id = :id AND "failureAlertedAt" IS NOT NULL',
+        { id: 1 },
+      );
+
+      queryBuilder.execute.mockResolvedValueOnce({ affected: 0 });
+      expect(await service.claimRecovery(1)).toBe(false);
     });
   });
 });
