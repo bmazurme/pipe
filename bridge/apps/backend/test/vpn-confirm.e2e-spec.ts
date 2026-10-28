@@ -15,9 +15,13 @@ import { UsersService } from '../src/users/users.service';
 describe('VPN confirm gate (e2e)', () => {
   let app: INestApplication<App>;
   let accessToken: string;
+  const email = `e2e-vpn-confirm-${Date.now()}@ntlstl.test`;
 
   beforeAll(async () => {
     process.env.POSTGRES_DB = 'ntlstl-db-test';
+    // VPN routes are owner-only; the shared test database already has an
+    // older first account, so name this user the owner through EMAILS.
+    process.env.EMAILS = email;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -34,7 +38,7 @@ describe('VPN confirm gate (e2e)', () => {
     const jwtService = app.get(JwtService);
 
     const user = await usersService.create({
-      email: `e2e-vpn-confirm-${Date.now()}@ntlstl.test`,
+      email,
     });
     const session = await sessionsService.createSession(
       user.id,
@@ -45,6 +49,7 @@ describe('VPN confirm gate (e2e)', () => {
   });
 
   afterAll(async () => {
+    delete process.env.EMAILS;
     await app.close();
   });
 
