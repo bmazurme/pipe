@@ -335,7 +335,7 @@ export interface paths {
         delete: operations["ChatController_removeChat"];
         options?: never;
         head?: never;
-        patch: operations["ChatController_renameChat"];
+        patch: operations["ChatController_updateChat"];
         trace?: never;
     };
     "/api/v1/chat/chats/{id}/run-results": {
@@ -2407,8 +2407,10 @@ export interface components {
             model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
             contextId?: number;
         };
-        RenameChatDto: {
-            title: string;
+        UpdateChatDto: {
+            title?: string;
+            /** @enum {string} */
+            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
         };
         AttachRunResultDto: {
             jobId: number;
@@ -3649,7 +3651,7 @@ export interface operations {
             };
         };
     };
-    ChatController_renameChat: {
+    ChatController_updateChat: {
         parameters: {
             query?: never;
             header?: never;
@@ -3660,7 +3662,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RenameChatDto"];
+                "application/json": components["schemas"]["UpdateChatDto"];
             };
         };
         responses: {

@@ -69,6 +69,10 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: ({ id, title }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { title } }),
       invalidatesTags: ['Chat'],
     }),
+    updateChatModel: builder.mutation<ChatMeta, { id: number; model: ChatModelId }>({
+      query: ({ id, model }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { model } }),
+      invalidatesTags: ['Chat'],
+    }),
     // Polled every second while a reply is pending (ChatPage), so the whole thread would be
     // re-fetched on every tick unless this stays incremental. Once a chat's messages are cached,
     // only what's changed since the newest `updatedAt` already held is fetched and merged in —
@@ -144,6 +148,7 @@ export const {
   useCreateChatMutation,
   useDeleteChatMutation,
   useRenameChatMutation,
+  useUpdateChatModelMutation,
   useAttachRunResultMutation,
   useListMessagesQuery,
   useSendMessageMutation,

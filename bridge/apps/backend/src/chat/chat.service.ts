@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { In, MoreThan, Repository } from 'typeorm';
 
 import { isImageAttachment } from './attachments';
 import { ChatAttachmentsService } from './chat-attachments.service';
@@ -17,7 +17,7 @@ import { describeRun, FINISHED_STATUSES } from '../worker/run-history';
 import { WorkerService } from '../worker/worker.service';
 import { ClaimedTurnHistoryEntry } from './dto/claimed-turn-response.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
-import { Chat } from './entities/chat.entity';
+import { Chat, ChatModel } from './entities/chat.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
 import {
   ChatMessage,
@@ -160,6 +160,44 @@ export class ChatService {
   async renameChat(id: number, userId: number, title: string): Promise<Chat> {
     const chat = await this.findOwnedChat(id, userId);
     chat.title = title;
+    return this.chatRepository.save(chat);
+  }
+
+  // The model is read fresh at every claim, so switching only affects turns claimed afterwards.
+  async changeModel(
+    id: number,
+    userId: number,
+    model: ChatModel,
+  ): Promise<Chat> {
+    const chat = await this.findOwnedChat(id, userId);
+
+    const inFlight = await this.messageRepository.count({
+      where: {
+        chatId: chat.id,
+        role: ChatMessageRole.Assistant,
+        status: In([ChatMessageStatus.Pending, ChatMessageStatus.Running]),
+      },
+    });
+    if (inFlight > 0) {
+      throw new BadRequestException(
+        'Нельзя сменить модель, пока чат отвечает на сообщение',
+      );
+    }
+
+    const isClaude =
+      model === ChatModel.Sonnet ||
+      model === ChatModel.Opus ||
+      model === ChatModel.Haiku;
+    if (!isClaude) {
+      const attachments = await this.chatAttachments.findByChat(chat.id);
+      if (attachments.length > 0) {
+        throw new BadRequestException(
+          'В чате есть вложения: их поддерживают только модели Claude (Sonnet, Opus или Haiku)',
+        );
+      }
+    }
+
+    chat.model = model;
     return this.chatRepository.save(chat);
   }
 

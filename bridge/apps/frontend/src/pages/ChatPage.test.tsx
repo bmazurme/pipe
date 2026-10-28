@@ -148,7 +148,10 @@ describe('ChatPage', () => {
     await waitFor(() => expect(createBody).toEqual({ model: 'gpt' }));
   });
 
-  it('names the active chat\'s model instead of offering a picker', async () => {
+  it('switches the model of an active chat from the composer', async () => {
+    const user = userEvent.setup();
+    let patchBody: unknown;
+
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
@@ -156,6 +159,10 @@ describe('ChatPage', () => {
         const method = request.method;
 
         if (url.endsWith('/chat/chats') && method === 'GET') return jsonResponse([CHAT]);
+        if (url.endsWith(`/chat/chats/${CHAT.id}`) && method === 'PATCH') {
+          patchBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...CHAT, model: 'opus' });
+        }
         if (url.includes(`/chat/chats/${CHAT.id}/messages`) && method === 'GET') return jsonResponse(MESSAGES);
 
         return jsonResponse([]);
@@ -166,13 +173,14 @@ describe('ChatPage', () => {
 
     const historyButtonEl = document.querySelector('[data-qa="header-action-history"]');
     if (!historyButtonEl) throw new Error('history button not found');
-    const user = userEvent.setup();
     await user.click(historyButtonEl);
     await user.click(await screen.findByText(CHAT.title));
 
     await screen.findByText('Привет');
-    expect(screen.getByText('Модель:')).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Модель' })).toBeNull();
+    await user.click(screen.getByText('GPT'));
+    await user.click(await screen.findByText('Claude Opus'));
+
+    await waitFor(() => expect(patchBody).toEqual({ model: 'opus' }));
   });
 
   it('renders a failed assistant turn inline instead of leaving it blank', async () => {

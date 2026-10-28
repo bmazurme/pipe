@@ -30,6 +30,7 @@ type MockRepository<T extends object> = Partial<
 function createMockRepository<T extends object>(): MockRepository<T> {
   return {
     find: jest.fn(),
+    count: jest.fn(),
     findOne: jest.fn(),
     findOneByOrFail: jest.fn(),
     save: jest.fn(),
@@ -729,5 +730,78 @@ describe('ChatService', () => {
         { role: ChatMessageRole.User, content: 'hi' },
       ]);
     });
+  });
+});
+
+describe('ChatService changeModel', () => {
+  let service: ChatService;
+  let chatRepository: MockRepository<Chat>;
+  let messageRepository: MockRepository<ChatMessage>;
+  let attachmentRepository: MockRepository<ChatAttachment>;
+
+  beforeEach(async () => {
+    chatRepository = createMockRepository<Chat>();
+    messageRepository = createMockRepository<ChatMessage>();
+    attachmentRepository = createMockRepository<ChatAttachment>();
+    attachmentRepository.find!.mockResolvedValue([]);
+    messageRepository.count!.mockResolvedValue(0);
+    chatRepository.findOne!.mockResolvedValue({
+      id: 1,
+      userId: 7,
+      model: ChatModel.Haiku,
+    });
+    chatRepository.save!.mockImplementation(async (chat) => chat);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ChatService,
+        ChatAttachmentsService,
+        { provide: getRepositoryToken(Chat), useValue: chatRepository },
+        {
+          provide: getRepositoryToken(ChatMessage),
+          useValue: messageRepository,
+        },
+        {
+          provide: getRepositoryToken(ChatAttachment),
+          useValue: attachmentRepository,
+        },
+        { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
+        { provide: ContextService, useValue: { findOwned: jest.fn() } },
+        { provide: WorkerService, useValue: { findOwned: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(ChatService);
+  });
+
+  it('switches between Claude models', async () => {
+    const result = await service.changeModel(1, 7, ChatModel.Opus);
+
+    expect(result.model).toBe(ChatModel.Opus);
+    expect(chatRepository.save).toHaveBeenCalled();
+  });
+
+  it('is refused while a turn is pending or running', async () => {
+    messageRepository.count!.mockResolvedValue(1);
+
+    await expect(service.changeModel(1, 7, ChatModel.Opus)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(chatRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('is refused for a non-Claude model when the chat has attachments', async () => {
+    attachmentRepository.find!.mockResolvedValue([{ id: 1 }]);
+
+    await expect(service.changeModel(1, 7, ChatModel.Gpt)).rejects.toThrow(
+      /вложения/,
+    );
+    expect(chatRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('allows a non-Claude model when there are no attachments', async () => {
+    const result = await service.changeModel(1, 7, ChatModel.Gpt);
+
+    expect(result.model).toBe(ChatModel.Gpt);
   });
 });
