@@ -3,6 +3,7 @@ import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
 import { useTabParam } from '../shared/hooks/useTabParam';
 import { useListJobsQuery, useListWorkersQuery } from '../store/api';
+import { useIsNonOwner } from '../store/hooks';
 import { PageHeader } from '../widgets/PageHeader';
 import { ClaudeCredentialsCard } from './worker/ClaudeCredentialsCard';
 import { isActive, JOB_IDLE_POLL_INTERVAL_MS, JOB_POLL_INTERVAL_MS, WORKER_STATUS_POLL_INTERVAL_MS } from './worker/constants';
@@ -23,6 +24,7 @@ const TABS = ['jobs', 'workers', 'keys'] as const;
 // set-once keys and connections. The summary above stays visible on all of them.
 export function WorkerPage() {
   const [activeTab, setActiveTab] = useTabParam(TABS, 'jobs');
+  const isNonOwner = useIsNonOwner();
 
   // Fast while something is queued or running, slow otherwise, and paused
   // entirely while the tab is in the background.
@@ -91,7 +93,7 @@ export function WorkerPage() {
 
               <ProviderCredentialsCard />
 
-              <VpnConnectionSelector />
+              {!isNonOwner && <VpnConnectionSelector />}
 
               <WorkerHelpCard />
             </>

@@ -116,7 +116,14 @@ export function App() {
                 <Route path="/time" element={<TimePage />} />
                 <Route path="/worker" element={<WorkerPage />} />
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="/vpn" element={<VpnPage />} />
+                <Route
+                  path="/vpn"
+                  element={
+                    <OwnerOnlyPage title="VPN">
+                      <VpnPage />
+                    </OwnerOnlyPage>
+                  }
+                />
                 <Route path="/lab" element={<LabPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
