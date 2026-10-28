@@ -102,6 +102,8 @@ npm run test:e2e -w backend          # e2e, нужен Postgres с базой `n
 npm test -w frontend                 # Vitest
 ```
 
+После изменения контроллера или DTO нужно перегенерировать `apps/backend/openapi.json` и `packages/protocol/src/bridge-api-types.d.ts` (CI проверяет оба): порядок шагов описан в разделе «OpenAPI spec» корневого `CLAUDE.md`.
+
 ### Интеграционный тест S3
 
 `apps/backend/src/storage/file-store/s3-file-store.integration.spec.ts`
