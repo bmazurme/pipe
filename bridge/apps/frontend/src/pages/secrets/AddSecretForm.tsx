@@ -10,6 +10,7 @@ export function AddSecretForm() {
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [description, setDescription] = useState('');
+  const [expiresOn, setExpiresOn] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -26,10 +27,12 @@ export function AddSecretForm() {
         name: name.trim(),
         value: value.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
+        ...(expiresOn ? { expiresOn } : {}),
       }).unwrap();
       setName('');
       setValue('');
       setDescription('');
+      setExpiresOn('');
       nameInputRef.current?.focus();
     } catch (err) {
       setCreateError(typeof err === 'string' ? err : 'Не удалось сохранить секрет');
@@ -72,6 +75,15 @@ export function AddSecretForm() {
           placeholder="Описание (опционально)"
           controlProps={{ 'aria-label': 'Описание секрета' }}
           size="l"
+        />
+        <input
+          type="date"
+          className={styles.dateInput}
+          value={expiresOn}
+          onChange={(event) => setExpiresOn(event.target.value)}
+          onKeyDown={handleKeyDown}
+          aria-label="Действует до"
+          title="Действует до"
         />
         <Button view="action" size="l" loading={isSaving} disabled={!canSubmit} onClick={() => void handleCreate()}>
           Добавить

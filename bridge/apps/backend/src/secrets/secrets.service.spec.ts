@@ -62,6 +62,7 @@ describe('SecretsService', () => {
         name: 'foo',
         value: 'bar',
         description: null,
+        expiresOn: null,
       });
       expect(result).toMatchObject({ name: 'foo', value: 'bar' });
     });
@@ -173,6 +174,51 @@ describe('SecretsService', () => {
         value: 'secret-value',
       });
       await expect(service.revealValue(1, 7)).resolves.toBe('secret-value');
+    });
+  });
+
+  describe('expiresOn', () => {
+    it('stores expiresOn on create', async () => {
+      repository.findOne!.mockResolvedValue(null);
+      repository.save!.mockImplementation((entry) => Promise.resolve(entry));
+
+      await service.create(7, {
+        name: 'foo',
+        value: 'bar',
+        expiresOn: '2026-12-01',
+      });
+
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ expiresOn: '2026-12-01' }),
+      );
+    });
+
+    it('clears expiresOn on update with null', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        userId: 7,
+        name: 'foo',
+        expiresOn: '2026-12-01',
+      });
+      repository.save!.mockImplementation((entry) => Promise.resolve(entry));
+
+      const result = await service.update(1, 7, { expiresOn: null });
+
+      expect(result.expiresOn).toBeNull();
+    });
+
+    it('leaves expiresOn unchanged when update omits it', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        userId: 7,
+        name: 'foo',
+        expiresOn: '2026-12-01',
+      });
+      repository.save!.mockImplementation((entry) => Promise.resolve(entry));
+
+      const result = await service.update(1, 7, { description: 'd' });
+
+      expect(result.expiresOn).toBe('2026-12-01');
     });
   });
 });

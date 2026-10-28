@@ -3055,6 +3055,7 @@ export interface components {
             id: number;
             name: string;
             description: string | null;
+            expiresOn: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -3064,6 +3065,7 @@ export interface components {
             name: string;
             value: string;
             description?: string;
+            expiresOn?: string | null;
         };
         UpdateSecretDto: Record<string, never>;
         DayOffResponseDto: {

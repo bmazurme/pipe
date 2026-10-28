@@ -8,6 +8,7 @@ export class SecretResponseDto {
   id: number;
   name: string;
   description: string | null;
+  expiresOn: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -16,6 +17,7 @@ export class SecretResponseDto {
       id: secret.id,
       name: secret.name,
       description: secret.description,
+      expiresOn: secret.expiresOn,
       createdAt: secret.createdAt,
       updatedAt: secret.updatedAt,
     };

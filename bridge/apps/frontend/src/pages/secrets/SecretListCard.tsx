@@ -79,6 +79,7 @@ export function SecretListCard() {
               isEditing={editing.editingId === secret.id}
               editName={editing.editName}
               editDescription={editing.editDescription}
+              editExpiresOn={editing.editExpiresOn}
               editValue={editing.editValue}
               editError={editing.editError}
               isEditSaving={editing.isEditSaving}
@@ -87,6 +88,7 @@ export function SecretListCard() {
               isRevealing={editing.revealingId === secret.id}
               onEditNameChange={editing.setEditName}
               onEditDescriptionChange={editing.setEditDescription}
+              onEditExpiresOnChange={editing.setEditExpiresOn}
               onEditValueChange={editing.setEditValue}
               onEditKeyDown={editing.handleEditKeyDown(secret.id)}
               onSaveEdit={() => void editing.handleSaveEdit(secret.id)}

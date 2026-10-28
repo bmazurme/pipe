@@ -7549,6 +7549,10 @@
             "type": "string",
             "nullable": true
           },
+          "expiresOn": {
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -7562,6 +7566,7 @@
           "id",
           "name",
           "description",
+          "expiresOn",
           "createdAt",
           "updatedAt"
         ]
@@ -7579,6 +7584,10 @@
           "description": {
             "type": "string",
             "maxLength": 500
+          },
+          "expiresOn": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [

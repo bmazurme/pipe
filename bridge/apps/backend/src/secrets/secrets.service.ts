@@ -38,6 +38,7 @@ export class SecretsService {
         name: dto.name,
         value: dto.value,
         description: dto.description ?? null,
+        expiresOn: dto.expiresOn ?? null,
       }),
     );
   }
@@ -68,6 +69,7 @@ export class SecretsService {
     if (dto.name !== undefined) secret.name = dto.name;
     if (dto.value !== undefined) secret.value = dto.value;
     if (dto.description !== undefined) secret.description = dto.description;
+    if (dto.expiresOn !== undefined) secret.expiresOn = dto.expiresOn;
 
     return this.repository.save(secret);
   }

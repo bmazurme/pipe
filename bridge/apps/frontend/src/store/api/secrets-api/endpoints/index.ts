@@ -4,6 +4,7 @@ export interface Secret {
   id: number;
   name: string;
   description: string | null;
+  expiresOn: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -21,7 +22,7 @@ const secretsApiEndpoints = secretsApi.injectEndpoints({
     }),
     createSecret: builder.mutation<
       Secret,
-      { name: string; value: string; description?: string }
+      { name: string; value: string; description?: string; expiresOn?: string }
     >({
       query: (body) => ({ url: 'secrets', method: 'POST', body }),
       invalidatesTags: ['Secret'],
@@ -30,7 +31,7 @@ const secretsApiEndpoints = secretsApi.injectEndpoints({
     }),
     updateSecret: builder.mutation<
       Secret,
-      { id: number; name?: string; value?: string; description?: string }
+      { id: number; name?: string; value?: string; description?: string; expiresOn?: string | null }
     >({
       query: ({ id, ...body }) => ({
         url: `secrets/${id}`,
