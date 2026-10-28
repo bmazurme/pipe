@@ -92,6 +92,7 @@ program
       '(${projectId}-${iid}.subscription.zip), compatible with reports\' Subscription module',
   )
   .option('--strict', 'abort instead of just warning when the leak scan finds something')
+  .option('--dry-run', 'show files, parcel name, encryption and leak findings without uploading')
   .action((name, projectId, iid, options) => pushIssueCommand(name, projectId, iid, options));
 
 program
