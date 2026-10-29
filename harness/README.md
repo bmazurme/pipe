@@ -505,6 +505,9 @@ claude mcp add pipe-mcp -- node /absolute/path/to/pipe/harness/dist/mcp.js
 - **`status`**/**`next`** — same `filter`/`live`/`staleHours` inputs as the
   CLI's own flags, same output text `pipe-status`/`pipe-status --next`
   would print.
+- **`brief`** — `{ recentHours?, staleHours? }`, the same digest as
+  `pipe-status --brief` (see "Morning brief"). Read-only; always checks
+  bridge and GitLab and prints the "unavailable" line when one fails.
 - **`task_log`** — `{ key }`, same output as `pipe-status --log <key>`.
 - **`pull`**/**`retry`**/**`publish`** — the same three actions as
   `--pull`/`--retry`/`--publish` (see "Running actions" above for what each
