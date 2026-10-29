@@ -1,5 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
+
+import { writeJsonFileSync } from '@pipe/protocol/atomicWrite';
 
 // What a worker keeps after it has been enrolled: its own key. Lives only in the state directory (a volume), mode
 // 0600 — never in the environment, which is the point of enrolling instead of configuring a key by hand.
@@ -47,16 +49,10 @@ export function loadCredentials(stateDir: string, bridgeApiUrl: string): StoredC
   }
 }
 
-// Written to a temporary file and renamed, so a crash never leaves half a key behind.
+// Written atomically (temporary file + rename), so a crash never leaves half a key behind.
 export function saveCredentials(stateDir: string, credentials: StoredCredentials): void {
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-
-  const file = credentialsPath(stateDir);
-  const temporary = `${file}.${process.pid}.tmp`;
-
-  writeFileSync(temporary, `${JSON.stringify(credentials, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(temporary, 0o600);
-  renameSync(temporary, file);
+  writeJsonFileSync(credentialsPath(stateDir), credentials, { mode: 0o600 });
 }
 
 export function clearCredentials(stateDir: string): void {
