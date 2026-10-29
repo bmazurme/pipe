@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { resolveAgentTimeoutMs, runClaude } from './claudeRunner.js';
+import { buildAgentEnv, resolveAgentTimeoutMs, runClaude } from './claudeRunner.js';
 
 describe('runClaude', () => {
   let dir: string;
@@ -70,5 +70,67 @@ describe('resolveAgentTimeoutMs', () => {
   it('converts positive seconds, including fractions, to milliseconds', () => {
     assert.equal(resolveAgentTimeoutMs('90'), 90_000);
     assert.equal(resolveAgentTimeoutMs('1.5'), 1_500);
+  });
+});
+
+describe('buildAgentEnv', () => {
+  const base = {
+    PATH: '/bin',
+    HOME: '/home/u',
+    HTTPS_PROXY: 'http://proxy',
+    CLAUDE_CODE_OAUTH_TOKEN: 'tok',
+    GITHUB_TOKEN: 'g',
+    GITLAB_TOKEN: 'gl',
+    AWS_SECRET_ACCESS_KEY: 'aws',
+    BRIDGE_API_KEY: 'b',
+    SYNC_FOO: 'x',
+    FOO: 'foo',
+  };
+
+  it('keeps allowed variables and drops secrets', () => {
+    assert.deepEqual(buildAgentEnv(base), {
+      PATH: '/bin',
+      HOME: '/home/u',
+      HTTPS_PROXY: 'http://proxy',
+      CLAUDE_CODE_OAUTH_TOKEN: 'tok',
+    });
+  });
+
+  it('SYNC_AGENT_ENV_PASS lets extra names through but not denied ones', () => {
+    const env = buildAgentEnv({ ...base, SYNC_AGENT_ENV_PASS: 'FOO, GITLAB_TOKEN,SYNC_FOO' });
+    assert.equal(env.FOO, 'foo');
+    assert.equal(env.GITLAB_TOKEN, undefined);
+    assert.equal(env.SYNC_FOO, undefined);
+    assert.equal(env.SYNC_AGENT_ENV_PASS, undefined);
+  });
+
+  it('does not hand denied variables to the spawned claude', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fake-claude-env-'));
+    const saved = { ...process.env };
+    const write = process.stdout.write.bind(process.stdout);
+    try {
+      const file = join(dir, 'claude');
+      writeFileSync(file, `#!${process.execPath}\nconsole.log(JSON.stringify(process.env));\n`);
+      chmodSync(file, 0o755);
+      process.env.PATH = `${dir}:${saved.PATH}`;
+      process.env.GITHUB_TOKEN = 'g';
+      process.env.GITLAB_TOKEN = 'gl';
+      process.env.BRIDGE_API_KEY = 'b';
+      process.env.SYNC_FOO = 'x';
+      process.env.AWS_SECRET_ACCESS_KEY = 'aws';
+      process.stdout.write = (() => true) as typeof process.stdout.write;
+      const result = await runClaude(dir, 'hi');
+      process.stdout.write = write;
+      const seen = JSON.parse(result.output) as Record<string, string>;
+      assert.ok(seen.PATH);
+      for (const name of ['GITHUB_TOKEN', 'GITLAB_TOKEN', 'BRIDGE_API_KEY', 'SYNC_FOO', 'AWS_SECRET_ACCESS_KEY']) {
+        assert.equal(seen[name], undefined, name);
+      }
+    } finally {
+      process.stdout.write = write;
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -11,6 +11,10 @@ import { spawn } from 'node:child_process';
 // 3 point 6) — the git-worktree isolation this module runs inside handles
 // disk state, but nothing here sandboxes network or process access. Do not
 // point this at a shared server user account.
+//
+// What the child inherits is limited by buildAgentEnv (an allowlist), but the
+// credentials file under sync's state dir is still readable by the same OS
+// user, so running the agent as a separate user/container still stands.
 export const DEFAULT_AGENT_TIMEOUT_SEC = 30 * 60;
 const OUTPUT_TAIL_BYTES = 64 * 1024;
 
@@ -18,6 +22,29 @@ const OUTPUT_TAIL_BYTES = 64 * 1024;
 export function resolveAgentTimeoutMs(raw: string | undefined): number {
   const sec = Number(raw);
   return (Number.isFinite(sec) && sec > 0 ? sec : DEFAULT_AGENT_TIMEOUT_SEC) * 1000;
+}
+
+// Variables sync's own secrets live in — never handed to the CLI, which runs an
+// unrestricted shell against untrusted parcel/issue content. Wins over everything.
+const DENIED_ENV = /^(SYNC_|BRIDGE_|GITLAB_)|_FILE$/;
+const ALLOWED_ENV =
+  /^(PATH|HOME|LANG|TMPDIR|TERM|USER|SHELL|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|(HTTP|HTTPS|ALL|NO)_PROXY|LC_.*|NODE_.*|XDG_.*)$/i;
+
+// Allowlist of what the claude child may inherit. SYNC_AGENT_ENV_PASS
+// (comma-separated names) adds extra variables, but never a denied one.
+export function buildAgentEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const extra = new Set(
+    (base.SYNC_AGENT_ENV_PASS ?? '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined || DENIED_ENV.test(key)) continue;
+    if (ALLOWED_ENV.test(key) || extra.has(key)) env[key] = value;
+  }
+  return env;
 }
 
 function defaultTimeoutMs(): number {
@@ -40,6 +67,7 @@ export function runClaude(
 
     const child = spawn('claude', args, {
       cwd,
+      env: buildAgentEnv(process.env),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
