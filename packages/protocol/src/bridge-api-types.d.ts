@@ -443,7 +443,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["ChatController_claim"];
+        post: operations["ChatTurnsController_claim"];
         delete?: never;
         options?: never;
         head?: never;
@@ -457,7 +457,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["ChatController_turnAttachment"];
+        get: operations["ChatTurnsController_turnAttachment"];
         put?: never;
         post?: never;
         delete?: never;
@@ -475,7 +475,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["ChatController_reportProgress"];
+        post: operations["ChatTurnsController_reportProgress"];
         delete?: never;
         options?: never;
         head?: never;
@@ -491,7 +491,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["ChatController_completeTurn"];
+        post: operations["ChatTurnsController_completeTurn"];
         delete?: never;
         options?: never;
         head?: never;
@@ -507,7 +507,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["ChatController_failTurn"];
+        post: operations["ChatTurnsController_failTurn"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3827,7 +3827,7 @@ export interface operations {
             };
         };
     };
-    ChatController_claim: {
+    ChatTurnsController_claim: {
         parameters: {
             query?: never;
             header?: never;
@@ -3844,7 +3844,7 @@ export interface operations {
             };
         };
     };
-    ChatController_turnAttachment: {
+    ChatTurnsController_turnAttachment: {
         parameters: {
             query?: never;
             header?: never;
@@ -3864,7 +3864,7 @@ export interface operations {
             };
         };
     };
-    ChatController_reportProgress: {
+    ChatTurnsController_reportProgress: {
         parameters: {
             query?: never;
             header?: never;
@@ -3887,7 +3887,7 @@ export interface operations {
             };
         };
     };
-    ChatController_completeTurn: {
+    ChatTurnsController_completeTurn: {
         parameters: {
             query?: never;
             header?: never;
@@ -3912,7 +3912,7 @@ export interface operations {
             };
         };
     };
-    ChatController_failTurn: {
+    ChatTurnsController_failTurn: {
         parameters: {
             query?: never;
             header?: never;

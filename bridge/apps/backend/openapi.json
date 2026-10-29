@@ -741,7 +741,7 @@
     },
     "/api/v1/chat/turns/claim": {
       "post": {
-        "operationId": "ChatController_claim",
+        "operationId": "ChatTurnsController_claim",
         "parameters": [],
         "responses": {
           "201": {
@@ -752,7 +752,7 @@
     },
     "/api/v1/chat/turns/{messageId}/attachments/{attachmentId}": {
       "get": {
-        "operationId": "ChatController_turnAttachment",
+        "operationId": "ChatTurnsController_turnAttachment",
         "parameters": [
           {
             "name": "messageId",
@@ -780,7 +780,7 @@
     },
     "/api/v1/chat/turns/{messageId}/progress": {
       "post": {
-        "operationId": "ChatController_reportProgress",
+        "operationId": "ChatTurnsController_reportProgress",
         "parameters": [
           {
             "name": "messageId",
@@ -810,7 +810,7 @@
     },
     "/api/v1/chat/turns/{messageId}/complete": {
       "post": {
-        "operationId": "ChatController_completeTurn",
+        "operationId": "ChatTurnsController_completeTurn",
         "parameters": [
           {
             "name": "messageId",
@@ -847,7 +847,7 @@
     },
     "/api/v1/chat/turns/{messageId}/fail": {
       "post": {
-        "operationId": "ChatController_failTurn",
+        "operationId": "ChatTurnsController_failTurn",
         "parameters": [
           {
             "name": "messageId",

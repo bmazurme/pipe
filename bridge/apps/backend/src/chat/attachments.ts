@@ -1,5 +1,10 @@
 import { extname } from 'node:path';
 
+import type { Response } from 'express';
+
+import type { ChatAttachmentsService } from './chat-attachments.service';
+import type { ChatAttachment } from './entities/chat-attachment.entity';
+
 // What may be attached to a chat message. Only Claude chats take attachments: Claude Code
 // reads these files itself (images included), the other providers here get text only.
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -80,4 +85,27 @@ export function contentTypeOf(originalName: string): string {
     default:
       return 'application/octet-stream';
   }
+}
+
+// Sends a chat attachment's bytes inline, never as a page the browser would render.
+export function sendAttachment(
+  res: Response,
+  attachment: ChatAttachment,
+  attachments: ChatAttachmentsService,
+): void {
+  const name = attachment.originalName;
+
+  res.setHeader('Content-Type', contentTypeOf(name));
+  // Never rendered as a page: an uploaded .html must not run in bridge's origin.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader(
+    'Content-Disposition',
+    `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
+  );
+  attachments.sendAttachment(res, attachment, (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).json({ message: 'File is missing' });
+    }
+  });
 }
