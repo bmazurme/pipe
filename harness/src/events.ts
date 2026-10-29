@@ -136,10 +136,24 @@ export function recordTransitions(
 function readAllEvents(logPath: string): TaskEvent[] {
   if (!existsSync(logPath)) return [];
 
-  return readFileSync(logPath, 'utf-8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as TaskEvent);
+  const events: TaskEvent[] = [];
+  let skipped = 0;
+  for (const line of readFileSync(logPath, 'utf-8').split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line) as Partial<TaskEvent> | null;
+      if (parsed && typeof parsed.ts === 'string' && typeof parsed.key === 'string') {
+        events.push(parsed as TaskEvent);
+        continue;
+      }
+    } catch {
+      // partial or corrupt line — skipped below
+    }
+    skipped++;
+  }
+  // stderr only: pipe-mcp's stdout is the JSON-RPC channel.
+  if (skipped > 0) console.error(`pipe-status: skipped ${skipped} unreadable line(s) in ${logPath}`);
+  return events;
 }
 
 // `pipe-status --log <key>` — this item's own `pipe log <key>` example
