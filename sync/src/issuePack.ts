@@ -9,7 +9,7 @@ import {
   type PackedFile,
   type PackedAsset,
 } from '@pipe/protocol';
-import { resolveInDir } from '@pipe/protocol/resolveInDir';
+import { assertNoSymlinkOnPath, resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { type Dictionary, localTransform } from './dictionary.js';
 
@@ -78,6 +78,7 @@ export function extractIssue(
 
   const imagePaths = assets.map((asset) => asset.relPath);
   const assetDestinations = assets.map((asset) => resolveInDir(projectPath, asset.relPath));
+  for (const destination of assetDestinations) assertNoSymlinkOnPath(projectPath, destination);
   assets.forEach((asset, i) => {
     mkdirSync(path.dirname(assetDestinations[i]), { recursive: true });
     writeFileSync(assetDestinations[i], Buffer.from(asset.base64, 'base64'));

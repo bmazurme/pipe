@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { resolveInDir } from '@pipe/protocol/resolveInDir';
+import { assertNoSymlinkOnPath, resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { issueKey, loadAgentState, recordOwnOutput } from '../agentState.js';
 import { BridgeClient } from '../bridgeClient.js';
@@ -147,6 +147,11 @@ export async function processCandidate(
   // Without this, e.g. an ENOBUFS from a huge git push loses the agent's
   // work with no way to recover it (see incident when this was a `finally`).
   addTaskWorktree(project.path, worktreeDir, branch, project.baseBranch ?? 'main');
+
+  // Checked after the worktree exists, so links checked out into it count.
+  // Every destination is verified before the first write.
+  const assetDestinations = assets.map((asset) => resolveInDir(worktreeDir, asset.relPath));
+  for (const destination of [...destinations, ...assetDestinations]) assertNoSymlinkOnPath(worktreeDir, destination);
 
   packedFiles.forEach((file, i) => {
     mkdirSync(path.dirname(destinations[i]), { recursive: true });

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -49,6 +49,26 @@ describe('writeParcelFiles', () => {
     }
     assert.equal(existsSync(path.join(root, '.git')), false);
     assert.equal(existsSync(path.join(root, 'sub')), false);
+    assert.equal(existsSync(path.join(root, 'ok.txt')), false);
+  });
+
+  it('refuses to write through an existing directory symlink and writes nothing', () => {
+    const base = mkdtempSync(path.join(tmpdir(), 'parcel-link-'));
+    const root = path.join(base, 'project');
+    const outside = path.join(base, 'outside');
+    mkdirSync(root);
+    mkdirSync(outside);
+    symlinkSync(outside, path.join(root, 'link'), 'dir');
+
+    assert.throws(
+      () =>
+        writeParcelFiles(root, [
+          { relPath: 'ok.txt', content: 'fine' },
+          { relPath: 'link/a.txt', content: 'bad' },
+        ]),
+      /Path goes through a symlink: link/,
+    );
+    assert.equal(existsSync(path.join(outside, 'a.txt')), false);
     assert.equal(existsSync(path.join(root, 'ok.txt')), false);
   });
 });

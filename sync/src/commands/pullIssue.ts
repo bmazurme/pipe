@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { notify } from '@pipe/protocol/notify';
-import { resolveInDir } from '@pipe/protocol/resolveInDir';
+import { assertNoSymlinkOnPath, resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
@@ -69,6 +69,7 @@ async function tryPullOnce(
 
   // Validate asset paths up front too, so a bad parcel writes nothing at all.
   const assetDestinations = assets.map((asset) => resolveInDir(project.path, asset.relPath));
+  for (const destination of assetDestinations) assertNoSymlinkOnPath(project.path, destination);
   writeParcelFiles(project.path, files, localTransform(dictionary));
 
   if (legacyManifest) {
