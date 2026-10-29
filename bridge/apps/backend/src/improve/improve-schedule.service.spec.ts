@@ -82,6 +82,7 @@ function setup() {
   const contexts = { findOwned: jest.fn().mockResolvedValue({ id: 4 }) };
   const service = new ImproveScheduleService(
     schedules as never,
+    runs as never,
     improve,
     github as never,
     notifier as never,
@@ -445,5 +446,76 @@ describe('schedule weekdays', () => {
     await expect(
       service.saveSchedule(3, { ...input, weekdays: [] }),
     ).resolves.toMatchObject({ weekdays: null });
+  });
+});
+
+describe('schedule onlyOnNewCommits', () => {
+  const now = new Date('2026-10-08T23:30:00Z');
+  const analysis = {
+    id: 1,
+    userId: 3,
+    name: 'night',
+    enabled: true,
+    kind: 'analysis',
+    onlyOnNewCommits: true,
+    count: 5,
+    model: 'sonnet',
+    hour: 2,
+    minute: 0,
+    timezone: 'Europe/Moscow',
+    lastRunOn: null as string | null,
+  };
+
+  function ticking(schedule: object) {
+    const ctx = setup();
+
+    ctx.schedules.find.mockResolvedValue([schedule]);
+    ctx.schedules.update.mockResolvedValue({ affected: 1 });
+    const fire = jest
+      .spyOn(ctx.service, 'fire')
+      .mockResolvedValue({ started: [], skipped: [] });
+
+    return { ...ctx, fire };
+  }
+
+  it('skips the night and says why when the base branch is unchanged', async () => {
+    const { service, runs, schedules, fire } = ticking(analysis);
+
+    runs.findOne.mockResolvedValue({ id: 9, baseSha: 'base-sha' });
+    await service.tickSchedules(now);
+
+    expect(fire).not.toHaveBeenCalled();
+    expect(schedules.update).toHaveBeenCalledWith(1, {
+      lastResult: 'пропущено: в main нет новых коммитов (base-sh)',
+    });
+  });
+
+  it('runs when there is a new commit, no earlier run, or GitHub fails', async () => {
+    const { service, runs, github, fire } = ticking(analysis);
+
+    runs.findOne.mockResolvedValue({ id: 9, baseSha: 'old-sha' });
+    await service.tickSchedules(now);
+    expect(fire).toHaveBeenCalledTimes(1);
+
+    runs.findOne.mockResolvedValue(null);
+    await service.tickSchedules(now);
+    expect(fire).toHaveBeenCalledTimes(2);
+
+    runs.findOne.mockResolvedValue({ id: 9, baseSha: 'base-sha' });
+    github.getBranchSha.mockRejectedValue(new Error('rate limited'));
+    await service.tickSchedules(now);
+    expect(fire).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not check issue schedules or schedules without the option', async () => {
+    for (const extra of [{ kind: 'issues' }, { onlyOnNewCommits: false }]) {
+      const { service, runs, fire } = ticking({ ...analysis, ...extra });
+
+      runs.findOne.mockResolvedValue({ id: 9, baseSha: 'base-sha' });
+      await service.tickSchedules(now);
+
+      expect(fire).toHaveBeenCalledTimes(1);
+      expect(runs.findOne).not.toHaveBeenCalled();
+    }
   });
 });

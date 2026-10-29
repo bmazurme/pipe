@@ -2877,6 +2877,7 @@ export interface components {
             categories: string | null;
             autoCreateIssues: boolean;
             autoStartIssues: boolean;
+            onlyOnNewCommits: boolean;
             contextId: number | null;
             count: number;
             model: string;
@@ -2907,6 +2908,7 @@ export interface components {
             categories?: string[];
             autoCreateIssues?: boolean;
             autoStartIssues?: boolean;
+            onlyOnNewCommits?: boolean;
         };
         SaveSettingsDto: {
             autoStartModel?: string | null;

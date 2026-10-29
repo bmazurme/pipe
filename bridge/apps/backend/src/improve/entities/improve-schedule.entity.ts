@@ -45,6 +45,10 @@ export class ImproveSchedule extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   autoStartIssues: boolean;
 
+  // Analysis only: skip a night when the base branch has no new commits since the schedule's last analysis.
+  @Column({ type: 'boolean', default: false })
+  onlyOnNewCommits: boolean;
+
   // A saved Context attached to every run this schedule starts (analysis and issues alike); null = none. The job keeps
   // its own snapshot of the text. ON DELETE SET NULL in the migration: deleting the context detaches it.
   @Column({ type: 'int', unsigned: true, nullable: true })

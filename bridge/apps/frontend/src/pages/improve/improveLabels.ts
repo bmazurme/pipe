@@ -138,6 +138,7 @@ export interface ScheduleForm {
   categories?: AnalysisCategory[];
   autoCreateIssues?: boolean;
   autoStartIssues?: boolean;
+  onlyOnNewCommits?: boolean;
   /** A saved Context id as the Select's string value; '' = none. Left out = untouched. */
   contextId?: string;
   /** ISO weekdays; left out = untouched (every day). */
@@ -169,6 +170,7 @@ export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput |
       categories: form.categories,
       autoCreateIssues: form.autoCreateIssues ?? true,
       autoStartIssues: form.autoStartIssues ?? false,
+      onlyOnNewCommits: form.onlyOnNewCommits ?? false,
       ...context,
       ...weekdays,
     };

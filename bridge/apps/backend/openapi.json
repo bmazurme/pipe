@@ -6783,6 +6783,9 @@
           "autoStartIssues": {
             "type": "boolean"
           },
+          "onlyOnNewCommits": {
+            "type": "boolean"
+          },
           "contextId": {
             "type": "number",
             "nullable": true
@@ -6833,6 +6836,7 @@
           "categories",
           "autoCreateIssues",
           "autoStartIssues",
+          "onlyOnNewCommits",
           "contextId",
           "count",
           "model",
@@ -6912,6 +6916,9 @@
             "type": "boolean"
           },
           "autoStartIssues": {
+            "type": "boolean"
+          },
+          "onlyOnNewCommits": {
             "type": "boolean"
           }
         },

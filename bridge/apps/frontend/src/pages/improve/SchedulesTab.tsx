@@ -42,6 +42,7 @@ function toForm(schedule: ImproveSchedule): Form {
     categories: schedule.categories ? (schedule.categories.split(',') as ScheduleForm['categories']) : DEFAULT_CATEGORIES,
     autoCreateIssues: schedule.autoCreateIssues,
     autoStartIssues: schedule.autoStartIssues,
+    onlyOnNewCommits: schedule.onlyOnNewCommits ?? false,
     contextId: schedule.contextId === null ? '' : String(schedule.contextId),
   };
 }
@@ -336,6 +337,7 @@ export function SchedulesTab() {
                   />
                   <Switch checked={editing.form.autoStartIssues ?? false} onUpdate={(autoStartIssues) => update({ autoStartIssues })} content="И сразу брать в работу" />
                   <Switch checked={editing.form.autoCreateIssues ?? true} onUpdate={(autoCreateIssues) => update({ autoCreateIssues })} content="Сразу создавать issues" />
+                  <Switch checked={editing.form.onlyOnNewCommits ?? false} onUpdate={(onlyOnNewCommits) => update({ onlyOnNewCommits })} content="Только если в ветке появились новые коммиты" />
                 </>
               )}
               <Switch checked={editing.form.enabled} onUpdate={(enabled) => update({ enabled })} content="Включено" />

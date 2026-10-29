@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import {
   ContextScheduleUse,
@@ -18,6 +18,7 @@ import { GithubApiService } from '../loop/github-api.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
+import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { isDue, localDate, onAllowedWeekday, PR_LABEL } from './improve-shared';
 import { ImproveService } from './improve.service';
@@ -32,6 +33,8 @@ export class ImproveScheduleService implements OnModuleInit {
   constructor(
     @InjectRepository(ImproveSchedule)
     private readonly schedules: Repository<ImproveSchedule>,
+    @InjectRepository(ImproveRun)
+    private readonly runs: Repository<ImproveRun>,
     private readonly improve: ImproveService,
     private readonly github: GithubApiService,
     private readonly notifier: NotifyService,
@@ -80,6 +83,7 @@ export class ImproveScheduleService implements OnModuleInit {
       categories?: string[];
       autoCreateIssues?: boolean;
       autoStartIssues?: boolean;
+      onlyOnNewCommits?: boolean;
       contextId?: number | null;
       weekdays?: number[] | null;
     },
@@ -117,6 +121,7 @@ export class ImproveScheduleService implements OnModuleInit {
       categories: categories.length ? categories.join(',') : null,
       autoCreateIssues: input.autoCreateIssues ?? true,
       autoStartIssues: input.autoStartIssues ?? false,
+      onlyOnNewCommits: input.onlyOnNewCommits ?? false,
       contextId: input.contextId ?? null,
       weekdays: input.weekdays?.length
         ? [...new Set(input.weekdays)].sort((a, b) => a - b)
@@ -169,12 +174,52 @@ export class ImproveScheduleService implements OnModuleInit {
 
         if (claim.affected !== 1) continue;
 
+        if (schedule.kind === 'analysis' && schedule.onlyOnNewCommits) {
+          const unchanged = await this.unchangedSinceLastAnalysis(schedule.id);
+
+          if (unchanged) {
+            await this.schedules
+              .update(schedule.id, {
+                lastResult: `пропущено: в ${unchanged.branch} нет новых коммитов (${unchanged.sha.slice(0, 7)})`,
+              })
+              .catch((error) =>
+                this.logger.warn(
+                  `Schedule ${schedule.id} skip could not be recorded: ${message(error)}`,
+                ),
+              );
+
+            continue;
+          }
+        }
+
         await this.fire(schedule).catch((error) =>
           this.logger.warn(`Schedule ${schedule.id} failed: ${message(error)}`),
         );
       }
     } finally {
       this.ticking = false;
+    }
+  }
+
+  // The base branch and its head, when the head is the very commit the schedule's latest analysis worked on; null
+  // otherwise (no previous run, a new commit, or GitHub did not answer — a skipped night is never worth a missed one).
+  private async unchangedSinceLastAnalysis(
+    scheduleId: number,
+  ): Promise<{ branch: string; sha: string } | null> {
+    try {
+      const last = await this.runs.findOne({
+        where: { scheduleId, kind: 'analysis', baseSha: Not(IsNull()) },
+        order: { id: 'DESC' },
+      });
+
+      if (!last?.baseSha) return null;
+
+      const branch = this.github.baseBranch();
+      const sha = await this.github.getBranchSha(branch);
+
+      return sha === last.baseSha ? { branch, sha } : null;
+    } catch {
+      return null;
     }
   }
 

@@ -140,6 +140,11 @@ export class SaveScheduleDto {
   @IsBoolean()
   autoStartIssues?: boolean;
 
+  // Analysis only: skip the night when the base branch has no new commits since the last analysis.
+  @IsOptional()
+  @IsBoolean()
+  onlyOnNewCommits?: boolean;
+
   // A saved Context to attach to every run; null/absent = none.
   @ApiPropertyOptional({ type: Number, nullable: true })
   @IsOptional()
