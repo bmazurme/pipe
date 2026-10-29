@@ -25,7 +25,7 @@ export class UpdateJobStatusDto {
   @IsOptional()
   errorMessage?: string;
 
-  @IsIn(['shutdown'])
+  @IsIn(['shutdown', 'network'])
   @IsOptional()
-  failureKind?: 'shutdown';
+  failureKind?: 'shutdown' | 'network';
 }

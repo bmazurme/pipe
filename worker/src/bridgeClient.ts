@@ -135,32 +135,34 @@ export class WorkerBridgeClient {
     jobId: number,
     status: "running" | "succeeded" | "failed" | "cancelled",
     errorMessage?: string,
-    failureKind?: "shutdown",
+    failureKind?: "shutdown" | "network",
     delaysMs: number[] = UPLOAD_RETRY_DELAYS_MS,
   ): Promise<void> {
-    const what = `Updating status for job ${jobId}`;
-    const body = { status, errorMessage, failureKind };
+    try {
+      await this.postStatus(jobId, { status, errorMessage, failureKind }, delaysMs);
+    } catch (error) {
+      // A bridge older than this worker rejects an unknown failureKind with 400; repeat once without it so
+      // the failure is still recorded.
+      if (
+        failureKind === undefined ||
+        !(error instanceof Error) ||
+        !error.message.includes("failed (400)")
+      )
+        throw error;
 
-    if (status === "running") {
-      // Retried like the terminal report: a blip at claim time must not fail the job before the model starts.
-      await this.withTransientRetry(
-        what,
-        () =>
-          bridgeFetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/status`, {
-            method: "POST",
-            headers: bearer(this.apiKey, true),
-            body: JSON.stringify(body),
-          }),
-        delaysMs,
-        [409],
-      );
-      return;
+      await this.postStatus(jobId, { status, errorMessage }, delaysMs);
     }
+  }
 
-    // A lost terminal report makes bridge sweep the job as lost and re-run it, so it is retried; a 409 on a
-    // retry means the first attempt (whose response was lost) was recorded.
+  private async postStatus(
+    jobId: number,
+    body: { status: string; errorMessage?: string; failureKind?: string },
+    delaysMs: number[],
+  ): Promise<void> {
+    // Retried like any terminal report: a lost one makes bridge sweep the job as lost and re-run it, and a 409 on
+    // a retry means the first attempt (whose response was lost) was recorded.
     await this.withTransientRetry(
-      what,
+      `Updating status for job ${jobId}`,
       () =>
         bridgeFetch(`${this.apiUrl}/api/v1/worker/jobs/${jobId}/status`, {
           method: "POST",

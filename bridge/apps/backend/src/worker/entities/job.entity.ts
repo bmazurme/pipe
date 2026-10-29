@@ -160,9 +160,9 @@ export class Job extends BaseEntity {
   errorMessage: string | null;
 
   // Why a failed job failed when the cause is the worker process rather than the
-  // task: 'shutdown' (worker reported SIGTERM) or 'lost' (sweep). Null otherwise.
+  // task: 'shutdown' (worker reported SIGTERM), 'network' (bridge or the AI endpoint unreachable) or 'lost' (sweep). Null otherwise.
   @Column({ type: 'varchar', length: 16, nullable: true })
-  failureKind: 'shutdown' | 'lost' | null;
+  failureKind: 'shutdown' | 'network' | 'lost' | null;
 
   // Self-reported hostname of whichever worker process claimed this job —
   // purely informational, helps distinguish jobs if more than one worker

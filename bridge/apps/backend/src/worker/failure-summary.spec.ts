@@ -72,6 +72,21 @@ describe('groupFailures infra by failureKind', () => {
   });
 });
 
+describe('groupFailures network failures', () => {
+  it('counts a network failure as infra', () => {
+    const groups = groupFailures([
+      {
+        id: 1,
+        errorMessage: 'fetch failed',
+        failureKind: 'network',
+        updatedAt: new Date('2026-10-01'),
+      },
+    ]);
+
+    expect(groups[0].infra).toBe(true);
+  });
+});
+
 describe('WorkerService.failureSummary', () => {
   it('queries only the caller failed jobs inside the window', async () => {
     const repository = {

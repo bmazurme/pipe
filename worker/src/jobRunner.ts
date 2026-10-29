@@ -6,7 +6,7 @@ import { encryptBuffer } from '@pipe/protocol';
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import type { WorkerConfig } from './config.js';
-import { buildExitFailureMessage } from './failureMessage.js';
+import { buildExitFailureMessage, isNetworkFailure } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
@@ -327,7 +327,7 @@ export async function processJob(
       jlog.error({ err: error }, 'failed');
 
       try {
-        await client.updateStatus(job.id, 'failed', message);
+        await client.updateStatus(job.id, 'failed', message, isNetworkFailure(error) ? 'network' : undefined);
       } catch (statusError) {
         jlog.error({ err: statusError }, 'additionally failed to report failure status');
       }

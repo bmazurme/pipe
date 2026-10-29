@@ -1538,6 +1538,21 @@ describe('WorkerService', () => {
       });
     });
 
+    it('re-queues a network failure once, but not a second one on the same parcel', async () => {
+      const network = lost({
+        errorMessage: 'fetch failed',
+        failureKind: 'network',
+      });
+
+      expect(await service.retryAfterInfraFailure(network)).not.toBeNull();
+
+      repository.save!.mockClear();
+      repository.count!.mockResolvedValue(1);
+
+      expect(await service.retryAfterInfraFailure(network)).toBeNull();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
     it('never retries a job that failed for another reason', async () => {
       const retried = await service.retryAfterInfraFailure(
         lost({ errorMessage: 'claude exited with code 1' }),
