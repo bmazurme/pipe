@@ -11,6 +11,7 @@ import {
   type LabRunStatus,
   useCancelLabRunMutation,
   useListContextsQuery,
+  useListLabProjectIssuesQuery,
   useListLabProjectsQuery,
   useListLabRunsQuery,
   useRefreshLabPrsMutation,
@@ -49,6 +50,8 @@ export function RunsTab() {
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const issuesProjectId = form && !form.followUpOf && form.projectId ? Number(form.projectId) : null;
+  const { data: issues, error: issuesError } = useListLabProjectIssuesQuery(issuesProjectId ?? 0, { skip: issuesProjectId === null });
   const [openJobId, setOpenJobId] = useState<number | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
@@ -222,6 +225,23 @@ export function RunsTab() {
                 width="max"
               />
               <TextInput label="Ветка" value={form.baseBranch} disabled={Boolean(form.followUpOf)} onUpdate={(baseBranch) => setForm({ ...form, baseBranch })} />
+              {!form.followUpOf && (
+                <>
+                  <Select
+                    label="Из issue"
+                    placeholder="Не выбрано"
+                    value={[]}
+                    onUpdate={([number]) => {
+                      const issue = issues?.find((item) => String(item.number) === number);
+
+                      if (issue) setForm({ ...form, task: `#${issue.number} ${issue.title}\n\n${issue.body}\n\n${issue.htmlUrl}` });
+                    }}
+                    options={(issues ?? []).map((issue) => ({ value: String(issue.number), content: `#${issue.number} ${issue.title}` }))}
+                    width="max"
+                  />
+                  {issuesError && <Alert theme="warning" view="outlined" message={typeof issuesError === 'string' ? issuesError : 'Не удалось загрузить issues'} />}
+                </>
+              )}
               <Text variant="body-2">Задача</Text>
               <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
               <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={MODEL_OPTIONS} width="max" />

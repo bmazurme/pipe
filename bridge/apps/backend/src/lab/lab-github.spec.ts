@@ -2,6 +2,7 @@ import {
   checkRepo,
   downloadRepoZip,
   isValidBranch,
+  listOpenIssues,
   readStep,
   ZIP_MAX_BYTES,
 } from './lab-github';
@@ -255,5 +256,36 @@ describe('the calls to GitHub and GITHUB_PROXY_URL', () => {
     delete process.env.GITHUB_PROXY_URL;
 
     expect((await seenInit()).dispatcher).toBeUndefined();
+  });
+});
+
+describe('listOpenIssues', () => {
+  const path = 'GET /issues?state=open&sort=updated&per_page=30';
+
+  it('drops pull requests and cuts long bodies', async () => {
+    stubGithub({
+      [path]: json([
+        { number: 1, title: 'A', body: 'x'.repeat(9000), html_url: 'u1' },
+        { number: 2, title: 'PR', body: 'b', html_url: 'u2', pull_request: {} },
+        { number: 3, title: 'C', body: null, html_url: 'u3' },
+      ]),
+    });
+    const issues = await listOpenIssues('me/boat', 'tok');
+
+    expect(issues.map((issue) => issue.number)).toEqual([1, 3]);
+    expect(issues[0].body).toHaveLength(8000);
+    expect(issues[1]).toEqual({
+      number: 3,
+      title: 'C',
+      body: '',
+      htmlUrl: 'u3',
+    });
+  });
+
+  it('maps 403 to a readable error', async () => {
+    stubGithub({ [path]: json({ message: 'nope' }, 403) });
+    await expect(listOpenIssues('me/boat', 'tok')).rejects.toThrow(
+      'Токен не может читать issues',
+    );
   });
 });

@@ -7,7 +7,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { LabProject } from './entities/lab-project.entity';
-import { checkRepo, isValidRepo, RepoCheck } from './lab-github';
+import {
+  checkRepo,
+  isValidRepo,
+  listOpenIssues,
+  RepoCheck,
+  RepoIssue,
+} from './lab-github';
 
 // What the owner sees of a project: everything but the token.
 export type LabProjectView = Omit<LabProject, 'token'>;
@@ -110,6 +116,19 @@ export class LabProjectsService {
     const result = await this.applyCheck(project);
 
     return { ...result, project: toView(await this.projects.save(project)) };
+  }
+
+  // Open issues of the project's repository, read with the stored token (which never leaves bridge).
+  async listIssues(id: number, userId: number): Promise<RepoIssue[]> {
+    const project = await this.findOwned(id, userId);
+
+    try {
+      return await listOpenIssues(project.repo, project.token);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   async remove(id: number, userId: number): Promise<void> {

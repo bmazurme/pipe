@@ -70,6 +70,14 @@ export class LabController {
     return this.projects.check(id, user.id);
   }
 
+  @Get('projects/:id/issues')
+  listIssues(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.projects.listIssues(id, user.id);
+  }
+
   @Delete('projects/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeProject(
