@@ -354,3 +354,39 @@ describe('ImprovePage analysis', () => {
     );
   });
 });
+
+describe('Analysis tab polling', () => {
+  const isListGet = (request: Request) => new URL(request.url).pathname.endsWith('improve/runs') && request.method === 'GET';
+  const listFetches = () => vi.mocked(fetch).mock.calls.filter(([request]) => isListGet(request as Request)).length;
+
+  const setRuns = (status: string) => {
+    const impl = vi.mocked(fetch).getMockImplementation()!;
+
+    vi.mocked(fetch).mockImplementation(async (request) => (isListGet(request as Request) ? json([{ ...LISTED_RUN, status, hasResult: true }]) : impl(request)));
+  };
+
+  it('polls every 30 s when no run is active and every 5 s when one is', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      setRuns('analyzed');
+      renderPage('/improve?tab=analysis');
+      await screen.findByText('Анализ: Безопасность');
+      const idle = listFetches();
+
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(listFetches()).toBe(idle);
+      await vi.advanceTimersByTimeAsync(11000);
+      expect(listFetches()).toBe(idle + 1);
+
+      setRuns('running');
+      await vi.advanceTimersByTimeAsync(30000);
+      const active = listFetches();
+
+      await vi.advanceTimersByTimeAsync(11000);
+      expect(listFetches()).toBeGreaterThanOrEqual(active + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

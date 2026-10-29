@@ -30,6 +30,10 @@ export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'suc
   cancelled: 'warning',
 };
 
+// Runs list polling: fast while something is working, slow otherwise.
+export const FAST_POLL_MS = 5000;
+export const SLOW_POLL_MS = 30000;
+
 export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['preparing', 'queued', 'running', 'publishing'];
 
 export const isActiveRun = (run: Pick<ImproveRun, 'status'> | null | undefined): boolean =>
