@@ -144,8 +144,25 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
 
       <div className={styles.importForm}>
         <Text variant="subheader-1">Импортировать ключ</Text>
-        <TextInput value={name} onUpdate={setName} placeholder="Название" />
-        <TextArea value={pem} onUpdate={setPem} rows={3} placeholder="-----BEGIN PRIVATE KEY----- или -----BEGIN PUBLIC KEY-----" />
+        <TextInput
+          value={name}
+          onUpdate={(value) => {
+            setName(value);
+            setError(null);
+          }}
+          placeholder="Название"
+          controlProps={{ 'aria-label': 'Название ключа' }}
+        />
+        <TextArea
+          value={pem}
+          onUpdate={(value) => {
+            setPem(value);
+            setError(null);
+          }}
+          rows={3}
+          placeholder="-----BEGIN PRIVATE KEY----- или -----BEGIN PUBLIC KEY-----"
+          controlProps={{ 'aria-label': 'Ключ в формате PEM' }}
+        />
         <input
           ref={fileInput}
           type="file"
