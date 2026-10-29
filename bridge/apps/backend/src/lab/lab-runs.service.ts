@@ -16,10 +16,9 @@ import {
   requireImproveModel,
 } from '../improve/improve-shared';
 import { readZipball } from '../common/zip';
-import { buildIssueParcel } from '../improve/parcel';
+import { launchIssueJob } from '../improve/issue-job';
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { ContextService } from '../context/context.service';
-import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { WORKER_CAPABILITY_LABEL } from '../worker/capabilities';
 import { JobModel, JobStatus } from '../worker/entities/job.entity';
@@ -285,36 +284,26 @@ export class LabRunsService {
       );
       const snapshot = await this.snapshotFor(project, baseSha);
       const baseline = snapshot.baseline;
-      const { buffer } = await buildIssueParcel(
-        parcelEntries(snapshot),
+      const { job } = await launchIssueJob(
+        { storage: this.storage, workers: this.workers },
         {
-          number: 'lab',
-          title,
-          body: `${taskWithSkipped(input.task, snapshot.skipped)}\n\n${labEnvironment(project.repo, baseBranch)}`,
-          repo: project.repo,
-          baseBranch,
-        },
-        new Date(),
-        baseline,
-      );
-      const stored = await this.storage.createFromBuffer(
-        userId,
-        buffer,
-        `lab-${project.id}.subscription.zip`,
-        {
-          channel: 'issue',
+          userId,
+          files: parcelEntries(snapshot),
+          task: {
+            number: 'lab',
+            title,
+            body: `${taskWithSkipped(input.task, snapshot.skipped)}\n\n${labEnvironment(project.repo, baseBranch)}`,
+            repo: project.repo,
+            baseBranch,
+          },
+          baseline,
+          fileName: `lab-${project.id}.subscription.zip`,
           taskKey: `lab:${project.id}`,
-          direction: StoredFileDirection.Outbound,
+          model: input.model as JobModel,
+          contextId: input.contextId,
+          requiredCapability: requiredCapabilityOf(run.executor) ?? undefined,
         },
       );
-      const job = await this.workers.create(userId, {
-        sourceFileId: stored.id,
-        model: input.model as JobModel,
-        ...(input.contextId ? { contextId: input.contextId } : {}),
-        ...(requiredCapabilityOf(run.executor)
-          ? { requiredCapability: requiredCapabilityOf(run.executor)! }
-          : {}),
-      });
 
       run.status = LabRunStatus.Queued;
       run.jobId = job.id;

@@ -3,13 +3,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { readZipball, type SnapshotFile } from '../common/zip';
 import { GithubApiService } from '../loop/github-api.service';
-import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import { StorageService } from '../storage/storage.service';
 import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import { message, withTransientRetry } from './improve-shared';
+import { launchIssueJob } from './issue-job';
 import {
-  buildIssueParcel,
   isExcludedPath,
   MAX_FILE_BYTES,
   selectParcelFiles,
@@ -119,33 +118,25 @@ export class ImproveHandoffService {
             ...(await this.headSnapshotAt(snapshot.sha)),
           }
         : await this.prepareSnapshot(baseBranch));
-    const { buffer } = await buildIssueParcel(
-      files,
+    const { job } = await launchIssueJob(
+      { storage: this.storage, workers: this.workers },
       {
-        number: task.number,
-        title: task.title,
-        body: task.body,
-        repo: this.github.repoName() as string,
-        baseBranch,
-      },
-      new Date(),
-      baseline,
-    );
-    const stored = await this.storage.createFromBuffer(
-      userId,
-      buffer,
-      fileName,
-      {
-        channel: 'issue',
+        userId,
+        files,
+        task: {
+          number: task.number,
+          title: task.title,
+          body: task.body,
+          repo: this.github.repoName() as string,
+          baseBranch,
+        },
+        baseline,
+        fileName,
         taskKey,
-        direction: StoredFileDirection.Outbound,
+        model: model as JobModel,
+        contextId,
       },
     );
-    const job = await this.workers.create(userId, {
-      sourceFileId: stored.id,
-      model: model as JobModel,
-      ...(contextId !== null ? { contextId } : {}),
-    });
 
     return { job, baseSha, baseline, fileCount: files.length };
   }
