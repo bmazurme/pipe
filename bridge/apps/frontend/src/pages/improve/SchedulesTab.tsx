@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Label, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 import { Clock } from '@gravity-ui/icons';
 
@@ -107,6 +107,7 @@ export function SchedulesTab() {
   const [runNow] = useRunImproveScheduleNowMutation();
   const { data: contexts } = useListContextsQuery();
   const [runningId, setRunningId] = useState<number | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ImproveSchedule | null>(null);
 
@@ -130,6 +131,28 @@ export function SchedulesTab() {
       setError(null);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось сохранить расписание'));
+    }
+  };
+
+  const handleToggle = async (schedule: ImproveSchedule, enabled: boolean) => {
+    const input = validateScheduleForm({ ...toForm(schedule), enabled });
+
+    setNotice(null);
+
+    if (typeof input === 'string') {
+      setError(input);
+      return;
+    }
+
+    setError(null);
+    setTogglingId(schedule.id);
+
+    try {
+      await saveSchedule({ id: schedule.id, input }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось изменить расписание'));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -206,7 +229,7 @@ export function SchedulesTab() {
             )}
           </div>
           <div className={styles.rowActions}>
-            {!schedule.enabled && <Label theme="normal">выключено</Label>}
+            <Switch size="m" checked={schedule.enabled} disabled={togglingId === schedule.id} controlProps={{ "aria-label": `Включено: ${schedule.name}` }} onUpdate={(enabled) => void handleToggle(schedule, enabled)} />
             <Button view="flat-secondary" size="s" loading={runningId === schedule.id} disabled={runningId !== null && runningId !== schedule.id} aria-label={`Запустить сейчас: ${schedule.name}`} title="Запустить сейчас" onClick={() => void handleRunNow(schedule)}>
               <Icon data={Play} size={16} />
             </Button>
