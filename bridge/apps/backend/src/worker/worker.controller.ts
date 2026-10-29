@@ -69,6 +69,18 @@ function parseLogsFrom(raw: string | undefined): number | undefined {
   return value;
 }
 
+function parsePositiveInt(raw: string | undefined, name: string) {
+  if (raw === undefined) return undefined;
+
+  const value = /^\d+$/.test(raw) ? Number(raw) : NaN;
+
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new BadRequestException(`${name} must be a positive integer`);
+  }
+
+  return value;
+}
+
 // One controller, one guard, for both audiences — JwtOrApiKeyGuard already
 // accepts a browser session OR a personal API key (the same "unified
 // machine auth" sync/reports already use), exactly like storage's own
@@ -91,13 +103,22 @@ export class WorkerController {
 
   @Get()
   @ApiQuery({ name: 'updatedAfter', required: false })
+  // Without updatedAfter: `limit` newest jobs (default 200, max 500), only those with id < beforeId.
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'beforeId', required: false })
   async list(
     @CurrentUser() currentUser: { id: number },
     @Query('updatedAfter') updatedAfterRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('beforeId') beforeIdRaw?: string,
   ): Promise<JobResponseDto[]> {
     const jobs = await this.workerService.findAllByUser(
       currentUser.id,
       parseUpdatedAfter(updatedAfterRaw),
+      {
+        limit: parsePositiveInt(limitRaw, 'limit'),
+        beforeId: parsePositiveInt(beforeIdRaw, 'beforeId'),
+      },
     );
 
     return jobs.map(JobResponseDto.fromEntity);

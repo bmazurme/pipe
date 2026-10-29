@@ -83,7 +83,7 @@ describe('listJobs polls incrementally', () => {
 
     const first = await poll();
 
-    expect(urls.at(-1)).toMatch(/\/worker\/jobs$/);
+    expect(urls.at(-1)).toMatch(/\/worker\/jobs\?limit=200$/);
     expect(first.data?.map((j) => j.id)).toEqual([2, 1]);
 
     const second = await poll();
@@ -185,5 +185,32 @@ describe('listMessages polls incrementally', () => {
     const second = await poll();
 
     expect(second.data?.map((m) => m.id)).toEqual([1, 2]);
+  });
+});
+
+describe('listJobs pages its first fetch', () => {
+  it('asks for the newest 200, and loadOlderJobs requests beforeId and appends without duplicates', async () => {
+    const loadOlder = (workerApi.endpoints as unknown as {
+      loadOlderJobs: { initiate: (id: number) => unknown };
+    }).loadOlderJobs;
+    answer = (url) =>
+      url.includes('beforeId=5')
+        ? [
+            job(5, '2026-10-16T05:00:00.000Z', '2026-10-16T05:00:00.000Z'),
+            job(4, '2026-10-16T04:00:00.000Z', '2026-10-16T04:00:00.000Z'),
+          ]
+        : [
+            job(6, '2026-10-16T06:00:00.000Z', '2026-10-16T06:00:00.000Z'),
+            job(5, '2026-10-16T05:00:00.000Z', '2026-10-16T05:00:00.000Z'),
+          ];
+
+    await run(workerEndpoints.listJobs.initiate(undefined, { forceRefetch: true }));
+    expect(urls.at(-1)).toContain('worker/jobs?limit=200');
+
+    await run(loadOlder.initiate(5));
+    expect(urls.at(-1)).toContain('limit=200&beforeId=5');
+
+    const list = workerEndpoints.listJobs.select()(store.getState());
+    expect(list.data?.map((j) => j.id)).toEqual([6, 5, 4]);
   });
 });

@@ -4151,6 +4151,8 @@ export interface operations {
         parameters: {
             query?: {
                 updatedAfter?: string;
+                limit?: string;
+                beforeId?: string;
             };
             header?: never;
             path?: never;

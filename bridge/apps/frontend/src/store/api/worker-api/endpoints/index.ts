@@ -164,12 +164,27 @@ const workerApiEndpoints = workerApi.injectEndpoints({
           return { data: mergeJobs(cached, delta.data as WorkerJob[]) };
         }
 
-        const whole = await baseQuery('worker/jobs');
+        const whole = await baseQuery(`worker/jobs?limit=${JOBS_PAGE_SIZE}`);
         if (whole.error) return { error: whole.error };
 
         return { data: whole.data as WorkerJob[] };
       },
       providesTags: ['WorkerJob'],
+    }),
+    // The first listJobs fetch holds only the newest JOBS_PAGE_SIZE jobs; this pulls the next older page and
+    // merges it into that cache entry. The returned page's length tells the caller whether more remain.
+    loadOlderJobs: builder.mutation<WorkerJob[], number>({
+      query: (beforeId) => `worker/jobs?limit=${JOBS_PAGE_SIZE}&beforeId=${beforeId}`,
+      async onQueryStarted(_beforeId, { dispatch, getState, queryFulfilled }) {
+        const { data: page } = await queryFulfilled;
+        const merged = mergeJobs(cachedJobs(getState) ?? [], page);
+
+        dispatch(
+          workerApiEndpoints.util.updateQueryData('listJobs', undefined, (draft) => {
+            draft.splice(0, draft.length, ...merged);
+          }),
+        );
+      },
     }),
     getWorkerStatus: builder.query<WorkerStatus, void>({
       query: () => 'worker/status',
@@ -463,6 +478,9 @@ function cachedJob(getState: () => unknown, id: number): WorkerJob | undefined {
   return workerApiEndpoints.endpoints.getJob.select(id)(getState() as State).data;
 }
 
+// Matches the backend's default page for GET worker/jobs.
+export const JOBS_PAGE_SIZE = 200;
+
 function cachedJobs(getState: () => unknown): WorkerJob[] | undefined {
   type State = Parameters<ReturnType<typeof workerApiEndpoints.endpoints.listJobs.select>>[0];
 
@@ -494,6 +512,7 @@ function withLogsLength(job: WorkerJob): WorkerJob {
 
 export const {
   useListJobsQuery,
+  useLoadOlderJobsMutation,
   useGetJobQuery,
   useGetWorkerStatusQuery,
   useCreateJobMutation,

@@ -15,7 +15,14 @@ import {
 } from './worker-eligibility';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
+import {
+  In,
+  LessThan,
+  MoreThan,
+  MoreThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 
 import { ContextUsageRegistry } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
@@ -75,6 +82,9 @@ export type JobStatusRow = Pick<
 // What a Claude run that Anthropic refused prints (e.g. "Failed to authenticate. API Error: 403 Request not allowed").
 const AUTH_FAILURE_PATTERN =
   /Failed to authenticate|\b401\b|\b403\b.*Request not allowed/i;
+
+export const DEFAULT_JOBS_PAGE = 200;
+export const MAX_JOBS_PAGE = 500;
 
 @Injectable()
 export class WorkerService implements OnModuleInit {
@@ -502,7 +512,19 @@ export class WorkerService implements OnModuleInit {
   // (plain .save()/.update() do this automatically; the few raw UPDATEs set it explicitly), so
   // nothing that changed can be missed; a hard-deleted job is handled by the frontend removing it
   // from its cache directly on delete, since a row that no longer exists can't appear in any filter.
-  async findAllByUser(userId: number, updatedAfter?: Date): Promise<Job[]> {
+  //
+  // Without `updatedAfter` (the first fetch) the answer is only the newest `limit` jobs, and
+  // `beforeId` pages to strictly older ones (ordered by id, which grows with createdAt).
+  async findAllByUser(
+    userId: number,
+    updatedAfter?: Date,
+    page: { limit?: number; beforeId?: number } = {},
+  ): Promise<Job[]> {
+    const limit = Math.min(
+      Math.max(page.limit ?? DEFAULT_JOBS_PAGE, 1),
+      MAX_JOBS_PAGE,
+    );
+
     // `logs` is unbounded and appended on every worker flush, and a context or history
     // can be tens of KB — the list view needs none of them, so they are left out of the
     // SELECT (GET :id returns the logs; the context/history text only ever goes to the worker).
@@ -518,8 +540,13 @@ export class WorkerService implements OnModuleInit {
       where: {
         userId,
         ...(updatedAfter ? { updatedAt: MoreThan(updatedAfter) } : {}),
+        ...(!updatedAfter && page.beforeId !== undefined
+          ? { id: LessThan(page.beforeId) }
+          : {}),
       },
-      order: { createdAt: 'DESC' },
+      ...(updatedAfter
+        ? { order: { createdAt: 'DESC' as const } }
+        : { order: { id: 'DESC' as const }, take: limit }),
     });
   }
 

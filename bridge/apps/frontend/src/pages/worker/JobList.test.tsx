@@ -222,3 +222,24 @@ describe('JobList row layout', () => {
     expect(screen.getByTitle(failed.errorMessage as string)).toBeInTheDocument();
   });
 });
+
+describe('JobList load more', () => {
+  const many = Array.from({ length: 9 }, (_, i) => ({ ...job, id: 100 - i }) as WorkerJob);
+
+  it('offers «Загрузить ещё» after everything held is shown, and calls back', () => {
+    const onLoadMore = vi.fn();
+    renderWithTheme(
+      <JobList jobs={many} isLoading={false} onOpenJob={() => {}} onLoadMore={onLoadMore} />,
+    );
+
+    expect(screen.queryByText('Загрузить ещё')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Показать ещё 1'));
+    fireEvent.click(screen.getByText('Загрузить ещё'));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not offer it without a callback', () => {
+    renderWithTheme(<JobList jobs={[job]} isLoading={false} onOpenJob={() => {}} />);
+    expect(screen.queryByText('Загрузить ещё')).not.toBeInTheDocument();
+  });
+});
