@@ -44,6 +44,7 @@ let sent: { method: string; path: string; body: unknown }[];
 let calls: string[];
 let listFails: boolean;
 let deleteFails: boolean;
+let saveFails: boolean;
 let releaseRun: () => void;
 
 const json = (body: unknown, status = 200) =>
@@ -65,6 +66,7 @@ beforeEach(() => {
   schedules = [makeSchedule(1, 'Первое'), makeSchedule(2, 'Второе')];
   listFails = false;
   deleteFails = false;
+  saveFails = false;
   releaseRun = () => undefined;
   store.dispatch(improveApi.util.resetApiState());
   vi.stubGlobal(
@@ -83,6 +85,7 @@ beforeEach(() => {
         return listFails ? json({ message: 'boom' }, 500) : json(schedules);
       }
       if (path === 'improve/settings') return json({ autoStartModel: null, autoRepairCi: true });
+      if (request.method === 'PUT' && saveFails) return json({ message: 'nope' }, 500);
       if (request.method === 'DELETE') return deleteFails ? json({ message: 'nope' }, 500) : new Response(null, { status: 200 });
       if (path.endsWith('/run')) {
         await new Promise<void>((resolve) => {
@@ -262,5 +265,36 @@ describe('SchedulesTab', () => {
       expect(await within(dialog).findByText('Выберите хотя бы один день недели')).toBeInTheDocument();
       expect(sent).toEqual([]);
     });
+  });
+});
+
+describe('row enable switch', () => {
+  it('sends enabled: false with the other fields unchanged, without opening the dialog', async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('switch', { name: 'Включено: Первое' }));
+
+    await waitFor(() => expect(sent.some((call) => call.path === 'improve/schedules/1')).toBe(true));
+    expect(sent.find((call) => call.path === 'improve/schedules/1')?.body).toMatchObject({
+      name: 'Первое',
+      enabled: false,
+      hour: 2,
+      minute: 0,
+      timezone: 'Europe/Moscow',
+      count: 5,
+      model: 'sonnet',
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows an error when the toggle fails', async () => {
+    saveFails = true;
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('switch', { name: 'Включено: Первое' }));
+
+    expect(await screen.findByText(/Не удалось изменить расписание|nope/)).toBeInTheDocument();
   });
 });

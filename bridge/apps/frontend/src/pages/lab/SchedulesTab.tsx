@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Clock, Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Label, Select, Skeleton, Switch, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Select, Skeleton, Switch, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
@@ -9,6 +9,7 @@ import {
   getErrorMessage,
   type LabExecutor,
   LabSchedule,
+  type LabScheduleInput,
   useDeleteLabScheduleMutation,
   useListContextsQuery,
   useListLabProjectsQuery,
@@ -56,70 +57,89 @@ export function SchedulesTab() {
   const [runNow] = useRunLabScheduleNowMutation();
   const [editing, setEditing] = useState<{ id?: number; form: Form } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<LabSchedule | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [runningId, setRunningId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const sorted = useMemo(() => sortSchedulesByRunTime(schedules ?? []), [schedules]);
   const projectName = (id: number) => projects?.find((project) => project.id === id)?.name ?? `#${id}`;
 
+  const toForm = (schedule: LabSchedule): Form => ({
+    projectId: String(schedule.projectId),
+    name: schedule.name,
+    enabled: schedule.enabled,
+    time: formatTime(schedule.hour, schedule.minute),
+    timezone: schedule.timezone,
+    weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
+    onlyOnNewCommits: schedule.onlyOnNewCommits ?? false,
+    model: schedule.model,
+    executor: schedule.executor ?? 'any',
+    task: schedule.task,
+    contextId: schedule.contextId === null ? '' : String(schedule.contextId),
+  });
+
   const open = (schedule?: LabSchedule) => {
     setError(null);
-    setEditing(
-      schedule
-        ? {
-            id: schedule.id,
-            form: {
-              projectId: String(schedule.projectId),
-              name: schedule.name,
-              enabled: schedule.enabled,
-              time: formatTime(schedule.hour, schedule.minute),
-              timezone: schedule.timezone,
-              weekdays: schedule.weekdays?.length ? schedule.weekdays : ALL_WEEKDAYS,
-              onlyOnNewCommits: schedule.onlyOnNewCommits ?? false,
-              model: schedule.model,
-              executor: schedule.executor ?? 'any',
-              task: schedule.task,
-              contextId: schedule.contextId === null ? '' : String(schedule.contextId),
-            },
-          }
-        : { form: { ...DEFAULT_FORM, projectId: projects?.[0] ? String(projects[0].id) : '' } },
-    );
+    setEditing(schedule ? { id: schedule.id, form: toForm(schedule) } : { form: { ...DEFAULT_FORM, projectId: projects?.[0] ? String(projects[0].id) : '' } });
+  };
+
+  const toInput = (form: Form): LabScheduleInput | string => {
+    const time = parseTime(form.time);
+
+    if (!form.projectId) return 'Выберите проект';
+    if (!form.name.trim()) return 'Укажите название';
+    if (!time) return 'Укажите время в формате ЧЧ:ММ';
+    if (form.task.trim().length < 3) return 'Опишите задачу текстом';
+    if (form.weekdays.length === 0) return 'Выберите хотя бы один день недели';
+
+    return {
+      projectId: Number(form.projectId),
+      name: form.name.trim(),
+      enabled: form.enabled,
+      hour: time.hour,
+      minute: time.minute,
+      timezone: form.timezone,
+      weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b),
+      onlyOnNewCommits: form.onlyOnNewCommits,
+      model: form.model,
+      executor: form.executor,
+      task: form.task.trim(),
+      contextId: form.contextId ? Number(form.contextId) : null,
+    };
   };
 
   const handleSave = async () => {
     if (!editing) return;
 
-    const { form } = editing;
-    const time = parseTime(form.time);
+    const input = toInput(editing.form);
 
-    if (!form.projectId) return setError('Выберите проект');
-    if (!form.name.trim()) return setError('Укажите название');
-    if (!time) return setError('Укажите время в формате ЧЧ:ММ');
-    if (form.task.trim().length < 3) return setError('Опишите задачу текстом');
-    if (form.weekdays.length === 0) return setError('Выберите хотя бы один день недели');
+    if (typeof input === 'string') return setError(input);
 
     try {
-      await save({
-        id: editing.id,
-        input: {
-          projectId: Number(form.projectId),
-          name: form.name.trim(),
-          enabled: form.enabled,
-          hour: time.hour,
-          minute: time.minute,
-          timezone: form.timezone,
-          weekdays: form.weekdays.length === ALL_WEEKDAYS.length ? null : [...form.weekdays].sort((a, b) => a - b),
-          onlyOnNewCommits: form.onlyOnNewCommits,
-          model: form.model,
-          executor: form.executor,
-          task: form.task.trim(),
-          contextId: form.contextId ? Number(form.contextId) : null,
-        },
-      }).unwrap();
+      await save({ id: editing.id, input }).unwrap();
       setEditing(null);
       setError(null);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось сохранить расписание'));
+    }
+  };
+
+  const handleToggle = async (schedule: LabSchedule, enabled: boolean) => {
+    const input = toInput({ ...toForm(schedule), enabled });
+
+    setNotice(null);
+
+    if (typeof input === 'string') return setError(input);
+
+    setError(null);
+    setTogglingId(schedule.id);
+
+    try {
+      await save({ id: schedule.id, input }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось изменить расписание'));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -200,7 +220,7 @@ export function SchedulesTab() {
             )}
           </div>
           <div className={styles.rowActions}>
-            {!schedule.enabled && <Label theme="normal">выключено</Label>}
+            <Switch size="m" checked={schedule.enabled} disabled={togglingId === schedule.id} controlProps={{ "aria-label": `Включено: ${schedule.name}` }} onUpdate={(enabled) => void handleToggle(schedule, enabled)} />
             <Button view="flat-secondary" size="s" loading={runningId === schedule.id} aria-label={`Запустить сейчас: ${schedule.name}`} title="Запустить сейчас" onClick={() => void handleRunNow(schedule)}>
               <Icon data={Play} size={16} />
             </Button>
