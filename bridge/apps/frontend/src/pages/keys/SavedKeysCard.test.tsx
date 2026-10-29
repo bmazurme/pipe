@@ -22,6 +22,53 @@ function renderCard(removeKey = vi.fn()) {
   return removeKey;
 }
 
+describe('SavedKeysCard import form', () => {
+  function renderWithAdd() {
+    const addKey = vi.fn();
+
+    render(
+      <ThemeProvider theme="light">
+        <SavedKeysCard keys={[]} addKey={addKey} removeKey={vi.fn()} />
+      </ThemeProvider>,
+    );
+
+    return addKey;
+  }
+
+  it('labels both fields', () => {
+    renderWithAdd();
+
+    expect(screen.getByLabelText('Название ключа')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ключ в формате PEM')).toBeInTheDocument();
+  });
+
+  it.each(['Ключ в формате PEM', 'Название ключа'])('clears the not-a-key error when %s is edited', (label) => {
+    renderWithAdd();
+
+    fireEvent.change(screen.getByLabelText('Название ключа'), { target: { value: 'k' } });
+    fireEvent.change(screen.getByLabelText('Ключ в формате PEM'), { target: { value: 'garbage' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Импортировать' }));
+
+    expect(screen.getByText(/Похоже, это не ключ/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: 'changed' } });
+
+    expect(screen.queryByText(/Похоже, это не ключ/)).not.toBeInTheDocument();
+  });
+
+  it('adds a valid key with trimmed values and empties the form', () => {
+    const addKey = renderWithAdd();
+
+    fireEvent.change(screen.getByLabelText('Название ключа'), { target: { value: '  k  ' } });
+    fireEvent.change(screen.getByLabelText('Ключ в формате PEM'), { target: { value: `  ${PUBLIC.pem}  ` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Импортировать' }));
+
+    expect(addKey).toHaveBeenCalledWith('k', PUBLIC.pem.trim());
+    expect(screen.getByLabelText('Название ключа')).toHaveValue('');
+    expect(screen.getByLabelText('Ключ в формате PEM')).toHaveValue('');
+  });
+});
+
 describe('SavedKeysCard removal', () => {
   it('does not remove the key until the user confirms', async () => {
     const removeKey = renderCard();
