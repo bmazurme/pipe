@@ -4,6 +4,13 @@ export type LabExecutor = 'any' | 'fusion';
 
 export type LabRunStatus = 'preparing' | 'queued' | 'running' | 'publishing' | 'pr_open' | 'pr_merged' | 'pr_closed' | 'issue_open' | 'no_changes' | 'failed' | 'cancelled';
 
+export interface LabIssue {
+  number: number;
+  title: string;
+  body: string;
+  htmlUrl: string;
+}
+
 export interface LabProject {
   id: number;
   name: string;
@@ -124,6 +131,10 @@ const labApiEndpoints = labApi.injectEndpoints({
       invalidatesTags: ['LabProjects'],
       transformErrorResponse: errorMessage('Не удалось проверить проект'),
     }),
+    listLabProjectIssues: builder.query<LabIssue[], number>({
+      query: (id) => `lab/projects/${id}/issues`,
+      transformErrorResponse: errorMessage('Не удалось загрузить issues'),
+    }),
     deleteLabProject: builder.mutation<void, number>({
       query: (id) => ({ url: `lab/projects/${id}`, method: 'DELETE' }),
       invalidatesTags: ['LabProjects', 'LabSchedules'],
@@ -182,6 +193,7 @@ export const {
   useUpdateLabProjectMutation,
   useCheckLabProjectMutation,
   useDeleteLabProjectMutation,
+  useListLabProjectIssuesQuery,
   useListLabSchedulesQuery,
   useSaveLabScheduleMutation,
   useDeleteLabScheduleMutation,

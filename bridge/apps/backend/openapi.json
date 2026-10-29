@@ -3115,6 +3115,33 @@
         }
       }
     },
+    "/api/v1/lab/projects/{id}/issues": {
+      "get": {
+        "operationId": "LabController_listIssues",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lab/schedules": {
       "get": {
         "operationId": "LabController_listSchedules",

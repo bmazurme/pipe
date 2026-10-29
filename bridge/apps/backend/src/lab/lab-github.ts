@@ -105,6 +105,59 @@ async function repoRequest(
   } as RequestInit);
 }
 
+export interface RepoIssue {
+  number: number;
+  title: string;
+  body: string;
+  htmlUrl: string;
+}
+
+// The task limit of StartLabRunDto: a longer issue body is cut so the prefilled task still starts.
+export const ISSUE_BODY_MAX = 8000;
+
+// Open issues of the repository, newest activity first; pull requests (GitHub lists them as issues too) are dropped.
+export async function listOpenIssues(
+  repo: string,
+  token: string,
+  limit = 30,
+): Promise<RepoIssue[]> {
+  let response: Response;
+
+  try {
+    response = await repoRequest(
+      repo,
+      token,
+      `/issues?state=open&sort=updated&per_page=${limit}`,
+    );
+  } catch (error) {
+    throw new Error(
+      `GitHub недоступен: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (response.status === 403 || response.status === 404)
+    throw new Error('Токен не может читать issues');
+  if (!response.ok)
+    throw new Error(`GitHub вернул ${response.status} при чтении issues`);
+
+  const items = (await response.json()) as Array<{
+    number: number;
+    title?: string;
+    body?: string | null;
+    html_url?: string;
+    pull_request?: unknown;
+  }>;
+
+  return items
+    .filter((item) => !item.pull_request)
+    .map((item) => ({
+      number: item.number,
+      title: item.title ?? '',
+      body: (item.body ?? '').slice(0, ISSUE_BODY_MAX),
+      htmlUrl: item.html_url ?? '',
+    }));
+}
+
 // Can this token read the repository, find the base branch there, and write?
 export async function checkRepo(
   repo: string,

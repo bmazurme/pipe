@@ -128,3 +128,55 @@ describe('lab RunsTab project filter', () => {
     await waitFor(() => expect(gets).toContain('lab/runs?projectId=1'));
   });
 });
+
+describe('lab RunsTab issue prefill', () => {
+  const issues = [{ number: 5, title: 'Течёт кран', body: 'Подробности', htmlUrl: 'https://github.com/o/r/issues/5' }];
+
+  const stubIssues = () => {
+    const base = globalThis.fetch as unknown as (request: Request) => Promise<Response>;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (!new URL(request.url).pathname.endsWith('lab/projects/1/issues')) return base(request);
+
+        gets.push('lab/projects/1/issues');
+
+        return json(issues);
+      }),
+    );
+  };
+
+  it('fills the task from the chosen issue', async () => {
+    stubIssues();
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: 'Новый запуск' }));
+    await waitFor(() => expect(gets).toContain('lab/projects/1/issues'));
+    await user.click(await screen.findByText('Не выбрано'));
+    await user.click(await screen.findByText('#5 Течёт кран'));
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Задача' })).toHaveValue('#5 Течёт кран\n\nПодробности\n\nhttps://github.com/o/r/issues/5'),
+    );
+  });
+
+  it('hides the issue select when following up a pull request', async () => {
+    const base = globalThis.fetch as unknown as (request: Request) => Promise<Response>;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) =>
+        new URL(request.url).pathname === '/api/v1/lab/runs' ? json([{ ...RUN, status: 'pr_open', branch: 'lab/run-7' }]) : base(request),
+      ),
+    );
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: 'Доработать' }));
+    expect(await screen.findByText('Доработать PR')).toBeInTheDocument();
+    expect(screen.queryByText('Из issue')).not.toBeInTheDocument();
+    expect(gets.some((path) => path.endsWith('/issues'))).toBe(false);
+  });
+});
