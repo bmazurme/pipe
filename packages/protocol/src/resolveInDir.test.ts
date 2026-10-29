@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { resolveInDir } from './resolveInDir.js';
+import { mkdirSync, mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+
+import { assertNoSymlinkOnPath, resolveInDir } from './resolveInDir.js';
 
 const root = path.resolve('/tmp/protocol-root');
 
@@ -43,4 +46,20 @@ test('still allows names that merely start with .git', () => {
   assert.equal(resolveInDir(root, '.gitignore'), path.join(root, '.gitignore'));
   assert.equal(resolveInDir(root, '.github/x.yml'), path.join(root, '.github', 'x.yml'));
   assert.equal(resolveInDir(root, 'docs/.gitkeep'), path.join(root, 'docs', '.gitkeep'));
+});
+
+test('assertNoSymlinkOnPath refuses a path through a symlinked directory', () => {
+  const base = mkdtempSync(path.join(tmpdir(), 'symlink-check-'));
+  const outside = path.join(base, 'outside');
+  const projectRoot = path.join(base, 'project');
+  mkdirSync(outside);
+  mkdirSync(path.join(projectRoot, 'plain'), { recursive: true });
+  symlinkSync(outside, path.join(projectRoot, 'link'), 'dir');
+
+  assert.throws(
+    () => assertNoSymlinkOnPath(projectRoot, path.join(projectRoot, 'link', 'a.txt')),
+    /Path goes through a symlink: link/,
+  );
+  assert.doesNotThrow(() => assertNoSymlinkOnPath(projectRoot, path.join(projectRoot, 'plain', 'a.txt')));
+  assert.doesNotThrow(() => assertNoSymlinkOnPath(projectRoot, path.join(projectRoot, 'new', 'deep', 'a.txt')));
 });

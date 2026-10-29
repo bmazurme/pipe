@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -136,5 +136,33 @@ describe('extractIssue path containment', () => {
     assert.throws(() => extractIssue(project, manifest, {}, 1, assets), /escapes/);
     assert.equal(existsSync(path.join(root, 'evil.png')), false);
     assert.equal(existsSync(path.join(project, ISSUE_FILE_NAME)), false);
+  });
+});
+
+describe('extractIssue symlink guard', () => {
+  it('refuses an asset under a symlinked directory and writes nothing', () => {
+    const base = mkdtempSync(path.join(tmpdir(), 'sync-cli-asset-link-'));
+    const projectPath = path.join(base, 'project');
+    const outside = path.join(base, 'outside');
+    mkdirSync(projectPath);
+    mkdirSync(outside);
+    symlinkSync(outside, path.join(projectPath, 'img'), 'dir');
+    const manifest = {
+      issueId: '1',
+      issueIid: '42',
+      issueTitle: 't',
+      issueDescription: 'd',
+      projectId: 173,
+      branch: 'b',
+      createdAt: '2026-09-14T10:00:00.000Z',
+      contentHash: 'deadbeef',
+      schemaVersion: 1,
+    };
+
+    assert.throws(
+      () => extractIssue(projectPath, manifest, {}, 7, [{ relPath: 'img/a.png', base64: 'AAAA' }]),
+      /Path goes through a symlink: img/,
+    );
+    assert.equal(existsSync(path.join(outside, 'a.png')), false);
   });
 });
