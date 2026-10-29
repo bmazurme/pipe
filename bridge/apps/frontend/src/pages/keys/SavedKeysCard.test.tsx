@@ -68,3 +68,53 @@ describe('SavedKeysCard removal', () => {
     expect(await screen.findByTitle('Не удалось вычислить отпечаток ключа')).toHaveTextContent('—');
   });
 });
+
+describe('SavedKeysCard file import', () => {
+  function renderImport() {
+    const addKey = vi.fn();
+
+    render(
+      <ThemeProvider theme="light">
+        <SavedKeysCard keys={[]} addKey={addKey} removeKey={vi.fn()} />
+      </ThemeProvider>,
+    );
+
+    return addKey;
+  }
+
+  const choose = (file: File) => fireEvent.change(screen.getByLabelText('Файл ключа'), { target: { files: [file] } });
+
+  it('fills the PEM and the name from the file, then imports on click', async () => {
+    const addKey = renderImport();
+
+    choose(new File([PRIVATE.pem], 'work-private.pem'));
+
+    await waitFor(() => expect(screen.getByPlaceholderText('Название')).toHaveValue('work'));
+    fireEvent.click(screen.getByRole('button', { name: 'Импортировать' }));
+
+    expect(addKey).toHaveBeenCalledWith('work', PRIVATE.pem.trim());
+  });
+
+  it('does not overwrite a name the user typed', async () => {
+    renderImport();
+
+    fireEvent.change(screen.getByPlaceholderText('Название'), { target: { value: 'mine' } });
+    choose(new File([PUBLIC.pem], 'work-public.pem'));
+
+    await waitFor(() => expect(screen.getByPlaceholderText(/BEGIN PRIVATE KEY/)).toHaveValue(PUBLIC.pem));
+    expect(screen.getByPlaceholderText('Название')).toHaveValue('mine');
+  });
+
+  it('rejects a non-key file and an oversized file without touching the fields', async () => {
+    renderImport();
+
+    choose(new File(['hello'], 'notes.txt'));
+    expect(await screen.findByText(/Похоже, это не ключ/)).toBeInTheDocument();
+
+    choose(new File(['x'.repeat(64 * 1024 + 1)], 'big.pem'));
+    expect(await screen.findByText(/слишком большой/)).toBeInTheDocument();
+
+    expect(screen.getByPlaceholderText('Название')).toHaveValue('');
+    expect(screen.getByPlaceholderText(/BEGIN PRIVATE KEY/)).toHaveValue('');
+  });
+});
