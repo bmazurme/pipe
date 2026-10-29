@@ -858,3 +858,37 @@ describe('processJob log sends while bridge is slow', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob failureKind', () => {
+  it("reports 'network' when the parcel download keeps failing with fetch failed", async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-net-'));
+    const client = Object.assign(fakeClient(fakeParcel()), {
+      downloadParcel: async () => {
+        throw new TypeError('fetch failed');
+      },
+    });
+    const job: RemoteJob = { id: 31, sourceFileId: 41, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const failed = client.updateStatus.calls.find((call) => call[1] === 'failed');
+    assert.equal(failed?.[3], 'network');
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('reports no failureKind for an ordinary model failure', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-nokind-'));
+    globalThis.fetch = (async () => new Response('server error', { status: 500 })) as typeof fetch;
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 32, sourceFileId: 42, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const failed = client.updateStatus.calls.find((call) => call[1] === 'failed');
+    assert.ok(failed);
+    assert.equal(failed[3], undefined);
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+});

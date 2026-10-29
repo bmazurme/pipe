@@ -5639,7 +5639,8 @@
           "failureKind": {
             "type": "string",
             "enum": [
-              "shutdown"
+              "shutdown",
+              "network"
             ]
           }
         },

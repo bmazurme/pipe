@@ -114,6 +114,20 @@ describe("WorkerBridgeClient", () => {
       }
     });
 
+    it("repeats a report rejected with 400 once without failureKind", async () => {
+      const bodies: unknown[] = [];
+      globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(init?.body as string));
+        return new Response("bad", { status: bodies.length === 1 ? 400 : 200 });
+      }) as typeof fetch;
+
+      await client().updateStatus(1, "failed", "boom", "network", [0]);
+
+      assert.equal(bodies.length, 2);
+      assert.equal((bodies[0] as { failureKind?: string }).failureKind, "network");
+      assert.equal((bodies[1] as { failureKind?: string }).failureKind, undefined);
+    });
+
     it("throws once the delays are used up", async () => {
       const calls = sequence([503, 503, 503]);
       await assert.rejects(

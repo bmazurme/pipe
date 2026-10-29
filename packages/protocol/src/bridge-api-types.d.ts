@@ -2599,7 +2599,7 @@ export interface components {
             status: "running" | "succeeded" | "failed" | "cancelled";
             errorMessage?: string;
             /** @enum {string} */
-            failureKind?: "shutdown";
+            failureKind?: "shutdown" | "network";
         };
         ReportQuestionsDto: {
             questions: string[];
