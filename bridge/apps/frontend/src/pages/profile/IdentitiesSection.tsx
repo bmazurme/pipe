@@ -13,6 +13,7 @@ import {
 } from "@gravity-ui/uikit";
 
 import { formatRelativeTime } from "../../shared/lib/formatRelativeTime";
+import { Dialog } from "../../shared/ui/Dialog";
 import { SectionHeader } from "../../widgets/SectionHeader";
 import {
   AuthProvider,
@@ -47,6 +48,7 @@ export function IdentitiesSection() {
   const [unlink] = useUnlinkIdentityMutation();
   const [startLink] = useStartIdentityLinkMutation();
   const [busy, setBusy] = useState<AuthProvider | null>(null);
+  const [confirmUnlink, setConfirmUnlink] = useState<AuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [params, setParams] = useSearchParams();
 
@@ -89,6 +91,15 @@ export function IdentitiesSection() {
 
       window.location.assign(getOauthUrl(provider, state));
     });
+
+  const handleConfirmUnlink = async () => {
+    if (!confirmUnlink) return;
+
+    const provider = confirmUnlink;
+
+    await run(provider, () => unlink(provider).unwrap());
+    setConfirmUnlink(null);
+  };
 
   return (
     <Card view="outlined" className={styles.card}>
@@ -175,11 +186,7 @@ export function IdentitiesSection() {
                       aria-label={`Отвязать ${title}`}
                       disabled={isLastEnabled || busy !== null}
                       loading={busy === identity.provider}
-                      onClick={() =>
-                        void run(identity.provider, () =>
-                          unlink(identity.provider).unwrap(),
-                        )
-                      }
+                      onClick={() => setConfirmUnlink(identity.provider)}
                     >
                       <Icon data={TrashBin} size={16} />
                     </Button>
@@ -204,6 +211,32 @@ export function IdentitiesSection() {
           </Button>
         ))}
       </div>
+
+      <Dialog
+        open={confirmUnlink !== null}
+        onClose={() => setConfirmUnlink(null)}
+        maxWidth="s"
+        aria-labelledby="unlink-identity-title"
+      >
+        <Dialog.Header
+          caption={`Отвязать ${confirmUnlink ? PROVIDERS[confirmUnlink].title : ""}?`}
+          id="unlink-identity-title"
+        />
+        <Dialog.Body>
+          <Text color="secondary">
+            Войти через него больше не получится, пока вы не подключите его
+            снова.
+          </Text>
+        </Dialog.Body>
+        <Dialog.Footer
+          preset="danger"
+          loading={busy !== null}
+          textButtonCancel="Отмена"
+          textButtonApply="Отвязать"
+          onClickButtonCancel={() => setConfirmUnlink(null)}
+          onClickButtonApply={() => void handleConfirmUnlink()}
+        />
+      </Dialog>
     </Card>
   );
 }
