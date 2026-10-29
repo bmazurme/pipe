@@ -1,5 +1,10 @@
 import type { AppLog } from './entities/app-log.entity';
-import { normalizeError, summarize } from './summary';
+import {
+  mergeCounts,
+  normalizeError,
+  summarize,
+  summarizeEvents,
+} from './summary';
 
 let id = 0;
 const row = (
@@ -123,5 +128,40 @@ describe('summarize with repeated', () => {
 
     expect(result.failingRoutes[0].count).toBe(10);
     expect(result.topErrors[0].count).toBe(10);
+  });
+});
+
+describe('summarizeEvents / mergeCounts', () => {
+  it('ignores rows of other events', () => {
+    const noise = [
+      row('telegram.api_failed', 'warn', 'integration', 'getUpdates failed', {
+        route: '/x',
+        durationMs: 99_999,
+      }),
+      row('loop.tick', 'info', 'loop', 'tick'),
+    ];
+    const real = [
+      row('http.error', 'error', 'http', 'e', { route: '/a', durationMs: 1 }),
+    ];
+
+    expect(summarizeEvents([...noise, ...real])).toEqual(summarizeEvents(real));
+    expect(summarizeEvents(noise).topErrors).toEqual([]);
+    expect(summarizeEvents(noise).failingRoutes).toEqual([]);
+  });
+
+  it('merges grouped counts into the summary', () => {
+    const s = mergeCounts(
+      [
+        { level: 'info', source: 'http', count: 30_000 },
+        { level: 'warn', source: 'integration', count: 5 },
+        { level: 'warn', source: 'http', count: 2 },
+      ],
+      summarizeEvents([]),
+      7,
+    );
+
+    expect(s.total).toBe(30_007);
+    expect(s.byLevel).toEqual({ info: 30_000, warn: 7 });
+    expect(s.bySource).toEqual({ http: 30_002, integration: 5 });
   });
 });

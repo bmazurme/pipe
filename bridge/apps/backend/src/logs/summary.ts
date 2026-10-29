@@ -49,16 +49,21 @@ function weightOf(meta: Record<string, unknown>): number {
     : 1;
 }
 
-function increment(map: Record<string, number>, key: string): void {
-  map[key] = (map[key] ?? 0) + 1;
+export type EventSummary = Pick<
+  LogSummary,
+  'jobs' | 'topErrors' | 'slowestRoutes' | 'failingRoutes'
+>;
+
+export interface LogCountRow {
+  level: string;
+  source: string;
+  count: number;
 }
 
-export function summarize(
-  rows: AppLog[],
-  days: number,
-): Omit<LogSummary, 'truncated'> {
-  const byLevel: Record<string, number> = {};
-  const bySource: Record<string, number> = {};
+// Pure part: only job.* and http.* rows contribute; any other row is ignored.
+export function summarizeEvents(
+  rows: Pick<AppLog, 'event' | 'message' | 'meta'>[],
+): EventSummary {
   const errors = new Map<string, number>();
   const routes = new Map<string, { count: number; maxMs: number }>();
   const failing = new Map<string, { count: number; maxMs: number }>();
@@ -68,9 +73,6 @@ export function summarize(
   let durationCount = 0;
 
   for (const row of rows) {
-    increment(byLevel, row.level);
-    increment(bySource, row.source);
-
     const meta = parseMeta(row.meta);
 
     if (row.event === 'job.succeeded' || row.event === 'job.failed') {
@@ -106,10 +108,6 @@ export function summarize(
   const finished = succeeded + failed;
 
   return {
-    days,
-    total: rows.length,
-    byLevel,
-    bySource,
     jobs: {
       succeeded,
       failed,
@@ -131,4 +129,45 @@ export function summarize(
       .sort((a, b) => b.count - a.count)
       .slice(0, 5),
   };
+}
+
+// Merges the GROUP BY level, source counts with the event summary.
+export function mergeCounts(
+  counts: LogCountRow[],
+  events: EventSummary,
+  days: number,
+): Omit<LogSummary, 'truncated'> {
+  const byLevel: Record<string, number> = {};
+  const bySource: Record<string, number> = {};
+  let total = 0;
+
+  for (const { level, source, count } of counts) {
+    byLevel[level] = (byLevel[level] ?? 0) + count;
+    bySource[source] = (bySource[source] ?? 0) + count;
+    total += count;
+  }
+
+  return { days, total, byLevel, bySource, ...events };
+}
+
+// Whole-row variant, counting in memory (used where rows are already loaded).
+export function summarize(
+  rows: AppLog[],
+  days: number,
+): Omit<LogSummary, 'truncated'> {
+  const grouped = new Map<string, LogCountRow>();
+
+  for (const row of rows) {
+    const key = `${row.level}|${row.source}`;
+    const entry = grouped.get(key) ?? {
+      level: row.level,
+      source: row.source,
+      count: 0,
+    };
+
+    entry.count += 1;
+    grouped.set(key, entry);
+  }
+
+  return mergeCounts([...grouped.values()], summarizeEvents(rows), days);
 }
