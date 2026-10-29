@@ -26,6 +26,9 @@ interface JobListProps {
   onOpenJob: (jobId: number) => void;
   /** For naming the worker a queued job is pinned to. */
   workers?: FleetWorker[];
+  /** Set when older jobs than the ones held may exist on the server. */
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 type JobFilter = 'all' | 'active' | 'failed';
@@ -80,7 +83,7 @@ function whoLine(job: WorkerJob, workers: FleetWorker[] | undefined): string | n
 // rest one click away instead of an ever-longer scroll above the settings.
 const INITIAL_VISIBLE_JOBS = 8;
 
-export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }: JobListProps) {
+export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers, onLoadMore, isLoadingMore = false }: JobListProps) {
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState<JobFilter>('all');
   const [taskFilter, setTaskFilter] = useState<string | null>(null);
@@ -261,6 +264,11 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers }
       {hiddenCount > 0 && (
         <Button view="flat-secondary" onClick={() => setShowAll(true)}>
           Показать ещё {hiddenCount}
+        </Button>
+      )}
+      {hiddenCount === 0 && onLoadMore && (
+        <Button view="flat-secondary" loading={isLoadingMore} onClick={onLoadMore}>
+          Загрузить ещё
         </Button>
       )}
     </Card>

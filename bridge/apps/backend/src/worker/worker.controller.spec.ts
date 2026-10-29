@@ -174,7 +174,10 @@ describe('WorkerController', () => {
 
       expect(
         (workerService as Record<string, jest.Mock>).findAllByUser,
-      ).toHaveBeenCalledWith(7, new Date('2026-10-16T12:00:00.000Z'));
+      ).toHaveBeenCalledWith(7, new Date('2026-10-16T12:00:00.000Z'), {
+        limit: undefined,
+        beforeId: undefined,
+      });
     });
 
     it('lists everything when it is absent', async () => {
@@ -182,7 +185,27 @@ describe('WorkerController', () => {
 
       expect(
         (workerService as Record<string, jest.Mock>).findAllByUser,
-      ).toHaveBeenCalledWith(7, undefined);
+      ).toHaveBeenCalledWith(7, undefined, {
+        limit: undefined,
+        beforeId: undefined,
+      });
+    });
+
+    it('passes limit and beforeId on as numbers', async () => {
+      await controller.list({ id: 7 }, undefined, '50', '900');
+
+      expect(
+        (workerService as Record<string, jest.Mock>).findAllByUser,
+      ).toHaveBeenCalledWith(7, undefined, { limit: 50, beforeId: 900 });
+    });
+
+    it('answers 400 for a bad limit or beforeId', async () => {
+      await expect(controller.list({ id: 7 }, undefined, '0')).rejects.toThrow(
+        /limit must be a positive integer/,
+      );
+      await expect(
+        controller.list({ id: 7 }, undefined, undefined, 'x'),
+      ).rejects.toThrow(/beforeId must be a positive integer/);
     });
 
     it('answers 400 for something that is not a date', async () => {

@@ -163,6 +163,39 @@ describe('WorkerService', () => {
       expect(options.where.updatedAt._value).toEqual(since);
     });
 
+    it('without updatedAfter returns the newest 200 by id, clamps limit to 500 and pages with beforeId', async () => {
+      await service.findAllByUser(7);
+      await service.findAllByUser(7, undefined, { limit: 9999 });
+      await service.findAllByUser(7, undefined, { limit: 20, beforeId: 90 });
+
+      const calls = repository.find!.mock.calls.map(
+        (c) =>
+          c[0] as {
+            take?: number;
+            order: object;
+            where: { id?: { _type: string; _value: number } };
+          },
+      );
+      expect(calls[0].take).toBe(200);
+      expect(calls[0].order).toEqual({ id: 'DESC' });
+      expect(calls[0].where.id).toBeUndefined();
+      expect(calls[1].take).toBe(500);
+      expect(calls[2].take).toBe(20);
+      expect(calls[2].where.id?._type).toBe('lessThan');
+      expect(calls[2].where.id?._value).toBe(90);
+    });
+
+    it('with updatedAfter applies no limit', async () => {
+      await service.findAllByUser(7, new Date(), { limit: 5, beforeId: 3 });
+
+      const options = repository.find!.mock.calls[0][0] as {
+        take?: number;
+        where: object;
+      };
+      expect(options.take).toBeUndefined();
+      expect(options.where).not.toHaveProperty('id');
+    });
+
     it('without it adds no time condition', async () => {
       await service.findAllByUser(7);
 

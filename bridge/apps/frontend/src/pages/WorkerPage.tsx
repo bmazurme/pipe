@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 
 import { useTabParam } from '../shared/hooks/useTabParam';
-import { useListJobsQuery, useListWorkersQuery } from '../store/api';
+import { JOBS_PAGE_SIZE, useListJobsQuery, useListWorkersQuery, useLoadOlderJobsMutation } from '../store/api';
 import { useIsNonOwner } from '../store/hooks';
 import { PageHeader } from '../widgets/PageHeader';
 import { ClaudeCredentialsCard } from './worker/ClaudeCredentialsCard';
@@ -42,6 +42,15 @@ export function WorkerPage() {
     skipPollingIfUnfocused: true,
   });
   const jobs = jobsData ?? [];
+  const [loadOlderJobs, { isLoading: isLoadingMore }] = useLoadOlderJobsMutation();
+  const [noMoreJobs, setNoMoreJobs] = useState(false);
+  const canLoadMore = !noMoreJobs && jobs.length >= JOBS_PAGE_SIZE;
+  const handleLoadMore = async () => {
+    const oldestId = Math.min(...jobs.map((job) => job.id));
+    const page = await loadOlderJobs(oldestId).unwrap().catch(() => undefined);
+
+    if (page && page.length < JOBS_PAGE_SIZE) setNoMoreJobs(true);
+  };
   const hasActiveJobs = jobs.some((job) => isActive(job.status));
 
   useEffect(() => {
@@ -79,6 +88,8 @@ export function WorkerPage() {
                 isError={isJobsError}
                 onOpenJob={setOpenJobId}
                 workers={workers}
+                onLoadMore={canLoadMore ? handleLoadMore : undefined}
+                isLoadingMore={isLoadingMore}
               />
             </>
           )}
