@@ -43,9 +43,16 @@ async function processIssue(
   notify('Task pushed', `#${issue.iid}: ${issue.title} — sent to bridge for agent-runner`);
 }
 
+const MAX_BACKOFF_MS = 60 * 60 * 1000;
+
+export type PushBackoff = Map<string, { failures: number; nextAttemptAt: number }>;
+
+// `backoff` is only passed by --watch; without it every tick retries as before.
 export async function runGitlabWorkerOnce(
   name: string,
   options: { strict?: boolean } = {},
+  backoff?: PushBackoff,
+  { intervalMs = 0, now = Date.now }: { intervalMs?: number; now?: () => number } = {},
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
@@ -64,6 +71,13 @@ export async function runGitlabWorkerOnce(
   const issues = await listAssignedOpenIssues(config.gitlab.apiUrl, gitlabToken);
   const state = loadGitlabWorkerState();
 
+  if (backoff) {
+    const assigned = new Set(issues.map((issue) => issueKey(issue.project_id, issue.iid)));
+    for (const key of backoff.keys()) {
+      if (!assigned.has(key)) backoff.delete(key);
+    }
+  }
+
   const newIssues = issues.filter(
     (issue) => belongsToTrackedProject(issue, project) && !state[issueKey(issue.project_id, issue.iid)],
   );
@@ -74,10 +88,23 @@ export async function runGitlabWorkerOnce(
   }
 
   for (const issue of newIssues) {
+    const key = issueKey(issue.project_id, issue.iid);
+    const entry = backoff?.get(key);
+    if (entry && now() < entry.nextAttemptAt) continue;
+
     try {
       await processIssue(issue, project, config, gitlabToken, options);
+      backoff?.delete(key);
     } catch (error) {
-      log.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${(error as Error).message}`);
+      const message = (error as Error).message;
+      log.error(`Error pushing issue #${issue.iid} (project ${issue.project_id}): ${message}`);
+      if (!backoff) continue;
+
+      const failures = (entry?.failures ?? 0) + 1;
+      const delayMs = Math.min(intervalMs * 2 ** (failures - 1), MAX_BACKOFF_MS);
+      backoff.set(key, { failures, nextAttemptAt: now() + delayMs });
+      if (failures === 1) notify('Task push failed', `#${issue.iid}: ${message}`);
+      log.info(`Issue #${issue.iid}: retrying in ${Math.round(delayMs / 60000)} min after ${failures} failures`);
     }
   }
 }
@@ -101,8 +128,9 @@ export async function gitlabWorkerCommand(
   }
 
   log.info(`Watching GitLab for new assigned issues every ${intervalSec}s. Ctrl+C to stop.`);
+  const backoff: PushBackoff = new Map();
   for (;;) {
-    await runGitlabWorkerOnce(name, options).catch((error: unknown) => {
+    await runGitlabWorkerOnce(name, options, backoff, { intervalMs: intervalSec * 1000 }).catch((error: unknown) => {
       log.error(error instanceof Error ? error.message : error);
     });
     await sleep(intervalSec * 1000);
