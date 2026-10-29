@@ -5850,7 +5850,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": Record<string, never>[];
                 };
             };
         };
