@@ -27,6 +27,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MachineOnly } from '../auth/decorators/machine-only.decorator';
 import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { parseUpdatedAfter } from '../common/parse-updated-after';
 import {
   WorkerResultExceptionFilter,
   workerResultMulterConfig,
@@ -63,18 +64,6 @@ function parseLogsFrom(raw: string | undefined): number | undefined {
 
   if (!Number.isSafeInteger(value) || value > MAX_LOGS_FROM) {
     throw new BadRequestException('logsFrom must be a non-negative integer');
-  }
-
-  return value;
-}
-
-function parseUpdatedAfter(raw: string | undefined): Date | undefined {
-  if (raw === undefined) return undefined;
-
-  const value = new Date(raw);
-
-  if (Number.isNaN(value.getTime())) {
-    throw new BadRequestException('updatedAfter must be a valid date');
   }
 
   return value;
