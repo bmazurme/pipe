@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Lock, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Card, ClipboardButton, Icon, Label, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
@@ -65,6 +65,8 @@ function KeyRow({ keyEntry, onRemove }: { keyEntry: StoredParcelKey; onRemove: (
   );
 }
 
+const MAX_KEY_FILE_BYTES = 64 * 1024;
+
 interface SavedKeysCardProps {
   keys: StoredParcelKey[];
   addKey: (name: string, pem: string) => void;
@@ -76,11 +78,34 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
   const [pem, setPem] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<StoredParcelKey | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const pendingIsPrivate = pendingRemoval ? keyKind(pendingRemoval.pem) === 'private' : false;
 
   const handleConfirmRemoval = () => {
     if (pendingRemoval) removeKey(pendingRemoval.id);
     setPendingRemoval(null);
+  };
+
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (file.size > MAX_KEY_FILE_BYTES) {
+      setError(`Файл «${file.name}» слишком большой для ключа (больше 64 КБ)`);
+      return;
+    }
+
+    const text = await file.text();
+
+    if (!keyKind(text)) {
+      setError('Похоже, это не ключ (нет заголовка «PRIVATE KEY» или «PUBLIC KEY»)');
+      return;
+    }
+
+    setError(null);
+    setPem(text);
+    if (!name.trim()) setName(file.name.replace(/\.[^.]*$/, '').replace(/-(public|private)$/i, ''));
   };
 
   const handleImport = () => {
@@ -138,7 +163,18 @@ export function SavedKeysCard({ keys, addKey, removeKey }: SavedKeysCardProps) {
           placeholder="-----BEGIN PRIVATE KEY----- или -----BEGIN PUBLIC KEY-----"
           controlProps={{ 'aria-label': 'Ключ в формате PEM' }}
         />
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".pem,.key,.txt"
+          aria-label="Файл ключа"
+          hidden
+          onChange={(event) => void handleFile(event)}
+        />
         <div>
+          <Button view="outlined" onClick={() => fileInput.current?.click()}>
+            Загрузить из файла
+          </Button>{' '}
           <Button view="normal" disabled={!name.trim() || !pem.trim()} onClick={handleImport}>
             Импортировать
           </Button>
