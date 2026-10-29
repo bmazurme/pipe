@@ -179,6 +179,14 @@ node dist/cli.js pull-issue bridge 123 45 --watch 30
 По истечении — `SIGTERM`, через 10 с `SIGKILL`, ошибка `claude timed out after Ns and
 was killed` попадает в лог, worktree остаётся для разбора, а `--watch` идёт дальше.
 
+Claude получает не всё окружение sync, а только разрешённые переменные (`PATH`, `HOME`,
+локаль, прокси, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `NODE_*`, `XDG_*`);
+`SYNC_*`, `BRIDGE_*`, `GITLAB_*` и `*_FILE` не передаются никогда. Если нужна ещё одна
+переменная — `SYNC_AGENT_ENV_PASS=FOO,BAR` (имена через запятую; запрещённые имена
+это не открывает). Файл с учётными данными в каталоге состояния sync по-прежнему
+читается тем же пользователем ОС, поэтому отдельный пользователь/контейнер остаётся
+рекомендацией.
+
 Подробнее о сценариях — [`docs/workflows.md`](../docs/workflows.md), о форматах
 state-файлов — [`ECOSYSTEM.md`](../ECOSYSTEM.md).
 
