@@ -6,10 +6,22 @@ import { ILike, In, LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 
 import { AppLog, AppLogLevel, AppLogSource } from './entities/app-log.entity';
 import { redact, sanitizeMeta } from './redact';
-import { summarize, LogSummary } from './summary';
+import {
+  LogCountRow,
+  LogSummary,
+  mergeCounts,
+  summarizeEvents,
+} from './summary';
 
 const DEFAULT_RETENTION_DAYS = 30;
 export const MAX_EXPORT_ROWS = 20_000;
+// The only events summarizeEvents reads.
+export const SUMMARY_EVENTS = [
+  'job.succeeded',
+  'job.failed',
+  'http.error',
+  'http.slow',
+];
 
 export interface RecordInput {
   level: AppLogLevel;
@@ -108,10 +120,32 @@ export class AppLogService {
   }
 
   async summary(days: number): Promise<LogSummary> {
-    const rows = await this.exportRows(days);
+    const from = since(days);
+    const [counts, rows] = await Promise.all([
+      this.repository
+        .createQueryBuilder('log')
+        .select('log.level', 'level')
+        .addSelect('log.source', 'source')
+        .addSelect('COUNT(*)', 'count')
+        .where('log.createdAt >= :from', { from })
+        .groupBy('log.level')
+        .addGroupBy('log.source')
+        .getRawMany<{ level: string; source: string; count: string }>(),
+      this.repository.find({
+        select: ['event', 'message', 'meta'],
+        where: { createdAt: MoreThanOrEqual(from), event: In(SUMMARY_EVENTS) },
+        order: { id: 'DESC' },
+        take: MAX_EXPORT_ROWS,
+      }),
+    ]);
+    const grouped: LogCountRow[] = counts.map((c) => ({
+      level: c.level,
+      source: c.source,
+      count: Number(c.count),
+    }));
 
     return {
-      ...summarize(rows, days),
+      ...mergeCounts(grouped, summarizeEvents(rows), days),
       truncated: rows.length >= MAX_EXPORT_ROWS,
     };
   }
