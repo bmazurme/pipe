@@ -6,7 +6,7 @@ import { encryptBuffer } from '@pipe/protocol';
 import { RemoteJob, WorkerBridgeClient } from './bridgeClient.js';
 import { CancelledError } from './cancelled.js';
 import type { WorkerConfig } from './config.js';
-import { buildExitFailureMessage, isNetworkFailure } from './failureMessage.js';
+import { buildExitFailureMessage, describeFailure, isNetworkFailure } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
 import { makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
@@ -322,7 +322,7 @@ export async function processJob(
         jlog.error({ err: statusError }, 'could not confirm the stop to bridge');
       }
     } else {
-      const message = redact(error instanceof Error ? error.message : String(error));
+      const message = redact(describeFailure(error));
       log(`Failed: ${message}\n`);
       jlog.error({ err: error }, 'failed');
 
