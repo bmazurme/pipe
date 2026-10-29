@@ -298,3 +298,20 @@ describe('row enable switch', () => {
     expect(await screen.findByText(/Не удалось изменить расписание|nope/)).toBeInTheDocument();
   });
 });
+
+describe('only on new commits', () => {
+  it('saves the switch for an analysis schedule', async () => {
+    schedules = [{ ...makeAnalysis(1, 'Ночной анализ', null), onlyOnNewCommits: false }];
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: 'Изменить: Ночной анализ' }));
+    const dialog = await screen.findByRole('dialog');
+
+    await user.click(within(dialog).getByRole('switch', { name: 'Только если в ветке появились новые коммиты' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')?.body).toMatchObject({ onlyOnNewCommits: true });
+  });
+});

@@ -90,6 +90,8 @@ export interface ImproveSchedule {
   categories: string | null;
   autoCreateIssues: boolean;
   autoStartIssues: boolean;
+  /** Analysis only: skip a night when the base branch has no new commits. */
+  onlyOnNewCommits?: boolean;
   /** A saved Context attached to every run of this schedule, or null. */
   contextId: number | null;
   /** ISO weekdays (1 = Mon … 7 = Sun) it fires on; null = every day. */
@@ -98,13 +100,14 @@ export interface ImproveSchedule {
   lastResult: string | null;
 }
 
-export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues' | 'contextId' | 'weekdays'> & {
+export type ImproveScheduleInput = Omit<ImproveSchedule, 'id' | 'lastRunAt' | 'lastResult' | 'label' | 'kind' | 'categories' | 'autoCreateIssues' | 'autoStartIssues' | 'onlyOnNewCommits' | 'contextId' | 'weekdays'> & {
   /** null or omitted = every day. */
   weekdays?: number[] | null;
   kind?: 'issues' | 'analysis';
   categories?: string[];
   autoCreateIssues?: boolean;
   autoStartIssues?: boolean;
+  onlyOnNewCommits?: boolean;
   /** null detaches the context; omitted leaves none/keeps the server's value on create. */
   contextId?: number | null;
 };
