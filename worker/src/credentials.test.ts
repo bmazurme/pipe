@@ -37,6 +37,16 @@ describe('stored worker credentials', () => {
     assert.deepEqual(readdirSync(dir), ['credentials.json']);
   });
 
+  it('leaves no temporary file in the state directory after an overwrite either', () => {
+    saveCredentials(dir, creds);
+    saveCredentials(dir, { ...creds, name: 'blue' });
+
+    assert.deepEqual(
+      readdirSync(dir).filter((f) => f.includes('.tmp')),
+      [],
+    );
+  });
+
   it('is null when nothing has been stored', () => {
     assert.equal(loadCredentials(dir, creds.bridgeApiUrl), null);
   });
