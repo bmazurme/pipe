@@ -120,9 +120,9 @@ describe('ImprovePage start issues', () => {
     renderPage('/improve?tab=analysis');
 
     await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
-    await user.click(await screen.findByRole('button', { name: 'В работу' }));
+    await user.click(await screen.findByRole('button', { name: 'В работу (1)' }));
 
-    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/start-items', body: { model: 'sonnet' } }));
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/start-items', body: { model: 'sonnet', indices: [0] } }));
   });
 
   it('can start an analysis that takes its issues straight into work', async () => {

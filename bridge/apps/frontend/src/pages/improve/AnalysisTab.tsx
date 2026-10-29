@@ -28,13 +28,29 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
     pollingInterval: isActiveRun(run) ? 5000 : 0,
   });
   const items = detail ? analysisItems(detail) : [];
-  const hasUnfiled = items.some((item) => !item.issueNumber && !item.duplicateOf);
+  // Positions (in `items`) of the only proposals either action can touch: not filed, not started, not a duplicate.
+  const selectable = items.reduce<number[]>((indices, item, index) => (!item.issueNumber && !item.duplicateOf && !item.started ? [...indices, index] : indices), []);
+  // Empty by default: every selectable proposal counts as ticked until the owner unticks one, so the one-click
+  // behaviour is unchanged. Tracking what's unticked (not ticked) means a proposal that drops out of `selectable`
+  // (filed, started, found a duplicate) is never sent again, whether or not its index was ever toggled.
+  const [untickedIndices, setUntickedIndices] = useState<ReadonlySet<number>>(new Set());
+  const tickedIndices = selectable.filter((index) => !untickedIndices.has(index));
+
+  const toggle = (index: number) =>
+    setUntickedIndices((current) => {
+      const next = new Set(current);
+
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+
+      return next;
+    });
 
   const handleCreate = async () => {
     setError(null);
 
     try {
-      await createIssues({ id: run.id }).unwrap();
+      await createIssues({ id: run.id, indices: tickedIndices }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось создать задачи'));
     }
@@ -44,7 +60,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
     setError(null);
 
     try {
-      await startItems({ id: run.id, model }).unwrap();
+      await startItems({ id: run.id, model, indices: tickedIndices }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось взять в работу'));
     }
@@ -56,14 +72,22 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
         <Text variant="body-2">{run.issueTitle}</Text>
         {open && !detail && !detailError && <Text variant="caption-2" color="secondary">Загрузка…</Text>}
         {open && !detail && detailError && <Text variant="caption-2" color="danger">Не удалось загрузить предложения</Text>}
-        {items.map((item) => (
-          <Text key={item.title} variant="caption-2" color="secondary">
-            {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
-            {item.issueNumber && ` · issue #${item.issueNumber}`}
-            {item.started && ' · в работе'}
-            {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}
-          </Text>
-        ))}
+        {items.map((item, index) =>
+          selectable.includes(index) ? (
+            <Checkbox key={item.title} checked={tickedIndices.includes(index)} onUpdate={() => toggle(index)}>
+              <Text variant="caption-2" color="secondary">
+                {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
+              </Text>
+            </Checkbox>
+          ) : (
+            <Text key={item.title} variant="caption-2" color="secondary">
+              {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
+              {item.issueNumber && ` · issue #${item.issueNumber}`}
+              {item.started && ' · в работе'}
+              {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}
+            </Text>
+          ),
+        )}
         {run.note && <Text variant="caption-2" color="secondary">{run.note}</Text>}
         {run.error && <Text variant="caption-2" color="danger">{run.error}</Text>}
         {error && <Text variant="caption-2" color="danger">{error}</Text>}
@@ -75,14 +99,28 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
             {open ? 'Скрыть предложения' : 'Показать предложения'}
           </Button>
         )}
-        {run.status === 'analyzed' && hasUnfiled && (
-          <Button view="outlined" size="s" loading={isLoading} onClick={() => void handleCreate()}>
-            Создать issues
+        {run.status === 'analyzed' && selectable.length > 0 && (
+          <Button
+            view="outlined"
+            size="s"
+            loading={isLoading}
+            disabled={tickedIndices.length === 0}
+            title={tickedIndices.length === 0 ? 'Отметьте хотя бы одно предложение' : undefined}
+            onClick={() => void handleCreate()}
+          >
+            Создать issues ({tickedIndices.length})
           </Button>
         )}
-        {run.status === 'analyzed' && items.some((item) => !item.started && !item.duplicateOf) && (
-          <Button view="action" size="s" loading={isStarting} onClick={() => void handleStart()}>
-            В работу
+        {run.status === 'analyzed' && selectable.length > 0 && (
+          <Button
+            view="action"
+            size="s"
+            loading={isStarting}
+            disabled={tickedIndices.length === 0}
+            title={tickedIndices.length === 0 ? 'Отметьте хотя бы одно предложение' : undefined}
+            onClick={() => void handleStart()}
+          >
+            В работу ({tickedIndices.length})
           </Button>
         )}
       </div>

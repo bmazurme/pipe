@@ -211,7 +211,7 @@ describe('ImprovePage analysis', () => {
     );
   });
 
-  it('shows proposals and files them as issues', async () => {
+  it('shows proposals, ticked by default, and files them as issues with their indices', async () => {
     const user = userEvent.setup();
     renderPage('/improve?tab=analysis');
 
@@ -221,9 +221,119 @@ describe('ImprovePage analysis', () => {
 
     expect(await screen.findByText(/Add rate limit/)).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Создать issues' }));
+    await user.click(screen.getByRole('button', { name: 'Создать issues (1)' }));
 
-    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/create-issues', body: {} }));
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/create-issues', body: { indices: [0] } }));
+  });
+
+  describe('proposal selection', () => {
+    const THREE_ITEM_RUN = {
+      ...ANALYSIS_RUN,
+      id: 21,
+      issueTitle: 'Анализ: Три направления',
+      result: JSON.stringify({
+        categories: ['security', 'uiux', 'tests'],
+        autoCreate: false,
+        items: [
+          { category: 'security', title: 'Proposal A', risk: 'low', body: 'x' },
+          { category: 'uiux', title: 'Proposal B', risk: 'low', body: 'x' },
+          { category: 'tests', title: 'Proposal C', risk: 'low', body: 'x' },
+        ],
+      }),
+    };
+    const LISTED_THREE_ITEM_RUN = { ...THREE_ITEM_RUN, result: undefined };
+
+    function stubThreeItemRun() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          const path = new URL(request.url).pathname.replace('/api/v1/', '');
+          const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+
+          if (request.method !== 'GET') sent.push({ method: request.method, path, body });
+          if (path === 'improve/status') return json(STATUS);
+          if (path === 'improve/runs' && request.method === 'GET') return json([{ ...LISTED_THREE_ITEM_RUN, hasResult: true }]);
+          if (path === 'improve/schedules') return json([]);
+          if (path === 'improve/settings') return json({ autoStartModel: null });
+
+          return json(THREE_ITEM_RUN);
+        }),
+      );
+    }
+
+    async function openThreeItemRun(user: ReturnType<typeof userEvent.setup>) {
+      stubThreeItemRun();
+      renderPage('/improve?tab=analysis');
+      await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+      await screen.findByText(/Proposal A/);
+    }
+
+    it('unticking a proposal drops it from both actions, by its index among all proposals', async () => {
+      const user = userEvent.setup();
+      await openThreeItemRun(user);
+
+      await user.click(screen.getByRole('checkbox', { name: /Proposal B/ }));
+
+      await user.click(screen.getByRole('button', { name: 'Создать issues (2)' }));
+      await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/21/create-issues', body: { indices: [0, 2] } }));
+
+      await user.click(screen.getByRole('button', { name: 'В работу (2)' }));
+      await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/21/start-items', body: { model: 'sonnet', indices: [0, 2] } }));
+    });
+
+    it('disables both actions once nothing is ticked', async () => {
+      const user = userEvent.setup();
+      await openThreeItemRun(user);
+
+      for (const name of [/Proposal A/, /Proposal B/, /Proposal C/]) {
+        await user.click(screen.getByRole('checkbox', { name }));
+      }
+
+      expect((screen.getByRole('button', { name: 'Создать issues (0)' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'В работу (0)' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('gives a filed or duplicate proposal no checkbox, and excludes it from the count', async () => {
+      const mixedRun = {
+        ...THREE_ITEM_RUN,
+        id: 22,
+        result: JSON.stringify({
+          categories: ['security', 'uiux', 'tests'],
+          autoCreate: false,
+          items: [
+            { category: 'security', title: 'Fresh proposal', risk: 'low', body: 'x' },
+            { category: 'uiux', title: 'Already filed', risk: 'low', body: 'x', issueNumber: 42 },
+            { category: 'tests', title: 'Already a duplicate', risk: 'low', body: 'x', duplicateOf: 10 },
+          ],
+        }),
+      };
+      const listed = { ...mixedRun, result: undefined };
+      const user = userEvent.setup();
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          const path = new URL(request.url).pathname.replace('/api/v1/', '');
+
+          if (path === 'improve/status') return json(STATUS);
+          if (path === 'improve/runs' && request.method === 'GET') return json([{ ...listed, hasResult: true }]);
+          if (path === 'improve/schedules') return json([]);
+          if (path === 'improve/settings') return json({ autoStartModel: null });
+
+          return json(mixedRun);
+        }),
+      );
+      renderPage('/improve?tab=analysis');
+      await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+      await screen.findByText(/Fresh proposal/);
+
+      expect(screen.getByRole('checkbox', { name: /Fresh proposal/ })).toBeTruthy();
+      expect(screen.queryByRole('checkbox', { name: /Already filed/ })).toBeNull();
+      expect(screen.queryByRole('checkbox', { name: /Already a duplicate/ })).toBeNull();
+      expect(screen.getByText(/issue #42/)).toBeTruthy();
+      expect(screen.getByText(/дубликат #10/)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Создать issues (1)' })).toBeTruthy();
+    });
   });
 
   it('saves an analysis schedule with its directions', async () => {
