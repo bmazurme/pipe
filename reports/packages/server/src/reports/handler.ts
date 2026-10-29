@@ -1,13 +1,9 @@
 import type { Request, Response } from 'express';
-import type { BridgeReportEntry, IssueResponse, ResultType } from '@reports/shared';
-// import path from 'path';
-// import { fileURLToPath } from 'url';
-// import { dirname } from 'path';
+import type { BridgeReportEntry, IssueResponse } from '@reports/shared';
 
+import { toReportRows, type ReportRow } from './report-rows';
 import { exportToCsv } from './export-to-csv';
 import { getCurrentMonthDates } from './get-current-month-dates';
-import { convertToHours } from './convert-to-hours';
-import { statusDict } from './constants';
 import { buildName } from './build-name';
 import { mockReports } from './mock-data';
 import { pushReportToBridge } from './push-to-bridge';
@@ -20,7 +16,7 @@ const GITLAB_TIMEOUT_MS = 30_000;
 
 export async function handleReport(req: Request, res: Response) {
   const sendEvent = streamSender(res);
-  let issues: any = [];
+  let issues: ReportRow[] = [];
 
   const { gitlabUrl: GITLAB_URL, privateToken: PRIVATE_TOKEN, userId: USER_ID } = getSettings();
   const projectDict = getProjectDict();
@@ -49,32 +45,7 @@ export async function handleReport(req: Request, res: Response) {
       fetchAllPages<IssueResponse[number]>(closedUrl, fetchConfig, GITLAB_TIMEOUT_MS, 'закрытых задач'),
       fetchAllPages<IssueResponse[number]>(openUrl, fetchConfig, GITLAB_TIMEOUT_MS, 'открытых задач'),
     ]);
-    const allIssues = [...closedIssues, ...openedIssues];
-    const result: ResultType[] = [];
-
-    allIssues.forEach(async (issue) => {
-      result.push({
-        id: issue.id,
-        iid: issue.iid,
-        title: issue.title,
-        project: issue.project_id,
-        status: issue.state,
-        created: issue.created_at,
-        timeStats: issue.time_stats?.human_time_estimate || '0',
-      });
-    });
-    
-    issues = result.map((x) => {
-      const title = x.title.trim();
-      const normalizedTitle = title.endsWith('.') ? title : `${title}.`;
-
-      return {
-        name: `${x.iid} ${projectDict[x.project] || ''} ${normalizedTitle}`,
-        status: statusDict[x.status],
-        time: convertToHours(x.timeStats),
-      };
-    });
-
+    issues = toReportRows([...closedIssues, ...openedIssues], projectDict);
   } catch (error) {
     console.error('Ошибка при получении задач:', error);
     sendEvent({
@@ -92,13 +63,6 @@ export async function handleReport(req: Request, res: Response) {
   }
 
   try {
-    // const __dirname = dirname(fileURLToPath(import.meta.url));
-    // const filePath = path.join(__dirname, '..', '..', filename)
-
-    // res.setHeader('Content-Type', 'text/csv');
-    // res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    // res.sendFile(filePath);
-
     sendEvent({ type: 'message', data: issues });
     res.end();
   } catch (error) {
