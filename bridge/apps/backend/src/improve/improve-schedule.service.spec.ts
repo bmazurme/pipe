@@ -151,7 +151,7 @@ describe('schedules', () => {
   });
 
   it('starts the oldest eligible issues up to count, skipping the ones that cannot start', async () => {
-    const { service, github, runs, notifier } = setup();
+    const { service, github, runs, notifier, schedules } = setup();
     github.listOpenIssues.mockResolvedValue(
       [5, 6, 7, 8].map((number) => ({
         number,
@@ -184,9 +184,35 @@ describe('schedules', () => {
 
     expect(result.started).toEqual([6, 7]);
     expect(result.skipped).toEqual([expect.stringContaining('#5')]);
+    await new Promise((resolve) => setImmediate(resolve)); // the report runs in the background
+    expect(schedules.update).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ lastResult: '2 запущено, 1 пропущено' }),
+    );
     expect(notifier.send).toHaveBeenCalledWith(
       expect.stringContaining('2 запущено, 1 пропущено'),
     );
+  });
+
+  it('does not wait on Telegram and survives a failing notifier', async () => {
+    const { service, github, schedules, notifier } = setup();
+    const row = { id: 1, userId: 3, name: 'n', count: 1, model: 'sonnet' };
+    github.listOpenIssues.mockResolvedValue([]);
+    schedules.findOne.mockResolvedValue(row);
+
+    notifier.send.mockReturnValue(new Promise(() => undefined));
+    await expect(service.runScheduleNow(1)).resolves.toEqual({
+      started: [],
+      skipped: [],
+    });
+
+    notifier.send.mockRejectedValue(new Error('telegram down'));
+    await expect(service.runScheduleNow(1)).resolves.toEqual({
+      started: [],
+      skipped: [],
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(schedules.update).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an unknown time zone or model when saving', async () => {

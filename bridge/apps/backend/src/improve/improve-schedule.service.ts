@@ -216,11 +216,7 @@ export class ImproveScheduleService implements OnModuleInit {
         summary = `анализ не запущен: ${message(error)}`;
       }
 
-      await this.schedules.update(schedule.id, {
-        lastRunAt: new Date(),
-        lastResult: summary,
-      });
-      await this.notifier.send(`🌙 Расписание «${schedule.name}»: ${summary}`);
+      void this.report(schedule, summary, '');
 
       return { started, skipped };
     }
@@ -245,15 +241,34 @@ export class ImproveScheduleService implements OnModuleInit {
 
     const summary = `${started.length} запущено${skipped.length ? `, ${skipped.length} пропущено` : ''}`;
 
-    await this.schedules.update(schedule.id, {
-      lastRunAt: new Date(),
-      lastResult: summary,
-    });
-    await this.notifier.send(
-      `🌙 Расписание «${schedule.name}»: ${summary}${started.length ? ` (${started.map((n) => `#${n}`).join(', ')})` : ''}`,
+    void this.report(
+      schedule,
+      summary,
+      started.length ? ` (${started.map((n) => `#${n}`).join(', ')})` : '',
     );
 
     return { started, skipped };
+  }
+
+  // Runs in the background: the caller never waits on the database write or Telegram.
+  private async report(
+    schedule: ImproveSchedule,
+    summary: string,
+    suffix: string,
+  ): Promise<void> {
+    try {
+      await this.schedules.update(schedule.id, {
+        lastRunAt: new Date(),
+        lastResult: summary,
+      });
+      await this.notifier.send(
+        `🌙 Расписание «${schedule.name}»: ${summary}${suffix}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Schedule ${schedule.id} result could not be reported: ${message(error)}`,
+      );
+    }
   }
 }
 
