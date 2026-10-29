@@ -13,9 +13,14 @@ What's on disk, per product, and how tasks are keyed:
 | `packages/server/src/subscription/subscription-state.json` | reports | `projectId:iid` | Subscription module's step/branch/timestamps per GitLab issue |
 | — | bridge | — | none; bridge is the storage relay, it holds no task state of its own |
 
-All three task-state files already agree on the `projectId:iid` key (e.g.
-`"173:628"`), which is what makes `pipe-status` (in `harness/`) able to
-merge them into one view instead of requiring separate lookups.
+The three per-task files (`.sync-agent-state.json`,
+`.gitlab-worker-state.json` and reports' `subscription-state.json`) agree on
+the `projectId:iid` key (e.g. `"173:628"`), which is what makes `pipe-status`
+(in `harness/`) able to merge them into one view instead of requiring separate
+lookups. `.sync-state.json` is the exception: it is keyed by project name, not
+by task, so `pipe-status` does not join it by `projectId:iid` — it shows it as
+a separate per-project section (`formatProjectSyncSection` in
+`harness/src/render.ts`).
 
 **Other files that are not task state.** These are settings and data, not
 progress; they have no `projectId:iid` key and `pipe-status` does not read
