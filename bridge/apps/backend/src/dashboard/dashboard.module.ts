@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '../auth/auth.module';
+import { BoardsModule } from '../boards/boards.module';
 import { DeployRecord } from '../loop/entities/deploy-record.entity';
 import { BackupStatusService } from './backup-status.service';
 import { DashboardController } from './dashboard.controller';
@@ -13,6 +14,7 @@ import { NodesService } from './nodes.service';
 @Module({
   imports: [
     AuthModule,
+    BoardsModule,
     TypeOrmModule.forFeature([SystemSettings, DeployRecord]),
   ],
   controllers: [DashboardController],

@@ -16,6 +16,7 @@ import {
 import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
 import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
+import { NasCard } from './dashboard/NasCard';
 import { ReleasesCard } from './dashboard/ReleasesCard';
 import styles from './DashboardPage.module.css';
 import { formatBytes } from '../shared/lib/formatBytes';
@@ -215,6 +216,8 @@ export function DashboardPage() {
             </div>
           )}
         </Card>
+
+        <NasCard />
 
         <ReleasesCard />
 

@@ -9,8 +9,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
+import { NasService, NasView } from '../boards/nas.service';
 import { BackupStatus, BackupStatusService } from './backup-status.service';
 import {
   CheckGithubConnectionDto,
@@ -35,6 +37,7 @@ export class DashboardController {
     private readonly backups: BackupStatusService,
     private readonly github: GithubConnectionService,
     private readonly deploys: DeploysService,
+    private readonly nas: NasService,
   ) {}
 
   @Get('nodes')
@@ -46,6 +49,12 @@ export class DashboardController {
   @Get('deploys')
   getDeploys(): Promise<DeployView[]> {
     return this.deploys.latest();
+  }
+
+  // The NAS that keeps the fourth copy of the backups: RAID, disks, the copy's age (infra/nas reports it).
+  @Get('nas')
+  getNas(@CurrentUser() user: { id: number }): Promise<NasView[]> {
+    return this.nas.list(user.id);
   }
 
   @Get('backups')

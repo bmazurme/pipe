@@ -21,7 +21,10 @@ describe('BoardsAgentController', () => {
       pendingFor: jest.fn().mockResolvedValue(null),
       recordResult: jest.fn().mockResolvedValue(undefined),
     };
-    controller = new BoardsAgentController(service as unknown as BoardsService);
+    controller = new BoardsAgentController(
+      service as unknown as BoardsService,
+      {} as never,
+    );
   });
 
   describe('pending', () => {

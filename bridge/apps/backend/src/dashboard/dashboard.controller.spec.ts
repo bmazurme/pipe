@@ -27,6 +27,7 @@ describe('DashboardController routes', () => {
       backups as unknown as BackupStatusService,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -60,6 +61,7 @@ describe('DashboardController: the connection to GitHub', () => {
     {} as never,
     github as never,
     {} as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -83,10 +85,29 @@ describe('DashboardController deploys', () => {
       {} as never,
       {} as never,
       { latest } as never,
+      {} as never,
     );
 
     await expect(controller.getDeploys()).resolves.toEqual([
       { sha: 'a'.repeat(40) },
     ]);
+  });
+});
+
+describe('DashboardController nas', () => {
+  it("lists the signed-in owner's NAS reports", async () => {
+    const list = jest.fn().mockResolvedValue([{ host: 'MyCloudEX2Ultra' }]);
+    const controller = new DashboardController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { list } as never,
+    );
+
+    await expect(controller.getNas({ id: 7 })).resolves.toEqual([
+      { host: 'MyCloudEX2Ultra' },
+    ]);
+    expect(list).toHaveBeenCalledWith(7);
   });
 });
