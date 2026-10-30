@@ -555,7 +555,8 @@ describe('WorkerPage', () => {
     await user.click(screen.getByText('Посылка'));
     await user.click(await screen.findByText(/🔒 402-8\.subscription\.zip\.enc/));
 
-    await user.type(await screen.findByPlaceholderText('-----BEGIN PRIVATE KEY-----'), privateKey);
+    await user.click(await screen.findByPlaceholderText('-----BEGIN PRIVATE KEY-----'));
+    await user.paste(privateKey);
 
     await user.click(screen.getByText('Модель'));
     await user.click(await screen.findByText('GPT'));
@@ -608,7 +609,8 @@ describe('WorkerPage', () => {
     await screen.findByText('Задача #1');
     await user.click(screen.getByText('Посылка'));
     await user.click(await screen.findByText(/🔒 402-8\.subscription\.zip\.enc/));
-    await user.type(await screen.findByPlaceholderText('-----BEGIN PRIVATE KEY-----'), privateKey);
+    await user.click(await screen.findByPlaceholderText('-----BEGIN PRIVATE KEY-----'));
+    await user.paste(privateKey);
     await user.click(screen.getByLabelText(/Зашифровать результат для отправки обратно/));
     await user.click(screen.getByText('Модель'));
     await user.click(await screen.findByText('GPT'));
