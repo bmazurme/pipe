@@ -47,6 +47,12 @@ const secretsApiEndpoints = secretsApi.injectEndpoints({
       invalidatesTags: ['Secret'],
       transformErrorResponse: () => 'Не удалось удалить секрет',
     }),
+    // Lazy only (useLazy…) — never fired by loading the page; every click
+    // re-fetches, nothing is kept in the cache.
+    exportSecrets: builder.query<string, void>({
+      query: () => ({ url: 'secrets/export', responseHandler: 'text' }),
+      keepUnusedDataFor: 0,
+    }),
     // Not tagged/cached — every click re-fetches the real current value
     // rather than ever serving a stale one back from RTK Query's cache.
     revealSecret: builder.mutation<{ value: string }, number>({
@@ -62,5 +68,6 @@ export const {
   useUpdateSecretMutation,
   useDeleteSecretMutation,
   useRevealSecretMutation,
+  useLazyExportSecretsQuery,
 } = secretsApiEndpoints;
 export { secretsApiEndpoints };

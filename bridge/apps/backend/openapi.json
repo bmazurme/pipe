@@ -4026,6 +4026,24 @@
         }
       }
     },
+    "/api/v1/secrets/export": {
+      "get": {
+        "operationId": "SecretsController_exportEnv",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/secrets/{id}": {
       "patch": {
         "operationId": "SecretsController_update",

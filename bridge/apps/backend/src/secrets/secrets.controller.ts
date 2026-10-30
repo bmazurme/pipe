@@ -3,14 +3,17 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   ParseIntPipe,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -26,6 +29,8 @@ import { SecretsService } from './secrets.service';
 @Controller('api/v1/secrets')
 @UseGuards(JwtGuard)
 export class SecretsController {
+  private readonly logger = new Logger(SecretsController.name);
+
   constructor(private readonly secretsService: SecretsService) {}
 
   @Get()
@@ -35,6 +40,17 @@ export class SecretsController {
     const secrets = await this.secretsService.findAllByUser(currentUser.id);
 
     return secrets.map(SecretResponseDto.fromEntity);
+  }
+
+  // Declared before the ':id' routes. Every value leaves in one response, so
+  // the audit line names only the user, never a secret.
+  @Get('export')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Header('Content-Type', 'text/plain; charset=utf-8')
+  async exportEnv(@CurrentUser() currentUser: { id: number }): Promise<string> {
+    this.logger.warn(`Secrets .env export by user ${currentUser.id}`);
+
+    return this.secretsService.exportEnv(currentUser.id);
   }
 
   @Post()

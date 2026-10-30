@@ -234,3 +234,53 @@ describe('SecretsService', () => {
     });
   });
 });
+
+describe('SecretsService.exportEnv', () => {
+  let service: SecretsService;
+  let repository: MockRepository;
+
+  beforeEach(async () => {
+    repository = createMockRepository();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SecretsService,
+        { provide: getRepositoryToken(Secret), useValue: repository },
+      ],
+    }).compile();
+    service = module.get(SecretsService);
+  });
+
+  it('writes sorted KEY=value lines with descriptions as comments', async () => {
+    repository.find!.mockResolvedValue([
+      { name: 'B', value: 'two', description: null },
+      { name: 'A', value: 'one', description: 'first\nsecond' },
+    ]);
+
+    expect(await service.exportEnv(7)).toBe(
+      '# first\n# second\nA=one\nB=two\n',
+    );
+    expect(repository.find).toHaveBeenCalledWith({
+      where: { userId: 7 },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('quotes values with whitespace, # or quotes only', async () => {
+    repository.find!.mockResolvedValue([
+      { name: 'A', value: 'a b', description: null },
+      { name: 'B', value: 'x#y', description: null },
+      { name: 'C', value: "it's", description: null },
+      { name: 'D', value: 'a=b', description: null },
+    ]);
+
+    expect(await service.exportEnv(1)).toBe(
+      'A="a b"\nB="x#y"\nC="it\'s"\nD=a=b\n',
+    );
+  });
+
+  it('returns an empty string without secrets', async () => {
+    repository.find!.mockResolvedValue([]);
+
+    expect(await service.exportEnv(1)).toBe('');
+  });
+});
