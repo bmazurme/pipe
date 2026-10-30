@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { BookOpen, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowDownToLine, BookOpen, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Loader, Text } from '@gravity-ui/uikit';
 import { Dialog } from '../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
-import { ContextSummary, getErrorMessage, useDeleteContextMutation, useListContextsQuery } from '../store/api';
+import { triggerBlobDownload } from '../shared/lib/parcelCrypto';
+import { ContextSummary, getErrorMessage, useDeleteContextMutation, useLazyGetContextQuery, useListContextsQuery } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import { ContextDialog } from './context/ContextDialog';
+import { contextFilename } from './context/contextExport';
 import styles from './ContextPage.module.css';
 
 // Improve schedules detach a deleted context; Lab ones keep pointing at it, so the dialog names them apart.
@@ -22,6 +24,24 @@ export function ContextPage() {
   const [editing, setEditing] = useState<{ mode: 'edit' | 'copy'; id: number } | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<ContextSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [fetchContext] = useLazyGetContextQuery();
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadFailed, setDownloadFailed] = useState(false);
+
+  const handleDownload = async (context: ContextSummary) => {
+    setDownloadingId(context.id);
+    setDownloadFailed(false);
+
+    try {
+      const saved = await fetchContext(context.id).unwrap();
+
+      triggerBlobDownload(new Blob([saved.content], { type: 'text/markdown' }), contextFilename(saved.name, saved.id));
+    } catch {
+      setDownloadFailed(true);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -49,6 +69,8 @@ export function ContextPage() {
       />
 
       {isError && <Alert theme="danger" view="filled" message="Не удалось загрузить контексты" />}
+
+      {downloadFailed && <Alert theme="danger" view="filled" message="Не удалось скачать контекст" />}
 
       {isLoading && (
         <div className={styles.centered}>
@@ -81,6 +103,15 @@ export function ContextPage() {
                 </Button>
                 <Button view="flat-secondary" size="s" aria-label={`Дублировать: ${context.name}`} onClick={() => setEditing({ mode: 'copy', id: context.id })}>
                   <Icon data={Copy} size={16} />
+                </Button>
+                <Button
+                  view="flat-secondary"
+                  size="s"
+                  aria-label={`Скачать: ${context.name}`}
+                  loading={downloadingId === context.id}
+                  onClick={() => void handleDownload(context)}
+                >
+                  <Icon data={ArrowDownToLine} size={16} />
                 </Button>
                 <Button
                   view="flat-danger"

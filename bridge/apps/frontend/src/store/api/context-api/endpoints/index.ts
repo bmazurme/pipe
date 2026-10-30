@@ -57,5 +57,12 @@ const contextApiEndpoints = contextApi.injectEndpoints({
   }),
 });
 
-export const { useListContextsQuery, useGetContextQuery, useCreateContextMutation, useUpdateContextMutation, useDeleteContextMutation } = contextApiEndpoints;
+export const {
+  useListContextsQuery,
+  useGetContextQuery,
+  useLazyGetContextQuery,
+  useCreateContextMutation,
+  useUpdateContextMutation,
+  useDeleteContextMutation,
+} = contextApiEndpoints;
 export { contextApiEndpoints };
