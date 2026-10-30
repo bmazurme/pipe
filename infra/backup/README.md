@@ -1,7 +1,7 @@
 # infra/backup — daily database backup
 
 Implements docs/ha-dr-plan.md §6: one backup a day, **verified before it replaces the previous one**.
-Today the copies live on the Pi; the NAS comes later (a second `rsync` pulling `latest`).
+The copies live on the Pi; the NAS is the fourth copy (a container that pulls `latest` from red once a day — `infra/nas`).
 
 | File | What |
 |---|---|
