@@ -12,6 +12,7 @@ type MockRepository = Partial<
 function createMockRepository(): MockRepository {
   return {
     findOneBy: jest.fn(),
+    findOne: jest.fn(),
     create: jest.fn((entity) => entity),
     save: jest.fn((entity) => entity),
     delete: jest.fn(),
@@ -36,6 +37,20 @@ describe('ReportsSettingsService', () => {
     }).compile();
 
     service = module.get(ReportsSettingsService);
+  });
+
+  describe('findStatusForUser', () => {
+    it('does not select the encrypted payload column', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await service.findStatusForUser(1);
+
+      const { where, select } = repository.findOne!.mock.calls[0][0];
+
+      expect(where).toEqual({ userId: 1 });
+      expect(select).toContain('updatedAt');
+      expect(select).not.toContain('payload');
+    });
   });
 
   describe('getForUser', () => {

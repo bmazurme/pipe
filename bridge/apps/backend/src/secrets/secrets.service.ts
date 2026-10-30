@@ -18,7 +18,20 @@ export class SecretsService {
   ) {}
 
   async findAllByUser(userId: number): Promise<Secret[]> {
-    return this.repository.find({ where: { userId }, order: { name: 'ASC' } });
+    // No `value`: the listing never returns it, so nothing is decrypted.
+    return this.repository.find({
+      where: { userId },
+      select: [
+        'id',
+        'userId',
+        'name',
+        'description',
+        'expiresOn',
+        'createdAt',
+        'updatedAt',
+      ],
+      order: { name: 'ASC' },
+    });
   }
 
   async create(userId: number, dto: CreateSecretDto): Promise<Secret> {

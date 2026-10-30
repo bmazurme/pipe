@@ -15,6 +15,16 @@ export class ReportsSettingsService {
     return this.repository.findOneBy({ userId });
   }
 
+  // Status check: no `payload`, so the encrypted bundle is not decrypted.
+  async findStatusForUser(
+    userId: number,
+  ): Promise<ReportsSettingsBackup | null> {
+    return this.repository.findOne({
+      where: { userId },
+      select: ['id', 'userId', 'updatedAt'],
+    });
+  }
+
   async getForUser(userId: number): Promise<ReportsSettingsBackup> {
     const backup = await this.findForUser(userId);
 
