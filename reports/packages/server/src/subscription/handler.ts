@@ -1,5 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { Request, Response } from 'express';
 import type {
   CreateManualSubscriptionIssuePayload,
@@ -10,26 +8,22 @@ import type {
   SubscriptionPushPayload,
   SubscriptionStateEntryType,
 } from '@reports/shared';
-import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
+import { scanForLeaks } from '@pipe/protocol';
 
 import { getProjectDict } from '../reports/project-dict-props';
 import { statusDict } from '../reports/constants';
 import { getSubscriptionConfig, findMigration, findTrackedProject } from './config-props';
 import { requireTrackedProject, workTreeFor } from './work-tree';
 import { getAllIssueStates, getIssueState, setIssueState, removeIssueState, issueKey } from './state-props';
-import { parseAttachments } from './attachments';
-import { collectMigrationFiles, countMigrationFiles, migrationTitle, requireMigration, TARGET_PREFIX, SOURCE_PREFIX } from './migration';
-import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate, getIssueImages, getIssueNotes } from './gitlab-client';
+import { countMigrationFiles, migrationTitle, requireMigration } from './migration';
+import { listAssignedOpenIssues, getCurrentUsername, getIssue, addIssueNote, getIssueTimeStats, setIssueTimeEstimate } from './gitlab-client';
 import { openPullRequestForTask } from './pull-request';
 import { listIssues as listGithubIssues, getIssue as getGithubIssue, addComment as addGithubComment, getLogin as getGithubLogin } from './github-client';
 import { buildBranchName, createBranch } from './git';
 import { withStream } from '../utils/stream';
-import { walkProjectFiles } from './walk';
 import { applyDictionary } from './dictionary';
-import { buildArchive } from './pack';
-import { uploadParcel, createWorkerJob } from './bridge-client';
-import { encryptBuffer } from './encryption';
 import { pullSubscriptionIssue } from './pull';
+import { pushSubscriptionIssue } from './push';
 import { resetSubscriptionIssue } from './reset';
 
 export { pullSubscriptionIssue };
@@ -49,10 +43,6 @@ function rejectBadIssueParams(req: Request<Record<string, string>>, res: Respons
   }
 
   return false;
-}
-
-function parcelName(projectId: string, iid: string, encrypted: boolean): string {
-  return `${projectId}-${iid}.subscription.zip${encrypted ? '.enc' : ''}`;
 }
 
 // GitHub-backed tracked project (see TrackedProjectType.provider) — its
@@ -295,154 +285,10 @@ export async function handlePushSubscriptionIssue(req: Request<Record<string, st
   if (rejectBadIssueParams(req, res)) return;
 
   const { projectId, iid } = req.params;
-  const { issueId, title: issueTitle, description: issueDescription, attachments } = req.body as SubscriptionPushPayload;
 
-  await withStream(res, 'Push subscription issue', async () => {
-    const state = getIssueState(projectId, iid);
-    // A migration task sends BOTH repositories — the current one under source/, the target under target/ — not a tracked project's tree.
-    const migration = state?.kind === 'migration' ? requireMigration(projectId) : undefined;
-    const trackedProject = migration ? undefined : requireTrackedProject(projectId);
-
-    if (!state?.branch) {
-      throw new Error('Сначала выполните init — ветка ещё не создана');
-    }
-
-    const { dictionary, encryption } = getSubscriptionConfig();
-    let files: { relPath: string; content: string }[];
-
-    if (migration) {
-      files = (await collectMigrationFiles(migration, dictionary)).files;
-    } else {
-      const tracked = trackedProject!;
-      const relPaths = await walkProjectFiles(tracked);
-      // Same stop as sync's push-issue: a parcel with no project files would reach a worker as an empty working directory.
-      if (relPaths.length === 0) {
-        throw new Error(
-          `В отслеживаемом проекте ${tracked.path} нет файлов, подходящих под include/exclude, — посылка была бы пустой. ` +
-            'Проверьте путь и шаблоны include/exclude проекта в Settings.',
-        );
-      }
-      files = relPaths.map((relPath) => ({
-        relPath,
-        content: applyDictionary(readFileSync(join(tracked.path, relPath), 'utf-8'), dictionary, 'toRemote'),
-      }));
-    }
-
-    // Image refs only resolve against the *real* GitLab markdown — the
-    // dictionary-substituted description above isn't safe to scan for them
-    // (a substitution could alter an /uploads/... path), so this still
-    // needs its own live fetch for a real issue. A manual parcel has no
-    // GitLab-hosted markdown to scan at all.
-    // (GitHub issues: no image fetch either — their attachments sit behind
-    // a different, signed-URL mechanism this doesn't handle.)
-    //
-    // The issue's comments travel with it, images included: a screenshot or a clarification in a comment is often the
-    // part of the task that matters. Their text is anonymized like the description; the images come from the real text.
-    const isGitlabIssue = !state.manual && !githubProjectFor(projectId);
-    const gitlabIssue = isGitlabIssue ? await getIssue(projectId, iid) : null;
-    const notes = isGitlabIssue ? await getIssueNotes(projectId, iid) : [];
-    const issueComments = notes.map((note) => ({
-      author: applyDictionary(note.author?.name || note.author?.username || '', dictionary, 'toRemote'),
-      createdAt: note.created_at,
-      body: applyDictionary(note.body, dictionary, 'toRemote'),
-    }));
-    const issueImages = isGitlabIssue
-      ? await getIssueImages([gitlabIssue?.description ?? '', ...notes.map((note) => note.body)].join('\n\n'), projectId)
-      : [];
-    // Screenshots attached by hand, for any task (a manual one has no issue to take them from).
-    const attached = parseAttachments(attachments, issueImages.map((image) => image.relPath.replace(/^issue-images\//, '')));
-    const images = [...issueImages, ...attached];
-
-    // Images never go through scanForLeaks (text-only) — this is the only
-    // signal the operator gets that they weren't checked, strict or not.
-    if (images.length > 0) {
-      console.warn(`[subscription ${projectId}:${iid}] ${images.length} image(s) were not leak-scanned.`);
-    }
-
-    const leaks = scanForLeaks([
-      ...files.map((f) => ({ source: f.relPath, content: f.content })),
-      { source: 'issue title', content: issueTitle },
-      { source: 'issue description', content: issueDescription },
-      ...issueComments.map((comment, index) => ({ source: `issue comment ${index + 1}`, content: comment.body })),
-    ]);
-    if (leaks.length > 0) {
-      console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
-
-      if (getSubscriptionConfig().leakScanStrict) {
-        throw new Error(
-          `leakScanStrict: ${leaks.length} possible leak(s) found — push aborted. ` +
-            'Disable "Строгая проверка на утечки" in Settings to push anyway.',
-        );
-      }
-    }
-
-    const archive = buildArchive(
-      files,
-      {
-        issueId,
-        issueIid: iid,
-        issueTitle,
-        issueDescription,
-        ...(issueComments.length > 0 ? { issueComments } : {}),
-        ...(migration ? { migration: { name: migration.name, sourceRoot: SOURCE_PREFIX, targetRoot: TARGET_PREFIX } } : {}),
-        projectId: Number(projectId),
-        branch: state.branch,
-        createdAt: new Date().toISOString(),
-      },
-      images,
-    );
-
-    const shouldEncrypt = encryption.enabled && !!encryption.publicKey;
-
-    if (encryption.enabled && !encryption.publicKey) {
-      throw new Error('Шифрование включено, но публичный ключ не задан — сгенерируйте пару ключей в Settings');
-    }
-
-    const buffer = shouldEncrypt ? encryptBuffer(archive, encryption.publicKey) : archive;
-    const stored = await uploadParcel(buffer, parcelName(projectId, iid, shouldEncrypt), {
-      channel: 'issue',
-      taskKey: `${projectId}:${iid}`,
-      direction: 'outbound',
-    });
-
-    const pushed = setIssueState(projectId, iid, {
-      step: 'pushed',
-      parcelId: stored.id,
-      pushedAt: new Date().toISOString(),
-      encrypted: shouldEncrypt,
-    });
-
-    await startWorkerIfConfigured(projectId, iid, stored.id, shouldEncrypt);
-
-    return pushed;
-  });
+  await withStream(res, 'Push subscription issue', () => pushSubscriptionIssue(projectId, iid, req.body as SubscriptionPushPayload));
 }
 
-// Optional automatic hand-off to the worker (config.autoStartWorkerModel). The
-// push itself is already recorded and valid, so a failure here must not look like
-// a failed push — but it must not be silent either (a task that never starts is
-// exactly the manual step this exists to remove): it is rethrown with a message
-// that says the parcel did go out.
-async function startWorkerIfConfigured(projectId: string, iid: string, parcelId: number, encrypted: boolean): Promise<void> {
-  const { autoStartWorkerModel } = getSubscriptionConfig();
-
-  if (!autoStartWorkerModel) return;
-
-  if (encrypted) {
-    console.warn(`[subscription ${projectId}:${iid}] auto-start skipped: worker only accepts unencrypted parcels.`);
-    return;
-  }
-
-  try {
-    const job = await createWorkerJob(parcelId, autoStartWorkerModel);
-
-    console.log(`[subscription ${projectId}:${iid}] worker job ${job.id} started (${autoStartWorkerModel}).`);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-
-    throw new Error(`Посылка отправлена, но задачу на worker запустить не удалось: ${reason}`);
-  }
-}
 
 export async function handlePullSubscriptionIssue(req: Request<Record<string, string>>, res: Response) {
   if (rejectBadIssueParams(req, res)) return;
