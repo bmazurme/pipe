@@ -7061,6 +7061,36 @@
           "status"
         ]
       },
+      "BoardHealthDto": {
+        "type": "object",
+        "properties": {
+          "diskUsedPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "diskFreeMb": {
+            "type": "number",
+            "minimum": 0
+          },
+          "inodesUsedPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "sshPasswordAuth": {
+            "type": "boolean"
+          },
+          "sshAuthorizedKeys": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "sshdActive": {
+            "type": "boolean"
+          }
+        }
+      },
       "BoardReportDto": {
         "type": "object",
         "properties": {
@@ -7081,6 +7111,9 @@
             "items": {
               "$ref": "#/components/schemas/ReportedScriptDto"
             }
+          },
+          "health": {
+            "$ref": "#/components/schemas/BoardHealthDto"
           }
         },
         "required": [

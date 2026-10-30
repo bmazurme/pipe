@@ -12,7 +12,11 @@ import { In, Repository } from 'typeorm';
 
 import { NotifyService } from '../telegram/notify.service';
 import { BoardReportDto } from './dto/boards.dto';
-import { BoardReport, BoardScript } from './entities/board-report.entity';
+import {
+  BoardHealth,
+  BoardReport,
+  BoardScript,
+} from './entities/board-report.entity';
 import { ScriptUpdate, ScriptUpdateVia } from './entities/script-update.entity';
 
 // A board that has not reported for this long is shown as offline, and its report is too old to act on.
@@ -42,6 +46,9 @@ export interface BoardView {
   mainSha: string;
   agentVersion: string | null;
   scripts: BoardScript[];
+  health: BoardHealth | null;
+  // Plain-language problems found in `health`; empty when the board is fine or has not reported any.
+  warnings: string[];
   outdated: number;
   updatable: number;
   pending: { id: number; sha: string; via: string; createdAt: Date } | null;
@@ -53,6 +60,41 @@ export interface BoardView {
     finishedAt: Date | null;
     createdAt: Date;
   } | null;
+}
+
+// Thresholds match infra/monitor (root disk >= 80 % alerts on the board itself).
+export const DISK_WARN_PCT = 80;
+export const INODES_WARN_PCT = 80;
+
+export function healthWarnings(health: BoardHealth | null): string[] {
+  if (!health) return [];
+
+  const warnings: string[] = [];
+
+  if (health.diskUsedPct !== undefined && health.diskUsedPct >= DISK_WARN_PCT) {
+    const free =
+      health.diskFreeMb !== undefined
+        ? `, свободно ${health.diskFreeMb} МБ`
+        : '';
+    warnings.push(`Диск заполнен на ${health.diskUsedPct} %${free}`);
+  }
+
+  if (
+    health.inodesUsedPct !== undefined &&
+    health.inodesUsedPct >= INODES_WARN_PCT
+  ) {
+    warnings.push(`Заканчиваются inode: занято ${health.inodesUsedPct} %`);
+  }
+
+  if (health.sshdActive === false) warnings.push('SSH-сервер не запущен');
+  if (health.sshAuthorizedKeys === 0 && health.sshPasswordAuth === false) {
+    warnings.push('В SSH нет ни ключей, ни входа по паролю — зайти нельзя');
+  }
+  if (health.sshPasswordAuth === true) {
+    warnings.push('SSH принимает пароли (лучше только ключи)');
+  }
+
+  return warnings;
 }
 
 function key(sha: string, outdated: BoardScript[]): string {
@@ -102,6 +144,7 @@ export class BoardsService {
         mainSha: dto.mainSha,
         agentVersion: dto.agentVersion ?? null,
         scripts,
+        health: dto.health ?? null,
       },
       ['userId', 'host'],
     );
@@ -279,6 +322,8 @@ export class BoardsService {
         mainSha: report.mainSha,
         agentVersion: report.agentVersion,
         scripts: report.scripts,
+        health: report.health,
+        warnings: healthWarnings(report.health),
         outdated: outdated.length,
         updatable: outdated.filter((s) => isUpdatable(s.repoPath)).length,
         pending: pending

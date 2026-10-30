@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { BoardsService, isUpdatable } from './boards.service';
+import { BoardsService, healthWarnings, isUpdatable } from './boards.service';
 import { BoardReport } from './entities/board-report.entity';
 import { ScriptUpdate } from './entities/script-update.entity';
 
@@ -569,5 +569,42 @@ describe('BoardsService: the board’s side', () => {
         expect.objectContaining({ status: 'applied' }),
       );
     });
+  });
+});
+
+describe('healthWarnings', () => {
+  it('has nothing to say about a board that reported no health, or a healthy one', () => {
+    expect(healthWarnings(null)).toEqual([]);
+    expect(
+      healthWarnings({
+        diskUsedPct: 32,
+        diskFreeMb: 90000,
+        sshPasswordAuth: false,
+        sshAuthorizedKeys: 2,
+        sshdActive: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it('flags a nearly full disk with the free space', () => {
+    expect(healthWarnings({ diskUsedPct: 91, diskFreeMb: 1200 })).toEqual([
+      'Диск заполнен на 91 %, свободно 1200 МБ',
+    ]);
+  });
+
+  it('flags the SSH door: stopped, passwords accepted, or no way in at all', () => {
+    expect(healthWarnings({ sshdActive: false })).toEqual([
+      'SSH-сервер не запущен',
+    ]);
+    expect(healthWarnings({ sshPasswordAuth: true })).toEqual([
+      'SSH принимает пароли (лучше только ключи)',
+    ]);
+    expect(
+      healthWarnings({ sshAuthorizedKeys: 0, sshPasswordAuth: false }),
+    ).toEqual(['В SSH нет ни ключей, ни входа по паролю — зайти нельзя']);
+  });
+
+  it('does not guess about a probe that was not reported', () => {
+    expect(healthWarnings({ sshAuthorizedKeys: 0 })).toEqual([]);
   });
 });

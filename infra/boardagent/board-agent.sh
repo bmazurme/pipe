@@ -51,14 +51,50 @@ bridge() { # method path [json-body] → body on stdout; fails on a non-2xx
   fi
 }
 
+# What the board can say about itself besides its scripts: the root disk (the first thing that quietly kills a Pi), and the SSH door —
+# whether passwords still work and how many keys are authorized — so a board nobody can log in to, or one that anyone with a password
+# can, shows on the page before it matters. Every field is optional: a probe that fails is left out, never guessed.
+collect_health() {
+  local used free inodes passwd keys active=true f
+  read -r used free < <(df -Pm / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5, $4 }')
+  inodes="$(df -Pi / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')"
+  passwd="$(sshd -T 2>/dev/null | awk '$1 == "passwordauthentication" { print $2; exit }')"
+  keys=0
+  for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
+    [ -r "$f" ] && keys=$((keys + $(grep -cEv '^[[:space:]]*(#|$)' "$f" 2>/dev/null || true)))
+  done
+  systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null || active=false
+  DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
+import json, os
+def num(name):
+    v = os.environ.get(name, "")
+    return int(v) if v.isdigit() else None
+health = {
+    "diskUsedPct": num("DISK_USED"),
+    "diskFreeMb": num("DISK_FREE_MB"),
+    "inodesUsedPct": num("INODES_USED"),
+    "sshPasswordAuth": {"yes": True, "no": False}.get(os.environ.get("SSH_PASSWORD", "")),
+    "sshAuthorizedKeys": num("SSH_KEYS"),
+    "sshdActive": os.environ.get("SSHD_ACTIVE") == "true",
+}
+print(json.dumps({k: v for k, v in health.items() if v is not None}))
+'
+}
+
 do_report() {
-  local report
+  local report health
   report="$(BOARD_HOST="$HOST" "$CHECK_SCRIPT" --json)" || { log "check-scripts.sh --json failed — nothing reported"; return 1; }
-  report="$(printf '%s' "$report" | HOST_NAME="$HOST" AGENT_VERSION="$AGENT_VERSION" python3 -c '
+  health="$(collect_health 2>/dev/null)" || health=""
+  [ -n "$health" ] || health='{}'
+  report="$(printf '%s' "$report" | HOST_NAME="$HOST" AGENT_VERSION="$AGENT_VERSION" HEALTH="$health" python3 -c '
 import json, os, sys
 data = json.load(sys.stdin)
 data["host"] = os.environ["HOST_NAME"]
 data["agentVersion"] = os.environ["AGENT_VERSION"]
+try:
+    data["health"] = json.loads(os.environ.get("HEALTH") or "{}")
+except ValueError:
+    pass
 print(json.dumps(data))
 ')" || return 1
   if bridge POST /api/v1/boards/agent/report "$report" >/dev/null; then log "reported to bridge"; else log "bridge did not take the report"; return 1; fi

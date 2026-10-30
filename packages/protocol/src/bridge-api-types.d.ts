@@ -2952,11 +2952,20 @@ export interface components {
             installedHash?: string | null;
             mainHash?: string | null;
         };
+        BoardHealthDto: {
+            diskUsedPct?: number;
+            diskFreeMb?: number;
+            inodesUsedPct?: number;
+            sshPasswordAuth?: boolean;
+            sshAuthorizedKeys?: number;
+            sshdActive?: boolean;
+        };
         BoardReportDto: {
             host: string;
             mainSha: string;
             agentVersion?: string;
             scripts: components["schemas"]["ReportedScriptDto"][];
+            health?: components["schemas"]["BoardHealthDto"];
         };
         UpdateResultDto: {
             ok: boolean;

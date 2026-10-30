@@ -23,6 +23,8 @@ const board = (over: Record<string, unknown> = {}) => ({
   mainSha: 'c823ea56' + 'a'.repeat(32),
   agentVersion: '1',
   scripts: [script('infra/scriptcheck/check-scripts.sh', 'outdated'), script('infra/notify/notify-telegram', 'current')],
+  health: null,
+  warnings: [],
   outdated: 1,
   updatable: 1,
   pending: null,
@@ -64,6 +66,23 @@ const renderPage = () =>
   );
 
 describe('BoardsPage', () => {
+  it("shows the board's disk and SSH warnings, and nothing for a board that reported none", async () => {
+    boards = [
+      board({
+        host: 'ubuntu-green',
+        health: { diskUsedPct: 91, diskFreeMb: 1200, sshAuthorizedKeys: 1, sshPasswordAuth: true },
+        warnings: ['Диск заполнен на 91 %, свободно 1200 МБ', 'SSH принимает пароли (лучше только ключи)'],
+      }),
+      board({ host: 'ubuntu-white' }),
+    ];
+    renderPage();
+
+    expect(await screen.findByText(/Диск заполнен на 91 %/)).toBeTruthy();
+    expect(screen.getByText(/SSH принимает пароли/)).toBeTruthy();
+    expect(screen.getByText(/SSH-ключей: 1/)).toBeTruthy();
+    expect(screen.getAllByText('Состояние платы')).toHaveLength(1);
+  });
+
   it('shows each board with what is outdated, and hides the current scripts until asked', async () => {
     const user = userEvent.setup();
     renderPage();

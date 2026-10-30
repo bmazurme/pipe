@@ -4,10 +4,13 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -43,6 +46,41 @@ export class ReportedScriptDto {
   mainHash?: string | null;
 }
 
+// What a board can say about itself besides its scripts (infra/boardagent `collect_health`): the root disk and the SSH door. Every field
+// is optional — a probe that failed on the board is simply absent.
+export class BoardHealthDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  diskUsedPct?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  diskFreeMb?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  inodesUsedPct?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  sshPasswordAuth?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000)
+  sshAuthorizedKeys?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  sshdActive?: boolean;
+}
+
 // What a board's agent posts about itself.
 export class BoardReportDto {
   @IsString()
@@ -63,6 +101,11 @@ export class BoardReportDto {
   @ValidateNested({ each: true })
   @Type(() => ReportedScriptDto)
   scripts: ReportedScriptDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BoardHealthDto)
+  health?: BoardHealthDto;
 }
 
 export class UpdateResultDto {
