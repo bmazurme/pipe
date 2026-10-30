@@ -22,7 +22,11 @@
 # harmless to the old code; a dropped one is not).
 #
 # Settings (/etc/pipe-autodeploy.env, read by the unit): OWNER, REPO, API_URL, BRIDGE_DIR, STATE_DIR,
-# MAX_WAIT_SECONDS, NOTIFY_CMD (run with the message as $1: deployed / rolled back).
+# MAX_WAIT_SECONDS, NOTIFY_CMD (run with the message as $1: deployed / rolled back), BRIDGE_API_KEY (optional: the owner's boards-only key,
+# the same one the board agent uses - with it every release's outcome is reported to bridge, which stops the automation when a release is
+# rolled back and tells the owner which pull requests were in it; without it nothing is reported).
+#
+# A report that bridge cannot take (it may be exactly what is down) is kept in STATE_DIR/deploy-report.pending and sent on a later pass.
 set -euo pipefail
 
 OWNER="${OWNER:-bmazurme}"
@@ -38,6 +42,42 @@ log() { echo "[$(date -u +%FT%TZ)] $*"; }
 notify() { log "$1"; if [ -n "${NOTIFY_CMD:-}" ]; then $NOTIFY_CMD "$1" || true; fi; }
 
 mkdir -p "$STATE_DIR"
+
+# Tells bridge how a release went: report_deploy <deployed|rolled_back|failed> <full sha> [detail]. Never fails the deploy: no key = silent,
+# an unreachable bridge = kept for the next pass. The key goes to curl on stdin, never in argv.
+report_body() { # result sha previous detail
+  RESULT="$1" SHA="$2" PREVIOUS="$3" DETAIL="$4" python3 -c '
+import json, os
+body = {"result": os.environ["RESULT"], "sha": os.environ["SHA"]}
+if os.environ.get("PREVIOUS"):
+    body["previousSha"] = os.environ["PREVIOUS"]
+if os.environ.get("DETAIL"):
+    body["detail"] = os.environ["DETAIL"][:500]
+print(json.dumps(body))
+'
+}
+send_report() { # json-body → success when bridge took it
+  printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" \
+    | curl -K - -fsS --max-time 20 -X POST -H 'Content-Type: application/json' --data "$1" "$API_URL/api/v1/loop/deploys" >/dev/null 2>&1
+}
+report_deploy() {
+  [ -n "${BRIDGE_API_KEY:-}" ] || return 0
+  local body
+  # The release that was running BEFORE this pass: deployed.txt is already the new one by the time a success is reported.
+  body="$(report_body "$1" "$2" "${previous_sha:-}" "${3:-}")" || return 0
+  send_report "$body" || { log "bridge did not take the deploy report - keeping it for later"; echo "$body" >> "$STATE_DIR/deploy-report.pending"; }
+}
+flush_pending_reports() {
+  local pending="$STATE_DIR/deploy-report.pending" kept="$STATE_DIR/deploy-report.kept" line
+  [ -n "${BRIDGE_API_KEY:-}" ] && [ -s "$pending" ] || return 0
+  : > "$kept"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    send_report "$line" || echo "$line" >> "$kept"
+  done < "$pending"
+  mv "$kept" "$pending"
+  [ -s "$pending" ] || rm -f "$pending"
+}
 
 registry_digest() { # image → the digest of its `stable` index, or nothing
   local image="$1" token
@@ -109,6 +149,9 @@ fi
 exec 9>"$STATE_DIR/lock"
 flock -n 9 || { log "another pass is running"; exit 0; }
 
+previous_sha="$(cut -d' ' -f2 "$STATE_DIR/deployed.txt" 2>/dev/null || true)"
+flush_pending_reports
+
 # --- a failover to another board is active: do nothing (the old primary must not be brought back by a routine deploy)
 other="$(docker node ls -q 2>/dev/null | xargs -r docker node inspect --format '{{.Description.Hostname}} {{index .Spec.Labels "failover"}}' 2>/dev/null | awk -v me="$(hostname)" '$2=="active" && $1!=me {print $1}' | head -1 || true)"
 if [ -n "$other" ]; then
@@ -146,7 +189,7 @@ for file in "${SERVICES_FILE_GLOB[@]}"; do
   [ -s "$work/$file" ] || { log "$file of ${sha:0:8} is empty — nothing done"; exit 0; }
 done
 grep -q '^services:' "$work/bridge-pi.yml" && grep -q '^services:' "$work/worker-pi.yml" && grep -q '^services:' "$work/worker-managed-pi.yml" \
-  || { notify "⚠️ release ${sha:0:8}: the stack files look wrong — not deployed"; echo "$release_id ${sha:0:8} bad-stack-files" > "$STATE_DIR/failed.txt"; exit 0; }
+  || { notify "⚠️ release ${sha:0:8}: the stack files look wrong — not deployed"; echo "$release_id ${sha:0:8} bad-stack-files" > "$STATE_DIR/failed.txt"; report_deploy failed "$sha" 'the stack files look wrong'; exit 0; }
 
 # --- deploy
 before="$(services_snapshot)"
@@ -166,6 +209,7 @@ if [ "$deploy_failed" = 0 ] && wait_healthy; then
     echo "$release_id ${sha:0:8} $(date -u +%FT%TZ)" > "$STATE_DIR/deployed.txt"
     rm -f "$STATE_DIR/failed.txt"
     notify "✅ Pi: развёрнута версия ${sha:0:8} (релиз $release_id)"
+    report_deploy deployed "$sha"
     exit 0
   fi
 
@@ -175,6 +219,7 @@ if [ "$deploy_failed" = 0 ] && wait_healthy; then
   done
   echo "$release_id ${sha:0:8} $(date -u +%FT%TZ)" > "$STATE_DIR/failed.txt"
   notify "🔴 Pi: версия ${sha:0:8} не прошла проверку Swarm — он сам откатил сервисы на предыдущую"
+  report_deploy rolled_back "$sha" 'Swarm rolled the services back to the previous images'
   exit 1
 fi
 
@@ -193,4 +238,5 @@ for file in "${SERVICES_FILE_GLOB[@]}"; do
 done
 echo "$release_id ${sha:0:8} $(date -u +%FT%TZ)" > "$STATE_DIR/failed.txt"
 notify "🔴 Pi: версия ${sha:0:8} не поднялась (проверка здоровья) — откат на предыдущую; новый релиз попробуем, когда он появится"
+report_deploy rolled_back "$sha" 'the services did not become healthy in time'
 exit 1

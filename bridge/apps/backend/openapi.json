@@ -2934,6 +2934,34 @@
         }
       }
     },
+    "/api/v1/loop/deploys": {
+      "post": {
+        "operationId": "LoopDeployController_report",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/boards/agent/report": {
       "post": {
         "operationId": "BoardsAgentController_report",
@@ -7165,6 +7193,10 @@
         ]
       },
       "PauseLoopDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "DeployReportDto": {
         "type": "object",
         "properties": {}
       },
