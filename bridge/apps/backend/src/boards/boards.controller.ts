@@ -22,6 +22,8 @@ import {
   HOST_PATTERN,
   UpdateResultDto,
 } from './dto/boards.dto';
+import { NasReportDto } from './dto/nas.dto';
+import { NasService } from './nas.service';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
 // account is refused — the boards are the owner's.
@@ -29,7 +31,20 @@ import {
 @UseGuards(JwtOrApiKeyGuard, OwnerGuard)
 @BoardAgentKeyAllowed()
 export class BoardsAgentController {
-  constructor(private readonly boards: BoardsService) {}
+  constructor(
+    private readonly boards: BoardsService,
+    private readonly nas: NasService,
+  ) {}
+
+  // What a NAS reports about itself (infra/nas/report.sh), with the same boards-only key.
+  @Post('nas')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async nasReport(
+    @Body() dto: NasReportDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.nas.record(user.id, dto);
+  }
 
   @Post('report')
   @HttpCode(HttpStatus.NO_CONTENT)

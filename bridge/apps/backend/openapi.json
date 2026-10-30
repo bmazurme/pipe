@@ -2232,6 +2232,27 @@
         }
       }
     },
+    "/api/v1/dashboard/nas": {
+      "get": {
+        "operationId": "DashboardController_getNas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/backups": {
       "get": {
         "operationId": "DashboardController_getBackups",
@@ -2318,6 +2339,159 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/nas": {
+      "post": {
+        "operationId": "BoardsAgentController_nasReport",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NasReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/report": {
+      "post": {
+        "operationId": "BoardsAgentController_report",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/pending": {
+      "get": {
+        "operationId": "BoardsAgentController_pending",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/updates/{id}/result": {
+      "post": {
+        "operationId": "BoardsAgentController_result",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards": {
+      "get": {
+        "operationId": "BoardsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/boards/{host}/updates": {
+      "post": {
+        "operationId": "BoardsController_update",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/{host}/updates/cancel": {
+      "post": {
+        "operationId": "BoardsController_cancel",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
           }
         }
       }
@@ -2979,138 +3153,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/boards/agent/report": {
-      "post": {
-        "operationId": "BoardsAgentController_report",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BoardReportDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/boards/agent/pending": {
-      "get": {
-        "operationId": "BoardsAgentController_pending",
-        "parameters": [
-          {
-            "name": "host",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/boards/agent/updates/{id}/result": {
-      "post": {
-        "operationId": "BoardsAgentController_result",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateResultDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/boards": {
-      "get": {
-        "operationId": "BoardsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/boards/{host}/updates": {
-      "post": {
-        "operationId": "BoardsController_update",
-        "parameters": [
-          {
-            "name": "host",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/boards/{host}/updates/cancel": {
-      "post": {
-        "operationId": "BoardsController_cancel",
-        "parameters": [
-          {
-            "name": "host",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
           }
         }
       }
@@ -6669,6 +6711,276 @@
           }
         }
       },
+      "NasBackupDto": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "latest": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "snapshots": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "snapshots",
+          "bytes"
+        ]
+      },
+      "NasRaidDto": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "degraded": {
+            "type": "boolean"
+          },
+          "syncing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "summary",
+          "degraded",
+          "syncing"
+        ]
+      },
+      "NasVolumeDto": {
+        "type": "object",
+        "properties": {
+          "totalBytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "usedBytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "totalBytes",
+          "usedBytes"
+        ]
+      },
+      "NasDiskDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "/^[a-z0-9]{2,16}$/"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "healthPassed": {
+            "type": "boolean"
+          },
+          "reallocated": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "powerOnHours": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "tempC": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -50,
+            "maximum": 150
+          },
+          "pending": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "uncorrectable": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "name",
+          "healthPassed"
+        ]
+      },
+      "NasReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "uptimeSec": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "backup": {
+            "$ref": "#/components/schemas/NasBackupDto"
+          },
+          "raid": {
+            "$ref": "#/components/schemas/NasRaidDto"
+          },
+          "volume": {
+            "$ref": "#/components/schemas/NasVolumeDto"
+          },
+          "disks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NasDiskDto"
+            }
+          }
+        },
+        "required": [
+          "host",
+          "uptimeSec",
+          "backup",
+          "raid",
+          "volume",
+          "disks"
+        ]
+      },
+      "ReportedScriptDto": {
+        "type": "object",
+        "properties": {
+          "installed": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "INSTALLED_PATH_PATTERN"
+          },
+          "repoPath": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "REPO_PATH_PATTERN"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "outdated",
+              "missing"
+            ]
+          },
+          "installedHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "mainHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "installed",
+          "repoPath",
+          "status"
+        ]
+      },
+      "BoardHealthDto": {
+        "type": "object",
+        "properties": {
+          "diskUsedPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "diskFreeMb": {
+            "type": "number",
+            "minimum": 0
+          },
+          "inodesUsedPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "sshPasswordAuth": {
+            "type": "boolean"
+          },
+          "sshAuthorizedKeys": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "sshdActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BoardReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "mainSha": {
+            "type": "string",
+            "pattern": "SHA_PATTERN"
+          },
+          "agentVersion": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "scripts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportedScriptDto"
+            }
+          },
+          "health": {
+            "$ref": "#/components/schemas/BoardHealthDto"
+          }
+        },
+        "required": [
+          "host",
+          "mainSha",
+          "scripts"
+        ]
+      },
+      "UpdateResultDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "CreateImproveIssueDto": {
         "type": "object",
         "properties": {
@@ -7220,120 +7532,6 @@
       "DeployReportDto": {
         "type": "object",
         "properties": {}
-      },
-      "ReportedScriptDto": {
-        "type": "object",
-        "properties": {
-          "installed": {
-            "type": "string",
-            "maxLength": 300,
-            "pattern": "INSTALLED_PATH_PATTERN"
-          },
-          "repoPath": {
-            "type": "string",
-            "maxLength": 300,
-            "pattern": "REPO_PATH_PATTERN"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "current",
-              "outdated",
-              "missing"
-            ]
-          },
-          "installedHash": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 64
-          },
-          "mainHash": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 64
-          }
-        },
-        "required": [
-          "installed",
-          "repoPath",
-          "status"
-        ]
-      },
-      "BoardHealthDto": {
-        "type": "object",
-        "properties": {
-          "diskUsedPct": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "diskFreeMb": {
-            "type": "number",
-            "minimum": 0
-          },
-          "inodesUsedPct": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "sshPasswordAuth": {
-            "type": "boolean"
-          },
-          "sshAuthorizedKeys": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1000
-          },
-          "sshdActive": {
-            "type": "boolean"
-          }
-        }
-      },
-      "BoardReportDto": {
-        "type": "object",
-        "properties": {
-          "host": {
-            "type": "string",
-            "pattern": "HOST_PATTERN"
-          },
-          "mainSha": {
-            "type": "string",
-            "pattern": "SHA_PATTERN"
-          },
-          "agentVersion": {
-            "type": "string",
-            "maxLength": 32
-          },
-          "scripts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReportedScriptDto"
-            }
-          },
-          "health": {
-            "$ref": "#/components/schemas/BoardHealthDto"
-          }
-        },
-        "required": [
-          "host",
-          "mainSha",
-          "scripts"
-        ]
-      },
-      "UpdateResultDto": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string",
-            "maxLength": 4000
-          }
-        },
-        "required": [
-          "ok"
-        ]
       },
       "CreateLabProjectDto": {
         "type": "object",

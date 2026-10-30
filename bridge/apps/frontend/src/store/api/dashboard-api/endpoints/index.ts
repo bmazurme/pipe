@@ -42,6 +42,34 @@ export interface GithubConnectionCheck {
   url: string;
 }
 
+export type NasStatus = 'ok' | 'warn' | 'bad';
+
+export interface NasDisk {
+  name: string;
+  model?: string | null;
+  healthPassed: boolean;
+  reallocated?: number | null;
+  powerOnHours?: number | null;
+  tempC?: number | null;
+  pending?: number | null;
+  uncorrectable?: number | null;
+}
+
+/** A NAS as it last reported itself (infra/nas), with bridge's verdict. */
+export interface DashboardNas {
+  host: string;
+  reportedAt: string;
+  status: NasStatus;
+  reasons: string[];
+  data: {
+    uptimeSec: number;
+    backup: { createdAt?: string | null; latest?: string | null; snapshots: number; bytes: number };
+    raid: { summary: string; degraded: boolean; syncing: boolean };
+    volume: { totalBytes: number; usedBytes: number };
+    disks: NasDisk[];
+  };
+}
+
 export type DeployResult = 'deployed' | 'rolled_back' | 'failed';
 
 /** What the deploying board reported about one release (infra/autodeploy → /loop/deploys). */
@@ -67,6 +95,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardBackups: builder.query<BackupStatus, void>({
       query: () => 'dashboard/backups',
     }),
+    getDashboardNas: builder.query<DashboardNas[], void>({
+      query: () => 'dashboard/nas',
+    }),
     getDashboardDeploys: builder.query<DashboardDeploy[], void>({
       query: () => 'dashboard/deploys',
     }),
@@ -91,6 +122,7 @@ export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
   useGetDashboardDeploysQuery,
+  useGetDashboardNasQuery,
   useGetGithubConnectionQuery,
   useSaveGithubConnectionMutation,
   useCheckGithubConnectionMutation,

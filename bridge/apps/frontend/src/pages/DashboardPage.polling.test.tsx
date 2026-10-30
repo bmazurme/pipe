@@ -35,6 +35,7 @@ vi.mock('../store/api', async (importOriginal) => {
 
 vi.mock('./dashboard/GithubConnectionCard', () => ({ GithubConnectionCard: () => null }));
 vi.mock('./dashboard/ReleasesCard', () => ({ ReleasesCard: () => null }));
+vi.mock('./dashboard/NasCard', () => ({ NasCard: () => null }));
 
 import { DashboardPage } from './DashboardPage';
 

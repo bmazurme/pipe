@@ -3,6 +3,7 @@ import { AuthIdentity } from '../auth/entities/auth-identity.entity';
 import { EmergencyKey } from '../auth/entities/emergency-key.entity';
 import { Session } from '../auth/entities/session.entity';
 import { BoardReport } from '../boards/entities/board-report.entity';
+import { NasReport } from '../boards/entities/nas-report.entity';
 import { ScriptUpdate } from '../boards/entities/script-update.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
@@ -48,6 +49,7 @@ export const ENTITIES = [
   SystemSettings,
   TaskQuestion,
   BoardReport,
+  NasReport,
   ScriptUpdate,
   User,
   StoredFile,

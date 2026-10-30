@@ -57,3 +57,9 @@
   width: 90px;
   height: 20px;
 }
+
+.nasBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
