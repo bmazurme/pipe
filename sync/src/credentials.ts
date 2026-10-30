@@ -48,6 +48,11 @@ export function saveApiKey(apiKey: string, filePath: string = CREDENTIALS_PATH):
   saveCredentials({ refreshToken: current.refreshToken ?? '', gitlabToken: current.gitlabToken, apiKey }, filePath);
 }
 
+export function saveRefreshToken(refreshToken: string, filePath: string = CREDENTIALS_PATH): void {
+  const current = loadCredentialsOrEmpty(filePath);
+  saveCredentials({ ...current, refreshToken }, filePath);
+}
+
 export function saveCredentials(credentials: Credentials, filePath: string = CREDENTIALS_PATH): void {
   // Owner-only, and atomic (IMPROVEMENTS_TECH.md 2.6) — writeJsonFileSync
   // applies the mode to the temp file at creation (never briefly
