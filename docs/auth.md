@@ -25,17 +25,23 @@ so a machine caller no longer has to impersonate a human's browser session.
   which used to be a separate shared secret and is now just another personal API key) — preferred by
   [subscription/bridge-client.ts](../reports/packages/server/src/subscription/bridge-client.ts)
   over replaying `bridgeRefreshToken` when set.
-- **worker**: `BRIDGE_API_KEY` env var, consumed by
-  [worker/src/bridgeClient.ts](../worker/src/bridgeClient.ts) — the *only*
-  auth method it supports (no refresh-token fallback at all, unlike
-  sync/reports, since worker is a headless server process with no browser
-  session to ever have replayed in the first place).
-  [WorkerController](../bridge/apps/backend/src/worker/worker.controller.ts)
-  reuses the same `JwtOrApiKeyGuard` as `StorageController` for every
-  route, human and machine alike — as does
-  [ChatController](../bridge/apps/backend/src/chat/chat.controller.ts): the
-  same `BRIDGE_API_KEY` worker already has authenticates its chat-turn
-  polling too, nothing separate to configure for that second channel.
+- **worker**: authenticates with a single `brw_` key of its own, consumed by
+  [worker/src/bridgeClient.ts](../worker/src/bridgeClient.ts) (no
+  refresh-token fallback at all, unlike sync/reports, since worker is a
+  headless server process with no browser session to ever have replayed in
+  the first place). The worker gets that key by redeeming a one-time
+  enrolment code (`node dist/enrollCli.js`, or `WORKER_ENROLL_CODE`; see
+  [worker/src/enrollment.ts](../worker/src/enrollment.ts)) and keeps it in
+  `WORKER_STATE_DIR`. Bridge's `JwtOrApiKeyGuard` accepts a `brw_` key only
+  on routes marked `@WorkerKeyAllowed()` (e.g. claim and heartbeat in
+  [WorkerController](../bridge/apps/backend/src/worker/worker.controller.ts));
+  on any other route it answers 403. `BRIDGE_API_KEY` (a personal `brk_...`
+  key) is the legacy path: it still works, and it takes precedence while it
+  is set. The chat-turn polling routes are owned by
+  [ChatTurnsController](../bridge/apps/backend/src/chat/chat-turns.controller.ts)
+  (not `ChatController`, which serves the browser) and are
+  `@WorkerKeyAllowed()` as well, so the same key authenticates them —
+  nothing separate to configure for that second channel.
 
 The refresh-token replay (browser cookie pasted into sync/reports) still
 works unchanged for anyone who hasn't switched over.
