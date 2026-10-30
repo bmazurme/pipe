@@ -10,16 +10,17 @@ function setup(
     cards?: unknown;
     failed?: Array<Record<string, unknown>>;
     succeeded?: Array<Record<string, unknown>>;
+    active?: Array<Record<string, unknown>>;
     workers?: Array<Record<string, unknown>>;
   } = {},
 ) {
   const runs = { find: jest.fn().mockResolvedValue(over.runs ?? []) };
   const jobs = {
-    find: jest.fn(async (query: { where: { status: string } }) =>
-      query.where.status === 'failed'
-        ? (over.failed ?? [])
-        : (over.succeeded ?? []),
-    ),
+    find: jest.fn(async (query: { where: { status: unknown } }) => {
+      if (query.where.status === 'failed') return over.failed ?? [];
+      if (query.where.status === 'succeeded') return over.succeeded ?? [];
+      return over.active ?? [];
+    }),
   };
   const workers = { find: jest.fn().mockResolvedValue(over.workers ?? []) };
   const questions = {
@@ -155,6 +156,32 @@ describe('InboxService', () => {
     expect(item.kind).toBe('jobs_failed');
     expect(item.title).toBe('Упавших запусков за сутки: 1');
     expect(item.detail).toContain('#2 b');
+  });
+
+  it('does not report a failed job while a later run of the same task is active, but does for an earlier one', async () => {
+    const at = (h: number) => new Date(`2026-10-30T0${h}:00:00Z`);
+    const failedJob = (id: number, taskKey: string) => ({
+      id,
+      taskKey,
+      model: 'sonnet',
+      errorMessage: 'x',
+      createdAt: at(1),
+      updatedAt: at(2),
+    });
+    const { service } = setup({
+      failed: [failedJob(1, 'a'), failedJob(2, 'b'), failedJob(3, 'c')],
+      active: [
+        { id: 9, taskKey: 'a', createdAt: at(3) },
+        { id: 8, taskKey: 'b', createdAt: new Date('2026-10-30T00:30:00Z') },
+      ],
+    });
+
+    const [item] = await service.list(7, NOW);
+
+    expect(item.title).toBe('Упавших запусков за сутки: 2');
+    expect(item.detail).toContain('#2 b');
+    expect(item.detail).toContain('#3 c');
+    expect(item.detail).not.toContain('#1 a');
   });
 
   it('ignores a limit whose window already reset, and counts a live one', async () => {
