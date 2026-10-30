@@ -122,3 +122,34 @@ describe('the owner-only pages', () => {
     expect(burger?.onItemClick).toBeTypeOf('function');
   });
 });
+
+describe('the inbox count badge', () => {
+  const adornment = (inboxTotal?: number, inboxUrgent?: number) =>
+    buildMenuItems('/', navigate, { inboxTotal, inboxUrgent }).find((item) => item.id === 'inbox')?.rightAdornment;
+
+  it('is drawn only while something waits', () => {
+    expect(adornment(undefined)).toBeUndefined();
+    expect(adornment(0, 0)).toBeUndefined();
+    expect(buildMenuItems('/', navigate, { inboxTotal: 2 }).filter((item) => item.rightAdornment)).toHaveLength(1);
+  });
+
+  it('says in words how many wait and how many are urgent', () => {
+    const { rerender } = render(<>{adornment(3, 1)}</>);
+
+    const badge = screen.getByRole('img', { name: '3 ждут решения, 1 срочно' });
+    expect(badge).toHaveTextContent('3');
+    expect(badge.className).toContain('countBadgeUrgent');
+
+    rerender(<>{adornment(2, 0)}</>);
+    expect(screen.getByRole('img', { name: '2 ждут решения' }).className).not.toContain('countBadgeUrgent');
+  });
+
+  it('is part of the inbox title in the burger', () => {
+    const title = buildBurgerItems('/', navigate, { inboxTotal: 3, inboxUrgent: 1 }).find(
+      (item) => item.id === 'inbox',
+    )?.title;
+
+    render(<>{title}</>);
+    expect(screen.getByRole('img', { name: '3 ждут решения, 1 срочно' })).toBeTruthy();
+  });
+});
