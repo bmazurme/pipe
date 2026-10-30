@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { store } from '../../store';
 import { dashboardApi } from '../../store/api';
 import { BoardMetricsCard } from './BoardMetricsCard';
-import { segments } from './tempSeries';
+import { fanText, segments, seriesStats } from './tempSeries';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -63,7 +63,12 @@ describe('BoardMetricsCard', () => {
     expect(await screen.findByText('68 °C')).toBeTruthy();
     expect(screen.getByText('red')).toBeTruthy();
     expect(screen.getByText('Процессор 68 °C')).toBeTruthy();
-    expect(screen.getByText(/NVMe 41 °C · кулер 4200 об\/мин · нагрузка 1.37 · память свободна 75 % из 8 ГБ · диск 30 % · работает 2 дн 7 ч/)).toBeTruthy();
+    expect(screen.getByText('NVMe 41 °C')).toBeTruthy();
+    expect(screen.getByText('кулер 4200 об/мин')).toBeTruthy();
+    expect(screen.getByText('нагрузка 1.37')).toBeTruthy();
+    expect(screen.getByText('память свободна 75 %')).toBeTruthy();
+    expect(screen.getByText('диск 30 %')).toBeTruthy();
+    expect(screen.getByText(/работает 2 дн 7 ч/)).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Температура red за 24 часа' })).toBeTruthy();
     // a board that stopped sending is a problem, not a number from three hours ago
     expect(screen.getByText('проблема')).toBeTruthy();
@@ -120,5 +125,34 @@ describe('TempChart segments', () => {
   it('is empty when nothing was read', () => {
     expect(segments([point(1000, null)], 'soc', x, y)).toEqual([]);
     expect(segments([], 'nvme', x, y)).toEqual([]);
+  });
+});
+
+describe('seriesStats and fanText', () => {
+  const at = (soc: number | null, nvme: number | null = null) => ({ t: '2026-10-30T12:00:00Z', soc, nvme });
+
+  it('frames the data with a margin and never less than twelve degrees, so a flat line does not look like a climb', () => {
+    const flat = seriesStats([at(48), at(49), at(48)]);
+
+    expect(flat).toMatchObject({ socMin: 48, socMax: 49, nvmeMin: null });
+    expect(flat!.hi - flat!.lo).toBeCloseTo(12);
+    expect((flat!.lo + flat!.hi) / 2).toBeCloseTo(48.5);
+
+    const wide = seriesStats([at(40, 30), at(70, 35)]);
+
+    expect(wide!.hi - wide!.lo).toBeCloseTo(52);
+    expect(wide).toMatchObject({ socMin: 40, socMax: 70, nvmeMin: 30, nvmeMax: 35 });
+  });
+
+  it('has nothing to frame without a single reading', () => {
+    expect(seriesStats([at(null), at(null)])).toBeNull();
+    expect(seriesStats([])).toBeNull();
+  });
+
+  it('calls an idle fan on a cool board "off", a stopped one on a warm board a warning, and prints a turning one', () => {
+    expect(fanText(0, 48)).toEqual({ text: 'кулер выкл', warn: false });
+    expect(fanText(0, undefined)).toEqual({ text: 'кулер выкл', warn: false });
+    expect(fanText(0, 66)).toEqual({ text: 'кулер стоит', warn: true });
+    expect(fanText(4585, 66)).toEqual({ text: 'кулер 4585 об/мин', warn: false });
   });
 });

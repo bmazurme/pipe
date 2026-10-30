@@ -1,11 +1,14 @@
 import { Database, Server, ShieldKeyhole } from '@gravity-ui/icons';
-import { Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
+import { Alert, Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
   getErrorMessage,
   NodeStatus,
   useGetDashboardBackupsQuery,
+  useGetDashboardBoardMetricsQuery,
+  useGetDashboardDeploysQuery,
+  useGetDashboardNasQuery,
   useGetDashboardNodesQuery,
   useGetVpnConnectionStatusQuery,
   useGetVpnStatusQuery,
@@ -19,11 +22,13 @@ import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import { BoardMetricsCard } from './dashboard/BoardMetricsCard';
 import { NasCard } from './dashboard/NasCard';
 import { ReleasesCard } from './dashboard/ReleasesCard';
+import { buildAttention, summarize } from './dashboard/dashboardAttention';
 import styles from './DashboardPage.module.css';
 import { formatBytes } from '../shared/lib/formatBytes';
 import { useFailureAwarePollInterval } from './vpn/statusPollInterval';
 
 const POLL_INTERVAL_MS = 20_000;
+const BOARD_POLL_INTERVAL_MS = 60_000;
 // A panel that is down (expired certificate, deleted server) cannot recover on its own.
 export const FAILING_POLL_INTERVAL_MS = 60_000;
 // Same "connected recently, not right now" heuristic as VpnConnectionStatusGrid —
@@ -125,28 +130,58 @@ export function DashboardPage() {
     skipPollingIfUnfocused: true,
   });
 
+  // The same requests the tiles make (RTK Query shares them), so the header can say what is wrong anywhere on the page without a second round trip.
+  const boardMetrics = useGetDashboardBoardMetricsQuery(24, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const deploys = useGetDashboardDeploysQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+
   const vpnDown = vpnActive.isError || !vpnActive.data?.lastOnline;
   const nodesList = nodes.data?.nodes ?? [];
   const nodesDownCount = nodesList.filter((node) => node.state !== 'ready').length;
   const backupAge = backups.data?.lastBackupAt ? Date.now() - new Date(backups.data.lastBackupAt).getTime() : null;
   const backupIssue = backups.isError || !backups.data?.configured || backupAge === null || backupAge > BACKUP_STALE_THRESHOLD_MS || Boolean(backups.data?.error);
 
-  const issues = [vpnDown, nodes.isError || nodesDownCount > 0, backupIssue, vpnConnections.isError].filter(Boolean).length;
+  const attention = buildAttention({
+    vpnDown: !vpnActive.isLoading && vpnDown,
+    vpnListError: vpnConnections.isError,
+    nodesError: nodes.isError,
+    nodesDown: nodesList.filter((node) => node.state !== 'ready').map((node) => node.label),
+    backupIssue: !backups.isLoading && backupIssue,
+    boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
+    nas: Array.isArray(nas.data) ? nas.data : [],
+    lastDeploy: Array.isArray(deploys.data) ? (deploys.data[0] ?? null) : null,
+  });
+  const summary = summarize(attention);
   const summaryReady = !vpnActive.isLoading && !nodes.isLoading && !backups.isLoading && !vpnConnections.isLoading;
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="Дашборд"
-        description="Состояние инфраструктуры: туннель, узлы кластера и бэкапы — на одной странице."
+        description="Состояние инфраструктуры: туннель, узлы кластера, платы, NAS, бэкапы и релизы — на одной странице."
         actions={
           summaryReady ? (
-            <Label theme={issues === 0 ? 'success' : 'danger'} size="m">
-              {issues === 0 ? 'Всё в порядке' : `Проблем: ${issues}`}
+            <Label theme={summary.theme} size="m">
+              {summary.label}
             </Label>
           ) : undefined
         }
       />
+
+      {summaryReady && attention.length > 0 && (
+        <Alert
+          theme={attention.some((item) => item.level === 'bad') ? 'danger' : 'warning'}
+          view="filled"
+          title={attention.some((item) => item.level === 'bad') ? 'Что требует внимания' : 'Замечания'}
+          message={
+            <ul className={styles.attention}>
+              {attention.map((item) => (
+                <li key={item.id}>{item.text}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
 
       <div className={styles.grid}>
         <Card view="outlined" className={styles.card}>
@@ -218,11 +253,13 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <BoardMetricsCard />
-
-        <NasCard />
-
         <ReleasesCard />
+      </div>
+
+      <BoardMetricsCard />
+
+      <div className={styles.grid}>
+        <NasCard />
 
         <GithubConnectionCard />
       </div>

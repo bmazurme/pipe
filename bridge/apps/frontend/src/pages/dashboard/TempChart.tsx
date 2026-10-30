@@ -1,43 +1,77 @@
+import { Text } from '@gravity-ui/uikit';
+
 import type { BoardSeriesPoint } from '../../store/api';
-import { type Segment, segments } from './tempSeries';
+import styles from './BoardMetricsCard.module.css';
+import { seriesStats, segments } from './tempSeries';
 
 const WIDTH = 300;
-const HEIGHT = 56;
+const HEIGHT = 44;
 // The two limits the monitor and the card use: warm from 65 °C, bad from 75 °C.
 const WARM = 65;
 const HOT = 75;
 
-const path = (segs: Segment[][]) => segs.map((seg) => seg.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')).join(' ');
+const path = (segs: ReturnType<typeof segments>) => segs.map((seg) => seg.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')).join(' ');
+const range = (min: number | null, max: number | null) => (min === null || max === null ? null : min === max ? `${Math.round(min)}` : `${Math.round(min)}–${Math.round(max)}`);
 
-// The temperature of one board over the window: the processor (solid) and, when there is one, the NVMe (dashed), with the 65 and 75 °C lines.
-export function TempChart({ points, label }: { points: BoardSeriesPoint[]; label: string }) {
-  const values = points.flatMap((point) => [point.soc, point.nvme]).filter((value): value is number => value !== null);
+// The temperature of one board over the window: the processor (solid) and, when there is one, the NVMe (dashed). The vertical scale follows the data;
+// the 65 and 75 °C lines are drawn only when the temperature is anywhere near them. Under it: the range in words, and the two ends of the time axis.
+export function TempChart({ points, label, windowText }: { points: BoardSeriesPoint[]; label: string; windowText: string }) {
+  const stats = points.length >= 2 ? seriesStats(points) : null;
 
-  if (points.length < 2 || values.length === 0) {
+  if (!stats) {
     return (
-      <svg role="img" aria-label={`${label}: графика пока нет`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT}>
-        <text x={WIDTH / 2} y={HEIGHT / 2} textAnchor="middle" fontSize="11" fill="currentColor" opacity="0.5">
-          мало данных для графика
-        </text>
-      </svg>
+      <div className={styles.chart}>
+        <svg role="img" aria-label={`${label}: графика пока нет`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT}>
+          <text x={WIDTH / 2} y={HEIGHT / 2 + 4} textAnchor="middle" fontSize="11" fill="currentColor" opacity="0.5">
+            мало данных для графика
+          </text>
+        </svg>
+      </div>
     );
   }
 
-  const lo = Math.min(30, Math.floor(Math.min(...values)) - 2);
-  const hi = Math.max(HOT + 5, Math.ceil(Math.max(...values)) + 2);
   const t0 = Date.parse(points[0].t);
   const t1 = Date.parse(points[points.length - 1].t);
   const x = (time: number) => (t1 === t0 ? 0 : ((time - t0) / (t1 - t0)) * WIDTH);
-  const y = (value: number) => HEIGHT - ((value - lo) / (hi - lo)) * HEIGHT;
+  const y = (value: number) => HEIGHT - 2 - ((value - stats.lo) / (stats.hi - stats.lo)) * (HEIGHT - 4);
   const soc = path(segments(points, 'soc', x, y));
   const nvme = path(segments(points, 'nvme', x, y));
+  const socRange = range(stats.socMin, stats.socMax);
+  const nvmeRange = range(stats.nvmeMin, stats.nvmeMax);
 
   return (
-    <svg role="img" aria-label={label} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} preserveAspectRatio="none">
-      <line x1="0" x2={WIDTH} y1={y(WARM)} y2={y(WARM)} stroke="var(--g-color-line-warning, orange)" strokeDasharray="2 3" opacity="0.6" />
-      <line x1="0" x2={WIDTH} y1={y(HOT)} y2={y(HOT)} stroke="var(--g-color-line-danger, red)" strokeDasharray="2 3" opacity="0.6" />
-      {nvme && <path d={nvme} fill="none" stroke="var(--g-color-text-secondary, gray)" strokeWidth="1.2" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" />}
-      {soc && <path d={soc} fill="none" stroke="var(--g-color-line-brand, royalblue)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />}
-    </svg>
+    <div className={styles.chart}>
+      <svg role="img" aria-label={label} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} preserveAspectRatio="none">
+        {[
+          [WARM, 'var(--g-color-line-warning, orange)'],
+          [HOT, 'var(--g-color-line-danger, red)'],
+        ].map(([value, color]) =>
+          (value as number) > stats.lo && (value as number) < stats.hi ? (
+            <line key={value as number} x1="0" x2={WIDTH} y1={y(value as number)} y2={y(value as number)} stroke={color as string} strokeDasharray="1 3" opacity="0.7" />
+          ) : null,
+        )}
+        {nvme && (
+          <path d={nvme} fill="none" stroke="var(--g-color-text-secondary, gray)" strokeWidth="1.2" strokeDasharray="4 2" vectorEffect="non-scaling-stroke">
+            <title>{`NVMe: ${nvmeRange} °C`}</title>
+          </path>
+        )}
+        {soc && (
+          <path d={soc} fill="none" stroke="var(--g-color-line-brand, royalblue)" strokeWidth="1.8" vectorEffect="non-scaling-stroke">
+            <title>{`Процессор: ${socRange} °C`}</title>
+          </path>
+        )}
+      </svg>
+      <div className={styles.chartCaption}>
+        <Text variant="caption-2" color="secondary">
+          {windowText}
+        </Text>
+        <Text variant="caption-2" color="secondary">
+          {[socRange && `процессор ${socRange} °C`, nvmeRange && `NVMe ${nvmeRange} °C`].filter(Boolean).join(' · ')}
+        </Text>
+        <Text variant="caption-2" color="secondary">
+          сейчас
+        </Text>
+      </div>
+    </div>
   );
 }
