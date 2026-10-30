@@ -28,6 +28,18 @@ export class ImproveSettings {
   @Column({ type: 'boolean', default: true })
   autoRepairCi: boolean;
 
+  // The brake on automatic issue filing (see improve-throttle.ts): proposals below this value (1–5) are not filed.
+  @Column({ type: 'smallint', default: 3 })
+  minValue: number;
+
+  // Open issues of one direction at which that direction stops getting new ones.
+  @Column({ type: 'smallint', default: 3 })
+  maxOpenPerCategory: number;
+
+  // New issues per 24 hours across all directions.
+  @Column({ type: 'smallint', default: 5 })
+  dailyIssueCap: number;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 

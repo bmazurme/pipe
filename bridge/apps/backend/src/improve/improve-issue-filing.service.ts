@@ -11,7 +11,13 @@ import { AppLogService } from '../logs/app-log.service';
 import { GithubApiService } from '../loop/github-api.service';
 import { issueBody, normalizeTitle } from './analysis';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
+import { ImproveSettings } from './entities/improve-settings.entity';
 import { AnalysisResult, message, PR_LABEL } from './improve-shared';
+import {
+  countOpenByCategory,
+  limitsFromSettings,
+  planFiling,
+} from './improve-throttle';
 
 // Turns an analysis's proposals into GitHub issues: duplicate detection, label
 // warnings and partial-failure bookkeeping.
@@ -25,6 +31,10 @@ export class ImproveIssueFilingService {
     private readonly runs: Repository<ImproveRun>,
     private readonly github: GithubApiService,
     private readonly appLogs: AppLogService,
+    // Read directly, not through ImproveAutoStartService: that file imports improve.service, which imports this one — a cycle Nest
+    // cannot resolve (the dependency arrives undefined).
+    @InjectRepository(ImproveSettings)
+    private readonly settings: Repository<ImproveSettings>,
   ) {}
 
   // Files the run's proposals as issues, skipping any whose title matches an existing
@@ -39,11 +49,18 @@ export class ImproveIssueFilingService {
     );
     let created = 0;
     let duplicates = 0;
+    let held = 0;
     const unlabelled: number[] = [];
     let failure: Error | null = null;
 
-    for (const [index, item] of stored.items.entries()) {
-      if (only && !only.includes(index)) continue;
+    // Which proposals, in which order: best value per effort first, and not past the account's limits. A person who ticked specific
+    // proposals (`only`) decides for themselves — the brake is for the automatic path.
+    const order = only ? only : await this.planOrder(run, stored);
+
+    for (const index of order) {
+      const item = stored.items[index];
+
+      if (!item) continue;
       if (item.issueNumber || item.duplicateOf) continue;
 
       const duplicate = existing.get(normalizeTitle(item.title));
@@ -79,6 +96,10 @@ export class ImproveIssueFilingService {
       }
     }
 
+    held = stored.items.filter(
+      (item) => item.skipped && !item.issueNumber,
+    ).length;
+
     // Keep whatever was filed, even when a later proposal failed.
     run.result = JSON.stringify(stored);
     await this.runs.save(run);
@@ -94,7 +115,51 @@ export class ImproveIssueFilingService {
 
     if (failure) throw failure;
 
-    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}${unlabelled.length ? `; ⚠ без метки ${PR_LABEL}: ${unlabelled.map((n) => `#${n}`).join(', ')} — проверьте права токена (Issues: write)` : ''}`;
+    return `создано задач: ${created}${duplicates ? `, дубликатов пропущено: ${duplicates}` : ''}${held ? `, придержано по лимитам: ${held}` : ''}${unlabelled.length ? `; ⚠ без метки ${PR_LABEL}: ${unlabelled.map((n) => `#${n}`).join(', ')} — проверьте права токена (Issues: write)` : ''}`;
+  }
+
+  // The order to file an analysis's proposals in, with the ones held back by the account's limits marked on the item. If GitHub cannot be
+  // asked what is already open, nothing is held back (filing will fail on its own if GitHub is really down).
+  private async planOrder(
+    run: ImproveRun,
+    stored: AnalysisResult,
+  ): Promise<number[]> {
+    for (const item of stored.items) delete item.skipped;
+
+    const limits = limitsFromSettings(
+      await this.settings.findOne({ where: { userId: run.userId } }),
+    );
+    let openIssues: Awaited<ReturnType<GithubApiService['listOpenIssues']>> =
+      [];
+
+    try {
+      openIssues = await this.github.listOpenIssues(PR_LABEL, 100);
+    } catch (error) {
+      this.log(
+        'warn',
+        'improve.limits_unchecked',
+        `Could not list open issues to apply the filing limits: ${message(error)}`,
+        { runId: run.id },
+      );
+    }
+
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const plan = planFiling(
+      stored.items,
+      {
+        openByCategory: countOpenByCategory(openIssues),
+        filedLast24h: openIssues.filter(
+          (issue) => Date.parse(issue.createdAt) >= dayAgo,
+        ).length,
+      },
+      limits,
+    );
+
+    for (const [index, reason] of plan.skipped) {
+      stored.items[index].skipped = reason;
+    }
+
+    return plan.order;
   }
 
   // The manual path for a reviewed analysis: file the chosen proposals.

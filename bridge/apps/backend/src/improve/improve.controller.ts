@@ -223,6 +223,7 @@ export class ImproveController {
     return {
       autoStartModel: settings?.autoStartModel ?? null,
       autoRepairCi: settings?.autoRepairCi ?? true,
+      ...(await this.autoStart.getFilingLimits(user.id)),
     };
   }
 
@@ -240,10 +241,16 @@ export class ImproveController {
         : dto.autoStartModel || null,
       dto.autoRepairCi,
     );
+    const limits = await this.autoStart.saveFilingLimits(user.id, {
+      minValue: dto.minValue,
+      maxOpenPerCategory: dto.maxOpenPerCategory,
+      dailyIssueCap: dto.dailyIssueCap,
+    });
 
     return {
       autoStartModel: saved.autoStartModel,
       autoRepairCi: saved.autoRepairCi,
+      ...limits,
     };
   }
 }

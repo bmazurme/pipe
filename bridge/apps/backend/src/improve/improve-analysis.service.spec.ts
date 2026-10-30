@@ -44,6 +44,13 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     runs as never,
     github as never,
     appLogs as never,
+    {
+      findOne: jest.fn().mockResolvedValue({
+        minValue: 1,
+        maxOpenPerCategory: 99,
+        dailyIssueCap: 99,
+      }),
+    } as never,
   );
   const publisher = new ImprovePublishService(
     runs as never,

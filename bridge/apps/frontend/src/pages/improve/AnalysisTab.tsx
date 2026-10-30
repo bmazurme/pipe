@@ -17,6 +17,11 @@ import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
 import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
+// "польза 4/5 · объём s" — what the analysis rated the proposal; nothing for an analysis made before it rated them.
+function priorityText(item: { value?: number; effort?: string }): string {
+  return item.value ? ` · польза: ${item.value}/5 · объём: ${item.effort ?? 'm'}` : '';
+}
+
 function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
   const [startItems, { isLoading: isStarting }] = useStartImproveItemsMutation();
@@ -76,12 +81,13 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
           selectable.includes(index) ? (
             <Checkbox key={item.title} checked={tickedIndices.includes(index)} onUpdate={() => toggle(index)}>
               <Text variant="caption-2" color="secondary">
-                {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
+                {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}{priorityText(item)}
               </Text>
             </Checkbox>
           ) : (
             <Text key={item.title} variant="caption-2" color="secondary">
-              {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}
+              {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}{priorityText(item)}
+              {item.skipped && ` · придержано: ${item.skipped}`}
               {item.issueNumber && ` · issue #${item.issueNumber}`}
               {item.started && ' · в работе'}
               {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}

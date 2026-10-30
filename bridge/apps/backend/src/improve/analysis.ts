@@ -105,11 +105,32 @@ const RISKS = ['low', 'medium', 'high'] as const;
 
 export type Risk = (typeof RISKS)[number];
 
+const EFFORTS = ['s', 'm', 'l'] as const;
+
+export type Effort = (typeof EFFORTS)[number];
+
+export const MIN_VALUE = 1;
+export const MAX_VALUE = 5;
+export const DEFAULT_VALUE = 3;
+
 export interface BacklogItem {
   category: AnalysisCategory;
   title: string;
   risk: Risk;
   body: string;
+  // How much the owner gains (1–5): time saved on the core flow, a failure or a security gap closed. Not "how nice it would be".
+  value: number;
+  // Rough size of the change: s ≈ under 80 lines, m ≈ up to 200, l = more (then it should be split).
+  effort: Effort;
+}
+
+// Higher is better: value per unit of effort, so a small useful change goes before a big marginal one.
+const EFFORT_COST: Record<Effort, number> = { s: 1, m: 2, l: 4 };
+
+export function priorityScore(
+  item: Pick<BacklogItem, 'value' | 'effort'>,
+): number {
+  return item.value / EFFORT_COST[item.effort];
 }
 
 const MAX_DIGEST_LINES = 12;
@@ -223,6 +244,8 @@ Output format — \`${BACKLOG_FILE}\` must be valid JSON, exactly this shape, no
       "category": "${wanted[0]?.id ?? 'general'}" | ... one of the ids above,
       "title": "imperative, specific, under ${MAX_TITLE} characters",
       "risk": "low" | "medium" | "high",
+      "value": 1-5 (integer; how much this gives the owner of this personal development tool: 5 = fixes a recurring failure, a security gap or saves time on the core flow GitLab/GitHub issue -> parcel -> worker -> PR; 3 = a real but occasional gain; 1 = nice to have. Be strict: most proposals are 2 or 3),
+      "effort": "s" | "m" | "l" (s = under about 80 changed lines, m = up to about 200, l = more: then split it),
       "body": "markdown with three sections: ## Problem (with file:line evidence), ## Proposed change, ## Acceptance criteria (checkable bullets)"
     }
   ]
@@ -249,10 +272,8 @@ export function parseBacklog(raw: string): BacklogItem[] {
   const items: BacklogItem[] = [];
 
   for (const entry of list) {
-    const { category, title, body, risk } = (entry ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const { category, title, body, risk, value, effort } = (entry ??
+      {}) as Record<string, unknown>;
 
     if (
       !isCategory(category) ||
@@ -269,6 +290,12 @@ export function parseBacklog(raw: string): BacklogItem[] {
       title: title.trim().slice(0, MAX_TITLE),
       body: body.trim().slice(0, MAX_BODY),
       risk: RISKS.includes(risk as Risk) ? (risk as Risk) : 'medium',
+      // Model output: clamp to the scale; a missing value is the middle, not a free pass to the top.
+      value:
+        typeof value === 'number' && Number.isFinite(value)
+          ? Math.min(MAX_VALUE, Math.max(MIN_VALUE, Math.round(value)))
+          : DEFAULT_VALUE,
+      effort: EFFORTS.includes(effort as Effort) ? (effort as Effort) : 'm',
     });
   }
 
@@ -293,5 +320,5 @@ export function normalizeTitle(title: string): string {
 }
 
 export function issueBody(item: BacklogItem): string {
-  return `> Направление: **${categoryLabel(item.category)}** · риск: ${item.risk} · предложено автоматическим анализом\n\n${item.body}`;
+  return `> Направление: **${categoryLabel(item.category)}** · риск: ${item.risk} · польза: ${item.value}/5 · объём: ${item.effort} · предложено автоматическим анализом\n\n${item.body}`;
 }

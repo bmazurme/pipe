@@ -18,6 +18,8 @@ import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
+const LIMITS = { minValue: 3, maxOpenPerCategory: 3, dailyIssueCap: 5 };
+
 describe('ImproveController', () => {
   const user = { id: 7 };
   let service: {
@@ -26,6 +28,8 @@ describe('ImproveController', () => {
   let autoStart: {
     getSettings: jest.Mock;
     saveSettings: jest.Mock;
+    getFilingLimits: jest.Mock;
+    saveFilingLimits: jest.Mock;
   };
   let controller: ImproveController;
 
@@ -39,6 +43,8 @@ describe('ImproveController', () => {
         autoStartModel: null,
         autoRepairCi: true,
       }),
+      getFilingLimits: jest.fn().mockResolvedValue(LIMITS),
+      saveFilingLimits: jest.fn().mockResolvedValue(LIMITS),
     };
     // schedules live in their own service now (#287); none of the flows under test here touches them
     controller = new ImproveController(
@@ -108,6 +114,7 @@ describe('ImproveController', () => {
       await expect(controller.settings(user)).resolves.toEqual({
         autoStartModel: null,
         autoRepairCi: true,
+        ...LIMITS,
       });
     });
   });
@@ -122,6 +129,22 @@ describe('ImproveController', () => {
       await controller.saveSettings({ autoRepairCi: false }, user);
 
       expect(autoStart.saveSettings).toHaveBeenCalledWith(7, 'opus', false);
+    });
+
+    it('passes the filing limits on, only the ones sent', async () => {
+      autoStart.saveFilingLimits.mockResolvedValue({
+        ...LIMITS,
+        dailyIssueCap: 2,
+      });
+
+      await expect(
+        controller.saveSettings({ dailyIssueCap: 2 }, user),
+      ).resolves.toEqual(expect.objectContaining({ dailyIssueCap: 2 }));
+      expect(autoStart.saveFilingLimits).toHaveBeenCalledWith(7, {
+        minValue: undefined,
+        maxOpenPerCategory: undefined,
+        dailyIssueCap: 2,
+      });
     });
 
     it('switches the model off with an empty string', async () => {

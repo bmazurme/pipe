@@ -26,6 +26,8 @@ export interface AnalysisResult {
       issueNumber?: number;
       duplicateOf?: number;
       started?: boolean;
+      // Why the filing brake held this proposal back (improve-throttle.ts); a person can still file it by hand.
+      skipped?: string;
     }
   >;
 }

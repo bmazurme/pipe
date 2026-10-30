@@ -99,6 +99,52 @@ function AutoRepairCard() {
   );
 }
 
+const LIMIT_OPTIONS = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => ({ value: String(from + i), content: String(from + i) }));
+
+// The brake on automatic issue filing (the analysis's proposals become issues, and each issue becomes a pull request to read and merge).
+function FilingLimitsCard() {
+  const { data } = useGetImproveSettingsQuery();
+  const [save, { isLoading }] = useSaveImproveSettingsMutation();
+  const pick = (key: 'minValue' | 'maxOpenPerCategory' | 'dailyIssueCap') => (values: string[]) => void save({ [key]: Number(values[0]) });
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Лимиты на новые задачи" />
+      <Text color="secondary" variant="body-2">
+        Анализ оценивает каждое предложение по пользе (1–5) и объёму. Автоматически создаются сначала самые выгодные — с лучшим отношением пользы к
+        объёму; слабые, лишние для направления и сверх суточного лимита остаются в анализе с пометкой «придержано» (их можно создать вручную).
+      </Text>
+      <div className={styles.toolbar}>
+        <Select
+          size="m"
+          label="Мин. польза:"
+          disabled={isLoading || !data}
+          value={[String(data?.minValue ?? 3)]}
+          onUpdate={pick('minValue')}
+          options={LIMIT_OPTIONS(1, 5)}
+        />
+        <Select
+          size="m"
+          label="Открытых на направление:"
+          disabled={isLoading || !data}
+          value={[String(data?.maxOpenPerCategory ?? 3)]}
+          onUpdate={pick('maxOpenPerCategory')}
+          options={LIMIT_OPTIONS(0, 10)}
+        />
+        <Select
+          size="m"
+          label="Новых в сутки:"
+          disabled={isLoading || !data}
+          value={[String(data?.dailyIssueCap ?? 5)]}
+          onUpdate={pick('dailyIssueCap')}
+          options={LIMIT_OPTIONS(0, 20)}
+        />
+      </div>
+    </Card>
+  );
+}
+
 export function SchedulesTab() {
   const { data: schedules, isLoading, isError } = useListImproveSchedulesQuery();
   // By the time they run, earliest first (the server returns them in the order they were made).
@@ -246,6 +292,7 @@ export function SchedulesTab() {
 
       <AutoStartCard />
       <AutoRepairCard />
+      <FilingLimitsCard />
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} maxWidth="s" aria-labelledby="schedule-delete-title">
         <Dialog.Header caption="Удалить расписание" id="schedule-delete-title" />

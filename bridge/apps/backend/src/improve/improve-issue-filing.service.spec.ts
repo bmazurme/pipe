@@ -8,19 +8,23 @@ function setup() {
   const github = {
     isReady: jest.fn().mockReturnValue(true),
     listIssueTitles: jest.fn().mockResolvedValue([]),
+    listOpenIssues: jest.fn().mockResolvedValue([]),
     createIssue: jest.fn(async () => ({
       number: 40,
       missingLabels: [] as string[],
     })),
   };
   const appLogs = { record: jest.fn() };
+  // No row: the account never saved settings, so the defaults (minimum value 3, 3 open per direction, 5 a day) apply.
+  const settings = { findOne: jest.fn().mockResolvedValue(null) };
   const service = new ImproveIssueFilingService(
     runs as never,
     github as never,
     appLogs as never,
+    settings as never,
   );
 
-  return { service, runs, github, appLogs };
+  return { service, runs, github, appLogs, settings };
 }
 
 describe('ImproveIssueFilingService', () => {
@@ -138,5 +142,84 @@ describe('ImproveIssueFilingService.createManualIssue', () => {
       service.createManualIssue({ title: 'Idea' }, start),
     ).rejects.toThrow('boom');
     expect(start).not.toHaveBeenCalled();
+  });
+
+  describe('the filing brake', () => {
+    const runWith = (items: Array<Record<string, unknown>>) => ({
+      id: 1,
+      userId: 3,
+      result: JSON.stringify({ categories: [], autoCreate: true, items }),
+      note: null as string | null,
+    });
+    const proposal = (title: string, category: string, value: number) => ({
+      category,
+      title,
+      risk: 'low',
+      body: 'b',
+      value,
+      effort: 'm',
+    });
+
+    it('files the best proposals first, holds back the weak ones, and records why', async () => {
+      const { service, github } = setup();
+      const run = runWith([
+        proposal('weak', 'docs', 2),
+        proposal('good', 'tests', 4),
+      ]);
+
+      const summary = await service.fileProposals(run as never);
+
+      expect(github.createIssue).toHaveBeenCalledTimes(1);
+      expect((github.createIssue.mock.calls as unknown[][])[0][0]).toEqual(
+        expect.objectContaining({ title: 'good' }),
+      );
+      expect(summary).toContain('придержано по лимитам: 1');
+
+      const stored = JSON.parse(run.result);
+
+      expect(stored.items[0].skipped).toBe('польза 2 ниже минимума 3');
+      expect(stored.items[1].issueNumber).toBe(40);
+    });
+
+    it('counts open issues of a direction and those filed in the last 24 hours', async () => {
+      const { service, github } = setup();
+      const recent = new Date().toISOString();
+      github.listOpenIssues.mockResolvedValue(
+        ['a', 'b', 'c'].map(() => ({
+          labels: ['loop', 'category:ui'],
+          createdAt: recent,
+        })),
+      );
+      const run = runWith([
+        proposal('ui again', 'ui', 5),
+        proposal('docs', 'docs', 5),
+      ]);
+
+      await service.fileProposals(run as never);
+
+      expect(github.createIssue).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(run.result).items[0].skipped).toContain(
+        'уже 3 открытых',
+      );
+    });
+
+    it('does not apply the brake to proposals a person ticked by hand', async () => {
+      const { service, github } = setup();
+      const run = runWith([proposal('weak', 'docs', 1)]);
+
+      await service.fileProposals(run as never, [0]);
+
+      expect(github.createIssue).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds nothing back when GitHub cannot say what is open', async () => {
+      const { service, github } = setup();
+      github.listOpenIssues.mockRejectedValue(new Error('GitHub 502'));
+      const run = runWith([proposal('good', 'tests', 4)]);
+
+      await service.fileProposals(run as never);
+
+      expect(github.createIssue).toHaveBeenCalledTimes(1);
+    });
   });
 });
