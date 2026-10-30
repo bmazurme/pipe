@@ -4,7 +4,7 @@ import AdmZip from 'adm-zip';
 
 import { createHash } from 'node:crypto';
 
-import { buildArchive, contentHash, extractArchive, type PackedFile, type PackedAsset } from './pack.js';
+import { buildArchive, contentHash, extractArchive, DEFAULT_PARCEL_LIMITS, type PackedFile, type PackedAsset } from './pack.js';
 import { PROTOCOL_SCHEMA_VERSION, type BaseManifest } from './manifest.js';
 
 interface TestManifest extends BaseManifest {
@@ -262,5 +262,40 @@ describe('buildArchive / extractArchive', () => {
 
     const { files: extractedFiles } = extractArchive<TestManifest>(zip.toBuffer(), ENTRY);
     assert.deepEqual(extractedFiles, files);
+  });
+});
+
+describe('extractArchive limits', () => {
+  const build = (files: PackedFile[]) =>
+    buildArchive<TestManifest>(ENTRY, files, { project: 'p', createdAt: 'now' }).buffer;
+
+  it('exports sane defaults and still round-trips a normal parcel', () => {
+    assert.ok(DEFAULT_PARCEL_LIMITS.maxEntries > 0);
+    const out = extractArchive<TestManifest>(build([{ relPath: 'a.txt', content: 'hi' }]), ENTRY);
+    assert.equal(out.files[0].content, 'hi');
+  });
+
+  it('rejects a parcel over the entry cap', () => {
+    const buf = build([
+      { relPath: 'a.txt', content: 'a' },
+      { relPath: 'b.txt', content: 'b' },
+    ]);
+    assert.throws(() => extractArchive(buf, ENTRY, { maxEntries: 2 }), /Parcel exceeds the entry limit/);
+  });
+
+  it('rejects an entry over the per-entry cap', () => {
+    const buf = build([{ relPath: 'big.txt', content: 'x'.repeat(1000) }]);
+    assert.throws(() => extractArchive(buf, ENTRY, { maxEntryBytes: 500 }), /Parcel exceeds the per-entry/);
+  });
+
+  it('rejects a total over the cap', () => {
+    const buf = build([
+      { relPath: 'a.txt', content: 'x'.repeat(300) },
+      { relPath: 'b.txt', content: 'y'.repeat(300) },
+    ]);
+    assert.throws(
+      () => extractArchive(buf, ENTRY, { maxEntryBytes: 400, maxTotalBytes: 500 }),
+      /Parcel exceeds the total size limit/,
+    );
   });
 });
