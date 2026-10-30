@@ -152,6 +152,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: bash infra/scriptcheck/test.sh
       - run: bash infra/boardagent/test.sh
+      - run: bash infra/autodeploy/test.sh
 
   reports:
     name: reports (build, tests)

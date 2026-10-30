@@ -22,10 +22,13 @@ SH
 cat > "$BIN/curl" <<'SH'
 #!/usr/bin/env bash
 [ -z "${FIX_DOWN:-}" ] || exit 6
-out=""; head_only=0; url=""
+out=""; head_only=0; url=""; data=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2;;
+    -K) cat > "$FIX/last_stdin"; shift 2;;
+    -X) shift 2;;
+    --data) data="$2"; shift 2;;
     -I|-fsSI) head_only=1; shift;;
     -H|--max-time) shift 2;;
     -*) case "$1" in *I*) head_only=1;; esac; shift;;
@@ -42,6 +45,9 @@ case "$url" in
   https://raw.githubusercontent.com/*)
     name="${url##*/}"; [ -f "$FIX/files/$name" ] || exit 22
     if [ -n "$out" ]; then cp "$FIX/files/$name" "$out"; else cat "$FIX/files/$name"; fi;;
+  http://api.test/api/v1/loop/deploys)
+    [ -z "${FIX_REPORT_DOWN:-}" ] || exit 22
+    echo "$data" >> "$FIX/reports"; echo '{}';;
   http://api.test/api/v1/health)
     [ ! -f "$FIX/health_fail" ] || exit 22
     echo '{"status":"ok","database":true,"pendingMigrations":false}';;
@@ -183,6 +189,49 @@ grep -q 'failover to ubuntu-red is active' "$T/out"; check "failover active else
 rm -f "$FIX/failover"
 run; check "no failover label: deploys again" $?
 [ -n "$(calls)" ]; check "no failover label: the deploy scripts ran" $?
+
+echo "# reporting to bridge"
+export BRIDGE_API_KEY=brk_test
+reports_ok() { # <line number> <result> <sha prefix> <previous>  → the nth report has those fields
+  sed -n "$1p" "$FIX/reports" | RESULT="$2" SHA="$3" PREVIOUS="$4" python3 -c '
+import json, os, sys
+body = json.load(sys.stdin)
+ok = body["result"] == os.environ["RESULT"] and body["sha"].startswith(os.environ["SHA"]) and body.get("previousSha", "") == os.environ["PREVIOUS"]
+sys.exit(0 if ok else 1)'
+}
+fresh_swarm; rm -f "$FIX/reports" "$FIX/last_stdin" "$STATE/failed.txt" "$STATE/deploy-report.pending"; set_published 44444444dddd b10 f10 w10; files v10
+previous="$(cut -d' ' -f2 "$STATE/deployed.txt")"
+run; check "reported release: deploys" $?
+reports_ok 1 deployed 44444444dddd "$previous"; check "a release that went out is reported, with the release it replaced" $?
+grep -q 'Authorization: Bearer brk_test' "$FIX/last_stdin"; check "the key goes to curl on stdin" $?
+
+fresh_swarm; set_published 55555555eeee b11 f11 w11; files v11; previous="$(cut -d' ' -f2 "$STATE/deployed.txt")"
+FIX_DEPLOY_MODE=bad run; code=$?
+[ "$code" -eq 1 ]; check "unhealthy release: exit 1 as before" $?
+reports_ok 2 rolled_back 55555555eeee "$previous"; check "a release rolled back for health is reported as rolled back" $?
+
+fresh_swarm; set_published 66666666ffff b12 f12 w12; files v12
+FIX_DEPLOY_MODE=swarm-rollback run
+reports_ok 3 rolled_back 66666666ffff "$previous"; check "a release Swarm rolled back by itself is reported as rolled back" $?
+
+fresh_swarm; set_published 77777777aaaa b13 f13 w13; echo 'broken: true' > "$FIX/files/bridge-pi.yml"; rm -f "$STATE/failed.txt"
+run
+reports_ok 4 failed 77777777aaaa "$previous"; check "a release that was refused (bad stack files) is reported as failed" $?
+
+echo "# bridge is down when a release is rolled back"
+fresh_swarm; rm -f "$FIX/reports"; set_published 88888888bbbb b14 f14 w14; files v14
+FIX_REPORT_DOWN=1 FIX_DEPLOY_MODE=bad run; code=$?
+[ "$code" -eq 1 ] && [ ! -e "$FIX/reports" ]; check "bridge down: the deploy outcome is unchanged and nothing was delivered" $?
+[ "$(wc -l < "$STATE/deploy-report.pending")" -eq 1 ]; check "bridge down: the report is kept for later" $?
+run; code=$?
+[ -s "$FIX/reports" ] && [ ! -e "$STATE/deploy-report.pending" ]; check "the next pass delivers the kept report and clears the file" $?
+reports_ok 1 rolled_back 88888888bbbb "$previous"; check "…and it is the rolled-back release" $?
+
+echo "# no key: nothing is reported"
+unset BRIDGE_API_KEY
+fresh_swarm; rm -f "$FIX/reports" "$STATE/failed.txt"; set_published 99999999cccc b15 f15 w15; files v15
+run; check "no key: deploys as before" $?
+[ ! -e "$FIX/reports" ] && [ ! -e "$STATE/deploy-report.pending" ]; check "no key: nothing sent, nothing kept" $?
 
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]

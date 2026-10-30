@@ -1522,6 +1522,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/loop/deploys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LoopDeployController_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boards/agent/report": {
         parameters: {
             query?: never;
@@ -3032,6 +3048,7 @@ export interface components {
             count?: number;
         };
         PauseLoopDto: Record<string, never>;
+        DeployReportDto: Record<string, never>;
         ReportedScriptDto: {
             installed: string;
             repoPath: string;
@@ -5776,6 +5793,29 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LoopDeployController_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeployReportDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

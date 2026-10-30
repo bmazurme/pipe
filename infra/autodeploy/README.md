@@ -61,3 +61,10 @@ missing tag, broken stack file, `status`:
 ```bash
 docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq && apt-get install -y -qq python3 && bash /r/infra/autodeploy/test.sh'
 ```
+
+## Telling bridge how a release went
+
+Optional, and the point of closing the loop: with `BRIDGE_API_KEY=brk_…` in `/etc/pipe-autodeploy.env` (the owner's **boards-only** key — the same one `infra/boardagent` uses; `chmod 600` the file: systemd reads it as root, the script gets the value in its environment) every pass reports its outcome to `POST /api/v1/loop/deploys`: `deployed`, `rolled_back` (health check failed, or Swarm rolled the services back by itself) or `failed` (stack files refused), with the commit and the release that was running before it. Bridge then lists the pull requests in that release (the `(#123)` at the end of each squash commit between the two) and, for a release that did not come up, **pauses the automation** and tells you which PRs were in it — the next merge would otherwise deploy on top of a main that does not run. `/resume` (or the button on the Improve page) continues once you have dealt with it.
+
+A report bridge cannot take (it may be exactly what is down) is kept in `~/.pipe/autodeploy/deploy-report.pending` and sent on a later pass. Without the key nothing is reported and nothing changes.
+
