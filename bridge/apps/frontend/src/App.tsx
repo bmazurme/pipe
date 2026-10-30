@@ -30,6 +30,9 @@ const QuestionsPage = lazy(() =>
 const ContextPage = lazy(() =>
   import('./pages/ContextPage').then((m) => ({ default: m.ContextPage })),
 );
+const UsagePage = lazy(() =>
+  import('./pages/UsagePage').then((m) => ({ default: m.UsagePage })),
+);
 const InboxPage = lazy(() =>
   import('./pages/InboxPage').then((m) => ({ default: m.InboxPage })),
 );
@@ -89,6 +92,14 @@ export function App() {
                   element={
                     <OwnerOnlyPage title="Дашборд">
                       <DashboardPage />
+                    </OwnerOnlyPage>
+                  }
+                />
+                <Route
+                  path="/usage"
+                  element={
+                    <OwnerOnlyPage title="Расходы">
+                      <UsagePage />
                     </OwnerOnlyPage>
                   }
                 />

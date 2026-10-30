@@ -3889,6 +3889,33 @@
         }
       }
     },
+    "/api/v1/usage/report": {
+      "get": {
+        "operationId": "UsageController_report",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports-release/info": {
       "get": {
         "operationId": "ReportsReleaseController_info",

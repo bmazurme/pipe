@@ -25,6 +25,7 @@ import { ReportsSettingsModule } from './reports-settings/reports-settings.modul
 import { SecretsModule } from './secrets/secrets.module';
 import { StorageModule } from './storage/storage.module';
 import { TimeModule } from './time/time.module';
+import { UsageModule } from './usage/usage.module';
 import { UsersModule } from './users/users.module';
 import { VpnModule } from './vpn/vpn.module';
 import { WorkerModule } from './worker/worker.module';
@@ -61,6 +62,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     PurgeModule,
     QuestionsModule,
     InboxModule,
+    UsageModule,
     ReportsReleaseModule,
     ReportsSettingsModule,
     SecretsModule,
