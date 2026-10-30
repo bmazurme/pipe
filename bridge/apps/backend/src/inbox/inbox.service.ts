@@ -214,12 +214,31 @@ export class InboxService {
           select: { id: true, taskKey: true, updatedAt: true },
         })
       : [];
+    // A retry (automatic or manual) that is still queued or running: the decision is already made.
+    const rerunning = keys.length
+      ? await this.jobs.find({
+          where: {
+            userId,
+            status: In([
+              JobStatus.Queued,
+              JobStatus.Claimed,
+              JobStatus.Running,
+            ]),
+            taskKey: In(keys),
+          },
+          select: { id: true, taskKey: true, createdAt: true },
+        })
+      : [];
 
     return failed
       .filter(
         (job) =>
           !recovered.some(
             (ok) => ok.taskKey === job.taskKey && ok.updatedAt > job.updatedAt,
+          ) &&
+          !rerunning.some(
+            (next) =>
+              next.taskKey === job.taskKey && next.createdAt > job.createdAt,
           ),
       )
       .map((job) => ({
