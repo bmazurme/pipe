@@ -91,4 +91,22 @@ describe('BridgeClient 401 handling', () => {
 
     await assert.rejects(new BridgeClient(API).listFiles(), /did not include a string "accessToken"/);
   });
+
+  it('keeps gitlabToken when a refresh rotates the cookie', async () => {
+    useCredentials({ refreshToken: 'r', gitlabToken: 'glpat' });
+    mockFetch(
+      () =>
+        new Response(JSON.stringify({ accessToken: 'a' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'set-cookie': 'bridgeRefreshToken=rotated; Path=/' },
+        }),
+    );
+
+    await new BridgeClient(API).listFiles();
+
+    assert.deepEqual(JSON.parse(readFileSync(CREDENTIALS_PATH, 'utf-8')), {
+      refreshToken: 'rotated',
+      gitlabToken: 'glpat',
+    });
+  });
 });
