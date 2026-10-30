@@ -1154,6 +1154,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/board-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getBoardMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/nas": {
         parameters: {
             query?: never;
@@ -1212,6 +1228,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["DashboardController_checkGithubConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/agent/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_boardMetrics"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2965,6 +2997,18 @@ export interface components {
         };
         CheckGithubConnectionDto: {
             url?: string;
+        };
+        BoardMetricsDto: {
+            host: string;
+            socTempC?: number;
+            throttled?: number;
+            fanRpm?: number;
+            nvmeTempC?: number;
+            load1?: number;
+            memAvailPct?: number;
+            memTotalMb?: number;
+            diskUsedPct?: number;
+            uptimeSec?: number;
         };
         NasBackupDto: {
             createdAt?: string | null;
@@ -5268,6 +5312,27 @@ export interface operations {
             };
         };
     };
+    DashboardController_getBoardMetrics: {
+        parameters: {
+            query: {
+                hours: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
     DashboardController_getNas: {
         parameters: {
             query?: never;
@@ -5368,6 +5433,27 @@ export interface operations {
                 content: {
                     "application/json": Record<string, never>;
                 };
+            };
+        };
+    };
+    BoardsAgentController_boardMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardMetricsDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

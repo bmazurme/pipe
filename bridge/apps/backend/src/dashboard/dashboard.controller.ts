@@ -1,17 +1,26 @@
 import {
+  BadRequestException,
   Body,
+  DefaultValuePipe,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
+import {
+  BoardMetricsService,
+  BoardMetricsView,
+  MAX_HOURS,
+} from '../boards/board-metrics.service';
 import { NasService, NasView } from '../boards/nas.service';
 import { BackupStatus, BackupStatusService } from './backup-status.service';
 import {
@@ -38,6 +47,7 @@ export class DashboardController {
     private readonly github: GithubConnectionService,
     private readonly deploys: DeploysService,
     private readonly nas: NasService,
+    private readonly boardMetrics: BoardMetricsService,
   ) {}
 
   @Get('nodes')
@@ -49,6 +59,19 @@ export class DashboardController {
   @Get('deploys')
   getDeploys(): Promise<DeployView[]> {
     return this.deploys.latest();
+  }
+
+  // The boards' vital signs: the newest reading with a verdict, and the graph of the last `hours` hours (1–168, default 24).
+  @Get('board-metrics')
+  getBoardMetrics(
+    @CurrentUser() user: { id: number },
+    @Query('hours', new DefaultValuePipe(24), ParseIntPipe) hours: number,
+  ): Promise<BoardMetricsView[]> {
+    if (hours < 1 || hours > MAX_HOURS) {
+      throw new BadRequestException(`hours must be between 1 and ${MAX_HOURS}`);
+    }
+
+    return this.boardMetrics.summary(user.id, hours);
   }
 
   // The NAS that keeps the fourth copy of the backups: RAID, disks, the copy's age (infra/nas reports it).

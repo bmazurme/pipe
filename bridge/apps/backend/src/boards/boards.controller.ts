@@ -22,7 +22,9 @@ import {
   HOST_PATTERN,
   UpdateResultDto,
 } from './dto/boards.dto';
+import { BoardMetricsDto } from './dto/board-metrics.dto';
 import { NasReportDto } from './dto/nas.dto';
+import { BoardMetricsService } from './board-metrics.service';
 import { NasService } from './nas.service';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
@@ -34,7 +36,18 @@ export class BoardsAgentController {
   constructor(
     private readonly boards: BoardsService,
     private readonly nas: NasService,
+    private readonly metrics: BoardMetricsService,
   ) {}
+
+  // The board's vital signs, every ~2 minutes (infra/boardagent, with the run that also asks for decisions).
+  @Post('metrics')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async boardMetrics(
+    @Body() dto: BoardMetricsDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.metrics.record(user.id, dto);
+  }
 
   // What a NAS reports about itself (infra/nas/report.sh), with the same boards-only key.
   @Post('nas')

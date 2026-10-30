@@ -2232,6 +2232,36 @@
         }
       }
     },
+    "/api/v1/dashboard/board-metrics": {
+      "get": {
+        "operationId": "DashboardController_getBoardMetrics",
+        "parameters": [
+          {
+            "name": "hours",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/nas": {
       "get": {
         "operationId": "DashboardController_getNas",
@@ -2339,6 +2369,27 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/metrics": {
+      "post": {
+        "operationId": "BoardsAgentController_boardMetrics",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardMetricsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
           }
         }
       }
@@ -6710,6 +6761,63 @@
             "maxLength": 500
           }
         }
+      },
+      "BoardMetricsDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "socTempC": {
+            "type": "number",
+            "minimum": -50,
+            "maximum": 150
+          },
+          "throttled": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "fanRpm": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 30000
+          },
+          "nvmeTempC": {
+            "type": "number",
+            "minimum": -50,
+            "maximum": 150
+          },
+          "load1": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "memAvailPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "memTotalMb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "diskUsedPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "uptimeSec": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          }
+        },
+        "required": [
+          "host"
+        ]
       },
       "NasBackupDto": {
         "type": "object",

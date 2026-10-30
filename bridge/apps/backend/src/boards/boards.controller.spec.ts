@@ -24,6 +24,7 @@ describe('BoardsAgentController', () => {
     controller = new BoardsAgentController(
       service as unknown as BoardsService,
       {} as never,
+      {} as never,
     );
   });
 
