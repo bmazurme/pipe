@@ -103,4 +103,25 @@ describe('GithubApiService', () => {
       'GitHub 409: Head branch was modified',
     );
   });
+
+  it('asks the comparison how far behind a head is, and updates a PR branch pinned to its head', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(ok({ behind_by: 4 }))
+      .mockResolvedValueOnce(ok({}));
+
+    expect(await make().behindBy('main', 'abc')).toBe(4);
+    await make().updatePullBranch(9, 'abc');
+
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/o/r/compare/main...abc',
+    );
+    const [url, init] = fetchSpy.mock.calls[1];
+
+    expect(url).toBe('https://api.github.com/repos/o/r/pulls/9/update-branch');
+    expect((init as RequestInit).method).toBe('PUT');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      expected_head_sha: 'abc',
+    });
+  });
 });

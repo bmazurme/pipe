@@ -377,6 +377,28 @@ export class GithubApiService {
     });
   }
 
+  // How many commits of `base` the head is missing. GitHub only says "behind" when the branch-protection rule "require branches to be up
+  // to date" is on, which this repository (free plan) does not have, so ask the comparison itself.
+  async behindBy(base: string, headSha: string): Promise<number> {
+    const data = (await this.get(`/compare/${base}...${headSha}`)) as {
+      behind_by?: number;
+    };
+
+    return data.behind_by ?? 0;
+  }
+
+  // "Update branch": merges the base into the PR's branch as a commit on top (never a force push; refused with 409 when the head moved
+  // since `expectedHeadSha`, and with 422 when the merge has conflicts). The new commit is pushed by the token's owner, so CI runs on it.
+  async updatePullBranch(
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<void> {
+    await this.request(`/pulls/${number}/update-branch`, {
+      method: 'PUT',
+      body: JSON.stringify({ expected_head_sha: expectedHeadSha }),
+    });
+  }
+
   // The check runs of a commit that failed or timed out (a cancelled run is not a failure to repair), each with its annotations.
   async failedChecks(sha: string): Promise<FailedCheck[]> {
     const data = (await this.get(
