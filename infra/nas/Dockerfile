@@ -8,12 +8,13 @@
 # coreutils/bash/util-linux because pull.sh uses GNU date -d, sha256sum, flock.
 FROM alpine:3.16
 
-RUN apk add --no-cache rsync openssh-client ca-certificates tzdata util-linux coreutils bash
+RUN apk add --no-cache rsync openssh-client ca-certificates tzdata util-linux coreutils bash smartmontools jq curl
 
 COPY pull.sh /usr/local/bin/pull.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY healthcheck.sh /usr/local/bin/healthcheck.sh
-RUN chmod 0755 /usr/local/bin/pull.sh /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
+COPY report.sh /usr/local/bin/report.sh
+RUN chmod 0755 /usr/local/bin/pull.sh /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/report.sh
 
 # Unhealthy (in Portainer / `docker ps`) when no backup has been pulled for over 26 hours.
 HEALTHCHECK --interval=30m --timeout=20s --start-period=26h CMD ["/usr/local/bin/healthcheck.sh"]

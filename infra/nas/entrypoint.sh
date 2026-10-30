@@ -14,6 +14,8 @@
 #   TZ          the zone PULL_AT is in, default Europe/Moscow
 #   RETRY_MIN   minutes between attempts after a failed pull, default 30; gives up for the day after MAX_TRIES (default 6)
 #   KEEP        snapshots kept, default 14 (the NAS has the room; the Pis keep one)
+#   BRIDGE_API_KEY  optional; with it the container also tells bridge how the NAS is doing every REPORT_MIN minutes (report.sh, the Dashboard tile)
+#   REPORT_MIN  minutes between those reports, default 10
 #   FROM_IP     the address the Pi will see this container come from (the NAS), for the `from=` of the printed line
 set -uo pipefail
 
@@ -66,6 +68,11 @@ run() {
   prepare_ssh
   [ -f "$SSH_KEY" ] || { log "no key yet - run: entrypoint.sh keygen"; sleep 60; exit 1; }
   log "daily pull of $SOURCE at $PULL_AT $TZ, keeping $KEEP snapshots"
+
+  if [ -n "${BRIDGE_API_KEY:-}" ]; then
+    log "reporting to bridge every ${REPORT_MIN:-10} min"
+    ( while true; do /usr/local/bin/report.sh || true; sleep $(( ${REPORT_MIN:-10} * 60 )); done ) &
+  fi
 
   while true; do
     wait=$(seconds_until "$PULL_AT")

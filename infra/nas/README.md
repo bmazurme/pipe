@@ -42,3 +42,15 @@ when the copy is older than 26 hours (`healthcheck.sh`). Nothing alerts on Teleg
 
 `bash infra/nas/test.sh` (16 checks, Linux: GNU date, flock) — the schedule, the key and the printed restricted line, a pull, history kept, a
 failing/older source never touching the last good copy, the health check. Runs in the `infra scripts` CI job.
+
+## The Dashboard tile
+
+With a boards-only API key the container also reports how the NAS is doing every 10 minutes (`report.sh`): the age of the copy it keeps, the RAID state
+(the host's `/proc/mdstat`, mounted read-only), the data volume's free space, each disk's SMART (health, reallocated / pending / uncorrectable sectors, power-on
+hours, temperature — the container gets `--device /dev/sda --device /dev/sdb --cap-add SYS_RAWIO` for that) and the uptime. It goes to the stack's VIP
+(`--resolve api.bridge.ntlstl.dev:443:192.168.50.10`), so it does not need the internet or the router's port forwarding. Bridge shows it on the Дашборд page.
+
+```bash
+PI_KEY_SOURCE=pi@192.168.50.11 infra/nas/install.sh setkey   # copies the key from the board agent's settings to the NAS, never printing it
+infra/nas/install.sh build && infra/nas/install.sh start     # rebuild with the new files, recreate the container
+```
