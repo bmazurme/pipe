@@ -31,7 +31,7 @@ export class ReportsSettingsController {
   async status(
     @CurrentUser() currentUser: { id: number },
   ): Promise<ReportsSettingsBackupResponseDto | null> {
-    const backup = await this.reportsSettingsService.findForUser(
+    const backup = await this.reportsSettingsService.findStatusForUser(
       currentUser.id,
     );
 
