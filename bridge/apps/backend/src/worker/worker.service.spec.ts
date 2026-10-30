@@ -1808,6 +1808,42 @@ describe('WorkerService', () => {
       });
     });
 
+    it('a retry can raise the limit, e.g. after a run was killed on the old one', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Gpt,
+        claudeCredentialId: null,
+        providerCredentialId: null,
+        targetWorkerId: null,
+        timeoutSec: 1800,
+        status: JobStatus.Failed,
+      });
+
+      await expect(
+        service.retry(5, 7, undefined, { timeoutSec: 3600 }),
+      ).resolves.toMatchObject({ timeoutSec: 3600 });
+    });
+
+    it('a retry of a job without a limit can still be given one', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        sourceFileId: 11,
+        model: JobModel.Gpt,
+        claudeCredentialId: null,
+        providerCredentialId: null,
+        targetWorkerId: null,
+        timeoutSec: null,
+        status: JobStatus.Failed,
+      });
+
+      await expect(
+        service.retry(5, 7, undefined, { timeoutSec: 7200 }),
+      ).resolves.toMatchObject({ timeoutSec: 7200 });
+    });
+
     it('a retry of a job without a limit stays without one', async () => {
       repository.findOne!.mockResolvedValue({
         id: 5,

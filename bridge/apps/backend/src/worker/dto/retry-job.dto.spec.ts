@@ -52,4 +52,16 @@ describe('RetryJobDto overrides', () => {
     expect(await check({ claudeCredentialId: id })).toHaveLength(1);
     expect(await check({ providerCredentialId: id })).toHaveLength(1);
   });
+
+  it('accepts a time limit from 5 minutes to 4 hours and rejects the rest', async () => {
+    for (const timeoutSec of [300, 3600, 14400]) {
+      expect(await check({ timeoutSec })).toHaveLength(0);
+    }
+
+    for (const timeoutSec of [0, 299, 14401, 1.5]) {
+      expect((await check({ timeoutSec })).map((e) => e.property)).toEqual([
+        'timeoutSec',
+      ]);
+    }
+  });
 });

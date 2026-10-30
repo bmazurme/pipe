@@ -287,6 +287,8 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         providerCredentialId?: number;
         contextId?: number;
         withoutContext?: boolean;
+        /** A new time limit in seconds (300–14400). */
+        timeoutSec?: number;
       }
     >({
       query: ({ id, notBefore, ...overrides }) => ({
