@@ -16,6 +16,7 @@ import { LabRun } from '../lab/entities/lab-run.entity';
 import { LabSchedule } from '../lab/entities/lab-schedule.entity';
 import { AppLog } from '../logs/entities/app-log.entity';
 import { ClientHeartbeat } from '../loop/entities/client-heartbeat.entity';
+import { DeployRecord } from '../loop/entities/deploy-record.entity';
 import { LoopControl } from '../loop/entities/loop-control.entity';
 import { LoopEvent } from '../loop/entities/loop-event.entity';
 import { LoopRun } from '../loop/entities/loop-run.entity';
@@ -71,6 +72,7 @@ export const ENTITIES = [
   Secret,
   ReportsSettingsBackup,
   LoopControl,
+  DeployRecord,
   LoopRun,
   LoopEvent,
   ClientHeartbeat,

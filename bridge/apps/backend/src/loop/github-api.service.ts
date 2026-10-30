@@ -418,6 +418,29 @@ export class GithubApiService {
     return failed.length;
   }
 
+  // First lines of the commit messages after `base` up to `head` (a single commit when there is no base), oldest first — the PR numbers of a
+  // release are read from them. Capped at the 250 commits GitHub's compare returns in one page; a release is never that big here.
+  async commitSubjects(
+    base: string | undefined,
+    head: string,
+  ): Promise<string[]> {
+    if (!base) {
+      const commit = (await this.get(`/commits/${head}`)) as {
+        commit: { message: string };
+      };
+
+      return [commit.commit.message];
+    }
+
+    const data = (await this.get(
+      `/compare/${base}...${head}?per_page=100`,
+    )) as {
+      commits: Array<{ commit: { message: string } }>;
+    };
+
+    return data.commits.map((entry) => entry.commit.message);
+  }
+
   // Closes a pull request with a comment saying why (the comment first, so the reason is there when someone opens the closed PR).
   async closePull(number: number, comment: string): Promise<void> {
     await this.post(`/issues/${number}/comments`, { body: comment });

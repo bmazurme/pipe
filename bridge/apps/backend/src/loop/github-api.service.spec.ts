@@ -182,3 +182,39 @@ describe('GithubApiService re-run and close', () => {
     });
   });
 });
+
+describe('GithubApiService.commitSubjects', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('reads the commits between two releases, oldest first', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
+      ok({
+        commits: [
+          { commit: { message: 'First (#1)\n\nbody' } },
+          { commit: { message: 'Second (#2)' } },
+        ],
+      }),
+    );
+
+    expect(await make().commitSubjects('aaa1111', 'bbb2222')).toEqual([
+      'First (#1)\n\nbody',
+      'Second (#2)',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/o/r/compare/aaa1111...bbb2222?per_page=100',
+    );
+  });
+
+  it('reads the single commit when there is no earlier release', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(ok({ commit: { message: 'Only (#9)' } }));
+
+    expect(await make().commitSubjects(undefined, 'bbb2222')).toEqual([
+      'Only (#9)',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      'https://api.github.com/repos/o/r/commits/bbb2222',
+    );
+  });
+});
