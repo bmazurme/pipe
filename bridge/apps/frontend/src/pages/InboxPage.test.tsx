@@ -55,6 +55,19 @@ describe('InboxPage', () => {
     expect(await screen.findByText('Ничего не ждёт решения')).toBeTruthy();
   });
 
+  it('does not claim nothing waits when the only item says a source could not be checked', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        json([{ id: 'sources-unavailable', kind: 'source_unavailable', severity: 'low', title: 'Не удалось проверить: GitHub', link: '/logs' }]),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Не удалось проверить: GitHub')).toBeTruthy();
+    expect(screen.queryByText('Ничего не ждёт решения')).toBeNull();
+  });
+
   it('shows the error when the list cannot be loaded', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ message: 'boom' }, 500)));
     renderPage();

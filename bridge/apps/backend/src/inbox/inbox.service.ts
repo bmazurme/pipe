@@ -27,6 +27,15 @@ const MAX_FAILED_JOBS = 20;
 // GitHub is asked live for each open PR; the answer is reused briefly so a page that refreshes every half minute costs one round of calls.
 const PULL_CACHE_MS = 60_000;
 
+const SOURCE_LABELS = {
+  pulls: 'GitHub',
+  questions: 'вопросы',
+  boards: 'платы',
+  workers: 'воркеры',
+  jobs: 'запуски',
+  'loop control': 'автоматика',
+} as const;
+
 interface CachedPull {
   at: number;
   ci: InboxPull['ci'];
@@ -52,19 +61,27 @@ export class InboxService {
   ) {}
 
   async list(userId: number, now = new Date()): Promise<InboxItem[]> {
+    const unavailable: string[] = [];
     // Each source fails on its own: a GitHub outage must not hide the unanswered questions.
     const [pulls, cards, boards, workers, failedJobs, pause] =
       await Promise.all([
-        this.safe('pulls', () => this.pulls(userId, now), []),
+        this.safe(unavailable, 'pulls', () => this.pulls(userId, now), []),
         this.safe(
+          unavailable,
           'questions',
           () => this.questions.listCards(userId, false),
           [],
         ),
-        this.safe('boards', () => this.boards.list(userId), []),
-        this.safe('workers', () => this.workerFacts(userId, now), []),
-        this.safe('jobs', () => this.failedJobs(userId, now), []),
+        this.safe(unavailable, 'boards', () => this.boards.list(userId), []),
         this.safe(
+          unavailable,
+          'workers',
+          () => this.workerFacts(userId, now),
+          [],
+        ),
+        this.safe(unavailable, 'jobs', () => this.failedJobs(userId, now), []),
+        this.safe(
+          unavailable,
           'loop control',
           async () => this.control?.state() ?? null,
           null,
@@ -96,6 +113,7 @@ export class InboxService {
       })),
       workers,
       failedJobs,
+      unavailable,
       now,
     };
 
@@ -103,7 +121,8 @@ export class InboxService {
   }
 
   private async safe<T>(
-    what: string,
+    unavailable: string[],
+    what: keyof typeof SOURCE_LABELS,
     run: () => Promise<T>,
     fallback: T,
   ): Promise<T> {
@@ -113,6 +132,8 @@ export class InboxService {
       this.logger.warn(
         `Inbox: ${what} unavailable: ${error instanceof Error ? error.message : String(error)}`,
       );
+
+      unavailable.push(SOURCE_LABELS[what]);
 
       return fallback;
     }

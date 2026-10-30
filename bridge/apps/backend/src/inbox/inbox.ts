@@ -14,7 +14,8 @@ export type InboxKind =
   | 'limit'
   | 'worker_offline'
   | 'jobs_failed'
-  | 'loop_paused';
+  | 'loop_paused'
+  | 'source_unavailable';
 
 export interface InboxItem {
   // Stable per subject, so the page can keep a row while its text changes.
@@ -81,6 +82,8 @@ export interface InboxFacts {
   boards: InboxBoard[];
   workers: InboxWorker[];
   failedJobs: InboxFailedJob[];
+  // Names of the sources that could not be asked, so «nothing waits» is not claimed falsely.
+  unavailable?: string[];
   now: Date;
 }
 
@@ -257,6 +260,17 @@ export function buildInbox(facts: InboxFacts): InboxItem[] {
         .join('\n'),
       since: shown[0]?.at,
       link: '/worker',
+    });
+  }
+
+  if (facts.unavailable && facts.unavailable.length > 0) {
+    items.push({
+      id: 'sources-unavailable',
+      kind: 'source_unavailable',
+      severity: 'low',
+      title: `Не удалось проверить: ${facts.unavailable.join(', ')}`,
+      detail: 'Остальное проверено; подробности в логах',
+      link: '/logs',
     });
   }
 
