@@ -62,6 +62,13 @@ beforeEach(() => {
         return new Response(null, { status: 204 });
       }
 
+      if (
+        request.method === "DELETE" &&
+        pathname.endsWith("/auth/identities/github")
+      ) {
+        return new Response(null, { status: 204 });
+      }
+
       return jsonResponse({}, 404);
     }),
   );
@@ -112,5 +119,49 @@ describe("IdentitiesSection", () => {
     );
 
     expect(await screen.findByText("занят")).toBeTruthy();
+  });
+
+  describe("unlinking", () => {
+    beforeEach(() => {
+      identities = [YANDEX, GITHUB];
+    });
+
+    it("asks for confirmation and sends nothing until confirmed", async () => {
+      renderSection();
+
+      await userEvent.click(await screen.findByLabelText("Отвязать GitHub"));
+
+      expect(await screen.findByText("Отвязать GitHub?")).toBeTruthy();
+      expect(requests.filter((r) => r.startsWith("DELETE"))).toEqual([]);
+    });
+
+    it("cancel closes the dialog without a request", async () => {
+      renderSection();
+
+      await userEvent.click(await screen.findByLabelText("Отвязать GitHub"));
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Отмена" }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByText("Отвязать GitHub?")).toBeNull(),
+      );
+      expect(requests.filter((r) => r.startsWith("DELETE"))).toEqual([]);
+    });
+
+    it("confirm sends exactly one DELETE", async () => {
+      renderSection();
+
+      await userEvent.click(await screen.findByLabelText("Отвязать GitHub"));
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Отвязать" }),
+      );
+
+      await waitFor(() =>
+        expect(requests.filter((r) => r.startsWith("DELETE"))).toEqual([
+          "DELETE /api/v1/auth/identities/github",
+        ]),
+      );
+    });
   });
 });
