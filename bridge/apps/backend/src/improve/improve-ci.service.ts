@@ -1,9 +1,15 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { GithubApiService } from '../loop/github-api.service';
+import { LoopControlService } from '../loop/loop-control.service';
 import { NotifyService } from '../telegram/notify.service';
 import {
   ACTIVE_RUN_STATUSES,
@@ -44,6 +50,7 @@ export class ImproveCiService {
     private readonly github: GithubApiService,
     private readonly improve: ImproveService,
     private readonly notifier: NotifyService,
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   @Interval(CI_CHECK_EVERY_MS)
@@ -53,6 +60,9 @@ export class ImproveCiService {
     this.checking = true;
 
     try {
+      // Paused: no re-runs, repairs, redos or branch updates on open pull requests.
+      if (await this.control?.isPaused()) return;
+
       const parents = await this.runs.find({
         where: {
           kind: 'issue',

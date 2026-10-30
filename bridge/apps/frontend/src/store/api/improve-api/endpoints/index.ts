@@ -130,8 +130,26 @@ function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
 
+export interface LoopControlState {
+  paused: boolean;
+  reason: string | null;
+  /** 'telegram' | 'owner' | 'deploy' (a release that was rolled back). */
+  pausedBy: string | null;
+  pausedAt: string | null;
+}
+
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
+    // The kill-switch of the automation.
+    getLoopControl: builder.query<LoopControlState, void>({ query: () => 'loop/control', providesTags: ['LoopControl'] }),
+    pauseLoop: builder.mutation<LoopControlState, { reason?: string }>({
+      query: (body) => ({ url: 'loop/control/pause', method: 'POST', body }),
+      invalidatesTags: ['LoopControl'],
+    }),
+    resumeLoop: builder.mutation<LoopControlState, void>({
+      query: () => ({ url: 'loop/control/resume', method: 'POST' }),
+      invalidatesTags: ['LoopControl'],
+    }),
     getImproveStatus: builder.query<ImproveStatus, void>({ query: () => 'improve/status' }),
     listImproveIssues: builder.query<ImproveIssue[], { all?: boolean; fresh?: boolean } | void>({
       query: (arg) => {
@@ -239,6 +257,9 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 });
 
 export const {
+  useGetLoopControlQuery,
+  usePauseLoopMutation,
+  useResumeLoopMutation,
   useGetImproveStatusQuery,
   useListImproveIssuesQuery,
   useLazyListImproveIssuesQuery,

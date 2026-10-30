@@ -226,3 +226,47 @@ describe('LoopService.handleGithubEvent', () => {
     });
   });
 });
+
+describe('LoopService status while paused', () => {
+  it('puts the pause and its reason first, and says how to continue', async () => {
+    const base = setup(null);
+    base.runs.find.mockResolvedValue([]);
+    const service = new LoopService(
+      base.runs as never,
+      base.events as never,
+      base.telegram as never,
+      { get: () => undefined } as never,
+      { statusLines: jest.fn().mockResolvedValue([]) } as never,
+      base.merges as never,
+      undefined,
+      {
+        state: jest
+          .fn()
+          .mockResolvedValue({ paused: true, reason: 'откат релиза' }),
+      } as never,
+    );
+
+    const text = await service.statusText();
+
+    expect(text.split('\n')[0]).toBe(
+      '⏸ Автоматика на паузе: откат релиза (/resume — продолжить)',
+    );
+  });
+
+  it('says nothing about a pause when running', async () => {
+    const base = setup(null);
+    base.runs.find.mockResolvedValue([]);
+    const service = new LoopService(
+      base.runs as never,
+      base.events as never,
+      base.telegram as never,
+      { get: () => undefined } as never,
+      { statusLines: jest.fn().mockResolvedValue([]) } as never,
+      base.merges as never,
+      undefined,
+      { state: jest.fn().mockResolvedValue({ paused: false }) } as never,
+    );
+
+    expect(await service.statusText()).not.toContain('на паузе');
+  });
+});

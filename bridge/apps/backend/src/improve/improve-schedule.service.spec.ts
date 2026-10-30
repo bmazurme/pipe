@@ -519,3 +519,16 @@ describe('schedule onlyOnNewCommits', () => {
     }
   });
 });
+
+describe('schedules while the automation is paused', () => {
+  it('fires nothing and does not even look at the schedules', async () => {
+    const { service, schedules } = setup();
+    (service as unknown as { control: object }).control = {
+      isPaused: jest.fn().mockResolvedValue(true),
+    };
+
+    await service.tickSchedules(new Date('2026-10-26T09:00:00Z'));
+
+    expect(schedules.find).not.toHaveBeenCalled();
+  });
+});

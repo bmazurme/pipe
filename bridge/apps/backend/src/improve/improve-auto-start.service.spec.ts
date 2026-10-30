@@ -140,3 +140,16 @@ describe('ImproveAutoStartService conflict redo switch', () => {
     );
   });
 });
+
+describe('ImproveAutoStartService while the automation is paused', () => {
+  it('leaves the parcels in Storage', async () => {
+    const { service, settings } = setup();
+    (service as unknown as { control: object }).control = {
+      isPaused: jest.fn().mockResolvedValue(true),
+    };
+
+    await service.autoStartParcels();
+
+    expect(settings.find).not.toHaveBeenCalled();
+  });
+});

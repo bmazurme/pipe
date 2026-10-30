@@ -13,6 +13,7 @@ import {
   TERMINAL_LOOP_STAGES,
 } from './entities/loop-run.entity';
 import { interpretGithubEvent } from './github-events';
+import { LoopControlService } from './loop-control.service';
 import { MergeService } from './merge.service';
 
 const STATUS_RUN_COUNT = 5;
@@ -31,6 +32,7 @@ export class LoopService {
     private readonly clients: ClientHeartbeatService,
     private readonly merges: MergeService,
     @Optional() private readonly appLogs?: AppLogService,
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   startRun(title: string): Promise<LoopRun> {
@@ -117,9 +119,10 @@ export class LoopService {
   }
 
   async statusText(): Promise<string> {
-    const [runs, clientLines] = await Promise.all([
+    const [runs, clientLines, control] = await Promise.all([
       this.runs.find({ order: { id: 'DESC' }, take: STATUS_RUN_COUNT }),
       this.clients.statusLines(),
+      this.control?.state(),
     ]);
 
     const runLines =
@@ -133,6 +136,12 @@ export class LoopService {
           });
 
     return [
+      ...(control?.paused
+        ? [
+            `⏸ Автоматика на паузе${control.reason ? `: ${control.reason}` : ''} (/resume — продолжить)`,
+            '',
+          ]
+        : []),
       ...runLines,
       ...(clientLines.length ? ['', ...clientLines] : []),
     ].join('\n');

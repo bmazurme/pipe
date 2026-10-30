@@ -12,7 +12,8 @@ export type InboxKind =
   | 'board_outdated'
   | 'limit'
   | 'worker_offline'
-  | 'jobs_failed';
+  | 'jobs_failed'
+  | 'loop_paused';
 
 /** One thing that needs the owner's attention, already ordered by the server (most urgent first). */
 export interface InboxItem {

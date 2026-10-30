@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,6 +14,7 @@ import {
   ContextScheduleUse,
   ContextUsageRegistry,
 } from '../context/context-usage';
+import { LoopControlService } from '../loop/loop-control.service';
 import { ContextService } from '../context/context.service';
 import {
   isDue,
@@ -63,6 +65,7 @@ export class LabSchedulesService implements OnModuleInit {
     private readonly contexts: ContextService,
     private readonly notifier: NotifyService,
     private readonly contextUsage: ContextUsageRegistry,
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   onModuleInit(): void {
@@ -152,6 +155,9 @@ export class LabSchedulesService implements OnModuleInit {
     this.ticking = true;
 
     try {
+      // Paused: nothing is started; a due schedule fires after the owner resumes.
+      if (await this.control?.isPaused()) return;
+
       for (const schedule of await this.schedules.find({
         where: { enabled: true },
       })) {

@@ -137,3 +137,75 @@ describe('TelegramCommandsService callbacks', () => {
     });
   });
 });
+
+describe('TelegramCommandsService kill-switch', () => {
+  function withControl() {
+    const control = {
+      pause: jest.fn().mockResolvedValue(undefined),
+      resume: jest.fn().mockResolvedValue(true),
+    };
+    const base = setup();
+    const service = new TelegramCommandsService(
+      { statusText: jest.fn() } as never,
+      base.telegram as never,
+      base.merges as never,
+      base.boards as never,
+      control as never,
+    );
+
+    return { service, control, telegram: base.telegram };
+  }
+
+  it('/pause stops the automation with the given reason, and says what it does and does not stop', async () => {
+    const { service, control, telegram } = withControl();
+
+    await service.handle(msg('/pause идёт релиз, не трогать'));
+
+    expect(control.pause).toHaveBeenCalledWith(
+      'идёт релиз, не трогать',
+      'telegram',
+    );
+    expect(telegram.send).toHaveBeenCalledWith(
+      expect.stringContaining('на паузе'),
+    );
+    expect(telegram.send).toHaveBeenCalledWith(
+      expect.stringContaining('/resume'),
+    );
+  });
+
+  it('/pause without a reason still records one', async () => {
+    const { service, control } = withControl();
+
+    await service.handle(msg('/pause'));
+
+    expect(control.pause).toHaveBeenCalledWith(
+      'остановлено командой /pause',
+      'telegram',
+    );
+  });
+
+  it('/resume continues, and says when there was nothing to resume', async () => {
+    const { service, control, telegram } = withControl();
+
+    await service.handle(msg('/resume'));
+    expect(telegram.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('продолжает'),
+    );
+
+    control.resume.mockResolvedValue(false);
+    await service.handle(msg('/resume'));
+    expect(telegram.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('не была на паузе'),
+    );
+  });
+
+  it('ignores the commands from anyone but the owner chat', async () => {
+    const { service, control } = withControl();
+
+    await service.handle(msg('/pause', 999));
+    await service.handle(msg('/resume', 999));
+
+    expect(control.pause).not.toHaveBeenCalled();
+    expect(control.resume).not.toHaveBeenCalled();
+  });
+});

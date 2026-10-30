@@ -13,7 +13,8 @@ export type InboxKind =
   | 'board_outdated'
   | 'limit'
   | 'worker_offline'
-  | 'jobs_failed';
+  | 'jobs_failed'
+  | 'loop_paused';
 
 export interface InboxItem {
   // Stable per subject, so the page can keep a row while its text changes.
@@ -67,6 +68,12 @@ export interface InboxFailedJob {
 }
 
 export interface InboxFacts {
+  // The kill-switch is on: nothing starts new automatic work until the owner resumes.
+  loopPause: {
+    reason: string | null;
+    by: string | null;
+    since: string | null;
+  } | null;
   pulls: InboxPull[];
   openQuestions: number;
   openQuestionCards: number;
@@ -92,6 +99,28 @@ const truncate = (text: string, max: number) =>
 
 export function buildInbox(facts: InboxFacts): InboxItem[] {
   const items: InboxItem[] = [];
+
+  if (facts.loopPause) {
+    items.push({
+      id: 'loop-paused',
+      kind: 'loop_paused',
+      severity: 'high',
+      title: 'Автоматика на паузе',
+      detail:
+        [
+          facts.loopPause.reason,
+          facts.loopPause.by === 'deploy'
+            ? 'остановил откат релиза'
+            : facts.loopPause.by === 'telegram'
+              ? 'остановлено из Telegram'
+              : null,
+        ]
+          .filter(Boolean)
+          .join(' — ') || undefined,
+      since: facts.loopPause.since ?? undefined,
+      link: '/improve',
+    });
+  }
 
   for (const pull of facts.pulls) {
     const base = {
