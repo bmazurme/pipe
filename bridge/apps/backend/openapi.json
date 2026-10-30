@@ -3868,6 +3868,27 @@
         }
       }
     },
+    "/api/v1/inbox": {
+      "get": {
+        "operationId": "InboxController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports-release/info": {
       "get": {
         "operationId": "ReportsReleaseController_info",
