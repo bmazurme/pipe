@@ -1,0 +1,87 @@
+name: External probe
+
+# Checks bridge the way a stranger's browser or a VPN server would: from outside the home network.
+# Everything else that watches bridge (board agents, the primary watch, Telegram itself) runs at home or
+# through it, so when the home uplink or the router's inbound NAT dies they all go quiet at once —
+# this runs on GitHub's side, so it is the one that still speaks. Best-effort: GitHub may delay a
+# scheduled run by several minutes.
+#
+# State is an open issue labelled `outage` (no `loop` label, so the self-improvement loop never picks
+# it up): opened after two failed rounds in a row, commented and closed on recovery. GitHub notifies
+# the repository owner by mail/app on issue events; Telegram is a second channel when the bot secrets
+# are set (it may itself be unreachable, which is the point of having the issue).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: external-probe
+  cancel-in-progress: false
+
+env:
+  HOSTS: https://bridge.ntlstl.dev/api/v1/health https://api.bridge.ntlstl.dev/api/v1/health
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe each host (3 tries, 10 s apart)
+        id: probe
+        run: |
+          failed=""
+          for url in $HOSTS; do
+            ok=""
+            for try in 1 2 3; do
+              code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$url" || true)"
+              if [ "$code" = "200" ]; then ok=1; break; fi
+              sleep 10
+            done
+            if [ -z "$ok" ]; then failed="$failed $url(HTTP ${code:-000})"; fi
+          done
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+          [ -z "$failed" ]
+        continue-on-error: true
+
+      - name: Open, update or close the outage issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ steps.probe.outputs.failed }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          repo="${{ github.repository }}"
+          open="$(gh issue list -R "$repo" --label outage --state open --json number --jq '.[0].number // empty')"
+          say() { # Telegram is optional and best-effort
+            [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
+            curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=$1" || true
+          }
+
+          if [ -n "$FAILED" ]; then
+            if [ -z "$open" ]; then
+              gh issue create -R "$repo" --label outage \
+                --title "bridge is unreachable from outside" \
+                --body "External probe could not get HTTP 200 (3 tries): ${FAILED}.
+
+          Run: ${RUN_URL}
+
+          Known cause of the 2026-10-27 outages: inbound 80/443 stop at the ASUS router until its firewall is restarted (\`service restart_firewall\`); see PI5-CAPACITY.md §12.1. This issue closes itself when the probe passes again."
+              say "🔴 bridge недоступен снаружи: ${FAILED}"
+            else
+              gh issue comment -R "$repo" "$open" --body "Still failing: ${FAILED} — ${RUN_URL}"
+            fi
+            exit 0
+          fi
+
+          if [ -n "$open" ]; then
+            gh issue close -R "$repo" "$open" --comment "Recovered: both hosts answer 200 — ${RUN_URL}"
+            say "🟢 bridge снова доступен снаружи"
+          fi
