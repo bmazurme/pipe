@@ -6,6 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+import { buildBrief, DEFAULT_RECENT_HOURS, formatBrief } from './brief.js';
 import { DEFAULT_ACTION_DEPS, runAction, type ActionDeps, type ActionKind, type ActionResult } from './actions.js';
 import type { StatusPaths } from './collect.js';
 import { readTaskEvents, type EventsPaths } from './events.js';
@@ -173,6 +174,28 @@ export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServ
       const incoming = built.gitlabLiveResult?.available ? built.gitlabLiveResult.data.incoming : [];
       const picked = pickNextTask(built.data.tasks, incoming, liveTasks);
       return textResult(formatNextRecommendation(picked));
+    },
+  );
+
+  server.registerTool(
+    'brief',
+    {
+      description:
+        'The morning digest pipe-status --brief prints: incoming GitLab issues, tasks ready to review, stale tasks, ' +
+        "recent transitions and the worker's heartbeat. Always checks bridge and GitLab; says so when one is unavailable.",
+      inputSchema: {
+        recentHours: z
+          .number()
+          .positive()
+          .default(DEFAULT_RECENT_HOURS)
+          .describe(`Look back this many hours for recent transitions (default ${DEFAULT_RECENT_HOURS})`),
+        staleHours: z.number().optional().describe('Mark a task stale after this many hours with no movement (default 24)'),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ recentHours, staleHours }) => {
+      const sections = await buildBrief({ recentHours, staleHours, paths: options.paths, eventsPaths: options.eventsPaths });
+      return textResult(formatBrief(sections, recentHours));
     },
   );
 

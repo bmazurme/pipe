@@ -43,8 +43,20 @@ describe('SecretsService', () => {
 
       expect(repository.find).toHaveBeenCalledWith({
         where: { userId: 7 },
+        select: expect.any(Array),
         order: { name: 'ASC' },
       });
+    });
+
+    it('does not select the encrypted value column', async () => {
+      repository.find!.mockResolvedValue([]);
+
+      await service.findAllByUser(7);
+
+      const { select } = repository.find!.mock.calls[0][0];
+
+      expect(select).toEqual(expect.arrayContaining(['id', 'name']));
+      expect(select).not.toContain('value');
     });
   });
 

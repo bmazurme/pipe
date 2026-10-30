@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -142,5 +142,27 @@ describe('readRecentEvents', () => {
 
   it('returns an empty array when nothing has ever been logged', () => {
     assert.deepEqual(readRecentEvents(24, REF_NOW, paths), []);
+  });
+});
+
+describe('corrupt event log lines', () => {
+  const REF_NOW = Date.parse('2026-10-05T12:00:00.000Z');
+  const good = (key: string, ts: string) => JSON.stringify({ ts, key, source: 'subscription', from: 'a', to: 'b' });
+
+  it('skips garbage, wrong-shaped and truncated lines and keeps valid events in order', () => {
+    appendFileSync(
+      paths.log,
+      [
+        good('1:1', '2026-10-05T11:00:00.000Z'),
+        'not json',
+        '{"ts":1,"key":"1:1"}',
+        'null',
+        good('1:1', '2026-10-05T11:30:00.000Z'),
+        '{"ts":"2026-10-05T11:45',
+      ].join('\n'),
+    );
+
+    assert.equal(readTaskEvents('1:1', paths).length, 2);
+    assert.equal(readRecentEvents(24, REF_NOW, paths).length, 2);
   });
 });

@@ -1,6 +1,8 @@
 import { createObjectCsvWriter } from 'csv-writer';
 
-export async function exportToCsv(fileName: string, data: { name: string; status: string; time: number }[]) {
+import type { ReportRow } from './report-rows';
+
+export async function exportToCsv(fileName: string, data: ReportRow[]) {
   const csvWriter = createObjectCsvWriter({
     path: fileName,
     header: [

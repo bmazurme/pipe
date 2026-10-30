@@ -1,4 +1,4 @@
-import { loadCredentials, saveCredentials } from './credentials.js';
+import { loadCredentials, saveRefreshToken } from './credentials.js';
 import type { StoredFileResponse } from './types.js';
 
 // Matches bridge's own REFRESH_COOKIE_NAME
@@ -46,7 +46,7 @@ async function refreshAccessToken(apiUrl: string): Promise<string> {
 
   const rotated = extractRotatedRefreshToken(response);
   if (rotated) {
-    saveCredentials({ refreshToken: rotated });
+    saveRefreshToken(rotated);
   }
 
   const body = (await response.json()) as { accessToken?: unknown };

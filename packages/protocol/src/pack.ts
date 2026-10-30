@@ -87,32 +87,74 @@ export function buildArchive<M extends BaseManifest>(
   return { buffer: zip.toBuffer(), manifest };
 }
 
+export interface ParcelLimits {
+  maxEntries: number;
+  maxEntryBytes: number;
+  maxTotalBytes: number;
+}
+
+// Parcels arrive from bridge storage, so a reader must not inflate whatever
+// the zip claims: generous caps, far above any real project tree.
+export const DEFAULT_PARCEL_LIMITS: ParcelLimits = {
+  maxEntries: 20_000,
+  maxEntryBytes: 64 * 1024 * 1024,
+  maxTotalBytes: 512 * 1024 * 1024,
+};
+
 export function extractArchive<M extends BaseManifest>(
   buffer: Buffer,
   entryName: string,
+  limits: Partial<ParcelLimits> = {},
 ): { files: PackedFile[]; assets: PackedAsset[]; manifest: M } {
+  const { maxEntries, maxEntryBytes, maxTotalBytes } = { ...DEFAULT_PARCEL_LIMITS, ...limits };
   const zip = new AdmZip(buffer);
+  const entries = zip.getEntries();
+  if (entries.length > maxEntries) {
+    throw new Error(`Parcel exceeds the entry limit (${entries.length} > ${maxEntries})`);
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory && entry.header.size > maxEntryBytes) {
+      throw new Error(
+        `Parcel exceeds the per-entry size limit (${entry.entryName}: ${entry.header.size} > ${maxEntryBytes} bytes)`,
+      );
+    }
+  }
+  let totalBytes = 0;
+  // The declared size can lie, so the real inflated length is checked too.
+  const inflate = (entry: (typeof entries)[number]): Buffer => {
+    const data = entry.getData();
+    totalBytes += data.length;
+    if (data.length > maxEntryBytes) {
+      throw new Error(
+        `Parcel exceeds the per-entry size limit (${entry.entryName}: ${data.length} > ${maxEntryBytes} bytes)`,
+      );
+    }
+    if (totalBytes > maxTotalBytes) {
+      throw new Error(`Parcel exceeds the total size limit (> ${maxTotalBytes} bytes)`);
+    }
+    return data;
+  };
   const files: PackedFile[] = [];
   const assets: PackedAsset[] = [];
   let manifest: M | undefined;
 
-  for (const entry of zip.getEntries()) {
+  for (const entry of entries) {
     if (entry.isDirectory) continue;
 
     if (entry.entryName === entryName) {
-      manifest = JSON.parse(entry.getData().toString('utf-8')) as M;
+      manifest = JSON.parse(inflate(entry).toString('utf-8')) as M;
       continue;
     }
 
     if (entry.entryName.startsWith(ASSET_PREFIX)) {
       assets.push({
         relPath: entry.entryName.slice(ASSET_PREFIX.length),
-        base64: entry.getData().toString('base64'),
+        base64: inflate(entry).toString('base64'),
       });
       continue;
     }
 
-    files.push({ relPath: entry.entryName, content: entry.getData().toString('utf-8') });
+    files.push({ relPath: entry.entryName, content: inflate(entry).toString('utf-8') });
   }
 
   if (!manifest) {

@@ -3,21 +3,12 @@ import type { SettingsBundleType } from '@reports/shared';
 
 import { getSettings } from './props';
 import { buildSettingsBundle, applySettingsBundle } from './bundle';
-import { describeFetchError } from '../utils/describe-fetch-error';
+import { bridgeErrorMessage, bridgeFetch } from '../utils/bridge-fetch';
 import { withStream } from '../utils/stream';
-
-const BRIDGE_TIMEOUT_MS = 20_000;
 
 interface BridgeBackupResponse {
   updatedAt: string;
   payload: string;
-}
-
-async function describeBridgeResponseError(response: Awaited<ReturnType<typeof fetch>>): Promise<string> {
-  const body = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
-  const message = Array.isArray(body?.message) ? body.message.join('; ') : body?.message;
-
-  return `Bridge API вернул ошибку ${response.status}${message ? `: ${message}` : ''}`;
 }
 
 export async function handlePushSettingsToBridge(req: Request, res: Response) {
@@ -28,24 +19,17 @@ export async function handlePushSettingsToBridge(req: Request, res: Response) {
       throw new Error('Интеграция с bridge не настроена: укажите адрес и ключ на странице Settings');
     }
 
-    const { origin } = new URL(bridgeApiUrl);
-    const url = `${origin}/api/v1/reports-settings`;
     const payload = JSON.stringify(buildSettingsBundle());
 
-    const response = await fetch(url, {
+    const response = await bridgeFetch('/api/v1/reports-settings', {
       method: 'PUT',
-      headers: {
-        'X-Api-Key': bridgeApiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ payload }),
-      signal: AbortSignal.timeout(BRIDGE_TIMEOUT_MS),
-    }).catch((error) => {
-      throw describeFetchError(error, url);
+      apiKey: bridgeApiKey,
+      bridgeUrl: bridgeApiUrl,
+      json: { payload },
     });
 
     if (!response.ok) {
-      throw new Error(await describeBridgeResponseError(response));
+      throw new Error(await bridgeErrorMessage(response));
     }
 
     const data = (await response.json()) as { updatedAt: string };
@@ -65,22 +49,14 @@ export async function handlePullSettingsFromBridge(req: Request, res: Response) 
       throw new Error('Укажите адрес и API-ключ bridge');
     }
 
-    const { origin } = new URL(bridgeApiUrl);
-    const url = `${origin}/api/v1/reports-settings/payload`;
-
-    const response = await fetch(url, {
-      headers: { 'X-Api-Key': bridgeApiKey },
-      signal: AbortSignal.timeout(BRIDGE_TIMEOUT_MS),
-    }).catch((error) => {
-      throw describeFetchError(error, url);
-    });
+    const response = await bridgeFetch('/api/v1/reports-settings/payload', { apiKey: bridgeApiKey, bridgeUrl: bridgeApiUrl });
 
     if (response.status === 404) {
       throw new Error('На bridge ещё нет сохранённых настроек');
     }
 
     if (!response.ok) {
-      throw new Error(await describeBridgeResponseError(response));
+      throw new Error(await bridgeErrorMessage(response));
     }
 
     const { payload } = (await response.json()) as BridgeBackupResponse;

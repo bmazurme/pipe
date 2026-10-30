@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Magnifier } from '@gravity-ui/icons';
 import { Alert, Button, Checkbox, Label, Loader, Select, Switch, Text } from '@gravity-ui/uikit';
 
@@ -15,7 +15,7 @@ import {
 import { EmptyState } from '../../widgets/EmptyState';
 import { MODEL_OPTIONS } from '../worker/constants';
 import styles from '../ImprovePage.module.css';
-import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
+import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
 function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
@@ -129,7 +129,14 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
 }
 
 export function AnalysisTab({ configured }: { configured: boolean }) {
-  const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval: 10000, skipPollingIfUnfocused: true });
+  // Fast while any run (an analysis or an issue run) is working, slow otherwise, paused in a background tab.
+  const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
+  const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
+  const hasActive = Boolean(runs?.some((run) => isActiveRun(run)));
+
+  useEffect(() => {
+    setPollingInterval(hasActive ? FAST_POLL_MS : SLOW_POLL_MS);
+  }, [hasActive]);
   const [start, { isLoading }] = useStartImproveAnalysisMutation();
   const [model, setModel] = useState(readStoredModel);
   const [categories, setCategories] = useState<AnalysisCategory[]>(DEFAULT_CATEGORIES);

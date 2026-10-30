@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadCredentials, loadCredentialsOrEmpty, saveApiKey, saveGitlabToken } from './credentials.js';
+import { loadCredentials, loadCredentialsOrEmpty, saveApiKey, saveGitlabToken, saveRefreshToken } from './credentials.js';
 
 const dirs: string[] = [];
 
@@ -49,5 +49,19 @@ describe('credentials file', () => {
     assert.deepEqual(loadCredentials(file), { refreshToken: 'r', gitlabToken: 'g2', apiKey: 'k' });
     saveApiKey('k2', file);
     assert.deepEqual(loadCredentials(file), { refreshToken: 'r', gitlabToken: 'g2', apiKey: 'k2' });
+  });
+});
+
+describe('saveRefreshToken', () => {
+  it('keeps gitlabToken and apiKey', () => {
+    const file = tempFile(JSON.stringify({ refreshToken: 'r', gitlabToken: 'g', apiKey: 'k' }));
+    saveRefreshToken('r2', file);
+    assert.deepEqual(loadCredentials(file), { refreshToken: 'r2', gitlabToken: 'g', apiKey: 'k' });
+  });
+
+  it('works without an existing file', () => {
+    const file = tempFile();
+    saveRefreshToken('r', file);
+    assert.deepEqual(loadCredentials(file), { refreshToken: 'r' });
   });
 });

@@ -7,10 +7,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
-import { isActiveRun, modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
-
-const FAST_POLL_MS = 5000;
-const SLOW_POLL_MS = 30000;
+import { FAST_POLL_MS, isActiveRun, modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
 // Runs accumulate forever; the tab should open on what is recent, with the
 // rest one click away instead of an ever-longer scroll (same reasoning as

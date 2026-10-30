@@ -100,6 +100,36 @@ describe('encryptedColumn decrypt warnings', () => {
     expect(String(warn.mock.calls[0][0])).toContain('CREDENTIALS_ENC_KEY');
   });
 
+  it('rejects a value whose auth tag is truncated to 4 bytes', () => {
+    const encrypted = encryptedColumn.to('plain-secret-value') as string;
+    const [keyId, iv, tag, data] = encrypted.split(':');
+    const truncated = [
+      keyId,
+      iv,
+      Buffer.from(tag, 'base64').subarray(0, 4).toString('base64'),
+      data,
+    ].join(':');
+
+    expect(encryptedColumn.from(truncated)).toBe(truncated);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a value whose IV is not 12 bytes', () => {
+    const encrypted = encryptedColumn.to('plain-secret-value') as string;
+    const [keyId, iv, tag, data] = encrypted.split(':');
+    const longIv = [
+      keyId,
+      Buffer.concat([Buffer.from(iv, 'base64'), Buffer.alloc(4)]).toString(
+        'base64',
+      ),
+      tag,
+      data,
+    ].join(':');
+
+    expect(encryptedColumn.from(longIv)).toBe(longIv);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it('does not warn for a legacy plaintext row', () => {
     encryptedColumn.from('legacy-plaintext');
     expect(warn).not.toHaveBeenCalled();
