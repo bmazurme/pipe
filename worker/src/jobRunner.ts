@@ -354,6 +354,12 @@ export async function processJob(
       const unsentChars = inFlightChars + pendingLog.length;
       jlog.warn({ unsentChars }, `gave up forwarding the job log to bridge: ${unsentChars} chars left unsent`);
     }
-    if (jobDir) rmSync(jobDir, { recursive: true, force: true });
+    if (jobDir) {
+      try {
+        rmSync(jobDir, { recursive: true, force: true });
+      } catch (err) {
+        jlog.warn({ err, jobDir }, 'could not remove job dir');
+      }
+    }
   }
 }

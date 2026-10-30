@@ -267,3 +267,37 @@ describe('runLoop', () => {
     assert.ok(h.events.includes('claim-chat'));
   });
 });
+
+describe('runLoop when processing throws', () => {
+  it('logs a rejected processJob and claims the next job', async () => {
+    const h = harness({ session: legacy, jobs: [job, job], passes: 1 });
+    const errors: unknown[][] = [];
+    h.deps.log = { ...h.deps.log, error: (...args: unknown[]) => void errors.push(args) } as LoopDeps['log'];
+    let calls = 0;
+    const original = h.deps.processJob;
+    h.deps.processJob = async (client, j, config) => {
+      calls += 1;
+      if (calls === 1) throw new Error('EACCES');
+      await original(client, j, config);
+    };
+
+    await runLoop(h.deps);
+
+    assert.equal(calls, 2);
+    assert.equal(errors.length, 1);
+    assert.equal(h.events.filter((e) => e === 'claim-job').length, 2);
+  });
+
+  it('logs a rejected chat turn and keeps polling', async () => {
+    const h = harness({ session: legacy, turns: [turn], passes: 1 });
+    const errors: unknown[][] = [];
+    h.deps.log = { ...h.deps.log, error: (...args: unknown[]) => void errors.push(args) } as LoopDeps['log'];
+    h.deps.processChatTurn = async () => {
+      throw new Error('boom');
+    };
+
+    await runLoop(h.deps);
+
+    assert.equal(errors.length, 1);
+  });
+});

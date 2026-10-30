@@ -6,6 +6,7 @@ import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { buildExitFailureMessage } from '../failureMessage.js';
 import { createProgressReporter } from './progress.js';
 import { withContext } from '../taskContext.js';
+import { logger } from '../logger.js';
 import { makeRunDir, runClaude } from '../modelRunners/claudeRunner.js';
 import type { ClaudeReport } from '../modelRunners/claudeUsage.js';
 import type { ClaudeModel } from '../providers.js';
@@ -89,6 +90,10 @@ export async function claudeChat(
 
     return { text: result.output.trim(), reasoning: progress?.reasoning() || null };
   } finally {
-    rmSync(turnDir, { recursive: true, force: true });
+    try {
+      rmSync(turnDir, { recursive: true, force: true });
+    } catch (err) {
+      logger.warn({ err, turnDir }, 'could not remove chat turn dir');
+    }
   }
 }
