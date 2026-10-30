@@ -4,6 +4,8 @@ import { ValueTransformer } from 'typeorm';
 
 const CURRENT_KEY_ID = 'v1';
 const ALGORITHM = 'aes-256-gcm';
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
 
 const logger = new Logger('encryptedColumn');
 
@@ -67,8 +69,10 @@ export const encryptedColumn: ValueTransformer = {
     if (value === null || value === undefined) return value;
 
     const key = resolveKey(CURRENT_KEY_ID);
-    const iv = randomBytes(12);
-    const cipher = createCipheriv(ALGORITHM, key, iv);
+    const iv = randomBytes(IV_BYTES);
+    const cipher = createCipheriv(ALGORITHM, key, iv, {
+      authTagLength: TAG_BYTES,
+    });
     const ciphertext = Buffer.concat([
       cipher.update(value, 'utf8'),
       cipher.final(),
@@ -100,7 +104,19 @@ export const encryptedColumn: ValueTransformer = {
       const authTag = Buffer.from(authTagB64, 'base64');
       const ciphertext = Buffer.from(ciphertextB64, 'base64');
 
-      const decipher = createDecipheriv(ALGORITHM, key, iv);
+      // Without these checks Node accepts a GCM tag as short as 4 bytes.
+      if (iv.length !== IV_BYTES) {
+        throw new Error(`IV must be ${IV_BYTES} bytes, got ${iv.length}`);
+      }
+      if (authTag.length !== TAG_BYTES) {
+        throw new Error(
+          `auth tag must be ${TAG_BYTES} bytes, got ${authTag.length}`,
+        );
+      }
+
+      const decipher = createDecipheriv(ALGORITHM, key, iv, {
+        authTagLength: TAG_BYTES,
+      });
       decipher.setAuthTag(authTag);
 
       return Buffer.concat([
