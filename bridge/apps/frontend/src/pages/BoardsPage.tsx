@@ -71,6 +71,17 @@ function BoardCard({ board, onUpdate, onCancel, busy, cancelling, error, onDismi
 
       {error && <Alert theme="danger" view="filled" message={error} onClose={onDismissError} />}
 
+      {board.warnings.length > 0 && (
+        <Alert theme="warning" view="filled" title="Состояние платы" message={board.warnings.join(' · ')} />
+      )}
+      {board.health?.diskUsedPct !== undefined && (
+        <Text variant="caption-2" color="secondary">
+          диск {board.health.diskUsedPct} %
+          {board.health.diskFreeMb !== undefined ? `, свободно ${board.health.diskFreeMb} МБ` : ''}
+          {board.health.sshAuthorizedKeys !== undefined ? ` · SSH-ключей: ${board.health.sshAuthorizedKeys}` : ''}
+        </Text>
+      )}
+
       {manualOnly && (
         <Text variant="caption-2" color="secondary">
           Устарело только то, что ставится вручную (scp + install.sh): установщик агента и его откат — их не обновляет ни кнопка, ни сам агент.

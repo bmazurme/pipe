@@ -10,6 +10,15 @@ export interface BoardScript {
   mainHash: string | null;
 }
 
+export interface BoardHealth {
+  diskUsedPct?: number;
+  diskFreeMb?: number;
+  inodesUsedPct?: number;
+  sshPasswordAuth?: boolean;
+  sshAuthorizedKeys?: number;
+  sshdActive?: boolean;
+}
+
 export interface Board {
   host: string;
   reportedAt: string;
@@ -19,6 +28,10 @@ export interface Board {
   mainSha: string;
   agentVersion: string | null;
   scripts: BoardScript[];
+  /** Root disk and SSH, as the board last reported them; null for an agent that predates it. */
+  health: BoardHealth | null;
+  /** Problems found in `health`, already worded. */
+  warnings: string[];
   outdated: number;
   /** Outdated scripts a button may update (not the agent itself). */
   updatable: number;

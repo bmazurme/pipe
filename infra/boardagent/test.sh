@@ -90,6 +90,20 @@ check "the agent's manifest is the list check-scripts.sh compares" $?
 # ---- report
 fresh; agent report
 [ "$(calls)" = 1 ] && grep -q 'POST /api/v1/boards/agent/report' "$T/calls/1"; check "report: posts to bridge" $?
+# The board also reports its root disk and its SSH door; a probe that cannot be made is left out, never invented.
+python3 - "$T/calls/1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+health = body.get("health")
+assert isinstance(health, dict), health
+used = health.get("diskUsedPct")
+assert isinstance(used, int) and 0 <= used <= 100, health
+assert isinstance(health.get("diskFreeMb"), int), health
+assert isinstance(health.get("sshAuthorizedKeys"), int), health
+assert isinstance(health.get("sshdActive"), bool), health
+assert all(v is not None for v in health.values()), health
+PY
+check "report: carries the board's disk and ssh health" $?
 python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])

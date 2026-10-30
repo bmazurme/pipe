@@ -13,6 +13,16 @@ export interface BoardScript {
   mainHash: string | null;
 }
 
+// What the board reported about its disk and SSH; every field optional (see BoardHealthDto).
+export interface BoardHealth {
+  diskUsedPct?: number;
+  diskFreeMb?: number;
+  inodesUsedPct?: number;
+  sshPasswordAuth?: boolean;
+  sshAuthorizedKeys?: number;
+  sshdActive?: boolean;
+}
+
 // What a board last told bridge about the scripts installed on it. One row per (account, board): the board's own agent posts it
 // (see infra/boardagent), and the page "Платы" and the Telegram message are made from it.
 @Entity({ name: 'board_reports' })
@@ -36,6 +46,10 @@ export class BoardReport extends BaseEntity {
 
   @Column({ type: 'jsonb' })
   scripts: BoardScript[];
+
+  // Null for a board whose agent predates health reporting.
+  @Column({ type: 'jsonb', nullable: true })
+  health: BoardHealth | null;
 
   // What was last announced to Telegram for this board (a hash of the outdated set), so a still-outdated board is announced once,
   // not at every report; null while everything is current.
