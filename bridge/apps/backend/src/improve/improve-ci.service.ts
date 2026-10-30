@@ -33,6 +33,8 @@ export class ImproveCiService {
   private readonly reportedExhausted = new Set<string>();
   // PR#:sha pairs already brought up to date with the base, or reported as conflicting: once per head commit, never in a loop.
   private readonly freshened = new Set<string>();
+  // PR#:sha pairs whose failed workflow runs were already re-run once (a flaky test passes the second time; a worker is not needed).
+  private readonly rerun = new Set<string>();
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -97,11 +99,40 @@ export class ImproveCiService {
 
     if (pull.state !== 'open' || pull.merged) return 'closed';
 
+    // A conflicting PR gets no CI run of the merge result at all, so this comes before looking at CI.
+    if (pull.mergeable === false) return this.onConflict(parent, pull, row);
+
     const ci = await this.github.ciState(pull.headSha);
 
     if (ci === 'success') return this.keepFresh(parent, pull);
 
     if (ci !== 'failure') return 'ci-ok';
+
+    // Red once: ask GitHub to re-run the failed jobs before spending a worker. A real failure fails again and goes on to the repair below.
+    const rerunKey = `${prNumber}:${pull.headSha}`;
+
+    if (!this.rerun.has(rerunKey)) {
+      this.rerun.add(rerunKey);
+
+      const rerun = await this.github
+        .rerunFailedRuns(pull.headSha)
+        .catch((error) => {
+          // Usually the token lacks Actions: write — then the worker repair below is all there is.
+          this.logger.warn(
+            `Could not re-run the failed checks of PR #${prNumber}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+
+          return 0;
+        });
+
+      if (rerun > 0) {
+        await this.notifier.send(
+          `🔁 PR #${prNumber}: CI красный — перезапустил упавшие проверки (вдруг флейк), жду результата\n${parent.prUrl ?? ''}`.trim(),
+        );
+
+        return 'rerun';
+      }
+    }
 
     const repairs = await this.runs.find({
       where: { kind: 'repair', prNumber, trigger: 'ci' },
@@ -157,8 +188,7 @@ export class ImproveCiService {
   }
 
   // A green PR that is behind `main` gets main merged into its branch by GitHub ("Update branch"), so what is merged is what was tested
-  // against today's main, and a spec that drifted meanwhile is caught here and not at the merge button. A conflict is the one case a
-  // person has to look at (the worker only gets a snapshot of the branch, not main), so it is announced once.
+  // against today's main, and a spec that drifted meanwhile is caught here and not at the merge button.
   private async keepFresh(
     parent: ImproveRun,
     pull: {
@@ -178,14 +208,6 @@ export class ImproveCiService {
 
     this.freshened.add(key);
 
-    if (pull.mergeable === false) {
-      await this.notifier.send(
-        `⚠️ PR #${pull.number}: конфликт с ${pull.baseRef} — нужен человек\n${parent.prUrl ?? ''}`.trim(),
-      );
-
-      return 'conflict';
-    }
-
     try {
       await this.github.updatePullBranch(pull.number, pull.headSha);
     } catch (error) {
@@ -202,5 +224,42 @@ export class ImproveCiService {
     );
 
     return 'updated';
+  }
+
+  // The branch conflicts with the base. A worker only gets a snapshot of the branch, never `main`, so it cannot merge; what can be done
+  // without a person is to do the issue again on today's base — if the owner switched that on (it closes a PR). Otherwise announced once.
+  private async onConflict(
+    parent: ImproveRun,
+    pull: { number: number; headSha: string; baseRef: string },
+    settings: { autoRedoConflicts?: boolean } | null,
+  ): Promise<string> {
+    const key = `${pull.number}:${pull.headSha}`;
+
+    if (this.freshened.has(key)) return 'conflict';
+
+    this.freshened.add(key);
+
+    if (settings?.autoRedoConflicts) {
+      try {
+        const run = await this.improve.redoOnConflict(parent);
+
+        await this.notifier.send(
+          `♻️ PR #${pull.number} конфликтует с ${pull.baseRef} — закрыл его и запустил задачу заново на свежем ${pull.baseRef} (запуск #${run.id})\n${parent.prUrl ?? ''}`.trim(),
+        );
+
+        return 'redo';
+      } catch (error) {
+        // Already redone once, or another run of the issue is going: fall through to asking a person.
+        this.logger.warn(
+          `Could not redo PR #${pull.number}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    await this.notifier.send(
+      `⚠️ PR #${pull.number}: конфликт с ${pull.baseRef} — нужен человек\n${parent.prUrl ?? ''}`.trim(),
+    );
+
+    return 'conflict';
   }
 }

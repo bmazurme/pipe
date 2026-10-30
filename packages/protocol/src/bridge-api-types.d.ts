@@ -2962,6 +2962,7 @@ export interface components {
         SaveSettingsDto: {
             autoStartModel?: string | null;
             autoRepairCi?: boolean;
+            autoRedoConflicts?: boolean;
             minValue?: number;
             maxOpenPerCategory?: number;
             dailyIssueCap?: number;

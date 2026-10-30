@@ -125,3 +125,60 @@ describe('GithubApiService', () => {
     });
   });
 });
+
+describe('GithubApiService re-run and close', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('re-runs only the workflow runs that failed on the commit', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        ok({
+          workflow_runs: [
+            { id: 1, conclusion: 'failure' },
+            { id: 2, conclusion: 'success' },
+            { id: 3, conclusion: 'timed_out' },
+            { id: 4, conclusion: 'cancelled' },
+          ],
+        }),
+      )
+      .mockResolvedValue(ok({}));
+
+    expect(await make().rerunFailedRuns('abc')).toBe(2);
+
+    const urls = fetchSpy.mock.calls.map(([url]) => url);
+
+    expect(urls[0]).toBe(
+      'https://api.github.com/repos/o/r/actions/runs?head_sha=abc&per_page=20',
+    );
+    expect(urls.slice(1)).toEqual([
+      'https://api.github.com/repos/o/r/actions/runs/1/rerun-failed-jobs',
+      'https://api.github.com/repos/o/r/actions/runs/3/rerun-failed-jobs',
+    ]);
+    expect(
+      fetchSpy.mock.calls
+        .slice(1)
+        .every(([, init]) => (init as RequestInit).method === 'POST'),
+    ).toBe(true);
+  });
+
+  it('comments first, then closes the pull request', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(ok({}));
+
+    await make().closePull(9, 'because');
+
+    const [[commentUrl, comment], [closeUrl, close]] = fetchSpy.mock.calls;
+
+    expect(commentUrl).toBe(
+      'https://api.github.com/repos/o/r/issues/9/comments',
+    );
+    expect(JSON.parse((comment as RequestInit).body as string)).toEqual({
+      body: 'because',
+    });
+    expect(closeUrl).toBe('https://api.github.com/repos/o/r/pulls/9');
+    expect((close as RequestInit).method).toBe('PATCH');
+    expect(JSON.parse((close as RequestInit).body as string)).toEqual({
+      state: 'closed',
+    });
+  });
+});

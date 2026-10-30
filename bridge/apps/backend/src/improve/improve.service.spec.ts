@@ -1197,3 +1197,97 @@ describe('ImproveService.startMany concurrency', () => {
     expect(result.skipped).toEqual(['#2: boom']);
   });
 });
+
+describe('ImproveService.redoOnConflict', () => {
+  const parent = () => ({
+    id: 9,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'sonnet',
+    scheduleId: null,
+    status: ImproveRunStatus.PrOpen,
+    note: 'old note',
+    branch: 'improve/issue-7-run-9',
+    prNumber: 55,
+    prUrl: 'https://gh/pr/55',
+  });
+  const closePull = jest.fn().mockResolvedValue(undefined);
+
+  // startRun refuses while a run of the issue has an open PR: the redo frees it first, so `findOne` sees the parent as blocking only
+  // until its status is saved as cancelled.
+  function withParent(p: ReturnType<typeof parent>, count = 0) {
+    const ctx = setup({
+      runs: {
+        count: jest.fn().mockResolvedValue(count),
+        findOne: jest.fn(async () =>
+          p.status === ImproveRunStatus.PrOpen ? p : null,
+        ),
+      },
+      github: { closePull },
+    });
+
+    return { ...ctx, p };
+  }
+
+  beforeEach(() => closePull.mockClear());
+
+  it('frees the issue, starts a new run on the conflict trigger, then closes the old PR and its branch', async () => {
+    const { service, github, runs, p } = withParent(parent());
+
+    const run = await service.redoOnConflict(p as never);
+
+    await settle();
+
+    expect(p.status).toBe(ImproveRunStatus.Cancelled);
+    expect(p.note).toContain('PR #55 закрыт');
+    expect(runs.save).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: 'conflict', issueNumber: 7 }),
+    );
+    expect(run).toMatchObject({ trigger: 'conflict', issueNumber: 7 });
+    expect(closePull).toHaveBeenCalledWith(
+      55,
+      expect.stringContaining('conflicts'),
+    );
+    expect(github.deleteBranch).toHaveBeenCalledWith('improve/issue-7-run-9');
+  });
+
+  it('does it at most once per issue', async () => {
+    const { service, p } = withParent(parent(), 1);
+
+    await expect(service.redoOnConflict(p as never)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(p.status).toBe(ImproveRunStatus.PrOpen);
+    expect(closePull).not.toHaveBeenCalled();
+  });
+
+  it('puts the old run back and leaves the PR open when the new run cannot start', async () => {
+    const { service, github, p } = withParent(parent());
+    github.getIssue.mockResolvedValue({
+      number: 7,
+      title: 'Fix it',
+      body: 'b',
+      state: 'closed',
+      isPull: false,
+      labels: [],
+    });
+
+    await expect(service.redoOnConflict(p as never)).rejects.toThrow();
+
+    expect(p.status).toBe(ImproveRunStatus.PrOpen);
+    expect(p.note).toBe('old note');
+    expect(closePull).not.toHaveBeenCalled();
+    expect(github.deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('still returns the new run when closing the old PR fails', async () => {
+    const { service, p } = withParent(parent());
+    closePull.mockRejectedValueOnce(new Error('GitHub 403'));
+
+    await expect(service.redoOnConflict(p as never)).resolves.toMatchObject({
+      trigger: 'conflict',
+    });
+  });
+});

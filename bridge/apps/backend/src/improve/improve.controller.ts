@@ -223,6 +223,7 @@ export class ImproveController {
     return {
       autoStartModel: settings?.autoStartModel ?? null,
       autoRepairCi: settings?.autoRepairCi ?? true,
+      autoRedoConflicts: settings?.autoRedoConflicts ?? false,
       ...(await this.autoStart.getFilingLimits(user.id)),
     };
   }
@@ -240,6 +241,7 @@ export class ImproveController {
         ? (current?.autoStartModel ?? null)
         : dto.autoStartModel || null,
       dto.autoRepairCi,
+      dto.autoRedoConflicts,
     );
     const limits = await this.autoStart.saveFilingLimits(user.id, {
       minValue: dto.minValue,
@@ -250,6 +252,7 @@ export class ImproveController {
     return {
       autoStartModel: saved.autoStartModel,
       autoRepairCi: saved.autoRepairCi,
+      autoRedoConflicts: saved.autoRedoConflicts,
       ...limits,
     };
   }

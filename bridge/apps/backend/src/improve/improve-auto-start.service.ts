@@ -33,6 +33,7 @@ export class ImproveAutoStartService {
     userId: number,
     autoStartModel: string | null,
     autoRepairCi?: boolean,
+    autoRedoConflicts?: boolean,
   ): Promise<ImproveSettings> {
     if (autoStartModel) requireImproveModel(autoStartModel);
 
@@ -44,6 +45,8 @@ export class ImproveAutoStartService {
       autoStartModel,
       // Left alone when the caller did not send it (the page saves the two settings separately).
       autoRepairCi: autoRepairCi ?? existing?.autoRepairCi ?? true,
+      autoRedoConflicts:
+        autoRedoConflicts ?? existing?.autoRedoConflicts ?? false,
       autoStartSince: autoStartModel
         ? enabling
           ? new Date()
@@ -74,6 +77,7 @@ export class ImproveAutoStartService {
       autoStartModel: existing?.autoStartModel ?? null,
       autoStartSince: existing?.autoStartSince ?? null,
       autoRepairCi: existing?.autoRepairCi ?? true,
+      autoRedoConflicts: existing?.autoRedoConflicts ?? false,
       ...next,
     });
 

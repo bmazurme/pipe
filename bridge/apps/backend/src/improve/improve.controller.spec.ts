@@ -114,6 +114,7 @@ describe('ImproveController', () => {
       await expect(controller.settings(user)).resolves.toEqual({
         autoStartModel: null,
         autoRepairCi: true,
+        autoRedoConflicts: false,
         ...LIMITS,
       });
     });
@@ -128,7 +129,12 @@ describe('ImproveController', () => {
 
       await controller.saveSettings({ autoRepairCi: false }, user);
 
-      expect(autoStart.saveSettings).toHaveBeenCalledWith(7, 'opus', false);
+      expect(autoStart.saveSettings).toHaveBeenCalledWith(
+        7,
+        'opus',
+        false,
+        undefined,
+      );
     });
 
     it('passes the filing limits on, only the ones sent', async () => {
@@ -150,7 +156,12 @@ describe('ImproveController', () => {
     it('switches the model off with an empty string', async () => {
       await controller.saveSettings({ autoStartModel: '' }, user);
 
-      expect(autoStart.saveSettings).toHaveBeenCalledWith(7, null, undefined);
+      expect(autoStart.saveSettings).toHaveBeenCalledWith(
+        7,
+        null,
+        undefined,
+        undefined,
+      );
     });
   });
 });

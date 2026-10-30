@@ -182,6 +182,21 @@ describe('ImprovePage filing limits', () => {
   });
 });
 
+describe('ImprovePage conflict redo setting', () => {
+  it('is off by default and switches on with a request that leaves the other settings alone', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    const toggle = await screen.findByRole('switch', { name: 'При конфликте с main закрывать PR и переделывать задачу' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { autoRedoConflicts: true } }));
+  });
+});
+
 describe('ImprovePage CI auto-repair setting', () => {
   it('is on by default and switches off with a request that leaves the auto-start model alone', async () => {
     const user = userEvent.setup();

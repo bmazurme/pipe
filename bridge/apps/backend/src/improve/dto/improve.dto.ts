@@ -222,6 +222,11 @@ export class SaveSettingsDto {
   @IsBoolean()
   autoRepairCi?: boolean;
 
+  // Close an Improve PR that conflicts with the base and do its issue again on the current base (once per issue).
+  @IsOptional()
+  @IsBoolean()
+  autoRedoConflicts?: boolean;
+
   // The brake on automatic issue filing (improve-throttle.ts). A missing field keeps what is stored.
   @IsOptional()
   @IsInt()

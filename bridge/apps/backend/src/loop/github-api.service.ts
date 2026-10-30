@@ -399,6 +399,34 @@ export class GithubApiService {
     });
   }
 
+  // Re-runs the failed jobs of the workflow runs that ended in failure on this commit (GitHub's "Re-run failed jobs"): a flaky test passes
+  // the second time, and nothing needed a worker. Returns how many workflow runs were asked to re-run. Needs Actions: write.
+  async rerunFailedRuns(sha: string): Promise<number> {
+    const data = (await this.get(
+      `/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`,
+    )) as { workflow_runs: Array<{ id: number; conclusion: string | null }> };
+    const failed = data.workflow_runs.filter((run) =>
+      ['failure', 'timed_out'].includes(run.conclusion ?? ''),
+    );
+
+    for (const run of failed) {
+      await this.request(`/actions/runs/${run.id}/rerun-failed-jobs`, {
+        method: 'POST',
+      });
+    }
+
+    return failed.length;
+  }
+
+  // Closes a pull request with a comment saying why (the comment first, so the reason is there when someone opens the closed PR).
+  async closePull(number: number, comment: string): Promise<void> {
+    await this.post(`/issues/${number}/comments`, { body: comment });
+    await this.request(`/pulls/${number}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'closed' }),
+    });
+  }
+
   // The check runs of a commit that failed or timed out (a cancelled run is not a failure to repair), each with its annotations.
   async failedChecks(sha: string): Promise<FailedCheck[]> {
     const data = (await this.get(
