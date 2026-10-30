@@ -2211,6 +2211,27 @@
         }
       }
     },
+    "/api/v1/dashboard/deploys": {
+      "get": {
+        "operationId": "DashboardController_getDeploys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/backups": {
       "get": {
         "operationId": "DashboardController_getBackups",

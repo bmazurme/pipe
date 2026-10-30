@@ -26,6 +26,7 @@ describe('DashboardController routes', () => {
       nodes as unknown as NodesService,
       backups as unknown as BackupStatusService,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -58,6 +59,7 @@ describe('DashboardController: the connection to GitHub', () => {
     {} as never,
     {} as never,
     github as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -70,5 +72,21 @@ describe('DashboardController: the connection to GitHub', () => {
     expect(github.save).toHaveBeenCalledWith(true, 'http://p:1');
     await controller.checkGithubConnection({ url: 'http://p:1' });
     expect(github.check).toHaveBeenCalledWith('http://p:1');
+  });
+});
+
+describe('DashboardController deploys', () => {
+  it('returns what the service lists', async () => {
+    const latest = jest.fn().mockResolvedValue([{ sha: 'a'.repeat(40) }]);
+    const controller = new DashboardController(
+      {} as never,
+      {} as never,
+      {} as never,
+      { latest } as never,
+    );
+
+    await expect(controller.getDeploys()).resolves.toEqual([
+      { sha: 'a'.repeat(40) },
+    ]);
   });
 });
