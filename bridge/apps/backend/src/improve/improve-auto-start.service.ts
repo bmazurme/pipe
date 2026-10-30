@@ -7,6 +7,7 @@ import { AppLogService } from '../logs/app-log.service';
 import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import { ImproveSettings } from './entities/improve-settings.entity';
+import { FilingLimits, limitsFromSettings } from './improve-throttle';
 import { ADVANCE_EVERY_MS, AUTOSTART_MIN_AGE_SECONDS } from './improve.service';
 import { message, requireImproveModel } from './improve-shared';
 
@@ -49,6 +50,34 @@ export class ImproveAutoStartService {
           : (existing?.autoStartSince ?? new Date())
         : null,
     });
+  }
+
+  // The brake on automatic issue filing; the defaults when the account never saved settings.
+  async getFilingLimits(userId: number): Promise<FilingLimits> {
+    return limitsFromSettings(await this.getSettings(userId));
+  }
+
+  // Only the fields given are changed; the account's other switches stay as they are.
+  async saveFilingLimits(
+    userId: number,
+    changes: Partial<FilingLimits>,
+  ): Promise<FilingLimits> {
+    const existing = await this.getSettings(userId);
+    const next = { ...(await this.getFilingLimits(userId)) };
+
+    for (const key of Object.keys(next) as Array<keyof FilingLimits>) {
+      if (changes[key] !== undefined) next[key] = changes[key] as number;
+    }
+
+    await this.settings.save({
+      userId,
+      autoStartModel: existing?.autoStartModel ?? null,
+      autoStartSince: existing?.autoStartSince ?? null,
+      autoRepairCi: existing?.autoRepairCi ?? true,
+      ...next,
+    });
+
+    return next;
   }
 
   // A parcel pushed from Subscription (channel "issue", outbound, unencrypted) that no

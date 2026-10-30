@@ -2929,6 +2929,9 @@ export interface components {
         SaveSettingsDto: {
             autoStartModel?: string | null;
             autoRepairCi?: boolean;
+            minValue?: number;
+            maxOpenPerCategory?: number;
+            dailyIssueCap?: number;
         };
         ClientHeartbeatDto: {
             name: string;

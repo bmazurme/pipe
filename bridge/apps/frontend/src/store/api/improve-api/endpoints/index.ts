@@ -19,6 +19,12 @@ export interface ImproveSettings {
   autoStartModel: string | null;
   /** Fix a red CI on the PRs Improve opened (a worker on the PR's branch, twice at most). */
   autoRepairCi: boolean;
+  /** The brake on automatic issue filing: proposals worth less than this (1–5) are not filed. */
+  minValue: number;
+  /** Open issues of one direction at which that direction waits. */
+  maxOpenPerCategory: number;
+  /** New issues per 24 hours across all directions. */
+  dailyIssueCap: number;
 }
 
 export interface ImproveStatus {
@@ -39,6 +45,12 @@ export interface AnalysisItem {
   issueNumber?: number;
   duplicateOf?: number;
   started?: boolean;
+  /** 1–5: what the owner gains; absent on analyses made before the field existed. */
+  value?: number;
+  /** Rough size of the change: s, m or l. */
+  effort?: 's' | 'm' | 'l';
+  /** Why the filing brake held this proposal back. */
+  skipped?: string;
 }
 
 export interface ImproveRun {

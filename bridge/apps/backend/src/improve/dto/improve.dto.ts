@@ -221,4 +221,23 @@ export class SaveSettingsDto {
   @IsOptional()
   @IsBoolean()
   autoRepairCi?: boolean;
+
+  // The brake on automatic issue filing (improve-throttle.ts). A missing field keeps what is stored.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  minValue?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  maxOpenPerCategory?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  dailyIssueCap?: number;
 }

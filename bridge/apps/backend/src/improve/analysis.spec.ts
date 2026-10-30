@@ -14,6 +14,8 @@ const item = (category: string, title = `t-${category}`) => ({
   category,
   title,
   risk: 'low',
+  value: 3,
+  effort: 'm' as const,
   body: `## Problem\n${category}`,
 });
 
@@ -134,6 +136,33 @@ describe('parseBacklog', () => {
     expect(items.map((i) => i.category)).toEqual(['uiux']);
   });
 
+  it('reads the value and effort of an item, clamps a wild value and falls back to the middle', () => {
+    const items = parseBacklog(
+      JSON.stringify({
+        items: [
+          { ...item('uiux'), value: 5, effort: 's' },
+          { ...item('docs'), value: 99, effort: 'huge' },
+          { ...item('tests'), value: 'high' },
+          { ...item('security'), value: 0.2 },
+        ],
+      }),
+    );
+
+    expect(items.map((i) => [i.value, i.effort])).toEqual([
+      [5, 's'],
+      [5, 'm'],
+      [3, 'm'],
+      [1, 'm'],
+    ]);
+  });
+
+  it('asks the model to rate value and effort', () => {
+    const prompt = buildAnalysisPrompt([]);
+
+    expect(prompt).toContain('"value": 1-5');
+    expect(prompt).toContain('"effort": "s" | "m" | "l"');
+  });
+
   it('rejects text that is not the expected JSON', () => {
     expect(() => parseBacklog('not json')).toThrow(/корректным JSON/);
     expect(() => parseBacklog('{"things":[]}')).toThrow(/нет массива items/);
@@ -174,7 +203,14 @@ describe('helpers', () => {
 
   it('labels the issue body with its direction and risk', () => {
     expect(
-      issueBody({ category: 'uiux', title: 't', risk: 'high', body: 'BODY' }),
-    ).toContain('**UI/UX** · риск: high');
+      issueBody({
+        category: 'uiux',
+        title: 't',
+        risk: 'high',
+        body: 'BODY',
+        value: 4,
+        effort: 's',
+      }),
+    ).toContain('**UI/UX** · риск: high · польза: 4/5 · объём: s');
   });
 });

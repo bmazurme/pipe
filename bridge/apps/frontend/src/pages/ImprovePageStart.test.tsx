@@ -83,7 +83,7 @@ beforeEach(() => {
       }
       if (path === 'improve/runs' && request.method === 'GET') return json([{ ...LISTED_RUN, hasResult: true }]);
       if (path === 'improve/schedules' && request.method === 'GET') return json([]);
-      if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null, autoRepairCi: true });
+      if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null, autoRepairCi: true, minValue: 4, maxOpenPerCategory: 2, dailyIssueCap: 6 });
 
       return json(ANALYSIS_RUN);
     }),
@@ -161,6 +161,24 @@ describe('ImprovePage analysis directions', () => {
     const box = (await screen.findByLabelText('Архитектура')) as HTMLInputElement;
 
     expect(box.checked).toBe(true);
+  });
+});
+
+describe('ImprovePage filing limits', () => {
+  it('shows the stored limits and saves a changed one on its own', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    expect(await screen.findByText('Лимиты на новые задачи')).toBeTruthy();
+    // the stored values are what the three selects show
+    await waitFor(() => expect(screen.getByText('4')).toBeTruthy());
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('6')).toBeTruthy();
+
+    await user.click(screen.getByText('4'));
+    await user.click(await screen.findByRole('option', { name: '5' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { minValue: 5 } }));
   });
 });
 
