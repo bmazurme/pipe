@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Put,
@@ -41,6 +42,7 @@ export class ReportsSettingsController {
   // The raw bundle — one explicit action (reports' own "Import from Bridge"),
   // not something returned by the general status check above.
   @Get('payload')
+  @Header('Cache-Control', 'no-store')
   async payload(
     @CurrentUser() currentUser: { id: number },
   ): Promise<{ updatedAt: Date; payload: string }> {

@@ -45,6 +45,7 @@ export class SecretsController {
   // Declared before the ':id' routes. Every value leaves in one response, so
   // the audit line names only the user, never a secret.
   @Get('export')
+  @Header('Cache-Control', 'no-store')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Header('Content-Type', 'text/plain; charset=utf-8')
   async exportEnv(@CurrentUser() currentUser: { id: number }): Promise<string> {
@@ -87,6 +88,7 @@ export class SecretsController {
   // (a click, not a render), not something that happens just by loading the
   // page the vault lives on.
   @Get(':id/value')
+  @Header('Cache-Control', 'no-store')
   async reveal(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: { id: number },
