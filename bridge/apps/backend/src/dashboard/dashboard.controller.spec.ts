@@ -28,6 +28,7 @@ describe('DashboardController routes', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -62,6 +63,7 @@ describe('DashboardController: the connection to GitHub', () => {
     github as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -86,6 +88,7 @@ describe('DashboardController deploys', () => {
       {} as never,
       { latest } as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getDeploys()).resolves.toEqual([
@@ -103,11 +106,44 @@ describe('DashboardController nas', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
     );
 
     await expect(controller.getNas({ id: 7 })).resolves.toEqual([
       { host: 'MyCloudEX2Ultra' },
     ]);
     expect(list).toHaveBeenCalledWith(7);
+  });
+});
+
+describe('DashboardController board metrics', () => {
+  const make = (summary: jest.Mock) =>
+    new DashboardController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { summary } as never,
+    );
+
+  it("passes the owner and the window to the service, 24 hours by default via the pipe's value", async () => {
+    const summary = jest.fn().mockResolvedValue([{ host: 'ubuntu-red' }]);
+
+    await expect(make(summary).getBoardMetrics({ id: 7 }, 24)).resolves.toEqual(
+      [{ host: 'ubuntu-red' }],
+    );
+    expect(summary).toHaveBeenCalledWith(7, 24);
+  });
+
+  it('refuses a window of nothing or longer than the 7 days that are kept', () => {
+    const controller = make(jest.fn());
+
+    expect(() => controller.getBoardMetrics({ id: 7 }, 0)).toThrow(
+      /between 1 and 168/,
+    );
+    expect(() => controller.getBoardMetrics({ id: 7 }, 169)).toThrow(
+      /between 1 and 168/,
+    );
   });
 });

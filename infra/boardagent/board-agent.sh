@@ -7,7 +7,8 @@
 #   board-agent.sh selftest checks this agent (syntax, manifest, bridge reachable and answering, check-scripts --json) — what a new version has
 #                           to pass before it replaces the running one
 #   board-agent.sh apply    every minute: ask bridge whether the owner pressed that button for THIS board and, if so, install what it
-#                           names. One request; nothing is done without a waiting decision.
+#                           names. One request; nothing is done without a waiting decision. The same run also sends the board's vital signs
+#                           (temperature, throttling, fan, load, memory, disk) every METRICS_EVERY_SEC seconds - the Dashboard tile and its graph.
 #
 # What a decision can and cannot do (the agent decides this, not bridge — a bridge that is wrong or hijacked must not be able to put
 # code on a board):
@@ -36,19 +37,37 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=1
+AGENT_VERSION=2
+# The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
+METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
+# The reliable way to bridge: the stack's own address inside the LAN (curl --resolve host:port:ip), so a request does not have to leave through the
+# router and come back, and does not depend on the provider. If that address does not answer, the request is repeated the ordinary way. Set
+# BRIDGE_RESOLVE= (empty) to turn it off, or to another host:port:ip.
+BRIDGE_RESOLVE="${BRIDGE_RESOLVE-api.bridge.ntlstl.dev:443:192.168.50.10}"
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 need() { [ -n "${!1:-}" ] || { log "$1 is not set (/etc/pipe-boardagent.env) — nothing done"; exit 0; }; }
 
-bridge() { # method path [json-body] → body on stdout; fails on a non-2xx
-  # The key goes to curl as a config on stdin (printf is a builtin), never in argv, where any local user could read it via ps.
-  local method="$1" path="$2" body="${3:-}"
-  if [ -n "$body" ]; then
-    printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" | curl -K - -fsS --max-time 30 -X "$method" -H 'Content-Type: application/json' --data "$body" "$BRIDGE_API_URL$path"
-  else
-    printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" | curl -K - -fsS --max-time 30 -X "$method" "$BRIDGE_API_URL$path"
+# One request; the key goes to curl as a config on stdin (printf is a builtin), never in argv, where any local user could read it via ps.
+# bridge_request <seconds> <method> <path> [json-body] [host:port:ip to pin]
+bridge_request() {
+  local timeout="$1" method="$2" path="$3" body="${4:-}" resolve="${5:-}"
+  local args=(-K - -fsS --max-time "$timeout" -X "$method")
+  [ -z "$body" ] || args+=(-H 'Content-Type: application/json' --data "$body")
+  [ -z "$resolve" ] || args+=(--resolve "$resolve")
+  printf 'header = "Authorization: Bearer %s"\n' "$BRIDGE_API_KEY" | curl "${args[@]}" "$BRIDGE_API_URL$path"
+}
+
+# method path [json-body] [seconds] → body on stdout; fails on a non-2xx. Through the LAN address first; repeated the ordinary way only when
+# that address could not be reached at all (curl 6/7/28/35/52/56) - never after an answer, so a request is not sent twice.
+bridge() {
+  local method="$1" path="$2" body="${3:-}" timeout="${4:-30}" code=0
+  if [ -n "$BRIDGE_RESOLVE" ]; then
+    bridge_request "$timeout" "$method" "$path" "$body" "$BRIDGE_RESOLVE" && return 0
+    code=$?
+    case "$code" in 6|7|28|35|52|56) ;; *) return "$code" ;; esac
   fi
+  bridge_request "$timeout" "$method" "$path" "$body"
 }
 
 # What the board can say about itself besides its scripts: the root disk (the first thing that quietly kills a Pi), and the SSH door —
@@ -182,8 +201,98 @@ update_self() { # work-dir, then the repo paths of the agent files that changed
   return 0
 }
 
+# The board's vital signs, for the Dashboard tile: the SoC temperature, whether the firmware is throttling or under-volted right now (the low four bits
+# of `vcgencmd get_throttled`, the same reading infra/monitor alerts on), the fan, the NVMe temperature, load, memory, the root disk, uptime. A probe that
+# fails is left out, never guessed. The hooks (THERMAL_FILE, LOADAVG_FILE, MEMINFO_FILE, UPTIME_FILE, HWMON_GLOB, NVME_GLOB) are for the tests.
+collect_metrics() {
+  local thermal="${THERMAL_FILE:-/sys/class/thermal/thermal_zone0/temp}" loadavg="${LOADAVG_FILE:-/proc/loadavg}"
+  local meminfo="${MEMINFO_FILE:-/proc/meminfo}" uptime_file="${UPTIME_FILE:-/proc/uptime}"
+  local soc fan nvme thr disk f
+  soc="$(cat "$thermal" 2>/dev/null || true)"
+  thr="$(vcgencmd get_throttled 2>/dev/null | sed -n 's/.*=0x\([0-9a-fA-F]*\).*/\1/p')"
+  fan=""; for f in ${HWMON_GLOB:-/sys/class/hwmon/hwmon*/fan1_input}; do [ -r "$f" ] && { fan="$(cat "$f" 2>/dev/null)"; break; }; done
+  nvme=""; for f in ${NVME_GLOB:-/sys/class/nvme/nvme0/hwmon*/temp1_input}; do [ -r "$f" ] && { nvme="$(cat "$f" 2>/dev/null)"; break; }; done
+  disk="$(df -P / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }')"
+  SOC_MILLI="$soc" THROTTLED_HEX="$thr" FAN_RPM="$fan" NVME_MILLI="$nvme" DISK_USED="$disk" LOADAVG_FILE="$loadavg" MEMINFO_FILE="$meminfo" UPTIME_FILE="$uptime_file" \
+    python3 -c '
+import json, os
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return ""
+def integer(name):
+    v = os.environ.get(name, "").strip()
+    return int(v) if v.lstrip("-").isdigit() else None
+out = {}
+soc = integer("SOC_MILLI")
+if soc is not None:
+    out["socTempC"] = round(soc / 1000)
+hexv = os.environ.get("THROTTLED_HEX", "").strip()
+if hexv:
+    try:
+        out["throttled"] = int(hexv, 16) & 0xF
+    except ValueError:
+        pass
+fan = integer("FAN_RPM")
+if fan is not None:
+    out["fanRpm"] = fan
+nvme = integer("NVME_MILLI")
+if nvme is not None:
+    out["nvmeTempC"] = round(nvme / 1000)
+parts = read(os.environ["LOADAVG_FILE"]).split()
+if parts:
+    try:
+        out["load1"] = round(float(parts[0]), 2)
+    except ValueError:
+        pass
+mem = {}
+for line in read(os.environ["MEMINFO_FILE"]).splitlines():
+    key, _, rest = line.partition(":")
+    digits = rest.split()
+    if digits and digits[0].isdigit():
+        mem[key] = int(digits[0])
+if mem.get("MemTotal") and "MemAvailable" in mem:
+    out["memAvailPct"] = round(mem["MemAvailable"] * 100 / mem["MemTotal"])
+    out["memTotalMb"] = round(mem["MemTotal"] / 1024)
+disk = integer("DISK_USED")
+if disk is not None:
+    out["diskUsedPct"] = disk
+up = read(os.environ["UPTIME_FILE"]).split()
+if up:
+    try:
+        out["uptimeSec"] = int(float(up[0]))
+    except ValueError:
+        pass
+print(json.dumps(out))
+'
+}
+
+# Sends the vital signs at most every METRICS_EVERY_SEC seconds (the timer runs us every minute; a little slack keeps timer jitter from
+# skipping a slot). Short timeout, and never an error for the caller: the decisions that `apply` is for must not wait on this.
+do_metrics() {
+  local last now body
+  # METRICS_EVERY_SEC=0 turns it off.
+  [ "$METRICS_EVERY_SEC" -gt 0 ] 2>/dev/null || return 0
+  now="$(date +%s)"
+  last="$(cat "$STATE_DIR/metrics-last" 2>/dev/null || echo 0)"
+  [ $(( now - last )) -ge $(( METRICS_EVERY_SEC - 10 )) ] || return 0
+  body="$(HOST_NAME="$HOST" METRICS="$(collect_metrics 2>/dev/null || echo '{}')" python3 -c '
+import json, os
+data = json.loads(os.environ.get("METRICS") or "{}")
+data["host"] = os.environ["HOST_NAME"]
+print(json.dumps(data))
+' 2>/dev/null)" || return 0
+  # The attempt is what is rate-limited, not only the success: a bridge that is down must not cost two timeouts every minute.
+  echo "$now" > "$STATE_DIR/metrics-last"
+  bridge POST /api/v1/boards/agent/metrics "$body" 10 >/dev/null 2>&1 || true
+  return 0
+}
+
 do_apply() {
   local pending
+  do_metrics || true
   pending="$(bridge GET "/api/v1/boards/agent/pending?host=$HOST")" || { log "bridge unreachable — nothing done"; return 0; }
   verify_self_update
   # id, sha, then one repo path per line; nothing at all when there is no decision

@@ -42,6 +42,37 @@ export interface GithubConnectionCheck {
   url: string;
 }
 
+export type BoardMetricsStatus = 'ok' | 'warn' | 'bad';
+
+export interface BoardMetricsReading {
+  socTempC?: number;
+  /** The low bits of vcgencmd get_throttled, right now: 1 under-voltage, 2 frequency capped, 4 throttled, 8 soft temperature limit. */
+  throttled?: number;
+  fanRpm?: number;
+  nvmeTempC?: number;
+  load1?: number;
+  memAvailPct?: number;
+  memTotalMb?: number;
+  diskUsedPct?: number;
+  uptimeSec?: number;
+}
+
+export interface BoardSeriesPoint {
+  t: string;
+  soc: number | null;
+  nvme: number | null;
+}
+
+/** A board's newest vital signs with bridge's verdict, and the graph of the window asked for. */
+export interface DashboardBoardMetrics {
+  host: string;
+  at: string;
+  status: BoardMetricsStatus;
+  reasons: string[];
+  data: BoardMetricsReading;
+  series: BoardSeriesPoint[];
+}
+
 export type NasStatus = 'ok' | 'warn' | 'bad';
 
 export interface NasDisk {
@@ -95,6 +126,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardBackups: builder.query<BackupStatus, void>({
       query: () => 'dashboard/backups',
     }),
+    getDashboardBoardMetrics: builder.query<DashboardBoardMetrics[], number>({
+      query: (hours) => `dashboard/board-metrics?hours=${hours}`,
+    }),
     getDashboardNas: builder.query<DashboardNas[], void>({
       query: () => 'dashboard/nas',
     }),
@@ -122,6 +156,7 @@ export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
   useGetDashboardDeploysQuery,
+  useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
   useGetGithubConnectionQuery,
   useSaveGithubConnectionMutation,

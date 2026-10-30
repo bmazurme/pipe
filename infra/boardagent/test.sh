@@ -16,10 +16,11 @@ SHA="$(printf 'c823ea56%032d' 0)"
 # raw.githubusercontent.com (serves $FAKE_REPO/<sha>/<path>, or $FAKE_REPO/main/<path> for check-scripts.sh's comparison).
 cat > "$T/bin/curl" <<'SH'
 #!/usr/bin/env bash
-out=""; url=""; method=GET; data=""
+out=""; url=""; method=GET; data=""; resolved=""
 printf '%s\n' "$@" >> "$FAKE_ARGV"
 while [ $# -gt 0 ]; do
   case "$1" in
+    --resolve) resolved="$2"; shift 2 ;;
     -o) out="$2"; shift 2 ;;
     -X) method="$2"; shift 2 ;;
     -K) cat >> "$FAKE_STDIN"; shift 2 ;;
@@ -32,6 +33,9 @@ done
 case "$url" in
   "$BRIDGE_API_URL"*)
     [ -z "${FAKE_BRIDGE_DOWN:-}" ] || exit 7
+    # the LAN address does not answer: connection failure, but only when it is the pinned request
+    [ -z "$resolved" ] || [ -z "${FAKE_RESOLVE_DOWN:-}" ] || exit 7
+    case "${url#"$BRIDGE_API_URL"}" in /api/v1/boards/agent/metrics) [ -z "${FAKE_METRICS_FAIL:-}" ] || exit 22 ;; esac
     path="${url#"$BRIDGE_API_URL"}"
     case "$path" in
       /api/v1/boards/agent/pending*) cat "$FAKE_PENDING" ;;
@@ -46,7 +50,7 @@ chmod +x "$T/bin/curl"
 # the lock is the boards' flock; here nothing else runs
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/flock"; chmod +x "$T/bin/flock"
 
-export BRIDGE_API_URL="https://bridge.example" BRIDGE_API_KEY="brk_test" GITHUB_API="https://api.github.example" RAW_HOST="https://raw.example"
+export METRICS_EVERY_SEC=0 BRIDGE_RESOLVE="" BRIDGE_API_URL="https://bridge.example" BRIDGE_API_KEY="brk_test" GITHUB_API="https://api.github.example" RAW_HOST="https://raw.example"
 export RAW_BASE="https://raw.example/o/r/main" FAKE_REPO="$T/repo" FAKE_PENDING="$T/pending.json" FAKE_CALLS="$T/calls" FAKE_COMPARE=behind FAKE_ARGV="$T/argv" FAKE_STDIN="$T/stdin"
 export STATE_DIR="$T/state" BOARD_HOST="ubuntu-red" BRIDGE_PI_DIR="$T/board/bridge-pi" MANIFEST_FILE="$T/manifest.txt"
 export CHECK_SCRIPT="$HERE/../scriptcheck/check-scripts.sh" SCRIPTCHECK_MANIFEST="$T/manifest.txt" MAIN_SHA="$SHA" STATE_DIR_CHECK="$T/check-state"
@@ -108,7 +112,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "1"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "2"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -232,6 +236,68 @@ fresh; : > "$T/argv"; : > "$T/stdin"; decision 40 infra/backup/uploads-pull.sh; 
 [ -s "$T/argv" ] && ! grep -q 'brk_test' "$T/argv" && ! grep -qi 'authorization' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "apply: the bridge key is on curl's stdin, not in its argv" $?
 : > "$T/argv"; : > "$T/stdin"; agent selftest
 ! grep -q 'brk_test' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "selftest: the bridge key is on curl's stdin, not in its argv" $?
+
+# ---- the vital signs
+echo "# metrics"
+mkdir -p "$T/sys/hwmon0" "$T/sys/nvme0"
+echo 52300 > "$T/sys/thermal"
+echo "1.37 0.80 0.50 1/300 1234" > "$T/sys/loadavg"
+printf 'MemTotal:        8000000 kB\nMemFree:          100000 kB\nMemAvailable:    6000000 kB\n' > "$T/sys/meminfo"
+echo "86400.55 12345.00" > "$T/sys/uptime"
+echo 4200 > "$T/sys/hwmon0/fan1_input"
+echo 41850 > "$T/sys/nvme0/temp1_input"
+printf '#!/usr/bin/env bash\necho "throttled=0x50005"\n' > "$T/bin/vcgencmd"; chmod +x "$T/bin/vcgencmd"
+export THERMAL_FILE="$T/sys/thermal" LOADAVG_FILE="$T/sys/loadavg" MEMINFO_FILE="$T/sys/meminfo" UPTIME_FILE="$T/sys/uptime" \
+  HWMON_GLOB="$T/sys/hwmon0/fan1_input" NVME_GLOB="$T/sys/nvme0/temp1_input"
+echo '{"update": null}' > "$T/pending.json"
+metrics_call() { grep -l 'POST /api/v1/boards/agent/metrics' "$T"/calls/* 2>/dev/null | head -1; }
+
+fresh; METRICS_EVERY_SEC=120 agent apply
+f="$(metrics_call)"; [ -n "$f" ]; check "metrics: apply posts the vital signs to bridge" $?
+python3 - "$f" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+want = {"host": "ubuntu-red", "socTempC": 52, "throttled": 5, "fanRpm": 4200, "nvmeTempC": 42, "load1": 1.37, "memAvailPct": 75, "memTotalMb": 7812, "uptimeSec": 86400}
+bad = {k: (body.get(k), v) for k, v in want.items() if body.get(k) != v}
+disk = body.get("diskUsedPct")
+sys.exit(0 if not bad and isinstance(disk, int) and 0 <= disk <= 100 else 1)
+PY
+check "metrics: temperature, the low throttling bits, fan, NVMe, load, memory, disk and uptime are read" $?
+
+n="$(calls)"; METRICS_EVERY_SEC=120 agent apply
+[ "$(calls)" = "$n" ]; check "metrics: a run a minute later does not post again (every 2 minutes)" $?
+echo $(( $(date +%s) - 125 )) > "$T/state/metrics-last"; METRICS_EVERY_SEC=120 agent apply
+[ "$(calls)" -gt "$n" ]; check "metrics: after the interval it posts again" $?
+
+fresh; METRICS_EVERY_SEC=0 agent apply
+[ -z "$(metrics_call)" ]; check "metrics: METRICS_EVERY_SEC=0 turns them off" $?
+
+echo "# metrics: a missing probe is left out, never guessed"
+fresh; HWMON_GLOB="$T/nowhere/*" NVME_GLOB="$T/nowhere/*" THERMAL_FILE="$T/nowhere" MEMINFO_FILE="$T/nowhere" METRICS_EVERY_SEC=120 agent apply
+f="$(metrics_call)"
+python3 - "$f" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+sys.exit(0 if body["host"] == "ubuntu-red" and not {"socTempC", "fanRpm", "nvmeTempC", "memAvailPct"} & set(body) and body.get("throttled") == 5 else 1)
+PY
+check "metrics: fields without a source are absent, the others still go" $?
+
+echo "# metrics never get in the way of a decision"
+fresh; decision 7 infra/backup/uploads-pull.sh
+FAKE_METRICS_FAIL=1 METRICS_EVERY_SEC=120 agent apply
+[ "$(cat "$T/code")" = 0 ] && board_has uploads-pull.sh "pull v2" && [ -z "$(metrics_call)" ]; check "metrics: bridge refusing them does not stop an update from being applied" $?
+[ -s "$T/state/metrics-last" ]; check "metrics: the attempt is what is rate-limited, so a refusing bridge is not hammered" $?
+echo '{"update": null}' > "$T/pending.json"
+
+echo "# the reliable way to bridge: the LAN address first, the ordinary way when it does not answer"
+fresh; : > "$T/argv"; BRIDGE_RESOLVE=api.bridge.ntlstl.dev:443:192.0.2.10 agent report
+grep -qx -- '--resolve' "$T/argv" && grep -qx 'api.bridge.ntlstl.dev:443:192.0.2.10' "$T/argv" && [ "$(calls)" = 1 ]; check "resolve: a request goes to the pinned address first" $?
+fresh; : > "$T/argv"; FAKE_RESOLVE_DOWN=1 BRIDGE_RESOLVE=api.bridge.ntlstl.dev:443:192.0.2.10 agent report
+[ "$(calls)" = 1 ] && [ "$(grep -cx -- '--resolve' "$T/argv")" = 1 ]; check "resolve: when that address cannot be reached the request is repeated the ordinary way (and delivered once)" $?
+fresh; : > "$T/argv"; FAKE_METRICS_FAIL=1 BRIDGE_RESOLVE=api.bridge.ntlstl.dev:443:192.0.2.10 METRICS_EVERY_SEC=120 agent apply
+[ "$(grep -c 'agent/metrics' "$T/argv")" = 1 ]; check "resolve: an answer of 4xx/5xx is not a reason to send the request a second time" $?
+fresh; : > "$T/argv"; BRIDGE_RESOLVE= agent report
+! grep -qx -- '--resolve' "$T/argv"; check "resolve: BRIDGE_RESOLVE= (empty) turns the pinning off" $?
 
 echo
 echo "passed $PASS, failed $FAILED"
