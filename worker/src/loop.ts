@@ -88,7 +88,11 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
     }
 
     if (job) {
-      await deps.processJob(clients.client, job, config);
+      try {
+        await deps.processJob(clients.client, job, config);
+      } catch (error) {
+        log.error({ err: error }, 'job processing failed');
+      }
       continue;
     }
 
@@ -108,7 +112,11 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
       const claimedTurn = turn;
       const { client, chatClient } = clients;
 
-      await deps.withHeartbeat(client, config.workerName, () => deps.processChatTurn(chatClient, claimedTurn, config));
+      try {
+        await deps.withHeartbeat(client, config.workerName, () => deps.processChatTurn(chatClient, claimedTurn, config));
+      } catch (error) {
+        log.error({ err: error }, 'chat turn processing failed');
+      }
     } else {
       await deps.sleep(config.pollIntervalSec * 1000);
     }

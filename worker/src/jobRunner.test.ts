@@ -892,3 +892,35 @@ describe('processJob failureKind', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 });
+
+describe('processJob job dir cleanup failure', () => {
+  it('still reports success and resolves when the job dir holds a subdirectory the worker cannot remove', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-eacces-'));
+    let lockedDir: string | undefined;
+    let wrote = false;
+    globalThis.fetch = (async () => {
+      if (!wrote) {
+        wrote = true;
+        const jobDir = path.join(workDir, readdirSync(workDir).find((name) => name.startsWith('job-'))!);
+        lockedDir = path.join(jobDir, 'locked');
+        mkdirSync(lockedDir);
+        writeFileSync(path.join(lockedDir, 'file.txt'), 'x');
+        chmodSync(lockedDir, 0o500);
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }] }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 3, sourceFileId: 12, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    try {
+      await processJob(client as never, job, fakeConfig(workDir));
+
+      assert.equal(client.uploadResult.calls.length, 1);
+      assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    } finally {
+      if (lockedDir && existsSync(lockedDir)) chmodSync(lockedDir, 0o700);
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+});

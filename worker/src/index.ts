@@ -80,5 +80,8 @@ async function main(): Promise<void> {
 // this module — only run it when this file is the actual process entry
 // point (`node dist/index.js`).
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  void main();
+  main().catch((err) => {
+    logger.fatal({ err }, 'pipe-worker crashed');
+    process.exit(1);
+  });
 }
