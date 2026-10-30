@@ -2641,6 +2641,7 @@ export interface components {
             providerCredentialId?: number;
             contextId?: number;
             withoutContext?: boolean;
+            timeoutSec?: number;
         };
         UpdateJobStatusDto: {
             /** @enum {string} */

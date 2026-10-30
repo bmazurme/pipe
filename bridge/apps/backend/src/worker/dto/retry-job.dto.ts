@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsInt,
   IsOptional,
+  Max,
   Min,
 } from 'class-validator';
 
@@ -46,4 +47,11 @@ export class RetryJobDto {
   @IsOptional()
   @IsBoolean()
   withoutContext?: boolean;
+
+  // A new time limit in seconds (5 min to 4 h) for the retry, e.g. after a run was killed on the old one; absent = the job's own.
+  @IsOptional()
+  @IsInt()
+  @Min(300)
+  @Max(14400)
+  timeoutSec?: number;
 }

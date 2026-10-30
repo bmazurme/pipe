@@ -429,6 +429,7 @@ export class WorkerController {
         providerCredentialId: dto.providerCredentialId,
         contextId: dto.contextId,
         withoutContext: dto.withoutContext,
+        timeoutSec: dto.timeoutSec,
       },
     );
 

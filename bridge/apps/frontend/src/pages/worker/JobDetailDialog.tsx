@@ -22,6 +22,7 @@ import { DiscussInChatButton } from './DiscussInChatButton';
 import { ExtendJobButton } from './ExtendJobButton';
 import { JobLogs } from './JobLogs';
 import { describeOutcome, describeStage } from './jobStage';
+import { FailureDiagnosisCard } from './FailureDiagnosisCard';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
@@ -175,6 +176,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         {job.errorMessage && (
           <Alert theme="danger" view="filled" message={job.errorMessage} className={styles.detailError} />
         )}
+        <FailureDiagnosisCard job={job} />
 
         <JobLogs jobId={job.id} logs={job.logs ?? ''} active={jobIsActive} />
 

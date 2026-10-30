@@ -330,6 +330,7 @@ export class WorkerService implements OnModuleInit {
       providerCredentialId?: number;
       contextId?: number;
       withoutContext?: boolean;
+      timeoutSec?: number;
     } = {},
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
@@ -387,7 +388,11 @@ export class WorkerService implements OnModuleInit {
         ...(providerCredentialId !== null ? { providerCredentialId } : {}),
         ...(pinUsable ? { targetWorkerId: pinned.id } : {}),
         ...(requiredCapability !== null ? { requiredCapability } : {}),
-        ...(job.timeoutSec != null ? { timeoutSec: job.timeoutSec } : {}),
+        ...(overrides.timeoutSec !== undefined
+          ? { timeoutSec: overrides.timeoutSec }
+          : job.timeoutSec != null
+            ? { timeoutSec: job.timeoutSec }
+            : {}),
         ...(job.notifyOnFinish ? { notifyOnFinish: true } : {}),
         ...(job.resultPublicKey
           ? { resultPublicKey: job.resultPublicKey }
