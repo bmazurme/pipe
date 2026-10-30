@@ -115,7 +115,11 @@ export class SecretsService {
   // parseEnvFile (which strips one pair of outer quotes and nothing else,
   // so no escaping is needed — only wrapping).
   async exportEnv(userId: number): Promise<string> {
-    const secrets = await this.findAllByUser(userId);
+    // Unlike the listing, this needs `value` (decrypted by the column transformer).
+    const secrets = await this.repository.find({
+      where: { userId },
+      order: { name: 'ASC' },
+    });
     const lines: string[] = [];
 
     for (const secret of [...secrets].sort((a, b) =>
