@@ -17,6 +17,7 @@ import { LabModule } from './lab/lab.module';
 import { LogsModule } from './logs/logs.module';
 import { LoopModule } from './loop/loop.module';
 import { OauthModule } from './oauth/oauth.module';
+import { InboxModule } from './inbox/inbox.module';
 import { QuestionsModule } from './questions/questions.module';
 import { PurgeModule } from './purge/purge.module';
 import { ReportsReleaseModule } from './reports-release/reports-release.module';
@@ -59,6 +60,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     OauthModule,
     PurgeModule,
     QuestionsModule,
+    InboxModule,
     ReportsReleaseModule,
     ReportsSettingsModule,
     SecretsModule,

@@ -8,6 +8,7 @@ import {
   FileZipper,
   Flask,
   House,
+  ListCheck,
   Key,
   Lock,
   MagicWand,
@@ -47,6 +48,15 @@ export interface ServiceLink {
  * shows up in every entry point at once instead of being added to each by hand.
  */
 export const SERVICES: ServiceLink[] = [
+  {
+    id: 'inbox',
+    title: 'Решения',
+    description: 'Всё, что ждёт вашего решения, в одном списке: PR к влитию, вопросы агента, платы, лимиты, упавшие запуски.',
+    icon: ListCheck,
+    path: '/inbox',
+    group: 'system',
+    ownerOnly: true,
+  },
   {
     id: 'dashboard',
     title: 'Дашборд',
