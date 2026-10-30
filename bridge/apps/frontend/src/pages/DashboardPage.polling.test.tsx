@@ -30,6 +30,9 @@ vi.mock('../store/api', async (importOriginal) => {
     }),
     useGetDashboardNodesQuery: () => ({ isError: false, isLoading: false, data: { nodes: [] } }),
     useGetDashboardBackupsQuery: () => ({ isError: false, isLoading: false, data: { configured: false } }),
+    useGetDashboardBoardMetricsQuery: () => ({ isError: false, isLoading: false, data: [] }),
+    useGetDashboardNasQuery: () => ({ isError: false, isLoading: false, data: [] }),
+    useGetDashboardDeploysQuery: () => ({ isError: false, isLoading: false, data: [] }),
   };
 });
 

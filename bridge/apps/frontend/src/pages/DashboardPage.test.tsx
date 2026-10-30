@@ -248,4 +248,66 @@ describe('DashboardPage', () => {
     if (!label) throw new Error('label not found');
     expect(label.className).toMatch(/theme_danger/);
   });
+
+  describe('the header and the list of what is wrong, from every tile', () => {
+    const BOARD_BAD = { host: 'ubuntu-green', at: new Date().toISOString(), status: 'bad', reasons: ['Нет данных 12 мин — плата выключена, зависла или без связи с мостом'], data: {}, series: [] };
+    const BOARD_WARM = { host: 'ubuntu-blue', at: new Date().toISOString(), status: 'warn', reasons: ['Процессор 66 °C'], data: { socTempC: 66 }, series: [] };
+    const NAS_WARN = { host: 'MyCloudEX2Ultra', reportedAt: new Date().toISOString(), status: 'warn', reasons: ['Копия бэкапа устарела: 27 ч'], data: { uptimeSec: 1, backup: { snapshots: 1, bytes: 1 }, raid: { summary: 'md1 [UU]', degraded: false, syncing: false }, volume: { totalBytes: 1, usedBytes: 1 }, disks: [] } };
+    const ROLLED_BACK = { sha: '9781a0d'.padEnd(40, 'a'), previousSha: null, result: 'rolled_back', detail: null, prNumbers: [41, 42], at: new Date().toISOString() };
+
+    const serve = (extra: Record<string, unknown>) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+          if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
+          if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
+          if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
+          for (const [path, body] of Object.entries(extra)) if (request.url.includes(path)) return jsonResponse(body);
+
+          return jsonResponse([]);
+        }),
+      );
+
+    it('counts a dead board and a rolled back release as problems and lists them, worst first, with the remarks after', async () => {
+      serve({ '/dashboard/board-metrics': [BOARD_WARM, BOARD_BAD], '/dashboard/nas': [NAS_WARN], '/dashboard/deploys': [ROLLED_BACK] });
+      renderPage();
+
+      expect(await screen.findByText('Проблем: 2')).toBeTruthy();
+      expect(await screen.findByText('Что требует внимания')).toBeTruthy();
+      const lines = screen.getAllByRole('listitem').map((li) => li.textContent);
+
+      expect(lines).toEqual([
+        'Плата green: Нет данных 12 мин — плата выключена, зависла или без связи с мостом',
+        'Релиз 9781a0d (#41, #42) откатился — автоматика на паузе',
+        'Плата blue: Процессор 66 °C',
+        'NAS: Копия бэкапа устарела: 27 ч',
+      ]);
+    });
+
+    it('says "Замечаний" when there are only remarks, and "Всё в порядке" with nothing to say', async () => {
+      serve({ '/dashboard/board-metrics': [BOARD_WARM], '/dashboard/nas': [NAS_WARN] });
+      renderPage();
+
+      expect(await screen.findByText('Замечаний: 2')).toBeTruthy();
+      expect(screen.getByText('Замечания')).toBeTruthy();
+    });
+
+    it('does not count a tile that failed to load as a problem of its own (the tile says so itself)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          if (request.url.endsWith('/vpn/status')) return jsonResponse(VPN_UP);
+          if (request.url.endsWith('/vpn/connections')) return jsonResponse(ONE_ACTIVE_CONNECTION);
+          if (request.url.endsWith('/dashboard/nodes')) return jsonResponse(NODES_ALL_READY);
+          if (request.url.endsWith('/dashboard/backups')) return jsonResponse(BACKUP_FRESH);
+
+          return new Response(JSON.stringify({ message: 'boom' }), { status: 500 });
+        }),
+      );
+      renderPage();
+
+      expect(await screen.findByText('Всё в порядке')).toBeTruthy();
+    });
+  });
 });

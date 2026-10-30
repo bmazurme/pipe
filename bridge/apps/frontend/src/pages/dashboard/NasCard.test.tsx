@@ -47,10 +47,23 @@ describe('NasCard', () => {
     expect(screen.getByText('MyCloudEX2Ultra')).toBeTruthy();
     expect(screen.getByText('Диск sda: секторов в ожидании 2')).toBeTruthy();
     expect(screen.getByText(/снимков 3/)).toBeTruthy();
-    expect(screen.getByText(/RAID md1 \[UU\] md0 \[UU\]/)).toBeTruthy();
-    expect(screen.getByText(/том занят на 18 %/)).toBeTruthy();
-    expect(screen.getByText(/sda: SMART в порядке · 44 °C · 4.2 лет работы/)).toBeTruthy();
-    expect(screen.getByText(/sdb: SMART не пройден/)).toBeTruthy();
+    expect(screen.getByText('RAID md1 [UU]')).toBeTruthy();
+    expect(screen.getByText('RAID md0 [UU]')).toBeTruthy();
+    expect(screen.getByText(/занят на 18 %/)).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: 'Заполнение тома' }).getAttribute('aria-valuenow')).toBe('18');
+    expect(screen.getAllByText(/SMART в порядке/)).toHaveLength(1);
+    expect(screen.getByText('SMART не пройден')).toBeTruthy();
+    expect(screen.getByText('44 °C')).toBeTruthy();
+    expect(screen.getByText('4,2 г. в работе')).toBeTruthy();
+  });
+
+  it('marks a RAID array with a missing member and the resync', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json([{ ...NAS, status: 'bad', reasons: ['RAID деградировал (md1 [U_])'], data: { ...NAS.data, raid: { summary: 'md1 [U_] md0 [UU]', degraded: true, syncing: true } } }])));
+    renderCard();
+
+    expect(await screen.findByText('RAID md1 [U_]')).toBeTruthy();
+    expect(screen.getByText('RAID md0 [UU]')).toBeTruthy();
+    expect(screen.getByText('пересборка')).toBeTruthy();
   });
 
   it('says what a missing report means and how to get one', async () => {

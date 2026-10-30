@@ -1,0 +1,70 @@
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 2px solid var(--g-color-line-brand, royalblue);
+}
+
+.swatchDashed {
+  border-top: 2px dashed var(--g-color-text-secondary, gray);
+}
+
+.board {
+  display: grid;
+  grid-template-columns: 190px minmax(200px, 1fr) minmax(200px, 300px);
+  gap: 8px 20px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.whoLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reasons {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart {
+  min-width: 0;
+}
+
+.chartCaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
