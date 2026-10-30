@@ -15,6 +15,7 @@ import {
   Pulse,
   Rocket,
   Server,
+  CircleDollar,
   ShieldKeyhole,
   TrashBin,
 } from '@gravity-ui/icons';
@@ -54,6 +55,15 @@ export const SERVICES: ServiceLink[] = [
     description: 'Всё, что ждёт вашего решения, в одном списке: PR к влитию, вопросы агента, платы, лимиты, упавшие запуски.',
     icon: ListCheck,
     path: '/inbox',
+    group: 'system',
+    ownerOnly: true,
+  },
+  {
+    id: 'usage',
+    title: 'Расходы',
+    description: 'Что стоили запуски агента: время машины, токены и условная стоимость по задачам и моделям, с PR.',
+    icon: CircleDollar,
+    path: '/usage',
     group: 'system',
     ownerOnly: true,
   },
