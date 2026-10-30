@@ -9,6 +9,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 import type { ActionDeps } from './actions.js';
 import type { StatusPaths } from './collect.js';
+import { buildBrief, formatBrief } from './brief.js';
+import type { EventsPaths } from './events.js';
 import { createPipeMcpServer, mcpRunSyncCli } from './mcp.js';
 
 // Real protocol round-trip (InMemoryTransport.createLinkedPair — a real
@@ -63,12 +65,25 @@ describe('pipe-mcp', () => {
     return client;
   }
 
-  it('lists all six tools', async () => {
+  it('brief returns the same text formatBrief produces for the same inputs', async () => {
+    const eventsPaths: EventsPaths = { log: path.join(dir, 'events.jsonl'), snapshot: path.join(dir, 'last-snapshot.json') };
+    const c = await connect({ eventsPaths });
+    const result = (await c.callTool({ name: 'brief', arguments: { recentHours: 12 } })) as {
+      content: { text: string }[];
+      isError?: boolean;
+    };
+    const expected = formatBrief(await buildBrief({ recentHours: 12, paths: makeFixturePaths(dir), eventsPaths }), 12);
+    assert.equal(result.isError, false);
+    assert.match(result.content[0].text, /== brief ==/);
+    assert.equal(result.content[0].text, expected);
+  });
+
+  it('lists all seven tools', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['next', 'publish', 'pull', 'retry', 'status', 'task_log'],
+      ['brief', 'next', 'publish', 'pull', 'retry', 'status', 'task_log'],
     );
   });
 
