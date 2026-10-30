@@ -6407,6 +6407,7 @@ export interface operations {
     LabController_listRuns: {
         parameters: {
             query?: {
+                /** @description Only the runs of this project; omitted = every project */
                 projectId?: number;
             };
             header?: never;

@@ -3497,7 +3497,9 @@
             "name": "projectId",
             "required": false,
             "in": "query",
+            "description": "Only the runs of this project; omitted = every project",
             "schema": {
+              "minimum": 1,
               "type": "number"
             }
           }

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -189,4 +189,24 @@ export class SaveLabScheduleDto {
   @IsOptional()
   @IsIn(LAB_EXECUTORS)
   executor?: LabExecutor;
+}
+
+// GET /lab/runs?projectId=… — the project filter is optional. It is a DTO and not `@Query('projectId', new ParseIntPipe({ optional: true }))`
+// on purpose: the global ValidationPipe (transform: true) turns a missing `number` parameter into NaN (an empty one into 0) BEFORE that pipe runs,
+// so "all projects" was refused with 400 "numeric string is expected". Here a missing value stays missing.
+export class ListLabRunsQueryDto {
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Only the runs of this project; omitted = every project',
+  })
+  @IsOptional()
+  // @Type has already made '' into 0 by the time a @Transform runs, so the original query value is what tells "empty" from a real number.
+  @Transform(
+    ({ value, obj }: { value: unknown; obj: Record<string, unknown> }) =>
+      obj.projectId === '' ? undefined : value,
+  )
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  projectId?: number;
 }
