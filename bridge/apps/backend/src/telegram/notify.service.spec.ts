@@ -150,3 +150,88 @@ describe('NotifyService', () => {
     });
   });
 });
+
+describe('NotifyService urgent and weekends', () => {
+  afterEach(() => jest.useRealTimers());
+
+  const SATURDAY_NOON = new Date('2026-10-31T09:00:00Z');
+
+  function make(
+    now: Date,
+    over: { quietWeekends?: boolean; allowUrgent?: boolean } = {},
+  ) {
+    jest.useFakeTimers().setSystemTime(now);
+
+    const telegram = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      send: jest.fn().mockResolvedValue(true),
+      sendWithButtons: jest.fn().mockResolvedValue(true),
+    };
+    const save = jest.fn().mockResolvedValue(undefined);
+    const settings = {
+      effective: jest.fn().mockResolvedValue({
+        window: { startMin: 23 * 60, endMin: 8 * 60 },
+        timezone: 'Europe/Moscow',
+        quietWeekends: over.quietWeekends ?? false,
+        allowUrgent: over.allowUrgent ?? true,
+      }),
+    };
+    const service = new NotifyService(
+      telegram as never,
+      settings as never,
+      { save, find: jest.fn().mockResolvedValue([]) } as never,
+    );
+
+    return { service, telegram, save };
+  }
+
+  it('holds an ordinary notification on a quiet weekend afternoon, outside the daily window', async () => {
+    const { service, telegram, save } = make(SATURDAY_NOON, {
+      quietWeekends: true,
+    });
+
+    await service.send('weekend event');
+
+    expect(telegram.send).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledWith({ text: 'weekend event', buttons: null });
+  });
+
+  it('delivers the same notification on a weekend when weekends are not quiet', async () => {
+    const { service, telegram } = make(SATURDAY_NOON);
+
+    await service.send('weekend event');
+
+    expect(telegram.send).toHaveBeenCalledWith('weekend event');
+  });
+
+  it('lets an urgent notification through the silence, also with buttons', async () => {
+    const { service, telegram, save } = make(SATURDAY_NOON, {
+      quietWeekends: true,
+    });
+
+    await service.send('VPN down', { urgent: true });
+    await service.sendWithButtons(
+      'Merge?',
+      [[{ text: 'ok', callback_data: 'x' }]],
+      {
+        urgent: true,
+      },
+    );
+
+    expect(telegram.send).toHaveBeenCalledWith('VPN down');
+    expect(telegram.sendWithButtons).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('queues an urgent notification too when the owner switched urgent off', async () => {
+    const { service, telegram, save } = make(SATURDAY_NOON, {
+      quietWeekends: true,
+      allowUrgent: false,
+    });
+
+    await service.send('VPN down', { urgent: true });
+
+    expect(telegram.send).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+});

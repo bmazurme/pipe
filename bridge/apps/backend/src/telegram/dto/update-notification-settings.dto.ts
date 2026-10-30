@@ -1,4 +1,10 @@
-import { IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdateNotificationSettingsDto {
   // "23:00-08:00", or "off".
@@ -11,4 +17,13 @@ export class UpdateNotificationSettingsDto {
   @IsString()
   @MaxLength(64)
   timezone: string;
+
+  // A missing field keeps what is saved.
+  @IsOptional()
+  @IsBoolean()
+  quietWeekends?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowUrgent?: boolean;
 }

@@ -2440,6 +2440,8 @@ export interface components {
         UpdateNotificationSettingsDto: {
             quietHours: string;
             timezone: string;
+            quietWeekends?: boolean;
+            allowUrgent?: boolean;
         };
         MeResponseDto: {
             id: number;

@@ -70,8 +70,10 @@ export class VpnStatusAlertsService {
       );
       if (!claimed || VPN_ALERTS_OFF()) return;
 
+      // Urgent: worker traffic goes through it, and it is not the kind of news that waits for the morning digest.
       await this.notifier?.send(
         `🔌 VPN «${connection.name}» не отвечает: ${reason}`,
+        { urgent: true },
       );
     } catch (err) {
       this.logger.warn(

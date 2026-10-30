@@ -17,6 +17,8 @@ export function NotificationsSection() {
 
   const [form, setForm] = useState<QuietHoursForm | null>(null);
   const [timezone, setTimezone] = useState<string>('');
+  const [quietWeekends, setQuietWeekends] = useState(false);
+  const [allowUrgent, setAllowUrgent] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
@@ -25,6 +27,8 @@ export function NotificationsSection() {
     if (data) {
       setForm(parseQuietHours(data.quietHours));
       setTimezone(data.timezone);
+      setQuietWeekends(data.quietWeekends);
+      setAllowUrgent(data.allowUrgent);
     }
   }, [data]);
 
@@ -48,7 +52,10 @@ export function NotificationsSection() {
 
   const validation = validateQuietHours(form);
   const isDirty =
-    formatQuietHours(form) !== formatQuietHours(parseQuietHours(data.quietHours)) || timezone !== data.timezone;
+    formatQuietHours(form) !== formatQuietHours(parseQuietHours(data.quietHours)) ||
+    timezone !== data.timezone ||
+    quietWeekends !== data.quietWeekends ||
+    allowUrgent !== data.allowUrgent;
 
   const update = (patch: Partial<QuietHoursForm>) => {
     setForm({ ...form, ...patch });
@@ -62,7 +69,7 @@ export function NotificationsSection() {
     setError(null);
 
     try {
-      await save({ quietHours: formatQuietHours(form), timezone }).unwrap();
+      await save({ quietHours: formatQuietHours(form), timezone, quietWeekends, allowUrgent }).unwrap();
       setIsSaved(true);
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось сохранить настройки'));
@@ -104,6 +111,23 @@ export function NotificationsSection() {
             />
           </label>
         </div>
+
+        <Switch
+          checked={quietWeekends}
+          onUpdate={(value) => {
+            setQuietWeekends(value);
+            setIsSaved(false);
+          }}
+          content="Тихие выходные (суббота и воскресенье целиком)"
+        />
+        <Switch
+          checked={allowUrgent}
+          onUpdate={(value) => {
+            setAllowUrgent(value);
+            setIsSaved(false);
+          }}
+          content="Срочное (например, VPN перестал отвечать) приходит и в тишину"
+        />
 
         <label className={styles.field}>
           <Text variant="body-2" color="secondary">Часовой пояс</Text>

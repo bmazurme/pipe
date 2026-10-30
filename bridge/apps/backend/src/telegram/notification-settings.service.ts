@@ -18,6 +18,8 @@ export interface EffectiveNotificationSettings {
   quietHours: string;
   timezone: string;
   window: QuietWindow | null;
+  quietWeekends: boolean;
+  allowUrgent: boolean;
   // Where the values came from: an account's saved settings, or the env defaults.
   source: 'profile' | 'default';
 }
@@ -68,6 +70,8 @@ export class NotificationSettingsService {
       quietHours,
       timezone,
       window: parseQuietHours(quietHours),
+      quietWeekends: owner?.quietWeekends ?? false,
+      allowUrgent: owner?.allowUrgent ?? true,
       source: owner ? 'profile' : 'default',
     };
 
@@ -84,6 +88,8 @@ export class NotificationSettingsService {
     isCustom: boolean;
     appliesToChat: boolean;
     isQuietNow: boolean;
+    quietWeekends: boolean;
+    allowUrgent: boolean;
   }> {
     const own = await this.repository.findOne({ where: { userId } });
     const effective = await this.effective();
@@ -95,10 +101,17 @@ export class NotificationSettingsService {
     return {
       quietHours: own?.quietHours ?? effective.quietHours,
       timezone: own?.timezone ?? effective.timezone,
+      quietWeekends: own?.quietWeekends ?? effective.quietWeekends,
+      allowUrgent: own?.allowUrgent ?? effective.allowUrgent,
       isCustom: Boolean(own),
       // Only the owner's row drives the shared chat.
       appliesToChat: !owner || owner.userId === userId,
-      isQuietNow: isQuietNow(effective.window, effective.timezone),
+      isQuietNow: isQuietNow(
+        effective.window,
+        effective.timezone,
+        new Date(),
+        effective.quietWeekends,
+      ),
     };
   }
 
@@ -106,13 +119,28 @@ export class NotificationSettingsService {
     userId: number,
     quietHours: string,
     timezone: string,
+    extra: { quietWeekends?: boolean; allowUrgent?: boolean } = {},
   ): Promise<void> {
     parseQuietHours(quietHours); // throws on a malformed window
     if (!isValidTimeZone(timezone)) {
       throw new Error(`Unknown time zone: ${timezone}`);
     }
 
-    await this.repository.upsert({ userId, quietHours, timezone }, ['userId']);
+    // Only what was sent is changed; the rest keeps its saved value (or the default for an account saving for the first time).
+    await this.repository.upsert(
+      {
+        userId,
+        quietHours,
+        timezone,
+        ...(extra.quietWeekends !== undefined
+          ? { quietWeekends: extra.quietWeekends }
+          : {}),
+        ...(extra.allowUrgent !== undefined
+          ? { allowUrgent: extra.allowUrgent }
+          : {}),
+      },
+      ['userId'],
+    );
     this.cache = null;
   }
 }

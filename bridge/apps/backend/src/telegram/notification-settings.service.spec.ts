@@ -1,6 +1,12 @@
 import { NotificationSettingsService } from './notification-settings.service';
 
-type Row = { userId: number; quietHours: string; timezone: string };
+type Row = {
+  userId: number;
+  quietHours: string;
+  timezone: string;
+  quietWeekends?: boolean;
+  allowUrgent?: boolean;
+};
 
 function setup(rows: Row[] = [], config: Record<string, string> = {}) {
   const repository = {
@@ -22,7 +28,8 @@ function setup(rows: Row[] = [], config: Record<string, string> = {}) {
     upsert: jest.fn(async (row: Row) => {
       const at = rows.findIndex((existing) => existing.userId === row.userId);
 
-      if (at >= 0) rows[at] = row;
+      if (at >= 0)
+        rows[at] = { ...rows[at], ...row }; // like the real upsert: only the columns sent change
       else rows.push(row);
     }),
   };
@@ -133,6 +140,42 @@ describe('NotificationSettingsService', () => {
         isCustom: false,
         appliesToChat: true,
       });
+    });
+  });
+});
+
+describe('NotificationSettingsService weekends and urgent', () => {
+  it('defaults to ordinary weekends and urgent allowed', async () => {
+    const { service } = setup();
+
+    expect(await service.effective()).toMatchObject({
+      quietWeekends: false,
+      allowUrgent: true,
+    });
+    expect(await service.forUser(7)).toMatchObject({
+      quietWeekends: false,
+      allowUrgent: true,
+    });
+  });
+
+  it('saves the extra switches only when they are sent, and keeps them otherwise', async () => {
+    const { service, rows } = setup();
+
+    await service.save(7, '23:00-08:00', 'Europe/Moscow', {
+      quietWeekends: true,
+      allowUrgent: false,
+    });
+    expect(rows[0]).toMatchObject({ quietWeekends: true, allowUrgent: false });
+
+    await service.save(7, '22:00-07:00', 'Europe/Moscow');
+    expect(rows[0]).toMatchObject({
+      quietHours: '22:00-07:00',
+      quietWeekends: true,
+      allowUrgent: false,
+    });
+    expect(await service.forUser(7)).toMatchObject({
+      quietWeekends: true,
+      allowUrgent: false,
     });
   });
 });
