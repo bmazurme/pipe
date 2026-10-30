@@ -1,5 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+
+import { LoopControlService } from '../loop/loop-control.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 
@@ -23,6 +25,7 @@ export class ImproveAutoStartService {
     private readonly settings: Repository<ImproveSettings>,
     private readonly workers: WorkerService,
     private readonly appLogs: AppLogService,
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   async getSettings(userId: number): Promise<ImproveSettings | null> {
@@ -93,6 +96,9 @@ export class ImproveAutoStartService {
     this.autoStarting = true;
 
     try {
+      // Paused: parcels stay in Storage and are picked up after the owner resumes.
+      if (await this.control?.isPaused()) return;
+
       const accounts = await this.settings.find({
         where: { autoStartModel: Not(IsNull()) },
       });

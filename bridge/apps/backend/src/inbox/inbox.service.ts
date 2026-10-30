@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
@@ -8,6 +8,7 @@ import {
   ImproveRunStatus,
 } from '../improve/entities/improve-run.entity';
 import { GithubApiService } from '../loop/github-api.service';
+import { LoopControlService } from '../loop/loop-control.service';
 import { QuestionsService } from '../questions/questions.service';
 import { Job, JobStatus } from '../worker/entities/job.entity';
 import { Worker } from '../worker/entities/worker.entity';
@@ -47,19 +48,33 @@ export class InboxService {
     private readonly questions: QuestionsService,
     private readonly boards: BoardsService,
     private readonly github: GithubApiService,
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   async list(userId: number, now = new Date()): Promise<InboxItem[]> {
     // Each source fails on its own: a GitHub outage must not hide the unanswered questions.
-    const [pulls, cards, boards, workers, failedJobs] = await Promise.all([
-      this.safe('pulls', () => this.pulls(userId, now), []),
-      this.safe('questions', () => this.questions.listCards(userId, false), []),
-      this.safe('boards', () => this.boards.list(userId), []),
-      this.safe('workers', () => this.workerFacts(userId, now), []),
-      this.safe('jobs', () => this.failedJobs(userId, now), []),
-    ]);
+    const [pulls, cards, boards, workers, failedJobs, pause] =
+      await Promise.all([
+        this.safe('pulls', () => this.pulls(userId, now), []),
+        this.safe(
+          'questions',
+          () => this.questions.listCards(userId, false),
+          [],
+        ),
+        this.safe('boards', () => this.boards.list(userId), []),
+        this.safe('workers', () => this.workerFacts(userId, now), []),
+        this.safe('jobs', () => this.failedJobs(userId, now), []),
+        this.safe(
+          'loop control',
+          async () => this.control?.state() ?? null,
+          null,
+        ),
+      ]);
     const open = cards.filter((card) => card.openCount > 0);
     const facts: InboxFacts = {
+      loopPause: pause?.paused
+        ? { reason: pause.reason, by: pause.pausedBy, since: pause.pausedAt }
+        : null,
       pulls,
       openQuestions: open.reduce((sum, card) => sum + card.openCount, 0),
       openQuestionCards: open.length,

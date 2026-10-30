@@ -5,7 +5,7 @@ import baseQuery from '../../base-query-with-reauth';
 const improveApi = createApi({
   reducerPath: 'improveApi',
   baseQuery,
-  tagTypes: ['ImproveIssues', 'ImproveRuns', 'ImproveSchedules', 'ImproveSettings'],
+  tagTypes: ['ImproveIssues', 'ImproveRuns', 'ImproveSchedules', 'ImproveSettings', 'LoopControl'],
   endpoints: () => ({}),
 });
 

@@ -3,6 +3,7 @@ import { Alert, Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 import { useTabParam } from '../shared/hooks/useTabParam';
 import { useGetImproveStatusQuery } from '../store/api';
 import { PageHeader } from '../widgets/PageHeader';
+import { LoopControlBanner } from './improve/LoopControlBanner';
 import styles from './ImprovePage.module.css';
 import { AnalysisTab } from './improve/AnalysisTab';
 import { IssuesTab } from './improve/IssuesTab';
@@ -25,6 +26,8 @@ export function ImprovePage() {
             : 'Самоулучшение: GitHub issues → worker → pull request.'
         }
       />
+
+      <LoopControlBanner />
 
       {status && !status.configured && (
         <Alert

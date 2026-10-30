@@ -399,3 +399,17 @@ describe('ImproveCiService: a PR that conflicts with the base', () => {
     expect(improve.redoOnConflict).not.toHaveBeenCalled();
   });
 });
+
+describe('ImproveCiService while the automation is paused', () => {
+  it('does nothing to the open pull requests', async () => {
+    const { service, runs, github } = setup();
+    (service as unknown as { control: object }).control = {
+      isPaused: jest.fn().mockResolvedValue(true),
+    };
+
+    await service.tick();
+
+    expect(runs.find).not.toHaveBeenCalled();
+    expect(github.getPull).not.toHaveBeenCalled();
+  });
+});

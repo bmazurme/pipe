@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,6 +16,7 @@ import {
 } from '../context/context-usage';
 import { ContextService } from '../context/context.service';
 import { GithubApiService } from '../loop/github-api.service';
+import { LoopControlService } from '../loop/loop-control.service';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
 import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
@@ -40,6 +42,8 @@ export class ImproveScheduleService implements OnModuleInit {
     private readonly notifier: NotifyService,
     private readonly contexts: ContextService,
     private readonly contextUsage: ContextUsageRegistry,
+    // The kill-switch; absent in tests that do not exercise it.
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   onModuleInit(): void {
@@ -152,6 +156,9 @@ export class ImproveScheduleService implements OnModuleInit {
     this.ticking = true;
 
     try {
+      // Paused: no schedule fires. They are not skipped for the day - a schedule that is due fires after the owner resumes.
+      if (await this.control?.isPaused()) return;
+
       for (const schedule of await this.schedules.find({
         where: { enabled: true },
       })) {

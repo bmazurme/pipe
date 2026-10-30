@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import { BoardsService } from '../boards/boards.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { LoopControlService } from './loop-control.service';
 import { LoopService } from './loop.service';
 import { MergeService } from './merge.service';
 
@@ -15,7 +16,9 @@ export interface TelegramUpdate {
   };
 }
 
-const HELP_TEXT = '/status — последние циклы\n/help — эта справка';
+const HELP_TEXT =
+  '/status — последние циклы\n/pause [причина] — остановить новую автоматическую работу\n/resume — продолжить\n/help — эта справка';
+const MAX_REASON = 200;
 
 // Command handling shared by both ways an update can arrive: the webhook
 // controller and the long-polling loop. Lives in the loop module (not
@@ -29,6 +32,8 @@ export class TelegramCommandsService {
     private readonly telegram: TelegramService,
     private readonly merges: MergeService,
     private readonly boards: BoardsService,
+    // Optional in tests that do not exercise it.
+    @Optional() private readonly control?: LoopControlService,
   ) {}
 
   async handle(update: TelegramUpdate): Promise<void> {
@@ -55,6 +60,29 @@ export class TelegramCommandsService {
 
     if (command === '/status') {
       await this.telegram.send(await this.loopService.statusText());
+    } else if (command === '/pause' && this.control) {
+      const reason = text
+        .trim()
+        .split(/\s+/)
+        .slice(1)
+        .join(' ')
+        .slice(0, MAX_REASON);
+
+      await this.control.pause(
+        reason || 'остановлено командой /pause',
+        'telegram',
+      );
+      await this.telegram.send(
+        '⏸ Автоматика на паузе: новые анализы, запуски по расписанию, автозапуск посылок и работа с открытыми PR не стартуют. Влить PR и запустить что-то вручную можно. /resume — продолжить.',
+      );
+    } else if (command === '/resume' && this.control) {
+      const was = await this.control.resume();
+
+      await this.telegram.send(
+        was
+          ? '▶️ Автоматика продолжает работу.'
+          : 'Автоматика и не была на паузе.',
+      );
     } else if (command === '/help' || command === '/start') {
       await this.telegram.send(HELP_TEXT);
     }

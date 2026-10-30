@@ -2,6 +2,7 @@ import { buildInbox, InboxFacts } from './inbox';
 
 const NOW = new Date('2026-10-30T12:00:00Z');
 const empty: InboxFacts = {
+  loopPause: null,
   pulls: [],
   openQuestions: 0,
   openQuestionCards: 0,
@@ -169,5 +170,28 @@ describe('buildInbox', () => {
       'board-offline:new',
       'questions',
     ]);
+  });
+
+  it('puts the paused automation first, with the reason and who stopped it', () => {
+    const items = build({
+      loopPause: {
+        reason: 'версия 9781a0d не прошла проверку',
+        by: 'deploy',
+        since: '2026-10-30T08:00:00Z',
+      },
+      openQuestions: 1,
+      openQuestionCards: 1,
+    });
+
+    expect(items[0]).toMatchObject({
+      id: 'loop-paused',
+      kind: 'loop_paused',
+      severity: 'high',
+      link: '/improve',
+      since: '2026-10-30T08:00:00Z',
+    });
+    expect(items[0].detail).toBe(
+      'версия 9781a0d не прошла проверку — остановил откат релиза',
+    );
   });
 });

@@ -2870,6 +2870,70 @@
         }
       }
     },
+    "/api/v1/loop/control": {
+      "get": {
+        "operationId": "LoopControlController_state",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/loop/control/pause": {
+      "post": {
+        "operationId": "LoopControlController_pause",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PauseLoopDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/loop/control/resume": {
+      "post": {
+        "operationId": "LoopControlController_resume",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/boards/agent/report": {
       "post": {
         "operationId": "BoardsAgentController_report",
@@ -7099,6 +7163,10 @@
           "type",
           "taskKey"
         ]
+      },
+      "PauseLoopDto": {
+        "type": "object",
+        "properties": {}
       },
       "ReportedScriptDto": {
         "type": "object",

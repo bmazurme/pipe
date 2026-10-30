@@ -236,3 +236,17 @@ describe('LabSchedulesService: onlyOnNewCommits', () => {
     expect(runs.launch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('LabSchedulesService while the automation is paused', () => {
+  it('starts nothing', async () => {
+    const { service, repo, runs } = setup(makeSchedule());
+    (service as unknown as { control: object }).control = {
+      isPaused: jest.fn().mockResolvedValue(true),
+    };
+
+    await service.tick(new Date('2026-10-26T09:00:00Z'));
+
+    expect(repo.find).not.toHaveBeenCalled();
+    expect(runs.launch).not.toHaveBeenCalled();
+  });
+});
