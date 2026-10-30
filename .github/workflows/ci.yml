@@ -196,8 +196,10 @@ jobs:
         run: npm test --workspace=packages/client
         working-directory: reports
 
-  bridge:
-    name: bridge (lint, build, tests)
+  # bridge is two parallel jobs (backend with Postgres, frontend without): they share no
+  # step, and one serial job was the slowest in the pipeline.
+  bridge-backend:
+    name: bridge backend (lint, build, tests)
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     needs: protocol
     # Backs both the e2e suite (needs a real DB — previously skipped in CI
@@ -318,6 +320,22 @@ jobs:
       # above having just confirmed that file itself is current.
       - name: protocol OpenAPI types drift check
         run: npm run openapi:check --workspace=packages/protocol
+
+  bridge-frontend:
+    name: bridge frontend (lint, build, tests)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    needs: protocol
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+      - run: npm ci
+        working-directory: bridge
 
       - name: Frontend ESLint
         run: npm run lint -w frontend
