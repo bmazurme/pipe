@@ -7,7 +7,7 @@ import {
 } from '@gravity-ui/navigation';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-import { useGetWorkerStatusQuery } from '../../store/api';
+import { useGetWorkerStatusQuery, useListInboxQuery } from '../../store/api';
 import { useAuth } from '../providers/AuthProvider';
 import { useAppTheme } from '../providers/ThemeProvider';
 import { useIsMobile } from '../../shared/lib/useIsMobile';
@@ -23,6 +23,7 @@ import { useCompactHotkey } from './useCompactHotkey';
 import styles from './AppLayout.module.css';
 
 const WORKER_STATUS_POLL_MS = 30_000;
+const INBOX_POLL_MS = 60_000;
 
 export function AppLayout() {
   const [compact, setCompact] = useLocalStorage(COMPACT_STORAGE_KEY, false);
@@ -61,7 +62,15 @@ export function AppLayout() {
     pollingInterval: WORKER_STATUS_POLL_MS,
     skipPollingIfUnfocused: true,
   });
+  // «Решения» is owner-only: for anyone else no request is sent. The cache is shared with InboxPage.
+  const { data: inboxItems } = useListInboxQuery(undefined, {
+    skip: user?.isOwner !== true,
+    pollingInterval: INBOX_POLL_MS,
+    skipPollingIfUnfocused: true,
+  });
   const navStatus: NavStatus = {
+    inboxTotal: inboxItems?.length,
+    inboxUrgent: inboxItems?.filter((item) => item.severity === 'high').length,
     workerUp: typeof workerStatus?.isUp === 'boolean' ? workerStatus.isUp : undefined,
     isOwner: user?.isOwner,
   };

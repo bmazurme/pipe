@@ -133,4 +133,15 @@ describe('AppLayout', () => {
     await user.click(profileRow);
     await waitFor(() => expect(screen.queryByText('Выйти')).toBeNull());
   });
+
+  it('does not ask for the inbox when the account is not the owner', async () => {
+    setViewport(false);
+    const fetchMock = vi.fn(async () => new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderLayout(layoutRoutes);
+
+    await screen.findByText('содержимое');
+    const urls = (fetchMock.mock.calls as unknown as [Request][]).map(([request]) => request.url);
+    expect(urls.some((url) => url.endsWith('/inbox'))).toBe(false);
+  });
 });
