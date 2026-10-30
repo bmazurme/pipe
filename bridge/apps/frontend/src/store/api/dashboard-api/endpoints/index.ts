@@ -42,6 +42,19 @@ export interface GithubConnectionCheck {
   url: string;
 }
 
+export type DeployResult = 'deployed' | 'rolled_back' | 'failed';
+
+/** What the deploying board reported about one release (infra/autodeploy → /loop/deploys). */
+export interface DashboardDeploy {
+  sha: string;
+  previousSha: string | null;
+  result: DeployResult;
+  detail: string | null;
+  /** The pull requests that rolled out in it; empty when GitHub could not be asked. */
+  prNumbers: number[];
+  at: string;
+}
+
 function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
@@ -53,6 +66,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     }),
     getDashboardBackups: builder.query<BackupStatus, void>({
       query: () => 'dashboard/backups',
+    }),
+    getDashboardDeploys: builder.query<DashboardDeploy[], void>({
+      query: () => 'dashboard/deploys',
     }),
     getGithubConnection: builder.query<GithubConnection, void>({
       query: () => 'dashboard/github-connection',
@@ -74,6 +90,7 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
 export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
+  useGetDashboardDeploysQuery,
   useGetGithubConnectionQuery,
   useSaveGithubConnectionMutation,
   useCheckGithubConnectionMutation,

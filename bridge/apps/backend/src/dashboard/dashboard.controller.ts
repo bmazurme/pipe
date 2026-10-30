@@ -21,6 +21,7 @@ import {
   GithubConnectionService,
   GithubConnectionState,
 } from './github-connection.service';
+import { DeploysService, DeployView } from './deploys.service';
 import { NodesService, NodesStatus } from './nodes.service';
 
 // Browser session only, owner-only — infra topology (Swarm nodes) and backup
@@ -33,11 +34,18 @@ export class DashboardController {
     private readonly nodes: NodesService,
     private readonly backups: BackupStatusService,
     private readonly github: GithubConnectionService,
+    private readonly deploys: DeploysService,
   ) {}
 
   @Get('nodes')
   getNodes(): Promise<NodesStatus> {
     return this.nodes.getStatus();
+  }
+
+  // The last releases the deploying board reported: went out, rolled back, or never came up, with the PRs in each.
+  @Get('deploys')
+  getDeploys(): Promise<DeployView[]> {
+    return this.deploys.latest();
   }
 
   @Get('backups')
