@@ -29,7 +29,7 @@ export const ACTIVE_RUN_STATUSES = [
 ];
 
 // 'ci' = started by bridge itself because CI went red on one of its pull requests.
-export type ImproveTrigger = 'manual' | 'schedule' | 'ci' | 'chat';
+export type ImproveTrigger = 'manual' | 'schedule' | 'ci' | 'chat' | 'conflict';
 // 'repair' fixes a red CI on an open PR of an earlier 'issue' run.
 export type ImproveRunKind = 'issue' | 'analysis' | 'repair';
 

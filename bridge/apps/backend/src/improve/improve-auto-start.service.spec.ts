@@ -79,6 +79,7 @@ describe('auto-start of pushed parcels', () => {
       autoStartModel: null,
       autoStartSince: null,
       autoRepairCi: true,
+      autoRedoConflicts: false,
     });
     await expect(service.saveSettings(3, 'nope')).rejects.toThrow(
       /Неизвестная модель/,
@@ -113,6 +114,29 @@ describe('ImproveAutoStartService.saveSettings', () => {
 
     expect(settings.save).toHaveBeenLastCalledWith(
       expect.objectContaining({ autoRepairCi: true }),
+    );
+  });
+});
+
+describe('ImproveAutoStartService conflict redo switch', () => {
+  it('is off for an account that never saved settings, and saving other settings does not switch it on or off', async () => {
+    const { service, settings } = setup();
+
+    await service.saveSettings(3, null, true, true);
+    expect(settings.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoRedoConflicts: true }),
+    );
+
+    settings.findOne.mockResolvedValue({
+      userId: 3,
+      autoStartModel: null,
+      autoStartSince: null,
+      autoRepairCi: true,
+      autoRedoConflicts: true,
+    });
+    await service.saveSettings(3, null, false);
+    expect(settings.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoRepairCi: false, autoRedoConflicts: true }),
     );
   });
 });

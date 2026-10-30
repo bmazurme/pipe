@@ -604,6 +604,69 @@ export class ImproveService {
 
   // The chat's "merge this PR" card, after the person confirmed it — a direct,
   // synchronous GitHub call (no worker job, no ImproveRun row to track).
+  // Closes an Improve pull request that conflicts with the base and does its issue again on the current base — at most once per issue.
+  // The old run is freed first (a run is refused while another has an open PR for the issue); if the new run cannot start, it is put
+  // back and the PR is left alone. The PR is closed only after the new run exists.
+  async redoOnConflict(parent: ImproveRun): Promise<ImproveRun> {
+    const prNumber = parent.prNumber as number;
+    const issueNumber = parent.issueNumber as number;
+    const earlier = await this.runs.count({
+      where: { kind: 'issue', issueNumber, trigger: 'conflict' },
+    });
+
+    if (earlier > 0) {
+      throw new ConflictException(
+        `Задача #${issueNumber} уже переделывалась после конфликта`,
+      );
+    }
+
+    const previous = { status: parent.status, note: parent.note };
+
+    parent.status = ImproveRunStatus.Cancelled;
+    parent.note = `PR #${prNumber} закрыт: конфликт с основной веткой, задача переделывается`;
+    await this.runs.save(parent);
+
+    let run: ImproveRun;
+
+    try {
+      run = await this.startRun(
+        parent.userId,
+        issueNumber,
+        parent.model,
+        'conflict',
+        parent.scheduleId,
+      );
+    } catch (error) {
+      parent.status = previous.status;
+      parent.note = previous.note;
+      await this.runs.save(parent);
+
+      throw error;
+    }
+
+    try {
+      await this.github.closePull(
+        prNumber,
+        `Closed by bridge: this branch conflicts with the base, so the issue is done again on the current base (run ${run.id}).`,
+      );
+
+      if (parent.branch) await this.github.deleteBranch(parent.branch);
+    } catch (error) {
+      this.logger.warn(
+        `PR #${prNumber} was replaced by run ${run.id} but could not be closed: ${message(error)}`,
+      );
+    }
+
+    this.log(
+      'info',
+      'improve.conflict_redo',
+      `PR #${prNumber} conflicts with the base: issue #${issueNumber} redone as run ${run.id}`,
+      { runId: run.id, prNumber, issueNumber },
+    );
+
+    return run;
+  }
+
   async startPrMerge(prNumber: number) {
     const result = await this.mergeService.mergeAny(prNumber);
 

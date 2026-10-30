@@ -7019,6 +7019,9 @@
           "autoRepairCi": {
             "type": "boolean"
           },
+          "autoRedoConflicts": {
+            "type": "boolean"
+          },
           "minValue": {
             "type": "number",
             "minimum": 1,

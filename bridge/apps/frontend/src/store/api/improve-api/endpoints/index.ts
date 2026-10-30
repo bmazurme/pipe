@@ -19,6 +19,8 @@ export interface ImproveSettings {
   autoStartModel: string | null;
   /** Fix a red CI on the PRs Improve opened (a worker on the PR's branch, twice at most). */
   autoRepairCi: boolean;
+  /** Close an Improve PR that conflicts with the base and do its issue again on the current base (once per issue). */
+  autoRedoConflicts: boolean;
   /** The brake on automatic issue filing: proposals worth less than this (1–5) are not filed. */
   minValue: number;
   /** Open issues of one direction at which that direction waits. */

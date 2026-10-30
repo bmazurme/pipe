@@ -35,6 +35,8 @@ function setup(
     ci?: string;
     failed?: unknown[];
     behind?: number;
+    rerun?: number;
+    rerunFails?: boolean;
   } = {},
 ) {
   const runs = {
@@ -61,9 +63,14 @@ function setup(
     failedChecks: jest.fn().mockResolvedValue(over.failed ?? [failedCheck]),
     behindBy: jest.fn().mockResolvedValue(over.behind ?? 0),
     updatePullBranch: jest.fn().mockResolvedValue(undefined),
+    // 0 = nothing to re-run (or no right to): the worker repair follows at once.
+    rerunFailedRuns: over.rerunFails
+      ? jest.fn().mockRejectedValue(new Error('GitHub 403'))
+      : jest.fn().mockResolvedValue(over.rerun ?? 0),
   };
   const improve = {
     startRepair: jest.fn().mockResolvedValue({ id: 77 }),
+    redoOnConflict: jest.fn().mockResolvedValue({ id: 88 }),
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
   const service = new ImproveCiService(
@@ -281,22 +288,6 @@ describe('ImproveCiService.checkOne while another start of the PR hands off', ()
       expect(github.behindBy).not.toHaveBeenCalled();
     });
 
-    it('announces a conflict once instead of trying to update', async () => {
-      const { service, github, notifier } = setup({
-        ci: 'success',
-        behind: 2,
-        pull: { mergeable: false },
-      });
-
-      expect(await service.checkOne(parent as never)).toBe('conflict');
-      expect(github.updatePullBranch).not.toHaveBeenCalled();
-      expect(notifier.send).toHaveBeenCalledWith(
-        expect.stringContaining('конфликт с main'),
-      );
-      expect(await service.checkOne(parent as never)).toBe('ci-ok');
-      expect(notifier.send).toHaveBeenCalledTimes(1);
-    });
-
     it('does not fail the tick when GitHub refuses the update', async () => {
       const { service, github, notifier } = setup({ ci: 'success', behind: 1 });
       github.updatePullBranch.mockRejectedValue(new Error('GitHub 422'));
@@ -304,5 +295,107 @@ describe('ImproveCiService.checkOne while another start of the PR hands off', ()
       expect(await service.checkOne(parent as never)).toBe('update-failed');
       expect(notifier.send).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ImproveCiService: re-run before repairing', () => {
+  it('re-runs the failed checks first, once per head commit, and only then spends a worker', async () => {
+    const { service, github, improve, notifier } = setup({ rerun: 1 });
+
+    expect(await service.checkOne(parent as never)).toBe('rerun');
+    expect(github.rerunFailedRuns).toHaveBeenCalledWith('head-1');
+    expect(improve.startRepair).not.toHaveBeenCalled();
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringContaining('перезапустил упавшие проверки'),
+    );
+
+    // Still red on the same commit: a real failure now.
+    expect(await service.checkOne(parent as never)).toBe('repair');
+    expect(github.rerunFailedRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it('goes straight to the repair when there was nothing to re-run, or the token may not', async () => {
+    const none = setup({ rerun: 0 });
+    const denied = setup({ rerunFails: true });
+
+    expect(await none.service.checkOne(parent as never)).toBe('repair');
+    expect(await denied.service.checkOne(parent as never)).toBe('repair');
+    expect(denied.improve.startRepair).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-runs again for a new head commit', async () => {
+    const { service, github } = setup({ rerun: 1 });
+
+    await service.checkOne(parent as never);
+    github.getPull.mockResolvedValue({
+      number: 55,
+      state: 'open',
+      merged: false,
+      headSha: 'head-2',
+      baseRef: 'main',
+      mergeable: true,
+    });
+
+    expect(await service.checkOne(parent as never)).toBe('rerun');
+    expect(github.rerunFailedRuns).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ImproveCiService: a PR that conflicts with the base', () => {
+  const conflicting = { mergeable: false };
+
+  it('announces it once and leaves it to a person by default, whatever CI says', async () => {
+    for (const ci of ['success', 'failure', 'none']) {
+      const { service, github, improve, notifier } = setup({
+        ci,
+        pull: conflicting,
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('conflict');
+      expect(await service.checkOne(parent as never)).toBe('conflict');
+      expect(notifier.send).toHaveBeenCalledTimes(1);
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('конфликт с main'),
+      );
+      expect(improve.redoOnConflict).not.toHaveBeenCalled();
+      expect(improve.startRepair).not.toHaveBeenCalled();
+      expect(github.ciState).not.toHaveBeenCalled();
+    }
+  });
+
+  it('redoes the issue on the current base when the owner switched that on', async () => {
+    const { service, improve, notifier } = setup({
+      pull: conflicting,
+      setting: { autoRedoConflicts: true },
+    });
+
+    expect(await service.checkOne(parent as never)).toBe('redo');
+    expect(improve.redoOnConflict).toHaveBeenCalledWith(parent);
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringContaining('запустил задачу заново'),
+    );
+  });
+
+  it('falls back to asking a person when the redo is refused (already redone once)', async () => {
+    const { service, improve, notifier } = setup({
+      pull: conflicting,
+      setting: { autoRedoConflicts: true },
+    });
+    improve.redoOnConflict.mockRejectedValue(new Error('already redone'));
+
+    expect(await service.checkOne(parent as never)).toBe('conflict');
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringContaining('нужен человек'),
+    );
+  });
+
+  it('does nothing while GitHub is still working out whether it conflicts', async () => {
+    const { service, improve } = setup({
+      ci: 'success',
+      pull: { mergeable: null },
+    });
+
+    expect(await service.checkOne(parent as never)).toBe('ci-ok');
+    expect(improve.redoOnConflict).not.toHaveBeenCalled();
   });
 });

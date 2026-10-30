@@ -95,6 +95,19 @@ function AutoRepairCard() {
           content="Чинить CI автоматически"
         />
       </div>
+      <Text color="secondary" variant="body-2">
+        Перед тем как тратить worker, bridge один раз просит GitHub перезапустить упавшие проверки (флейки проходят сами), а зелёному PR, отставшему от main, подтягивает main. Если PR
+        конфликтует с main, worker помочь не может (у него снимок ветки, но не main) — тогда bridge пишет в Telegram. Можно доверить ему и это: закрыть такой PR и сделать задачу заново на
+        свежем main (один раз на задачу).
+      </Text>
+      <div className={styles.toolbar}>
+        <Switch
+          checked={data?.autoRedoConflicts ?? false}
+          disabled={isLoading || !data}
+          onUpdate={(autoRedoConflicts) => void save({ autoRedoConflicts })}
+          content="При конфликте с main закрывать PR и переделывать задачу"
+        />
+      </div>
     </Card>
   );
 }

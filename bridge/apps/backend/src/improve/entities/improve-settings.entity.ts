@@ -28,6 +28,11 @@ export class ImproveSettings {
   @Column({ type: 'boolean', default: true })
   autoRepairCi: boolean;
 
+  // A pull request that has a merge conflict with the base is closed and its issue is done again on the current base (once per issue).
+  // Off by default: it closes a PR on its own, which a person may have been editing.
+  @Column({ type: 'boolean', default: false })
+  autoRedoConflicts: boolean;
+
   // The brake on automatic issue filing (see improve-throttle.ts): proposals below this value (1–5) are not filed.
   @Column({ type: 'smallint', default: 3 })
   minValue: number;
