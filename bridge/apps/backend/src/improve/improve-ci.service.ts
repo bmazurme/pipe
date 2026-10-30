@@ -31,6 +31,8 @@ export class ImproveCiService {
   private checking = false;
   // PR#:sha pairs already reported as "out of attempts", so the owner hears it once.
   private readonly reportedExhausted = new Set<string>();
+  // PR#:sha pairs already brought up to date with the base, or reported as conflicting: once per head commit, never in a loop.
+  private readonly freshened = new Set<string>();
 
   constructor(
     @InjectRepository(ImproveRun)
@@ -95,7 +97,11 @@ export class ImproveCiService {
 
     if (pull.state !== 'open' || pull.merged) return 'closed';
 
-    if ((await this.github.ciState(pull.headSha)) !== 'failure') return 'ci-ok';
+    const ci = await this.github.ciState(pull.headSha);
+
+    if (ci === 'success') return this.keepFresh(parent, pull);
+
+    if (ci !== 'failure') return 'ci-ok';
 
     const repairs = await this.runs.find({
       where: { kind: 'repair', prNumber, trigger: 'ci' },
@@ -148,5 +154,53 @@ export class ImproveCiService {
     );
 
     return 'repair';
+  }
+
+  // A green PR that is behind `main` gets main merged into its branch by GitHub ("Update branch"), so what is merged is what was tested
+  // against today's main, and a spec that drifted meanwhile is caught here and not at the merge button. A conflict is the one case a
+  // person has to look at (the worker only gets a snapshot of the branch, not main), so it is announced once.
+  private async keepFresh(
+    parent: ImproveRun,
+    pull: {
+      number: number;
+      headSha: string;
+      baseRef: string;
+      mergeable: boolean | null;
+    },
+  ): Promise<string> {
+    const key = `${pull.number}:${pull.headSha}`;
+
+    if (this.freshened.has(key)) return 'ci-ok';
+
+    if ((await this.github.behindBy(pull.baseRef, pull.headSha)) === 0) {
+      return 'ci-ok';
+    }
+
+    this.freshened.add(key);
+
+    if (pull.mergeable === false) {
+      await this.notifier.send(
+        `⚠️ PR #${pull.number}: конфликт с ${pull.baseRef} — нужен человек\n${parent.prUrl ?? ''}`.trim(),
+      );
+
+      return 'conflict';
+    }
+
+    try {
+      await this.github.updatePullBranch(pull.number, pull.headSha);
+    } catch (error) {
+      // 409: the head moved meanwhile; 422: the merge has conflicts GitHub had not computed yet. Both are for the next tick or a person.
+      this.logger.warn(
+        `Could not update the branch of PR #${pull.number}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return 'update-failed';
+    }
+
+    await this.notifier.send(
+      `🔄 PR #${pull.number}: подтянул свежий ${pull.baseRef} в ветку, CI запустится заново\n${parent.prUrl ?? ''}`.trim(),
+    );
+
+    return 'updated';
   }
 }

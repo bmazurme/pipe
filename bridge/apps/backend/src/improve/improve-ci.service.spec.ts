@@ -34,6 +34,7 @@ function setup(
     pull?: Record<string, unknown>;
     ci?: string;
     failed?: unknown[];
+    behind?: number;
   } = {},
 ) {
   const runs = {
@@ -52,10 +53,14 @@ function setup(
       state: 'open',
       merged: false,
       headSha: 'head-1',
+      baseRef: 'main',
+      mergeable: true,
       ...over.pull,
     }),
     ciState: jest.fn().mockResolvedValue(over.ci ?? 'failure'),
     failedChecks: jest.fn().mockResolvedValue(over.failed ?? [failedCheck]),
+    behindBy: jest.fn().mockResolvedValue(over.behind ?? 0),
+    updatePullBranch: jest.fn().mockResolvedValue(undefined),
   };
   const improve = {
     startRepair: jest.fn().mockResolvedValue({ id: 77 }),
@@ -245,5 +250,59 @@ describe('ImproveCiService.checkOne while another start of the PR hands off', ()
     improve.startRepair.mockRejectedValue(new Error('boom'));
 
     await expect(service.checkOne(parent as never)).rejects.toThrow('boom');
+  });
+
+  describe('keeping a green PR up to date with main', () => {
+    it('merges main into a green PR that is behind, once per head commit, and tells the owner', async () => {
+      const { service, github, notifier } = setup({ ci: 'success', behind: 3 });
+
+      expect(await service.checkOne(parent as never)).toBe('updated');
+      expect(github.behindBy).toHaveBeenCalledWith('main', 'head-1');
+      expect(github.updatePullBranch).toHaveBeenCalledWith(55, 'head-1');
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('подтянул свежий main'),
+      );
+
+      expect(await service.checkOne(parent as never)).toBe('ci-ok');
+      expect(github.updatePullBranch).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a green PR that is not behind alone', async () => {
+      const { service, github } = setup({ ci: 'success', behind: 0 });
+
+      expect(await service.checkOne(parent as never)).toBe('ci-ok');
+      expect(github.updatePullBranch).not.toHaveBeenCalled();
+    });
+
+    it('does not touch a PR whose CI is still running or red', async () => {
+      const { service, github } = setup({ ci: 'pending', behind: 3 });
+
+      expect(await service.checkOne(parent as never)).toBe('ci-ok');
+      expect(github.behindBy).not.toHaveBeenCalled();
+    });
+
+    it('announces a conflict once instead of trying to update', async () => {
+      const { service, github, notifier } = setup({
+        ci: 'success',
+        behind: 2,
+        pull: { mergeable: false },
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('conflict');
+      expect(github.updatePullBranch).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('конфликт с main'),
+      );
+      expect(await service.checkOne(parent as never)).toBe('ci-ok');
+      expect(notifier.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fail the tick when GitHub refuses the update', async () => {
+      const { service, github, notifier } = setup({ ci: 'success', behind: 1 });
+      github.updatePullBranch.mockRejectedValue(new Error('GitHub 422'));
+
+      expect(await service.checkOne(parent as never)).toBe('update-failed');
+      expect(notifier.send).not.toHaveBeenCalled();
+    });
   });
 });

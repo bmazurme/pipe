@@ -1,0 +1,103 @@
+name: Regenerate the API spec
+
+# A controller or DTO change has to be followed by `openapi:generate` in bridge/apps/backend and in packages/protocol. Forgetting it (or a
+# parallel PR changing the same endpoint) used to be found only by the drift check in ci.yml, after a full CI run, and fixed by hand —
+# generating the spec needs a database, so neither a worker nor a person without Docker could do it quickly.
+#
+# This job does it on the PR itself: it regenerates both files and, when they differ, pushes one commit to the PR's branch and starts CI
+# on that commit. (A push made with the workflow's own token does not trigger the pull_request workflows by design, hence the explicit
+# `gh workflow run`.) Same-repository branches only: a fork's branch cannot be pushed to, and its code must not run with this write access.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'bridge/apps/backend/src/**'
+      - 'bridge/apps/backend/package.json'
+      - 'packages/protocol/package.json'
+
+concurrency:
+  group: regen-api-spec-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  NODE_VERSION: '22.18.0'
+
+jobs:
+  regen:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'github-actions[bot]'
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ntlstl-db-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace=packages/protocol
+      - run: npm ci
+        working-directory: bridge
+      - run: npm run build -w backend
+        working-directory: bridge
+
+      - name: Regenerate openapi.json (same environment as ci.yml's drift check)
+        working-directory: bridge
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ntlstl-db-test
+          JWT_SECRET: ci-access-secret
+          REFRESH_JWT_SECRET: ci-refresh-secret
+          CREDENTIALS_ENC_KEY: 'lSEY5qf7avV5z3N5+QgTVnqxo9UNI4k2B4+nuLK0YZQ='
+          YANDEX_ID: ci-yandex-id
+          YANDEX_SECRET: ci-yandex-secret
+          BRIDGE_YANDEX_REDIRECT: http://localhost:3002/api/v1/oauth/yandex/redirect
+          BRIDGE_TARGET_URL: http://localhost:5173
+          COOKIE_DOMAIN: localhost
+          CORS_ORIGINS: http://localhost:5173
+        run: npm run openapi:generate -w backend
+
+      - name: Regenerate the protocol types
+        run: npm run openapi:generate --workspace=packages/protocol
+
+      - name: Commit and push when they changed, then start CI on the new commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet -- bridge/apps/backend/openapi.json packages/protocol/src/bridge-api-types.d.ts; then
+            echo "spec and types are current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bridge/apps/backend/openapi.json packages/protocol/src/bridge-api-types.d.ts
+          git commit -m "Regenerate openapi.json and bridge-api-types for this PR's API changes"
+          # Not forced: if the branch moved meanwhile, the next push to it runs this job again.
+          git push origin "HEAD:${BRANCH}"
+          gh workflow run ci.yml --ref "${BRANCH}"
