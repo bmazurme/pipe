@@ -22,6 +22,14 @@ export class NotificationSettings {
   @Column({ type: 'varchar', length: 64 })
   timezone: string;
 
+  // Saturday and Sunday are quiet all day, on top of the daily window.
+  @Column({ type: 'boolean', default: false })
+  quietWeekends: boolean;
+
+  // Urgent notifications (a VPN that stopped answering) are delivered even while it is quiet. Off = nothing breaks the silence.
+  @Column({ type: 'boolean', default: true })
+  allowUrgent: boolean;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 

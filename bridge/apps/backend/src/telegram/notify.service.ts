@@ -10,6 +10,11 @@ import { InlineButton, TelegramService } from './telegram.service';
 
 const FLUSH_EVERY_MS = 60_000;
 
+export interface NotifyOptions {
+  // Delivered even while it is quiet (if the owner allows it): something broke that cannot wait for the morning digest.
+  urgent?: boolean;
+}
+
 // Automatic notifications (heartbeats, CI/deploy events, merge offers) go
 // through here; replies to something the owner just typed or pressed keep
 // using TelegramService directly and are never delayed. The method names
@@ -30,8 +35,8 @@ export class NotifyService {
     private readonly outbox: Repository<TelegramOutbox>,
   ) {}
 
-  async send(text: string): Promise<boolean> {
-    if (await this.isQuiet()) {
+  async send(text: string, options: NotifyOptions = {}): Promise<boolean> {
+    if (await this.isQuiet(options)) {
       return this.enqueue(text, null);
     }
 
@@ -41,8 +46,9 @@ export class NotifyService {
   async sendWithButtons(
     text: string,
     buttons: InlineButton[][],
+    options: NotifyOptions = {},
   ): Promise<boolean> {
-    if (await this.isQuiet()) {
+    if (await this.isQuiet(options)) {
       return this.enqueue(text, buttons);
     }
 
@@ -130,11 +136,16 @@ export class NotifyService {
     }
   }
 
-  private async isQuiet(): Promise<boolean> {
+  private async isQuiet(options: NotifyOptions = {}): Promise<boolean> {
     try {
-      const { window, timezone } = await this.settings.effective();
+      const { window, timezone, quietWeekends, allowUrgent } =
+        await this.settings.effective();
 
-      return isQuietNow(window, timezone);
+      if (options.urgent && allowUrgent) {
+        return false;
+      }
+
+      return isQuietNow(window, timezone, new Date(), quietWeekends);
     } catch (error) {
       // A broken setting must never swallow notifications — fail open.
       this.logger.warn(

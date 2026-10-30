@@ -89,6 +89,7 @@ describe('VpnStatusAlertsService', () => {
     expect(notifier.send).toHaveBeenCalledTimes(1);
     expect(notifier.send).toHaveBeenCalledWith(
       '🔌 VPN «primary» не отвечает: panel down',
+      { urgent: true },
     );
   });
 

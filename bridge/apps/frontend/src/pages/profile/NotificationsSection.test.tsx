@@ -14,6 +14,8 @@ const SETTINGS = {
   isCustom: false,
   appliesToChat: true,
   isQuietNow: false,
+  quietWeekends: false,
+  allowUrgent: true,
 };
 
 function jsonResponse(body: unknown): Response {
@@ -30,7 +32,9 @@ function renderSection() {
   );
 }
 
-let saved: { quietHours: string; timezone: string } | undefined;
+type Saved = { quietHours: string; timezone: string; quietWeekends: boolean; allowUrgent: boolean };
+
+let saved: Saved | undefined;
 
 beforeEach(() => {
   saved = undefined;
@@ -39,7 +43,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (request: Request) => {
       if (request.method === 'PUT') {
-        saved = (await request.json()) as { quietHours: string; timezone: string };
+        saved = (await request.json()) as Saved;
         return jsonResponse({ ...SETTINGS, ...saved, isCustom: true });
       }
 
@@ -67,7 +71,7 @@ describe('NotificationsSection', () => {
     await user.type(from, '22:30');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
 
-    await waitFor(() => expect(saved).toEqual({ quietHours: '22:30-08:00', timezone: 'Europe/Moscow' }));
+    await waitFor(() => expect(saved).toEqual({ quietHours: '22:30-08:00', timezone: 'Europe/Moscow', quietWeekends: false, allowUrgent: true }));
   });
 
   it('saves "off" when the switch is turned off', async () => {
@@ -78,7 +82,21 @@ describe('NotificationsSection', () => {
     await user.click(screen.getByText('Тихие часы'));
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
 
-    await waitFor(() => expect(saved).toEqual({ quietHours: 'off', timezone: 'Europe/Moscow' }));
+    await waitFor(() => expect(saved).toEqual({ quietHours: 'off', timezone: 'Europe/Moscow', quietWeekends: false, allowUrgent: true }));
+  });
+
+  it('saves quiet weekends and a switched-off urgent exception', async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByLabelText('Начало тихих часов');
+    await user.click(screen.getByText(/Тихие выходные/));
+    await user.click(screen.getByText(/Срочное \(например, VPN/));
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({ quietHours: '23:00-08:00', timezone: 'Europe/Moscow', quietWeekends: true, allowUrgent: false }),
+    );
   });
 
   it('refuses an empty range and explains why', async () => {

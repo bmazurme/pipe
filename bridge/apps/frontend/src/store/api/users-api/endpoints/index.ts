@@ -17,6 +17,10 @@ export interface NotificationSettings {
   /** Whether this account's values drive the shared Telegram chat. */
   appliesToChat: boolean;
   isQuietNow: boolean;
+  /** Saturday and Sunday are quiet all day. */
+  quietWeekends: boolean;
+  /** Urgent notifications (a VPN that stopped answering) are delivered even while it is quiet. */
+  allowUrgent: boolean;
 }
 
 const usersApiEndpoints = usersApi.injectEndpoints({
@@ -42,7 +46,7 @@ const usersApiEndpoints = usersApi.injectEndpoints({
     }),
     updateNotificationSettings: builder.mutation<
       NotificationSettings,
-      { quietHours: string; timezone: string }
+      { quietHours: string; timezone: string; quietWeekends?: boolean; allowUrgent?: boolean }
     >({
       query: (body) => ({ url: 'notification-settings', method: 'PUT', body }),
       invalidatesTags: ['NotificationSettings'],

@@ -55,11 +55,27 @@ export function localMinutes(date: Date, timeZone: string): number {
   return hour * 60 + minute;
 }
 
+// Saturday or Sunday in the given zone.
+export function isWeekend(date: Date, timeZone: string): boolean {
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+  }).format(date);
+
+  return day === 'Sat' || day === 'Sun';
+}
+
+// `quietWeekends`: the whole of Saturday and Sunday is quiet, whatever the daily window says (and even with the window off).
 export function isQuietNow(
   window: QuietWindow | null,
   timeZone: string,
   now: Date = new Date(),
+  quietWeekends = false,
 ): boolean {
+  if (quietWeekends && isWeekend(now, timeZone)) {
+    return true;
+  }
+
   if (!window) {
     return false;
   }

@@ -2,6 +2,7 @@ import {
   buildDigests,
   formatLocalTime,
   isQuietNow,
+  isWeekend,
   localMinutes,
   parseQuietHours,
 } from './quiet-hours';
@@ -116,5 +117,36 @@ describe('buildDigests', () => {
     expect(digests.join('\n')).toContain('n0 ');
     expect(digests.join('\n')).toContain('n19 ');
     expect(digests[1]).toContain('продолжение (2/');
+  });
+});
+
+describe('quiet weekends', () => {
+  // 2026-10-31 is a Saturday, 2026-11-01 a Sunday, 2026-11-02 a Monday; Moscow midnight is 21:00Z.
+  const at = (iso: string) => new Date(iso);
+  const night = parseQuietHours('23:00-08:00');
+
+  it('knows the weekend in the zone it is asked in, not the server clock', () => {
+    expect(isWeekend(at('2026-10-30T20:59:00Z'), MSK)).toBe(false); // Friday 23:59
+    expect(isWeekend(at('2026-10-30T21:00:00Z'), MSK)).toBe(true); // Saturday 00:00
+    expect(isWeekend(at('2026-11-01T20:59:00Z'), MSK)).toBe(true); // Sunday 23:59
+    expect(isWeekend(at('2026-11-01T21:00:00Z'), MSK)).toBe(false); // Monday 00:00
+    expect(isWeekend(at('2026-10-30T21:00:00Z'), 'UTC')).toBe(false); // still Friday in UTC
+  });
+
+  it('makes the whole weekend quiet, whatever the daily window says', () => {
+    const noon = at('2026-10-31T09:00:00Z'); // Saturday 12:00 Moscow
+
+    expect(isQuietNow(night, MSK, noon)).toBe(false);
+    expect(isQuietNow(night, MSK, noon, true)).toBe(true);
+    expect(isQuietNow(null, MSK, noon, true)).toBe(true);
+  });
+
+  it('leaves weekdays to the daily window', () => {
+    const mondayNoon = at('2026-11-02T09:00:00Z');
+    const mondayEarly = at('2026-11-02T03:00:00Z'); // 06:00
+
+    expect(isQuietNow(night, MSK, mondayNoon, true)).toBe(false);
+    expect(isQuietNow(night, MSK, mondayEarly, true)).toBe(true);
+    expect(isQuietNow(null, MSK, mondayNoon, true)).toBe(false);
   });
 });

@@ -43,7 +43,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (request: Request) => {
       if (request.url.includes('notification-settings')) {
-        return jsonResponse({ quietHours: '23:00-08:00', timezone: 'Europe/Moscow', isCustom: false, appliesToChat: true, isQuietNow: false });
+        return jsonResponse({ quietHours: '23:00-08:00', timezone: 'Europe/Moscow', isCustom: false, appliesToChat: true, isQuietNow: false, quietWeekends: false, allowUrgent: true });
       }
 
       if (request.url.includes('logs/summary')) {

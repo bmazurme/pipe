@@ -33,6 +33,10 @@ export class NotificationSettingsController {
         currentUser.id,
         dto.quietHours.toLowerCase(),
         dto.timezone,
+        {
+          quietWeekends: dto.quietWeekends,
+          allowUrgent: dto.allowUrgent,
+        },
       );
     } catch (error) {
       throw new BadRequestException(
