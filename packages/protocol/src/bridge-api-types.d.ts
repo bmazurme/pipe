@@ -2036,6 +2036,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/secrets/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SecretsController_exportEnv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/secrets/{id}": {
         parameters: {
             query?: never;
@@ -6543,6 +6559,23 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SecretResponseDto"];
                 };
+            };
+        };
+    };
+    SecretsController_exportEnv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

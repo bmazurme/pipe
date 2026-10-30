@@ -97,4 +97,28 @@ export class SecretsService {
 
     return secret.value;
   }
+
+  // KEY=value lines sorted by name, readable back by the frontend's
+  // parseEnvFile (which strips one pair of outer quotes and nothing else,
+  // so no escaping is needed — only wrapping).
+  async exportEnv(userId: number): Promise<string> {
+    const secrets = await this.findAllByUser(userId);
+    const lines: string[] = [];
+
+    for (const secret of [...secrets].sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    )) {
+      if (secret.description) {
+        for (const line of secret.description.split(/\r\n|\r|\n/)) {
+          lines.push(`# ${line}`.trimEnd());
+        }
+      }
+      const value = /[\s#"']/.test(secret.value)
+        ? `"${secret.value}"`
+        : secret.value;
+      lines.push(`${secret.name}=${value}`);
+    }
+
+    return lines.length > 0 ? `${lines.join('\n')}\n` : '';
+  }
 }
