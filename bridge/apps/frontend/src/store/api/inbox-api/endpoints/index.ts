@@ -13,7 +13,8 @@ export type InboxKind =
   | 'limit'
   | 'worker_offline'
   | 'jobs_failed'
-  | 'loop_paused';
+  | 'loop_paused'
+  | 'source_unavailable';
 
 /** One thing that needs the owner's attention, already ordered by the server (most urgent first). */
 export interface InboxItem {

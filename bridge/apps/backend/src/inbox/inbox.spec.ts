@@ -19,6 +19,20 @@ describe('buildInbox', () => {
     expect(build({})).toEqual([]);
   });
 
+  it('names the sources that could not be checked in one low item', () => {
+    expect(build({ unavailable: [] })).toEqual([]);
+    expect(build({ unavailable: ['GitHub', 'вопросы'] })).toEqual([
+      {
+        id: 'sources-unavailable',
+        kind: 'source_unavailable',
+        severity: 'low',
+        title: 'Не удалось проверить: GitHub, вопросы',
+        detail: 'Остальное проверено; подробности в логах',
+        link: '/logs',
+      },
+    ]);
+  });
+
   it('puts a green PR first, a red one lower, a running one last', () => {
     const items = build({
       pulls: [

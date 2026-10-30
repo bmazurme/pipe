@@ -117,7 +117,11 @@ describe('InboxService', () => {
 
     const items = await failing.service.list(7, NOW);
 
-    expect(items.map((item) => item.kind)).toEqual(['pr_ready']);
+    expect(items.map((item) => item.kind)).toEqual([
+      'pr_ready',
+      'source_unavailable',
+    ]);
+    expect(items.at(-1)?.title).toBe('Не удалось проверить: вопросы');
     expect(
       (await service.list(7, NOW)).find((item) => item.kind === 'questions')
         ?.since,
