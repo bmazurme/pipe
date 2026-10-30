@@ -63,6 +63,32 @@ describe('Secrets API (e2e)', () => {
       return request(app.getHttpServer()).get('/api/v1/secrets').expect(401);
     });
 
+    it('sends Cache-Control: no-store on reveal and export', async () => {
+      const { accessToken } = await authenticatedUser();
+
+      const created = await authed(
+        request(app.getHttpServer()).post('/api/v1/secrets').send({
+          name: 'e2e-no-store',
+          value: 'e2e-value',
+        }),
+        accessToken,
+      ).expect(201);
+
+      const revealed = await authed(
+        request(app.getHttpServer()).get(
+          `/api/v1/secrets/${created.body.id}/value`,
+        ),
+        accessToken,
+      ).expect(200);
+      expect(revealed.headers['cache-control']).toBe('no-store');
+
+      const exported = await authed(
+        request(app.getHttpServer()).get('/api/v1/secrets/export'),
+        accessToken,
+      ).expect(200);
+      expect(exported.headers['cache-control']).toBe('no-store');
+    });
+
     it('supports the full create/list/reveal/update/delete lifecycle', async () => {
       const { accessToken } = await authenticatedUser();
 

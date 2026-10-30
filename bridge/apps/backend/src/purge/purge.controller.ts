@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -36,6 +37,7 @@ export class PurgeController {
   }
 
   @Get('draft/text')
+  @Header('Cache-Control', 'no-store')
   async getDraft(
     @CurrentUser() currentUser: { id: number },
   ): Promise<{ text: string }> {

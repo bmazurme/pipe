@@ -39,3 +39,17 @@ describe('VpnConnectionsController.getStatus', () => {
     expect(vpnService.checkConnectionStatus).toHaveBeenCalledWith(9, false);
   });
 });
+
+describe('VpnConnectionsController.getConnectionLink caching', () => {
+  it('answers with Cache-Control: no-store', () => {
+    const headers = Reflect.getMetadata(
+      '__headers__',
+      VpnConnectionsController.prototype.getConnectionLink,
+    ) as { name: string; value: string }[];
+
+    expect(headers).toContainEqual({
+      name: 'Cache-Control',
+      value: 'no-store',
+    });
+  });
+});

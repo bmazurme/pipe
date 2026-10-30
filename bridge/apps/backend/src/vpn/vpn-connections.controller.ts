@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -86,6 +87,7 @@ export class VpnConnectionsController {
   }
 
   @Get(':id/connection-link')
+  @Header('Cache-Control', 'no-store')
   async getConnectionLink(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ link: string }> {
