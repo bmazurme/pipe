@@ -19,11 +19,11 @@ import {
   useStartLabRunMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
-import { MODEL_OPTIONS } from '../worker/constants';
+import { useModelOptions } from '../worker/useModelOptions';
 import { JobDetailDialog } from '../worker/JobDetailDialog';
-import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
+import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel, modelAfterExecutor, modelsFor } from './executors';
 import styles from '../ImprovePage.module.css';
-import { modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from '../improve/improveLabels';
+import { RUN_STATUS_LABEL, RUN_STATUS_THEME } from '../improve/improveLabels';
 
 const FAST_POLL_MS = 5000;
 const SLOW_POLL_MS = 30000;
@@ -37,6 +37,7 @@ const describeRefresh = ({ checked, merged, closed, failed }: LabPrRefresh) =>
   `Проверено PR: ${checked} · влито: ${merged} · закрыто: ${closed}${failed ? ` · не удалось проверить: ${failed}` : ''}`;
 
 export function RunsTab() {
+  const { options: modelOptions, label: modelLabel } = useModelOptions();
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const [filterProjectId, setFilterProjectId] = useState('');
   const { data: runs, isLoading, isError } = useListLabRunsQuery(filterProjectId ? { projectId: Number(filterProjectId) } : undefined, { pollingInterval, skipPollingIfUnfocused: true });
@@ -244,8 +245,8 @@ export function RunsTab() {
               )}
               <Text variant="body-2">Задача</Text>
               <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
-              <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={MODEL_OPTIONS} width="max" />
-              <Select label="Где выполнять" value={[form.executor]} onUpdate={([executor]) => setForm({ ...form, executor: (executor as LabExecutor) ?? 'any' })} options={EXECUTOR_OPTIONS} width="max" />
+              <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={modelsFor(modelOptions, form.executor)} width="max" />
+              <Select label="Где выполнять" value={[form.executor]} onUpdate={([executor]) => setForm({ ...form, executor: (executor as LabExecutor) ?? 'any', model: modelAfterExecutor(form.model, (executor as LabExecutor) ?? 'any') })} options={EXECUTOR_OPTIONS} width="max" />
               {form.executor === 'fusion' && (
                 <Text variant="caption-2" color="secondary">
                   {EXECUTOR_HINT}

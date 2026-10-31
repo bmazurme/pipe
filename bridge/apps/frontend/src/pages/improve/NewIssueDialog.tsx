@@ -4,9 +4,10 @@ import { Dialog } from '../../shared/ui/Dialog';
 
 import { describeApiError } from '../../store/api/describeApiError';
 import { useCreateImproveIssueMutation } from '../../store/api';
-import { MODEL_OPTIONS } from '../worker/constants';
+import { useModelOptions } from '../worker/useModelOptions';
 
 export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean; onClose: () => void; defaultModel: string }) {
+  const { options: modelOptions } = useModelOptions();
   const [create, { isLoading }] = useCreateImproveIssueMutation();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -63,7 +64,7 @@ export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean;
           onUpdate={setBody}
         />
         <Switch checked={start} onUpdate={setStart} content="Сразу запустить" />
-        {start && <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={MODEL_OPTIONS} />}
+        {start && <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={modelOptions} />}
         {warning && <Alert theme="warning" view="filled" message={warning} />}
         {error && <Alert theme="danger" view="filled" message={error} />}
       </Dialog.Body>

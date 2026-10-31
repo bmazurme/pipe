@@ -6,11 +6,12 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { getErrorMessage, ImproveIssue, useLazyListImproveIssuesQuery, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { NewIssueDialog } from './NewIssueDialog';
-import { MODEL_OPTIONS } from '../worker/constants';
+import { useModelOptions } from '../worker/useModelOptions';
 import styles from '../ImprovePage.module.css';
 import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 export function IssuesTab({ configured }: { configured: boolean }) {
+  const { options: modelOptions } = useModelOptions();
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
   const issues = data?.issues;
@@ -78,7 +79,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
           label="Модель:"
           value={[model]}
           onUpdate={([value]) => handleModel(value)}
-          options={MODEL_OPTIONS}
+          options={modelOptions}
         />
         <Switch checked={showAll} onUpdate={setShowAll} content="Все открытые issues" />
         <Button

@@ -196,6 +196,15 @@ describe('resolveProvider with a key stored in bridge', () => {
       assert.equal((resolveProvider('custom', {}, { ...stored, stream: true }) as { stream?: boolean }).stream, true);
     });
 
+    it('carries the prices only when the key has them', () => {
+      assert.equal('priceInPerMTok' in resolveProvider('custom', {}, stored), false);
+
+      const priced = resolveProvider('custom', {}, { ...stored, priceInPerMTok: 0.5, priceOutPerMTok: null }) as { priceInPerMTok?: number; priceOutPerMTok?: number };
+
+      assert.equal(priced.priceInPerMTok, 0.5);
+      assert.equal('priceOutPerMTok' in priced, false);
+    });
+
     it('lets a local server have no secret, but only when its scheme is none', () => {
       assert.equal(resolveProvider('custom', {}, { ...stored, apiKey: '', authScheme: 'none' }).tool, 'openai-compatible');
       assert.throws(() => resolveProvider('custom', {}, { ...stored, apiKey: '' }), /needs one/);

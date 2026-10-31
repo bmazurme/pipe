@@ -6,12 +6,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
-import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import { FilingLimits, limitsFromSettings } from './improve-throttle';
 import { ADVANCE_EVERY_MS, AUTOSTART_MIN_AGE_SECONDS } from './improve.service';
-import { message, requireImproveModel } from './improve-shared';
+import { jobModelOf, message, requireImproveModel } from './improve-shared';
 
 // Reports pushes → worker at once: the per-account Improve settings and the poller that
 // starts a job for each parcel pushed from Subscription while auto-start is on.
@@ -126,7 +125,7 @@ export class ImproveAutoStartService {
         await this.workers
           .create(row.userId, {
             sourceFileId: row.fileId,
-            model: row.model as JobModel,
+            ...jobModelOf(row.model),
           })
           .then((job) =>
             this.log(

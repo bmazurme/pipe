@@ -3,17 +3,22 @@ import { UsageService } from './usage.service';
 const NOW = new Date('2026-10-30T12:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
 
-function setup(jobs: Array<Record<string, unknown>>) {
+function setup(
+  jobs: Array<Record<string, unknown>>,
+  keys: Array<Record<string, unknown>> = [],
+) {
   const jobRepo = { find: jest.fn().mockResolvedValue(jobs) };
   const improve = { find: jest.fn().mockResolvedValue([]) };
   const lab = { find: jest.fn().mockResolvedValue([]) };
+  const credentials = { find: jest.fn().mockResolvedValue(keys) };
   const service = new UsageService(
     jobRepo as never,
     improve as never,
     lab as never,
+    credentials as never,
   );
 
-  return { service, jobRepo, improve, lab };
+  return { service, jobRepo, improve, lab, credentials };
 }
 
 describe('UsageService', () => {
@@ -98,5 +103,71 @@ describe('UsageService', () => {
       costUsd: 0.4,
       tokens: 15,
     });
+  });
+
+  it('shows each custom key as its own model, so a free local server and a paid one are not blended', async () => {
+    const job = (
+      id: number,
+      providerCredentialId: number | null,
+      model = 'custom',
+    ) => ({
+      id,
+      model,
+      providerCredentialId,
+      status: 'succeeded',
+      taskKey: null,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: NOW,
+      usage: {
+        costUsd: null,
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      },
+    });
+    const { service, credentials } = setup(
+      [job(1, 9), job(2, 9), job(3, 12), job(4, 77), job(5, null, 'sonnet')],
+      [
+        { id: 9, name: 'Mac M2' },
+        { id: 12, name: 'Yandex' },
+      ],
+    );
+
+    const report = await service.report(7, 7, NOW);
+
+    expect(credentials.find.mock.calls[0][0].where.userId).toBe(7);
+    const rows = Object.fromEntries(
+      report.byModel.map((row) => [row.model, [row.jobs, row.tokens]]),
+    );
+
+    // a job whose key was deleted keeps the plain "custom"
+    expect(rows).toEqual({
+      custom: [1, 120],
+      'custom · Mac M2': [2, 240],
+      'custom · Yandex': [1, 120],
+      sonnet: [1, 120],
+    });
+  });
+
+  it('does not look up keys when no job ran on a custom model', async () => {
+    const { service, credentials } = setup([
+      {
+        id: 1,
+        model: 'gpt',
+        providerCredentialId: 4,
+        status: 'succeeded',
+        taskKey: null,
+        startedAt: null,
+        finishedAt: null,
+        createdAt: NOW,
+        usage: null,
+      },
+    ]);
+
+    await service.report(7, 7, NOW);
+
+    expect(credentials.find).not.toHaveBeenCalled();
   });
 });

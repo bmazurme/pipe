@@ -144,6 +144,8 @@ describe('ProviderCredentialsService', () => {
         timeoutSec: 600,
         supportsTools: false,
         stream: true,
+        priceInPerMTok: 0.5,
+        priceOutPerMTok: null,
       });
 
       await expect(service.resolveForJob(7, 'custom', 3)).resolves.toEqual({
@@ -156,6 +158,8 @@ describe('ProviderCredentialsService', () => {
         timeoutSec: 600,
         supportsTools: false,
         stream: true,
+        priceInPerMTok: 0.5,
+        priceOutPerMTok: null,
       });
 
       repository.findOneBy.mockResolvedValue(null);

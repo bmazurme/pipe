@@ -179,7 +179,23 @@ export function executeTool(
 
 // Generous on purpose — a real completion (especially with tool calls) can legitimately take minutes (openAiRequest.ts has the
 // default and the per-key override); without any bound a provider that just hangs would block the job forever.
-export type OpenAiCompatibleOptions = Pick<OpenAiCompatibleConfig, "baseUrl" | "apiKey" | "model" | "route" | "authScheme" | "extraHeaders" | "timeoutSec">;
+export type OpenAiCompatibleOptions = Pick<
+  OpenAiCompatibleConfig,
+  "baseUrl" | "apiKey" | "model" | "route" | "authScheme" | "extraHeaders" | "timeoutSec" | "priceInPerMTok" | "priceOutPerMTok"
+>;
+
+// What the servers report per completion (`usage`), summed over the run; null when none ever did.
+export function usageReport(
+  tokens: { input: number; output: number } | null,
+  prices: Pick<OpenAiCompatibleConfig, "priceInPerMTok" | "priceOutPerMTok">,
+): RunResult["report"] | undefined {
+  if (!tokens) return undefined;
+
+  const priced = prices.priceInPerMTok !== undefined || prices.priceOutPerMTok !== undefined;
+  const costUsd = priced ? (tokens.input * (prices.priceInPerMTok ?? 0) + tokens.output * (prices.priceOutPerMTok ?? 0)) / 1_000_000 : null;
+
+  return { usage: { costUsd, inputTokens: tokens.input, outputTokens: tokens.output, cacheReadTokens: 0, cacheCreationTokens: 0 } };
+}
 
 // The minimal agent loop shared by gpt/deepseek/qwen: all three expose the
 // same OpenAI-compatible Chat Completions + function-calling shape, so one
@@ -216,12 +232,13 @@ export async function runOpenAiCompatible(
 
   let output = "";
   let anyToolCall = false;
+  const total = { input: 0, output: 0, reported: false };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     if (signal?.aborted) throw new CancelledError();
     if (deadlineSignal?.aborted) throw timeoutError();
 
-    let data: { choices?: { message?: ChatMessage }[] };
+    let data: { choices?: { message?: ChatMessage }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
     for (let attempt = 0; ; attempt++) {
       const completionSignal = AbortSignal.timeout(completionTimeout);
       let retryable = false;
@@ -252,9 +269,7 @@ export async function runOpenAiCompatible(
           );
         }
 
-        data = (await response.json()) as {
-          choices?: { message?: ChatMessage }[];
-        };
+        data = (await response.json()) as typeof data;
         break;
       } catch (error) {
         // The owner's stop wins over everything else; then only the job deadline is
@@ -275,6 +290,13 @@ export async function runOpenAiCompatible(
         if (deadlineSignal?.aborted) throw timeoutError();
       }
     }
+    // Counted as the server says; a server that sends no usage leaves the run without a report (nothing is made up).
+    if (typeof data.usage?.prompt_tokens === "number" || typeof data.usage?.completion_tokens === "number") {
+      total.reported = true;
+      total.input += Math.max(0, data.usage?.prompt_tokens ?? 0);
+      total.output += Math.max(0, data.usage?.completion_tokens ?? 0);
+    }
+
     const message = data.choices?.[0]?.message;
 
     if (!message) {
@@ -302,7 +324,7 @@ export async function runOpenAiCompatible(
       if (!anyToolCall) {
         onOutput("Warning: the model never called a tool, so no file was read or changed — it may not support function calling.\n");
       }
-      return { exitCode: 0, output };
+      return { exitCode: 0, output, report: usageReport(total.reported ? total : null, options) };
     }
     anyToolCall = true;
 
@@ -327,5 +349,5 @@ export async function runOpenAiCompatible(
   onOutput(
     `Stopped after ${MAX_TURNS} turns without the model signaling completion.\n`,
   );
-  return { exitCode: 1, output };
+  return { exitCode: 1, output, report: usageReport(total.reported ? total : null, options) };
 }

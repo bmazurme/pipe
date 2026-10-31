@@ -69,4 +69,7 @@ export class ClaimedProviderDto {
   supportsTools?: boolean;
   // Stream a chat answer (the worker reports the text so far as it arrives).
   stream?: boolean;
+  // USD per million tokens, for the cost the worker reports with a run (absent/null: a free local model, no cost).
+  priceInPerMTok?: number | null;
+  priceOutPerMTok?: number | null;
 }

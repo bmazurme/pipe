@@ -10,6 +10,7 @@ import {
   MAX_TOOL_RESULT_CHARS,
   parseTextToolCall,
   runOpenAiCompatible,
+  usageReport,
 } from "./openAiCompatibleRunner.js";
 
 describe("executeTool read_file", () => {
@@ -523,5 +524,75 @@ describe("runOpenAiCompatible with a call printed as text", () => {
     await run(output);
 
     assert.ok(!output.join("").includes("Warning: the model never called a tool"));
+  });
+});
+
+describe("usage of an OpenAI-compatible run", () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "oai-runner-"));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const completion = (message: object, usage?: object) =>
+    new Response(JSON.stringify({ choices: [{ message: { role: "assistant", ...message } }], ...(usage ? { usage } : {}) }));
+
+  function serve(...replies: Response[]) {
+    let i = 0;
+
+    globalThis.fetch = (async () => replies[Math.min(i++, replies.length - 1)].clone()) as typeof fetch;
+  }
+
+  const options = { baseUrl: "http://stub.invalid", apiKey: "k", model: "m" };
+  const run = (extra: Partial<typeof options> & Record<string, unknown> = {}) =>
+    runOpenAiCompatible(dir, "task", { ...options, ...extra }, () => {}, undefined, 5000);
+
+  it("sums the tokens the server reports over every turn, and reports no cost for a free model", async () => {
+    serve(
+      completion({ content: null, tool_calls: [{ id: "c1", function: { name: "list_files", arguments: "{}" } }] }, { prompt_tokens: 100, completion_tokens: 10 }),
+      completion({ content: "done" }, { prompt_tokens: 150, completion_tokens: 20 }),
+    );
+
+    const result = await run();
+
+    assert.deepEqual(result.report, {
+      usage: { costUsd: null, inputTokens: 250, outputTokens: 30, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    });
+  });
+
+  it("prices the run from the key's price per million tokens", async () => {
+    serve(completion({ content: "done" }, { prompt_tokens: 2_000_000, completion_tokens: 500_000 }));
+
+    const result = await run({ priceInPerMTok: 0.5, priceOutPerMTok: 2 });
+
+    assert.equal(result.report?.usage?.costUsd, 2);
+  });
+
+  it("makes nothing up when the server reports no usage", async () => {
+    serve(completion({ content: "done" }));
+
+    assert.equal((await run()).report, undefined);
+  });
+
+  it("still reports what a run that hit the turn limit used", async () => {
+    serve(completion({ content: null, tool_calls: [{ id: "c", function: { name: "list_files", arguments: "{}" } }] }, { prompt_tokens: 10, completion_tokens: 1 }));
+
+    const result = await run();
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.report?.usage?.inputTokens, 200);
+  });
+});
+
+describe("usageReport", () => {
+  it("prices only the side that has a price, and nothing without tokens", () => {
+    assert.equal(usageReport({ input: 1_000_000, output: 1_000_000 }, { priceOutPerMTok: 3 })?.usage?.costUsd, 3);
+    assert.equal(usageReport(null, { priceInPerMTok: 1 }), undefined);
   });
 });

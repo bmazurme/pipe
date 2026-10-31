@@ -30,6 +30,12 @@ function cleanHeaders(
   return entries.length ? Object.fromEntries(entries) : null;
 }
 
+function numberOrNull(
+  value: string | number | null | undefined,
+): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 function toDecimal(value: number | undefined): string | null {
   return value === undefined ? null : String(value);
 }
@@ -179,6 +185,8 @@ export class ProviderCredentialsService {
             timeoutSec: chosen.timeoutSec,
             supportsTools: chosen.supportsTools,
             stream: chosen.stream,
+            priceInPerMTok: numberOrNull(chosen.priceInPerMTok),
+            priceOutPerMTok: numberOrNull(chosen.priceOutPerMTok),
           }
         : {}),
     };

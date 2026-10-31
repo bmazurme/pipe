@@ -482,6 +482,29 @@ describe('LabRunsService: the branch of a run', () => {
     expect(runs.save).not.toHaveBeenCalled();
   });
 
+  it('refuses a Fusion run on a model without a shell, and lets a custom model run an ordinary one', async () => {
+    await expect(
+      service.launch(1, {
+        projectId: project.id,
+        task: 'Построить корпус',
+        model: 'custom:3',
+        executor: 'fusion',
+      }),
+    ).rejects.toThrow(/требует модель Claude/);
+    expect(workers.hasEnabledWorkerWith).not.toHaveBeenCalled();
+
+    await prepare({
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'custom:3',
+    });
+
+    expect(workers.create).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ model: 'custom', providerCredentialId: 3 }),
+    );
+  });
+
   it('puts an ordinary run on any worker, with no capability required', async () => {
     const saved = await prepare({
       projectId: project.id,

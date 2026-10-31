@@ -74,8 +74,11 @@ export function analysisItems(run: Pick<ImproveRun, 'result'>): AnalysisItem[] {
   }
 }
 
-export const modelLabel = (model: string): string =>
-  MODEL_OPTIONS.find((option) => option.value === model)?.content ?? model;
+export const modelLabel = (model: string): string => {
+  const custom = /^custom:(\d+)$/.exec(model);
+
+  return MODEL_OPTIONS.find((option) => option.value === model)?.content ?? (custom ? `Своя модель (ключ #${custom[1]})` : model);
+};
 
 const MODEL_STORAGE_KEY = 'improve.model';
 
@@ -105,18 +108,20 @@ export const formatTime = (hour: number, minute: number): string => `${pad(hour)
 
 export function describeSchedule(
   schedule: Pick<ImproveSchedule, 'hour' | 'minute' | 'timezone' | 'count' | 'model'> & Partial<Pick<ImproveSchedule, 'kind' | 'categories' | 'weekdays'>>,
+  // How a model is named; a page that knows the owner's custom keys passes its own (useModelOptions).
+  label: (model: string) => string = modelLabel,
 ): string {
   if (schedule.kind === 'analysis') {
     const chosen = schedule.categories ? schedule.categories.split(',').filter((c): c is AnalysisCategory => c in CATEGORY_LABEL) : DEFAULT_CATEGORIES;
     const what = chosen.length === DEFAULT_CATEGORIES.length && !chosen.some((category) => OPT_IN_CATEGORIES.includes(category)) ? 'анализ: 5 направлений' : `анализ: ${chosen.map((c) => CATEGORY_LABEL[c]).join(', ')}`;
 
-    return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${what} · ${modelLabel(schedule.model)}`;
+    return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${what} · ${label(schedule.model)}`;
   }
 
   const count = schedule.count;
   const noun = count % 10 === 1 && count % 100 !== 11 ? 'задача' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20) ? 'задачи' : 'задач';
 
-  return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${count} ${noun} · ${modelLabel(schedule.model)}`;
+  return `${formatWeekdays(schedule.weekdays)} в ${formatTime(schedule.hour, schedule.minute)} (${schedule.timezone}) · ${count} ${noun} · ${label(schedule.model)}`;
 }
 
 /** "HH:MM" from an <input type="time">, or null when it is not a valid time. */

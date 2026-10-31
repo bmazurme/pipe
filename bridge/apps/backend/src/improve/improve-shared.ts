@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import type { GithubApiService, TreeEntry } from '../loop/github-api.service';
 import { localMinutes } from '../telegram/quiet-hours';
+import { CLAUDE_JOB_MODELS, JobModel } from '../worker/entities/job.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { AnalysisCategory, BacklogItem } from './analysis';
 import type { Change } from './parcel';
@@ -123,10 +124,31 @@ export const IMPROVE_MODELS = [
   'qwen',
 ];
 
+// A run or schedule on a custom model keeps it in its ordinary `model` column as "custom:<id of the stored key>": the key is what
+// says which server it runs on, and no new column is needed. The key is checked when the job is made (WorkerService.create).
+const CUSTOM_MODEL = /^custom:(\d+)$/;
+
 export function requireImproveModel(model: string): void {
-  if (!IMPROVE_MODELS.includes(model)) {
+  if (!IMPROVE_MODELS.includes(model) && !CUSTOM_MODEL.test(model)) {
     throw new BadRequestException(`Неизвестная модель: ${model}`);
   }
+}
+
+// The model and key a job is made with, from what a run or schedule stores.
+export function jobModelOf(model: string): {
+  model: JobModel;
+  providerCredentialId?: number;
+} {
+  const custom = CUSTOM_MODEL.exec(model);
+
+  return custom
+    ? { model: JobModel.Custom, providerCredentialId: Number(custom[1]) }
+    : { model: model as JobModel };
+}
+
+// A model that can run a shell (only the claude CLI can), as Fusion 360 and every job that needs to run things do.
+export function isClaudeModelName(model: string): boolean {
+  return CLAUDE_JOB_MODELS.includes(model as JobModel);
 }
 
 // "YYYY-MM-DD" of `now` in the schedule's own time zone.

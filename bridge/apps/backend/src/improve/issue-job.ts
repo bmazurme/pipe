@@ -1,8 +1,8 @@
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import type { StorageService } from '../storage/storage.service';
 import type { WorkerCapability } from '../worker/capabilities';
-import type { JobModel } from '../worker/entities/job.entity';
 import type { WorkerService } from '../worker/worker.service';
+import { jobModelOf } from './improve-shared';
 import { buildIssueParcel, type IssueRef, type SnapshotFile } from './parcel';
 
 export type IssueParcelTask = IssueRef;
@@ -14,7 +14,8 @@ export type IssueJobInput = {
   baseline: Record<string, string>;
   fileName: string;
   taskKey: string;
-  model: JobModel;
+  // 'sonnet' … 'qwen', or 'custom:<key id>' for a stored custom model (improve-shared.ts).
+  model: string;
   // A saved Context the job carries; omitted from the job input unless set.
   contextId?: number | null;
   requiredCapability?: WorkerCapability;
@@ -45,7 +46,7 @@ export async function launchIssueJob(
   );
   const job = await deps.workers.create(userId, {
     sourceFileId: stored.id,
-    model: input.model,
+    ...jobModelOf(input.model),
     ...(input.contextId ? { contextId: input.contextId } : {}),
     ...(input.requiredCapability
       ? { requiredCapability: input.requiredCapability }

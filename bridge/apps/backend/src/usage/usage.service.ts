@@ -5,7 +5,13 @@ import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { ImproveRun } from '../improve/entities/improve-run.entity';
 import { LabRun } from '../lab/entities/lab-run.entity';
 import { Job } from '../worker/entities/job.entity';
-import { buildUsageReport, UsageReport, UsageRun } from './usage-report';
+import { ProviderCredential } from '../worker/entities/provider-credential.entity';
+import {
+  buildUsageReport,
+  UsageJob,
+  UsageReport,
+  UsageRun,
+} from './usage-report';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const MIN_DAYS = 1;
@@ -20,6 +26,8 @@ export class UsageService {
     @InjectRepository(ImproveRun)
     private readonly improveRuns: Repository<ImproveRun>,
     @InjectRepository(LabRun) private readonly labRuns: Repository<LabRun>,
+    @InjectRepository(ProviderCredential)
+    private readonly credentials: Repository<ProviderCredential>,
   ) {}
 
   async report(
@@ -40,10 +48,12 @@ export class UsageService {
         finishedAt: true,
         createdAt: true,
         usage: true,
+        providerCredentialId: true,
       },
       order: { id: 'ASC' },
       take: MAX_JOBS,
     });
+    const rows = await this.namedCustomModels(userId, jobs);
     const jobIds = jobs.map((job) => job.id);
     const [improve, lab] = jobIds.length
       ? await Promise.all([
@@ -75,6 +85,38 @@ export class UsageService {
       })),
     ];
 
-    return buildUsageReport(jobs, runs, { from, to: now });
+    return buildUsageReport(rows, runs, { from, to: now });
+  }
+
+  // Every custom key is its own "model" in the report ("custom · Mac M2"): they are different servers, a local one free and a
+  // paid one not, so one "custom" row would blur exactly the comparison the report is for.
+  private async namedCustomModels(
+    userId: number,
+    jobs: Job[],
+  ): Promise<UsageJob[]> {
+    const ids = [
+      ...new Set(
+        jobs
+          .filter((job) => job.model === 'custom' && job.providerCredentialId)
+          .map((job) => job.providerCredentialId as number),
+      ),
+    ];
+
+    if (ids.length === 0) return jobs;
+
+    const keys = await this.credentials.find({
+      where: { userId, id: In(ids) },
+      select: { id: true, name: true },
+    });
+    const names = new Map(keys.map((key) => [key.id, key.name]));
+
+    return jobs.map((job) => {
+      const name =
+        job.model === 'custom' && job.providerCredentialId
+          ? names.get(job.providerCredentialId)
+          : undefined;
+
+      return name ? { ...job, model: `custom · ${name}` } : job;
+    });
   }
 }

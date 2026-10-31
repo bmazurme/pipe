@@ -18,10 +18,10 @@ import {
   useSaveLabScheduleMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
-import { MODEL_OPTIONS } from '../worker/constants';
-import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel } from './executors';
+import { useModelOptions } from '../worker/useModelOptions';
+import { EXECUTOR_HINT, EXECUTOR_OPTIONS, executorLabel, modelAfterExecutor, modelsFor } from './executors';
 import styles from '../ImprovePage.module.css';
-import { formatTime, modelLabel, parseTime } from '../improve/improveLabels';
+import { formatTime, parseTime } from '../improve/improveLabels';
 import { sortSchedulesByRunTime } from '../improve/scheduleOrder';
 import { ALL_WEEKDAYS, formatWeekdays, WEEKDAYS, WEEKEND_DAYS, WORKDAYS } from './weekdays';
 
@@ -49,6 +49,7 @@ interface Form {
 const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, onlyOnNewCommits: false, model: 'sonnet', executor: 'any', task: '', contextId: '' };
 
 export function SchedulesTab() {
+  const { options: modelOptions, label: modelLabel } = useModelOptions();
   const { data: schedules, isLoading, isError } = useListLabSchedulesQuery();
   const { data: projects } = useListLabProjectsQuery();
   const { data: contexts } = useListContextsQuery();
@@ -300,8 +301,8 @@ export function SchedulesTab() {
                   </Button>
                 ))}
               </div>
-              <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
-              <Select label="Где выполнять" value={[editing.form.executor]} onUpdate={([executor]) => update({ executor: (executor as LabExecutor) ?? 'any' })} options={EXECUTOR_OPTIONS} width="max" />
+              <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={modelsFor(modelOptions, editing.form.executor)} width="max" />
+              <Select label="Где выполнять" value={[editing.form.executor]} onUpdate={([executor]) => update({ executor: (executor as LabExecutor) ?? 'any', model: modelAfterExecutor(editing.form.model, (executor as LabExecutor) ?? 'any') })} options={EXECUTOR_OPTIONS} width="max" />
               {editing.form.executor === 'fusion' && (
                 <Text variant="caption-2" color="secondary">
                   {EXECUTOR_HINT}
