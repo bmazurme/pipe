@@ -1,5 +1,6 @@
 import { BridgeHttpError, bearer, bridgeFetch } from './bridgeHttp.js';
 import type { WorkerConfig } from './config.js';
+import { workerVersion } from './version.js';
 
 // What the owner set for this worker on the Worker page. Fetched before every poll, so a change applies within one
 // poll interval without restarting anything.
@@ -29,11 +30,13 @@ export class WorkerRevokedError extends Error {
   }
 }
 
-export async function fetchRemoteConfig(bridgeApiUrl: string, key: string): Promise<RemoteWorkerConfig> {
+// The version goes with every fetch: bridge decides from it which jobs this worker may be given (a custom model needs 0.2.0),
+// and the version recorded at enrolment goes stale on the first upgrade.
+export async function fetchRemoteConfig(bridgeApiUrl: string, key: string, version: string = workerVersion()): Promise<RemoteWorkerConfig> {
   try {
     const response = await bridgeFetch(
       `${bridgeApiUrl}/api/v1/workers/me/config`,
-      { headers: bearer(key) },
+      { headers: { ...bearer(key), 'X-Worker-Version': version } },
       { expectOk: 'Fetching worker settings' },
     );
 

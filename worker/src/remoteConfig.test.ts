@@ -36,10 +36,12 @@ describe('fetchRemoteConfig', () => {
   it('asks for this worker’s settings with its own key', async () => {
     let url = '';
     let auth: string | null = null;
+    let version: string | null = null;
 
     globalThis.fetch = (async (u: string, init?: RequestInit) => {
       url = u;
       auth = new Headers(init?.headers).get('authorization');
+      version = new Headers(init?.headers).get('x-worker-version');
 
       return new Response(JSON.stringify(remote), { status: 200 });
     }) as typeof fetch;
@@ -47,6 +49,8 @@ describe('fetchRemoteConfig', () => {
     assert.deepEqual(await fetchRemoteConfig('https://bridge.example.com', 'brw_k'), remote);
     assert.equal(url, 'https://bridge.example.com/api/v1/workers/me/config');
     assert.equal(auth, 'Bearer brw_k');
+    // bridge decides from it which jobs this worker may be given
+    assert.match(version ?? '', /^\d+\.\d+\.\d+/);
   });
 
   it('a 401 means the worker was deleted or reconnected — a distinct error', async () => {
