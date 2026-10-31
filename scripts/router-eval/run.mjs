@@ -8,7 +8,7 @@
 //                                             [--auth none|bearer --key …] [--out .router-eval]
 //   node scripts/router-eval/run.mjs report   [--out .router-eval]
 //   node scripts/router-eval/run.mjs replay   --url http://localhost:11434/v1 --model qwen2.5-coder:7b [--max-tier 1] [--limit 8]
-//                                             [--auth none|bearer --key …] [--timeout 900] [--out .router-eval]
+//                                             [--auth none|bearer --key …] [--timeout 900] [--only 1070,1031] [--out .router-eval]
 //
 // `collect` (and `replay`, for the commits) needs the gh CLI logged in; `replay` also needs the worker built (npm run build) and runs in
 // a clone of the project, on the machine where the model is. `claude` runs `claude -p` (a few hundred tokens a task); `openai` talks to any
@@ -186,7 +186,11 @@ async function replay() {
   }
 
   const repoDir = flags['repo-dir'] ?? process.cwd();
-  const picked = selectTasks(withMergeCommits(read('tasks.json')), { maxTier: Number(flags['max-tier'] ?? 1), limit: Number(flags.limit ?? 8) }).filter((task) => task.mergeCommit);
+  const only = flags.only ? new Set(flags.only.split(',').map(Number)) : null;
+  const picked = (only
+    ? withMergeCommits(read('tasks.json')).filter((task) => only.has(task.pr))
+    : selectTasks(withMergeCommits(read('tasks.json')), { maxTier: Number(flags['max-tier'] ?? 1), limit: Number(flags.limit ?? 8) })
+  ).filter((task) => task.mergeCommit);
   const dest = join(out, `replay-${flags.model.replace(/[^\w.-]/g, '_')}`);
   const workRoot = mkdtempSync(join(tmpdir(), 'router-replay-'));
   const options = { baseUrl: flags.url.replace(/\/+$/, ''), apiKey: flags.key ?? '', model: flags.model, authScheme: flags.auth === 'bearer' ? 'bearer' : 'none', route: 'direct' };
@@ -205,7 +209,13 @@ async function replay() {
       workRoot,
       ts,
       wrap: questions.withQuestionsInstruction,
-      run: (dir, prompt) => runner.runOpenAiCompatible(dir, prompt, options, () => {}, undefined, timeoutMs),
+      // everything the run prints — the model's words, every tool call and its result, the worker's warnings — is the log
+      run: async (dir, prompt) => {
+        const transcript = [`PROMPT:\n${prompt}\n\nRUN:\n`];
+        const result = await runner.runOpenAiCompatible(dir, prompt, options, (chunk) => transcript.push(chunk), undefined, timeoutMs);
+
+        return { ...result, output: transcript.join('') };
+      },
     });
 
     writeFileSync(join(dest, `pr-${task.pr}.model.diff`), result.diff);
@@ -218,6 +228,9 @@ async function replay() {
     }
 
     process.stderr.write(`${result.seconds} s, ${result.changed.length} files${result.failure ? `, ${result.failure}` : ''}\n`);
+
+    // a run that changed nothing is the case to look at: show how it ended right here
+    if (result.changed.length === 0) process.stderr.write(`    the model's end of the log:\n${(result.output ?? '').trim().split('\n').slice(-6).map((line) => `      ${line.slice(0, 200)}`).join('\n')}\n`);
     results.push({ ...result, diff: undefined, output: undefined });
   }
 
