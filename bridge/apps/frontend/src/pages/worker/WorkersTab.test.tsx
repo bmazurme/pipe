@@ -35,6 +35,9 @@ function fleetWorker(over: Record<string, unknown> = {}) {
     claudeLimits: null,
     claudeCredentialId: null,
     vpnHost: null,
+    vpnSource: 'link',
+    vpnConnectionId: null,
+    vpnConnectionName: null,
     limitsRefreshMin: 0,
     limitsRefreshRequestedAt: null,
     capabilities: [],
@@ -81,6 +84,12 @@ beforeEach(() => {
       if (custom) return custom;
       if (recorded.method === 'GET' && recorded.path === '/workers') return json(workers);
       if (recorded.method === 'GET' && recorded.path === '/worker/claude-credentials') return json([]);
+      if (recorded.method === 'GET' && recorded.path === '/vpn/connections') {
+        return json([
+          { id: 7, name: 'NL', serverAddress: 'nl.example.com', isActive: false, createdAt: NOW },
+          { id: 8, name: 'DE', serverAddress: 'de.example.com', isActive: true, createdAt: NOW },
+        ]);
+      }
 
       return json({});
     }),
@@ -596,6 +605,57 @@ describe('WorkersTab — settings', () => {
 
       await user.click(await screen.findByRole('button', { name: /Настройки/ }));
       expect(within(await screen.findByRole('dialog')).getByLabelText("VPN-ссылка worker'а")).toBeTruthy();
+    });
+
+    it('takes the VPN from a connection of the VPN page, and drops the link field for it', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: null })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByText('Своя ссылка vless://'));
+      await user.click(await screen.findByText('Подключение со страницы VPN'));
+
+      expect(within(dialog).queryByLabelText("VPN-ссылка worker'а")).toBeNull();
+
+      // the first connection is preselected; pick another one
+      await user.click(await within(dialog).findByText('NL · nl.example.com'));
+      await user.click(await screen.findByText('DE · de.example.com · активное'));
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ vpnSource: 'connection', vpnConnectionId: 8 });
+      expect(sent('PATCH', '/workers/1')[0].body).not.toHaveProperty('vpnLink');
+    });
+
+    it('follows the active connection of the VPN page', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: null })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByText('Своя ссылка vless://'));
+      await user.click(await screen.findByText('Активное подключение со страницы VPN'));
+
+      expect(await within(dialog).findByText(/Сейчас активно: DE · de.example.com/)).toBeTruthy();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ vpnSource: 'active', vpnConnectionId: null });
+    });
+
+    it('the card shows the connection the worker takes its VPN from', async () => {
+      workers = [fleetWorker({ id: 1, vpnHost: 'nl.example.com', vpnSource: 'connection', vpnConnectionId: 7, vpnConnectionName: 'NL' })];
+      renderTab();
+
+      expect(await screen.findByText('VPN: NL · nl.example.com')).toBeTruthy();
     });
 
     it('the card shows which VPN server the worker uses', async () => {

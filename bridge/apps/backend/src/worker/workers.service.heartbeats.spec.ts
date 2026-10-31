@@ -25,6 +25,8 @@ function build(workers: Worker[], legacy: WorkerHeartbeatStatus[] = []) {
     {} as never,
     heartbeats as never,
     {} as never,
+    {} as never,
+    {} as never,
   );
 
   return { service, workersRepo, jobsRepo };

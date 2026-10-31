@@ -5,7 +5,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS } from './constants';
-import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField } from './WorkerAccessFields';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
 
 interface WorkerSettingsDialogProps {
   worker: FleetWorker;
@@ -37,6 +37,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const [tokenId, setTokenId] = useState(worker.claudeCredentialId === null ? DEFAULT_TOKEN : String(worker.claudeCredentialId));
   // undefined = the VPN is left as it is, null = removed, a string = replaced
   const [vpnChange, setVpnChange] = useState<string | null | undefined>(undefined);
+  const [vpnSource, setVpnSource] = useState<VpnSource>(worker.vpnSource ?? 'link');
+  const [vpnConnectionId, setVpnConnectionId] = useState<number | null>(worker.vpnConnectionId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [updateWorker, { isLoading }] = useUpdateWorkerMutation();
 
@@ -45,7 +47,10 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const pollValid = pollIntervalSec !== null && pollIntervalSec >= 2 && pollIntervalSec <= 300;
   const proxyValid = proxyUrl.trim() === '' || /^https?:\/\/\S+$/.test(proxyUrl.trim());
   const vpnValid = typeof vpnChange !== 'string' || isVlessLink(vpnChange);
-  const canSave = name.trim() !== '' && models.length > 0 && timeoutValid && pollValid && proxyValid && vpnValid;
+  const vpnSourceValid = vpnSource !== 'connection' || vpnConnectionId !== null;
+  const vpnSourceEdited =
+    vpnSource !== (worker.vpnSource ?? 'link') || (vpnSource === 'connection' && vpnConnectionId !== (worker.vpnConnectionId ?? null));
+  const canSave = name.trim() !== '' && models.length > 0 && timeoutValid && pollValid && proxyValid && vpnValid && vpnSourceValid;
 
   const toggleModel = (model: WorkerJobModel, checked: boolean) =>
     setModels((current) => (checked ? [...current, model] : current.filter((candidate) => candidate !== model)));
@@ -68,7 +73,8 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
         capabilities: fusion ? ['fusion'] : [],
         limitsRefreshMin: Number(limitsRefreshMin),
         claudeCredentialId: tokenId === DEFAULT_TOKEN ? null : Number(tokenId),
-        ...(vpnChange !== undefined ? { vpnLink: vpnChange } : {}),
+        ...(vpnChange !== undefined && vpnSource === 'link' ? { vpnLink: vpnChange } : {}),
+        ...(vpnSourceEdited ? { vpnSource, vpnConnectionId: vpnSource === 'connection' ? vpnConnectionId : null } : {}),
       }).unwrap();
       onClose();
     } catch (err) {
@@ -142,7 +148,16 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
 
           <ClaudeTokenField value={tokenId} onChange={setTokenId} />
 
-          <VpnLinkField currentHost={worker.vpnHost} onChange={setVpnChange} />
+          <VpnSourceField
+            source={vpnSource}
+            connectionId={vpnConnectionId}
+            onChange={(source, connectionId) => {
+              setVpnSource(source);
+              setVpnConnectionId(connectionId);
+            }}
+          />
+
+          {vpnSource === 'link' && <VpnLinkField currentHost={worker.vpnSource === 'link' ? worker.vpnHost : null} onChange={setVpnChange} />}
 
           <label className={styles.dialogForm}>
             <Text variant="body-2" color="secondary">

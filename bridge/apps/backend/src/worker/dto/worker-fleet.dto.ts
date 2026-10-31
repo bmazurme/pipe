@@ -17,7 +17,12 @@ import {
   Min,
 } from 'class-validator';
 
-import { WORKER_CAPABILITIES, type WorkerCapability } from '../capabilities';
+import {
+  WORKER_CAPABILITIES,
+  WORKER_VPN_SOURCES,
+  type WorkerCapability,
+  type WorkerVpnSource,
+} from '../capabilities';
 import type { ClaudeLimits } from '../claude-limits';
 import {
   describeVless,
@@ -78,6 +83,19 @@ class WorkerSettingsDto {
   @IsString()
   @MaxLength(4000)
   vpnLink?: string | null;
+
+  // Where the tunnel comes from: the worker's own link (default), a connection of the VPN page, or the page's active one.
+  @ApiPropertyOptional({ enum: WORKER_VPN_SOURCES })
+  @IsOptional()
+  @IsIn(WORKER_VPN_SOURCES)
+  vpnSource?: WorkerVpnSource;
+
+  // The VPN page connection for vpnSource 'connection'.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  vpnConnectionId?: number | null;
 
   // Minutes between automatic probes of the Claude plan limits; 0 = only on request.
   @IsOptional()
@@ -167,6 +185,11 @@ export class WorkerResponseDto {
   claudeCredentialId: number | null;
   // host:port of the worker's VPN server, or null — the link itself is never shown again.
   vpnHost: string | null;
+  @ApiProperty({ enum: WORKER_VPN_SOURCES })
+  vpnSource: WorkerVpnSource;
+  // The VPN page connection this worker uses ('connection'), or the one it follows ('active'); null when it has none.
+  vpnConnectionId: number | null;
+  vpnConnectionName: string | null;
   limitsRefreshMin: number;
   @ApiProperty({ enum: WORKER_CAPABILITIES, isArray: true })
   capabilities: WorkerCapability[];
@@ -186,6 +209,7 @@ export class WorkerResponseDto {
     activeJobs: number,
     isOnline: boolean,
     now: Date,
+    vpnConnection: { id: number; name: string; host: string } | null = null,
   ): WorkerResponseDto {
     const enrolled = worker.keyHash !== null;
     const state: WorkerState = !enrolled
@@ -215,7 +239,13 @@ export class WorkerResponseDto {
       proxyHasCredentials: proxyHasCredentials(worker.proxyUrl),
       chatEnabled: worker.chatEnabled,
       claudeCredentialId: worker.claudeCredentialId ?? null,
-      vpnHost: describeVless(worker.vpnLink),
+      vpnHost:
+        worker.vpnSource === 'link'
+          ? describeVless(worker.vpnLink)
+          : (vpnConnection?.host ?? null),
+      vpnSource: worker.vpnSource ?? 'link',
+      vpnConnectionId: vpnConnection?.id ?? null,
+      vpnConnectionName: vpnConnection?.name ?? null,
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
       capabilities: worker.capabilities ?? [],
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
@@ -259,6 +289,9 @@ export class WorkerResponseDto {
       claudeLimits: null,
       claudeCredentialId: null,
       vpnHost: null,
+      vpnSource: 'link',
+      vpnConnectionId: null,
+      vpnConnectionName: null,
       limitsRefreshMin: 0,
       capabilities: [],
       limitsRefreshRequestedAt: null,

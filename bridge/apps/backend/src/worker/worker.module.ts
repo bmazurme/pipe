@@ -6,6 +6,7 @@ import { QuestionsModule } from '../questions/questions.module';
 import { ContextModule } from '../context/context.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
+import { VpnModule } from '../vpn/vpn.module';
 import { ClaudeCredentialsController } from './claude-credentials.controller';
 import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ClaudeUsageService } from './claude-usage.service';
@@ -34,6 +35,7 @@ import { WorkersService } from './workers.service';
     ContextModule,
     QuestionsModule,
     TelegramModule,
+    VpnModule,
     StorageModule,
     TypeOrmModule.forFeature([
       Job,

@@ -4,7 +4,7 @@ import { BaseEntity } from '../../base.entity';
 import { encryptedColumn } from '../../crypto/encrypted-column.transformer';
 import { User } from '../../users/entities/user.entity';
 import type { ClaudeLimits } from '../claude-limits';
-import type { WorkerCapability } from '../capabilities';
+import type { WorkerCapability, WorkerVpnSource } from '../capabilities';
 import { JobModel } from './job.entity';
 
 // A worker process the owner added in the UI. It joins with a one-time enrollment code (no secret in its
@@ -87,6 +87,14 @@ export class Worker extends BaseEntity {
   // secret: only the worker itself ever receives it back; the owner's views get a host:port summary.
   @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
   vpnLink: string | null;
+
+  // Where the tunnel's link comes from (capabilities.ts): this worker's own vpnLink, a connection of the VPN page, or the active one.
+  @Column({ type: 'varchar', length: 16, default: 'link' })
+  vpnSource: WorkerVpnSource;
+
+  // The VPN page connection for vpnSource 'connection'; ON DELETE SET NULL in the migration, which leaves the worker without a tunnel.
+  @Column({ type: 'int', nullable: true })
+  vpnConnectionId: number | null;
 
   // How often (minutes) this worker probes the Claude plan limits when idle, so the numbers on its card do not go stale
   // between runs; 0 = only when the owner presses "refresh". A probe is one tiny call (~4k tokens), not free.
