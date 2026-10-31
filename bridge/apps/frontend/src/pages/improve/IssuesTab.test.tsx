@@ -89,4 +89,20 @@ describe('IssuesTab', () => {
     expect(screen.getByRole('button', { name: 'Запустить #1' })).toBeEnabled();
     expect(screen.getByRole('checkbox', { name: 'Выбрать #2' })).toBeEnabled();
   });
+
+  it('warns when the list is the last good one served because GitHub failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([makeIssue(1)]), {
+            status: 200,
+            headers: { 'content-type': 'application/json', 'X-Issues-Stale-Since': new Date().toISOString() },
+          }),
+      ),
+    );
+    renderTab();
+
+    expect(await screen.findByText(/GitHub недоступен — список задач от \d{2}:\d{2}/)).toBeInTheDocument();
+  });
 });
