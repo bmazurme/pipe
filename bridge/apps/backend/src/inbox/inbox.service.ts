@@ -148,6 +148,15 @@ export class InboxService {
         status: ImproveRunStatus.PrOpen,
         prNumber: Not(IsNull()),
       },
+      // `result` is the whole analysis JSON; the inbox only needs the PR fields.
+      select: {
+        id: true,
+        prNumber: true,
+        issueTitle: true,
+        prUrl: true,
+        finishedAt: true,
+        createdAt: true,
+      },
       order: { id: 'DESC' },
       take: MAX_PULLS,
     });
@@ -218,6 +227,15 @@ export class InboxService {
     const since = new Date(now.getTime() - DAY_MS);
     const failed = await this.jobs.find({
       where: { userId, status: JobStatus.Failed, updatedAt: MoreThan(since) },
+      // `logs` and the encrypted context are large (and decrypted on read): load only what the inbox shows.
+      select: {
+        id: true,
+        taskKey: true,
+        model: true,
+        errorMessage: true,
+        updatedAt: true,
+        createdAt: true,
+      },
       order: { updatedAt: 'DESC' },
       take: MAX_FAILED_JOBS,
     });
