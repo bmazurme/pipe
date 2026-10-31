@@ -37,7 +37,8 @@ node scripts/router-eval/run.mjs replay --url http://localhost:11434/v1 --model 
 ```
 
 Results go to `.router-eval/replay-<model>/`: `report.md` (the table), and per task `pr-N.model.diff` / `pr-N.pr.diff` /
-`pr-N.model.log.txt`. The automatic measure is deliberately cheap — "touched every file the real change touched, and every changed
+`pr-N.model.log.txt` — the log holds the prompt and the whole run (the model's words, every tool call and its result, the worker's warnings),
+and for a task where nothing changed its last lines are also printed as the run goes. `--only 1070,1031` replays just those tasks. The automatic measure is deliberately cheap — "touched every file the real change touched, and every changed
 file still parses" — and is only a filter: whether a change is *right* is for you to judge from the two diffs.
 
 For Ollama give the model room first: its default context is 4096 tokens, which a task prompt plus a file or two can outgrow without any error
