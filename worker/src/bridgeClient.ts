@@ -7,6 +7,7 @@ import {
   reportClaudeUsage,
 } from "./bridgeHttp.js";
 import type { ClaudeReport } from "./modelRunners/claudeUsage.js";
+import type { ProviderOverride } from "./providers.js";
 
 const UPLOAD_RETRY_DELAYS_MS = [2000, 5000];
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
@@ -18,20 +19,16 @@ export interface RemoteJob {
   id: number;
   sourceFileId: number;
   resultFileId: number | null;
-  model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+  model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
   // Resolved by bridge from the job's chosen named credential (see bridge's
   // ClaudeCredentialsService) — only ever present for sonnet/opus/haiku, and only
   // when one was picked. Absent/null means fall back to this process's own
   // inherited CLAUDE_CODE_OAUTH_TOKEN env var, same as before this field
   // existed.
   claudeToken?: string | null;
-  // The API key (and optional endpoint / model) for a gpt/deepseek/qwen job, from the account's stored keys. Null/absent:
+  // The API key (and endpoint / model / route / auth scheme …) for a gpt/deepseek/qwen/custom job, from the account's stored keys. Null/absent:
   // fall back to this process's own environment, as before stored keys existed.
-  provider?: {
-    apiKey: string;
-    baseUrl?: string | null;
-    model?: string | null;
-  } | null;
+  provider?: ProviderOverride | null;
   // Background text the owner attached at launch (bridge's Context module), or
   // null/absent for a job with none — the default.
   context?: string | null;

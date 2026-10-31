@@ -146,5 +146,54 @@ describe('resolveProvider with a key stored in bridge', () => {
   it('Claude models never need a provider key', () => {
     assert.deepEqual(resolveProvider('sonnet', {}, { apiKey: 'ignored' }), { tool: 'claude', claudeModel: 'sonnet' });
   });
-});
 
+  describe('custom', () => {
+    const stored = { apiKey: 'k', baseUrl: 'http://192.168.50.35:11434/v1/', model: 'qwen3-coder' };
+
+    it('takes everything from the stored key: no defaults, no environment fallback', () => {
+      assert.throws(() => resolveProvider('custom', { OPENAI_API_KEY: 'k' }), /stored key with an address and a model/);
+      assert.throws(() => resolveProvider('custom', {}, { apiKey: 'k', baseUrl: 'http://x/v1' }), /stored key with an address and a model/);
+    });
+
+    it('resolves the key, trims a trailing slash and fills the defaults (bearer, auto, tools on)', () => {
+      assert.deepEqual(resolveProvider('custom', {}, stored), {
+        tool: 'openai-compatible',
+        baseUrl: 'http://192.168.50.35:11434/v1',
+        apiKey: 'k',
+        model: 'qwen3-coder',
+        route: 'auto',
+        authScheme: 'bearer',
+        supportsTools: true,
+      });
+    });
+
+    it('carries the route, scheme, headers, timeout and tool support the key sets', () => {
+      assert.deepEqual(
+        resolveProvider('custom', {}, {
+          ...stored,
+          route: 'direct',
+          authScheme: 'api-key',
+          extraHeaders: { 'x-folder-id': 'b1g' },
+          timeoutSec: 900,
+          supportsTools: false,
+        }),
+        {
+          tool: 'openai-compatible',
+          baseUrl: 'http://192.168.50.35:11434/v1',
+          apiKey: 'k',
+          model: 'qwen3-coder',
+          route: 'direct',
+          authScheme: 'api-key',
+          extraHeaders: { 'x-folder-id': 'b1g' },
+          timeoutSec: 900,
+          supportsTools: false,
+        },
+      );
+    });
+
+    it('lets a local server have no secret, but only when its scheme is none', () => {
+      assert.equal(resolveProvider('custom', {}, { ...stored, apiKey: '', authScheme: 'none' }).tool, 'openai-compatible');
+      assert.throws(() => resolveProvider('custom', {}, { ...stored, apiKey: '' }), /needs one/);
+    });
+  });
+});

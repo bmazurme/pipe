@@ -65,6 +65,33 @@ describe('openAiCompatibleChat', () => {
     assert.ok((capturedInit as { dispatcher?: unknown })?.dispatcher);
   });
 
+  it('uses the key\'s auth scheme, extra headers and route', async () => {
+    let capturedInit: (RequestInit & { dispatcher?: unknown }) | undefined;
+
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      capturedInit = init as never;
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
+    }) as typeof fetch;
+
+    await openAiCompatibleChat(
+      [{ role: 'user', content: 'hi' }],
+      { baseUrl: 'http://ollama.lan:11434/v1', apiKey: '', model: 'm', authScheme: 'none', extraHeaders: { 'x-a': '1' } },
+      'http://vpn-client:1080',
+    );
+
+    const headers = capturedInit?.headers as Record<string, string>;
+
+    assert.ok(!('Authorization' in headers));
+    assert.equal(headers['x-a'], '1');
+    // a private address does not go through the proxy
+    assert.equal(capturedInit?.dispatcher, undefined);
+
+    await assert.rejects(
+      openAiCompatibleChat([{ role: 'user', content: 'hi' }], { baseUrl: 'https://x.example/v1', apiKey: 'k', model: 'm', route: 'vpn' }),
+      /requires the VPN/,
+    );
+  });
+
   it('throws a descriptive error on a failure status', async () => {
     globalThis.fetch = (async () => new Response('nope', { status: 500 })) as typeof fetch;
 

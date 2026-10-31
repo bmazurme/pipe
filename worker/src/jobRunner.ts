@@ -17,6 +17,7 @@ import { jobLogger } from './logger.js';
 import { splitLogChunk } from './logChunks.js';
 import { buildResultParcel, describeTask, extractParcel, type ExtractedParcel } from './parcel.js';
 import { makeRedactor, maxSecretLength } from './redact.js';
+import { routeFor } from './openAiRequest.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
 import { extractQuestions, withQuestionsInstruction } from './taskQuestions.js';
@@ -242,6 +243,11 @@ export async function processJob(
     // Fail the job up front rather than let it run with no shell and open an unchecked pull request.
     if (provider.tool === 'claude') requireShell();
 
+    // A job is a tool-calling loop; a model that cannot call functions can only chat.
+    if (provider.tool === 'openai-compatible' && provider.supportsTools === false) {
+      throw new Error(`${provider.model} does not call functions, so it cannot run a job — use it in a chat, or pick another model`);
+    }
+
     // A job that needs Fusion 360: check it answers before the model starts, and tell the model how to drive it.
     if (job.requiredCapability === 'fusion') {
       prompt = await prepareFusionJob(prompt, {
@@ -257,6 +263,9 @@ export async function processJob(
     const timeoutSec = job.timeoutSec ?? config.jobTimeoutSec;
     if (provider.tool === 'claude') baseTimeoutSec = timeoutSec;
     log(`Time limit: ${timeoutSec}s${job.timeoutSec != null ? ' (set for this job)' : ''}\n`);
+
+    // Where the requests to the model server go (the runner decides again from the same inputs); a key that needs the VPN fails here.
+    if (provider.tool === 'openai-compatible') log(`Route to ${provider.model}: ${routeFor(provider, config.proxyUrl).reason}\n`);
 
     log(`Running ${provider.tool === 'claude' ? `claude --model ${provider.claudeModel}` : provider.model}...\n`);
 

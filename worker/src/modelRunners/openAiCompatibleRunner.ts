@@ -5,15 +5,12 @@ import { resolveInDir } from "@pipe/protocol/resolveInDir";
 
 import { CancelledError } from "../cancelled.js";
 import { EXCLUDED_RESULT_DIRS, listFilesRecursively } from "../fsWalk.js";
+import { completionHeaders, completionTimeoutMs, routeFor } from "../openAiRequest.js";
 import { resolveDispatcher } from "../proxyAgent.js";
+import type { OpenAiCompatibleConfig } from "../providers.js";
 import type { RunResult } from "./claudeRunner.js";
 
 const MAX_TURNS = 20;
-
-// Generous on purpose — a real completion (especially with tool calls) can
-// legitimately take minutes, unlike a plain API round trip. Without any
-// timeout at all, a provider that just hangs would block the job forever.
-const COMPLETION_TIMEOUT_MS = 300_000;
 
 const TURN_RETRY_DELAY_MS = 2000;
 
@@ -148,11 +145,9 @@ export function executeTool(
   }
 }
 
-export interface OpenAiCompatibleOptions {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
+// Generous on purpose — a real completion (especially with tool calls) can legitimately take minutes (openAiRequest.ts has the
+// default and the per-key override); without any bound a provider that just hangs would block the job forever.
+export type OpenAiCompatibleOptions = Pick<OpenAiCompatibleConfig, "baseUrl" | "apiKey" | "model" | "route" | "authScheme" | "extraHeaders" | "timeoutSec">;
 
 // The minimal agent loop shared by gpt/deepseek/qwen: all three expose the
 // same OpenAI-compatible Chat Completions + function-calling shape, so one
@@ -177,6 +172,11 @@ export async function runOpenAiCompatible(
   const deadlineSignal =
     timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
 
+  // Decided once per job: the key's route against the proxy this worker has right now. A run keeps its route to the end.
+  const route = routeFor(options, proxyUrl);
+  const headers = completionHeaders(options);
+  const completionTimeout = completionTimeoutMs(options);
+
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: prompt },
@@ -190,15 +190,12 @@ export async function runOpenAiCompatible(
 
     let data: { choices?: { message?: ChatMessage }[] };
     for (let attempt = 0; ; attempt++) {
-      const completionSignal = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
+      const completionSignal = AbortSignal.timeout(completionTimeout);
       let retryable = false;
       try {
         const response = await fetch(`${options.baseUrl}/chat/completions`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${options.apiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers,
           body: JSON.stringify({
             model: options.model,
             messages,
@@ -207,7 +204,7 @@ export async function runOpenAiCompatible(
           }),
           // `dispatcher` is a Node/undici-specific fetch extension not in the
           // standard RequestInit type — real at runtime, just untyped here.
-          dispatcher: resolveDispatcher(proxyUrl),
+          dispatcher: resolveDispatcher(route.proxyUrl),
           signal: AbortSignal.any([
             completionSignal,
             ...(deadlineSignal ? [deadlineSignal] : []),
