@@ -38,6 +38,7 @@ export function ProviderCredentialsCard() {
   const [headerText, setHeaderText] = useState('');
   const [timeoutSec, setTimeoutSec] = useState('');
   const [supportsTools, setSupportsTools] = useState(true);
+  const [stream, setStream] = useState(false);
   const [allowedWorkerIds, setAllowedWorkerIds] = useState<number[]>([]);
   const isCustom = provider === 'custom';
   // Only asked for when a custom key is being made: the list of workers the key can be limited to.
@@ -87,6 +88,7 @@ export function ProviderCredentialsCard() {
               authScheme,
               route,
               supportsTools,
+              ...(stream ? { stream: true } : {}),
               preset: presetId,
               ...(Object.keys(headers.headers).length > 0 ? { extraHeaders: headers.headers } : {}),
               ...(timeoutValue !== undefined ? { timeoutSec: timeoutValue } : {}),
@@ -101,6 +103,7 @@ export function ProviderCredentialsCard() {
       setHeaderText('');
       setTimeoutSec('');
       setSupportsTools(true);
+      setStream(false);
       setAllowedWorkerIds([]);
       setPresetId(DEFAULT_PRESET);
       setAuthScheme('bearer');
@@ -270,7 +273,7 @@ export function ProviderCredentialsCard() {
         )}
 
         {isCustom ? (
-          <Disclosure summary="Дополнительно: заголовки, таймаут, вызов функций, worker'ы">
+          <Disclosure summary="Дополнительно: заголовки, таймаут, функции, поток, worker'ы">
             <div className={styles.dialogForm}>
               <TextArea
                 value={headerText}
@@ -296,6 +299,7 @@ export function ProviderCredentialsCard() {
                 validationState={timeoutValid ? undefined : 'invalid'}
               />
               <Switch checked={supportsTools} onUpdate={setSupportsTools} content="Модель вызывает функции (нужно для задач; без этого — только чат)" />
+              <Switch checked={stream} onUpdate={setStream} content="Потоковая выдача в чате (ответ появляется по мере генерации)" />
               {managedWorkers.length > 0 && (
                 <fieldset className={styles.dialogForm} style={{ border: 'none', margin: 0, padding: 0 }}>
                   <Text as="legend" variant="body-2" color="secondary">
