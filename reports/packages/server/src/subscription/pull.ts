@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import type { SubscriptionStateEntryType } from '@reports/shared';
-import { resolveInDir } from '@pipe/protocol/resolveInDir';
+import { assertNoSymlinkOnPath, resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { getSubscriptionConfig } from './config-props';
 import { getIssueState, setIssueState } from './state-props';
@@ -31,6 +31,16 @@ function writeIfChanged(destination: string, content: string): boolean {
 function resolveParcelPath(projectRoot: string, relPath: string): string {
   try {
     return resolveInDir(projectRoot, relPath);
+  } catch (error) {
+    throw new Error(`Посылка содержит недопустимый путь: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// resolveInDir is a pure path check: a symlink already in the checked-out task
+// branch (`vendor -> /home/user`) would still let a write land outside the repo.
+function assertNoSymlink(projectRoot: string, destination: string): void {
+  try {
+    assertNoSymlinkOnPath(projectRoot, destination);
   } catch (error) {
     throw new Error(`Посылка содержит недопустимый путь: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -123,6 +133,9 @@ export async function pullSubscriptionIssue(
   // dirty-tree guard would block every later pull.
   const fileDestinations = files.map((file) => resolveParcelPath(projectRoot, file.relPath));
   const assetDestinations = assets.map((asset) => resolveParcelPath(projectRoot, asset.relPath));
+
+  // Links on the task branch itself count, hence after checkoutTaskBranch and before the first write.
+  [...fileDestinations, ...assetDestinations].forEach((destination) => assertNoSymlink(projectRoot, destination));
 
   let writtenFiles = 0;
 
