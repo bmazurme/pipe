@@ -28,9 +28,16 @@ const METRICS = ['lines', 'branches', 'functions'];
 const result = spawnSync(
   process.execPath,
   ['--test', '--experimental-test-coverage', ...extraNodeArgs, 'dist/**/*.test.js'],
-  { cwd: ROOT, encoding: 'utf8' },
+  // spawnSync kills a child whose output passes `maxBuffer` (1 MiB by default) — a package's whole TAP report plus the coverage table
+  // is already about that size for worker, and the kill looked like a failing test with a log cut off in the middle.
+  { cwd: ROOT, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 },
 );
 const output = `${result.stdout}${result.stderr}`;
+
+if (result.error) {
+  console.error(`could not run node --test: ${result.error.message}`);
+  process.exit(1);
+}
 
 if (result.status !== 0) {
   console.error(output);
