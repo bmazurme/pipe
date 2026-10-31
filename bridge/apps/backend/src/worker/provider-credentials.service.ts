@@ -1,13 +1,38 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import type { CreateProviderCredentialDto } from './dto/create-provider-credential.dto';
 import { ClaimedProviderDto } from './dto/provider-credential-response.dto';
 import {
   PROVIDER_MODELS,
   ProviderCredential,
   type ProviderModel,
 } from './entities/provider-credential.entity';
+
+// Header names are case-insensitive and values are text; anything else is dropped rather than sent as "[object Object]".
+function cleanHeaders(
+  raw: Record<string, unknown> | undefined,
+): Record<string, string> | null {
+  const entries = Object.entries(raw ?? {})
+    .filter(
+      ([name, value]) =>
+        /^[A-Za-z0-9-]{1,64}$/.test(name) &&
+        typeof value === 'string' &&
+        value.length <= 500,
+    )
+    .map(([name, value]) => [name, value as string] as const);
+
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
+function toDecimal(value: number | undefined): string | null {
+  return value === undefined ? null : String(value);
+}
 
 export function isProviderModel(value: string): value is ProviderModel {
   return (PROVIDER_MODELS as readonly string[]).includes(value);
@@ -22,22 +47,47 @@ export class ProviderCredentialsService {
 
   async create(
     userId: number,
-    input: {
-      provider: ProviderModel;
-      name: string;
-      apiKey: string;
-      baseUrl?: string;
-      model?: string;
-    },
+    input: CreateProviderCredentialDto,
   ): Promise<ProviderCredential> {
+    const custom = input.provider === 'custom';
+    const authScheme = custom ? (input.authScheme ?? 'bearer') : 'bearer';
+    const apiKey = input.apiKey?.trim() ?? '';
+    const baseUrl = input.baseUrl?.trim().replace(/\/+$/, '') || null;
+    const model = input.model?.trim() || null;
+
+    if (apiKey === '' && !(custom && authScheme === 'none')) {
+      throw new BadRequestException('apiKey is required');
+    }
+    if (custom && (baseUrl === null || model === null)) {
+      throw new BadRequestException(
+        'A custom model needs an address (baseUrl) and a model name',
+      );
+    }
+
     return this.repository.save(
       this.repository.create({
         userId,
         provider: input.provider,
         name: input.name.trim(),
-        apiKey: input.apiKey.trim(),
-        baseUrl: input.baseUrl?.trim() || null,
-        model: input.model?.trim() || null,
+        apiKey,
+        baseUrl,
+        model,
+        ...(custom
+          ? {
+              route: input.route ?? 'auto',
+              authScheme,
+              extraHeaders: cleanHeaders(input.extraHeaders),
+              timeoutSec: input.timeoutSec ?? null,
+              supportsTools: input.supportsTools ?? true,
+              stream: input.stream ?? false,
+              priceInPerMTok: toDecimal(input.priceInPerMTok),
+              priceOutPerMTok: toDecimal(input.priceOutPerMTok),
+              preset: input.preset?.trim() || null,
+              allowedWorkerIds: input.allowedWorkerIds?.length
+                ? input.allowedWorkerIds
+                : null,
+            }
+          : {}),
       }),
     );
   }
@@ -76,6 +126,7 @@ export class ProviderCredentialsService {
       gpt: 0,
       deepseek: 0,
       qwen: 0,
+      custom: 0,
     };
 
     for (const row of rows) counts[row.provider] += 1;
@@ -84,7 +135,8 @@ export class ProviderCredentialsService {
   }
 
   // The one place the raw key leaves this service: the credential the job named, else the account's first one for the
-  // provider. Null when there is none (the worker then falls back to its own environment, as before).
+  // provider. Null when there is none (the worker then falls back to its own environment, as before). A custom key has no
+  // "first": which server to talk to is the job's choice, so without one there is nothing to hand over.
   async resolveForJob(
     userId: number,
     model: string,
@@ -104,13 +156,44 @@ export class ProviderCredentialsService {
         : null;
     const chosen =
       credential ??
-      (await this.repository.findOne({
-        where: { userId, provider: model },
-        order: { id: 'ASC' },
-      }));
+      (model === 'custom'
+        ? null
+        : await this.repository.findOne({
+            where: { userId, provider: model },
+            order: { id: 'ASC' },
+          }));
 
-    return chosen
-      ? { apiKey: chosen.apiKey, baseUrl: chosen.baseUrl, model: chosen.model }
-      : null;
+    if (!chosen) return null;
+
+    return {
+      apiKey: chosen.apiKey,
+      baseUrl: chosen.baseUrl,
+      model: chosen.model,
+      ...(chosen.provider === 'custom'
+        ? {
+            route: chosen.route,
+            authScheme: chosen.authScheme,
+            ...(chosen.extraHeaders
+              ? { extraHeaders: chosen.extraHeaders }
+              : {}),
+            timeoutSec: chosen.timeoutSec,
+            supportsTools: chosen.supportsTools,
+          }
+        : {}),
+    };
+  }
+
+  // What the claim and the launch checks need to know about the key a custom job names; null when it is not the owner's.
+  async findForCheck(
+    id: number,
+    userId: number,
+  ): Promise<Pick<
+    ProviderCredential,
+    'id' | 'provider' | 'allowedWorkerIds'
+  > | null> {
+    return this.repository.findOne({
+      where: { id, userId },
+      select: { id: true, provider: true, allowedWorkerIds: true },
+    });
   }
 }

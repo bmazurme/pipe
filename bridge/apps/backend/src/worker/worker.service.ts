@@ -241,6 +241,16 @@ export class WorkerService implements OnModuleInit {
       }
     }
 
+    // Any other server is chosen only by its key, so there is no "the account's first" to fall back on.
+    if (
+      dto.model === JobModel.Custom &&
+      dto.providerCredentialId === undefined
+    ) {
+      throw new BadRequestException(
+        'A custom model needs the key of the server to run on',
+      );
+    }
+
     if (dto.providerCredentialId !== undefined) {
       if (
         !isProviderModel(dto.model) ||
@@ -267,9 +277,17 @@ export class WorkerService implements OnModuleInit {
       if (!target) {
         throw new BadRequestException('Worker not found');
       }
+      const key =
+        dto.model === JobModel.Custom && dto.providerCredentialId !== undefined
+          ? await this.providerCredentialsService.findForCheck(
+              dto.providerCredentialId,
+              userId,
+            )
+          : null;
       const why = whyWorkerCannotRun(target, {
         model: dto.model,
         requiredCapability: dto.requiredCapability,
+        allowedWorkerIds: key?.allowedWorkerIds ?? null,
       });
 
       if (why !== null) {
@@ -358,9 +376,6 @@ export class WorkerService implements OnModuleInit {
     const requiredCapability = isWorkerCapability(job.requiredCapability)
       ? job.requiredCapability
       : null;
-    const pinUsable =
-      pinned !== null &&
-      whyWorkerCannotRun(pinned, { model, requiredCapability }) === null;
     // A stored credential only fits the family (Claude / one provider) it was made for.
     const claudeCredentialId =
       overrides.claudeCredentialId ??
@@ -368,6 +383,20 @@ export class WorkerService implements OnModuleInit {
     const providerCredentialId =
       overrides.providerCredentialId ??
       (model === job.model ? job.providerCredentialId : null);
+    const key =
+      model === JobModel.Custom && providerCredentialId !== null
+        ? await this.providerCredentialsService.findForCheck(
+            providerCredentialId,
+            userId,
+          )
+        : null;
+    const pinUsable =
+      pinned !== null &&
+      whyWorkerCannotRun(pinned, {
+        model,
+        requiredCapability,
+        allowedWorkerIds: key?.allowedWorkerIds ?? null,
+      }) === null;
     // A context chosen for the retry replaces the job's snapshot.
     const context =
       overrides.contextId !== undefined

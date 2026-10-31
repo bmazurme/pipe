@@ -15,6 +15,8 @@ export enum JobModel {
   Gpt = 'gpt',
   Deepseek = 'deepseek',
   Qwen = 'qwen',
+  // Any other OpenAI-compatible server, described by the stored key the job names (provider_credentials, provider 'custom').
+  Custom = 'custom',
 }
 
 // The models that run through the `claude` CLI, and so use a stored Claude token and report plan limits.

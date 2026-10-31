@@ -551,7 +551,10 @@ export class WorkersService implements OnModuleInit {
     }
   }
 
-  async configFor(workerId: number): Promise<WorkerConfigResponseDto> {
+  async configFor(
+    workerId: number,
+    reportedVersion?: string,
+  ): Promise<WorkerConfigResponseDto> {
     const worker = await this.workers.findOneBy({ id: workerId });
 
     if (!worker) {
@@ -559,6 +562,18 @@ export class WorkersService implements OnModuleInit {
     }
 
     await touchWorker(this.workers, worker.id, worker.lastSeenAt);
+
+    // Only an enrolment used to record the version, so an upgraded worker kept showing its old one; what decides which jobs it
+    // may be given (a custom model needs a newer worker) has to be what is running now.
+    const version = reportedVersion?.trim();
+
+    if (
+      version &&
+      /^[\w.+-]{1,50}$/.test(version) &&
+      version !== worker.version
+    ) {
+      await this.workers.update({ id: worker.id }, { version });
+    }
 
     const vpnLink = await this.vpnLinkOf(worker);
 
@@ -581,15 +596,18 @@ export class WorkersService implements OnModuleInit {
 
   // The worker's own settings fetch. A personal API key has no worker behind it (a legacy worker keeps using its
   // environment), so it gets a clear refusal rather than someone else's settings.
-  async configForPrincipal(principal: {
-    id: number;
-    workerId?: number;
-  }): Promise<WorkerConfigResponseDto> {
+  async configForPrincipal(
+    principal: {
+      id: number;
+      workerId?: number;
+    },
+    reportedVersion?: string,
+  ): Promise<WorkerConfigResponseDto> {
     if (principal.workerId === undefined) {
       throw new UnauthorizedException('This call needs a worker key');
     }
 
-    return this.configFor(principal.workerId);
+    return this.configFor(principal.workerId, reportedVersion);
   }
 
   // May this worker take a chat turn right now? Also counts as a sign of life.

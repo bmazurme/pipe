@@ -2721,7 +2721,7 @@ export interface components {
             sourceFileId: number | null;
             resultFileId: number | null;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
             claudeCredentialId: number | null;
             usedClaudeCredentialName: string | null;
             providerCredentialId: number | null;
@@ -2757,7 +2757,7 @@ export interface components {
         CreateJobDto: {
             sourceFileId: number;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
             claudeCredentialId?: number;
             providerCredentialId?: number;
             targetWorkerId?: number;
@@ -2798,7 +2798,7 @@ export interface components {
             /** Format: date-time */
             notBefore?: string;
             /** @enum {string} */
-            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
             claudeCredentialId?: number;
             providerCredentialId?: number;
             contextId?: number;
@@ -2849,16 +2849,38 @@ export interface components {
             keyHint: string;
             baseUrl: string | null;
             model: string | null;
+            route: Record<string, never>;
+            authScheme: Record<string, never>;
+            extraHeaderNames: string[];
+            timeoutSec: number | null;
+            supportsTools: boolean;
+            stream: boolean;
+            priceInPerMTok: number | null;
+            priceOutPerMTok: number | null;
+            preset: string | null;
+            allowedWorkerIds: number[] | null;
             /** Format: date-time */
             createdAt: string;
         };
         CreateProviderCredentialDto: {
             /** @enum {string} */
-            provider: "gpt" | "deepseek" | "qwen";
+            provider: "gpt" | "deepseek" | "qwen" | "custom";
             name: string;
-            apiKey: string;
+            apiKey?: string;
             baseUrl?: string;
             model?: string;
+            /** @enum {string} */
+            route?: "auto" | "vpn" | "direct";
+            /** @enum {string} */
+            authScheme?: "bearer" | "api-key" | "none";
+            extraHeaders?: Record<string, never>;
+            timeoutSec?: number;
+            supportsTools?: boolean;
+            stream?: boolean;
+            priceInPerMTok?: number;
+            priceOutPerMTok?: number;
+            preset?: string;
+            allowedWorkerIds?: number[];
         };
         WorkerHeartbeatStatusDto: {
             name: string;
@@ -2871,7 +2893,7 @@ export interface components {
             workers: components["schemas"]["WorkerHeartbeatStatusDto"][];
         };
         WorkerResponseDto: {
-            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom")[] | null;
             /** @enum {string} */
             vpnSource: "link" | "connection" | "active";
             capabilities: "fusion"[];
@@ -2908,7 +2930,7 @@ export interface components {
             createdAt: string | null;
         };
         CreateWorkerDto: {
-            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             /** @enum {string} */
@@ -2941,7 +2963,7 @@ export interface components {
             key: string;
         };
         WorkerConfigResponseDto: {
-            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom")[] | null;
             capabilities: "fusion"[];
             id: number;
             name: string;
@@ -2959,7 +2981,7 @@ export interface components {
             };
         };
         UpdateWorkerDto: {
-            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             /** @enum {string} */
@@ -5098,7 +5120,9 @@ export interface operations {
     WorkersController_config: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "x-worker-version": string;
+            };
             path?: never;
             cookie?: never;
         };

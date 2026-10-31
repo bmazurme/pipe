@@ -833,6 +833,135 @@ describe('Worker fleet (e2e)', () => {
     });
   });
 
+  describe('custom models (any OpenAI-compatible server)', () => {
+    const claim = (token: string) =>
+      request(server())
+        .post('/api/v1/worker/jobs/claim')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+    const createKey = (token: string, extra: Record<string, unknown> = {}) =>
+      as(
+        request(server()).post('/api/v1/worker/provider-credentials'),
+        token,
+      ).send({
+        provider: 'custom',
+        name: 'Local Qwen',
+        baseUrl: 'http://192.168.50.35:11434/v1',
+        model: 'qwen3-coder',
+        authScheme: 'none',
+        route: 'direct',
+        extraHeaders: { 'x-folder-id': 'b1g' },
+        ...extra,
+      });
+
+    it('a key needs no secret for a local server, is listed without its headers, and a job must name it', async () => {
+      const { accessToken, userId } = await owner();
+      const created = await createKey(accessToken).expect(201);
+
+      expect(created.body).toMatchObject({
+        provider: 'custom',
+        keyHint: '',
+        authScheme: 'none',
+        route: 'direct',
+        extraHeaderNames: ['x-folder-id'],
+      });
+      expect(JSON.stringify(created.body)).not.toContain('b1g');
+
+      await createKey(accessToken, { baseUrl: undefined }).expect(400);
+      await createKey(accessToken, { authScheme: 'bearer' }).expect(400);
+
+      const file = await app
+        .get(StorageService)
+        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+
+      await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
+        .send({ sourceFileId: file.id, model: 'custom' })
+        .expect(400);
+      await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
+        .send({
+          sourceFileId: file.id,
+          model: 'custom',
+          providerCredentialId: created.body.id,
+        })
+        .expect(201);
+    });
+
+    it('is given to a worker whose id the key allows, with the whole description of the key — and to no other', async () => {
+      const { accessToken, userId } = await owner();
+      const a = await enroll((await addWorker(accessToken, 'mac')).enrollCode);
+      const b = await enroll((await addWorker(accessToken, 'pi')).enrollCode);
+      const key = await createKey(accessToken, {
+        allowedWorkerIds: [a.workerId],
+      }).expect(201);
+
+      await job(userId, accessToken, {
+        model: 'custom',
+        providerCredentialId: key.body.id,
+      });
+
+      await claim(b.key).expect(204);
+
+      const taken = await claim(a.key).expect(200);
+
+      expect(taken.body.provider).toEqual({
+        apiKey: '',
+        baseUrl: 'http://192.168.50.35:11434/v1',
+        model: 'qwen3-coder',
+        route: 'direct',
+        authScheme: 'none',
+        extraHeaders: { 'x-folder-id': 'b1g' },
+        timeoutSec: null,
+        supportsTools: true,
+      });
+    });
+
+    it('refuses to pin a custom job to a worker outside the key’s list', async () => {
+      const { accessToken, userId } = await owner();
+      const a = await addWorker(accessToken, 'mac');
+      const b = await addWorker(accessToken, 'pi');
+      const key = await createKey(accessToken, {
+        allowedWorkerIds: [a.worker.id],
+      }).expect(201);
+      const file = await app
+        .get(StorageService)
+        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+
+      await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
+        .send({
+          sourceFileId: file.id,
+          model: 'custom',
+          providerCredentialId: key.body.id,
+          targetWorkerId: b.worker.id,
+        })
+        .expect(400);
+    });
+
+    it('an older worker is given nothing custom until it reports a newer version', async () => {
+      const { accessToken, userId } = await owner();
+      const w = await enroll((await addWorker(accessToken, 'old')).enrollCode);
+      const key = await createKey(accessToken).expect(201);
+
+      const settings = (version: string) =>
+        request(server())
+          .get('/api/v1/workers/me/config')
+          .set('Authorization', `Bearer ${w.key}`)
+          .set('X-Worker-Version', version)
+          .expect(200);
+
+      await job(userId, accessToken, {
+        model: 'custom',
+        providerCredentialId: key.body.id,
+      });
+
+      await settings('0.1.0');
+      await claim(w.key).expect(204);
+
+      await settings('0.2.0');
+      await claim(w.key).expect(200);
+    });
+  });
+
   describe('deleting a worker', () => {
     it('revokes its key at once, fails what it was running and frees the jobs pinned to it', async () => {
       const { accessToken, userId } = await owner();

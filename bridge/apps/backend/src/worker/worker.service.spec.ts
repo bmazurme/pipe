@@ -74,6 +74,7 @@ describe('WorkerService', () => {
   let providerCredentials: {
     existsFor: jest.Mock;
     resolveForJob: jest.Mock;
+    findForCheck: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -107,6 +108,7 @@ describe('WorkerService', () => {
     providerCredentials = {
       existsFor: jest.fn().mockResolvedValue(true),
       resolveForJob: jest.fn().mockResolvedValue(null),
+      findForCheck: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -2301,6 +2303,65 @@ describe('WorkerService', () => {
             providerCredentialId: 4,
           }),
         ).rejects.toThrow('Provider credential not found');
+      });
+
+      it('a custom model runs only on the server of the key it names', async () => {
+        await expect(
+          service.create(7, { sourceFileId: 1, model: JobModel.Custom }),
+        ).rejects.toThrow('needs the key of the server');
+
+        providerCredentials.existsFor.mockResolvedValueOnce(true);
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Custom,
+            providerCredentialId: 3,
+          }),
+        ).resolves.toMatchObject({ model: 'custom', providerCredentialId: 3 });
+      });
+
+      it('refuses to pin a custom job to a worker that is old or outside the key’s list', async () => {
+        providerCredentials.existsFor.mockResolvedValue(true);
+        providerCredentials.findForCheck.mockResolvedValue({
+          id: 3,
+          provider: 'custom',
+          allowedWorkerIds: [5],
+        });
+        workerRepository.findOneBy.mockResolvedValue({
+          id: 6,
+          name: 'pi-green',
+          enabled: true,
+          models: null,
+          capabilities: null,
+          version: '0.2.0',
+        });
+
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Custom,
+            providerCredentialId: 3,
+            targetWorkerId: 6,
+          }),
+        ).rejects.toThrow('not allowed on worker "pi-green"');
+
+        workerRepository.findOneBy.mockResolvedValue({
+          id: 5,
+          name: 'mac-fusion',
+          enabled: true,
+          models: null,
+          capabilities: null,
+          version: '0.1.0',
+        });
+
+        await expect(
+          service.create(7, {
+            sourceFileId: 1,
+            model: JobModel.Custom,
+            providerCredentialId: 3,
+            targetWorkerId: 5,
+          }),
+        ).rejects.toThrow('old version');
       });
 
       it('refuses a provider key for a Claude model', async () => {

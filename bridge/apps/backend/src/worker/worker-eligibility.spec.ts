@@ -3,6 +3,7 @@ import {
   claimEligibilitySql,
   whyWorkerCannotRun,
   workerHasCapability,
+  workerSupportsCustom,
 } from './worker-eligibility';
 
 const worker = (over: Record<string, unknown> = {}) =>
@@ -74,7 +75,7 @@ describe('claimEligibilitySql', () => {
     const params: unknown[] = [];
 
     expect(claimEligibilitySql(null, params)).toBe(
-      ' AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL',
+      ` AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL AND model::text <> 'custom'`,
     );
     expect(params).toEqual([]);
   });
@@ -95,8 +96,59 @@ describe('claimEligibilitySql', () => {
     const params: unknown[] = [1, 2, 3, 4, 5];
     const sql = claimEligibilitySql(worker(), params);
 
-    expect(sql).not.toContain('model::text');
+    expect(sql).not.toContain('model::text = ANY');
     expect(sql).toContain('"requiredCapability" = ANY($6::text[])');
     expect(params.slice(5)).toEqual([[]]);
+  });
+});
+
+describe('custom models', () => {
+  const custom = { model: JobModel.Custom };
+
+  it('workerSupportsCustom compares versions numerically and refuses unknown ones', () => {
+    expect(workerSupportsCustom('0.2.0')).toBe(true);
+    expect(workerSupportsCustom('0.10.1')).toBe(true);
+    expect(workerSupportsCustom('1.0.0')).toBe(true);
+    expect(workerSupportsCustom('0.1.9')).toBe(false);
+    expect(workerSupportsCustom('unknown')).toBe(false);
+    expect(workerSupportsCustom(null)).toBe(false);
+  });
+
+  it("whyWorkerCannotRun refuses an old worker and a worker outside the key's list", () => {
+    expect(whyWorkerCannotRun(worker({ version: '0.1.0' }), custom)).toMatch(
+      /old version \(0\.1\.0\)/,
+    );
+    expect(
+      whyWorkerCannotRun(worker({ version: '0.2.0', id: 3 }), {
+        ...custom,
+        allowedWorkerIds: [1, 2],
+      }),
+    ).toMatch(/not allowed on worker "w1"/);
+    expect(
+      whyWorkerCannotRun(worker({ version: '0.2.0', id: 2 }), {
+        ...custom,
+        allowedWorkerIds: [1, 2],
+      }),
+    ).toBeNull();
+    expect(
+      whyWorkerCannotRun(worker({ version: '0.2.0', id: 9 }), custom),
+    ).toBeNull();
+  });
+
+  it("claimEligibilitySql keeps custom jobs from an old worker, and limits a new one by the key's list", () => {
+    const old = claimEligibilitySql(
+      worker({ version: '0.1.0' }),
+      [1, 2, 3, 4, 5],
+    );
+    const fresh = claimEligibilitySql(
+      worker({ version: '0.2.0' }),
+      [1, 2, 3, 4, 5],
+    );
+
+    expect(old).toContain(`model::text <> 'custom'`);
+    expect(old).not.toContain('allowedWorkerIds');
+    expect(fresh).toContain(
+      '"allowedWorkerIds" IS NULL OR $5 = ANY("allowedWorkerIds")',
+    );
   });
 });

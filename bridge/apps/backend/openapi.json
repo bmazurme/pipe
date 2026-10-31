@@ -1962,7 +1962,16 @@
     "/api/v1/workers/me/config": {
       "get": {
         "operationId": "WorkersController_config",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "x-worker-version",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -5648,7 +5657,8 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ],
             "type": "string"
           },
@@ -5799,7 +5809,8 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ]
           },
           "claudeCredentialId": {
@@ -5926,7 +5937,8 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ]
           },
           "claudeCredentialId": {
@@ -6113,6 +6125,47 @@
             "type": "string",
             "nullable": true
           },
+          "route": {
+            "type": "object"
+          },
+          "authScheme": {
+            "type": "object"
+          },
+          "extraHeaderNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeoutSec": {
+            "type": "number",
+            "nullable": true
+          },
+          "supportsTools": {
+            "type": "boolean"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "priceInPerMTok": {
+            "type": "number",
+            "nullable": true
+          },
+          "priceOutPerMTok": {
+            "type": "number",
+            "nullable": true
+          },
+          "preset": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedWorkerIds": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -6125,6 +6178,16 @@
           "keyHint",
           "baseUrl",
           "model",
+          "route",
+          "authScheme",
+          "extraHeaderNames",
+          "timeoutSec",
+          "supportsTools",
+          "stream",
+          "priceInPerMTok",
+          "priceOutPerMTok",
+          "preset",
+          "allowedWorkerIds",
           "createdAt"
         ]
       },
@@ -6136,7 +6199,8 @@
             "enum": [
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ]
           },
           "name": {
@@ -6155,12 +6219,61 @@
           "model": {
             "type": "string",
             "maxLength": 100
+          },
+          "route": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "vpn",
+              "direct"
+            ]
+          },
+          "authScheme": {
+            "type": "string",
+            "enum": [
+              "bearer",
+              "api-key",
+              "none"
+            ]
+          },
+          "extraHeaders": {
+            "type": "object"
+          },
+          "timeoutSec": {
+            "type": "number",
+            "minimum": 10,
+            "maximum": 1800
+          },
+          "supportsTools": {
+            "type": "boolean"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "priceInPerMTok": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "priceOutPerMTok": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "preset": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "allowedWorkerIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
           }
         },
         "required": [
           "provider",
-          "name",
-          "apiKey"
+          "name"
         ]
       },
       "WorkerHeartbeatStatusDto": {
@@ -6215,7 +6328,8 @@
                 "haiku",
                 "gpt",
                 "deepseek",
-                "qwen"
+                "qwen",
+                "custom"
               ]
             }
           },
@@ -6376,7 +6490,8 @@
                 "haiku",
                 "gpt",
                 "deepseek",
-                "qwen"
+                "qwen",
+                "custom"
               ]
             }
           },
@@ -6527,7 +6642,8 @@
                 "haiku",
                 "gpt",
                 "deepseek",
-                "qwen"
+                "qwen",
+                "custom"
               ]
             }
           },
@@ -6614,7 +6730,8 @@
                 "haiku",
                 "gpt",
                 "deepseek",
-                "qwen"
+                "qwen",
+                "custom"
               ]
             }
           },
