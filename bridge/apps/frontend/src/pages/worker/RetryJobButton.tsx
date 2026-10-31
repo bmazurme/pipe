@@ -17,7 +17,7 @@ import { MODEL_OPTIONS } from './constants';
 
 const SAME = '';
 const NO_CONTEXT = 'none';
-const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
+const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen', 'custom'];
 
 interface RetryJobButtonProps {
   job: WorkerJob;
@@ -48,13 +48,18 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
   const resetAt = limitResetAt(job.errorMessage, credential?.limits, Date.now());
 
   const isProvider = PROVIDER_MODELS.includes(newModel);
+  // A custom model has no default key: unless the job already ran on one, the owner picks (the first is preselected).
+  const needsOwnKey = newModel === 'custom' && job.model !== 'custom';
   const tokenOptions = [
-    { value: SAME, content: 'как в задаче' },
+    ...(needsOwnKey ? [] : [{ value: SAME, content: 'как в задаче' }]),
     ...(isProvider
       ? (providerCredentials ?? []).filter((item) => item.provider === newModel)
       : (credentials ?? [])
     ).map((item) => ({ value: String(item.id), content: item.name })),
   ];
+
+  const firstCustomKey = needsOwnKey ? (providerCredentials ?? []).find((item) => item.provider === 'custom') : undefined;
+  const shownCredential = newCredential === SAME && firstCustomKey ? String(firstCustomKey.id) : newCredential;
 
   // Untouched = the answers saved from the Questions page for this task, when there are any, else the job's own.
   const answersContext = contexts?.find((item) => item.name === `Ответы: ${job.taskKey}`);
@@ -71,7 +76,7 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
   };
 
   const handleRetryOther = async () => {
-    const credentialId = newCredential === SAME ? undefined : Number(newCredential);
+    const credentialId = newCredential === SAME ? firstCustomKey?.id : Number(newCredential);
     setOtherOpen(false);
     await handleRetry(undefined, {
       model: newModel,
@@ -142,7 +147,7 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
           <Select
             label="Токен"
             width="max"
-            value={[newCredential]}
+            value={[shownCredential]}
             options={tokenOptions}
             onUpdate={(value) => setNewCredential(value[0] ?? SAME)}
           />

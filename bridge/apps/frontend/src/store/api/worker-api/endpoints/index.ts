@@ -82,9 +82,13 @@ export interface ClaudeCredential {
   usage7d?: RecentClaudeUsage | null;
 }
 
-export type ProviderModel = 'gpt' | 'deepseek' | 'qwen';
+export type ProviderModel = 'gpt' | 'deepseek' | 'qwen' | 'custom';
 
-/** A stored API key — never carries the key itself, only a hint (its last 4 characters). */
+/** How a request to a custom model's server travels: auto = a private address direct, a public one through the worker's VPN when it has one. */
+export type ProviderRoute = 'auto' | 'vpn' | 'direct';
+export type ProviderAuthScheme = 'bearer' | 'api-key' | 'none';
+
+/** A stored API key — never carries the key itself, only a hint (its last 4 characters). The fields after `model` matter for `custom` keys only. */
 export interface ProviderCredential {
   id: number;
   provider: ProviderModel;
@@ -92,7 +96,34 @@ export interface ProviderCredential {
   keyHint: string;
   baseUrl: string | null;
   model: string | null;
+  route: ProviderRoute;
+  authScheme: ProviderAuthScheme;
+  /** Names only: the values are secrets. */
+  extraHeaderNames: string[];
+  timeoutSec: number | null;
+  supportsTools: boolean;
+  stream: boolean;
+  priceInPerMTok: number | null;
+  priceOutPerMTok: number | null;
+  preset: string | null;
+  /** Only these workers may use the key; null = any. */
+  allowedWorkerIds: number[] | null;
   createdAt: string;
+}
+
+export interface CreateProviderCredentialBody {
+  provider: ProviderModel;
+  name: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  route?: ProviderRoute;
+  authScheme?: ProviderAuthScheme;
+  extraHeaders?: Record<string, string>;
+  timeoutSec?: number;
+  supportsTools?: boolean;
+  preset?: string;
+  allowedWorkerIds?: number[];
 }
 
 /**
@@ -430,10 +461,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
       query: () => 'worker/provider-credentials',
       providesTags: ['ProviderCredential'],
     }),
-    createProviderCredential: builder.mutation<
-      ProviderCredential,
-      { provider: ProviderModel; name: string; apiKey: string; baseUrl?: string; model?: string }
-    >({
+    createProviderCredential: builder.mutation<ProviderCredential, CreateProviderCredentialBody>({
       query: (body) => ({ url: 'worker/provider-credentials', method: 'POST', body }),
       invalidatesTags: ['ProviderCredential'],
       transformErrorResponse: (response) => {
