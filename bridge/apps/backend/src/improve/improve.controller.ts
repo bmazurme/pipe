@@ -12,8 +12,10 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -59,11 +61,14 @@ export class ImproveController {
     @Query('label') label?: string,
     @Query('all') all?: string,
     @Query('fresh') fresh?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
     return this.improve.listIssues(
       label || undefined,
       all === '1',
       fresh === '1',
+      (since) =>
+        res?.setHeader('X-Issues-Stale-Since', new Date(since).toISOString()),
     );
   }
 

@@ -78,6 +78,8 @@ export const AUTOSTART_MIN_AGE_SECONDS = 10;
 // request — no reports, no developer machine. Merging stays where it always was
 // (the loop's CI → Telegram → Merge flow); this only ever opens PRs.
 const OPEN_ISSUES_TTL_MS = 60_000;
+// How long the last good GitHub issue list is served when GitHub fails.
+const OPEN_ISSUES_STALE_MS = 30 * 60_000;
 
 @Injectable()
 export class ImproveService {
@@ -110,6 +112,13 @@ export class ImproveService {
   private readonly openIssues = new SharedAsyncCache<IssueInfo[]>({
     ttlMs: OPEN_ISSUES_TTL_MS,
     maxEntries: 8,
+    staleOnErrorMs: OPEN_ISSUES_STALE_MS,
+    onStale: (key, since, error) =>
+      this.logger.warn(
+        `improve.issues_stale label=${key || '*'} since=${new Date(since).toISOString()}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ),
   });
 
   // ---------------------------------------------------------------- status
@@ -127,16 +136,25 @@ export class ImproveService {
   // The open `loop` issues, each with its latest run (if any), for the page.
   // `all` lists every open issue, labelled or not.
   // The GitHub part is cached briefly (runs are looked up live); `fresh` bypasses the cache.
-  async listIssues(label = PR_LABEL, all = false, fresh = false) {
+  // `onStale` is told when the list is the last good one (epoch ms) because GitHub failed.
+  async listIssues(
+    label = PR_LABEL,
+    all = false,
+    fresh = false,
+    onStale?: (since: number) => void,
+  ) {
     this.requireConfigured();
 
     const key = all ? '' : label;
 
     if (fresh) this.openIssues.clear();
 
-    const issues = await this.openIssues.get(key, () =>
-      this.github.listOpenIssues(key, 100),
+    const { value: issues, staleSince } = await this.openIssues.getWithMeta(
+      key,
+      () => this.github.listOpenIssues(key, 100),
     );
+
+    if (staleSince !== undefined) onStale?.(staleSince);
     const latest = new Map<number, Omit<ImproveRun, 'result' | 'baseline'>>();
 
     if (issues.length) {

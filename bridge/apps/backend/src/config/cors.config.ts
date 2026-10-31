@@ -13,6 +13,7 @@ export const configureCors = (app: INestApplication) => {
     origin: origin.length ? origin : false,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['X-Issues-Stale-Since'],
     credentials: true,
     maxAge: 3600,
     optionsSuccessStatus: 204,

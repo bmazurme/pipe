@@ -12,7 +12,9 @@ import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS
 
 export function IssuesTab({ configured }: { configured: boolean }) {
   const [showAll, setShowAll] = useState(false);
-  const { data: issues, isLoading, isError, error, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
+  const { data, isLoading, isError, error, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
+  const issues = data?.issues;
+  const staleSince = data?.staleSince ? new Date(data.staleSince) : null;
   const [loadFresh] = useLazyListImproveIssuesQuery();
   const [start, { isLoading: isStarting }] = useStartImproveRunMutation();
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
@@ -116,6 +118,14 @@ export function IssuesTab({ configured }: { configured: boolean }) {
 
       {startError && <Alert theme="danger" view="filled" message={startError} />}
       {isError && <Alert theme="danger" view="filled" message={getErrorMessage(error, 'Не удалось загрузить задачи')} />}
+
+      {staleSince && !Number.isNaN(staleSince.getTime()) && (
+        <Alert
+          theme="warning"
+          view="filled"
+          message={`GitHub недоступен — список задач от ${staleSince.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`}
+        />
+      )}
 
       {isLoading && <Skeleton style={{ height: 120 }} />}
 

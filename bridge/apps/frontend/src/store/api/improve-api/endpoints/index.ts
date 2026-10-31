@@ -151,7 +151,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['LoopControl'],
     }),
     getImproveStatus: builder.query<ImproveStatus, void>({ query: () => 'improve/status' }),
-    listImproveIssues: builder.query<ImproveIssue[], { all?: boolean; fresh?: boolean } | void>({
+    listImproveIssues: builder.query<{ issues: ImproveIssue[]; staleSince: string | null }, { all?: boolean; fresh?: boolean } | void>({
       query: (arg) => {
         const params = [arg && arg.all ? 'all=1' : '', arg && arg.fresh ? 'fresh=1' : ''].filter(Boolean);
 
@@ -159,6 +159,11 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       },
       // `fresh` only changes how the server answers, so it shares the cache entry with the plain query.
       serializeQueryArgs: ({ endpointName, queryArgs }) => `${endpointName}(${queryArgs && queryArgs.all ? 'all' : ''})`,
+      // X-Issues-Stale-Since is set when GitHub failed and bridge served its last good list.
+      transformResponse: (issues: ImproveIssue[], meta: { response?: Response } | undefined) => ({
+        issues,
+        staleSince: meta?.response?.headers.get('X-Issues-Stale-Since') ?? null,
+      }),
       providesTags: ['ImproveIssues'],
       transformErrorResponse: errorMessage('Не удалось загрузить задачи'),
     }),
