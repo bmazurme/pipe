@@ -5,7 +5,7 @@ import { isClaudeModel } from './chatAttachments';
 
 describe('the models on offer', () => {
   it('lists Haiku with the other Claude models, in a job and for a chat', () => {
-    expect(MODEL_OPTIONS.map((option) => option.value)).toEqual(['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen']);
+    expect(MODEL_OPTIONS.map((option) => option.value)).toEqual(['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen', 'custom']);
     expect(MODEL_OPTIONS.find((option) => option.value === 'haiku')?.content).toBe('Claude Haiku');
   });
 
