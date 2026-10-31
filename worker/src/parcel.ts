@@ -6,6 +6,11 @@ import {
   type PackedAsset,
   type PackedFile,
 } from '@pipe/protocol';
+import {
+  SUBSCRIPTION_MANIFEST_ENTRY,
+  SYNC_MANIFEST_ENTRY,
+  type SubscriptionManifest,
+} from '@pipe/protocol/issueParcel';
 
 // The two manifest shapes a parcel already sitting in bridge storage can
 // have — reports' Subscription module and sync's own push-issue write
@@ -13,22 +18,7 @@ import {
 // __sync_manifest__.json. Worker doesn't know in advance which one a given
 // job's parcel is, so it probes for whichever is actually present, the same
 // technique sync's issuePack.ts already uses for the same reason.
-export const SUBSCRIPTION_MANIFEST_ENTRY = '__subscription_manifest__.json';
-export const SYNC_MANIFEST_ENTRY = '__sync_manifest__.json';
-
-export interface SubscriptionManifest extends BaseManifest {
-  issueId: string;
-  issueIid: string;
-  issueTitle: string;
-  issueDescription: string;
-  // The issue's comments, oldest first (anonymized like the description); absent when it had none or the parcel is older.
-  issueComments?: { author: string; createdAt: string; body: string }[];
-  // A migration task: the current repository is under sourceRoot, the one the project moves to under targetRoot (see reports' Subscription).
-  migration?: { name?: string; sourceRoot: string; targetRoot: string };
-  projectId: number;
-  branch: string;
-  createdAt: string;
-}
+export { SUBSCRIPTION_MANIFEST_ENTRY, SYNC_MANIFEST_ENTRY };
 
 export interface ExtractedParcel {
   manifestEntry: string;
