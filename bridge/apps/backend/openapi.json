@@ -2193,6 +2193,264 @@
         }
       }
     },
+    "/api/v1/vpn/status": {
+      "get": {
+        "operationId": "VpnController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/sync": {
+      "post": {
+        "operationId": "VpnController_sync",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/worker-secrets": {
+      "post": {
+        "operationId": "VpnController_setWorkerSecret",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorkerSecretDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/provision": {
+      "post": {
+        "operationId": "VpnController_provision",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionVpnServerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections": {
+      "get": {
+        "operationId": "VpnConnectionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VpnConnectionResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "VpnConnectionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVpnConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VpnConnectionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}": {
+      "patch": {
+        "operationId": "VpnConnectionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVpnConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VpnConnectionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "VpnConnectionsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/activate": {
+      "post": {
+        "operationId": "VpnConnectionsController_activate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/status": {
+      "get": {
+        "operationId": "VpnConnectionsController_getStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "force",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/connections/{id}/connection-link": {
+      "get": {
+        "operationId": "VpnConnectionsController_getConnectionLink",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/nodes": {
       "get": {
         "operationId": "DashboardController_getNodes",
@@ -4615,264 +4873,6 @@
           }
         }
       }
-    },
-    "/api/v1/vpn/status": {
-      "get": {
-        "operationId": "VpnController_getStatus",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/sync": {
-      "post": {
-        "operationId": "VpnController_sync",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmActionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/worker-secrets": {
-      "post": {
-        "operationId": "VpnController_setWorkerSecret",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetWorkerSecretDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/provision": {
-      "post": {
-        "operationId": "VpnController_provision",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProvisionVpnServerDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/connections": {
-      "get": {
-        "operationId": "VpnConnectionsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/VpnConnectionResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "VpnConnectionsController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateVpnConnectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VpnConnectionResponseDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/connections/{id}": {
-      "patch": {
-        "operationId": "VpnConnectionsController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateVpnConnectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VpnConnectionResponseDto"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "VpnConnectionsController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/connections/{id}/activate": {
-      "post": {
-        "operationId": "VpnConnectionsController_activate",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/connections/{id}/status": {
-      "get": {
-        "operationId": "VpnConnectionsController_getStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "force",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/vpn/connections/{id}/connection-link": {
-      "get": {
-        "operationId": "VpnConnectionsController_getConnectionLink",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
     }
   },
   "info": {
@@ -6219,6 +6219,14 @@
               ]
             }
           },
+          "vpnSource": {
+            "type": "string",
+            "enum": [
+              "link",
+              "connection",
+              "active"
+            ]
+          },
           "capabilities": {
             "type": "array",
             "items": {
@@ -6289,6 +6297,14 @@
             "type": "string",
             "nullable": true
           },
+          "vpnConnectionId": {
+            "type": "number",
+            "nullable": true
+          },
+          "vpnConnectionName": {
+            "type": "string",
+            "nullable": true
+          },
           "limitsRefreshMin": {
             "type": "number"
           },
@@ -6317,6 +6333,7 @@
         },
         "required": [
           "models",
+          "vpnSource",
           "capabilities",
           "claudeLimits",
           "id",
@@ -6335,6 +6352,8 @@
           "chatEnabled",
           "claudeCredentialId",
           "vpnHost",
+          "vpnConnectionId",
+          "vpnConnectionName",
           "limitsRefreshMin",
           "limitsRefreshRequestedAt",
           "keyPrefix",
@@ -6370,6 +6389,19 @@
             "type": "string",
             "nullable": true,
             "maxLength": 4000
+          },
+          "vpnSource": {
+            "type": "string",
+            "enum": [
+              "link",
+              "connection",
+              "active"
+            ]
+          },
+          "vpnConnectionId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
           },
           "capabilities": {
             "type": "array",
@@ -6596,6 +6628,19 @@
             "nullable": true,
             "maxLength": 4000
           },
+          "vpnSource": {
+            "type": "string",
+            "enum": [
+              "link",
+              "connection",
+              "active"
+            ]
+          },
+          "vpnConnectionId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "capabilities": {
             "type": "array",
             "enum": [
@@ -6739,6 +6784,125 @@
             "maxLength": 2000
           }
         }
+      },
+      "ConfirmActionDto": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ]
+      },
+      "SetWorkerSecretDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "WORKER_OPENAI_API_KEY",
+              "WORKER_DEEPSEEK_API_KEY",
+              "WORKER_QWEN_API_KEY",
+              "WORKER_CLAUDE_CODE_OAUTH_TOKEN"
+            ]
+          },
+          "value": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "confirm"
+        ]
+      },
+      "ProvisionVpnServerDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "sshUser": {
+            "type": "string"
+          },
+          "sshPassword": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "host",
+          "sshUser",
+          "sshPassword",
+          "confirm"
+        ]
+      },
+      "VpnConnectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "serverAddress": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "serverAddress",
+          "isActive",
+          "createdAt"
+        ]
+      },
+      "CreateVpnConnectionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "panelUrl": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "panelApiToken": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "serverAddress": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "/^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|[0-9A-Fa-f:]+)$/"
+          }
+        },
+        "required": [
+          "name",
+          "panelUrl",
+          "panelApiToken",
+          "serverAddress"
+        ]
+      },
+      "UpdateVpnConnectionDto": {
+        "type": "object",
+        "properties": {}
       },
       "SaveGithubConnectionDto": {
         "type": "object",
@@ -8461,125 +8625,6 @@
           "month",
           "entries"
         ]
-      },
-      "ConfirmActionDto": {
-        "type": "object",
-        "properties": {
-          "confirm": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "confirm"
-        ]
-      },
-      "SetWorkerSecretDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": [
-              "WORKER_OPENAI_API_KEY",
-              "WORKER_DEEPSEEK_API_KEY",
-              "WORKER_QWEN_API_KEY",
-              "WORKER_CLAUDE_CODE_OAUTH_TOKEN"
-            ]
-          },
-          "value": {
-            "type": "string"
-          },
-          "confirm": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "value",
-          "confirm"
-        ]
-      },
-      "ProvisionVpnServerDto": {
-        "type": "object",
-        "properties": {
-          "host": {
-            "type": "string"
-          },
-          "sshUser": {
-            "type": "string"
-          },
-          "sshPassword": {
-            "type": "string"
-          },
-          "confirm": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "host",
-          "sshUser",
-          "sshPassword",
-          "confirm"
-        ]
-      },
-      "VpnConnectionResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "serverAddress": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "serverAddress",
-          "isActive",
-          "createdAt"
-        ]
-      },
-      "CreateVpnConnectionDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "panelUrl": {
-            "type": "string",
-            "maxLength": 255
-          },
-          "panelApiToken": {
-            "type": "string",
-            "maxLength": 2048
-          },
-          "serverAddress": {
-            "type": "string",
-            "maxLength": 255,
-            "pattern": "/^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|[0-9A-Fa-f:]+)$/"
-          }
-        },
-        "required": [
-          "name",
-          "panelUrl",
-          "panelApiToken",
-          "serverAddress"
-        ]
-      },
-      "UpdateVpnConnectionDto": {
-        "type": "object",
-        "properties": {}
       }
     }
   }

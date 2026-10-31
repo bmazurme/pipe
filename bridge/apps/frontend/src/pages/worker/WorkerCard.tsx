@@ -107,7 +107,8 @@ export function WorkerCard({ worker, activeJob, onOpenJob, onSettings, onReconne
           </Text>
           {worker.vpnHost && (
             <Text variant="caption-2" color="secondary">
-              VPN: {worker.vpnHost}
+              VPN: {worker.vpnConnectionName ? `${worker.vpnConnectionName} · ${worker.vpnHost}` : worker.vpnHost}
+              {worker.vpnSource === 'active' ? ' (активное)' : ''}
             </Text>
           )}
           {worker.proxyUrl && (

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -25,11 +26,15 @@ import {
   WorkerConfigResponseDto,
   WorkerResponseDto,
 } from './dto/worker-fleet.dto';
+import { VpnConnectionsService } from '../vpn/vpn-connections.service';
+import { VpnLinkResolver } from '../vpn/vpn-link-resolver.service';
 import { parseVlessLink } from './vless-link';
 import { touchWorker } from './worker-touch';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job, JobStatus } from './entities/job.entity';
 import { Worker } from './entities/worker.entity';
+import type { WorkerVpnSource } from './capabilities';
+import type { VpnConnection } from '../vpn/entities/vpn-connection.entity';
 import {
   STALE_AFTER_MS,
   WorkerHeartbeatService,
@@ -54,6 +59,8 @@ export class WorkersService implements OnModuleInit {
     private readonly credentials: Repository<ClaudeCredential>,
     private readonly heartbeats: WorkerHeartbeatService,
     private readonly workerKeys: WorkerKeysService,
+    private readonly vpnConnections: VpnConnectionsService,
+    private readonly vpnLinks: VpnLinkResolver,
   ) {}
 
   onModuleInit(): void {
@@ -97,6 +104,55 @@ export class WorkersService implements OnModuleInit {
     }
 
     return link;
+  }
+
+  // The VPN page connection a worker's tunnel comes from, as its card shows it: the one it picked, or the page's active one.
+  private vpnConnectionOf(
+    worker: Worker,
+    connections: VpnConnection[],
+  ): { id: number; name: string; host: string } | null {
+    const found =
+      worker.vpnSource === 'connection'
+        ? connections.find((entry) => entry.id === worker.vpnConnectionId)
+        : worker.vpnSource === 'active'
+          ? connections.find((entry) => entry.isActive)
+          : undefined;
+
+    return found
+      ? { id: found.id, name: found.name, host: found.serverAddress }
+      : null;
+  }
+
+  // 'link' keeps the worker's own link; the other two take it from the VPN page, so a stray pasted link is dropped.
+  private async applyVpnSource(
+    worker: Worker,
+    dto: { vpnSource?: WorkerVpnSource; vpnConnectionId?: number | null },
+  ): Promise<void> {
+    if (dto.vpnSource === undefined && dto.vpnConnectionId === undefined) {
+      return;
+    }
+
+    const source = dto.vpnSource ?? worker.vpnSource ?? 'link';
+
+    if (source === 'connection') {
+      const id = dto.vpnConnectionId ?? worker.vpnConnectionId;
+
+      if (id === null || id === undefined) {
+        throw new BadRequestException('VPN: выберите подключение');
+      }
+
+      const connections = await this.vpnConnections.findAll();
+
+      if (!connections.some((entry) => entry.id === id)) {
+        throw new BadRequestException('VPN: подключение не найдено');
+      }
+
+      worker.vpnConnectionId = id;
+    } else {
+      worker.vpnConnectionId = null;
+    }
+
+    worker.vpnSource = source;
   }
 
   // The token a worker was bound to in its settings (null = none).
@@ -150,10 +206,11 @@ export class WorkersService implements OnModuleInit {
   // name they report) — so nothing that is running is hidden from the page.
   async list(userId: number): Promise<WorkerResponseDto[]> {
     const now = new Date();
-    const [managed, legacy, counts] = await Promise.all([
+    const [managed, legacy, counts, connections] = await Promise.all([
       this.workers.find({ where: { userId }, order: { id: 'ASC' } }),
       this.heartbeats.listForUser(userId),
       this.activeJobCounts(userId),
+      this.vpnConnections.findAll(),
     ]);
     const managedNames = new Set(managed.map((worker) => worker.name));
 
@@ -164,6 +221,7 @@ export class WorkersService implements OnModuleInit {
           counts.byId.get(worker.id) ?? 0,
           this.isOnline(worker.lastSeenAt, now.getTime()),
           now,
+          this.vpnConnectionOf(worker, connections),
         ),
       ),
       ...legacy
@@ -259,28 +317,43 @@ export class WorkersService implements OnModuleInit {
 
     const { code, hash } = generateEnrollCode();
     const expires = new Date(Date.now() + ENROLL_TTL_MS);
-    const worker = await this.workers.save(
-      this.workers.create({
-        userId,
-        name,
-        enabled: true,
-        keyHash: null,
-        keyPrefix: null,
-        enrollCodeHash: hash,
-        enrollExpiresAt: expires,
-        models: dto.models ?? null,
-        pollIntervalSec: dto.pollIntervalSec ?? 10,
-        jobTimeoutSec: dto.jobTimeoutSec ?? 1800,
-        proxyUrl: dto.proxyUrl?.trim() || null,
-        chatEnabled: dto.chatEnabled ?? true,
-        claudeCredentialId: dto.claudeCredentialId ?? null,
-        vpnLink: this.normalizeVpnLink(dto.vpnLink),
-        capabilities: dto.capabilities?.length ? dto.capabilities : null,
-      }),
+    const draft = this.workers.create({
+      userId,
+      name,
+      enabled: true,
+      keyHash: null,
+      keyPrefix: null,
+      enrollCodeHash: hash,
+      enrollExpiresAt: expires,
+      models: dto.models ?? null,
+      pollIntervalSec: dto.pollIntervalSec ?? 10,
+      jobTimeoutSec: dto.jobTimeoutSec ?? 1800,
+      proxyUrl: dto.proxyUrl?.trim() || null,
+      chatEnabled: dto.chatEnabled ?? true,
+      claudeCredentialId: dto.claudeCredentialId ?? null,
+      vpnLink: this.normalizeVpnLink(dto.vpnLink),
+      vpnSource: 'link',
+      vpnConnectionId: null,
+      capabilities: dto.capabilities?.length ? dto.capabilities : null,
+    });
+
+    await this.applyVpnSource(draft, dto);
+
+    const worker = await this.workers.save(draft);
+
+    const vpnConnection = this.vpnConnectionOf(
+      worker,
+      await this.vpnConnections.findAll(),
     );
 
     return {
-      worker: WorkerResponseDto.fromWorker(worker, 0, false, new Date()),
+      worker: WorkerResponseDto.fromWorker(
+        worker,
+        0,
+        false,
+        new Date(),
+        vpnConnection,
+      ),
       enrollCode: code,
       enrollExpiresAt: expires,
     };
@@ -318,18 +391,23 @@ export class WorkersService implements OnModuleInit {
     if (dto.vpnLink !== undefined) {
       worker.vpnLink = this.normalizeVpnLink(dto.vpnLink);
     }
+    await this.applyVpnSource(worker, dto);
     if (dto.capabilities !== undefined) {
       worker.capabilities = dto.capabilities.length ? dto.capabilities : null;
     }
 
     const saved = await this.workers.save(worker);
-    const counts = await this.activeJobCounts(userId);
+    const [counts, connections] = await Promise.all([
+      this.activeJobCounts(userId),
+      this.vpnConnections.findAll(),
+    ]);
 
     return WorkerResponseDto.fromWorker(
       saved,
       counts.byId.get(saved.id) ?? 0,
       this.isOnline(saved.lastSeenAt),
       new Date(),
+      this.vpnConnectionOf(saved, connections),
     );
   }
 
@@ -363,7 +441,13 @@ export class WorkersService implements OnModuleInit {
     const saved = await this.workers.save(worker);
 
     return {
-      worker: WorkerResponseDto.fromWorker(saved, 0, false, new Date()),
+      worker: WorkerResponseDto.fromWorker(
+        saved,
+        0,
+        false,
+        new Date(),
+        this.vpnConnectionOf(saved, await this.vpnConnections.findAll()),
+      ),
       enrollCode: code,
       enrollExpiresAt: expires,
     };
@@ -441,6 +525,32 @@ export class WorkersService implements OnModuleInit {
     await touchWorker(this.workers, workerId);
   }
 
+  // The tunnel link this worker should run with. From the VPN page the link is built from the panel; if that fails and no earlier
+  // link exists the whole settings fetch fails, so the worker keeps its last settings (and tunnel) instead of dropping the VPN.
+  private async vpnLinkOf(worker: Worker): Promise<string | null> {
+    const source = worker.vpnSource ?? 'link';
+
+    if (source === 'link') return worker.vpnLink ?? null;
+
+    if (source === 'connection' && worker.vpnConnectionId === null) {
+      return null;
+    }
+
+    try {
+      return await this.vpnLinks.resolve(
+        source === 'active' ? 'active' : (worker.vpnConnectionId as number),
+      );
+    } catch (error) {
+      if (error instanceof NotFoundException && source === 'active') {
+        return null;
+      }
+
+      throw new ServiceUnavailableException(
+        `VPN: не удалось получить ссылку из модуля VPN (${error instanceof Error ? error.message : 'ошибка'})`,
+      );
+    }
+  }
+
   async configFor(workerId: number): Promise<WorkerConfigResponseDto> {
     const worker = await this.workers.findOneBy({ id: workerId });
 
@@ -449,6 +559,8 @@ export class WorkersService implements OnModuleInit {
     }
 
     await touchWorker(this.workers, worker.id, worker.lastSeenAt);
+
+    const vpnLink = await this.vpnLinkOf(worker);
 
     return {
       id: worker.id,
@@ -459,7 +571,7 @@ export class WorkersService implements OnModuleInit {
       jobTimeoutSec: worker.jobTimeoutSec,
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
-      vpnLink: worker.vpnLink ?? null,
+      vpnLink,
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       limitProbe: null,

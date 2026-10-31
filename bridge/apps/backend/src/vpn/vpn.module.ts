@@ -8,6 +8,7 @@ import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsController } from './vpn-connections.controller';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnStatusAlertsService } from './vpn-status-alerts.service';
+import { VpnLinkResolver } from './vpn-link-resolver.service';
 import { VpnController } from './vpn.controller';
 import { VpnService } from './vpn.service';
 
@@ -23,6 +24,8 @@ import { VpnService } from './vpn.service';
     VpnConnectionsService,
     GithubActionsService,
     VpnStatusAlertsService,
+    VpnLinkResolver,
   ],
+  exports: [VpnConnectionsService, VpnLinkResolver],
 })
 export class VpnModule {}

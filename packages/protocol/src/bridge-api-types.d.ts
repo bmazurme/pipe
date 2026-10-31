@@ -1122,6 +1122,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["VpnController_getStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["VpnController_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/worker-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["VpnController_setWorkerSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["VpnController_provision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["VpnConnectionsController_list"];
+        put?: never;
+        post: operations["VpnConnectionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["VpnConnectionsController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["VpnConnectionsController_update"];
+        trace?: never;
+    };
+    "/api/v1/vpn/connections/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["VpnConnectionsController_activate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/connections/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["VpnConnectionsController_getStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/connections/{id}/connection-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["VpnConnectionsController_getConnectionLink"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/nodes": {
         parameters: {
             query?: never;
@@ -2372,150 +2516,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/vpn/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["VpnController_getStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["VpnController_sync"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/worker-secrets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["VpnController_setWorkerSecret"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/provision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["VpnController_provision"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["VpnConnectionsController_list"];
-        put?: never;
-        post: operations["VpnConnectionsController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/connections/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["VpnConnectionsController_remove"];
-        options?: never;
-        head?: never;
-        patch: operations["VpnConnectionsController_update"];
-        trace?: never;
-    };
-    "/api/v1/vpn/connections/{id}/activate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["VpnConnectionsController_activate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/connections/{id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["VpnConnectionsController_getStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/vpn/connections/{id}/connection-link": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["VpnConnectionsController_getConnectionLink"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2872,6 +2872,8 @@ export interface components {
         };
         WorkerResponseDto: {
             models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
+            /** @enum {string} */
+            vpnSource: "link" | "connection" | "active";
             capabilities: "fusion"[];
             claudeLimits: {
                 [key: string]: unknown;
@@ -2893,6 +2895,8 @@ export interface components {
             chatEnabled: boolean;
             claudeCredentialId: number | null;
             vpnHost: string | null;
+            vpnConnectionId: number | null;
+            vpnConnectionName: string | null;
             limitsRefreshMin: number;
             /** Format: date-time */
             limitsRefreshRequestedAt: string | null;
@@ -2907,6 +2911,9 @@ export interface components {
             models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
+            /** @enum {string} */
+            vpnSource?: "link" | "connection" | "active";
+            vpnConnectionId?: number | null;
             /** @enum {array} */
             capabilities?: "fusion";
             name: string;
@@ -2955,6 +2962,9 @@ export interface components {
             models?: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen")[] | null;
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
+            /** @enum {string} */
+            vpnSource?: "link" | "connection" | "active";
+            vpnConnectionId?: number | null;
             /** @enum {array} */
             capabilities?: "fusion";
             name?: string;
@@ -2991,6 +3001,36 @@ export interface components {
             resolved?: boolean;
             answer?: string;
         };
+        ConfirmActionDto: {
+            confirm: boolean;
+        };
+        SetWorkerSecretDto: {
+            /** @enum {string} */
+            name: "WORKER_OPENAI_API_KEY" | "WORKER_DEEPSEEK_API_KEY" | "WORKER_QWEN_API_KEY" | "WORKER_CLAUDE_CODE_OAUTH_TOKEN";
+            value: string;
+            confirm: boolean;
+        };
+        ProvisionVpnServerDto: {
+            host: string;
+            sshUser: string;
+            sshPassword: string;
+            confirm: boolean;
+        };
+        VpnConnectionResponseDto: {
+            id: number;
+            name: string;
+            serverAddress: string;
+            isActive: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateVpnConnectionDto: {
+            name: string;
+            panelUrl: string;
+            panelApiToken: string;
+            serverAddress: string;
+        };
+        UpdateVpnConnectionDto: Record<string, never>;
         SaveGithubConnectionDto: {
             enabled: boolean;
             url?: string;
@@ -3397,36 +3437,6 @@ export interface components {
             month: number;
             entries: components["schemas"]["ImportReportEntryDto"][];
         };
-        ConfirmActionDto: {
-            confirm: boolean;
-        };
-        SetWorkerSecretDto: {
-            /** @enum {string} */
-            name: "WORKER_OPENAI_API_KEY" | "WORKER_DEEPSEEK_API_KEY" | "WORKER_QWEN_API_KEY" | "WORKER_CLAUDE_CODE_OAUTH_TOKEN";
-            value: string;
-            confirm: boolean;
-        };
-        ProvisionVpnServerDto: {
-            host: string;
-            sshUser: string;
-            sshPassword: string;
-            confirm: boolean;
-        };
-        VpnConnectionResponseDto: {
-            id: number;
-            name: string;
-            serverAddress: string;
-            isActive: boolean;
-            /** Format: date-time */
-            createdAt: string;
-        };
-        CreateVpnConnectionDto: {
-            name: string;
-            panelUrl: string;
-            panelApiToken: string;
-            serverAddress: string;
-        };
-        UpdateVpnConnectionDto: Record<string, never>;
     };
     responses: never;
     parameters: never;
@@ -5267,6 +5277,235 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnController_getStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    VpnController_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmActionDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnController_setWorkerSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetWorkerSecretDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnController_provision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionVpnServerDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnConnectionsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VpnConnectionResponseDto"][];
+                };
+            };
+        };
+    };
+    VpnConnectionsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVpnConnectionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VpnConnectionResponseDto"];
+                };
+            };
+        };
+    };
+    VpnConnectionsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnConnectionsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVpnConnectionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VpnConnectionResponseDto"];
+                };
+            };
+        };
+    };
+    VpnConnectionsController_activate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VpnConnectionsController_getStatus: {
+        parameters: {
+            query: {
+                force: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    VpnConnectionsController_getConnectionLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7297,235 +7536,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImportTimeReportResponseDto"];
                 };
-            };
-        };
-    };
-    VpnController_getStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    VpnController_sync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmActionDto"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    VpnController_setWorkerSecret: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetWorkerSecretDto"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    VpnController_provision: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProvisionVpnServerDto"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    VpnConnectionsController_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VpnConnectionResponseDto"][];
-                };
-            };
-        };
-    };
-    VpnConnectionsController_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateVpnConnectionDto"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VpnConnectionResponseDto"];
-                };
-            };
-        };
-    };
-    VpnConnectionsController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    VpnConnectionsController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateVpnConnectionDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VpnConnectionResponseDto"];
-                };
-            };
-        };
-    };
-    VpnConnectionsController_activate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    VpnConnectionsController_getStatus: {
-        parameters: {
-            query: {
-                force: string;
-            };
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    VpnConnectionsController_getConnectionLink: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };

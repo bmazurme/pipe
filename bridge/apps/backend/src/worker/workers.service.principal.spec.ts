@@ -11,6 +11,8 @@ function build() {
     {} as never,
     {} as never,
     { useLookup } as never,
+    {} as never,
+    {} as never,
   );
 
   return { service, workersRepo, useLookup };

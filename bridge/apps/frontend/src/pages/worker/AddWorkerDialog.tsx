@@ -5,7 +5,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { type CreatedFleetWorker, useCreateWorkerMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { EnrollInstructions } from './EnrollInstructions';
-import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField } from './WorkerAccessFields';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -21,6 +21,8 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
   const [error, setError] = useState<string | null>(null);
   const [tokenId, setTokenId] = useState(DEFAULT_TOKEN);
   const [vpnLink, setVpnLink] = useState<string | null | undefined>(undefined);
+  const [vpnSource, setVpnSource] = useState<VpnSource>('link');
+  const [vpnConnectionId, setVpnConnectionId] = useState<number | null>(null);
   const [createWorker, { isLoading }] = useCreateWorkerMutation();
   const shown = created ?? existing;
 
@@ -28,6 +30,8 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
     setName('');
     setTokenId(DEFAULT_TOKEN);
     setVpnLink(undefined);
+    setVpnSource('link');
+    setVpnConnectionId(null);
     setCreated(undefined);
     setError(null);
     onClose();
@@ -42,7 +46,8 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
         await createWorker({
           name: name.trim(),
           ...(tokenId !== DEFAULT_TOKEN ? { claudeCredentialId: Number(tokenId) } : {}),
-          ...(typeof vpnLink === 'string' ? { vpnLink } : {}),
+          ...(vpnSource === 'link' && typeof vpnLink === 'string' ? { vpnLink } : {}),
+          ...(vpnSource !== 'link' ? { vpnSource, vpnConnectionId: vpnSource === 'connection' ? vpnConnectionId : null } : {}),
         }).unwrap(),
       );
     } catch (err) {
@@ -82,7 +87,15 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
               <TextInput value={name} onUpdate={setName} placeholder="Например, green или ноутбук" autoFocus hasClear />
             </label>
             <ClaudeTokenField value={tokenId} onChange={setTokenId} />
-            <VpnLinkField currentHost={null} onChange={setVpnLink} />
+            <VpnSourceField
+              source={vpnSource}
+              connectionId={vpnConnectionId}
+              onChange={(source, connectionId) => {
+                setVpnSource(source);
+                setVpnConnectionId(connectionId);
+              }}
+            />
+            {vpnSource === 'link' && <VpnLinkField currentHost={null} onChange={setVpnLink} />}
             {error && <Alert theme="danger" view="filled" message={error} />}
           </form>
         )}
@@ -94,7 +107,12 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
           textButtonCancel="Отмена"
           textButtonApply="Создать и получить код"
           loading={isLoading}
-          propsButtonApply={{ disabled: !name.trim() || (typeof vpnLink === 'string' && !isVlessLink(vpnLink)) }}
+          propsButtonApply={{
+            disabled:
+              !name.trim() ||
+              (vpnSource === 'link' && typeof vpnLink === 'string' && !isVlessLink(vpnLink)) ||
+              (vpnSource === 'connection' && vpnConnectionId === null),
+          }}
           onClickButtonCancel={handleClose}
           onClickButtonApply={() => void handleCreate()}
         />

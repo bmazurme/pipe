@@ -67,6 +67,8 @@ function build(input: {
     {} as never,
     heartbeats as never,
     {} as never,
+    { findAll: jest.fn().mockResolvedValue([]) } as never,
+    {} as never,
   );
 
   return { service, workersRepo, heartbeats };
