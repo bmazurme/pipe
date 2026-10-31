@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Disclosure, Icon, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Checkbox, Disclosure, Icon, Select, Skeleton, Switch, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import {
+  type ProviderAuthScheme,
   type ProviderCredential,
   type ProviderModel,
+  type ProviderRoute,
   useCreateProviderCredentialMutation,
   useDeleteProviderCredentialMutation,
   useListProviderCredentialsQuery,
+  useListWorkersQuery,
 } from '../../store/api';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 import { modelName } from './fleet';
+import { AUTH_OPTIONS, describeKey, parseHeaderLines, presetById, PROVIDER_PRESETS, ROUTE_OPTIONS } from './providerPresets';
 
-const PROVIDERS: ProviderModel[] = ['gpt', 'deepseek', 'qwen'];
+const PROVIDERS: ProviderModel[] = ['gpt', 'deepseek', 'qwen', 'custom'];
+const DEFAULT_PRESET = 'other';
 
 export function ProviderCredentialsCard() {
   const { data: credentials, isLoading, isError, refetch } = useListProviderCredentialsQuery();
@@ -26,11 +31,45 @@ export function ProviderCredentialsCard() {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
+  // A custom key (any OpenAI-compatible server): a template fills these in, every one stays editable.
+  const [presetId, setPresetId] = useState(DEFAULT_PRESET);
+  const [authScheme, setAuthScheme] = useState<ProviderAuthScheme>('bearer');
+  const [route, setRoute] = useState<ProviderRoute>('auto');
+  const [headerText, setHeaderText] = useState('');
+  const [timeoutSec, setTimeoutSec] = useState('');
+  const [supportsTools, setSupportsTools] = useState(true);
+  const [allowedWorkerIds, setAllowedWorkerIds] = useState<number[]>([]);
+  const isCustom = provider === 'custom';
+  // Only asked for when a custom key is being made: the list of workers the key can be limited to.
+  const { data: workers } = useListWorkersQuery(undefined, { skip: !isCustom });
+  const managedWorkers = (Array.isArray(workers) ? workers : []).filter((worker) => worker.kind === 'managed' && worker.id !== null);
+  const preset = presetById(presetId);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProviderCredential | null>(null);
 
-  const canSave = name.trim() !== '' && apiKey.trim() !== '';
+  const headers = parseHeaderLines(headerText);
+  const timeoutValue = timeoutSec.trim() === '' ? undefined : Number(timeoutSec);
+  const timeoutValid = timeoutValue === undefined || (Number.isInteger(timeoutValue) && timeoutValue >= 10 && timeoutValue <= 1800);
+  const canSave = isCustom
+    ? name.trim() !== '' &&
+      baseUrl.trim() !== '' &&
+      model.trim() !== '' &&
+      (authScheme === 'none' || apiKey.trim() !== '') &&
+      headers.invalid.length === 0 &&
+      timeoutValid
+    : name.trim() !== '' && apiKey.trim() !== '';
+
+  const choosePreset = (id: string) => {
+    const chosen = presetById(id);
+
+    setPresetId(id);
+    if (!chosen) return;
+    setBaseUrl(chosen.baseUrl);
+    setAuthScheme(chosen.authScheme);
+    setRoute(chosen.route);
+    setHeaderText(Object.keys(chosen.headerHints).map((header) => `${header}: `).join('\n'));
+  };
 
   const handleCreate = async () => {
     if (!canSave) return;
@@ -40,14 +79,32 @@ export function ProviderCredentialsCard() {
       await createCredential({
         provider,
         name: name.trim(),
-        apiKey: apiKey.trim(),
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
         ...(model.trim() ? { model: model.trim() } : {}),
+        ...(isCustom
+          ? {
+              authScheme,
+              route,
+              supportsTools,
+              preset: presetId,
+              ...(Object.keys(headers.headers).length > 0 ? { extraHeaders: headers.headers } : {}),
+              ...(timeoutValue !== undefined ? { timeoutSec: timeoutValue } : {}),
+              ...(allowedWorkerIds.length > 0 ? { allowedWorkerIds } : {}),
+            }
+          : {}),
       }).unwrap();
       setName('');
       setApiKey('');
       setBaseUrl('');
       setModel('');
+      setHeaderText('');
+      setTimeoutSec('');
+      setSupportsTools(true);
+      setAllowedWorkerIds([]);
+      setPresetId(DEFAULT_PRESET);
+      setAuthScheme('bearer');
+      setRoute('auto');
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Не удалось сохранить ключ');
     }
@@ -75,7 +132,8 @@ export function ProviderCredentialsCard() {
       <Text color="secondary" variant="caption-2">
         Ключи GPT, DeepSeek и Qwen хранятся в bridge в зашифрованном виде и выдаются worker&apos;у вместе с задачей — в
         его переменных среды ничего не нужно, передеплой не требуется. По умолчанию берётся первый добавленный ключ
-        провайдера; в форме задачи можно выбрать другой.
+        провайдера; в форме задачи можно выбрать другой. «Другая модель» — любой OpenAI-совместимый сервер (Yandex AI Studio,
+        Gemini, Ollama…): её ключ в форме задачи выбирается всегда.
       </Text>
 
       {isLoading && <Skeleton height={40} />}
@@ -112,6 +170,11 @@ export function ProviderCredentialsCard() {
                   {credential.baseUrl && ` · ${credential.baseUrl}`}
                   {credential.model && ` · ${credential.model}`}
                 </Text>
+                {credential.provider === 'custom' && (
+                  <Text color="secondary" variant="caption-2">
+                    {describeKey(credential)}
+                  </Text>
+                )}
               </div>
               <Button
                 view="flat-danger"
@@ -149,27 +212,127 @@ export function ProviderCredentialsCard() {
             controlProps={{ 'aria-label': 'Название ключа' }}
           />
         </div>
-        <TextInput
-          type="password"
-          value={apiKey}
-          onUpdate={setApiKey}
-          placeholder="API-ключ"
-          controlProps={{ 'aria-label': 'API-ключ' }}
-          hasClear
-          autoComplete="off"
-        />
-
-        <Disclosure summary="Свой адрес или модель (необязательно)">
-          <div className={styles.fieldRow}>
-            <TextInput
-              value={baseUrl}
-              onUpdate={setBaseUrl}
-              placeholder="https://api.example.com/v1"
-              controlProps={{ 'aria-label': 'Адрес API' }}
+        {isCustom && (
+          <>
+            <Select
+              value={[presetId]}
+              onUpdate={([value]) => choosePreset(value ?? DEFAULT_PRESET)}
+              options={PROVIDER_PRESETS.map((item) => ({ value: item.id, content: item.label }))}
+              aria-label="Шаблон"
+              width="max"
             />
-            <TextInput value={model} onUpdate={setModel} placeholder="Модель, например gpt-4o" controlProps={{ 'aria-label': 'Модель' }} />
-          </div>
-        </Disclosure>
+            {preset && (
+              <Alert
+                theme="info"
+                view="outlined"
+                message={
+                  <>
+                    Содержимое задач и чатов уйдёт: <b>{preset.dataGoesTo}</b>. {preset.note}
+                  </>
+                }
+              />
+            )}
+            <div className={styles.fieldRow}>
+              <TextInput value={baseUrl} onUpdate={setBaseUrl} placeholder="Адрес API, например http://localhost:11434/v1" controlProps={{ 'aria-label': 'Адрес API' }} />
+              <TextInput value={model} onUpdate={setModel} placeholder={`Модель: ${preset?.modelHint ?? 'название'}`} controlProps={{ 'aria-label': 'Модель' }} />
+            </div>
+            <div className={styles.fieldRow}>
+              <Select
+                value={[authScheme]}
+                onUpdate={([value]) => setAuthScheme((value as ProviderAuthScheme) ?? 'bearer')}
+                options={AUTH_OPTIONS}
+                aria-label="Авторизация"
+                width="max"
+              />
+              <Select
+                value={[route]}
+                onUpdate={([value]) => setRoute((value as ProviderRoute) ?? 'auto')}
+                options={ROUTE_OPTIONS}
+                aria-label="Маршрут"
+                width="max"
+              />
+            </div>
+            <Text color="secondary" variant="caption-2">
+              Маршрут меняется в любой момент и действует со следующей задачи; уже запущенная держит свой.
+            </Text>
+          </>
+        )}
+        {(!isCustom || authScheme !== 'none') && (
+          <TextInput
+            type="password"
+            value={apiKey}
+            onUpdate={setApiKey}
+            placeholder="API-ключ"
+            controlProps={{ 'aria-label': 'API-ключ' }}
+            hasClear
+            autoComplete="off"
+          />
+        )}
+
+        {isCustom ? (
+          <Disclosure summary="Дополнительно: заголовки, таймаут, вызов функций, worker'ы">
+            <div className={styles.dialogForm}>
+              <TextArea
+                value={headerText}
+                onUpdate={setHeaderText}
+                rows={3}
+                placeholder="Заголовки, по одному в строке: имя: значение"
+                controlProps={{ 'aria-label': 'Заголовки' }}
+                validationState={headers.invalid.length > 0 ? 'invalid' : undefined}
+                errorMessage={headers.invalid.length > 0 ? `Не разобрать: ${headers.invalid[0]}` : undefined}
+              />
+              {preset && Object.keys(preset.headerHints).length > 0 && (
+                <Text color="secondary" variant="caption-2">
+                  {Object.entries(preset.headerHints)
+                    .map(([header, hint]) => `${header} — ${hint}`)
+                    .join('; ')}
+                </Text>
+              )}
+              <TextInput
+                value={timeoutSec}
+                onUpdate={setTimeoutSec}
+                placeholder="Таймаут одного запроса, с (10–1800; по умолчанию 300)"
+                controlProps={{ 'aria-label': 'Таймаут' }}
+                validationState={timeoutValid ? undefined : 'invalid'}
+              />
+              <Switch checked={supportsTools} onUpdate={setSupportsTools} content="Модель вызывает функции (нужно для задач; без этого — только чат)" />
+              {managedWorkers.length > 0 && (
+                <fieldset className={styles.dialogForm} style={{ border: 'none', margin: 0, padding: 0 }}>
+                  <Text as="legend" variant="body-2" color="secondary">
+                    Только на этих worker&apos;ах (пусто = на любых)
+                  </Text>
+                  {managedWorkers.map((worker) => (
+                    <Checkbox
+                      key={worker.id}
+                      checked={allowedWorkerIds.includes(worker.id as number)}
+                      onUpdate={(checked) =>
+                        setAllowedWorkerIds((current) =>
+                          checked ? [...current, worker.id as number] : current.filter((id) => id !== worker.id),
+                        )
+                      }
+                      content={worker.name}
+                    />
+                  ))}
+                  <Text color="secondary" variant="caption-2">
+                    Локальная модель достижима только из вашей сети — ограничьте ключ машиной, где она стоит.
+                  </Text>
+                </fieldset>
+              )}
+            </div>
+          </Disclosure>
+        ) : (
+          <Disclosure summary="Свой адрес или модель (необязательно)">
+            <div className={styles.fieldRow}>
+              <TextInput
+                value={baseUrl}
+                onUpdate={setBaseUrl}
+                placeholder="https://api.example.com/v1"
+                controlProps={{ 'aria-label': 'Адрес API' }}
+              />
+              <TextInput value={model} onUpdate={setModel} placeholder="Модель, например gpt-4o" controlProps={{ 'aria-label': 'Модель' }} />
+            </div>
+          </Disclosure>
+        )}
 
         <div>
           <Button view="normal" loading={isCreating} disabled={!canSave} onClick={() => void handleCreate()}>

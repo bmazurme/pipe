@@ -16,6 +16,7 @@ export const MODEL_OPTIONS: { value: WorkerJobModel; content: string }[] = [
   { value: 'gpt', content: 'GPT' },
   { value: 'deepseek', content: 'DeepSeek' },
   { value: 'qwen', content: 'Qwen' },
+  { value: 'custom', content: 'Другая модель (свой сервер)' },
 ];
 
 export const STATUS_LABEL: Record<WorkerJobStatus, string> = {

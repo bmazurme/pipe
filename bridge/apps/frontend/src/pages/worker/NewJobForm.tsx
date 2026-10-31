@@ -44,7 +44,7 @@ const TIMEOUT_OPTIONS = [
   { value: '14400', content: '4 ч' },
 ];
 
-const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen'];
+const PROVIDER_MODELS: WorkerJobModel[] = ['gpt', 'deepseek', 'qwen', 'custom'];
 
 // A per-viewer convenience only — storage can be blocked or throw, and the
 // form must work identically without it.
@@ -118,6 +118,8 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
 
   const isClaudeModel = model === 'sonnet' || model === 'opus' || model === 'haiku';
   const isProviderModel = model !== undefined && PROVIDER_MODELS.includes(model);
+  // Any other server is chosen only by its key: there is no "the first one" to fall back on.
+  const isCustomModel = model === 'custom';
   const providerKeys = useMemo(
     () => (providerCredentialsData ?? []).filter((credential) => credential.provider === model),
     [providerCredentialsData, model],
@@ -147,6 +149,13 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
       setClaudeCredentialId(claudeCredentialsData[0].id);
     }
   }, [claudeCredentialId, claudeCredentialsData]);
+
+  // A custom model runs on the server of its key: preselect the first one, then it is the owner's pick.
+  useEffect(() => {
+    if (isCustomModel && providerCredentialId === undefined && providerKeys.length > 0) {
+      setProviderCredentialId(providerKeys[0].id);
+    }
+  }, [isCustomModel, providerCredentialId, providerKeys]);
 
   const resetAt = isClaudeModel
     ? fiveHourResetAt(claudeCredentialsData?.find((credential) => credential.id === claudeCredentialId)?.limits, Date.now())
@@ -311,10 +320,12 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
                 value={[providerCredentialId ? String(providerCredentialId) : 'default']}
                 onUpdate={([value]) => setProviderCredentialId(value && value !== 'default' ? Number(value) : undefined)}
                 options={[
-                  { value: 'default', content: 'Ключ по умолчанию (первый)' },
+                  ...(isCustomModel ? [] : [{ value: 'default', content: 'Ключ по умолчанию (первый)' }]),
                   ...providerKeys.map((credential) => ({
                     value: String(credential.id),
-                    content: `${credential.name} ${credential.keyHint}`,
+                    content: isCustomModel
+                      ? `${credential.name}${credential.model ? ` · ${credential.model}` : ''}`
+                      : `${credential.name} ${credential.keyHint}`,
                   })),
                 ]}
                 width="max"
@@ -365,7 +376,7 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               view="action"
               onClick={() => void handleCreate()}
               loading={isCreating || isPreparingSource}
-              disabled={!sourceFileId || !model || (needsDecryptKey && !decryptKey.trim())}
+              disabled={!sourceFileId || !model || (needsDecryptKey && !decryptKey.trim()) || (isCustomModel && providerCredentialId === undefined)}
             >
               <Icon data={FaceRobot} size={16} />
               Запустить
@@ -392,10 +403,16 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
               theme="warning"
               view="outlined"
               message={
-                <>
-                  Для {model ? modelName(model) : 'этой модели'} нет сохранённого API-ключа — worker возьмёт ключ из своей среды, если он там
-                  есть, иначе задача завершится ошибкой. <Link to="?tab=keys">Добавить ключ</Link>
-                </>
+                isCustomModel ? (
+                  <>
+                    Нет ни одного ключа для своей модели — без него задачу не запустить. <Link to="?tab=keys">Добавить ключ</Link>
+                  </>
+                ) : (
+                  <>
+                    Для {model ? modelName(model) : 'этой модели'} нет сохранённого API-ключа — worker возьмёт ключ из своей среды, если он там
+                    есть, иначе задача завершится ошибкой. <Link to="?tab=keys">Добавить ключ</Link>
+                  </>
+                )
               }
             />
           )}
