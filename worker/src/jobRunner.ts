@@ -9,13 +9,13 @@ import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage, describeFailure, isNetworkFailure } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
-import { makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
+import { ClaudeRunError, makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
-import { collectResult, writeParcelToDir } from './jobFiles.js';
+import { changedFiles, collectResult, describeChangedFiles, writeParcelToDir } from './jobFiles.js';
 import { jobLogger } from './logger.js';
 import { splitLogChunk } from './logChunks.js';
-import { buildResultParcel, describeTask, extractParcel } from './parcel.js';
+import { buildResultParcel, describeTask, extractParcel, type ExtractedParcel } from './parcel.js';
 import { makeRedactor, maxSecretLength } from './redact.js';
 import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
@@ -66,6 +66,7 @@ export async function processJob(
   } = {},
 ): Promise<void> {
   let jobDir: string | undefined;
+  let downloadedParcel: ExtractedParcel | undefined;
   // Structured (pino) logger for this job's own lifecycle events — distinct
   // from `log` below, which forwards the model's textual output to bridge.
   const jlog = jobLogger(job.id);
@@ -226,6 +227,7 @@ export async function processJob(
 
     const parcelBuffer = await client.downloadParcel(job.id);
     const parcel = extractParcel(parcelBuffer);
+    downloadedParcel = parcel;
 
     writeParcelToDir(jobDir, parcel);
 
@@ -322,6 +324,17 @@ export async function processJob(
         jlog.error({ err: statusError }, 'could not confirm the stop to bridge');
       }
     } else {
+      if (error instanceof ClaudeRunError && /timed out/.test(error.message) && jobDir && downloadedParcel) {
+        // Best-effort: names only, so the owner can tell a nearly-done run from an empty one; never fails the report.
+        try {
+          const base = downloadedParcel;
+          const redactedBase = { files: base.files.map((f) => ({ ...f, content: redact(f.content) })), assets: base.assets };
+          const names = changedFiles(redactedBase, collectResult(jobDir, redact));
+          log(redact(describeChangedFiles(names)));
+        } catch (collectError) {
+          jlog.warn({ err: collectError }, 'could not list the files changed before the time limit');
+        }
+      }
       const message = redact(describeFailure(error));
       log(`Failed: ${message}\n`);
       jlog.error({ err: error }, 'failed');

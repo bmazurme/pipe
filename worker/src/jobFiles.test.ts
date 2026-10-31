@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { collectResult, writeParcelToDir } from './jobFiles.js';
+import { changedFiles, collectResult, describeChangedFiles, writeParcelToDir } from './jobFiles.js';
 import type { ExtractedParcel } from './parcel.js';
 
 function parcel(): ExtractedParcel {
@@ -102,5 +102,38 @@ describe('writeParcelToDir / collectResult', () => {
 
     assert.equal(files.find((file) => file.relPath === 'notes.dat')?.content, 'now plain text');
     assert.ok(!assets.some((asset) => asset.relPath === 'notes.dat'));
+  });
+});
+
+describe('changedFiles', () => {
+  it('reports added and modified files and assets, not unchanged ones', () => {
+    const base = parcel();
+    const collected = {
+      files: [
+        { relPath: 'a.ts', content: 'export const a = 2;\n' },
+        { relPath: 'nested/dir/b.md', content: '# b\n' },
+        { relPath: 'new.ts', content: 'x' },
+      ],
+      assets: [
+        { relPath: 'img/logo.png', base64: base.assets[0].base64 },
+        { relPath: 'img/new.png', base64: 'AAAA' },
+      ],
+    };
+    assert.deepEqual(changedFiles(base, collected), ['a.ts', 'img/new.png', 'new.ts']);
+  });
+
+  it('detects a modified asset and returns nothing when nothing changed', () => {
+    const base = parcel();
+    assert.deepEqual(changedFiles(base, { files: base.files, assets: base.assets }), []);
+    assert.deepEqual(changedFiles(base, { files: base.files, assets: [{ relPath: 'img/logo.png', base64: 'AAAA' }] }), ['img/logo.png']);
+  });
+
+  it('describes the list, capped at 20 names', () => {
+    assert.match(describeChangedFiles([]), /no files changed/);
+    const names = Array.from({ length: 23 }, (_, i) => `f${String(i).padStart(2, '0')}`);
+    const line = describeChangedFiles(names);
+    assert.match(line, /changed 23 files: f00,/);
+    assert.match(line, /\(\+3 more\)/);
+    assert.ok(!line.includes('f20'));
   });
 });
