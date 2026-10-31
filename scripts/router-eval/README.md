@@ -44,3 +44,18 @@ file still parses" — and is only a filter: whether a change is *right* is for 
 For Ollama give the model room first: its default context is 4096 tokens, which a task prompt plus a file or two can outgrow without any error
 (`OLLAMA_CONTEXT_LENGTH=16384 ollama serve`, or `num_ctx` in a Modelfile). A 7B model's quality on tool calls varies a lot with the
 model: `qwen2.5-coder` prints its calls as text (the worker accepts that), `qwen3:8b` and `llama3.1:8b` use real tool calls.
+
+## grade — are the model's changes right?
+
+`replay` only says that a file was touched and still parses. `grade` runs tests: the model's diff (`pr-N.model.diff`) is applied to the
+project as it was before the task, the **tests of the real pull request** are laid over it, and those are run (jest for the backend,
+vitest for the frontend, `tsc -b` + `node --test` for harness/worker/sync/protocol). A change that passes the tests its human counterpart
+came with is "right enough". For a pull request that is only tests ("add a spec"), the model's own test files are run instead. Docs and
+changes with no test are reported as not testable.
+
+```bash
+node scripts/router-eval/run.mjs grade --dir .router-eval/replay-qwen3-16k            # needs no model: any machine with the project
+```
+
+It runs in a clone with dependencies installed and the packages built (`node_modules` of that clone are linked into each checkout, so
+nothing is installed per task). Result: `grade.md` in the same folder.
