@@ -760,3 +760,72 @@ describe("a model that ends without having written a file", () => {
     }
   });
 });
+
+describe("executeTool replace_in_file", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "replace-test-"));
+    writeFileSync(join(dir, "a.ts"), "const a = 1;\nconst b = 2;\nconst c = a + b;\n");
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const replace = (args: Record<string, unknown>) => executeTool(dir, "replace_in_file", { path: "a.ts", ...args });
+  const content = () => readFileSync(join(dir, "a.ts"), "utf-8");
+
+  it("replaces one exact snippet and leaves the rest of the file as it was", () => {
+    assert.equal(replace({ old_text: "const b = 2;", new_text: "const b = 3;" }), "ok");
+    assert.equal(content(), "const a = 1;\nconst b = 3;\nconst c = a + b;\n");
+  });
+
+  it("can delete a snippet, and replace one that spans lines", () => {
+    replace({ old_text: "const a = 1;\nconst b = 2;\n", new_text: "" });
+    assert.equal(content(), "const c = a + b;\n");
+  });
+
+  it("refuses a snippet that is not there, that is empty, or that is ambiguous — and writes nothing", () => {
+    for (const [args, message] of [
+      [{ old_text: "const z = 9;", new_text: "x" }, /not found.*read_file/],
+      [{ old_text: "", new_text: "x" }, /old_text is empty/],
+      [{ old_text: "const", new_text: "let" }, /more than one place/],
+    ] as const) {
+      assert.throws(() => replace({ ...args }), message);
+    }
+    assert.equal(content(), "const a = 1;\nconst b = 2;\nconst c = a + b;\n");
+  });
+
+  it("does not leave the project or touch .git, and says so when the file is missing", () => {
+    assert.throws(() => executeTool(dir, "replace_in_file", { path: "../x.ts", old_text: "a", new_text: "b" }));
+    assert.throws(() => executeTool(dir, "replace_in_file", { path: ".git/config", old_text: "a", new_text: "b" }), /\.git/);
+    assert.throws(() => executeTool(dir, "replace_in_file", { path: "nope.ts", old_text: "a", new_text: "b" }), /ENOENT/);
+  });
+
+  it("counts as writing a file: no reminder after it, and a call printed as text is understood", async () => {
+    assert.deepEqual(parseTextToolCall('{"name": "replace_in_file", "arguments": {"path": "a.ts", "old_text": "1", "new_text": "2"}}'), {
+      name: "replace_in_file",
+      arguments: '{"path":"a.ts","old_text":"1","new_text":"2"}',
+    });
+
+    const realFetch = globalThis.fetch;
+    const replies = [
+      { content: null, tool_calls: [{ id: "r", function: { name: "replace_in_file", arguments: JSON.stringify({ path: "a.ts", old_text: "a = 1", new_text: "a = 10" }) } }] },
+      { content: "Changed a to 10." },
+    ];
+    let calls = 0;
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({ choices: [{ message: { role: "assistant", ...replies[Math.min(calls++, 1)] } }] }))) as typeof fetch;
+
+    try {
+      const result = await runOpenAiCompatible(dir, "task", { baseUrl: "http://stub.invalid", apiKey: "k", model: "m" }, () => {}, undefined, 5000);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(calls, 2);
+      assert.match(content(), /const a = 10;/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
