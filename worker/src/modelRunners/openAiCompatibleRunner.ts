@@ -44,6 +44,15 @@ const SYSTEM_PROMPT = [
   "When you are done, reply with a plain text summary of what you changed and stop calling tools.",
 ].join(" ");
 
+// A small model often ends by showing the change as a code block instead of writing it. One reminder is enough to turn that into
+// an edit; it is sent only when the answer holds code and no file was written, so a "nothing to change" answer is left alone.
+export const APPLY_REMINDER =
+  "You showed the change but did not apply it: no file has been written. Apply it now by calling write_file with the full new content of each file you change (read_file it first if you need its current content). Do not paste code in your reply. When the files are written, reply with a short summary.";
+
+export function showsCodeWithoutWriting(content: string | null | undefined): boolean {
+  return /```|^diff --git |^@@ /m.test(content ?? "");
+}
+
 const TOOLS = [
   {
     type: "function",
@@ -266,6 +275,8 @@ export async function runOpenAiCompatible(
 
   let output = "";
   let anyToolCall = false;
+  let wroteFile = false;
+  let reminded = false;
   const total = { input: 0, output: 0, reported: false };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -355,6 +366,13 @@ export async function runOpenAiCompatible(
 
     const toolCalls = message.tool_calls ?? [];
     if (toolCalls.length === 0) {
+      if (!wroteFile && !reminded && showsCodeWithoutWriting(message.content)) {
+        reminded = true;
+        onOutput("(the answer shows a change but no file was written — asking the model to apply it)\n");
+        messages.push({ role: "user", content: APPLY_REMINDER });
+        continue;
+      }
+
       if (!anyToolCall) {
         onOutput("Warning: the model never called a tool, so no file was read or changed — it may not support function calling.\n");
       }
@@ -369,6 +387,7 @@ export async function runOpenAiCompatible(
           ? JSON.parse(call.function.arguments)
           : {};
         result = executeTool(cwd, call.function.name, args);
+        if (call.function.name === "write_file") wroteFile = true;
       } catch (error) {
         result = `Error: ${(error as Error).message}`;
       }

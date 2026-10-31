@@ -7,11 +7,13 @@ import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { CancelledError } from "../cancelled.js";
 import {
   executeTool,
+  APPLY_REMINDER,
   listFilesCapped,
   MAX_LIST_CHARS,
   MAX_TOOL_RESULT_CHARS,
   parseTextToolCall,
   runOpenAiCompatible,
+  showsCodeWithoutWriting,
   usageReport,
 } from "./openAiCompatibleRunner.js";
 
@@ -656,5 +658,90 @@ describe("list_files on a big project", () => {
 
   it("never leaves the project", () => {
     assert.throws(() => executeTool(dir, "list_files", { path: "../" }), /outside|escape|not allowed/i);
+  });
+});
+
+describe("a model that shows the change instead of writing it", () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "oai-runner-"));
+    writeFileSync(join(dir, "test.js"), "// test.js\n");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const reply = (message: object) => new Response(JSON.stringify({ choices: [{ message: { role: "assistant", ...message } }] }));
+  const writeCall = (content: string) => ({
+    content: null,
+    tool_calls: [{ id: "w", function: { name: "write_file", arguments: JSON.stringify({ path: "test.js", content }) } }],
+  });
+
+  function serve(...replies: object[]) {
+    const bodies: { messages: { role: string; content?: string | null }[] }[] = [];
+    let i = 0;
+
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+
+      return reply(replies[Math.min(i++, replies.length - 1)]);
+    }) as typeof fetch;
+
+    return bodies;
+  }
+
+  const run = (output: string[]) =>
+    runOpenAiCompatible(dir, "task", { baseUrl: "http://stub.invalid", apiKey: "k", model: "m" }, (chunk) => output.push(chunk), undefined, 5000);
+
+  it("tells it once to apply the change, and takes the edit it then makes", async () => {
+    const bodies = serve(
+      { content: "Here is the fix:\n```js\nconsole.log(1);\n```" },
+      writeCall("console.log(1);\n"),
+      { content: "Done." },
+    );
+    const output: string[] = [];
+    const result = await run(output);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "console.log(1);\n");
+    assert.equal(bodies.length, 3);
+    assert.equal(bodies[1].messages.at(-1)?.content, APPLY_REMINDER);
+    assert.match(output.join(""), /shows a change but no file was written/);
+  });
+
+  it("reminds only once: a model that keeps showing code ends the run as it was", async () => {
+    const bodies = serve({ content: "```js\nx\n```" });
+    const output: string[] = [];
+    const result = await run(output);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(bodies.length, 2);
+    assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "// test.js\n");
+  });
+
+  it("leaves an answer without code alone, and one that came after a file was written", async () => {
+    const plain = serve({ content: "Nothing needs to change here." });
+
+    await run([]);
+    assert.equal(plain.length, 1);
+
+    const written = serve(writeCall("a\n"), { content: "Done, the code is now:\n```js\na\n```" });
+
+    await run([]);
+    assert.equal(written.length, 2);
+    assert.ok(!written.some((body) => body.messages.some((message) => message.content === APPLY_REMINDER)));
+  });
+
+  it("knows a code block or a diff when it sees one", () => {
+    for (const text of ["```js\nx\n```", "```\nx\n```", "diff --git a/x b/x\n--- a/x", "see:\n@@ -1 +1 @@\n-a\n+b"]) {
+      assert.equal(showsCodeWithoutWriting(text), true, text);
+    }
+    for (const text of ["", null, undefined, "I will change the query in `a.ts` and add `b`.", "No change is needed."]) {
+      assert.equal(showsCodeWithoutWriting(text), false, String(text));
+    }
   });
 });
