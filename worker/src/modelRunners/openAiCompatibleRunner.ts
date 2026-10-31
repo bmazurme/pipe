@@ -44,13 +44,14 @@ const SYSTEM_PROMPT = [
   "When you are done, reply with a plain text summary of what you changed and stop calling tools.",
 ].join(" ");
 
-// A small model often ends by showing the change as a code block instead of writing it. One reminder is enough to turn that into
-// an edit; it is sent only when the answer holds code and no file was written, so a "nothing to change" answer is left alone.
+// A small model often stops without having changed anything: it shows the fix as a code block instead of writing it, or lists a directory,
+// says so and ends. One reminder is sent when a run ends with no file written; an answer that says plainly there is nothing to change
+// ("NO CHANGE: …") is left alone, so a task that needs no edit costs at most one extra request.
 export const APPLY_REMINDER =
-  "You showed the change but did not apply it: no file has been written. Apply it now by calling write_file with the full new content of each file you change (read_file it first if you need its current content). Do not paste code in your reply. When the files are written, reply with a short summary.";
+  'No file has been written yet. If the task needs a change, carry on: read the files that matter and apply the change by calling write_file with the full new content of each file you change — do not paste code in your reply. If nothing needs to change, reply with one sentence that starts with "NO CHANGE:" and says why.';
 
-export function showsCodeWithoutWriting(content: string | null | undefined): boolean {
-  return /```|^diff --git |^@@ /m.test(content ?? "");
+export function needsApplyReminder(content: string | null | undefined): boolean {
+  return !/^\s*NO CHANGE\b/.test(content ?? "");
 }
 
 const TOOLS = [
@@ -366,9 +367,9 @@ export async function runOpenAiCompatible(
 
     const toolCalls = message.tool_calls ?? [];
     if (toolCalls.length === 0) {
-      if (!wroteFile && !reminded && showsCodeWithoutWriting(message.content)) {
+      if (!wroteFile && !reminded && needsApplyReminder(message.content)) {
         reminded = true;
-        onOutput("(the answer shows a change but no file was written — asking the model to apply it)\n");
+        onOutput("(no file was written — reminding the model to apply the change)\n");
         messages.push({ role: "user", content: APPLY_REMINDER });
         continue;
       }

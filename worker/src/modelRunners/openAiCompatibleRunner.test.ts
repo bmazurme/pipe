@@ -12,8 +12,8 @@ import {
   MAX_LIST_CHARS,
   MAX_TOOL_RESULT_CHARS,
   parseTextToolCall,
+  needsApplyReminder,
   runOpenAiCompatible,
-  showsCodeWithoutWriting,
   usageReport,
 } from "./openAiCompatibleRunner.js";
 
@@ -181,7 +181,7 @@ describe("runOpenAiCompatible job deadline", () => {
     globalThis.fetch = (async () =>
       new Response(
         JSON.stringify({
-          choices: [{ message: { role: "assistant", content: "done" } }],
+          choices: [{ message: { role: "assistant", content: "NO CHANGE: done" } }],
         }),
       )) as typeof fetch;
 
@@ -284,7 +284,7 @@ describe("runOpenAiCompatible turn retry", () => {
   const answer = () =>
     new Response(
       JSON.stringify({
-        choices: [{ message: { role: "assistant", content: "done" } }],
+        choices: [{ message: { role: "assistant", content: "NO CHANGE: done" } }],
       }),
       { status: 200 },
     );
@@ -373,7 +373,7 @@ describe("runOpenAiCompatible request shape", () => {
     captured = undefined;
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       captured = { url, init: init as never };
-      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "done" } }] }));
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "NO CHANGE: done" } }] }));
     }) as typeof fetch;
   });
 
@@ -560,7 +560,7 @@ describe("usage of an OpenAI-compatible run", () => {
   it("sums the tokens the server reports over every turn, and reports no cost for a free model", async () => {
     serve(
       completion({ content: null, tool_calls: [{ id: "c1", function: { name: "list_files", arguments: "{}" } }] }, { prompt_tokens: 100, completion_tokens: 10 }),
-      completion({ content: "done" }, { prompt_tokens: 150, completion_tokens: 20 }),
+      completion({ content: "NO CHANGE: done" }, { prompt_tokens: 150, completion_tokens: 20 }),
     );
 
     const result = await run();
@@ -571,7 +571,7 @@ describe("usage of an OpenAI-compatible run", () => {
   });
 
   it("prices the run from the key's price per million tokens", async () => {
-    serve(completion({ content: "done" }, { prompt_tokens: 2_000_000, completion_tokens: 500_000 }));
+    serve(completion({ content: "NO CHANGE: done" }, { prompt_tokens: 2_000_000, completion_tokens: 500_000 }));
 
     const result = await run({ priceInPerMTok: 0.5, priceOutPerMTok: 2 });
 
@@ -579,7 +579,7 @@ describe("usage of an OpenAI-compatible run", () => {
   });
 
   it("makes nothing up when the server reports no usage", async () => {
-    serve(completion({ content: "done" }));
+    serve(completion({ content: "NO CHANGE: done" }));
 
     assert.equal((await run()).report, undefined);
   });
@@ -661,7 +661,7 @@ describe("list_files on a big project", () => {
   });
 });
 
-describe("a model that shows the change instead of writing it", () => {
+describe("a model that ends without having written a file", () => {
   const realFetch = globalThis.fetch;
   let dir: string;
 
@@ -710,7 +710,7 @@ describe("a model that shows the change instead of writing it", () => {
     assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "console.log(1);\n");
     assert.equal(bodies.length, 3);
     assert.equal(bodies[1].messages.at(-1)?.content, APPLY_REMINDER);
-    assert.match(output.join(""), /shows a change but no file was written/);
+    assert.match(output.join(""), /no file was written — reminding the model/);
   });
 
   it("reminds only once: a model that keeps showing code ends the run as it was", async () => {
@@ -723,11 +723,26 @@ describe("a model that shows the change instead of writing it", () => {
     assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "// test.js\n");
   });
 
-  it("leaves an answer without code alone, and one that came after a file was written", async () => {
-    const plain = serve({ content: "Nothing needs to change here." });
+  it("also reminds a model that listed a directory and stopped, and takes its edit afterwards", async () => {
+    const bodies = serve(
+      { content: null, tool_calls: [{ id: "l", function: { name: "list_files", arguments: "{}" } }] },
+      { content: "I have listed the files." },
+      writeCall("console.log(2);\n"),
+      { content: "Done." },
+    );
+    const result = await run([]);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "console.log(2);\n");
+    assert.equal(bodies.length, 4);
+    assert.equal(bodies[2].messages.at(-1)?.content, APPLY_REMINDER);
+  });
+
+  it("lets an answer that says there is nothing to change stand, and leaves a run that wrote a file alone", async () => {
+    const nothing = serve({ content: "NO CHANGE: the query already selects only the columns it uses." });
 
     await run([]);
-    assert.equal(plain.length, 1);
+    assert.equal(nothing.length, 1);
 
     const written = serve(writeCall("a\n"), { content: "Done, the code is now:\n```js\na\n```" });
 
@@ -736,12 +751,12 @@ describe("a model that shows the change instead of writing it", () => {
     assert.ok(!written.some((body) => body.messages.some((message) => message.content === APPLY_REMINDER)));
   });
 
-  it("knows a code block or a diff when it sees one", () => {
-    for (const text of ["```js\nx\n```", "```\nx\n```", "diff --git a/x b/x\n--- a/x", "see:\n@@ -1 +1 @@\n-a\n+b"]) {
-      assert.equal(showsCodeWithoutWriting(text), true, text);
+  it("asks for a reminder unless the answer starts with NO CHANGE", () => {
+    for (const text of ["", null, undefined, "```js\nx\n```", "I have listed the files.", "Nothing needs to change here.", "no change would be wrong"]) {
+      assert.equal(needsApplyReminder(text), true, String(text));
     }
-    for (const text of ["", null, undefined, "I will change the query in `a.ts` and add `b`.", "No change is needed."]) {
-      assert.equal(showsCodeWithoutWriting(text), false, String(text));
+    for (const text of ["NO CHANGE: already done", "  NO CHANGE: the file is fine", "NO CHANGE"]) {
+      assert.equal(needsApplyReminder(text), false, text);
     }
   });
 });

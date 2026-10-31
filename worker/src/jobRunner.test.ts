@@ -310,7 +310,7 @@ describe('processJob', () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-usage-'));
     globalThis.fetch = (async () =>
       new Response(
-        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }], usage: { prompt_tokens: 1000, completion_tokens: 200 } }),
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'NO CHANGE: done' } }], usage: { prompt_tokens: 1000, completion_tokens: 200 } }),
         { status: 200 },
       )) as typeof fetch;
 
