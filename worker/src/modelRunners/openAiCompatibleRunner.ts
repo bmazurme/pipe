@@ -39,7 +39,8 @@ export const MAX_LIST_CHARS = 6_000;
 
 const SYSTEM_PROMPT = [
   "You are a coding agent working in a plain directory (not a git repository).",
-  "Use the read_file/list_files/write_file tools to inspect and edit files as needed.",
+  "Use the read_file/list_files tools to inspect files and replace_in_file/write_file to edit them.",
+  "To change part of an existing file, prefer replace_in_file (an exact snippet of the file and what to put in its place) over rewriting the whole file with write_file: a rewrite easily drops or breaks code you did not mean to touch.",
   "There is no shell/run_command tool available — make changes purely by reading and writing files.",
   "When you are done, reply with a plain text summary of what you changed and stop calling tools.",
 ].join(" ");
@@ -48,7 +49,7 @@ const SYSTEM_PROMPT = [
 // says so and ends. One reminder is sent when a run ends with no file written; an answer that says plainly there is nothing to change
 // ("NO CHANGE: …") is left alone, so a task that needs no edit costs at most one extra request.
 export const APPLY_REMINDER =
-  'No file has been written yet. If the task needs a change, carry on: read the files that matter and apply the change by calling write_file with the full new content of each file you change — do not paste code in your reply. If nothing needs to change, reply with one sentence that starts with "NO CHANGE:" and says why.';
+  'No file has been written yet. If the task needs a change, carry on: read the files that matter and apply the change by calling replace_in_file (part of a file) or write_file (a whole file) — do not paste code in your reply. If nothing needs to change, reply with one sentence that starts with "NO CHANGE:" and says why.';
 
 export function needsApplyReminder(content: string | null | undefined): boolean {
   return !/^\s*NO CHANGE\b/.test(content ?? "");
@@ -108,6 +109,26 @@ const TOOLS = [
           content: { type: "string" },
         },
         required: ["path", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "replace_in_file",
+      description:
+        "Change part of an existing file: replace one exact snippet with new text. old_text must match the file exactly (every space, quote and line break) and occur once; include a line or two around the change to make it unique. Prefer this to write_file for any change that is not a whole new file.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Path relative to the working directory",
+          },
+          old_text: { type: "string", description: "The exact text to replace, copied from the file" },
+          new_text: { type: "string", description: "What to put in its place (may be empty to delete the snippet)" },
+        },
+        required: ["path", "old_text", "new_text"],
       },
     },
   },
@@ -214,6 +235,27 @@ export function executeTool(
       const path = resolveInDir(cwd, String(args.path ?? ""));
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, String(args.content ?? ""), "utf-8");
+      return "ok";
+    }
+    case "replace_in_file": {
+      const path = resolveInDir(cwd, String(args.path ?? ""));
+      const oldText = String(args.old_text ?? "");
+      const newText = String(args.new_text ?? "");
+      const content = readFileSync(path, "utf-8");
+
+      if (oldText === "") throw new Error("old_text is empty — give the exact snippet of the file to replace");
+
+      const first = content.indexOf(oldText);
+
+      if (first === -1) {
+        throw new Error("old_text was not found in the file. It must match exactly, including spaces and line breaks — read_file the file again and copy the snippet");
+      }
+      if (content.indexOf(oldText, first + oldText.length) !== -1) {
+        throw new Error("old_text matches more than one place — include a line or two around it so that it is unique");
+      }
+
+      writeFileSync(path, content.slice(0, first) + newText + content.slice(first + oldText.length), "utf-8");
+
       return "ok";
     }
     default:
@@ -388,7 +430,7 @@ export async function runOpenAiCompatible(
           ? JSON.parse(call.function.arguments)
           : {};
         result = executeTool(cwd, call.function.name, args);
-        if (call.function.name === "write_file") wroteFile = true;
+        if (call.function.name === "write_file" || call.function.name === "replace_in_file") wroteFile = true;
       } catch (error) {
         result = `Error: ${(error as Error).message}`;
       }

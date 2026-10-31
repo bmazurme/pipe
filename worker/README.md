@@ -28,7 +28,7 @@
 - Для задач Sonnet/Opus/Haiku выполняются через уже установленный CLI `claude`
   (Claude Code) — так же, как это делает `sync-cli agent-runner`.
   GPT/DeepSeek/Qwen выполняются через собственный минимальный цикл вызова
-  инструментов (`read_file`/`write_file`/`list_files`) поверх их
+  инструментов (`read_file`/`list_files`/`replace_in_file`/`write_file`) поверх их
   OpenAI-совместимого Chat Completions API — никакого дополнительного
   Python-тулчейна на сервере не требуется, только Node.
 - Для чата: Sonnet/Opus/Haiku идут через тот же залогиненный `claude` CLI, что и
@@ -292,7 +292,7 @@ add-in не установлен»), а не молча. Модели GPT/DeepSe
 у которого есть локальный клон отслеживаемого проекта).
 
 Для GPT/DeepSeek/Qwen worker намеренно не даёт модели инструмент для
-запуска shell-команд — только `read_file`/`write_file`/`list_files`. Это
+запуска shell-команд — только `read_file`/`list_files`/`replace_in_file`/`write_file`. Это
 меньше возможностей, чем у `claude` CLI (которому уже доверяют
 `--dangerously-skip-permissions` в этом проекте), но и меньше поверхность
 атаки для менее проверенного, стороннего кода выполнения инструментов.
