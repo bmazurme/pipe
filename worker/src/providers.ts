@@ -1,11 +1,13 @@
-export type JobModel = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
+import type { RouteMode } from './routing.js';
+
+export type JobModel = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen' | 'custom';
 
 // The models that run through the `claude` CLI (the others go through an OpenAI-compatible provider).
 export type ClaudeModel = 'sonnet' | 'opus' | 'haiku';
 
 export type ProviderConfig =
   | { tool: 'claude'; claudeModel: ClaudeModel }
-  | { tool: 'openai-compatible'; baseUrl: string; apiKey: string; model: string };
+  | OpenAiCompatibleConfig;
 
 export interface OpenAiCompatibleDefaults {
   baseUrlEnv: string;
@@ -16,6 +18,16 @@ export interface OpenAiCompatibleDefaults {
 }
 
 export type OpenAiCompatibleModel = 'gpt' | 'deepseek' | 'qwen';
+
+// 'custom' is any other OpenAI-compatible server (Yandex AI Studio, Gemini, Ollama, LM Studio, a gateway…): everything about it
+// comes from the stored key — address, model, auth scheme, headers — there are no defaults and no environment fallback.
+export type CustomModel = 'custom';
+
+// How the key goes into the request: 'Authorization: Bearer <key>' (OpenAI and most others), 'Authorization: Api-Key <key>'
+// (Yandex Cloud), or not at all (a local server).
+export type AuthScheme = 'bearer' | 'api-key' | 'none';
+
+export const AUTH_SCHEMES: readonly AuthScheme[] = ['bearer', 'api-key', 'none'];
 
 // gpt/deepseek/qwen all expose the same OpenAI-compatible Chat Completions +
 // function-calling API — one HTTP client (openAiCompatibleRunner.ts), three
@@ -48,7 +60,20 @@ export const OPENAI_COMPATIBLE_DEFAULTS: Record<OpenAiCompatibleModel, OpenAiCom
   },
 };
 
-export type OpenAiCompatibleConfig = { tool: 'openai-compatible'; baseUrl: string; apiKey: string; model: string };
+export interface OpenAiCompatibleConfig {
+  tool: 'openai-compatible';
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  // Only a 'custom' key sets these; absent = what gpt/deepseek/qwen always did.
+  route?: RouteMode;
+  authScheme?: AuthScheme;
+  extraHeaders?: Record<string, string>;
+  /** Seconds one completion request may take; absent = 300. */
+  timeoutSec?: number;
+  /** false = the model cannot call functions, so it cannot run a job (it can still chat). Absent = true. */
+  supportsTools?: boolean;
+}
 
 // An env var set to '' (docker-compose `${VAR:-}` passthrough, a blank line in
 // an env file) or whitespace counts as unset.
@@ -60,15 +85,22 @@ export interface ProviderOverride {
   apiKey: string;
   baseUrl?: string | null;
   model?: string | null;
+  route?: RouteMode | null;
+  authScheme?: AuthScheme | null;
+  extraHeaders?: Record<string, string> | null;
+  timeoutSec?: number | null;
+  supportsTools?: boolean | null;
 }
 
 // Shared by resolveProvider (jobs) and chatProviders.ts's resolveChatProvider
 // (chat turns) — gpt/deepseek/qwen need identical setup for both.
 export function resolveOpenAiCompatibleConfig(
-  model: OpenAiCompatibleModel,
+  model: OpenAiCompatibleModel | CustomModel,
   env: NodeJS.ProcessEnv,
   override?: ProviderOverride | null,
 ): OpenAiCompatibleConfig {
+  if (model === 'custom') return resolveCustomConfig(override);
+
   const defaults = OPENAI_COMPATIBLE_DEFAULTS[model];
 
   // What bridge sent wins; the environment is the fallback (a worker that has not been moved to stored keys yet).
@@ -94,6 +126,34 @@ export function resolveOpenAiCompatibleConfig(
     baseUrl: nonEmpty(env[defaults.baseUrlEnv]) ?? defaults.defaultBaseUrl,
     apiKey,
     model: nonEmpty(env[defaults.modelEnv]) ?? defaults.defaultModel,
+  };
+}
+
+function resolveCustomConfig(override?: ProviderOverride | null): OpenAiCompatibleConfig {
+  const baseUrl = nonEmpty(override?.baseUrl ?? undefined)?.replace(/\/+$/, '');
+  const model = nonEmpty(override?.model ?? undefined);
+
+  if (!override || !baseUrl || !model) {
+    throw new Error('This model needs a stored key with an address and a model name — add one in Worker → Keys');
+  }
+
+  const authScheme = override.authScheme ?? 'bearer';
+  const apiKey = override.apiKey?.trim() ?? '';
+
+  if (authScheme !== 'none' && apiKey === '') {
+    throw new Error('The key for this model has no secret, but its authorization scheme needs one');
+  }
+
+  return {
+    tool: 'openai-compatible',
+    baseUrl,
+    apiKey,
+    model,
+    route: override.route ?? 'auto',
+    authScheme,
+    ...(override.extraHeaders && Object.keys(override.extraHeaders).length > 0 ? { extraHeaders: override.extraHeaders } : {}),
+    ...(override.timeoutSec ? { timeoutSec: override.timeoutSec } : {}),
+    supportsTools: override.supportsTools ?? true,
   };
 }
 

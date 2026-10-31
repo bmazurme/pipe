@@ -278,6 +278,56 @@ describe('processJob', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
+  it('fails a custom-model job up front when the key says the model cannot call functions', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-notools-'));
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response('{}');
+    }) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = {
+      id: 50,
+      sourceFileId: 60,
+      resultFileId: null,
+      model: 'custom',
+      status: 'claimed',
+      provider: { apiKey: '', baseUrl: 'http://192.168.50.35:11434/v1', model: 'tiny', authScheme: 'none', supportsTools: false },
+    };
+
+    await processJob(client as never, job, fakeConfig(workDir));
+
+    const failed = client.updateStatus.calls.filter((call) => call[1] === 'failed');
+    assert.equal(failed.length, 1);
+    assert.match(String(failed[0][2] ?? ''), /does not call functions/);
+    assert.equal(fetched, false);
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('logs the route of a custom-model job, and fails it when the key needs a VPN the worker lacks', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-route-'));
+    stubOpenAiCompletion('done');
+
+    const client = fakeClient(fakeParcel());
+    const provider = { apiKey: 'k', baseUrl: 'http://192.168.50.35:11434/v1', model: 'm' };
+
+    await processJob(client as never, { id: 51, sourceFileId: 60, resultFileId: null, model: 'custom', status: 'claimed', provider } as RemoteJob, fakeConfig(workDir));
+    assert.match(client.appendLog.calls.map((call) => String(call[1])).join(''), /Route to m: direct \(a private address/);
+
+    const needsVpn = fakeClient(fakeParcel());
+
+    await processJob(
+      needsVpn as never,
+      { id: 52, sourceFileId: 60, resultFileId: null, model: 'custom', status: 'claimed', provider: { ...provider, baseUrl: 'https://gemini.example/v1', route: 'vpn' } } as RemoteJob,
+      fakeConfig(workDir),
+    );
+    assert.ok(needsVpn.updateStatus.calls.some((call) => call[1] === 'failed'));
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
   it('cleans up the job temp directory even when the model run fails', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-fail-'));
     globalThis.fetch = (async () => new Response('server error', { status: 500 })) as typeof fetch;

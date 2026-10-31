@@ -1,6 +1,6 @@
 import { resolveOpenAiCompatibleConfig, type ClaudeModel, type OpenAiCompatibleConfig, type ProviderOverride } from './providers.js';
 
-export type ChatModel = ClaudeModel | 'gpt' | 'deepseek' | 'qwen';
+export type ChatModel = ClaudeModel | 'gpt' | 'deepseek' | 'qwen' | 'custom';
 
 export type ChatProviderConfig =
   | { tool: 'claude'; claudeModel: ClaudeModel }

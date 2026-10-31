@@ -1,5 +1,6 @@
 import { bearer, bridgeFetch, readOptionalJson, reportClaudeUsage } from './bridgeHttp.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
+import type { ProviderOverride } from './providers.js';
 
 // A file can be several MB.
 const ATTACHMENT_TIMEOUT_MS = 60_000;
@@ -21,12 +22,12 @@ export interface ChatHistoryEntry {
 export interface ClaimedChatTurn {
   messageId: number;
   chatId: number;
-  model: 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
+  model: 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen' | 'custom';
   // The account's Claude token for a sonnet/opus turn (null/absent: this process's own login).
   claudeToken?: string | null;
   context?: string | null;
   // The stored API key for a gpt/deepseek/qwen turn; null/absent = this worker's own environment.
-  provider?: { apiKey: string; baseUrl?: string | null; model?: string | null } | null;
+  provider?: ProviderOverride | null;
   history: ChatHistoryEntry[];
 }
 

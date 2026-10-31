@@ -356,3 +356,58 @@ describe("runOpenAiCompatible turn retry", () => {
     await assert.rejects(run, CancelledError);
   });
 });
+
+describe("runOpenAiCompatible request shape", () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+  let captured: { url: string; init: RequestInit & { dispatcher?: unknown } } | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "oai-runner-"));
+    captured = undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      captured = { url, init: init as never };
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "done" } }] }));
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const run = (options: Parameters<typeof runOpenAiCompatible>[2], proxyUrl?: string) =>
+    runOpenAiCompatible(dir, "task", options, () => {}, proxyUrl, 5000);
+
+  it("sends the key's scheme and extra headers", async () => {
+    await run({
+      baseUrl: "http://192.168.50.35:11434/v1",
+      apiKey: "k",
+      model: "m",
+      authScheme: "api-key",
+      extraHeaders: { "x-folder-id": "b1g" },
+    });
+
+    const headers = captured?.init.headers as Record<string, string>;
+
+    assert.equal(headers.Authorization, "Api-Key k");
+    assert.equal(headers["x-folder-id"], "b1g");
+  });
+
+  it("goes around the proxy to a private address, through it to a public one", async () => {
+    await run({ baseUrl: "http://192.168.50.35:11434/v1", apiKey: "k", model: "m" }, "http://127.0.0.1:18080");
+    assert.equal(captured?.init.dispatcher, undefined);
+
+    await run({ baseUrl: "https://api.openai.com/v1", apiKey: "k", model: "m" }, "http://127.0.0.1:18080");
+    assert.ok(captured?.init.dispatcher);
+  });
+
+  it("a key set to direct ignores the proxy; one set to vpn refuses to run without it", async () => {
+    await run({ baseUrl: "https://api.openai.com/v1", apiKey: "k", model: "m", route: "direct" }, "http://127.0.0.1:18080");
+    assert.equal(captured?.init.dispatcher, undefined);
+
+    captured = undefined;
+    await assert.rejects(run({ baseUrl: "https://api.openai.com/v1", apiKey: "k", model: "m", route: "vpn" }), /requires the VPN/);
+    assert.equal(captured, undefined);
+  });
+});
