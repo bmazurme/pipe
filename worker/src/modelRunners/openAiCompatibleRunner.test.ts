@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
@@ -8,6 +8,7 @@ import { CancelledError } from "../cancelled.js";
 import {
   executeTool,
   MAX_TOOL_RESULT_CHARS,
+  parseTextToolCall,
   runOpenAiCompatible,
 } from "./openAiCompatibleRunner.js";
 
@@ -409,5 +410,118 @@ describe("runOpenAiCompatible request shape", () => {
     captured = undefined;
     await assert.rejects(run({ baseUrl: "https://api.openai.com/v1", apiKey: "k", model: "m", route: "vpn" }), /requires the VPN/);
     assert.equal(captured, undefined);
+  });
+});
+
+describe("parseTextToolCall", () => {
+  const call = { name: "list_files", arguments: "{}" };
+
+  it("reads a call printed as bare JSON, in a ``` fence, or in <tool_call> tags", () => {
+    expectCall('{"name": "list_files", "arguments": {}}');
+    expectCall('```json\n{"name": "list_files", "arguments": {}}\n```');
+    expectCall('```\n{"name":"list_files"}\n```');
+    expectCall('<tool_call>\n{"name": "list_files", "arguments": {}}\n</tool_call>');
+
+    function expectCall(text: string) {
+      assert.deepEqual(parseTextToolCall(text), call, text);
+    }
+  });
+
+  it("keeps the arguments", () => {
+    assert.deepEqual(parseTextToolCall('{"name": "write_file", "arguments": {"path": "a.js", "content": "x"}}'), {
+      name: "write_file",
+      arguments: '{"path":"a.js","content":"x"}',
+    });
+  });
+
+  it("never treats prose, another tool, or malformed JSON as a call", () => {
+    for (const text of [
+      "",
+      "I will call list_files now",
+      'Sure: {"name": "list_files", "arguments": {}}',
+      '{"name": "run_command", "arguments": {"cmd": "rm -rf /"}}',
+      '{"name": "list_files", "arguments": "oops"}',
+      '{"name": "list_files", "arguments": [1]}',
+      '{"name": "list_files"',
+      "[1, 2]",
+      "null",
+    ]) {
+      assert.equal(parseTextToolCall(text), null, text);
+    }
+    assert.equal(parseTextToolCall(null), null);
+  });
+});
+
+describe("runOpenAiCompatible with a call printed as text", () => {
+  const realFetch = globalThis.fetch;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "oai-runner-"));
+    writeFileSync(join(dir, "test.js"), "// test.js\n");
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function replies(...contents: (string | { tool_calls: unknown[] })[]) {
+    const sent: { messages: { role: string; tool_calls?: unknown[]; content?: string | null }[] }[] = [];
+    let i = 0;
+
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      const next = contents[Math.min(i++, contents.length - 1)];
+
+      return new Response(
+        JSON.stringify({ choices: [{ message: typeof next === "string" ? { role: "assistant", content: next } : { role: "assistant", content: null, ...next } }] }),
+      );
+    }) as typeof fetch;
+
+    return sent;
+  }
+
+  const run = (output: string[]) =>
+    runOpenAiCompatible(dir, "task", { baseUrl: "http://stub.invalid", apiKey: "k", model: "m" }, (chunk) => output.push(chunk), undefined, 5000);
+
+  it("runs the call, goes on, and finishes when the model answers in words", async () => {
+    const sent = replies(
+      '```json\n{"name": "write_file", "arguments": {"path": "test.js", "content": "console.log(1);\\n"}}\n```',
+      "Done.",
+    );
+    const output: string[] = [];
+    const result = await run(output);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(readFileSync(join(dir, "test.js"), "utf-8"), "console.log(1);\n");
+    assert.match(output.join(""), /printed a call to write_file as text/);
+    assert.ok(!output.join("").includes("Warning: the model never called a tool"));
+    // the second request carries a real tool call and its result, not the raw JSON
+    const assistant = sent[1].messages.find((message) => message.role === "assistant");
+
+    assert.equal(assistant?.content, null);
+    assert.equal(assistant?.tool_calls?.length, 1);
+    assert.ok(sent[1].messages.some((message) => message.role === "tool"));
+  });
+
+  it("warns when a model finishes without ever calling a tool, and still succeeds", async () => {
+    const output: string[] = [];
+
+    replies("I would add a console.log to test.js.");
+
+    const result = await run(output);
+
+    assert.equal(result.exitCode, 0);
+    assert.match(output.join(""), /Warning: the model never called a tool/);
+  });
+
+  it("does not warn after a real tool call", async () => {
+    const output: string[] = [];
+
+    replies({ tool_calls: [{ id: "c1", function: { name: "list_files", arguments: "{}" } }] }, "ok");
+    await run(output);
+
+    assert.ok(!output.join("").includes("Warning: the model never called a tool"));
   });
 });
