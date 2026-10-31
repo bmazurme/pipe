@@ -5,3 +5,6 @@ dist/
 
 # encrypted secret bundles are for the password manager, not for git
 *.age
+
+# scratch output of scripts/router-eval
+.router-eval/
