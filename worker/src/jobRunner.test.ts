@@ -644,6 +644,28 @@ describe('processJob time limit chosen at launch', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
+  it('logs which files a timed-out claude run had already changed', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
+    const binDir = path.join(workDir, 'bin');
+    mkdirSync(binDir);
+    const script = path.join(binDir, 'claude');
+    writeFileSync(
+      script,
+      ['#!/usr/bin/env node', "require('node:fs').writeFileSync('partial.txt', 'x');", 'setInterval(() => {}, 1000);', ''].join('\n'),
+    );
+    chmodSync(script, 0o755);
+    process.env.PATH = `${binDir}:${originalPath}`;
+
+    const client = fakeClient(fakeParcel());
+    client.reportClaudeUsage = async () => {};
+    const job: RemoteJob = { id: 24, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 1, status: 'claimed' };
+    await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 1000 });
+
+    assert.match(failureOf(client), /timed out/);
+    assert.match(logsOf(client), /changed 1 files: partial\.txt/);
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
   it('passes the job’s own deadline to runOpenAiCompatible instead of the worker setting', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
     // A model that never answers until the request is aborted.

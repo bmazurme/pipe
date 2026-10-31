@@ -59,3 +59,26 @@ export function collectResult(
   }
   return { files, assets };
 }
+
+// Paths the run added or modified relative to the parcel it was given (sorted). Content only decides "modified"; it is never returned.
+export function changedFiles(
+  parcel: Pick<ExtractedParcel, 'files' | 'assets'>,
+  collected: { files: PackedFile[]; assets: PackedAsset[] },
+): string[] {
+  const before = new Map<string, string>();
+  for (const file of parcel.files) before.set(file.relPath, `t:${file.content}`);
+  for (const asset of parcel.assets) before.set(asset.relPath, `b:${asset.base64}`);
+  const changed: string[] = [];
+  for (const file of collected.files) if (before.get(file.relPath) !== `t:${file.content}`) changed.push(file.relPath);
+  for (const asset of collected.assets) if (before.get(asset.relPath) !== `b:${asset.base64}`) changed.push(asset.relPath);
+  return changed.sort();
+}
+
+const MAX_LISTED_CHANGED_FILES = 20;
+
+export function describeChangedFiles(names: string[]): string {
+  if (names.length === 0) return 'Before the time limit the run left no files changed\n';
+  const shown = names.slice(0, MAX_LISTED_CHANGED_FILES).join(', ');
+  const more = names.length > MAX_LISTED_CHANGED_FILES ? `, … (+${names.length - MAX_LISTED_CHANGED_FILES} more)` : '';
+  return `Before the time limit the run had changed ${names.length} files: ${shown}${more}\n`;
+}
