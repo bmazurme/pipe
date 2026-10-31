@@ -169,6 +169,25 @@ function withMergeCommits(tasks) {
   return tasks;
 }
 
+// Asks the server which models it has (OpenAI-compatible /models — Ollama answers it) and stops at once when the one asked for is not
+// among them; a server that does not answer is let through, the first task will say what is wrong.
+async function requireModel(options) {
+  let ids = null;
+
+  try {
+    const response = await fetch(`${options.baseUrl}/models`, { signal: AbortSignal.timeout(10_000) });
+
+    if (response.ok) ids = (await response.json()).data?.map((entry) => entry.id) ?? null;
+  } catch {
+    return;
+  }
+
+  if (ids && !ids.includes(options.model) && !ids.includes(`${options.model}:latest`)) {
+    console.error(`the server has no model "${options.model}". It has: ${ids.join(', ') || '(none)'}`);
+    process.exit(1);
+  }
+}
+
 async function replay() {
   if (!flags.url || !flags.model) throw new Error('replay needs --url and --model');
 
@@ -197,6 +216,7 @@ async function replay() {
   const timeoutMs = Number(flags.timeout ?? 900) * 1000;
   const results = [];
 
+  await requireModel(options);
   mkdirSync(dest, { recursive: true });
   console.error(`${picked.length} tasks of tier ≤ ${flags['max-tier'] ?? 1} → ${dest}`);
 
@@ -232,6 +252,12 @@ async function replay() {
     // a run that changed nothing is the case to look at: show how it ended right here
     if (result.changed.length === 0) process.stderr.write(`    the model's end of the log:\n${(result.output ?? '').trim().split('\n').slice(-6).map((line) => `      ${line.slice(0, 200)}`).join('\n')}\n`);
     results.push({ ...result, diff: undefined, output: undefined });
+
+    // a server that refuses the first task (no such model, bad key) refuses them all alike: stop instead of six identical failures
+    if (/API error \((401|403|404)\)/.test(result.failure ?? '')) {
+      console.error(`\nstopping: the model server answered the first task with an error that will repeat for every task:\n  ${result.failure}`);
+      process.exit(1);
+    }
   }
 
   write(`${dest.split('/').pop()}/results.json`, results);
