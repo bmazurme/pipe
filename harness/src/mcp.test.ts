@@ -11,6 +11,7 @@ import type { ActionDeps } from './actions.js';
 import type { StatusPaths } from './collect.js';
 import { buildBrief, formatBrief } from './brief.js';
 import type { EventsPaths } from './events.js';
+import type { LogTimeDeps } from './timeTracking.js';
 import { createPipeMcpServer, mcpRunSyncCli } from './mcp.js';
 
 // Real protocol round-trip (InMemoryTransport.createLinkedPair — a real
@@ -78,12 +79,12 @@ describe('pipe-mcp', () => {
     assert.equal(result.content[0].text, expected);
   });
 
-  it('lists all seven tools', async () => {
+  it('lists all eight tools', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['brief', 'next', 'publish', 'pull', 'retry', 'status', 'task_log'],
+      ['brief', 'log_time', 'next', 'publish', 'pull', 'retry', 'status', 'task_log'],
     );
   });
 
@@ -198,6 +199,100 @@ describe('pipe-mcp', () => {
     const result = await c.callTool({ name: 'publish', arguments: { key: '402:6', yes: true, reportsUrl: 'https://example.com' } });
 
     assert.equal(result.isError, true);
+    assert.equal(calls.length, 0);
+  });
+});
+
+describe('pipe-mcp log_time', () => {
+  let dir: string;
+  let client: Client;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'harness-mcp-logtime-'));
+    writeFileSync(
+      makeFixturePaths(dir).reportsState,
+      JSON.stringify({ '402:6': { step: 'pulled', pushedAt: '2026-01-01T10:00:00.000Z', pulledAt: '2026-01-01T12:30:00.000Z' } }),
+    );
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function makeDeps(calls: unknown[][]): LogTimeDeps {
+    return {
+      loadGitlabConfig: () => ({ apiUrl: 'https://gitlab.example/api/v4', token: 't' }) as ReturnType<LogTimeDeps['loadGitlabConfig']>,
+      addSpentTime: (async (...args: unknown[]) => {
+        calls.push(args);
+      }) as LogTimeDeps['addSpentTime'],
+      confirm: async () => true,
+      isInteractive: false,
+    };
+  }
+
+  async function connect(logTimeDeps: LogTimeDeps) {
+    const server = createPipeMcpServer({ paths: makeFixturePaths(dir), logTimeDeps });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    return client;
+  }
+
+  const textOf = (result: object) => ((result as { content: { text: string }[] }).content)[0].text;
+
+  it('lists log_time with required yes and a key pattern', async () => {
+    const c = await connect(makeDeps([]));
+    const tool = (await c.listTools()).tools.find((t) => t.name === 'log_time');
+    const schema = tool?.inputSchema as { required?: string[]; properties: Record<string, { pattern?: string }> };
+    assert.ok(schema.required?.includes('yes'));
+    assert.equal(schema.properties.key.pattern, '^\\d+:\\d+$');
+  });
+
+  it('refuses without yes and never calls addSpentTime', async () => {
+    const calls: unknown[][] = [];
+    const c = await connect(makeDeps(calls));
+    const result = await c.callTool({ name: 'log_time', arguments: { key: '402:6', yes: false } });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /Refusing to .* without confirmation/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('dryRun describes the duration without logging', async () => {
+    const calls: unknown[][] = [];
+    const c = await connect(makeDeps(calls));
+    const result = await c.callTool({ name: 'log_time', arguments: { key: '402:6', yes: false, dryRun: true } });
+    assert.equal(result.isError, false);
+    assert.match(textOf(result), /^Would log .* spent on 402:6/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('yes:true calls addSpentTime with project, iid and duration', async () => {
+    const calls: unknown[][] = [];
+    const c = await connect(makeDeps(calls));
+    const result = await c.callTool({ name: 'log_time', arguments: { key: '402:6', yes: true } });
+    assert.equal(result.isError, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2], '402');
+    assert.equal(calls[0][3], '6');
+    assert.equal(typeof calls[0][4], 'string');
+    assert.match(textOf(result), /^Logged .* on 402:6/);
+  });
+
+  it('returns an error for a task with no finished cycle', async () => {
+    const calls: unknown[][] = [];
+    const c = await connect(makeDeps(calls));
+    const result = await c.callTool({ name: 'log_time', arguments: { key: '402:7', yes: true } });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /nothing to propose/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('rejects a malformed key at schema validation', async () => {
+    const calls: unknown[][] = [];
+    const c = await connect(makeDeps(calls));
+    const result = await c.callTool({ name: 'log_time', arguments: { key: '402:6/../x', yes: true } }).catch((e: Error) => e);
+    assert.ok(result instanceof Error || (result as { isError?: boolean }).isError === true);
     assert.equal(calls.length, 0);
   });
 });
