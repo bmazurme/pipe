@@ -46,6 +46,24 @@ const renderDialog = (onClose = vi.fn()) =>
     </Provider>,
   );
 
+// Picks run #3 and waits until the form shows it. On a loaded runner a click on the popup's option is sometimes swallowed (the list is
+// still being positioned), leaving the select empty and the later "Прикрепить" with nothing to send — so a choice that did not take
+// is simply made again; each try starts from whatever state the popup was left in (open or closed).
+async function chooseRun3(user: ReturnType<typeof userEvent.setup>) {
+  const box = () => screen.getByRole('combobox', { name: 'Запуск' });
+
+  await waitFor(
+    async () => {
+      if (/#3/.test(box().textContent ?? '')) return;
+
+      if (!screen.queryByText(/#3 · sonnet/)) await user.click(box());
+      await user.click(await screen.findByText(/#3 · sonnet/, undefined, { timeout: 1500 }));
+      await waitFor(() => expect(box()).toHaveTextContent(/#3/), { timeout: 1500 });
+    },
+    { timeout: 12_000, interval: 100 },
+  );
+}
+
 describe('AttachRunResultDialog', () => {
   it('lists only finished runs and posts the chosen one to the chat', async () => {
     const onClose = vi.fn();
@@ -53,10 +71,10 @@ describe('AttachRunResultDialog', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('combobox', { name: 'Запуск' }));
+    expect(await screen.findByText(/#3 · sonnet · готово/)).toBeTruthy();
     expect(screen.queryByText(/#4/)).toBeNull();
-    await user.click(await screen.findByText(/#3 · sonnet · готово/));
     // The click on "Прикрепить" must come after the choice has reached the form: on a slow runner it used to race the select and send nothing.
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Запуск' })).toHaveTextContent(/#3/));
+    await chooseRun3(user);
     await user.click(screen.getByRole('button', { name: 'Прикрепить' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 5000 });
@@ -81,8 +99,7 @@ describe('AttachRunResultDialog', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('combobox', { name: 'Запуск' }));
-    await user.click(await screen.findByText(/#3 · sonnet/));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Запуск' })).toHaveTextContent(/#3/));
+    await chooseRun3(user);
     await user.click(screen.getByRole('button', { name: 'Прикрепить' }));
 
     expect(await screen.findByText(/Не удалось прикрепить результат|уже/, undefined, { timeout: 5000 })).toBeInTheDocument();
