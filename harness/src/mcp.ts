@@ -12,6 +12,7 @@ import type { StatusPaths } from './collect.js';
 import { readTaskEvents, type EventsPaths } from './events.js';
 import { formatNextRecommendation, pickNextTask } from './next.js';
 import { buildReportData, formatBuiltReport } from './reportBuilder.js';
+import { DEFAULT_LOG_TIME_DEPS, logTime, type LogTimeDeps } from './timeTracking.js';
 
 // IMPROVEMENTS_HARNESS.md 5.1 — harness's already-CLI-independent pure
 // functions (collectReportData/deriveStatus/pickNextTask/runAction) wrapped
@@ -93,6 +94,10 @@ const MCP_ACTION_DEPS: ActionDeps = {
   isInteractive: false,
 };
 
+// Same reasoning as MCP_ACTION_DEPS: stdin is the JSON-RPC channel, so
+// logTime must never try to prompt — yes: false always refuses.
+const MCP_LOG_TIME_DEPS: LogTimeDeps = { ...DEFAULT_LOG_TIME_DEPS, isInteractive: false };
+
 function textResult(text: string, isError = false) {
   return { content: [{ type: 'text' as const, text }], isError };
 }
@@ -140,11 +145,13 @@ export interface PipeMcpServerOptions {
   paths?: Partial<StatusPaths>;
   eventsPaths?: EventsPaths;
   actionDeps?: ActionDeps;
+  logTimeDeps?: LogTimeDeps;
 }
 
 export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'pipe-mcp', version: '0.1.0' });
   const actionDeps = options.actionDeps ?? MCP_ACTION_DEPS;
+  const logTimeDeps = options.logTimeDeps ?? MCP_LOG_TIME_DEPS;
 
   server.registerTool(
     'status',
@@ -244,6 +251,25 @@ export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServ
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     (args) => runWriteAction('publish', args, actionDeps),
+  );
+
+  server.registerTool(
+    'log_time',
+    {
+      description:
+        "Log a pulled task's push→pull duration (from reports' subscription-state.json) to GitLab as spent time, like pipe-status --log-time. " +
+        'A write action — see the yes input. NOT idempotent: GitLab adds the time again on every call, so never call it twice for the same task.',
+      inputSchema: {
+        key: z.string().regex(/^\d+:\d+$/, 'Expected "projectId:iid" with numeric parts').describe('Task key, "projectId:iid" (e.g. "402:6")'),
+        yes: z.boolean().describe('Must be true to actually log the time — false (or omitted) always refuses, same as pipe-status without --yes'),
+        dryRun: z.boolean().optional().describe('Describe the time that would be logged instead of logging it'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ key, yes, dryRun }) => {
+      const { code, output } = await logTime(key, { yes, dryRun: dryRun ?? false, paths: options.paths }, logTimeDeps);
+      return textResult(output || '(no output)', code !== 0);
+    },
   );
 
   return server;
