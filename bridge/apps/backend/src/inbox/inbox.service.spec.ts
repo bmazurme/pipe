@@ -213,4 +213,40 @@ describe('InboxService', () => {
 
     expect(items.map((item) => item.id)).toEqual(['limit:live']);
   });
+
+  it('selects only the columns it shows, not logs, encrypted context or the analysis result', async () => {
+    const { service, runs, jobs } = setup({ runs: [run(1)] });
+
+    await service.list(7, NOW);
+
+    const runSelect = (runs.find.mock.calls[0][0] as { select: object }).select;
+    const failedQuery = jobs.find.mock.calls.find(
+      ([query]) => query.where.status === 'failed',
+    )?.[0] as unknown as { select: object };
+
+    expect(Object.keys(runSelect).sort()).toEqual(
+      [
+        'id',
+        'prNumber',
+        'issueTitle',
+        'prUrl',
+        'finishedAt',
+        'createdAt',
+      ].sort(),
+    );
+    expect(runSelect).not.toHaveProperty('result');
+    expect(Object.keys(failedQuery.select).sort()).toEqual(
+      [
+        'id',
+        'taskKey',
+        'model',
+        'errorMessage',
+        'updatedAt',
+        'createdAt',
+      ].sort(),
+    );
+    for (const column of ['logs', 'contextText', 'historyText']) {
+      expect(failedQuery.select).not.toHaveProperty(column);
+    }
+  });
 });
