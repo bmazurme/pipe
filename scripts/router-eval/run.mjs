@@ -9,6 +9,9 @@
 //   node scripts/router-eval/run.mjs report   [--out .router-eval]
 //   node scripts/router-eval/run.mjs replay   --url http://localhost:11434/v1 --model qwen2.5-coder:7b [--max-tier 1] [--limit 8]
 //                                             [--auth none|bearer --key …] [--timeout 900] [--only 1070,1031] [--out .router-eval]
+//   node scripts/router-eval/run.mjs grade    --dir <replay-… folder> [--repo-dir .] [--only 1070]
+//                                             run the real pull request's tests against the model's change (needs node_modules installed
+//                                             and the packages built in --repo-dir; any machine with the project, no model needed)
 //
 // `collect` (and `replay`, for the commits) needs the gh CLI logged in; `replay` also needs the worker built (npm run build) and runs in
 // a clone of the project, on the machine where the model is. `claude` runs `claude -p` (a few hundred tokens a task); `openai` talks to any
@@ -19,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { classifierPrompt, compare, heuristicClassify, parseClassification, policies, renderReport, truthOf } from './lib.mjs';
+import { filesInDiff, gradeTask, renderGrades } from './grade-lib.mjs';
 import { renderReplay, replayTask, selectTasks } from './replay-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -148,7 +152,7 @@ function report() {
   console.log(sections.join('\n'));
 }
 
-if (!existsSync(out) && command !== 'collect') {
+if (!existsSync(out) && command !== 'collect' && command !== 'grade') {
   console.error(`no ${out}/ — run "collect" first`);
   process.exit(1);
 }
@@ -267,10 +271,41 @@ async function replay() {
   console.log(text);
 }
 
-const commands = { collect, classify, report, replay };
+function grade() {
+  if (!flags.dir) throw new Error('grade needs --dir <the replay-… folder with the pr-N.model.diff files>');
+
+  const repoDir = flags['repo-dir'] ?? process.cwd();
+  const tasks = withMergeCommits(read('tasks.json'));
+  const only = flags.only ? new Set(flags.only.split(',').map(Number)) : null;
+  const workRoot = mkdtempSync(join(tmpdir(), 'router-grade-'));
+  const rows = [];
+
+  for (const name of readdirSync(flags.dir).filter((file) => /^pr-\d+\.model\.diff$/.test(file)).sort()) {
+    const pr = Number(/\d+/.exec(name)[0]);
+    const task = tasks.find((entry) => entry.pr === pr);
+
+    if (!task || (only && !only.has(pr))) continue;
+
+    process.stderr.write(`#${pr} ${task.title.slice(0, 70)} … `);
+
+    const modelDiff = readFileSync(join(flags.dir, name), 'utf8');
+    const result = gradeTask({ repo: repoDir, task, modelDiff, modelFiles: filesInDiff(modelDiff), workRoot });
+
+    process.stderr.write(`${result.status}\n`);
+    if (result.status === 'failed' || result.status === 'apply-failed') process.stderr.write(`${result.output.split('\n').map((line) => `      ${line.slice(0, 200)}`).join('\n')}\n`);
+    rows.push({ pr, grade: result });
+  }
+
+  const text = renderGrades(flags.dir.replace(/\/+$/, '').split('/').pop(), rows);
+
+  writeFileSync(join(flags.dir, 'grade.md'), `${text}\n`);
+  console.log(text);
+}
+
+const commands = { collect, classify, report, replay, grade };
 
 if (!commands[command]) {
-  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report | replay --url … --model …');
+  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report | replay --url … --model … | grade --dir …');
   process.exit(1);
 }
 
