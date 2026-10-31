@@ -7,13 +7,41 @@ import type { Worker } from './entities/worker.entity';
 export type WorkerEligibilityTarget = Pick<
   Worker,
   'name' | 'enabled' | 'models' | 'capabilities'
->;
+> &
+  Partial<Pick<Worker, 'id' | 'version'>>;
+
+// The first worker release that knows the 'custom' model. Older ones would take such a job and fail it as an unknown model,
+// so they are simply not given one. A worker reports its version on every settings fetch, so an upgrade is noticed within a poll.
+export const MIN_CUSTOM_WORKER_VERSION = '0.2.0';
+
+function versionParts(version: string): [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
+
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+export function workerSupportsCustom(
+  version: string | null | undefined,
+): boolean {
+  const have = version ? versionParts(version) : null;
+  const need = versionParts(MIN_CUSTOM_WORKER_VERSION);
+
+  if (!have || !need) return false;
+
+  for (let i = 0; i < 3; i++) {
+    if (have[i] !== need[i]) return have[i] > need[i];
+  }
+
+  return true;
+}
 
 export function whyWorkerCannotRun(
   worker: WorkerEligibilityTarget,
   job: {
     model: JobModel;
     requiredCapability?: WorkerCapability | null;
+    // For a custom job: the workers the key is limited to (null/absent = any).
+    allowedWorkerIds?: number[] | null;
   },
 ): string | null {
   if (!worker.enabled) {
@@ -21,6 +49,17 @@ export function whyWorkerCannotRun(
   }
   if (worker.models !== null && !worker.models.includes(job.model)) {
     return `Worker "${worker.name}" is not set up to run ${job.model}`;
+  }
+  if (job.model === 'custom') {
+    if (!workerSupportsCustom(worker.version)) {
+      return `Worker "${worker.name}" runs an old version (${worker.version ?? 'unknown'}) that does not know custom models — update it`;
+    }
+    if (
+      job.allowedWorkerIds?.length &&
+      (worker.id === undefined || !job.allowedWorkerIds.includes(worker.id))
+    ) {
+      return `The key of this model is not allowed on worker "${worker.name}"`;
+    }
   }
   if (
     job.requiredCapability != null &&
@@ -47,11 +86,14 @@ export function workerHasCapability(
 // $1..$5 with the worker id at $5; this pushes its own parameters. A legacy worker (null) takes only unpinned jobs
 // that need no capability.
 export function claimEligibilitySql(
-  worker: Pick<Worker, 'models' | 'capabilities'> | null,
+  worker:
+    | (Pick<Worker, 'models' | 'capabilities'> &
+        Partial<Pick<Worker, 'version'>>)
+    | null,
   params: unknown[],
 ): string {
   if (!worker) {
-    return ' AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL';
+    return ` AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL AND model::text <> 'custom'`;
   }
 
   let eligibility = ' AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5)';
@@ -60,6 +102,11 @@ export function claimEligibilitySql(
     params.push(worker.models);
     eligibility += ` AND model::text = ANY($${params.length}::text[])`;
   }
+
+  // A custom job goes only to a worker that knows the model and whose id the job's key allows ($5 is this worker).
+  eligibility += workerSupportsCustom(worker.version)
+    ? ` AND (model::text <> 'custom' OR "providerCredentialId" IN (SELECT id FROM provider_credentials WHERE "allowedWorkerIds" IS NULL OR $5 = ANY("allowedWorkerIds")))`
+    : ` AND model::text <> 'custom'`;
 
   params.push(worker.capabilities ?? []);
   eligibility += ` AND ("requiredCapability" IS NULL OR "requiredCapability" = ANY($${params.length}::text[]))`;

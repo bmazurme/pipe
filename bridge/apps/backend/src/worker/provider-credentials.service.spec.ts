@@ -51,6 +51,152 @@ describe('ProviderCredentialsService', () => {
     });
   });
 
+  describe('custom keys', () => {
+    const custom = {
+      provider: 'custom' as const,
+      name: 'Local Qwen',
+      baseUrl: 'http://192.168.50.35:11434/v1/',
+      model: 'qwen3-coder',
+    };
+
+    it('needs an address and a model, and a secret unless the scheme is none', async () => {
+      await expect(
+        service.create(7, { ...custom, apiKey: 'k', baseUrl: undefined }),
+      ).rejects.toThrow('address (baseUrl) and a model name');
+      await expect(
+        service.create(7, { ...custom, apiKey: 'k', model: ' ' }),
+      ).rejects.toThrow('address (baseUrl) and a model name');
+      await expect(service.create(7, custom)).rejects.toThrow(
+        'apiKey is required',
+      );
+      await expect(
+        service.create(7, { provider: 'gpt', name: 'x' }),
+      ).rejects.toThrow('apiKey is required');
+
+      await service.create(7, { ...custom, authScheme: 'none' });
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: '', authScheme: 'none' }),
+      );
+    });
+
+    it('stores the settings, trims the address, keeps only well-formed headers and an empty list as null', async () => {
+      await service.create(7, {
+        ...custom,
+        apiKey: 'k',
+        route: 'direct',
+        timeoutSec: 900,
+        supportsTools: false,
+        priceInPerMTok: 0.5,
+        extraHeaders: {
+          'x-folder-id': 'b1g',
+          'bad name': 'x',
+          'x-long': 'y'.repeat(501),
+        },
+        allowedWorkerIds: [],
+        preset: 'ollama',
+      });
+
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'custom',
+          baseUrl: 'http://192.168.50.35:11434/v1',
+          route: 'direct',
+          authScheme: 'bearer',
+          extraHeaders: { 'x-folder-id': 'b1g' },
+          timeoutSec: 900,
+          supportsTools: false,
+          priceInPerMTok: '0.5',
+          priceOutPerMTok: null,
+          allowedWorkerIds: null,
+          preset: 'ollama',
+        }),
+      );
+    });
+
+    it('ignores the custom-only settings on a named provider', async () => {
+      await service.create(7, {
+        provider: 'gpt',
+        name: 'g',
+        apiKey: 'k',
+        route: 'vpn',
+        allowedWorkerIds: [1],
+      });
+
+      expect(repository.save).toHaveBeenCalledWith({
+        userId: 7,
+        provider: 'gpt',
+        name: 'g',
+        apiKey: 'k',
+        baseUrl: null,
+        model: null,
+      });
+    });
+
+    it('hands the worker the whole description of the key it named — and never "the first custom key"', async () => {
+      repository.findOneBy.mockResolvedValue({
+        provider: 'custom',
+        apiKey: '',
+        baseUrl: 'http://x/v1',
+        model: 'm',
+        route: 'direct',
+        authScheme: 'none',
+        extraHeaders: { 'x-a': '1' },
+        timeoutSec: 600,
+        supportsTools: false,
+      });
+
+      await expect(service.resolveForJob(7, 'custom', 3)).resolves.toEqual({
+        apiKey: '',
+        baseUrl: 'http://x/v1',
+        model: 'm',
+        route: 'direct',
+        authScheme: 'none',
+        extraHeaders: { 'x-a': '1' },
+        timeoutSec: 600,
+        supportsTools: false,
+      });
+
+      repository.findOneBy.mockResolvedValue(null);
+      await expect(service.resolveForJob(7, 'custom', 99)).resolves.toBeNull();
+      await expect(
+        service.resolveForJob(7, 'custom', null),
+      ).resolves.toBeNull();
+      expect(repository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('lists a custom key without its secret: header names only, a price as a number', () => {
+      const dto = ProviderCredentialResponseDto.fromEntity({
+        id: 1,
+        provider: 'custom',
+        name: 'n',
+        apiKey: 'sk-secret-1234',
+        baseUrl: 'http://x/v1',
+        model: 'm',
+        route: 'vpn',
+        authScheme: 'api-key',
+        extraHeaders: { 'x-folder-id': 'b1g' },
+        timeoutSec: null,
+        supportsTools: true,
+        stream: false,
+        priceInPerMTok: '0.5000',
+        priceOutPerMTok: null,
+        preset: null,
+        allowedWorkerIds: [5],
+        createdAt: new Date(),
+      } as never);
+
+      expect(dto).toMatchObject({
+        keyHint: '…1234',
+        extraHeaderNames: ['x-folder-id'],
+        priceInPerMTok: 0.5,
+        priceOutPerMTok: null,
+        allowedWorkerIds: [5],
+      });
+      expect(JSON.stringify(dto)).not.toContain('sk-secret');
+      expect(JSON.stringify(dto)).not.toContain('b1g');
+    });
+  });
+
   describe('resolveForJob', () => {
     it('is null for a Claude model — it has its own credential', async () => {
       await expect(
@@ -127,6 +273,7 @@ describe('ProviderCredentialsService', () => {
       gpt: 2,
       deepseek: 0,
       qwen: 1,
+      custom: 0,
     });
   });
 

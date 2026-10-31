@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -75,8 +76,12 @@ export class WorkersController {
   @WorkerKeyAllowed()
   async config(
     @CurrentUser() currentUser: { id: number; workerId?: number },
+    @Headers('x-worker-version') workerVersion?: string,
   ): Promise<WorkerConfigResponseDto> {
-    const config = await this.workersService.configForPrincipal(currentUser);
+    const config = await this.workersService.configForPrincipal(
+      currentUser,
+      workerVersion,
+    );
 
     // The token to probe the plan limits with goes to the worker only while a probe is due, and is the one its jobs use.
     if (limitProbeWanted(config)) {
