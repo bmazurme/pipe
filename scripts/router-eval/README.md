@@ -21,3 +21,25 @@ node --test scripts/router-eval/*.test.mjs                              # the pu
 
 The report's last table is the one to decide by: for "send to a local model when the predicted tier is at most N", how many tasks
 that sends and how many of them were more than a file-only model could do.
+
+## replay — the same tasks on a real model
+
+`classify` only says how big a change *looks*. `replay` runs a model on past tasks and measures what it actually does: for each small
+task (default: truth tier 1, nothing to generate) it checks out the project as it was just before that task's pull request, gives the
+model the task as the worker would (the worker's own tool loop, `list_files`/`read_file`/`write_file`), and compares the model's
+edits with the merged change. It must run on the machine where the model is, in a clone of the project, with the worker built:
+
+```bash
+cd ~/pipe && git pull && npm install && npm run build --workspace=packages/protocol && npm run build --workspace=worker
+node scripts/router-eval/run.mjs collect --limit 40                       # once; needs `gh auth login`
+node scripts/router-eval/run.mjs replay --url http://localhost:11434/v1 --model qwen2.5-coder:7b
+node scripts/router-eval/run.mjs replay --url http://localhost:11434/v1 --model qwen2.5-coder:7b --max-tier 2 --limit 10   # then the bigger ones
+```
+
+Results go to `.router-eval/replay-<model>/`: `report.md` (the table), and per task `pr-N.model.diff` / `pr-N.pr.diff` /
+`pr-N.model.log.txt`. The automatic measure is deliberately cheap — "touched every file the real change touched, and every changed
+file still parses" — and is only a filter: whether a change is *right* is for you to judge from the two diffs.
+
+For Ollama give the model room first: its default context is 4096 tokens, which a task prompt plus a file or two can outgrow without any error
+(`OLLAMA_CONTEXT_LENGTH=16384 ollama serve`, or `num_ctx` in a Modelfile). A 7B model's quality on tool calls varies a lot with the
+model: `qwen2.5-coder` prints its calls as text (the worker accepts that), `qwen3:8b` and `llama3.1:8b` use real tool calls.

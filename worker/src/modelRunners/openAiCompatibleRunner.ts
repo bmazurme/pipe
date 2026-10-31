@@ -33,6 +33,10 @@ function sleepUnlessAborted(ms: number, signals: AbortSignal[]): Promise<void> {
 // turn, so one huge file (e.g. a lockfile) could overflow the context window.
 export const MAX_TOOL_RESULT_CHARS = 50_000;
 
+// A project can hold thousands of files: listing them all in one answer is tens of thousands of tokens, more than a local model's
+// context and a waste on a paid one. The list is cut here and the model is told how to narrow it.
+export const MAX_LIST_CHARS = 6_000;
+
 const SYSTEM_PROMPT = [
   "You are a coding agent working in a plain directory (not a git repository).",
   "Use the read_file/list_files/write_file tools to inspect and edit files as needed.",
@@ -45,9 +49,16 @@ const TOOLS = [
     type: "function",
     function: {
       name: "list_files",
-      description:
-        "List every file path in the working directory, recursively.",
-      parameters: { type: "object", properties: {} },
+      description: `List the file paths in the working directory, recursively, sorted. Output is capped at about ${MAX_LIST_CHARS} characters: pass a directory in path to list just that part.`,
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "A directory to list, relative to the working directory (default: the whole directory).",
+          },
+        },
+      },
     },
   },
   {
@@ -136,6 +147,29 @@ export function parseTextToolCall(content: string | null | undefined): { name: s
   }
 }
 
+// The file paths under `directory` (all of them when empty), sorted, cut after MAX_LIST_CHARS with a note that says how many were left.
+export function listFilesCapped(cwd: string, directory: string): string {
+  const base = directory.trim() === "" || directory.trim() === "." ? cwd : resolveInDir(cwd, directory.trim());
+  const paths = listFilesRecursively(base, cwd, EXCLUDED_RESULT_DIRS).sort();
+
+  if (paths.length === 0) return directory.trim() ? `(no files under ${directory.trim()})` : "(no files)";
+
+  const shown: string[] = [];
+  let size = 0;
+
+  for (const path of paths) {
+    if (size + path.length + 1 > MAX_LIST_CHARS && shown.length > 0) break;
+    shown.push(path);
+    size += path.length + 1;
+  }
+
+  const left = paths.length - shown.length;
+
+  return left === 0
+    ? shown.join("\n")
+    : `${shown.join("\n")}\n[${left} more of ${paths.length} files not shown: call list_files with a path to list one directory]`;
+}
+
 // Keeps log lines bounded — write_file's arguments carry the entire file
 // content, which would otherwise be copied in full into the job's log row.
 function truncate(text: string, max = 200): string {
@@ -151,7 +185,7 @@ export function executeTool(
 ): string {
   switch (name) {
     case "list_files": {
-      return listFilesRecursively(cwd, cwd, EXCLUDED_RESULT_DIRS).join("\n");
+      return listFilesCapped(cwd, typeof args.path === "string" ? args.path : "");
     }
     case "read_file": {
       const path = resolveInDir(cwd, String(args.path ?? ""));

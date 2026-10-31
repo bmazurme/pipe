@@ -7,8 +7,11 @@
 //   node scripts/router-eval/run.mjs classify --by heuristic|claude|openai [--model haiku] [--url http://localhost:11434/v1]
 //                                             [--auth none|bearer --key …] [--out .router-eval]
 //   node scripts/router-eval/run.mjs report   [--out .router-eval]
+//   node scripts/router-eval/run.mjs replay   --url http://localhost:11434/v1 --model qwen2.5-coder:7b [--max-tier 1] [--limit 8]
+//                                             [--auth none|bearer --key …] [--timeout 900] [--out .router-eval]
 //
-// `collect` needs the gh CLI logged in. `claude` runs `claude -p` (a few hundred tokens a task); `openai` talks to any
+// `collect` (and `replay`, for the commits) needs the gh CLI logged in; `replay` also needs the worker built (npm run build) and runs in
+// a clone of the project, on the machine where the model is. `claude` runs `claude -p` (a few hundred tokens a task); `openai` talks to any
 // OpenAI-compatible server, e.g. Ollama on mac-fusion.
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -16,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { classifierPrompt, compare, heuristicClassify, parseClassification, policies, renderReport, truthOf } from './lib.mjs';
+import { renderReplay, replayTask, selectTasks } from './replay-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = Object.fromEntries(
@@ -40,7 +44,7 @@ function collect() {
     if (tasks.length >= limit) break;
 
     try {
-      const pr = gh('pr', 'view', String(number), '--repo', repo, '--json', 'body,files');
+      const pr = gh('pr', 'view', String(number), '--repo', repo, '--json', 'body,files,mergeCommit');
       const issueNumber = /Closes #(\d+)/i.exec(pr.body ?? '')?.[1];
 
       if (!issueNumber || pr.files.length === 0) continue;
@@ -50,7 +54,7 @@ function collect() {
 
       if (!issue.body?.trim()) continue;
 
-      tasks.push({ pr: number, issue: Number(issueNumber), title: issue.title, body: issue.body, files, truth: truthOf(files) });
+      tasks.push({ pr: number, issue: Number(issueNumber), title: issue.title, body: issue.body, files, mergeCommit: pr.mergeCommit?.oid ?? null, truth: truthOf(files) });
     } catch (error) {
       console.error(`skipping #${number}: ${error.message.split('\n')[0]}`);
     }
@@ -149,10 +153,85 @@ if (!existsSync(out) && command !== 'collect') {
   process.exit(1);
 }
 
-const commands = { collect, classify, report };
+// The tasks' merge commits, for a tasks.json collected before they were kept.
+function withMergeCommits(tasks) {
+  let changed = false;
+
+  for (const task of tasks) {
+    if (task.mergeCommit) continue;
+
+    task.mergeCommit = gh('pr', 'view', String(task.pr), '--repo', repo, '--json', 'mergeCommit').mergeCommit?.oid ?? null;
+    changed = true;
+  }
+
+  if (changed) write('tasks.json', tasks);
+
+  return tasks;
+}
+
+async function replay() {
+  if (!flags.url || !flags.model) throw new Error('replay needs --url and --model');
+
+  const workerDist = new URL('../../worker/dist/', import.meta.url);
+  let runner;
+  let questions;
+  let ts;
+
+  try {
+    runner = await import(new URL('modelRunners/openAiCompatibleRunner.js', workerDist));
+    questions = await import(new URL('taskQuestions.js', workerDist));
+    ts = (await import('typescript')).default;
+  } catch (error) {
+    throw new Error(`build the worker first (npm install && npm run build --workspace=packages/protocol && npm run build --workspace=worker): ${error.message}`);
+  }
+
+  const repoDir = flags['repo-dir'] ?? process.cwd();
+  const picked = selectTasks(withMergeCommits(read('tasks.json')), { maxTier: Number(flags['max-tier'] ?? 1), limit: Number(flags.limit ?? 8) }).filter((task) => task.mergeCommit);
+  const dest = join(out, `replay-${flags.model.replace(/[^\w.-]/g, '_')}`);
+  const workRoot = mkdtempSync(join(tmpdir(), 'router-replay-'));
+  const options = { baseUrl: flags.url.replace(/\/+$/, ''), apiKey: flags.key ?? '', model: flags.model, authScheme: flags.auth === 'bearer' ? 'bearer' : 'none', route: 'direct' };
+  const timeoutMs = Number(flags.timeout ?? 900) * 1000;
+  const results = [];
+
+  mkdirSync(dest, { recursive: true });
+  console.error(`${picked.length} tasks of tier ≤ ${flags['max-tier'] ?? 1} → ${dest}`);
+
+  for (const task of picked) {
+    process.stderr.write(`#${task.pr} ${task.title.slice(0, 70)} … `);
+
+    const result = await replayTask({
+      repo: repoDir,
+      task,
+      workRoot,
+      ts,
+      wrap: questions.withQuestionsInstruction,
+      run: (dir, prompt) => runner.runOpenAiCompatible(dir, prompt, options, () => {}, undefined, timeoutMs),
+    });
+
+    writeFileSync(join(dest, `pr-${task.pr}.model.diff`), result.diff);
+    writeFileSync(join(dest, `pr-${task.pr}.model.log.txt`), result.output);
+
+    try {
+      writeFileSync(join(dest, `pr-${task.pr}.pr.diff`), execFileSync('gh', ['pr', 'diff', String(task.pr), '--repo', repo], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+    } catch {
+      // the real diff is a convenience for the reader, not part of the measure
+    }
+
+    process.stderr.write(`${result.seconds} s, ${result.changed.length} files${result.failure ? `, ${result.failure}` : ''}\n`);
+    results.push({ ...result, diff: undefined, output: undefined });
+  }
+
+  write(`${dest.split('/').pop()}/results.json`, results);
+  const text = renderReplay(flags.model, results);
+
+  writeFileSync(join(dest, 'report.md'), `${text}\n`);
+  console.log(text);
+}
+
+const commands = { collect, classify, report, replay };
 
 if (!commands[command]) {
-  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report');
+  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report | replay --url … --model …');
   process.exit(1);
 }
 

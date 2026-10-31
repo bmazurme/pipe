@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
@@ -7,6 +7,8 @@ import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { CancelledError } from "../cancelled.js";
 import {
   executeTool,
+  listFilesCapped,
+  MAX_LIST_CHARS,
   MAX_TOOL_RESULT_CHARS,
   parseTextToolCall,
   runOpenAiCompatible,
@@ -594,5 +596,65 @@ describe("usageReport", () => {
   it("prices only the side that has a price, and nothing without tokens", () => {
     assert.equal(usageReport({ input: 1_000_000, output: 1_000_000 }, { priceOutPerMTok: 3 })?.usage?.costUsd, 3);
     assert.equal(usageReport(null, { priceInPerMTok: 1 }), undefined);
+  });
+});
+
+describe("list_files on a big project", () => {
+  let dir: string;
+
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), "list-files-test-"));
+
+    for (const folder of ["a", "b"]) {
+      mkdirSync(join(dir, folder, "deep"), { recursive: true });
+      for (let i = 0; i < 400; i++) writeFileSync(join(dir, folder, "deep", `file-number-${String(i).padStart(4, "0")}.ts`), "");
+    }
+    writeFileSync(join(dir, "README.md"), "");
+    mkdirSync(join(dir, "node_modules", "x"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", "x", "index.js"), "");
+  });
+
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns a small project whole, sorted, without node_modules", () => {
+    const small = mkdtempSync(join(tmpdir(), "list-files-small-"));
+
+    writeFileSync(join(small, "b.ts"), "");
+    writeFileSync(join(small, "a.ts"), "");
+    mkdirSync(join(small, "node_modules"));
+    writeFileSync(join(small, "node_modules", "z.js"), "");
+
+    assert.equal(executeTool(small, "list_files", {}), "a.ts\nb.ts");
+    rmSync(small, { recursive: true, force: true });
+  });
+
+  it("cuts a huge listing to about MAX_LIST_CHARS and says how many files were left and how to narrow it", () => {
+    const listing = listFilesCapped(dir, "");
+
+    assert.ok(listing.length < MAX_LIST_CHARS + 300, String(listing.length));
+    assert.match(listing, /\[\d+ more of 801 files not shown: call list_files with a path/);
+    assert.ok(listing.startsWith("README.md\n"));
+  });
+
+  it("lists one directory when asked, in full if it fits, and says so when there is nothing", () => {
+    assert.equal(executeTool(dir, "list_files", { path: "a/deep" }).split("\n").length > 100, true);
+    assert.match(executeTool(dir, "list_files", { path: "a" }), /more of 400 files not shown|file-number-0000/);
+
+    const small = mkdtempSync(join(tmpdir(), "list-files-dir-"));
+
+    mkdirSync(join(small, "src"));
+    writeFileSync(join(small, "src", "x.ts"), "");
+    mkdirSync(join(small, "empty"));
+
+    assert.equal(executeTool(small, "list_files", { path: "src" }), "src/x.ts");
+    assert.equal(listFilesCapped(small, "./"), "src/x.ts");
+    assert.equal(listFilesCapped(small, "empty"), "(no files under empty)");
+    rmSync(small, { recursive: true, force: true });
+  });
+
+  it("never leaves the project", () => {
+    assert.throws(() => executeTool(dir, "list_files", { path: "../" }), /outside|escape|not allowed/i);
   });
 });
