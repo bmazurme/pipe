@@ -319,4 +319,24 @@ describe('ImproveService.listIssues GitHub cache', () => {
     await expect(service.listIssues()).resolves.toHaveLength(1);
     expect(github.listOpenIssues).toHaveBeenCalledTimes(2);
   });
+
+  it('serves the last good list with its date when GitHub fails, also on fresh=1', async () => {
+    const { service, github } = build();
+
+    await service.listIssues();
+    github.listOpenIssues.mockRejectedValue(new Error('github down'));
+
+    const onStale = jest.fn();
+    const issues = await service.listIssues(undefined, false, true, onStale);
+
+    expect(issues).toHaveLength(1);
+    expect(onStale).toHaveBeenCalledWith(expect.any(Number));
+  });
+
+  it('still fails when there was no good list', async () => {
+    const { service, github } = build();
+
+    github.listOpenIssues.mockRejectedValue(new Error('github down'));
+    await expect(service.listIssues()).rejects.toThrow('github down');
+  });
 });

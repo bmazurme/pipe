@@ -102,3 +102,65 @@ describe('SharedAsyncCache', () => {
     expect(await cache.get('a', build)).toBe('value');
   });
 });
+
+describe('SharedAsyncCache staleOnErrorMs', () => {
+  afterEach(() => jest.useRealTimers());
+
+  const make = (onStale = jest.fn()) =>
+    new SharedAsyncCache<string>({
+      ttlMs: 1000,
+      maxEntries: 4,
+      staleOnErrorMs: 10_000,
+      onStale,
+    });
+
+  it('serves the last good value when a rebuild fails within the window', async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const onStale = jest.fn();
+    const cache = make(onStale);
+
+    await cache.get('k', () => Promise.resolve('good'));
+    jest.setSystemTime(1_005_000);
+
+    const r = await cache.getWithMeta('k', () =>
+      Promise.reject(new Error('x')),
+    );
+
+    expect(r).toEqual({ value: 'good', staleSince: 1_000_000 });
+    expect(onStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects once the last good value is older than the window', async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const cache = make();
+
+    await cache.get('k', () => Promise.resolve('good'));
+    jest.setSystemTime(1_020_000);
+
+    await expect(
+      cache.get('k', () => Promise.reject(new Error('x'))),
+    ).rejects.toThrow('x');
+  });
+
+  it('keeps the fallback across clear()', async () => {
+    const cache = make();
+
+    await cache.get('k', () => Promise.resolve('good'));
+    cache.clear();
+
+    await expect(
+      cache.get('k', () => Promise.reject(new Error('x'))),
+    ).resolves.toBe('good');
+  });
+
+  it('does not fall back when the option is off', async () => {
+    const cache = new SharedAsyncCache<string>({ ttlMs: 1, maxEntries: 4 });
+
+    await cache.get('k', () => Promise.resolve('good'));
+    cache.clear();
+
+    await expect(
+      cache.get('k', () => Promise.reject(new Error('x'))),
+    ).rejects.toThrow('x');
+  });
+});
