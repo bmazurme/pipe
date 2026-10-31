@@ -94,6 +94,7 @@ const TOOLS = [
 
 interface ToolCall {
   id: string;
+  type?: "function";
   function: { name: string; arguments: string };
 }
 
@@ -102,6 +103,37 @@ interface ChatMessage {
   content?: string | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+}
+
+const TOOL_NAMES = new Set<string>(TOOLS.map((tool) => tool.function.name));
+
+// Some models (Qwen-coder variants on Ollama among them) print the call as text instead of returning `tool_calls`:
+// the whole reply is one JSON object `{"name": …, "arguments": {…}}`, bare, in a ``` fence or inside <tool_call> tags. Without
+// this the first such reply would end the job "successfully" with nothing done. Only a reply that is entirely such an object,
+// naming one of our tools, counts — prose that merely mentions a tool is never executed.
+export function parseTextToolCall(content: string | null | undefined): { name: string; arguments: string } | null {
+  if (!content) return null;
+
+  let text = content.trim();
+  const tagged = /^<tool_call>\s*([\s\S]*?)\s*<\/tool_call>$/.exec(text);
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
+
+  text = (tagged ?? fenced)?.[1] ?? text;
+
+  try {
+    const parsed: unknown = JSON.parse(text);
+
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const { name, arguments: args } = parsed as { name?: unknown; arguments?: unknown };
+
+    if (typeof name !== "string" || !TOOL_NAMES.has(name)) return null;
+    if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) return null;
+
+    return { name, arguments: JSON.stringify(args ?? {}) };
+  } catch {
+    return null;
+  }
 }
 
 // Keeps log lines bounded — write_file's arguments carry the entire file
@@ -183,6 +215,7 @@ export async function runOpenAiCompatible(
   ];
 
   let output = "";
+  let anyToolCall = false;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     if (signal?.aborted) throw new CancelledError();
@@ -248,6 +281,15 @@ export async function runOpenAiCompatible(
       throw new Error(`${options.model} returned no message`);
     }
 
+    // A call printed as text becomes a real one, so the rest of the loop (and the transcript the model sees) is the normal shape.
+    const textCall = message.tool_calls?.length ? null : parseTextToolCall(message.content);
+
+    if (textCall) {
+      message.content = null;
+      message.tool_calls = [{ id: `text-call-${turn}`, type: "function", function: textCall }];
+      onOutput(`(the model printed a call to ${textCall.name} as text — treated as a tool call)\n`);
+    }
+
     messages.push(message);
 
     if (message.content) {
@@ -257,8 +299,12 @@ export async function runOpenAiCompatible(
 
     const toolCalls = message.tool_calls ?? [];
     if (toolCalls.length === 0) {
+      if (!anyToolCall) {
+        onOutput("Warning: the model never called a tool, so no file was read or changed — it may not support function calling.\n");
+      }
       return { exitCode: 0, output };
     }
+    anyToolCall = true;
 
     for (const call of toolCalls) {
       let result: string;
