@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { ContextService } from '../context/context.service';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
 import { WorkerService } from '../worker/worker.service';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { ChatAttachmentsService } from './chat-attachments.service';
@@ -31,6 +32,10 @@ describe('ChatService context snapshot', () => {
         { provide: FILE_STORE, useValue: {} },
         { provide: ContextService, useValue: { findOwned } },
         { provide: WorkerService, useValue: { findOwned: jest.fn() } },
+        {
+          provide: ProviderCredentialsService,
+          useValue: { existsFor: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 
@@ -46,6 +51,7 @@ describe('ChatService context snapshot', () => {
     expect(save).toHaveBeenCalledWith({
       userId: 7,
       model: ChatModel.Sonnet,
+      providerCredentialId: null,
       title: null,
       contextName: 'Rules',
       contextText: 'Use tabs',

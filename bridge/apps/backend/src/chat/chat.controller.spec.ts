@@ -141,7 +141,12 @@ describe('ChatController updateChat', () => {
       },
     );
 
-    expect(chatService.changeModel).toHaveBeenCalledWith(1, 7, 'opus');
+    expect(chatService.changeModel).toHaveBeenCalledWith(
+      1,
+      7,
+      'opus',
+      undefined,
+    );
     expect(chatService.renameChat).not.toHaveBeenCalled();
   });
 

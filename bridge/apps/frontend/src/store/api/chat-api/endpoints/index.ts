@@ -1,11 +1,13 @@
 import chatApi from '..';
 import { deltaSince } from '../../incrementalSince';
 
-export type ChatModelId = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen';
+export type ChatModelId = 'sonnet' | 'opus' | 'haiku' | 'gpt' | 'deepseek' | 'qwen' | 'custom';
 
 export interface ChatMeta {
   id: number;
   model: ChatModelId;
+  /** The stored key a 'custom' chat runs on; null for every other model. */
+  providerCredentialId?: number | null;
   title: string | null;
   // Name of the saved Context attached at creation; the text itself never reaches the browser.
   contextName?: string | null;
@@ -52,7 +54,7 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: (args) => (args && args.q ? { url: 'chat/chats', params: { q: args.q } } : 'chat/chats'),
       providesTags: ['Chat'],
     }),
-    createChat: builder.mutation<ChatMeta, { model: ChatModelId; contextId?: number }>({
+    createChat: builder.mutation<ChatMeta, { model: ChatModelId; contextId?: number; providerCredentialId?: number }>({
       query: (body) => ({ url: 'chat/chats', method: 'POST', body }),
       invalidatesTags: ['Chat'],
     }),
@@ -69,8 +71,9 @@ const chatApiEndpoints = chatApi.injectEndpoints({
       query: ({ id, title }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { title } }),
       invalidatesTags: ['Chat'],
     }),
-    updateChatModel: builder.mutation<ChatMeta, { id: number; model: ChatModelId }>({
-      query: ({ id, model }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body: { model } }),
+    // `model` and/or `providerCredentialId`: a key alone moves a custom chat to another server.
+    updateChatModel: builder.mutation<ChatMeta, { id: number; model?: ChatModelId; providerCredentialId?: number }>({
+      query: ({ id, ...body }) => ({ url: `chat/chats/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['Chat'],
     }),
     // Polled every second while a reply is pending (ChatPage), so the whole thread would be

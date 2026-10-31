@@ -913,6 +913,7 @@ describe('Worker fleet (e2e)', () => {
         extraHeaders: { 'x-folder-id': 'b1g' },
         timeoutSec: null,
         supportsTools: true,
+        stream: false,
       });
     });
 
@@ -935,6 +936,58 @@ describe('Worker fleet (e2e)', () => {
           targetWorkerId: b.worker.id,
         })
         .expect(400);
+    });
+
+    it('a chat on a custom model: needs a key, and its turn goes only to a worker the key allows — with the key’s description', async () => {
+      const { accessToken } = await owner();
+      const a = await enroll((await addWorker(accessToken, 'mac')).enrollCode);
+      const b = await enroll((await addWorker(accessToken, 'pi')).enrollCode);
+      const key = await createKey(accessToken, {
+        allowedWorkerIds: [a.workerId],
+        stream: true,
+      }).expect(201);
+      const chatClaim = (token: string) =>
+        request(server())
+          .post('/api/v1/chat/turns/claim')
+          .set('Authorization', `Bearer ${token}`)
+          .send({});
+
+      await as(request(server()).post('/api/v1/chat/chats'), accessToken)
+        .send({ model: 'custom' })
+        .expect(400);
+
+      const chat = await as(
+        request(server()).post('/api/v1/chat/chats'),
+        accessToken,
+      )
+        .send({ model: 'custom', providerCredentialId: key.body.id })
+        .expect(201);
+
+      expect(chat.body).toMatchObject({
+        model: 'custom',
+        providerCredentialId: key.body.id,
+      });
+
+      await as(
+        request(server()).post(`/api/v1/chat/chats/${chat.body.id}/messages`),
+        accessToken,
+      )
+        .send({ content: 'привет' })
+        .expect(201);
+
+      await chatClaim(b.key).expect(204);
+
+      const taken = await chatClaim(a.key).expect(200);
+
+      expect(taken.body).toMatchObject({
+        model: 'custom',
+        provider: {
+          baseUrl: 'http://192.168.50.35:11434/v1',
+          model: 'qwen3-coder',
+          authScheme: 'none',
+          stream: true,
+        },
+      });
     });
 
     it('an older worker is given nothing custom until it reports a newer version', async () => {

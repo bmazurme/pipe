@@ -14,6 +14,8 @@ import { ChatAttachmentsService } from './chat-attachments.service';
 import { ContextService } from '../context/context.service';
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { describeRun, FINISHED_STATUSES } from '../worker/run-history';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
+import { claimCustomChatSql } from '../worker/worker-eligibility';
 import { WorkerService } from '../worker/worker.service';
 import { ClaimedTurnHistoryEntry } from './dto/claimed-turn-response.dto';
 import { CreateChatDto } from './dto/create-chat.dto';
@@ -36,6 +38,7 @@ const LIST_COLUMNS = [
   'id',
   'userId',
   'model',
+  'providerCredentialId',
   'title',
   'contextName',
   'createdAt',
@@ -51,10 +54,36 @@ export class ChatService {
     private readonly messageRepository: Repository<ChatMessage>,
     private readonly contextService: ContextService,
     private readonly workerService: WorkerService,
+    private readonly providerCredentials: ProviderCredentialsService,
     private readonly chatAttachments: ChatAttachmentsService,
   ) {}
 
   private readonly logger = new Logger(ChatService.name);
+
+  // A custom chat names the stored key of the server it runs on, which must be the owner's own custom key; any other model has none.
+  private async customKeyFor(
+    userId: number,
+    model: ChatModel,
+    providerCredentialId: number | undefined | null,
+  ): Promise<number | null> {
+    if (model !== ChatModel.Custom) return null;
+
+    if (
+      providerCredentialId === undefined ||
+      providerCredentialId === null ||
+      !(await this.providerCredentials.existsFor(
+        providerCredentialId,
+        userId,
+        'custom',
+      ))
+    ) {
+      throw new BadRequestException(
+        'Для своей модели нужен ключ сервера, на котором она работает',
+      );
+    }
+
+    return providerCredentialId;
+  }
 
   async createChat(userId: number, dto: CreateChatDto): Promise<Chat> {
     // Snapshot, like a Worker job: the chat keeps its own copy of the text.
@@ -63,9 +92,16 @@ export class ChatService {
         ? null
         : await this.contextService.findOwned(dto.contextId, userId);
 
+    const providerCredentialId = await this.customKeyFor(
+      userId,
+      dto.model,
+      dto.providerCredentialId,
+    );
+
     return this.chatRepository.save({
       userId,
       model: dto.model,
+      providerCredentialId,
       title: null,
       ...(context
         ? { contextName: context.name, contextText: context.content }
@@ -167,9 +203,12 @@ export class ChatService {
   async changeModel(
     id: number,
     userId: number,
-    model: ChatModel,
+    requestedModel: ChatModel | undefined,
+    providerCredentialId?: number,
   ): Promise<Chat> {
     const chat = await this.findOwnedChat(id, userId);
+    // A key sent alone moves a custom chat to another server; it means nothing for any other model.
+    const model = requestedModel ?? chat.model;
 
     const inFlight = await this.messageRepository.count({
       where: {
@@ -197,6 +236,12 @@ export class ChatService {
       }
     }
 
+    chat.providerCredentialId = await this.customKeyFor(
+      userId,
+      model,
+      providerCredentialId ??
+        (model === chat.model ? chat.providerCredentialId : undefined),
+    );
     chat.model = model;
     return this.chatRepository.save(chat);
   }
@@ -312,7 +357,12 @@ export class ChatService {
   // Atomically takes the oldest pending assistant message across all of
   // this account's chats — same FOR UPDATE SKIP LOCKED pattern as
   // WorkerService.claim, so two worker processes never claim the same turn.
-  async claim(userId: number): Promise<{
+  // `worker` is the one asking (null: a legacy worker on a personal API key). A custom chat goes only to a managed worker that knows
+  // the model and is allowed by the chat's key — the same rule as for a job (worker-eligibility.ts).
+  async claim(
+    userId: number,
+    worker: { id: number; version: string | null } | null = null,
+  ): Promise<{
     message: ChatMessage;
     chat: Chat;
     history: ClaimedTurnHistoryEntry[];
@@ -323,17 +373,23 @@ export class ChatService {
     // Indexing straight into the result ([0]?.id) silently reads the rows
     // array itself as if it were the first row, always finding no `.id` and
     // reporting "nothing to claim" even though the UPDATE just committed.
+    const params: unknown[] = [
+      ChatMessageStatus.Running,
+      ChatMessageStatus.Pending,
+      userId,
+    ];
+    const eligibility = claimCustomChatSql(worker, params);
     const [rows]: [{ id: number }[], number] =
       await this.messageRepository.query(
         `UPDATE chat_messages SET status = $1, "updatedAt" = now()
        WHERE id = (
          SELECT cm.id FROM chat_messages cm
          INNER JOIN chats c ON c.id = cm."chatId"
-         WHERE cm.status = $2 AND c."userId" = $3
+         WHERE cm.status = $2 AND c."userId" = $3${eligibility}
          ORDER BY cm."createdAt" ASC LIMIT 1 FOR UPDATE OF cm SKIP LOCKED
        )
        RETURNING id`,
-        [ChatMessageStatus.Running, ChatMessageStatus.Pending, userId],
+        params,
       );
 
     const claimedId = rows[0]?.id;

@@ -2,13 +2,56 @@ import type { ChatHistoryEntry } from '../chatBridgeClient.js';
 import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { CHAT_TOOLS_SYSTEM_PROMPT, type ChatToolset } from '../chatTools.js';
 import { withContext } from '../taskContext.js';
+import type { StreamDelta } from '../modelRunners/claudeUsage.js';
+import { createProgressReporter } from './progress.js';
 import { completionHeaders, completionTimeoutMs, routeFor } from '../openAiRequest.js';
 import { resolveDispatcher } from '../proxyAgent.js';
 import type { OpenAiCompatibleConfig } from '../providers.js';
 
 // Same bound as modelRunners/openAiCompatibleRunner.ts (openAiRequest.ts): generous since a real completion can take minutes, but
 // still bounded so a hung provider doesn't block the chat turn forever.
-export type OpenAiCompatibleChatOptions = Pick<OpenAiCompatibleConfig, 'baseUrl' | 'apiKey' | 'model' | 'route' | 'authScheme' | 'extraHeaders' | 'timeoutSec'>;
+export type OpenAiCompatibleChatOptions = Pick<
+  OpenAiCompatibleConfig,
+  'baseUrl' | 'apiKey' | 'model' | 'route' | 'authScheme' | 'extraHeaders' | 'timeoutSec' | 'stream'
+>;
+
+// Reads a server-sent-events stream of chat completion chunks (`data: {...}` lines, `data: [DONE]` at the end) and reports each
+// piece of text as it arrives: the answer (`delta.content`) and, for servers that send it, the reasoning
+// (`delta.reasoning_content`). Lines can be split across network chunks; comments, blank lines and chunks that are not JSON are skipped.
+export async function readCompletionStream(body: ReadableStream<Uint8Array>, onDelta: (delta: StreamDelta) => void): Promise<void> {
+  const decoder = new TextDecoder();
+  let buffered = '';
+
+  const handleLine = (raw: string) => {
+    const line = raw.trim();
+
+    if (!line.startsWith('data:')) return;
+
+    const payload = line.slice(5).trim();
+
+    if (payload === '' || payload === '[DONE]') return;
+
+    try {
+      const delta = (JSON.parse(payload) as { choices?: { delta?: { content?: string | null; reasoning_content?: string | null } }[] }).choices?.[0]?.delta;
+
+      if (delta?.reasoning_content) onDelta({ kind: 'thinking', text: delta.reasoning_content });
+      if (delta?.content) onDelta({ kind: 'text', text: delta.content });
+    } catch {
+      // a keep-alive or a chunk this reader does not know: nothing to show
+    }
+  };
+
+  for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+    buffered += decoder.decode(chunk, { stream: true });
+
+    const lines = buffered.split('\n');
+
+    buffered = lines.pop() ?? '';
+    lines.forEach(handleLine);
+  }
+
+  handleLine(buffered + decoder.decode());
+}
 
 // A chat turn can call a few bridge-native read tools (see chatTools.ts) — a short
 // loop, far below the job runner's 20 turns: a question about jobs needs one or
@@ -33,6 +76,8 @@ export async function openAiCompatibleChat(
   toolset?: ChatToolset | null,
   // Background text from the Context attached to the chat; absent or blank: the system message is unchanged.
   context?: string | null,
+  // Hears the answer as the model writes it (streaming keys only); used to show progress in the chat.
+  onProgress?: (text: string) => void | Promise<void>,
 ): Promise<string> {
   const instructions = toolset ? `${CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION;
   const contextBlock = withContext('', context).trim();
@@ -52,12 +97,15 @@ export async function openAiCompatibleChat(
     // After the last allowed round the tools are withheld, forcing a plain answer.
     const withTools = toolset && round < MAX_TOOL_ROUNDS;
 
+    // Only a plain answer is streamed: a round that may call tools needs the whole message to see the calls.
+    const streaming = Boolean(options.stream && onProgress && !withTools);
     const response = await fetch(`${options.baseUrl}/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         model: options.model,
         messages,
+        ...(streaming ? { stream: true } : {}),
         ...(withTools ? { tools: toolset.definitions, tool_choice: 'auto' } : {}),
       }),
       // `dispatcher` is a Node/undici-specific fetch extension not in the
@@ -68,6 +116,25 @@ export async function openAiCompatibleChat(
 
     if (!response.ok) {
       throw new Error(`${options.model} API error (${response.status}): ${await response.text()}`);
+    }
+
+    // A server that ignores `stream` answers with plain JSON: handled below like any other reply.
+    if (streaming && response.body && (response.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const progress = createProgressReporter(onProgress as (text: string) => void | Promise<void>);
+      let answer = '';
+
+      try {
+        await readCompletionStream(response.body, (delta) => {
+          if (delta.kind === 'text') answer += delta.text;
+          progress.push(delta);
+        });
+      } finally {
+        progress.stop();
+      }
+
+      if (!answer.trim()) throw new Error(`${options.model} returned an empty reply`);
+
+      return answer;
     }
 
     const data = (await response.json()) as {

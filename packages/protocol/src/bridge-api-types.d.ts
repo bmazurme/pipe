@@ -2604,7 +2604,8 @@ export interface components {
         ChatResponseDto: {
             id: number;
             /** @enum {string} */
-            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
+            providerCredentialId: number | null;
             title: string | null;
             contextName: string | null;
             /** Format: date-time */
@@ -2614,13 +2615,15 @@ export interface components {
         };
         CreateChatDto: {
             /** @enum {string} */
-            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
+            providerCredentialId?: number;
             contextId?: number;
         };
         UpdateChatDto: {
             title?: string;
             /** @enum {string} */
-            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen";
+            model?: "sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom";
+            providerCredentialId?: number;
         };
         AttachRunResultDto: {
             jobId: number;

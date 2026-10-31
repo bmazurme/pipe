@@ -113,3 +113,19 @@ export function claimEligibilitySql(
 
   return eligibility;
 }
+
+// The same rule for a chat turn: the SQL clause (starting with " AND") over `chats c`, which a claiming worker adds to the
+// pending-turn query. `params` already holds $1..$3; a worker that may take custom chats adds its id as $4. A legacy worker (null)
+// and a worker too old to know the model never get a custom chat; otherwise only those whose key allows this worker.
+export function claimCustomChatSql(
+  worker: { id: number; version: string | null } | null,
+  params: unknown[],
+): string {
+  if (!worker || !workerSupportsCustom(worker.version)) {
+    return ` AND c.model::text <> 'custom'`;
+  }
+
+  params.push(worker.id);
+
+  return ` AND (c.model::text <> 'custom' OR c."providerCredentialId" IN (SELECT id FROM provider_credentials WHERE "allowedWorkerIds" IS NULL OR $${params.length} = ANY("allowedWorkerIds")))`;
+}

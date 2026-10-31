@@ -39,7 +39,7 @@ export async function processChatTurn(
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
           reports.push(client.reportClaudeUsage(report));
         }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text), turn.context, chatTimeoutSec * 1000, options.shutdown)
-      : { text: await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context), reasoning: null };
+      : { text: await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context, (text) => client.reportProgress(turn.messageId, text)), reasoning: null };
 
     await Promise.all(reports);
     await client.complete(turn.messageId, clipReply(text), reasoning ? clipReasoning(reasoning) : null);

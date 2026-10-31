@@ -16,6 +16,8 @@ interface UseChatComposerParams {
   setActiveChatId: (id: number | null) => void;
   newChatModel: ChatModelId;
   newChatContextId: number | undefined;
+  /** The stored key of the server a new 'custom' chat runs on. */
+  newChatProviderCredentialId?: number;
   hasPendingReply: boolean;
   lastReplyStatus: string | undefined;
   messagesLoaded: boolean;
@@ -27,6 +29,7 @@ export function useChatComposer({
   setActiveChatId,
   newChatModel,
   newChatContextId,
+  newChatProviderCredentialId,
   hasPendingReply,
   lastReplyStatus,
   messagesLoaded,
@@ -48,11 +51,15 @@ export function useChatComposer({
   const ensureChat = useCallback(async (): Promise<number> => {
     if (activeChatId !== null) return activeChatId;
 
-    const chat = await createChat({ model: newChatModel, contextId: newChatContextId }).unwrap();
+    const chat = await createChat({
+      model: newChatModel,
+      contextId: newChatContextId,
+      ...(newChatModel === 'custom' && newChatProviderCredentialId !== undefined ? { providerCredentialId: newChatProviderCredentialId } : {}),
+    }).unwrap();
     setActiveChatId(chat.id);
 
     return chat.id;
-  }, [activeChatId, createChat, newChatModel, newChatContextId, setActiveChatId]);
+  }, [activeChatId, createChat, newChatModel, newChatContextId, newChatProviderCredentialId, setActiveChatId]);
 
   const attachFiles = async (files: File[]) => {
     setChatError(null);

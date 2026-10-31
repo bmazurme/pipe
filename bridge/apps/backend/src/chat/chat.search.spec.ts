@@ -2,6 +2,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 
 import { ContextService } from '../context/context.service';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
 import { WorkerService } from '../worker/worker.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
@@ -33,6 +34,10 @@ describe('ChatService.findAllByUser search', () => {
         { provide: getRepositoryToken(ChatMessage), useValue: {} },
         { provide: ContextService, useValue: {} },
         { provide: WorkerService, useValue: {} },
+        {
+          provide: ProviderCredentialsService,
+          useValue: { existsFor: jest.fn().mockResolvedValue(true) },
+        },
         { provide: ChatAttachmentsService, useValue: {} },
         { provide: getRepositoryToken(ChatAttachment), useValue: {} },
       ],

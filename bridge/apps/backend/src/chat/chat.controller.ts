@@ -76,13 +76,22 @@ export class ChatController {
     @Body() dto: UpdateChatDto,
     @CurrentUser() currentUser: { id: number },
   ): Promise<ChatResponseDto> {
-    if (dto.title === undefined && dto.model === undefined) {
+    if (
+      dto.title === undefined &&
+      dto.model === undefined &&
+      dto.providerCredentialId === undefined
+    ) {
       throw new BadRequestException('Нужно указать название или модель');
     }
 
     let chat: Chat | undefined;
-    if (dto.model !== undefined) {
-      chat = await this.chatService.changeModel(id, currentUser.id, dto.model);
+    if (dto.model !== undefined || dto.providerCredentialId !== undefined) {
+      chat = await this.chatService.changeModel(
+        id,
+        currentUser.id,
+        dto.model,
+        dto.providerCredentialId,
+      );
     }
     if (dto.title !== undefined) {
       chat = await this.chatService.renameChat(id, currentUser.id, dto.title);

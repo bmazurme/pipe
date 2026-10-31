@@ -143,6 +143,7 @@ describe('ProviderCredentialsService', () => {
         extraHeaders: { 'x-a': '1' },
         timeoutSec: 600,
         supportsTools: false,
+        stream: true,
       });
 
       await expect(service.resolveForJob(7, 'custom', 3)).resolves.toEqual({
@@ -154,6 +155,7 @@ describe('ProviderCredentialsService', () => {
         extraHeaders: { 'x-a': '1' },
         timeoutSec: 600,
         supportsTools: false,
+        stream: true,
       });
 
       repository.findOneBy.mockResolvedValue(null);
