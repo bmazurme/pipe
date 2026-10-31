@@ -18,6 +18,10 @@ export interface SubscriptionManifest extends BaseManifest {
   issueIid: string;
   issueTitle: string;
   issueDescription: string;
+  // The issue's comments, oldest first (anonymized like the description); absent when it had none or the parcel is older.
+  issueComments?: { author: string; createdAt: string; body: string }[];
+  // A migration task: the current repository is under sourceRoot, the one the project moves to under targetRoot (see reports' Subscription).
+  migration?: { name?: string; sourceRoot: string; targetRoot: string };
   projectId: number;
   branch: string;
   createdAt: string;
