@@ -58,6 +58,16 @@ export interface LabSchedule {
 
 export type LabScheduleInput = Omit<LabSchedule, 'id' | 'lastRunAt' | 'lastResult'>;
 
+/** What the model router decided for an 'auto' run, and why — in words, for the owner. */
+export interface LabRouting {
+  model: string;
+  source: 'rule' | 'classifier' | 'fallback' | 'executor';
+  reason: string;
+  tier?: number;
+  needsGenerated?: boolean;
+  rule?: string;
+}
+
 export interface LabRun {
   id: number;
   projectId: number | null;
@@ -66,7 +76,10 @@ export interface LabRun {
   trigger: 'manual' | 'schedule';
   title: string;
   task: string;
+  /** The model the job really ran on; for an 'auto' run, what the router chose once it had. */
   model: string;
+  /** Set on an 'auto' run once the router has chosen. */
+  routing?: LabRouting | null;
   executor: LabExecutor;
   status: LabRunStatus;
   jobId: number | null;
@@ -107,6 +120,20 @@ export interface LabPrRefresh {
 
 function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
+}
+
+export interface RouterRule {
+  name: string;
+  /** Words or phrases, one per line or separated by commas; a task that mentions any of them goes to this model. */
+  keywords: string;
+  model: string;
+  enabled: boolean;
+}
+
+export interface RouterSettings {
+  /** The model for each size tier 1–4: a Claude model, a named provider, or `custom:<key id>`. */
+  tierModels: Record<'1' | '2' | '3' | '4', string>;
+  rules: RouterRule[];
 }
 
 const labApiEndpoints = labApi.injectEndpoints({
@@ -179,6 +206,21 @@ const labApiEndpoints = labApi.injectEndpoints({
       invalidatesTags: ['LabRuns'],
       transformErrorResponse: errorMessage('Не удалось повторить публикацию'),
     }),
+    getRouterSettings: builder.query<RouterSettings, void>({
+      query: () => 'router/settings',
+      providesTags: ['RouterSettings'],
+      transformErrorResponse: errorMessage('Не удалось загрузить настройки маршрутизатора'),
+    }),
+    saveRouterSettings: builder.mutation<RouterSettings, RouterSettings>({
+      query: (body) => ({ url: 'router/settings', method: 'PUT', body }),
+      invalidatesTags: ['RouterSettings'],
+      transformErrorResponse: errorMessage('Не удалось сохранить настройки'),
+    }),
+    // What "Авто" would pick for a task — without starting anything (costs one short question to Haiku unless a rule decides by words).
+    previewRouting: builder.mutation<LabRouting, { task: string; executor: LabExecutor }>({
+      query: (body) => ({ url: 'router/preview', method: 'POST', body }),
+      transformErrorResponse: errorMessage('Не удалось определить модель'),
+    }),
     refreshLabPrs: builder.mutation<LabPrRefresh, void>({
       query: () => ({ url: 'lab/runs/refresh-prs', method: 'POST' }),
       invalidatesTags: ['LabRuns'],
@@ -203,6 +245,9 @@ export const {
   useCancelLabRunMutation,
   useRetryLabPublishMutation,
   useRefreshLabPrsMutation,
+  useGetRouterSettingsQuery,
+  useSaveRouterSettingsMutation,
+  usePreviewRoutingMutation,
 } = labApiEndpoints;
 
 export default labApiEndpoints;

@@ -49,7 +49,7 @@ interface Form {
 const DEFAULT_FORM: Form = { projectId: '', name: 'Ночной запуск', enabled: true, time: '02:00', timezone: 'Europe/Moscow', weekdays: ALL_WEEKDAYS, onlyOnNewCommits: false, model: 'sonnet', executor: 'any', task: '', contextId: '' };
 
 export function SchedulesTab() {
-  const { options: modelOptions, label: modelLabel } = useModelOptions();
+  const { options: modelOptions, label: modelLabel } = useModelOptions(true);
   const { data: schedules, isLoading, isError } = useListLabSchedulesQuery();
   const { data: projects } = useListLabProjectsQuery();
   const { data: contexts } = useListContextsQuery();

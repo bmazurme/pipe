@@ -14,7 +14,7 @@ import {
   PREPARE_ABANDONED_ERROR,
   preparingStaleMs,
   isClaudeModelName,
-  requireImproveModel,
+  requireLabModel,
 } from '../improve/improve-shared';
 import { readZipball } from '../common/zip';
 import { launchIssueJob } from '../improve/issue-job';
@@ -39,6 +39,7 @@ import {
   ZIP_TOTAL_MS,
 } from './lab-github';
 import { LabProject } from './entities/lab-project.entity';
+import { RouterService } from '../router/router.service';
 import { requiredCapabilityOf, type LabExecutor } from './lab-executor';
 import { LabProjectsService } from './lab-projects.service';
 import { LabPublishService } from './lab-publish.service';
@@ -112,6 +113,7 @@ export class LabRunsService {
     private readonly storage: StorageService,
     private readonly contexts: ContextService,
     private readonly publisher: LabPublishService,
+    private readonly router: RouterService,
   ) {}
 
   list(userId: number, limit = 50, projectId?: number): Promise<LabRun[]> {
@@ -178,7 +180,7 @@ export class LabRunsService {
     trigger: LabTrigger = 'manual',
     scheduleId: number | null = null,
   ): Promise<{ run: LabRun; prepared: Promise<LabRun> }> {
-    requireImproveModel(input.model);
+    requireLabModel(input.model);
 
     const project = await this.projects.findOwned(input.projectId, userId);
 
@@ -207,7 +209,12 @@ export class LabRunsService {
     const capability = requiredCapabilityOf(executor);
 
     // Fusion is driven from the model's shell (fusionctl); only the claude CLI has one.
-    if (capability && !isClaudeModelName(input.model)) {
+    // ('auto' is the router's to decide: it keeps Fusion on a Claude model.)
+    if (
+      capability &&
+      input.model !== 'auto' &&
+      !isClaudeModelName(input.model)
+    ) {
       throw new BadRequestException(
         `${WORKER_CAPABILITY_LABEL[capability]} требует модель Claude (Sonnet, Opus или Haiku) — ей нужна оболочка`,
       );
@@ -292,6 +299,20 @@ export class LabRunsService {
       );
       const snapshot = await this.snapshotFor(project, baseSha);
       const baseline = snapshot.baseline;
+      // 'auto': the router says which model, and why (a few seconds of Haiku, or none when a rule decides by words).
+      const { model, routing } = await this.router.resolve({
+        userId,
+        model: input.model,
+        title,
+        task: input.task,
+        executor: run.executor,
+      });
+
+      if (routing) {
+        run.model = model;
+        run.routing = routing;
+      }
+
       const { job } = await launchIssueJob(
         { storage: this.storage, workers: this.workers },
         {
@@ -307,7 +328,7 @@ export class LabRunsService {
           baseline,
           fileName: `lab-${project.id}.subscription.zip`,
           taskKey: `lab:${project.id}`,
-          model: input.model,
+          model,
           contextId: input.contextId,
           requiredCapability: requiredCapabilityOf(run.executor) ?? undefined,
         },
