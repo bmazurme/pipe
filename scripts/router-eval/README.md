@@ -16,7 +16,7 @@ node scripts/router-eval/run.mjs classify --by heuristic
 node scripts/router-eval/run.mjs classify --by claude --model haiku     # ~3 minutes, a few hundred tokens a task
 node scripts/router-eval/run.mjs classify --by openai --url http://localhost:11434/v1 --model qwen3:8b
 node scripts/router-eval/run.mjs report                                 # tiers, confusion matrix, and the threshold table
-node --test scripts/router-eval/                                        # the pure parts
+node --test scripts/router-eval/*.test.mjs                              # the pure parts
 ```
 
 The report's last table is the one to decide by: for "send to a local model when the predicted tier is at most N", how many tasks
