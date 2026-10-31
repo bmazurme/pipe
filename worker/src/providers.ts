@@ -75,6 +75,9 @@ export interface OpenAiCompatibleConfig {
   supportsTools?: boolean;
   /** Stream a chat answer as the model writes it (the chat shows it growing). */
   stream?: boolean;
+  /** USD per million input / output tokens: what a run reports as its cost. Absent: free (a local model), no cost reported. */
+  priceInPerMTok?: number;
+  priceOutPerMTok?: number;
 }
 
 // An env var set to '' (docker-compose `${VAR:-}` passthrough, a blank line in
@@ -93,6 +96,8 @@ export interface ProviderOverride {
   timeoutSec?: number | null;
   supportsTools?: boolean | null;
   stream?: boolean | null;
+  priceInPerMTok?: number | null;
+  priceOutPerMTok?: number | null;
 }
 
 // Shared by resolveProvider (jobs) and chatProviders.ts's resolveChatProvider
@@ -158,6 +163,8 @@ function resolveCustomConfig(override?: ProviderOverride | null): OpenAiCompatib
     ...(override.timeoutSec ? { timeoutSec: override.timeoutSec } : {}),
     supportsTools: override.supportsTools ?? true,
     ...(override.stream ? { stream: true } : {}),
+    ...(typeof override.priceInPerMTok === 'number' ? { priceInPerMTok: override.priceInPerMTok } : {}),
+    ...(typeof override.priceOutPerMTok === 'number' ? { priceOutPerMTok: override.priceOutPerMTok } : {}),
   };
 }
 

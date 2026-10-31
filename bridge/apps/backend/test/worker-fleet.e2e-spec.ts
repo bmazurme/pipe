@@ -914,6 +914,8 @@ describe('Worker fleet (e2e)', () => {
         timeoutSec: null,
         supportsTools: true,
         stream: false,
+        priceInPerMTok: null,
+        priceOutPerMTok: null,
       });
     });
 

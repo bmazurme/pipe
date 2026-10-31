@@ -148,6 +148,8 @@ describe('ProviderCredentialsCard — a custom model', () => {
     await user.clear(headers);
     await user.type(headers, 'x-folder-id: b1g');
     await user.type(screen.getByLabelText('Таймаут'), '600');
+    await user.type(screen.getByLabelText('Цена входа'), '0,5');
+    await user.type(screen.getByLabelText('Цена выхода'), '2');
     await user.click(screen.getByText(/Потоковая выдача в чате/));
     await user.click(await screen.findByLabelText('mac-fusion'));
     expect(screen.queryByLabelText('legacy-box')).toBeNull();
@@ -160,6 +162,8 @@ describe('ProviderCredentialsCard — a custom model', () => {
       authScheme: 'api-key',
       extraHeaders: { 'x-folder-id': 'b1g' },
       timeoutSec: 600,
+      priceInPerMTok: 0.5,
+      priceOutPerMTok: 2,
       stream: true,
       allowedWorkerIds: [4],
     });

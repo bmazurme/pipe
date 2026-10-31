@@ -39,6 +39,8 @@ export function ProviderCredentialsCard() {
   const [timeoutSec, setTimeoutSec] = useState('');
   const [supportsTools, setSupportsTools] = useState(true);
   const [stream, setStream] = useState(false);
+  const [priceIn, setPriceIn] = useState('');
+  const [priceOut, setPriceOut] = useState('');
   const [allowedWorkerIds, setAllowedWorkerIds] = useState<number[]>([]);
   const isCustom = provider === 'custom';
   // Only asked for when a custom key is being made: the list of workers the key can be limited to.
@@ -52,13 +54,17 @@ export function ProviderCredentialsCard() {
   const headers = parseHeaderLines(headerText);
   const timeoutValue = timeoutSec.trim() === '' ? undefined : Number(timeoutSec);
   const timeoutValid = timeoutValue === undefined || (Number.isInteger(timeoutValue) && timeoutValue >= 10 && timeoutValue <= 1800);
+  const priceValue = (text: string) => (text.trim() === '' ? undefined : Number(text.replace(',', '.')));
+  const priceValid = (text: string) => priceValue(text) === undefined || (Number.isFinite(priceValue(text)) && (priceValue(text) as number) >= 0);
   const canSave = isCustom
     ? name.trim() !== '' &&
       baseUrl.trim() !== '' &&
       model.trim() !== '' &&
       (authScheme === 'none' || apiKey.trim() !== '') &&
       headers.invalid.length === 0 &&
-      timeoutValid
+      timeoutValid &&
+      priceValid(priceIn) &&
+      priceValid(priceOut)
     : name.trim() !== '' && apiKey.trim() !== '';
 
   const choosePreset = (id: string) => {
@@ -89,6 +95,8 @@ export function ProviderCredentialsCard() {
               route,
               supportsTools,
               ...(stream ? { stream: true } : {}),
+              ...(priceValue(priceIn) !== undefined ? { priceInPerMTok: priceValue(priceIn) } : {}),
+              ...(priceValue(priceOut) !== undefined ? { priceOutPerMTok: priceValue(priceOut) } : {}),
               preset: presetId,
               ...(Object.keys(headers.headers).length > 0 ? { extraHeaders: headers.headers } : {}),
               ...(timeoutValue !== undefined ? { timeoutSec: timeoutValue } : {}),
@@ -104,6 +112,8 @@ export function ProviderCredentialsCard() {
       setTimeoutSec('');
       setSupportsTools(true);
       setStream(false);
+      setPriceIn('');
+      setPriceOut('');
       setAllowedWorkerIds([]);
       setPresetId(DEFAULT_PRESET);
       setAuthScheme('bearer');
@@ -298,6 +308,25 @@ export function ProviderCredentialsCard() {
                 controlProps={{ 'aria-label': 'Таймаут' }}
                 validationState={timeoutValid ? undefined : 'invalid'}
               />
+              <div className={styles.fieldRow}>
+                <TextInput
+                  value={priceIn}
+                  onUpdate={setPriceIn}
+                  placeholder="Цена входа, $ за млн токенов"
+                  controlProps={{ 'aria-label': 'Цена входа' }}
+                  validationState={priceValid(priceIn) ? undefined : 'invalid'}
+                />
+                <TextInput
+                  value={priceOut}
+                  onUpdate={setPriceOut}
+                  placeholder="Цена выхода, $ за млн токенов"
+                  controlProps={{ 'aria-label': 'Цена выхода' }}
+                  validationState={priceValid(priceOut) ? undefined : 'invalid'}
+                />
+              </div>
+              <Text color="secondary" variant="caption-2">
+                Нужны только для условной стоимости на странице «Расходы»; у локальной модели оставьте пустыми — токены считаются, стоимость нет.
+              </Text>
               <Switch checked={supportsTools} onUpdate={setSupportsTools} content="Модель вызывает функции (нужно для задач; без этого — только чат)" />
               <Switch checked={stream} onUpdate={setStream} content="Потоковая выдача в чате (ответ появляется по мере генерации)" />
               {managedWorkers.length > 0 && (

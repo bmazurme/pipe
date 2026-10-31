@@ -66,4 +66,16 @@ describe('launchIssueJob', () => {
       requiredCapability: 'fusion',
     });
   });
+
+  it('makes a custom model\'s job with the key stored in the run, and no "custom:" string', async () => {
+    const { workers, run } = setup();
+
+    await run({ model: 'custom:12' });
+
+    expect(workers.create).toHaveBeenCalledWith(3, {
+      sourceFileId: 7,
+      model: 'custom',
+      providerCredentialId: 12,
+    });
+  });
 });

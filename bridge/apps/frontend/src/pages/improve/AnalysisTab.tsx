@@ -13,7 +13,7 @@ import {
   useStartImproveItemsMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
-import { MODEL_OPTIONS } from '../worker/constants';
+import { useModelOptions } from '../worker/useModelOptions';
 import styles from '../ImprovePage.module.css';
 import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
@@ -135,6 +135,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
 }
 
 export function AnalysisTab({ configured }: { configured: boolean }) {
+  const { options: modelOptions } = useModelOptions();
   // Fast while any run (an analysis or an issue run) is working, slow otherwise, paused in a background tab.
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const { data: runs, isLoading: isListLoading, isError: isListError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
@@ -191,7 +192,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         (границы модулей и зависимости). По умолчанию выключено.
       </Text>
       <div className={styles.toolbar}>
-        <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => handleModel(value)} options={MODEL_OPTIONS} />
+        <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => handleModel(value)} options={modelOptions} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />
         <Switch checked={autoStart} onUpdate={setAutoStart} content="И сразу взять в работу" />
         <Button view="action" size="m" loading={isLoading} disabled={!configured || !runs || busy || categories.length === 0} onClick={() => void handleStart()}>

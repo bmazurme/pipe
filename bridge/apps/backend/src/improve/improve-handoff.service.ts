@@ -4,7 +4,6 @@ import { SharedAsyncCache } from '../common/shared-async-cache';
 import { readZipball, type SnapshotFile } from '../common/zip';
 import { GithubApiService } from '../loop/github-api.service';
 import { StorageService } from '../storage/storage.service';
-import { JobModel } from '../worker/entities/job.entity';
 import { WorkerService } from '../worker/worker.service';
 import { message, withTransientRetry } from './improve-shared';
 import { launchIssueJob } from './issue-job';
@@ -133,7 +132,7 @@ export class ImproveHandoffService {
         baseline,
         fileName,
         taskKey,
-        model: model as JobModel,
+        model,
         contextId,
       },
     );

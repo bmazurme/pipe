@@ -7,7 +7,8 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
-import { FAST_POLL_MS, isActiveRun, modelLabel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
+import { FAST_POLL_MS, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
+import { useModelOptions } from '../worker/useModelOptions';
 
 // Runs accumulate forever; the tab should open on what is recent, with the
 // rest one click away instead of an ever-longer scroll (same reasoning as
@@ -24,6 +25,7 @@ function matches(run: ImproveRun, filter: RunFilter): boolean {
 }
 
 export function RunsTab() {
+  const { label: modelLabel } = useModelOptions();
   // Fast while something is working, slow otherwise, paused in a background tab.
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const { data: runs, isLoading, isError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });

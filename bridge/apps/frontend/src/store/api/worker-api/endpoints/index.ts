@@ -123,6 +123,8 @@ export interface CreateProviderCredentialBody {
   timeoutSec?: number;
   supportsTools?: boolean;
   stream?: boolean;
+  priceInPerMTok?: number;
+  priceOutPerMTok?: number;
   preset?: string;
   allowedWorkerIds?: number[];
 }

@@ -13,6 +13,7 @@ import {
   message,
   PREPARE_ABANDONED_ERROR,
   preparingStaleMs,
+  isClaudeModelName,
   requireImproveModel,
 } from '../improve/improve-shared';
 import { readZipball } from '../common/zip';
@@ -21,7 +22,7 @@ import { SharedAsyncCache } from '../common/shared-async-cache';
 import { ContextService } from '../context/context.service';
 import { StorageService } from '../storage/storage.service';
 import { WORKER_CAPABILITY_LABEL } from '../worker/capabilities';
-import { JobModel, JobStatus } from '../worker/entities/job.entity';
+import { JobStatus } from '../worker/entities/job.entity';
 import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
   ACTIVE_LAB_RUN_STATUSES,
@@ -205,6 +206,13 @@ export class LabRunsService {
     const executor = input.executor ?? 'any';
     const capability = requiredCapabilityOf(executor);
 
+    // Fusion is driven from the model's shell (fusionctl); only the claude CLI has one.
+    if (capability && !isClaudeModelName(input.model)) {
+      throw new BadRequestException(
+        `${WORKER_CAPABILITY_LABEL[capability]} требует модель Claude (Sonnet, Opus или Haiku) — ей нужна оболочка`,
+      );
+    }
+
     // Better a clear answer now than a run that waits for ever for a worker that does not exist.
     if (
       capability &&
@@ -299,7 +307,7 @@ export class LabRunsService {
           baseline,
           fileName: `lab-${project.id}.subscription.zip`,
           taskKey: `lab:${project.id}`,
-          model: input.model as JobModel,
+          model: input.model,
           contextId: input.contextId,
           requiredCapability: requiredCapabilityOf(run.executor) ?? undefined,
         },

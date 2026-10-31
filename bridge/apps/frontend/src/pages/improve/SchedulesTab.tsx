@@ -21,7 +21,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
-import { MODEL_OPTIONS } from '../worker/constants';
+import { useModelOptions } from '../worker/useModelOptions';
 import styles from '../ImprovePage.module.css';
 import { ALL_WEEKDAYS, WEEKDAYS, WEEKEND_DAYS, WORKDAYS } from '../lab/weekdays';
 import { describeSchedule, formatTime, ScheduleForm, validateScheduleForm } from './improveLabels';
@@ -52,6 +52,7 @@ const NO_CONTEXT = '';
 const sameDays = (a: number[], b: number[]) => a.length === b.length && [...a].sort().every((day, index) => day === [...b].sort()[index]);
 
 function AutoStartCard() {
+  const { options: modelOptions } = useModelOptions();
   const { data } = useGetImproveSettingsQuery();
   const [save, { isLoading }] = useSaveImproveSettingsMutation();
 
@@ -69,7 +70,7 @@ function AutoStartCard() {
           disabled={isLoading || !data}
           value={[data?.autoStartModel ?? 'off']}
           onUpdate={([value]) => void save({ autoStartModel: value === 'off' ? null : value })}
-          options={[{ value: 'off', content: 'Выключен' }, ...MODEL_OPTIONS]}
+          options={[{ value: 'off', content: 'Выключен' }, ...modelOptions]}
         />
       </div>
     </Card>
@@ -159,6 +160,7 @@ function FilingLimitsCard() {
 }
 
 export function SchedulesTab() {
+  const { options: modelOptions, label: modelLabel } = useModelOptions();
   const { data: schedules, isLoading, isError } = useListImproveSchedulesQuery();
   // By the time they run, earliest first (the server returns them in the order they were made).
   const sortedSchedules = useMemo(() => sortSchedulesByRunTime(schedules ?? []), [schedules]);
@@ -279,7 +281,7 @@ export function SchedulesTab() {
           <div className={styles.rowMain}>
             <Text variant="body-2">{schedule.name}</Text>
             <Text variant="caption-2" color="secondary">
-              {describeSchedule(schedule)}
+              {describeSchedule(schedule, modelLabel)}
               {typeof schedule.contextId === 'number' && ` · контекст: ${(Array.isArray(contexts) ? contexts : []).find((context) => context.id === schedule.contextId)?.name ?? `#${schedule.contextId}`}`}
             </Text>
             {schedule.lastRunAt && (
@@ -374,7 +376,7 @@ export function SchedulesTab() {
                   );
                 })}
               </div>
-              <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={MODEL_OPTIONS} width="max" />
+              <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={modelOptions} width="max" />
               <Select
                 label="Контекст"
                 value={[editing.form.contextId ?? NO_CONTEXT]}

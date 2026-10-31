@@ -306,6 +306,40 @@ describe('processJob', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
+  it('reports the tokens and the cost of a custom-model job before it is marked done', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-usage-'));
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }], usage: { prompt_tokens: 1000, completion_tokens: 200 } }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const client = fakeClient(fakeParcel());
+    const reports: unknown[][] = [];
+    client.reportClaudeUsage = async (...args: unknown[]) => void reports.push(args);
+
+    await processJob(
+      client as never,
+      {
+        id: 60,
+        sourceFileId: 61,
+        resultFileId: null,
+        model: 'custom',
+        status: 'claimed',
+        provider: { apiKey: '', baseUrl: 'http://192.168.50.35:11434/v1', model: 'm', authScheme: 'none', priceInPerMTok: 1, priceOutPerMTok: 5 },
+      } as RemoteJob,
+      fakeConfig(workDir),
+    );
+
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0][0], 60);
+    assert.deepEqual(reports[0][1], {
+      usage: { costUsd: 0.002, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    });
+
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
   it('logs the route of a custom-model job, and fails it when the key needs a VPN the worker lacks', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-route-'));
     stubOpenAiCompletion('done');
