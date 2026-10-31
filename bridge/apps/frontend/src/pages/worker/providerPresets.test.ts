@@ -39,8 +39,8 @@ describe('describeKey', () => {
   });
 
   it('lists what is unusual', () => {
-    expect(describeKey({ ...base, route: 'direct', authScheme: 'none', supportsTools: false, timeoutSec: 900, allowedWorkerIds: [5] })).toBe(
-      'напрямую · без ключа · без вызова функций (только чат) · таймаут 900 с · только worker: 1',
+    expect(describeKey({ ...base, route: 'direct', authScheme: 'none', supportsTools: false, stream: true, timeoutSec: 900, allowedWorkerIds: [5] })).toBe(
+      'напрямую · без ключа · без вызова функций (только чат) · потоком в чате · таймаут 900 с · только worker: 1',
     );
   });
 });

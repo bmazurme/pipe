@@ -49,8 +49,15 @@ export class ChatTurnsController {
     const mayTake =
       currentUser.workerId === undefined ||
       (await this.workersService.mayTakeChatTurn(currentUser.workerId));
+    const worker =
+      mayTake && currentUser.workerId !== undefined
+        ? await this.workersService.findById(currentUser.workerId)
+        : null;
     const claimed = mayTake
-      ? await this.chatService.claim(currentUser.id)
+      ? await this.chatService.claim(
+          currentUser.id,
+          worker ? { id: worker.id, version: worker.version ?? null } : null,
+        )
       : null;
 
     // A bare `return null` sends a genuinely empty body (no content-type,
@@ -69,6 +76,7 @@ export class ChatTurnsController {
         currentUser.id,
         currentUser.workerId,
         claimed.chat.model,
+        { providerCredentialId: claimed.chat.providerCredentialId },
       );
     } catch (error) {
       // The row is already Running; without this it would stay "thinking" forever.

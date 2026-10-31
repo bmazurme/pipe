@@ -178,6 +178,7 @@ export class ProviderCredentialsService {
               : {}),
             timeoutSec: chosen.timeoutSec,
             supportsTools: chosen.supportsTools,
+            stream: chosen.stream,
           }
         : {}),
     };

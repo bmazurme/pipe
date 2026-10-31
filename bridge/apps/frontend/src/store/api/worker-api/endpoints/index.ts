@@ -122,6 +122,7 @@ export interface CreateProviderCredentialBody {
   extraHeaders?: Record<string, string>;
   timeoutSec?: number;
   supportsTools?: boolean;
+  stream?: boolean;
   preset?: string;
   allowedWorkerIds?: number[];
 }

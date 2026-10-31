@@ -120,6 +120,7 @@ export function describeKey(key: {
   route: ProviderRoute;
   authScheme: ProviderAuthScheme;
   supportsTools: boolean;
+  stream?: boolean;
   timeoutSec: number | null;
   allowedWorkerIds: number[] | null;
 }): string {
@@ -129,6 +130,7 @@ export function describeKey(key: {
     key.route === 'auto' ? 'маршрут: авто' : key.route === 'vpn' ? 'через VPN' : 'напрямую',
     key.authScheme === 'none' ? 'без ключа' : key.authScheme === 'api-key' ? 'Api-Key' : null,
     key.supportsTools ? null : 'без вызова функций (только чат)',
+    key.stream ? 'потоком в чате' : null,
     key.timeoutSec ? `таймаут ${key.timeoutSec} с` : null,
     key.allowedWorkerIds?.length ? `только worker: ${key.allowedWorkerIds.length}` : null,
   ]

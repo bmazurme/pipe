@@ -10,6 +10,7 @@ import { ContextService } from '../context/context.service';
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { FILE_STORE } from '../storage/file-store/file-store';
 import { JobStatus } from '../worker/entities/job.entity';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
 import { WorkerService } from '../worker/worker.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
@@ -51,6 +52,10 @@ describe('ChatService.attachRunResult', () => {
         { provide: FILE_STORE, useValue: {} },
         { provide: ContextService, useValue: { findOwned: jest.fn() } },
         { provide: WorkerService, useValue: { findOwned: findOwnedJob } },
+        {
+          provide: ProviderCredentialsService,
+          useValue: { existsFor: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 

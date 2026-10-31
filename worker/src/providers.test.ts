@@ -191,6 +191,11 @@ describe('resolveProvider with a key stored in bridge', () => {
       );
     });
 
+    it('carries the stream flag only when the key sets it', () => {
+      assert.equal('stream' in resolveProvider('custom', {}, stored), false);
+      assert.equal((resolveProvider('custom', {}, { ...stored, stream: true }) as { stream?: boolean }).stream, true);
+    });
+
     it('lets a local server have no secret, but only when its scheme is none', () => {
       assert.equal(resolveProvider('custom', {}, { ...stored, apiKey: '', authScheme: 'none' }).tool, 'openai-compatible');
       assert.throws(() => resolveProvider('custom', {}, { ...stored, apiKey: '' }), /needs one/);

@@ -73,6 +73,8 @@ export interface OpenAiCompatibleConfig {
   timeoutSec?: number;
   /** false = the model cannot call functions, so it cannot run a job (it can still chat). Absent = true. */
   supportsTools?: boolean;
+  /** Stream a chat answer as the model writes it (the chat shows it growing). */
+  stream?: boolean;
 }
 
 // An env var set to '' (docker-compose `${VAR:-}` passthrough, a blank line in
@@ -90,6 +92,7 @@ export interface ProviderOverride {
   extraHeaders?: Record<string, string> | null;
   timeoutSec?: number | null;
   supportsTools?: boolean | null;
+  stream?: boolean | null;
 }
 
 // Shared by resolveProvider (jobs) and chatProviders.ts's resolveChatProvider
@@ -154,6 +157,7 @@ function resolveCustomConfig(override?: ProviderOverride | null): OpenAiCompatib
     ...(override.extraHeaders && Object.keys(override.extraHeaders).length > 0 ? { extraHeaders: override.extraHeaders } : {}),
     ...(override.timeoutSec ? { timeoutSec: override.timeoutSec } : {}),
     supportsTools: override.supportsTools ?? true,
+    ...(override.stream ? { stream: true } : {}),
   };
 }
 

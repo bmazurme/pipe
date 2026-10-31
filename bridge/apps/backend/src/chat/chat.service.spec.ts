@@ -12,6 +12,7 @@ import { FILE_STORE } from '../storage/file-store/file-store';
 import { LocalFileStore } from '../storage/file-store/local-file-store';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ContextService } from '../context/context.service';
+import { ProviderCredentialsService } from '../worker/provider-credentials.service';
 import { WorkerService } from '../worker/worker.service';
 import { ChatAttachmentsService } from './chat-attachments.service';
 import { ChatService } from './chat.service';
@@ -68,6 +69,10 @@ describe('ChatService', () => {
         { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
         { provide: ContextService, useValue: { findOwned: jest.fn() } },
         { provide: WorkerService, useValue: { findOwned: jest.fn() } },
+        {
+          provide: ProviderCredentialsService,
+          useValue: { existsFor: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 
@@ -85,6 +90,7 @@ describe('ChatService', () => {
       expect(chatRepository.save).toHaveBeenCalledWith({
         userId: 7,
         model: ChatModel.Gpt,
+        providerCredentialId: null,
         title: null,
       });
       expect(chat).toMatchObject({ id: 1, model: ChatModel.Gpt });
@@ -768,6 +774,10 @@ describe('ChatService changeModel', () => {
         { provide: FILE_STORE, useValue: new LocalFileStore(UPLOAD_DIR) },
         { provide: ContextService, useValue: { findOwned: jest.fn() } },
         { provide: WorkerService, useValue: { findOwned: jest.fn() } },
+        {
+          provide: ProviderCredentialsService,
+          useValue: { existsFor: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 

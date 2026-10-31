@@ -67,4 +67,6 @@ export class ClaimedProviderDto {
   extraHeaders?: Record<string, string>;
   timeoutSec?: number | null;
   supportsTools?: boolean;
+  // Stream a chat answer (the worker reports the text so far as it arrives).
+  stream?: boolean;
 }

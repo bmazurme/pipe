@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ChatContainer } from '@gravity-ui/aikit';
 import type {
   ChatContainerTexts,
@@ -23,6 +23,7 @@ import {
   useListChatsQuery,
   useListContextsQuery,
   useListMessagesQuery,
+  useListProviderCredentialsQuery,
   useRenameChatMutation,
   useUpdateChatModelMutation,
   useRetryChatTurnMutation,
@@ -75,6 +76,7 @@ const MODEL_OPTIONS: { value: ChatModelId; content: string }[] = [
   { value: 'gpt', content: 'GPT' },
   { value: 'deepseek', content: 'DeepSeek' },
   { value: 'qwen', content: 'Qwen' },
+  { value: 'custom', content: 'Другая модель' },
 ];
 
 function modelLabel(model: ChatModelId): string {
@@ -195,6 +197,10 @@ export function ChatPage() {
   // Like the model, fixed once the chat exists; never remembered between chats.
   const [newChatContextId, setNewChatContextId] = useState<number | undefined>(undefined);
   const { data: contextsData } = useListContextsQuery();
+  // A custom chat runs on the server of one stored key; picked here, first one by default.
+  const [newChatKeyId, setNewChatKeyId] = useState<number | undefined>(undefined);
+  const { data: providerKeys } = useListProviderCredentialsQuery();
+  const customKeys = (Array.isArray(providerKeys) ? providerKeys : []).filter((key) => key.provider === 'custom');
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
 
@@ -296,6 +302,7 @@ export function ChatPage() {
   // dialog — otherwise the first message of every implicit chat silently
   // goes to sonnet with no way to tell or change that in advance.
   const activeModel: ChatModelId = chatsData?.find((chat) => chat.id === activeChatId)?.model ?? newChatModel;
+  const activeKeyId = chatsData?.find((chat) => chat.id === activeChatId)?.providerCredentialId ?? newChatKeyId ?? customKeys[0]?.id;
   const activeContextName = chatsData?.find((chat) => chat.id === activeChatId)?.contextName ?? null;
   const canAttach = isClaudeModel(activeModel);
 
@@ -304,6 +311,7 @@ export function ChatPage() {
     setActiveChatId,
     newChatModel,
     newChatContextId,
+    newChatProviderCredentialId: newChatKeyId ?? customKeys[0]?.id,
     hasPendingReply,
     lastReplyStatus: lastReply?.status,
     messagesLoaded: Boolean(messagesData),
@@ -377,12 +385,16 @@ export function ChatPage() {
     }
   };
 
-  const handleChangeModel = async (model: ChatModelId) => {
-    if (activeChatId === null || model === activeModel || isChangingModel) return;
+  const handleChangeModel = async (model: ChatModelId, providerCredentialId?: number) => {
+    if (activeChatId === null || (model === activeModel && providerCredentialId === undefined) || isChangingModel) return;
     composer.setChatError(null);
 
     try {
-      await updateChatModel({ id: activeChatId, model }).unwrap();
+      await updateChatModel({
+        id: activeChatId,
+        model,
+        ...(model === 'custom' ? { providerCredentialId: providerCredentialId ?? customKeys[0]?.id } : {}),
+      }).unwrap();
     } catch (error) {
       const message = (error as { data?: { message?: unknown } })?.data?.message;
       composer.setChatError(typeof message === 'string' ? message : 'Не удалось сменить модель');
@@ -416,6 +428,24 @@ export function ChatPage() {
         disabled={Boolean(activeChat) && (hasPendingReply || isChangingModel)}
         width={150}
       />
+      {activeModel === 'custom' &&
+        (customKeys.length > 0 ? (
+          <Select
+            size="s"
+            aria-label="Ключ модели"
+            value={activeKeyId === undefined ? [] : [String(activeKeyId)]}
+            onUpdate={([value]) => {
+              if (!value) return;
+              if (activeChat) void handleChangeModel('custom', Number(value));
+              else setNewChatKeyId(Number(value));
+            }}
+            options={customKeys.map((key) => ({ value: String(key.id), content: `${key.name}${key.model ? ` · ${key.model}` : ''}` }))}
+            disabled={Boolean(activeChat) && (hasPendingReply || isChangingModel)}
+            width={190}
+          />
+        ) : (
+          <Link to="/worker?tab=keys">Добавить ключ модели</Link>
+        ))}
       {activeChat ? (
         activeContextName && (
           <>

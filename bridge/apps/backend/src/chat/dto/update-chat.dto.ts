@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -19,4 +20,9 @@ export class UpdateChatDto {
   @IsOptional()
   @IsEnum(ChatModel)
   model?: ChatModel;
+
+  // With model 'custom': which stored key; on a custom chat alone it switches the server.
+  @IsOptional()
+  @IsInt()
+  providerCredentialId?: number;
 }

@@ -2,7 +2,7 @@ import { CHAT_ACTIONS_INSTRUCTION } from './chatActions.js';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { openAiCompatibleChat } from './openAiCompatibleChat.js';
+import { openAiCompatibleChat, readCompletionStream } from './openAiCompatibleChat.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -217,5 +217,110 @@ describe('openAiCompatibleChat', () => {
       assert.deepEqual(bodies[0].messages[0], { role: 'system', content: CHAT_ACTIONS_INSTRUCTION });
       assert.equal(bodies[0].messages[1].role, 'user');
     });
+  });
+});
+
+const sse = (...events: string[]) =>
+  new Response(events.map((event) => `data: ${event}\n\n`).join(''), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+const chunk = (content: string) => JSON.stringify({ choices: [{ delta: { content } }] });
+
+describe('readCompletionStream', () => {
+  const streamOf = (...parts: string[]) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const part of parts) controller.enqueue(new TextEncoder().encode(part));
+        controller.close();
+      },
+    });
+
+  it('reports answer and reasoning text as it arrives, across lines split between network chunks', async () => {
+    const seen: [string, string][] = [];
+    const whole = `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'hm' } }] })}\n\ndata: ${chunk('Hel')}\n\ndata: ${chunk('lo')}\n\ndata: [DONE]\n\n`;
+
+    await readCompletionStream(streamOf(whole.slice(0, 40), whole.slice(40, 95), whole.slice(95)), (delta) => seen.push([delta.kind, delta.text]));
+
+    assert.deepEqual(seen, [
+      ['thinking', 'hm'],
+      ['text', 'Hel'],
+      ['text', 'lo'],
+    ]);
+  });
+
+  it('skips comments, blank lines, non-JSON and empty deltas, and reads a last line with no newline', async () => {
+    const seen: string[] = [];
+
+    await readCompletionStream(
+      streamOf(': keep-alive\n\ndata: not json\n\ndata: {"choices":[{"delta":{}}]}\n\ndata: {"choices":[]}\n\n', `data: ${chunk('tail')}`),
+      (delta) => seen.push(delta.text),
+    );
+
+    assert.deepEqual(seen, ['tail']);
+  });
+});
+
+describe('openAiCompatibleChat streaming', () => {
+  const options = { baseUrl: 'http://ollama.lan:11434/v1', apiKey: '', model: 'm', authScheme: 'none', stream: true } as const;
+  const history = [{ role: 'user' as const, content: 'hi' }];
+
+  it('streams a key that asks for it: sends stream:true, reports the text so far, returns the whole answer', async () => {
+    let body: Record<string, unknown> = {};
+    const progress: string[] = [];
+
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      body = JSON.parse(init?.body as string);
+
+      // the chunks arrive over time, like a model writing: the first words are reported at once
+      const parts = [chunk('Hel'), chunk('lo'), '[DONE]'];
+      let next = 0;
+
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            if (next >= parts.length) return controller.close();
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            controller.enqueue(new TextEncoder().encode(`data: ${parts[next++]}\n\n`));
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      );
+    }) as typeof fetch;
+
+    const reply = await openAiCompatibleChat(history, options, undefined, null, null, (text) => void progress.push(text));
+
+    assert.equal(reply, 'Hello');
+    assert.equal(body.stream, true);
+    assert.ok(progress.length > 0 && progress.every((text) => 'Hello'.startsWith(text)), progress.join('|'));
+  });
+
+  it('does not stream without a progress listener, or for a key that did not ask', async () => {
+    const bodies: Record<string, unknown>[] = [];
+
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string));
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'plain' } }] }), { status: 200 });
+    }) as typeof fetch;
+
+    assert.equal(await openAiCompatibleChat(history, options), 'plain');
+    assert.equal(await openAiCompatibleChat(history, { ...options, stream: undefined }, undefined, null, null, () => {}), 'plain');
+    assert.ok(bodies.every((body) => !('stream' in body)));
+  });
+
+  it('takes a plain JSON answer from a server that ignores stream', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'plain' } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch;
+
+    assert.equal(await openAiCompatibleChat(history, options, undefined, null, null, () => {}), 'plain');
+  });
+
+  it('fails on a stream that carried no text, and on an error status', async () => {
+    globalThis.fetch = (async () => sse('[DONE]')) as typeof fetch;
+    await assert.rejects(openAiCompatibleChat(history, options, undefined, null, null, () => {}), /empty reply/);
+
+    globalThis.fetch = (async () => new Response('down', { status: 503 })) as typeof fetch;
+    await assert.rejects(openAiCompatibleChat(history, options, undefined, null, null, () => {}), /API error \(503\)/);
   });
 });

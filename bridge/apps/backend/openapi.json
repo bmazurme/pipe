@@ -5212,9 +5212,14 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ],
             "type": "string"
+          },
+          "providerCredentialId": {
+            "type": "number",
+            "nullable": true
           },
           "title": {
             "type": "string",
@@ -5236,6 +5241,7 @@
         "required": [
           "id",
           "model",
+          "providerCredentialId",
           "title",
           "contextName",
           "createdAt",
@@ -5253,8 +5259,12 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ]
+          },
+          "providerCredentialId": {
+            "type": "number"
           },
           "contextId": {
             "type": "number"
@@ -5279,8 +5289,12 @@
               "haiku",
               "gpt",
               "deepseek",
-              "qwen"
+              "qwen",
+              "custom"
             ]
+          },
+          "providerCredentialId": {
+            "type": "number"
           }
         }
       },

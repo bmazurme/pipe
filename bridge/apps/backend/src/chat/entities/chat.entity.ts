@@ -13,6 +13,8 @@ export enum ChatModel {
   Gpt = 'gpt',
   Deepseek = 'deepseek',
   Qwen = 'qwen',
+  // Any other OpenAI-compatible server: the stored key the chat points at (providerCredentialId) says which.
+  Custom = 'custom',
 }
 
 @Entity({ name: 'chats' })
@@ -23,6 +25,11 @@ export class Chat extends BaseEntity {
 
   @Column({ type: 'enum', enum: ChatModel })
   model: ChatModel;
+
+  // The stored API key of a 'custom' chat (null for every other model); ON DELETE SET NULL in the migration, which leaves the chat
+  // unable to answer until another is chosen.
+  @Column({ type: 'int', nullable: true })
+  providerCredentialId: number | null;
 
   // Left null and derived client-side from the first message by default —
   // never auto-generated server-side (would need its own model call).

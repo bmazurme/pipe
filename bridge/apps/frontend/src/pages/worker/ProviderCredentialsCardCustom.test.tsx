@@ -148,6 +148,7 @@ describe('ProviderCredentialsCard — a custom model', () => {
     await user.clear(headers);
     await user.type(headers, 'x-folder-id: b1g');
     await user.type(screen.getByLabelText('Таймаут'), '600');
+    await user.click(screen.getByText(/Потоковая выдача в чате/));
     await user.click(await screen.findByLabelText('mac-fusion'));
     expect(screen.queryByLabelText('legacy-box')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Добавить ключ' }));
@@ -159,6 +160,7 @@ describe('ProviderCredentialsCard — a custom model', () => {
       authScheme: 'api-key',
       extraHeaders: { 'x-folder-id': 'b1g' },
       timeoutSec: 600,
+      stream: true,
       allowedWorkerIds: [4],
     });
   });
