@@ -55,9 +55,11 @@ describe('AttachRunResultDialog', () => {
     await user.click(await screen.findByRole('combobox', { name: 'Запуск' }));
     expect(screen.queryByText(/#4/)).toBeNull();
     await user.click(await screen.findByText(/#3 · sonnet · готово/));
+    // The click on "Прикрепить" must come after the choice has reached the form: on a slow runner it used to race the select and send nothing.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Запуск' })).toHaveTextContent(/#3/));
     await user.click(screen.getByRole('button', { name: 'Прикрепить' }));
 
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 5000 });
     expect(sent).toEqual([{ method: 'POST', path: 'chat/chats/9/run-results', body: { jobId: 3 } }]);
   });
 
@@ -80,9 +82,10 @@ describe('AttachRunResultDialog', () => {
 
     await user.click(await screen.findByRole('combobox', { name: 'Запуск' }));
     await user.click(await screen.findByText(/#3 · sonnet/));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Запуск' })).toHaveTextContent(/#3/));
     await user.click(screen.getByRole('button', { name: 'Прикрепить' }));
 
-    expect(await screen.findByText(/Не удалось прикрепить результат|уже/)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось прикрепить результат|уже/, undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 });
