@@ -113,12 +113,21 @@ export class AuthController {
   async createApiKey(
     @Body() dto: CreateApiKeyDto,
     @CurrentUser() currentUser: { id: number },
+    @Req() request: ExpressRequest,
   ) {
     const created = await this.apiKeysService.create(
       currentUser.id,
       dto.name,
       dto.scope ?? null,
       dto.expiresInDays ?? null,
+    );
+    this.authService.announceCredentialCreated(
+      'api-key',
+      currentUser.id,
+      created.name,
+      request.ip,
+      created.scope,
+      created.expiresAt,
     );
     return CreatedApiKeyResponseDto.fromCreatedApiKey(created);
   }
@@ -166,8 +175,18 @@ export class AuthController {
   })
   async createEmergencyKey(
     @CurrentUser() currentUser: { id: number },
+    @Req() request: ExpressRequest,
   ): Promise<CreatedEmergencyKeyResponseDto> {
-    return this.emergencyKeysService.createOrReplace(currentUser.id);
+    const created = await this.emergencyKeysService.createOrReplace(
+      currentUser.id,
+    );
+    this.authService.announceCredentialCreated(
+      'emergency',
+      currentUser.id,
+      undefined,
+      request.ip,
+    );
+    return created;
   }
 
   @UseGuards(JwtGuard)
