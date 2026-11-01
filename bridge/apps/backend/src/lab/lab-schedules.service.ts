@@ -21,7 +21,7 @@ import {
   localDate,
   message,
   onAllowedWeekday,
-  requireImproveModel,
+  requireLabModel,
 } from '../improve/improve-shared';
 import { isValidTimeZone } from '../telegram/notification-settings.service';
 import { NotifyService } from '../telegram/notify.service';
@@ -103,7 +103,7 @@ export class LabSchedulesService implements OnModuleInit {
     input: ScheduleInput,
     id?: number,
   ): Promise<LabSchedule> {
-    requireImproveModel(input.model);
+    requireLabModel(input.model);
 
     if (!isValidTimeZone(input.timezone))
       throw new BadRequestException(

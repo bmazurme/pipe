@@ -71,6 +71,11 @@ describe('Lab helpers', () => {
   });
 });
 
+// An owner who named a model: the router lets it through unchanged.
+const passThroughRouter = {
+  resolve: async ({ model }: { model: string }) => ({ model, routing: null }),
+} as never;
+
 describe('LabRunsService repo snapshot cache', () => {
   const downloadRepoZip = jest.fn();
   const getBranchSha = jest.fn();
@@ -123,6 +128,7 @@ describe('LabRunsService repo snapshot cache', () => {
       { createFromBuffer: jest.fn(async () => ({ id: 3 })) },
       { findOwned: jest.fn() },
       {},
+      passThroughRouter,
     );
     const start = async (task: string) =>
       (await service.launch(1, { projectId: 1, task, model: 'sonnet' }))
@@ -216,6 +222,7 @@ describe('LabRunsService preparing run', () => {
       {} as never,
       {} as never,
       {} as never,
+      passThroughRouter,
     );
 
     jest.spyOn(labGithub, 'githubFor').mockReturnValue({
@@ -307,6 +314,7 @@ describe('LabRunsService preparing run', () => {
       {} as never,
       {} as never,
       {} as never,
+      passThroughRouter,
     );
 
     await service.advance();
@@ -352,10 +360,17 @@ describe('LabRunsService: the branch of a run', () => {
     update: jest.Mock;
   };
   let workers: { create: jest.Mock; hasEnabledWorkerWith: jest.Mock };
+  let router: { resolve: jest.Mock };
   let service: LabRunsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    router = {
+      resolve: jest.fn(async ({ model }: { model: string }) => ({
+        model,
+        routing: null,
+      })),
+    };
     github = {
       getBranchSha: jest.fn().mockResolvedValue('sha-base'),
       getCommitTreeSha: jest.fn().mockResolvedValue('tree-base'),
@@ -402,6 +417,7 @@ describe('LabRunsService: the branch of a run', () => {
       } as never,
       { findOwned: jest.fn() } as never,
       { send: jest.fn().mockResolvedValue(undefined) } as never,
+      router as never,
     );
   });
 
@@ -480,6 +496,75 @@ describe('LabRunsService: the branch of a run', () => {
       }),
     ).rejects.toThrow(/Нет включённого worker с Fusion 360/);
     expect(runs.save).not.toHaveBeenCalled();
+  });
+
+  it("'auto' asks the router, runs on the model it chose, and keeps the reason", async () => {
+    const routing = {
+      model: 'haiku',
+      source: 'classifier',
+      tier: 1,
+      needsGenerated: false,
+      reason: 'Ярус 1 из 4 — haiku',
+    };
+
+    router.resolve.mockResolvedValue({ model: 'haiku', routing });
+
+    const saved = await prepare({
+      projectId: project.id,
+      task: 'Fix a typo in the README',
+      model: 'auto',
+    });
+
+    expect(router.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        model: 'auto',
+        task: 'Fix a typo in the README',
+        executor: 'any',
+      }),
+    );
+    expect(workers.create).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ model: 'haiku' }),
+    );
+    expect(saved).toMatchObject({ model: 'haiku', routing, jobId: 42 });
+  });
+
+  it("a model the owner named is not the router's business: nothing is recorded as decided", async () => {
+    const saved = await prepare({
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'opus',
+    });
+
+    expect(workers.create).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ model: 'opus' }),
+    );
+    expect(saved.routing).toBeUndefined();
+  });
+
+  it("'auto' is allowed on the Fusion executor — the router keeps it on Claude — while a named model without a shell is not", async () => {
+    router.resolve.mockResolvedValue({
+      model: 'sonnet',
+      routing: { model: 'sonnet', source: 'classifier', reason: 'r' },
+    });
+
+    const saved = await prepare({
+      projectId: project.id,
+      task: 'Построить корпус',
+      model: 'auto',
+      executor: 'fusion',
+    });
+
+    expect(workers.create).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        model: 'sonnet',
+        requiredCapability: 'fusion',
+      }),
+    );
+    expect(saved.executor).toBe('fusion');
   });
 
   it('refuses a Fusion run on a model without a shell, and lets a custom model run an ordinary one', async () => {
@@ -575,6 +660,7 @@ describe('LabRunsService: follow-up of a pull request', () => {
       { createFromBuffer: jest.fn().mockResolvedValue({ id: 5 }) } as never,
       { findOwned: jest.fn() } as never,
       {} as never,
+      passThroughRouter,
     );
   });
 
@@ -669,6 +755,7 @@ describe('LabRunsService.refreshPrStates', () => {
       {} as never,
       {} as never,
       {} as never,
+      passThroughRouter,
     );
   });
 
@@ -808,6 +895,7 @@ describe('LabRunsService.list', () => {
       {} as never,
       {} as never,
       {} as never,
+      passThroughRouter,
     );
 
     return { service, runs };

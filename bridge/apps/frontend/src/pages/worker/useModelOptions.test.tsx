@@ -33,6 +33,18 @@ describe('useModelOptions (the model pickers of Improve and Lab)', () => {
     expect(result.current.options.find((option) => option.value === 'custom:12')?.content).toBe('Yandex');
   });
 
+  it("offers the router's 'Авто' first, for Lab only", async () => {
+    const lab = renderHook(() => useModelOptions(true), { wrapper });
+
+    await waitFor(() => expect(lab.result.current.options.some((option) => option.value === 'custom:9')).toBe(true));
+    expect(lab.result.current.options[0]).toEqual({ value: 'auto', content: 'Авто (маршрутизатор выбирает)' });
+    expect(lab.result.current.label('auto')).toBe('Авто (маршрутизатор выбирает)');
+
+    const improve = renderHook(() => useModelOptions(), { wrapper });
+
+    expect(improve.result.current.options.some((option) => option.value === 'auto')).toBe(false);
+  });
+
   it('names a model by its key, and says so when the key is gone', async () => {
     const { result } = renderHook(() => useModelOptions(), { wrapper });
 

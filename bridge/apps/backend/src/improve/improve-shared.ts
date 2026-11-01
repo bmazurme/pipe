@@ -134,6 +134,11 @@ export function requireImproveModel(model: string): void {
   }
 }
 
+// Lab also takes 'auto': the model router (src/router) picks the model when the run is prepared.
+export function requireLabModel(model: string): void {
+  if (model !== 'auto') requireImproveModel(model);
+}
+
 // The model and key a job is made with, from what a run or schedule stores.
 export function jobModelOf(model: string): {
   model: JobModel;
