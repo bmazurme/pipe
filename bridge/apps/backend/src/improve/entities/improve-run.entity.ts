@@ -97,6 +97,10 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   error: string | null;
 
+  // CI watcher only: the head commit it last acted on and what it already did there (re-run, exhausted, conflict…), so a restart repeats nothing.
+  @Column({ type: 'jsonb', nullable: true })
+  ciHandled: { sha: string; actions: string[] } | null;
+
   @Column({ type: 'timestamp', nullable: true })
   finishedAt: Date | null;
 }

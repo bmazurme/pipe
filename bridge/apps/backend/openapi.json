@@ -7486,6 +7486,10 @@
             "type": "string",
             "nullable": true
           },
+          "ciHandled": {
+            "type": "object",
+            "nullable": true
+          },
           "finishedAt": {
             "format": "date-time",
             "type": "string",
@@ -7521,6 +7525,7 @@
           "result",
           "note",
           "error",
+          "ciHandled",
           "finishedAt",
           "id",
           "createdAt",

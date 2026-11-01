@@ -3160,6 +3160,7 @@ export interface components {
             result: string | null;
             note: string | null;
             error: string | null;
+            ciHandled: Record<string, never> | null;
             /** Format: date-time */
             finishedAt: string | null;
             id: number;

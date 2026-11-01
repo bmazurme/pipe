@@ -26,6 +26,10 @@ const failedCheck = {
   ],
 };
 
+beforeEach(() => {
+  (parent as Record<string, unknown>).ciHandled = null;
+});
+
 function setup(
   over: {
     repairs?: Array<Record<string, unknown>>;
@@ -44,6 +48,7 @@ function setup(
       query.where.kind === 'repair' ? (over.repairs ?? []) : [parent],
     ),
     count: jest.fn().mockResolvedValue(over.active ?? 0),
+    update: jest.fn().mockResolvedValue(undefined),
   };
   const settings = {
     findOne: jest.fn().mockResolvedValue(over.setting ?? null),
@@ -346,6 +351,7 @@ describe('ImproveCiService: a PR that conflicts with the base', () => {
 
   it('announces it once and leaves it to a person by default, whatever CI says', async () => {
     for (const ci of ['success', 'failure', 'none']) {
+      (parent as Record<string, unknown>).ciHandled = null;
       const { service, github, improve, notifier } = setup({
         ci,
         pull: conflicting,
@@ -411,5 +417,70 @@ describe('ImproveCiService while the automation is paused', () => {
 
     expect(runs.find).not.toHaveBeenCalled();
     expect(github.getPull).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImproveCiService persisted once-per-head guards', () => {
+  // Two instances over the same repository mock stand in for a bridge restart.
+  function restart(first: ReturnType<typeof setup>) {
+    const github = first.github;
+    const notifier = first.notifier;
+    const service = new ImproveCiService(
+      first.runs as never,
+      first.settings as never,
+      github as never,
+      first.improve as never,
+      notifier as never,
+    );
+
+    return service;
+  }
+
+  it('does not re-run or re-announce the same head after a restart, but handles a new one', async () => {
+    const first = setup({ rerun: 1 });
+
+    expect(await first.service.checkOne(parent as never)).toBe('rerun');
+    expect(first.runs.update).toHaveBeenCalledWith(9, {
+      ciHandled: { sha: 'head-1', actions: ['rerun'] },
+    });
+
+    const second = restart(first);
+
+    await second.checkOne(parent as never);
+    expect(first.github.rerunFailedRuns).toHaveBeenCalledTimes(1);
+    expect(first.notifier.send).toHaveBeenCalledTimes(2);
+
+    first.github.getPull.mockResolvedValue({
+      number: 55,
+      state: 'open',
+      merged: false,
+      headSha: 'head-2',
+      baseRef: 'main',
+      mergeable: true,
+    });
+    expect(await second.checkOne(parent as never)).toBe('rerun');
+    expect(first.github.rerunFailedRuns).toHaveBeenCalledTimes(2);
+  });
+
+  it('announces exhaustion and a conflict once per head across instances', async () => {
+    const exhausted = setup({
+      repairs: [
+        { baseSha: 'a', trigger: 'ci' },
+        { baseSha: 'b', trigger: 'ci' },
+      ],
+    });
+
+    await exhausted.service.checkOne(parent as never);
+    const sent = exhausted.notifier.send.mock.calls.length;
+
+    await restart(exhausted).checkOne(parent as never);
+    expect(exhausted.notifier.send).toHaveBeenCalledTimes(sent);
+
+    (parent as Record<string, unknown>).ciHandled = null;
+    const conflict = setup({ pull: { mergeable: false } });
+
+    expect(await conflict.service.checkOne(parent as never)).toBe('conflict');
+    expect(await restart(conflict).checkOne(parent as never)).toBe('conflict');
+    expect(conflict.notifier.send).toHaveBeenCalledTimes(1);
   });
 });
