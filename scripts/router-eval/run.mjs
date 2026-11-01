@@ -9,6 +9,9 @@
 //   node scripts/router-eval/run.mjs report   [--out .router-eval]
 //   node scripts/router-eval/run.mjs replay   --url http://localhost:11434/v1 --model qwen2.5-coder:7b [--max-tier 1] [--limit 8]
 //                                             [--auth none|bearer --key …] [--timeout 900] [--only 1070,1031] [--out .router-eval]
+//   node scripts/router-eval/run.mjs replay   --by claude --model haiku [--max-tier 2] [--limit 24] [--timeout 900]
+//                                             a Claude model as an agent (reads, edits, runs tests; needs the claude CLI logged in here);
+//                                             --model is haiku, sonnet or opus; the cost of each run is in the report
 //   node scripts/router-eval/run.mjs grade    --dir <replay-… folder> [--repo-dir .] [--only 1070]
 //                                             run the real pull request's tests against the model's change (needs node_modules installed
 //                                             and the packages built in --repo-dir; any machine with the project, no model needed)
@@ -22,7 +25,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { classifierPrompt, compare, heuristicClassify, parseClassification, policies, renderReport, truthOf } from './lib.mjs';
-import { filesInDiff, gradeTask, renderGrades } from './grade-lib.mjs';
+import { runClaudeAgent } from './claude-agent.mjs';
+import { filesInDiff, gradeTask, linkNodeModules, renderGrades } from './grade-lib.mjs';
 import { renderReplay, replayTask, selectTasks } from './replay-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -193,15 +197,17 @@ async function requireModel(options) {
 }
 
 async function replay() {
-  if (!flags.url || !flags.model) throw new Error('replay needs --url and --model');
+  const byClaude = flags.by === 'claude';
+
+  if (byClaude ? !flags.model : !flags.url || !flags.model) throw new Error('replay needs --url and --model, or --by claude --model haiku|sonnet|opus');
 
   const workerDist = new URL('../../worker/dist/', import.meta.url);
-  let runner;
+  let runner = null;
   let questions;
   let ts;
 
   try {
-    runner = await import(new URL('modelRunners/openAiCompatibleRunner.js', workerDist));
+    if (!byClaude) runner = await import(new URL('modelRunners/openAiCompatibleRunner.js', workerDist));
     questions = await import(new URL('taskQuestions.js', workerDist));
     ts = (await import('typescript')).default;
   } catch (error) {
@@ -214,13 +220,13 @@ async function replay() {
     ? withMergeCommits(read('tasks.json')).filter((task) => only.has(task.pr))
     : selectTasks(withMergeCommits(read('tasks.json')), { maxTier: Number(flags['max-tier'] ?? 1), limit: Number(flags.limit ?? 8) })
   ).filter((task) => task.mergeCommit);
-  const dest = join(out, `replay-${flags.model.replace(/[^\w.-]/g, '_')}`);
+  const dest = join(out, `replay-${byClaude ? 'claude-' : ''}${flags.model.replace(/[^\w.-]/g, '_')}`);
   const workRoot = mkdtempSync(join(tmpdir(), 'router-replay-'));
-  const options = { baseUrl: flags.url.replace(/\/+$/, ''), apiKey: flags.key ?? '', model: flags.model, authScheme: flags.auth === 'bearer' ? 'bearer' : 'none', route: 'direct' };
+  const options = { baseUrl: (flags.url ?? '').replace(/\/+$/, ''), apiKey: flags.key ?? '', model: flags.model, authScheme: flags.auth === 'bearer' ? 'bearer' : 'none', route: 'direct' };
   const timeoutMs = Number(flags.timeout ?? 900) * 1000;
   const results = [];
 
-  await requireModel(options);
+  if (!byClaude) await requireModel(options);
   mkdirSync(dest, { recursive: true });
   console.error(`${picked.length} tasks of tier ≤ ${flags['max-tier'] ?? 1} → ${dest}`);
 
@@ -235,6 +241,13 @@ async function replay() {
       wrap: questions.withQuestionsInstruction,
       // everything the run prints — the model's words, every tool call and its result, the worker's warnings — is the log
       run: async (dir, prompt) => {
+        if (byClaude) {
+          // the checkout is only the project's files: link the real node_modules in, so the model can run the tests as it could in a Lab run
+          linkNodeModules(repoDir, dir);
+
+          return runClaudeAgent(dir, prompt, { model: flags.model, timeoutMs });
+        }
+
         const transcript = [`PROMPT:\n${prompt}\n\nRUN:\n`];
         const result = await runner.runOpenAiCompatible(dir, prompt, options, (chunk) => transcript.push(chunk), undefined, timeoutMs);
 

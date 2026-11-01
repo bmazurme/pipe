@@ -59,3 +59,18 @@ node scripts/router-eval/run.mjs grade --dir .router-eval/replay-qwen3-16k      
 
 It runs in a clone with dependencies installed and the packages built (`node_modules` of that clone are linked into each checkout, so
 nothing is installed per task). Result: `grade.md` in the same folder.
+
+## replay --by claude — a Claude model as the agent
+
+The same replay with a Claude model working like a worker's job (reading, editing, running the tests), to compare Haiku, Sonnet and Opus on
+past tasks — which tier a cheaper model is enough for — with the cost of every run in the report:
+
+```bash
+node scripts/router-eval/run.mjs replay --by claude --model haiku  --max-tier 2 --limit 24
+node scripts/router-eval/run.mjs grade  --dir .router-eval/replay-claude-haiku
+```
+
+It runs `claude -p` from the checkout of each task (so the project's own CLAUDE.md is what the model reads) with the `claude` CLI logged in on
+this machine, so it spends your plan. Unlike a worker, which may run any command, the shell here is narrowed to what checking a change needs
+(tests, type checks, `node`, `git status/diff`; no installs, no deletion, no network tools), because it runs on your own machine. The real
+`node_modules` are linked into the checkout, so tests can run there.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -113,6 +113,29 @@ describe('replayTask', () => {
     assert.equal(sh(repo, 'status', '--porcelain'), '', 'the project itself is untouched');
   });
 
+  it('does not count the node_modules links a test run needs as the model\'s work, and reports the run\'s cost', async () => {
+    const modules = mkdtempSync(join(tmpdir(), 'replay-modules-'));
+    const result = await replayTask({
+      repo,
+      task: task(),
+      workRoot: work,
+      ts,
+      run: async (dir) => {
+        symlinkSync(modules, join(dir, 'node_modules'));
+        mkdirSync(join(dir, 'src', 'deep'), { recursive: true });
+        symlinkSync(modules, join(dir, 'src', 'deep', 'node_modules'));
+        writeFileSync(join(dir, 'src', 'a.ts'), 'export const a = 2;\n');
+
+        return { exitCode: 0, output: '', report: { usage: { costUsd: 0.0123, turns: 4 } } };
+      },
+    });
+
+    assert.deepEqual(result.changed, ['src/a.ts']);
+    assert.ok(!result.diff.includes('node_modules'));
+    assert.deepEqual([result.costUsd, result.turns], [0.0123, 4]);
+    rmSync(modules, { recursive: true, force: true });
+  });
+
   it('records a run that changed nothing, one that broke a file, and one that failed', async () => {
     const nothing = await replayTask({ repo, task: task(), workRoot: work, ts, run: async () => ({ exitCode: 0, output: 'I would change it.' }) });
 
@@ -149,11 +172,19 @@ describe('summarize / renderReplay', () => {
     assert.deepEqual([s.n, s.changedSomething, s.plausible, s.plausibleClean, s.syntaxBroken, s.seconds], [5, 4, 2, 1, 1, 50]);
   });
 
+  it('adds up the cost when runs report one, and leaves the column empty when none does', () => {
+    const text = renderReplay('haiku', [result({ costUsd: 0.05 }), result({ pr: 2, costUsd: 0.1 })]);
+
+    assert.match(text, /cost \$0\.15 \(\$0\.075 a task\)/);
+    assert.match(text, /\| #1 \| 10 \| 0\.050 \|/);
+    assert.doesNotMatch(renderReplay('qwen', [result({})]), /cost \$/);
+  });
+
   it('renders a table with a row per task, and survives an empty run', () => {
     const text = renderReplay('qwen', [result({}), result({ pr: 2, failure: 'model down', changed: [] })]);
 
     assert.match(text, /# Replay on qwen: 2 past tasks/);
-    assert.match(text, /\| #2 \| 10 \| 0 \| 0 \| 0 \| yes \| model down \|/);
+    assert.match(text, /\| #2 \| 10 \| {2}\| 0 \| 0 \| 0 \| yes \| model down \|/);
     assert.match(renderReplay('x', []), /0 past tasks/);
   });
 });
