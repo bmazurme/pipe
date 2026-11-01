@@ -37,7 +37,7 @@ const describeRefresh = ({ checked, merged, closed, failed }: LabPrRefresh) =>
   `Проверено PR: ${checked} · влито: ${merged} · закрыто: ${closed}${failed ? ` · не удалось проверить: ${failed}` : ''}`;
 
 export function RunsTab() {
-  const { options: modelOptions, label: modelLabel } = useModelOptions();
+  const { options: modelOptions, label: modelLabel } = useModelOptions(true);
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const [filterProjectId, setFilterProjectId] = useState('');
   const { data: runs, isLoading, isError } = useListLabRunsQuery(filterProjectId ? { projectId: Number(filterProjectId) } : undefined, { pollingInterval, skipPollingIfUnfocused: true });
@@ -132,6 +132,11 @@ export function RunsTab() {
               {run.baseBranch && run.baseBranch !== branchOf(run.projectId) && ` · ветка ${run.baseBranch}`}
               {run.note && ` · ${run.note}`}
             </Text>
+            {run.routing && (
+              <Text variant="caption-2" color="secondary" title="Почему маршрутизатор выбрал эту модель">
+                Авто: {run.routing.reason}
+              </Text>
+            )}
             {run.error && (
               <Text variant="caption-2" color="danger" ellipsis title={run.error}>
                 {run.error}

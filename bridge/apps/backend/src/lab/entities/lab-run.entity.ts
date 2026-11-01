@@ -2,6 +2,7 @@ import { Column, Entity, Index } from 'typeorm';
 
 import type { LabExecutor } from '../lab-executor';
 import { BaseEntity } from '../../base.entity';
+import type { Routing } from '../../router/router-policy';
 
 export enum LabRunStatus {
   // The row exists while bridge snapshots the repository and creates the job: a second start of the same task sees it.
@@ -64,8 +65,13 @@ export class LabRun extends BaseEntity {
   @Column({ type: 'text' })
   task: string;
 
+  // What was asked for: a model, or 'auto' — and then what the router made of it (routing) is the model the job really ran on.
   @Column({ type: 'varchar', length: 16 })
   model: string;
+
+  // Set for an 'auto' run once the router has chosen: the model, and the reason in words (router-policy.ts `Routing`).
+  @Column({ type: 'jsonb', nullable: true })
+  routing: Routing | null;
 
   // Where it was asked to run: 'any' worker or a 'fusion' one (see lab-executor.ts).
   @Column({ type: 'varchar', length: 16, default: 'any' })
