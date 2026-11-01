@@ -47,3 +47,36 @@ describe('VpnLinkResolver', () => {
     await expect(resolver.resolve(9)).rejects.toThrow('down');
   });
 });
+
+describe('VpnLinkResolver stale-while-revalidate', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns the stale link without awaiting a hanging panel', async () => {
+    const { resolver, vpn } = build();
+
+    await resolver.resolve(7);
+    vpn.getConnectionLink.mockReturnValue(new Promise(() => undefined));
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + LINK_TTL_MS + 1);
+
+    await expect(resolver.resolve(7)).resolves.toBe('vless://a');
+    expect(vpn.getConnectionLink).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask the panel again within one TTL after a failed refresh', async () => {
+    const { resolver, vpn } = build();
+
+    await resolver.resolve(7);
+    vpn.getConnectionLink.mockRejectedValue(new Error('down'));
+    const start = Date.now() + LINK_TTL_MS + 1;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+
+    await resolver.resolve(7);
+    await new Promise((r) => setImmediate(r));
+    await resolver.resolve(7);
+    expect(vpn.getConnectionLink).toHaveBeenCalledTimes(2);
+
+    now.mockReturnValue(start + LINK_TTL_MS);
+    await resolver.resolve(7);
+    expect(vpn.getConnectionLink).toHaveBeenCalledTimes(3);
+  });
+});

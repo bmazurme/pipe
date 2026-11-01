@@ -18,6 +18,7 @@ interface CachedLink {
 @Injectable()
 export class VpnLinkResolver {
   private readonly cache = new Map<number, CachedLink>();
+  private readonly failedAt = new Map<number, number>();
   private readonly inFlight = new Map<number, Promise<string>>();
 
   constructor(
@@ -33,14 +34,31 @@ export class VpnLinkResolver {
 
     if (cached && Date.now() - cached.at < LINK_TTL_MS) return cached.link;
 
+    if (cached) {
+      // Stale-while-revalidate: a down panel must not stall a settings fetch, so hand out the old link at once and
+      // refresh behind it, but not again until a TTL has passed since the last failure.
+      const failedAt = this.failedAt.get(id);
+
+      if (failedAt === undefined || Date.now() - failedAt >= LINK_TTL_MS) {
+        this.refreshInBackground(id).catch(() => undefined);
+      }
+
+      return cached.link;
+    }
+
+    return this.refreshInBackground(id);
+  }
+
+  private async refreshInBackground(id: number): Promise<string> {
     try {
       const link = await this.refresh(id);
 
       this.cache.set(id, { link, at: Date.now() });
+      this.failedAt.delete(id);
 
       return link;
     } catch (error) {
-      if (cached) return cached.link;
+      this.failedAt.set(id, Date.now());
 
       throw error;
     }
