@@ -70,7 +70,7 @@ describe('chooseRoute', () => {
         classification: { tier: 3, needsGenerated: false },
         settings: settings(),
       }).model,
-    ).toBe('sonnet');
+    ).toBe('haiku');
     expect(
       chooseRoute({
         task: 't',
