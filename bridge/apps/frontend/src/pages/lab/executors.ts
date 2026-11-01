@@ -11,7 +11,8 @@ export const executorLabel = (executor: LabExecutor | undefined): string | null 
 export const EXECUTOR_HINT =
   '«Fusion 360 на Mac» берёт только worker, у которого в настройках включено «Fusion 360 на этом компьютере»: он работает рядом с открытым Fusion и может строить и проверять CAD-модели.';
 
-const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku'];
+// 'auto' stays: the router keeps Fusion on a Claude model itself.
+const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'auto'];
 
 /** Fusion is driven from the model's shell, which only Claude has: what the model picker offers for the executor, and the model to fall back to. */
 export const modelsFor = <T extends { value: string }>(options: T[], executor: LabExecutor | undefined): T[] =>
