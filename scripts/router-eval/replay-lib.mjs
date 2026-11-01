@@ -1,8 +1,25 @@
 // Replay of past tasks on a real model (step 3b of the router plan): the project as it was just before a task's pull request, the
 // task text as the worker would hand it over, the model's own edits — then how they compare with what was really merged.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+// A checkout's node_modules are symlinks into the real project (so that tests can run there): they are not the model's work, and git
+// refuses to add a path that .gitignore names, so they are taken out before the changes are counted.
+export function removeModuleLinks(root, depth = 4) {
+  const walk = (dir, level) => {
+    if (level > depth) return;
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+
+      if (entry.name === 'node_modules' && lstatSync(full).isSymbolicLink()) unlinkSync(full);
+      else if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') walk(full, level + 1);
+    }
+  };
+
+  walk(root, 1);
+}
 
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
@@ -69,19 +86,22 @@ export async function replayTask({ repo, task, run, workRoot, ts, wrap }) {
   const started = Date.now();
   let failure = null;
   let output = '';
+  let result = null;
 
   mkdirSync(workRoot, { recursive: true });
   git(repo, 'worktree', 'add', '--detach', '--force', dir, base);
 
   try {
     try {
-      const result = await run(dir, buildPrompt(task, wrap));
+      result = await run(dir, buildPrompt(task, wrap));
 
       output = result.output ?? '';
       if (result.exitCode !== 0) failure = 'the run did not finish (turn limit)';
     } catch (error) {
       failure = error instanceof Error ? error.message : String(error);
     }
+
+    removeModuleLinks(dir);
 
     const changed = pathsOf(git(dir, 'status', '--porcelain', '-uall'));
 
@@ -94,6 +114,8 @@ export async function replayTask({ repo, task, run, workRoot, ts, wrap }) {
       title: task.title,
       seconds: Math.round((Date.now() - started) / 1000),
       failure,
+      costUsd: result?.report?.usage?.costUsd ?? null,
+      turns: result?.report?.usage?.turns ?? null,
       changed,
       diff,
       ...compareFiles(changed, task.files.map((file) => file.path)),
@@ -126,6 +148,7 @@ export function summarize(results) {
     plausibleClean: hitAll.filter((result) => result.extra.length === 0).length,
     syntaxBroken: results.filter((result) => result.syntaxBroken.length > 0).length,
     seconds: results.reduce((sum, result) => sum + result.seconds, 0),
+    costUsd: results.some((result) => result.costUsd !== null && result.costUsd !== undefined) ? results.reduce((sum, result) => sum + (result.costUsd ?? 0), 0) : null,
   };
 }
 
@@ -136,15 +159,15 @@ export function renderReplay(model, results) {
     `# Replay on ${model}: ${s.n} past tasks`,
     '',
     `- finished: ${s.finished}/${s.n}; changed some file: ${s.changedSomething}/${s.n}; **touched every file the real change touched and left every file parseable: ${s.plausible}/${s.n}** (${pct(s.plausible, s.n)}), of which with no extra files: ${s.plausibleClean}`,
-    `- a changed file that no longer parses: ${s.syntaxBroken}; total time ${s.seconds} s (${s.n ? Math.round(s.seconds / s.n) : 0} s a task)`,
+    `- a changed file that no longer parses: ${s.syntaxBroken}; total time ${s.seconds} s (${s.n ? Math.round(s.seconds / s.n) : 0} s a task)${s.costUsd === null ? '' : `; cost $${s.costUsd.toFixed(2)} ($${(s.costUsd / s.n).toFixed(3)} a task)`}`,
     '- "plausible" is the cheap automatic part. Whether the change is right is for you to judge from pr-N.model.diff against pr-N.pr.diff.',
     '',
-    '| PR | s | model changed | missed | extra | parses | note |',
-    '|---|---|---|---|---|---|---|',
+    '| PR | s | $ | model changed | missed | extra | parses | note |',
+    '|---|---|---|---|---|---|---|---|',
     ...results.map((result) => {
       const note = result.failure ?? (result.changed.length === 0 ? 'no file changed' : '');
 
-      return `| #${result.pr} | ${result.seconds} | ${result.changed.length} | ${result.missed.length} | ${result.extra.length} | ${result.syntaxBroken.length === 0 ? 'yes' : `NO: ${result.syntaxBroken.join(', ')}`} | ${note} |`;
+      return `| #${result.pr} | ${result.seconds} | ${result.costUsd == null ? '' : result.costUsd.toFixed(3)} | ${result.changed.length} | ${result.missed.length} | ${result.extra.length} | ${result.syntaxBroken.length === 0 ? 'yes' : `NO: ${result.syntaxBroken.join(', ')}`} | ${note} |`;
     }),
   ].join('\n');
 }
