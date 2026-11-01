@@ -35,13 +35,6 @@ const MAX_PRS_PER_TICK = 20;
 export class ImproveCiService {
   private readonly logger = new Logger(ImproveCiService.name);
   private checking = false;
-  // PR#:sha pairs already reported as "out of attempts", so the owner hears it once.
-  private readonly reportedExhausted = new Set<string>();
-  // PR#:sha pairs already brought up to date with the base, or reported as conflicting: once per head commit, never in a loop.
-  private readonly freshened = new Set<string>();
-  // PR#:sha pairs whose failed workflow runs were already re-run once (a flaky test passes the second time; a worker is not needed).
-  private readonly rerun = new Set<string>();
-
   constructor(
     @InjectRepository(ImproveRun)
     private readonly runs: Repository<ImproveRun>,
@@ -119,10 +112,8 @@ export class ImproveCiService {
     if (ci !== 'failure') return 'ci-ok';
 
     // Red once: ask GitHub to re-run the failed jobs before spending a worker. A real failure fails again and goes on to the repair below.
-    const rerunKey = `${prNumber}:${pull.headSha}`;
-
-    if (!this.rerun.has(rerunKey)) {
-      this.rerun.add(rerunKey);
+    if (!this.hasHandled(parent, pull.headSha, 'rerun')) {
+      await this.markHandled(parent, pull.headSha, 'rerun');
 
       const rerun = await this.github
         .rerunFailedRuns(pull.headSha)
@@ -154,10 +145,8 @@ export class ImproveCiService {
     }
 
     if (repairs.length >= MAX_REPAIRS_PER_PR) {
-      const key = `${prNumber}:${pull.headSha}`;
-
-      if (!this.reportedExhausted.has(key)) {
-        this.reportedExhausted.add(key);
+      if (!this.hasHandled(parent, pull.headSha, 'exhausted')) {
+        await this.markHandled(parent, pull.headSha, 'exhausted');
         await this.notifier.send(
           `🔴 PR #${prNumber}: CI красный, автоисправления исчерпаны (${MAX_REPAIRS_PER_PR}) — нужен человек\n${parent.prUrl ?? ''}`.trim(),
         );
@@ -208,15 +197,13 @@ export class ImproveCiService {
       mergeable: boolean | null;
     },
   ): Promise<string> {
-    const key = `${pull.number}:${pull.headSha}`;
-
-    if (this.freshened.has(key)) return 'ci-ok';
+    if (this.hasHandled(parent, pull.headSha, 'freshen')) return 'ci-ok';
 
     if ((await this.github.behindBy(pull.baseRef, pull.headSha)) === 0) {
       return 'ci-ok';
     }
 
-    this.freshened.add(key);
+    await this.markHandled(parent, pull.headSha, 'freshen');
 
     try {
       await this.github.updatePullBranch(pull.number, pull.headSha);
@@ -243,11 +230,9 @@ export class ImproveCiService {
     pull: { number: number; headSha: string; baseRef: string },
     settings: { autoRedoConflicts?: boolean } | null,
   ): Promise<string> {
-    const key = `${pull.number}:${pull.headSha}`;
+    if (this.hasHandled(parent, pull.headSha, 'conflict')) return 'conflict';
 
-    if (this.freshened.has(key)) return 'conflict';
-
-    this.freshened.add(key);
+    await this.markHandled(parent, pull.headSha, 'conflict');
 
     if (settings?.autoRedoConflicts) {
       try {
@@ -271,5 +256,29 @@ export class ImproveCiService {
     );
 
     return 'conflict';
+  }
+
+  // Once-per-head-commit guards live on the run row, so a restart does not repeat a CI re-run or a notification.
+  private hasHandled(parent: ImproveRun, sha: string, action: string): boolean {
+    return (
+      parent.ciHandled?.sha === sha && parent.ciHandled.actions.includes(action)
+    );
+  }
+
+  // A new head SHA starts a fresh record. Marked before the action, as before: a failing action is not retried in a loop.
+  private async markHandled(
+    parent: ImproveRun,
+    sha: string,
+    action: string,
+  ): Promise<void> {
+    const actions =
+      parent.ciHandled?.sha === sha ? [...parent.ciHandled.actions] : [];
+
+    actions.push(action);
+
+    const ciHandled = { sha, actions };
+
+    await this.runs.update(parent.id, { ciHandled } as never);
+    parent.ciHandled = ciHandled;
   }
 }

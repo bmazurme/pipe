@@ -7558,6 +7558,22 @@
             "type": "string",
             "nullable": true
           },
+          "ciHandled": {
+            "type": "object",
+            "properties": {
+              "sha": {
+                "required": true,
+                "type": "string"
+              },
+              "actions": {
+                "required": true,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "finishedAt": {
             "format": "date-time",
             "type": "string",
@@ -7593,6 +7609,7 @@
           "result",
           "note",
           "error",
+          "ciHandled",
           "finishedAt",
           "id",
           "createdAt",

@@ -3192,6 +3192,10 @@ export interface components {
             result: string | null;
             note: string | null;
             error: string | null;
+            ciHandled: {
+                sha?: string;
+                actions?: string[];
+            };
             /** Format: date-time */
             finishedAt: string | null;
             id: number;
