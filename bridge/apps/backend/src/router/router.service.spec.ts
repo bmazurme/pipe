@@ -105,15 +105,15 @@ describe('RouterService', () => {
   });
 
   it("decides 'auto' by the size the classifier gives", async () => {
-    classifier.classify.mockResolvedValue({ tier: 3, needsGenerated: false });
+    classifier.classify.mockResolvedValue({ tier: 4, needsGenerated: false });
 
     const { model, routing } = await router.resolve({
       ...request,
       model: 'auto',
     });
 
-    expect(model).toBe('sonnet');
-    expect(routing).toMatchObject({ source: 'classifier', tier: 3 });
+    expect(model).toBe('opus');
+    expect(routing).toMatchObject({ source: 'classifier', tier: 4 });
     expect(classifier.classify).toHaveBeenCalledWith(7, {
       title: 'T',
       body: 'Fix a typo',

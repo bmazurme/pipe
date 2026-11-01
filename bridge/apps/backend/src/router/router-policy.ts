@@ -31,12 +31,14 @@ export interface RouterSettings {
   rules: RouterRule[];
 }
 
-// Cheap for small tasks, the strongest for the biggest. Nothing here is a local model: measured on the owner's own Mac, those did not
-// pass the tests of even the smallest tasks (ROUTER-L0-RESULT.md), so they are for the owner to put in by hand.
+// Haiku for everything up to tier 3: replayed on 32 past tasks of those tiers with the real pull requests' tests, Haiku and Sonnet passed exactly
+// the same ones (21 of 32 each) — tier by tier, task by task — and Sonnet cost 11 times as much (ROUTER-L0-RESULT.md). Tier 4 is the strongest model:
+// there were only 2 such tasks, no data. Nothing here is a local model: measured on the owner's own Mac, those did not pass the tests of even
+// the smallest tasks, so they are for the owner to put in by hand.
 export const DEFAULT_TIER_MODELS: Record<Tier, string> = {
   1: 'haiku',
   2: 'haiku',
-  3: 'sonnet',
+  3: 'haiku',
   4: 'opus',
 };
 
