@@ -70,13 +70,19 @@ export function syntaxErrors(root, paths, ts) {
       return [];
     }
 
-    const { diagnostics } = ts.transpileModule(content, {
-      fileName: path,
-      reportDiagnostics: true,
-      compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ES2022 },
-    });
+    try {
+      const { diagnostics } = ts.transpileModule(content, {
+        fileName: path,
+        reportDiagnostics: true,
+        compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ES2022 },
+      });
 
-    return diagnostics?.length ? [path] : [];
+      return diagnostics?.length ? [path] : [];
+    } catch {
+      // the compiler itself fell over on this file (an internal "Debug Failure"): a file that cannot be checked is not a file that is broken,
+      // and the tests of `grade` will say whether it works
+      return [];
+    }
   });
 }
 

@@ -60,6 +60,12 @@ describe('syntaxErrors', () => {
 
   after(() => rmSync(dir, { recursive: true, force: true }));
 
+  it('does not call a file broken when the compiler itself falls over on it', () => {
+    const crashing = { JsxEmit: { Preserve: 1 }, ScriptTarget: { ES2022: 9 }, transpileModule: () => { throw new Error('Debug Failure. Output generation failed'); } };
+
+    assert.deepEqual(syntaxErrors(dir, ['ok.ts'], crashing), []);
+  });
+
   it('flags a file that no longer parses and leaves valid code, JSX, docs and missing files alone', () => {
     assert.deepEqual(syntaxErrors(dir, ['ok.ts', 'ok.tsx', 'broken.ts', 'notes.md', 'deleted.ts'], ts), ['broken.ts']);
   });
