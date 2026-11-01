@@ -332,4 +332,40 @@ describe('AuthService sessions and token refresh', () => {
       expect(response.clearCookie).toHaveBeenCalled();
     });
   });
+
+  describe('announceCredentialCreated', () => {
+    it('sends one Telegram line for an emergency key, with user and address', () => {
+      service.announceCredentialCreated('emergency', 7, undefined, '9.9.9.9');
+
+      expect(telegram.send).toHaveBeenCalledTimes(1);
+      const text = telegram.send.mock.calls[0][0] as string;
+      expect(text).toContain('7');
+      expect(text).toContain('9.9.9.9');
+    });
+
+    it('names the API key and its expiry', () => {
+      service.announceCredentialCreated(
+        'api-key',
+        7,
+        'ci-key',
+        '9.9.9.9',
+        'boards',
+        null,
+      );
+
+      expect(telegram.send).toHaveBeenCalledTimes(1);
+      const text = telegram.send.mock.calls[0][0] as string;
+      expect(text).toContain('ci-key');
+      expect(text).toContain('бессрочный');
+    });
+
+    it('does not throw when Telegram rejects', async () => {
+      telegram.send.mockRejectedValue(new Error('telegram unreachable'));
+
+      expect(() =>
+        service.announceCredentialCreated('emergency', 7, undefined, null),
+      ).not.toThrow();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  });
 });

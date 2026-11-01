@@ -149,6 +149,34 @@ export class AuthService {
     return { isAuthenticated: true };
   }
 
+  // A long-lived credential was just minted from a browser session: tell the owner, so a stolen session cannot
+  // quietly leave a way back in. Best-effort — never throws, never includes the plaintext token.
+  announceCredentialCreated(
+    kind: 'emergency' | 'api-key',
+    userId: number,
+    name?: string,
+    ip?: string | null,
+    scope?: string | null,
+    expiresAt?: Date | null,
+  ): void {
+    const address = ip ?? 'неизвестен';
+    const hint = 'Не вы — отзовите в профиле.';
+    let message: string;
+
+    if (kind === 'emergency') {
+      this.logger.warn(`Emergency key created: user ${userId} from ${address}`);
+      message = `🔑 Создан аварийный ключ: пользователь ${userId}, адрес ${address}. ${hint}`;
+    } else {
+      const expiry = expiresAt ? expiresAt.toISOString() : 'бессрочный';
+      this.logger.warn(
+        `API key "${name}" created: user ${userId} from ${address}, scope ${scope ?? 'all'}, expires ${expiry}`,
+      );
+      message = `🔑 Создан API-ключ «${name}» (${scope ?? 'все права'}, срок: ${expiry}): пользователь ${userId}, адрес ${address}. ${hint}`;
+    }
+
+    void this.telegram.send(message).catch(() => undefined);
+  }
+
   private unauthorizedResponse(response: Response): CheckAuthResponseDto {
     response.status(HttpStatus.UNAUTHORIZED);
     return { isAuthenticated: false };
