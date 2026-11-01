@@ -9,7 +9,7 @@
 //   node scripts/router-eval/run.mjs report   [--out .router-eval]
 //   node scripts/router-eval/run.mjs replay   --url http://localhost:11434/v1 --model qwen2.5-coder:7b [--max-tier 1] [--limit 8]
 //                                             [--auth none|bearer --key …] [--timeout 900] [--only 1070,1031] [--out .router-eval]
-//   node scripts/router-eval/run.mjs replay   --by claude --model haiku [--max-tier 2] [--limit 24] [--timeout 900]
+//   node scripts/router-eval/run.mjs replay   --by claude --model haiku [--min-tier 3 --max-tier 3] [--limit 24] [--timeout 900]
 //                                             a Claude model as an agent (reads, edits, runs tests; needs the claude CLI logged in here);
 //                                             --model is haiku, sonnet or opus; the cost of each run is in the report
 //   node scripts/router-eval/run.mjs grade    --dir <replay-… folder> [--repo-dir .] [--only 1070]
@@ -218,7 +218,13 @@ async function replay() {
   const only = flags.only ? new Set(flags.only.split(',').map(Number)) : null;
   const picked = (only
     ? withMergeCommits(read('tasks.json')).filter((task) => only.has(task.pr))
-    : selectTasks(withMergeCommits(read('tasks.json')), { maxTier: Number(flags['max-tier'] ?? 1), limit: Number(flags.limit ?? 8) })
+    : selectTasks(withMergeCommits(read('tasks.json')), {
+        minTier: Number(flags['min-tier'] ?? 1),
+        maxTier: Number(flags['max-tier'] ?? 1),
+        limit: Number(flags.limit ?? 8),
+        // a Claude model can generate files and write migrations: the tasks that need that are fair game for it
+        onlyLocalOk: !byClaude || flags['only-file-tasks'] === 'true',
+      })
   ).filter((task) => task.mergeCommit);
   const dest = join(out, `replay-${byClaude ? 'claude-' : ''}${flags.model.replace(/[^\w.-]/g, '_')}`);
   const workRoot = mkdtempSync(join(tmpdir(), 'router-replay-'));
@@ -228,7 +234,7 @@ async function replay() {
 
   if (!byClaude) await requireModel(options);
   mkdirSync(dest, { recursive: true });
-  console.error(`${picked.length} tasks of tier ≤ ${flags['max-tier'] ?? 1} → ${dest}`);
+  console.error(`${picked.length} tasks of tier ${flags['min-tier'] ?? 1}–${flags['max-tier'] ?? 1} → ${dest}`);
 
   for (const task of picked) {
     process.stderr.write(`#${task.pr} ${task.title.slice(0, 70)} … `);
