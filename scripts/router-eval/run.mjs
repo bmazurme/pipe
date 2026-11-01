@@ -233,6 +233,7 @@ async function replay() {
   for (const task of picked) {
     process.stderr.write(`#${task.pr} ${task.title.slice(0, 70)} … `);
 
+    // one task going wrong (git, the checkout) is that task's failure, not the end of the whole run
     const result = await replayTask({
       repo: repoDir,
       task,
@@ -253,7 +254,21 @@ async function replay() {
 
         return { ...result, output: transcript.join('') };
       },
-    });
+    }).catch((error) => ({
+      pr: task.pr,
+      title: task.title,
+      seconds: 0,
+      failure: `could not replay: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+      costUsd: null,
+      turns: null,
+      changed: [],
+      same: [],
+      missed: task.files.map((file) => file.path),
+      extra: [],
+      syntaxBroken: [],
+      diff: '',
+      output: '',
+    }));
 
     writeFileSync(join(dest, `pr-${task.pr}.model.diff`), result.diff);
     writeFileSync(join(dest, `pr-${task.pr}.model.log.txt`), result.output);

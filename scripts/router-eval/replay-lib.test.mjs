@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 
-import { buildPrompt, compareFiles, pathsOf, renderReplay, replayTask, selectTasks, summarize, syntaxErrors } from './replay-lib.mjs';
+import { buildPrompt, compareFiles, pathsOf, removeModuleLinks, renderReplay, replayTask, selectTasks, summarize, syntaxErrors } from './replay-lib.mjs';
 
 const ts = createRequire(import.meta.url)('typescript');
 const sh = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
@@ -159,6 +159,28 @@ describe('replayTask', () => {
 
     assert.equal(failed.failure, 'model down');
     assert.equal(sh(repo, 'worktree', 'list').split('\n').length, 1);
+  });
+});
+
+describe('removeModuleLinks', () => {
+  it('takes out the node_modules symlinks, and leaves a real node_modules folder and everything else alone', () => {
+    const root = mkdtempSync(join(tmpdir(), 'links-'));
+    const target = mkdtempSync(join(tmpdir(), 'links-target-'));
+
+    mkdirSync(join(root, 'app', 'sub'), { recursive: true });
+    mkdirSync(join(root, 'real', 'node_modules'), { recursive: true });
+    writeFileSync(join(root, 'real', 'node_modules', 'keep.txt'), 'x');
+    writeFileSync(join(root, 'app', 'a.ts'), 'x');
+    symlinkSync(target, join(root, 'node_modules'));
+    symlinkSync(target, join(root, 'app', 'sub', 'node_modules'));
+
+    removeModuleLinks(root);
+
+    assert.throws(() => readFileSync(join(root, 'node_modules')));
+    assert.equal(readFileSync(join(root, 'real', 'node_modules', 'keep.txt'), 'utf8'), 'x');
+    assert.equal(readFileSync(join(root, 'app', 'a.ts'), 'utf8'), 'x');
+    rmSync(root, { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
   });
 });
 

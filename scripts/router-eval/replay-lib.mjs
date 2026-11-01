@@ -1,11 +1,25 @@
 // Replay of past tasks on a real model (step 3b of the router plan): the project as it was just before a task's pull request, the
 // task text as the worker would hand it over, the model's own edits — then how they compare with what was really merged.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// A checkout whose node_modules are symlinks into the real project (so tests can run there): those links are not the model's work.
-const OUTSIDE_MODULES = ['--', '.', ':(exclude)node_modules', ':(exclude,glob)**/node_modules'];
+// A checkout's node_modules are symlinks into the real project (so that tests can run there): they are not the model's work, and git
+// refuses to add a path that .gitignore names, so they are taken out before the changes are counted.
+export function removeModuleLinks(root, depth = 4) {
+  const walk = (dir, level) => {
+    if (level > depth) return;
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+
+      if (entry.name === 'node_modules' && lstatSync(full).isSymbolicLink()) unlinkSync(full);
+      else if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') walk(full, level + 1);
+    }
+  };
+
+  walk(root, 1);
+}
 
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
@@ -87,9 +101,11 @@ export async function replayTask({ repo, task, run, workRoot, ts, wrap }) {
       failure = error instanceof Error ? error.message : String(error);
     }
 
-    const changed = pathsOf(git(dir, 'status', '--porcelain', '-uall', ...OUTSIDE_MODULES));
+    removeModuleLinks(dir);
 
-    git(dir, 'add', '-A', ...OUTSIDE_MODULES);
+    const changed = pathsOf(git(dir, 'status', '--porcelain', '-uall'));
+
+    git(dir, 'add', '-A');
 
     const diff = git(dir, 'diff', '--cached');
 
