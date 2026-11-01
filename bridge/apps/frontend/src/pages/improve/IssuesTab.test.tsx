@@ -19,6 +19,7 @@ const makeIssue = (number: number) => ({
 });
 
 let releaseBatch: () => void;
+let batchBody: unknown;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -43,6 +44,7 @@ beforeEach(() => {
 
       if (path === 'improve/issues') return json([makeIssue(1), makeIssue(2), makeIssue(3)]);
       if (path === 'improve/runs/batch') {
+        batchBody = await request.clone().json().catch(() => undefined);
         await new Promise<void>((resolve) => {
           releaseBatch = resolve;
         });
@@ -53,6 +55,28 @@ beforeEach(() => {
       return json({});
     }),
   );
+});
+
+describe("IssuesTab with the router's 'Авто'", () => {
+  it('offers it first among the models, starts the selected issues on it, and remembers the choice', async () => {
+    const user = userEvent.setup();
+
+    try {
+      localStorage.clear();
+    } catch {
+      // not available: the choice just is not remembered
+    }
+    renderTab();
+
+    await user.click(await screen.findByText('Claude Sonnet'));
+    await user.click(await screen.findByText('Авто (маршрутизатор выбирает)'));
+    await user.click(await screen.findByRole('checkbox', { name: 'Выбрать #1' }));
+    await user.click(screen.getByRole('button', { name: /Запустить выбранные/ }));
+
+    await waitFor(() => expect(batchBody).toMatchObject({ issueNumbers: [1], model: 'auto' }));
+    releaseBatch();
+    expect(localStorage.getItem('improve.model')).toBe('auto');
+  });
 });
 
 describe('IssuesTab', () => {

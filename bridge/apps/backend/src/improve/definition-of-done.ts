@@ -28,3 +28,13 @@ export function withDefinitionOfDone(body: string): string {
 
   return text ? `${text}\n\n${DEFINITION_OF_DONE}` : DEFINITION_OF_DONE;
 }
+
+// What `withDefinitionOfDone` was given: the task as it was written, for anything that judges the task (the model router must not be told
+// a task is big because of the build-and-test instructions every task carries).
+export function withoutDefinitionOfDone(body: string): string {
+  const text = body ?? '';
+
+  return text.endsWith(DEFINITION_OF_DONE)
+    ? text.slice(0, text.length - DEFINITION_OF_DONE.length).trimEnd()
+    : text;
+}

@@ -93,7 +93,9 @@ export class ImproveScheduleService implements OnModuleInit {
     },
     id?: number,
   ): Promise<ImproveSchedule> {
-    this.improve.requireModel(input.model);
+    // An issues schedule may take 'auto'; an analysis one has no task text to size, so it names its model.
+    if (input.kind === 'analysis') this.improve.requireModel(input.model);
+    else this.improve.requireIssueModel(input.model);
 
     if (!isValidTimeZone(input.timezone)) {
       throw new BadRequestException(

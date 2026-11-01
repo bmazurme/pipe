@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { blocksNewRun, describeSchedule, formatTime, isActiveRun, parseTime, RUN_STATUS_LABEL } from './improveLabels';
+import { blocksNewRun, describeSchedule, formatTime, isActiveRun, parseTime, readStoredModel, RUN_STATUS_LABEL, storeModel } from './improveLabels';
 
 describe('improve labels', () => {
   it('describes a schedule in words, with the right Russian plural', () => {
@@ -78,5 +78,30 @@ describe('a preparing run', () => {
     expect(RUN_STATUS_LABEL.preparing).toBe('Готовится');
     expect(isActiveRun({ status: 'preparing' })).toBe(true);
     expect(blocksNewRun({ status: 'preparing' })).toBe(true);
+  });
+});
+
+describe('the remembered model', () => {
+  it("remembers a named model and one of the owner's own keys, 'auto' only where it is offered, and falls back to Sonnet", () => {
+    storeModel('opus');
+    expect(readStoredModel()).toBe('opus');
+
+    storeModel('custom:12');
+    expect(readStoredModel()).toBe('custom:12');
+
+    storeModel('auto');
+    expect(readStoredModel(true)).toBe('auto');
+    expect(readStoredModel()).toBe('sonnet');
+
+    for (const junk of ['custom', 'custom:', 'gemini', '']) {
+      storeModel(junk);
+      expect(readStoredModel(true)).toBe('sonnet');
+    }
+  });
+
+  it("names 'auto' schedules by the router's label when given one", () => {
+    const base = { hour: 2, minute: 0, timezone: 'UTC', count: 2 };
+
+    expect(describeSchedule({ ...base, model: 'auto' }, () => 'Авто')).toContain('· Авто');
   });
 });

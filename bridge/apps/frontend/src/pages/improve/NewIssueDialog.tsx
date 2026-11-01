@@ -7,7 +7,7 @@ import { useCreateImproveIssueMutation } from '../../store/api';
 import { useModelOptions } from '../worker/useModelOptions';
 
 export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean; onClose: () => void; defaultModel: string }) {
-  const { options: modelOptions } = useModelOptions();
+  const { options: modelOptions } = useModelOptions(true);
   const [create, { isLoading }] = useCreateImproveIssueMutation();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');

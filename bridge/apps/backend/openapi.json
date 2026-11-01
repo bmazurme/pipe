@@ -3475,6 +3475,78 @@
         }
       }
     },
+    "/api/v1/router/settings": {
+      "get": {
+        "operationId": "RouterController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "RouterController_save",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouterSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/router/preview": {
+      "post": {
+        "operationId": "RouterController_preview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouterPreviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lab/projects": {
       "get": {
         "operationId": "LabController_listProjects",
@@ -3879,78 +3951,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LabRun"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/router/settings": {
-      "get": {
-        "operationId": "RouterController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "RouterController_save",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RouterSettingsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/router/preview": {
-      "post": {
-        "operationId": "RouterController_preview",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RouterPreviewDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
                 }
               }
             }
@@ -7500,6 +7500,10 @@
           "model": {
             "type": "string"
           },
+          "routing": {
+            "type": "object",
+            "nullable": true
+          },
           "trigger": {
             "type": "object"
           },
@@ -7597,6 +7601,7 @@
           "issueNumber",
           "issueTitle",
           "model",
+          "routing",
           "trigger",
           "scheduleId",
           "status",
@@ -8027,6 +8032,71 @@
         "type": "object",
         "properties": {}
       },
+      "RouterRuleDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "keywords": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "keywords",
+          "model",
+          "enabled"
+        ]
+      },
+      "RouterSettingsDto": {
+        "type": "object",
+        "properties": {
+          "tierModels": {
+            "type": "object"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouterRuleDto"
+            }
+          }
+        },
+        "required": [
+          "tierModels",
+          "rules"
+        ]
+      },
+      "RouterPreviewDto": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8000
+          },
+          "executor": {
+            "type": "string",
+            "enum": [
+              "any",
+              "fusion"
+            ]
+          }
+        },
+        "required": [
+          "task",
+          "executor"
+        ]
+      },
       "CreateLabProjectDto": {
         "type": "object",
         "properties": {
@@ -8420,71 +8490,6 @@
           "projectId",
           "task",
           "model"
-        ]
-      },
-      "RouterRuleDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100
-          },
-          "keywords": {
-            "type": "string",
-            "maxLength": 1000
-          },
-          "model": {
-            "type": "string",
-            "maxLength": 32
-          },
-          "enabled": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "keywords",
-          "model",
-          "enabled"
-        ]
-      },
-      "RouterSettingsDto": {
-        "type": "object",
-        "properties": {
-          "tierModels": {
-            "type": "object"
-          },
-          "rules": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RouterRuleDto"
-            }
-          }
-        },
-        "required": [
-          "tierModels",
-          "rules"
-        ]
-      },
-      "RouterPreviewDto": {
-        "type": "object",
-        "properties": {
-          "task": {
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 8000
-          },
-          "executor": {
-            "type": "string",
-            "enum": [
-              "any",
-              "fusion"
-            ]
-          }
-        },
-        "required": [
-          "task",
-          "executor"
         ]
       },
       "AppLog": {

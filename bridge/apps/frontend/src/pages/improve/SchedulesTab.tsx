@@ -160,7 +160,7 @@ function FilingLimitsCard() {
 }
 
 export function SchedulesTab() {
-  const { options: modelOptions, label: modelLabel } = useModelOptions();
+  const { options: modelOptions, label: modelLabel } = useModelOptions(true);
   const { data: schedules, isLoading, isError } = useListImproveSchedulesQuery();
   // By the time they run, earliest first (the server returns them in the order they were made).
   const sortedSchedules = useMemo(() => sortSchedulesByRunTime(schedules ?? []), [schedules]);
@@ -333,7 +333,17 @@ export function SchedulesTab() {
                 label="Что запускать"
                 value={[editing.form.kind ?? 'issues']}
                 onUpdate={([kind]) =>
-                  update(kind === 'analysis' ? { kind: 'analysis', categories: editing.form.categories ?? DEFAULT_CATEGORIES, autoCreateIssues: editing.form.autoCreateIssues ?? true } : { kind: 'issues' })
+                  update(
+                    kind === 'analysis'
+                      ? {
+                          kind: 'analysis',
+                          // an analysis has no task text to size: it names its model
+                          model: editing.form.model === 'auto' ? 'sonnet' : editing.form.model,
+                          categories: editing.form.categories ?? DEFAULT_CATEGORIES,
+                          autoCreateIssues: editing.form.autoCreateIssues ?? true,
+                        }
+                      : { kind: 'issues' },
+                  )
                 }
                 options={[
                   { value: 'issues', content: 'Задачи из issues' },
@@ -376,7 +386,18 @@ export function SchedulesTab() {
                   );
                 })}
               </div>
-              <Select label="Модель" value={[editing.form.model]} onUpdate={([model]) => update({ model })} options={modelOptions} width="max" />
+              <Select
+                label="Модель"
+                value={[editing.form.model]}
+                onUpdate={([model]) => update({ model })}
+                options={editing.form.kind === 'analysis' ? modelOptions.filter((option) => option.value !== 'auto') : modelOptions}
+                width="max"
+              />
+              {editing.form.model === 'auto' && (
+                <Text variant="caption-2" color="secondary">
+                  Для каждой задачи модель выберет маршрутизатор (Lab → «Маршрутизатор»: ярусы и правила «слова → строго заданная модель»).
+                </Text>
+              )}
               <Select
                 label="Контекст"
                 value={[editing.form.contextId ?? NO_CONTEXT]}
