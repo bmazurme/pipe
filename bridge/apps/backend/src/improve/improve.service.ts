@@ -249,7 +249,7 @@ export class ImproveService {
     contextId: number | null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
-    this.requireModel(model);
+    this.requireIssueModel(model);
 
     const blocking = await this.runs.findOne({
       where: {
@@ -306,7 +306,7 @@ export class ImproveService {
   ): Promise<void> {
     try {
       const prepared = await this.handoff.prepareSnapshot();
-      const { job, baseSha, baseline, fileCount } =
+      const { job, baseSha, baseline, fileCount, model, routing } =
         await this.handoff.handToWorker(
           run.userId,
           run.model,
@@ -330,6 +330,8 @@ export class ImproveService {
           jobId: job.id,
           baseSha,
           baseline: JSON.stringify(baseline),
+          // 'auto': the run now says which model it really runs on, and why
+          ...(routing ? { model, routing } : {}),
         },
       );
 
@@ -342,6 +344,10 @@ export class ImproveService {
       run.status = ImproveRunStatus.Queued;
       run.jobId = job.id;
       run.baseSha = baseSha;
+      if (routing) {
+        run.model = model;
+        run.routing = routing;
+      }
       this.log(
         'info',
         'improve.run_started',
@@ -1310,7 +1316,7 @@ export class ImproveService {
     indices?: number[],
   ): Promise<ImproveRun> {
     this.requireConfigured();
-    this.requireModel(model);
+    this.requireIssueModel(model);
 
     const run = await this.runs.findOne({ where: { id, kind: 'analysis' } });
 
@@ -1356,7 +1362,7 @@ export class ImproveService {
     model: string,
   ): Promise<{ started: number[]; skipped: string[] }> {
     this.requireConfigured();
-    this.requireModel(model);
+    this.requireIssueModel(model);
 
     const outcomes = await this.startEach(userId, issueNumbers, model);
     const started: number[] = [];
@@ -1382,6 +1388,12 @@ export class ImproveService {
 
   requireModel(model: string): void {
     requireImproveModel(model);
+  }
+
+  // An issue run may also take 'auto': the model router picks when the run is prepared. Analysis, repair and chat fixes may not — they
+  // are not sized by a task text, so they keep a model the owner names.
+  requireIssueModel(model: string): void {
+    if (model !== 'auto') this.requireModel(model);
   }
 
   private log(

@@ -1,4 +1,8 @@
-import { DEFINITION_OF_DONE, withDefinitionOfDone } from './definition-of-done';
+import {
+  withoutDefinitionOfDone,
+  DEFINITION_OF_DONE,
+  withDefinitionOfDone,
+} from './definition-of-done';
 
 describe('withDefinitionOfDone', () => {
   it('appends the checklist after the issue text, which stays first', () => {
@@ -51,5 +55,18 @@ describe('withDefinitionOfDone', () => {
     ]) {
       expect(fs.existsSync(path.join(root, file))).toBe(true);
     }
+  });
+});
+
+describe('withoutDefinitionOfDone', () => {
+  it('undoes withDefinitionOfDone, and leaves any other text alone', () => {
+    expect(
+      withoutDefinitionOfDone(withDefinitionOfDone('Fix the typo in a.ts.')),
+    ).toBe('Fix the typo in a.ts.');
+    expect(withoutDefinitionOfDone(withDefinitionOfDone(''))).toBe('');
+    expect(withoutDefinitionOfDone('No such block here.')).toBe(
+      'No such block here.',
+    );
+    expect(withoutDefinitionOfDone(undefined as unknown as string)).toBe('');
   });
 });

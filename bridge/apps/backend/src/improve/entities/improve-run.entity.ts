@@ -1,6 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 
 import { BaseEntity } from '../../base.entity';
+import type { Routing } from '../../router/router-policy';
 
 export enum ImproveRunStatus {
   // The run is recorded; the snapshot and the parcel are still being built in the background.
@@ -52,8 +53,13 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   issueTitle: string;
 
+  // What was asked for: a model, or 'auto' — and then the model the router chose (`routing` says why) once the run was prepared.
   @Column({ type: 'varchar', length: 16 })
   model: string;
+
+  // Set for an 'auto' issue run once the router has chosen (router-policy.ts `Routing`): the model and the reason in words.
+  @Column({ type: 'jsonb', nullable: true })
+  routing: Routing | null;
 
   @Column({ type: 'varchar', length: 16, default: 'manual' })
   trigger: ImproveTrigger;

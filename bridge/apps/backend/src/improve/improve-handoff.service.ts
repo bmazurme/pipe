@@ -3,8 +3,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { readZipball, type SnapshotFile } from '../common/zip';
 import { GithubApiService } from '../loop/github-api.service';
+import { RouterService } from '../router/router.service';
 import { StorageService } from '../storage/storage.service';
 import { WorkerService } from '../worker/worker.service';
+import { withoutDefinitionOfDone } from './definition-of-done';
 import { message, withTransientRetry } from './improve-shared';
 import { launchIssueJob } from './issue-job';
 import {
@@ -52,6 +54,7 @@ export class ImproveHandoffService {
     private readonly github: GithubApiService,
     private readonly storage: StorageService,
     private readonly workers: WorkerService,
+    private readonly router: RouterService,
   ) {}
 
   // Snapshot of a base-branch commit.
@@ -108,6 +111,16 @@ export class ImproveHandoffService {
     // A saved Context (Context page) the run's worker job carries as background text; the job keeps its own snapshot.
     contextId: number | null = null,
   ) {
+    // 'auto': the model router picks (a few seconds of Haiku, or none when a rule of the owner's decides by words); a model the owner
+    // named passes through, and so does every run that is not an issue run (analysis, repair, chat fix), which always has one.
+    const { model: chosen, routing } = await this.router.resolve({
+      userId,
+      model,
+      title: task.title,
+      // the task as it was written, not the build-and-test instructions every task carries
+      task: withoutDefinitionOfDone(task.body),
+      executor: 'any',
+    });
     const baseBranch = snapshot?.branch ?? this.github.baseBranch();
     const { baseSha, files, baseline } =
       prepared ??
@@ -132,11 +145,19 @@ export class ImproveHandoffService {
         baseline,
         fileName,
         taskKey,
-        model,
+        model: chosen,
         contextId,
       },
     );
 
-    return { job, baseSha, baseline, fileCount: files.length };
+    return {
+      job,
+      baseSha,
+      baseline,
+      fileCount: files.length,
+      // the model the job really got, and why when the router chose it
+      model: chosen,
+      routing,
+    };
   }
 }

@@ -5,6 +5,11 @@ import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 import { zipSync, strToU8 } from 'fflate';
 
+// A model the owner named: the router lets it through unchanged.
+const passThroughRouter = {
+  resolve: async ({ model }: { model: string }) => ({ model, routing: null }),
+} as never;
+
 function setup(runOverrides: Record<string, unknown> = {}) {
   const runs = {
     find: jest.fn().mockResolvedValue([]),
@@ -74,6 +79,7 @@ function setup(runOverrides: Record<string, unknown> = {}) {
       github as never,
       storage as never,
       workers as never,
+      passThroughRouter,
     ),
   );
 

@@ -11,7 +11,7 @@ import styles from '../ImprovePage.module.css';
 import { blocksNewRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME } from './improveLabels';
 
 export function IssuesTab({ configured }: { configured: boolean }) {
-  const { options: modelOptions } = useModelOptions();
+  const { options: modelOptions } = useModelOptions(true);
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isError, error, isFetching } = useListImproveIssuesQuery({ all: showAll }, { skip: !configured });
   const issues = data?.issues;
@@ -20,7 +20,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [start, { isLoading: isStarting }] = useStartImproveRunMutation();
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
-  const [model, setModel] = useState(readStoredModel);
+  const [model, setModel] = useState(() => readStoredModel(true));
   const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
   const [launching, setLaunching] = useState<number[]>([]);
   const [newIssueOpen, setNewIssueOpen] = useState(false);

@@ -1858,6 +1858,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/router/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["RouterController_get"];
+        put: operations["RouterController_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/router/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RouterController_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/projects": {
         parameters: {
             query?: never;
@@ -2028,38 +2060,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["LabController_retryPublish"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/router/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["RouterController_get"];
-        put: operations["RouterController_save"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/router/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["RouterController_preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3179,6 +3179,7 @@ export interface components {
             issueNumber: number | null;
             issueTitle: string;
             model: string;
+            routing: Record<string, never> | null;
             trigger: Record<string, never>;
             scheduleId: number | null;
             /** @enum {string} */
@@ -3302,6 +3303,21 @@ export interface components {
         };
         PauseLoopDto: Record<string, never>;
         DeployReportDto: Record<string, never>;
+        RouterRuleDto: {
+            name: string;
+            keywords: string;
+            model: string;
+            enabled: boolean;
+        };
+        RouterSettingsDto: {
+            tierModels: Record<string, never>;
+            rules: components["schemas"]["RouterRuleDto"][];
+        };
+        RouterPreviewDto: {
+            task: string;
+            /** @enum {string} */
+            executor: "any" | "fusion";
+        };
         CreateLabProjectDto: {
             name: string;
             repo: string;
@@ -3393,21 +3409,6 @@ export interface components {
             task: string;
             model: string;
             baseBranch?: string;
-        };
-        RouterRuleDto: {
-            name: string;
-            keywords: string;
-            model: string;
-            enabled: boolean;
-        };
-        RouterSettingsDto: {
-            tierModels: Record<string, never>;
-            rules: components["schemas"]["RouterRuleDto"][];
-        };
-        RouterPreviewDto: {
-            task: string;
-            /** @enum {string} */
-            executor: "any" | "fusion";
         };
         AppLog: {
             level: Record<string, never>;
@@ -6489,6 +6490,71 @@ export interface operations {
             };
         };
     };
+    RouterController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    RouterController_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    RouterController_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterPreviewDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     LabController_listProjects: {
         parameters: {
             query?: never;
@@ -6824,71 +6890,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabRun"];
-                };
-            };
-        };
-    };
-    RouterController_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    RouterController_save: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RouterSettingsDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    RouterController_preview: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RouterPreviewDto"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
                 };
             };
         };

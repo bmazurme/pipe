@@ -4,6 +4,11 @@ import { ImproveHandoffService } from './improve-handoff.service';
 import * as parcel from './parcel';
 import { MANIFEST_ENTRY } from './parcel';
 
+// A model the owner named: the router lets it through unchanged.
+const passThroughRouter = {
+  resolve: async ({ model }: { model: string }) => ({ model, routing: null }),
+} as never;
+
 function setup() {
   const github = {
     repoName: jest.fn().mockReturnValue('o/r'),
@@ -24,6 +29,7 @@ function setup() {
     github as never,
     storage as never,
     workers as never,
+    passThroughRouter,
   );
 
   return { service, github, storage, workers };

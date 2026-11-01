@@ -105,6 +105,11 @@ export function RunsTab() {
               {modelLabel(run.model)} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}
               {run.note && ` · ${run.note}`}
             </Text>
+            {run.routing && (
+              <Text variant="caption-2" color="secondary" title="Почему маршрутизатор выбрал эту модель">
+                Авто: {run.routing.reason}
+              </Text>
+            )}
             {run.error && (
               <Text variant="caption-2" color="danger" ellipsis title={run.error}>
                 {run.error}

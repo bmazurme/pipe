@@ -66,7 +66,10 @@ export interface ImproveRun {
   hasResult?: boolean;
   issueNumber: number | null;
   issueTitle: string;
+  /** The model the job runs on; for an 'auto' run, what the router chose once it had. */
   model: string;
+  /** Set on an 'auto' issue run once the router has chosen: the model and why, in words. */
+  routing?: { model: string; source: 'rule' | 'classifier' | 'fallback' | 'executor'; reason: string; tier?: number; needsGenerated?: boolean; rule?: string } | null;
   trigger: 'manual' | 'schedule' | 'ci' | 'chat';
   scheduleId: number | null;
   status: ImproveRunStatus;

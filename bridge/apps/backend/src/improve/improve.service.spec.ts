@@ -12,6 +12,11 @@ import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 import { MANIFEST_ENTRY, sha256 } from './parcel';
 
+// A model the owner named: the router lets it through unchanged.
+const passThroughRouter = {
+  resolve: async ({ model }: { model: string }) => ({ model, routing: null }),
+} as never;
+
 const BASE = { 'a.ts': 'one', 'b.ts': 'two' };
 const baselineOf = (files: Record<string, string>) =>
   JSON.stringify(
@@ -27,6 +32,7 @@ function setup(
   overrides: {
     runs?: Record<string, unknown>;
     github?: Record<string, unknown>;
+    router?: unknown;
   } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), 'improve-test-'));
@@ -115,6 +121,7 @@ function setup(
       github as never,
       storage as never,
       workers as never,
+      (overrides.router ?? passThroughRouter) as never,
     ),
   );
 
@@ -135,6 +142,84 @@ function setup(
 const settle = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
 };
+
+describe("ImproveService.startRun with the model 'auto'", () => {
+  const routing = {
+    model: 'haiku',
+    source: 'classifier',
+    tier: 1,
+    needsGenerated: false,
+    reason: 'Ярус 1 из 4 — haiku',
+  };
+  const router = {
+    resolve: jest.fn(async ({ model }: { model: string; task?: string }) =>
+      model === 'auto' ? { model: 'haiku', routing } : { model, routing: null },
+    ),
+  };
+
+  beforeEach(() => router.resolve.mockClear());
+
+  it('asks the router when the run is prepared, runs the job on the model it chose and keeps the reason on the run', async () => {
+    const { service, workers, runs } = setup({ router });
+
+    const run = await service.startRun(3, 7, 'auto');
+
+    expect(run.model).toBe('auto');
+    await settle();
+
+    expect(router.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 3,
+        model: 'auto',
+        title: expect.any(String),
+        executor: 'any',
+      }),
+    );
+    // the router judged the issue as it was written, without the build-and-test instructions every issue carries
+    expect(JSON.stringify(router.resolve.mock.calls[0][0].task)).not.toContain(
+      'Definition of done',
+    );
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ model: 'haiku' }),
+    );
+    expect(runs.update.mock.calls[0][1]).toMatchObject({
+      status: 'queued',
+      jobId: 321,
+      model: 'haiku',
+      routing,
+    });
+    expect(run).toMatchObject({ model: 'haiku', routing });
+  });
+
+  it('records no routing for a model the owner named — that choice is theirs, hard', async () => {
+    const { service, workers, runs } = setup({ router });
+
+    await service.startRun(3, 7, 'opus');
+    await settle();
+
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ model: 'opus' }),
+    );
+    expect(runs.update.mock.calls[0][1]).not.toHaveProperty('routing');
+    expect(runs.update.mock.calls[0][1]).not.toHaveProperty('model');
+  });
+
+  it('is allowed for a batch of issues, and refused where there is no task text to size: an analysis, a CI repair', async () => {
+    const { service } = setup({ router });
+
+    await expect(service.startMany(3, [7], 'auto')).resolves.toBeDefined();
+    await expect(service.startAnalysis(3, 'auto', ['general'])).rejects.toThrow(
+      /Неизвестная модель/,
+    );
+    expect(() => service.requireModel('auto')).toThrow(/Неизвестная модель/);
+    expect(() => service.requireIssueModel('auto')).not.toThrow();
+    expect(() => service.requireIssueModel('gemini')).toThrow(
+      /Неизвестная модель/,
+    );
+  });
+});
 
 describe('ImproveService.startRun', () => {
   it('records the run, then snapshots the repo, stores the parcel and starts a worker job', async () => {

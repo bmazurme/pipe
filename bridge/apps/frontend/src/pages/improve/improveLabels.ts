@@ -84,11 +84,17 @@ const MODEL_STORAGE_KEY = 'improve.model';
 
 // Shared across every "Модель" picker on this page (Задачи, Анализ) — picking opus in one tab
 // and finding sonnet still selected in another was the inconsistency this fixes.
-export function readStoredModel(): string {
+// `allowAuto`: the issue pickers offer the router's 'Авто'; the analysis picker does not (an analysis has no task text to size), and a
+// remembered 'auto' is then not taken. A model of the owner's own ("custom:<key id>") is remembered like any other.
+export function readStoredModel(allowAuto = false): string {
   try {
     const value = localStorage.getItem(MODEL_STORAGE_KEY);
+    const known =
+      MODEL_OPTIONS.some((option) => option.value === value && value !== 'custom') ||
+      /^custom:\d+$/.test(value ?? '') ||
+      (allowAuto && value === 'auto');
 
-    return MODEL_OPTIONS.some((option) => option.value === value) ? (value as string) : 'sonnet';
+    return known ? (value as string) : 'sonnet';
   } catch {
     return 'sonnet';
   }

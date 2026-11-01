@@ -7,6 +7,11 @@ import { ImproveHandoffService } from './improve-handoff.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveService } from './improve.service';
 
+// A model the owner named: the router lets it through unchanged.
+const passThroughRouter = {
+  resolve: async ({ model }: { model: string }) => ({ model, routing: null }),
+} as never;
+
 function setup() {
   const runs: Record<string, jest.Mock> = {
     find: jest.fn().mockResolvedValue([]),
@@ -77,6 +82,7 @@ function setup() {
       github as never,
       storage as never,
       workers as never,
+      passThroughRouter,
     ),
   );
   const contexts = { findOwned: jest.fn().mockResolvedValue({ id: 4 }) };
@@ -234,6 +240,37 @@ describe('schedules', () => {
     await expect(
       service.saveSchedule(3, { ...input, timezone: 'UTC', model: 'x' }),
     ).rejects.toThrow(/Неизвестная модель/);
+  });
+
+  it("lets an issues schedule take 'auto' (a model chosen per task), but an analysis schedule must name its model", async () => {
+    const { service, schedules } = setup();
+    const input = {
+      name: 'n',
+      hour: 2,
+      minute: 0,
+      timezone: 'UTC',
+      count: 3,
+      model: 'auto',
+      enabled: true,
+    };
+
+    schedules.findOne.mockResolvedValue(undefined);
+    (schedules as unknown as { create: jest.Mock }).create = jest.fn(
+      (value: object) => ({ ...value }),
+    );
+    (schedules as unknown as { save: jest.Mock }).save = jest.fn(
+      async (value: object) => value,
+    );
+
+    await expect(service.saveSchedule(3, input)).resolves.toMatchObject({
+      model: 'auto',
+    });
+    await expect(
+      service.saveSchedule(3, { ...input, kind: 'analysis' }),
+    ).rejects.toThrow(/Неизвестная модель/);
+    await expect(
+      service.saveSchedule(3, { ...input, kind: 'analysis', model: 'haiku' }),
+    ).resolves.toMatchObject({ model: 'haiku' });
   });
 
   describe('an attached context', () => {
