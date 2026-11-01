@@ -23,10 +23,11 @@ export function removeModuleLinks(root, depth = 4) {
 
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
-// The tasks worth trying on a small local model: small by the diff, nothing to generate, newest first.
-export function selectTasks(tasks, { maxTier = 1, limit = 8 } = {}) {
+// The tasks to try, newest first: of the tiers asked for and — for a small local model, which cannot generate files or write a migration — only
+// those a model that reads and writes files could do (`onlyLocalOk`, the default); a Claude model takes them all.
+export function selectTasks(tasks, { minTier = 1, maxTier = 1, limit = 8, onlyLocalOk = true } = {}) {
   return tasks
-    .filter((task) => task.truth.tier <= maxTier && task.truth.localOk)
+    .filter((task) => task.truth.tier >= minTier && task.truth.tier <= maxTier && (!onlyLocalOk || task.truth.localOk))
     .sort((a, b) => b.pr - a.pr)
     .slice(0, limit);
 }
@@ -69,13 +70,19 @@ export function syntaxErrors(root, paths, ts) {
       return [];
     }
 
-    const { diagnostics } = ts.transpileModule(content, {
-      fileName: path,
-      reportDiagnostics: true,
-      compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ES2022 },
-    });
+    try {
+      const { diagnostics } = ts.transpileModule(content, {
+        fileName: path,
+        reportDiagnostics: true,
+        compilerOptions: { jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ES2022 },
+      });
 
-    return diagnostics?.length ? [path] : [];
+      return diagnostics?.length ? [path] : [];
+    } catch {
+      // the compiler itself fell over on this file (an internal "Debug Failure"): a file that cannot be checked is not a file that is broken,
+      // and the tests of `grade` will say whether it works
+      return [];
+    }
   });
 }
 

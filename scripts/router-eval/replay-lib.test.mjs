@@ -20,6 +20,15 @@ describe('selectTasks', () => {
     assert.deepEqual(picked.map((t) => t.pr), [7, 5]);
     assert.deepEqual(selectTasks([task(1, 1), task(2, 2)], { maxTier: 2, limit: 8 }).map((t) => t.pr), [2, 1]);
   });
+
+  it('takes a range of tiers, and — for a model that is not limited to files — tasks of any kind', () => {
+    const tasks = [task(1, 1), task(2, 2), task(3, 3, false), task(4, 3), task(5, 4, false)];
+
+    assert.deepEqual(selectTasks(tasks, { minTier: 3, maxTier: 3, onlyLocalOk: false }).map((t) => t.pr), [4, 3]);
+    assert.deepEqual(selectTasks(tasks, { minTier: 3, maxTier: 4, onlyLocalOk: false }).map((t) => t.pr), [5, 4, 3]);
+    assert.deepEqual(selectTasks(tasks, { minTier: 3, maxTier: 3 }).map((t) => t.pr), [4], 'by default only a task marked local-ok');
+    assert.deepEqual(selectTasks(tasks, { minTier: 2, maxTier: 2 }).map((t) => t.pr), [2]);
+  });
 });
 
 describe('pathsOf / compareFiles / buildPrompt', () => {
@@ -50,6 +59,12 @@ describe('syntaxErrors', () => {
   });
 
   after(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('does not call a file broken when the compiler itself falls over on it', () => {
+    const crashing = { JsxEmit: { Preserve: 1 }, ScriptTarget: { ES2022: 9 }, transpileModule: () => { throw new Error('Debug Failure. Output generation failed'); } };
+
+    assert.deepEqual(syntaxErrors(dir, ['ok.ts'], crashing), []);
+  });
 
   it('flags a file that no longer parses and leaves valid code, JSX, docs and missing files alone', () => {
     assert.deepEqual(syntaxErrors(dir, ['ok.ts', 'ok.tsx', 'broken.ts', 'notes.md', 'deleted.ts'], ts), ['broken.ts']);
