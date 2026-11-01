@@ -7488,7 +7488,19 @@
           },
           "ciHandled": {
             "type": "object",
-            "nullable": true
+            "properties": {
+              "sha": {
+                "required": true,
+                "type": "string"
+              },
+              "actions": {
+                "required": true,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "finishedAt": {
             "format": "date-time",
