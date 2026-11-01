@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ContextModule } from '../context/context.module';
 import { LoopModule } from '../loop/loop.module';
+import { RouterModule } from '../router/router.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { WorkerModule } from '../worker/worker.module';
@@ -25,6 +26,7 @@ import { LabSchedulesService } from './lab-schedules.service';
     TelegramModule,
     AuthModule,
     LoopModule,
+    RouterModule,
   ],
   controllers: [LabController],
   providers: [

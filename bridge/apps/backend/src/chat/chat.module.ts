@@ -23,5 +23,7 @@ import { ChatMessage } from './entities/chat-message.entity';
   ],
   controllers: [ChatController, ChatTurnsController],
   providers: [ChatService, ChatAttachmentsService],
+  // The model router asks a short question of Haiku through a chat of its own.
+  exports: [ChatService],
 })
 export class ChatModule {}

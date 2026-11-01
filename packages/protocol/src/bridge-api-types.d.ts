@@ -2034,6 +2034,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/router/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["RouterController_get"];
+        put: operations["RouterController_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/router/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RouterController_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs": {
         parameters: {
             query?: never;
@@ -3329,6 +3361,7 @@ export interface components {
             title: string;
             task: string;
             model: string;
+            routing: Record<string, never> | null;
             executor: Record<string, never>;
             /** @enum {string} */
             status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "pr_merged" | "pr_closed" | "issue_open" | "no_changes" | "failed" | "cancelled";
@@ -3360,6 +3393,21 @@ export interface components {
             task: string;
             model: string;
             baseBranch?: string;
+        };
+        RouterRuleDto: {
+            name: string;
+            keywords: string;
+            model: string;
+            enabled: boolean;
+        };
+        RouterSettingsDto: {
+            tierModels: Record<string, never>;
+            rules: components["schemas"]["RouterRuleDto"][];
+        };
+        RouterPreviewDto: {
+            task: string;
+            /** @enum {string} */
+            executor: "any" | "fusion";
         };
         AppLog: {
             level: Record<string, never>;
@@ -6776,6 +6824,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabRun"];
+                };
+            };
+        };
+    };
+    RouterController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    RouterController_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    RouterController_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterPreviewDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };
