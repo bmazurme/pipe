@@ -5951,16 +5951,10 @@
             "maxLength": 255
           },
           "unavailableCapabilities": {
-            "type": "array",
+            "type": "string",
             "enum": [
               "fusion"
-            ],
-            "items": {
-              "type": "string",
-              "enum": [
-                "fusion"
-              ]
-            }
+            ]
           }
         }
       },
