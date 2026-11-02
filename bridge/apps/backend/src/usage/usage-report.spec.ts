@@ -182,4 +182,66 @@ describe('buildUsageReport', () => {
     expect(report.tasks[0].firstAt).toBe(at(2).toISOString());
     expect(report.tasks[0].lastAt).toBe(at(5).toISOString());
   });
+
+  describe('byRoute', () => {
+    it('groups routed runs by decision with failures, cost and pull requests', () => {
+      const report = buildUsageReport(
+        [
+          job(1, { usage: usage(1) }),
+          job(2, { usage: usage(2), status: 'failed' }),
+          job(3, { usage: usage(0.5) }),
+          job(4, { usage: usage(0.25) }),
+          job(5, { usage: usage(9) }),
+        ],
+        [
+          improveRun(1, {
+            issueNumber: 1,
+            prNumber: 10,
+            routing: {
+              model: 'haiku',
+              source: 'classifier',
+              reason: 'r',
+              tier: 2,
+            },
+          }),
+          improveRun(2, {
+            issueNumber: 2,
+            routing: {
+              model: 'haiku',
+              source: 'classifier',
+              reason: 'r',
+              tier: 2,
+            },
+          }),
+          improveRun(3, {
+            issueNumber: 3,
+            prNumber: 11,
+            routing: { model: 'opus', source: 'rule', reason: 'r', rule: 'db' },
+          }),
+          improveRun(4, {
+            issueNumber: 4,
+            routing: { model: 'sonnet', source: 'fallback', reason: 'r' },
+          }),
+          improveRun(5, { issueNumber: 5 }),
+        ],
+        RANGE,
+      );
+
+      expect(
+        report.byRoute.map((row) => [
+          row.route,
+          row.label,
+          row.jobs,
+          row.failed,
+          row.costUsd,
+          row.pullRequests,
+        ]),
+      ).toEqual([
+        ['tier:2', 'Ярус 2', 2, 1, 3, 1],
+        ['rule:db', 'Правило «db»', 1, 0, 0.5, 1],
+        ['fallback', 'Не определён → sonnet', 1, 0, 0.25, 0],
+      ]);
+      expect(report.byModel[0].jobs).toBe(5);
+    });
+  });
 });

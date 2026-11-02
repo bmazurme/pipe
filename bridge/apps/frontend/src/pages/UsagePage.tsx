@@ -154,6 +154,33 @@ export function UsagePage() {
             </table>
           </Card>
 
+          {data.byRoute && data.byRoute.length > 0 && (
+            <Card view="outlined" className={styles.card}>
+              <Text variant="subheader-2">Маршрутизатор «Авто»</Text>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Маршрут</th>
+                    <th className={styles.num}>Запусков</th>
+                    <th className={styles.num}>Время</th>
+                    <th className={styles.num}>Токены</th>
+                    <th className={styles.num}>Стоимость</th>
+                    <th className={styles.num}>PR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byRoute.map((row) => (
+                    <tr key={row.route}>
+                      <td>{row.label}</td>
+                      <TotalsCells row={row} />
+                      <td className={styles.num}>{row.pullRequests}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+
           <Card view="outlined" className={styles.card}>
             <Text variant="subheader-2">По задачам (дорогие сверху)</Text>
             <table className={styles.table}>
