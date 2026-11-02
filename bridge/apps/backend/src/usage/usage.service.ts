@@ -72,6 +72,7 @@ export class UsageService {
         status: run.status,
         prNumber: run.prNumber,
         prUrl: run.prUrl,
+        routing: run.routing,
       })),
       ...lab.map((run): UsageRun => ({
         jobId: run.jobId,
@@ -82,6 +83,7 @@ export class UsageService {
         status: run.status,
         prNumber: run.prNumber,
         prUrl: run.prUrl,
+        routing: run.routing,
       })),
     ];
 

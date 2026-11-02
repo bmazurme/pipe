@@ -15,6 +15,13 @@ export interface UsageModelRow extends UsageTotals {
   model: string;
 }
 
+export interface UsageRouteRow extends UsageTotals {
+  /** 'rule:<name>', 'tier:<n>' or 'fallback'. */
+  route: string;
+  label: string;
+  pullRequests: number;
+}
+
 export type UsageTaskKind = 'improve' | 'lab' | 'analysis' | 'parcel';
 
 export interface UsageTaskRow extends UsageTotals {
@@ -35,6 +42,7 @@ export interface UsageReport {
   pullRequests: number;
   costPerPullRequest: number | null;
   byModel: UsageModelRow[];
+  byRoute?: UsageRouteRow[];
   tasks: UsageTaskRow[];
 }
 

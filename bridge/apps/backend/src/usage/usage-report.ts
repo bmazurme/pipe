@@ -2,6 +2,8 @@
 // costUsd is what the Claude CLI reports for the run — the API-price equivalent, not what a subscription plan charges — so it is a
 // yardstick for comparing tasks and models, not an invoice. Chat turns are not jobs and are not counted.
 
+import type { Routing } from '../router/router-policy';
+
 export type UsageTaskKind = 'improve' | 'lab' | 'analysis' | 'parcel';
 
 export interface UsageJob {
@@ -33,6 +35,8 @@ export interface UsageRun {
   status: string;
   prNumber: number | null;
   prUrl: string | null;
+  // The router's decision for an 'auto' run; absent or null for a run on a fixed model.
+  routing?: Routing | null;
 }
 
 export interface UsageTotals {
@@ -47,6 +51,14 @@ export interface UsageTotals {
 
 export interface UsageModelRow extends UsageTotals {
   model: string;
+}
+
+export interface UsageRouteRow extends UsageTotals {
+  // 'rule:<name>', 'tier:<n>' or 'fallback'.
+  route: string;
+  label: string;
+  // Distinct tasks of this route that ended in a pull request.
+  pullRequests: number;
 }
 
 export interface UsageTaskRow extends UsageTotals {
@@ -69,6 +81,7 @@ export interface UsageReport {
   pullRequests: number;
   costPerPullRequest: number | null;
   byModel: UsageModelRow[];
+  byRoute: UsageRouteRow[];
   tasks: UsageTaskRow[];
 }
 
@@ -117,6 +130,32 @@ const tidy = <T extends UsageTotals>(row: T): T => ({
   costUsd: round(row.costUsd),
 });
 
+function routeOf(
+  routing: Routing | null | undefined,
+): { route: string; label: string } | null {
+  if (!routing) return null;
+
+  if (routing.source === 'rule' && routing.rule) {
+    return {
+      route: `rule:${routing.rule}`,
+      label: `Правило «${routing.rule}»`,
+    };
+  }
+
+  if (routing.source === 'fallback') {
+    return {
+      route: 'fallback',
+      label: `Не определён → ${routing.model}`,
+    };
+  }
+
+  if (routing.tier !== undefined) {
+    return { route: `tier:${routing.tier}`, label: `Ярус ${routing.tier}` };
+  }
+
+  return null;
+}
+
 const LABEL_MAX = 140;
 const truncate = (text: string) =>
   text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX - 1)}…` : text;
@@ -134,6 +173,8 @@ export function buildUsageReport(
   const totals = emptyTotals();
   const models = new Map<string, UsageModelRow>();
   const tasks = new Map<string, UsageTaskRow>();
+  const routes = new Map<string, UsageRouteRow>();
+  const routePrs = new Map<string, Set<string>>();
 
   for (const job of jobs) {
     add(totals, job);
@@ -147,6 +188,26 @@ export function buildUsageReport(
     models.set(job.model, model);
 
     const run = runByJob.get(job.id);
+    const decision = routeOf(run?.routing);
+
+    if (run && decision) {
+      const row = routes.get(decision.route) ?? {
+        ...decision,
+        pullRequests: 0,
+        ...emptyTotals(),
+      };
+
+      add(row, job);
+      routes.set(decision.route, row);
+
+      if (run.prNumber != null) {
+        const prs = routePrs.get(decision.route) ?? new Set<string>();
+
+        prs.add(`${run.kind}:${run.issueNumber ?? run.runId}`);
+        routePrs.set(decision.route, prs);
+      }
+    }
+
     let key: string;
     let kind: UsageTaskKind;
     let title: string;
@@ -214,6 +275,11 @@ export function buildUsageReport(
     costPerPullRequest: withPr.length ? round(prCost / withPr.length) : null,
     byModel: [...models.values()]
       .map(tidy)
+      .sort((a, b) => b.costUsd - a.costUsd || b.jobs - a.jobs),
+    byRoute: [...routes.values()]
+      .map((row) =>
+        tidy({ ...row, pullRequests: routePrs.get(row.route)?.size ?? 0 }),
+      )
       .sort((a, b) => b.costUsd - a.costUsd || b.jobs - a.jobs),
     tasks: taskRows.slice(0, maxTasks).map(tidy),
   };

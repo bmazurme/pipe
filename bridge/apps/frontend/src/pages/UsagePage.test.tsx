@@ -116,4 +116,26 @@ describe('UsagePage', () => {
 
     expect(await screen.findByText(/boom|Не удалось загрузить отчёт/)).toBeTruthy();
   });
+
+  it('shows the Auto router card when there are routes, and hides it otherwise', async () => {
+    const byRoute = [
+      { route: 'tier:2', label: 'Ярус 2', pullRequests: 1, ...totals({ jobs: 2 }) },
+      { route: 'rule:db', label: 'Правило «db»', pullRequests: 0, ...totals({ jobs: 1 }) },
+      { route: 'fallback', label: 'Не определён → sonnet', pullRequests: 0, ...totals({ jobs: 1 }) },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => json({ ...REPORT, byRoute })));
+    const first = renderPage();
+
+    expect(await screen.findByText('Маршрутизатор «Авто»')).toBeTruthy();
+    expect(screen.getByText('Ярус 2')).toBeTruthy();
+    expect(screen.getByText('Правило «db»')).toBeTruthy();
+    expect(screen.getByText('Не определён → sonnet')).toBeTruthy();
+    first.unmount();
+
+    vi.stubGlobal('fetch', vi.fn(async () => json({ ...REPORT, byRoute: [] })));
+    renderPage();
+
+    expect(await screen.findByText('Условная стоимость')).toBeTruthy();
+    expect(screen.queryByText('Маршрутизатор «Авто»')).toBeNull();
+  });
 });
