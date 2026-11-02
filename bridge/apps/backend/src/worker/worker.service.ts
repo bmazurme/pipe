@@ -869,6 +869,7 @@ export class WorkerService implements OnModuleInit {
     userId: number,
     workerName?: string,
     workerId?: number,
+    unavailableCapabilities: readonly string[] = [],
   ): Promise<Job | null> {
     let name = workerName;
     let worker: Worker | null = null;
@@ -909,7 +910,11 @@ export class WorkerService implements OnModuleInit {
       worker?.id ?? null,
     ];
     // A job that requires a capability goes only to a worker that has it; a legacy worker has none.
-    const eligibility = claimEligibilitySql(worker ?? null, params);
+    const eligibility = claimEligibilitySql(
+      worker ?? null,
+      params,
+      unavailableCapabilities,
+    );
 
     const [rows]: [{ id: number }[], number] = await this.jobRepository.query(
       `UPDATE jobs SET status = $1, "claimedAt" = now(), "workerName" = $2, "workerId" = $5, "updatedAt" = now()

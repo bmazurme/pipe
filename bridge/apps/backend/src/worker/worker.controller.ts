@@ -149,6 +149,7 @@ export class WorkerController {
       currentUser.id,
       dto.workerName,
       currentUser.workerId,
+      dto.unavailableCapabilities,
     );
 
     // A bare `return null` from a Nest handler sends a genuinely empty body

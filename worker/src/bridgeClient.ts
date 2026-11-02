@@ -84,9 +84,20 @@ export class WorkerBridgeClient {
   }
 
   // Returns null when nothing is queued right now (see readOptionalJson).
-  async claim(workerName: string): Promise<RemoteJob | null> {
+  // `unavailableCapabilities` (omitted when empty, so the body stays as before): capabilities the worker has but cannot use now.
+  async claim(
+    workerName: string,
+    unavailableCapabilities: string[] = [],
+  ): Promise<RemoteJob | null> {
     return readOptionalJson<RemoteJob>(
-      await this.post("/claim", "Claim", { workerName }, true),
+      await this.post(
+        "/claim",
+        "Claim",
+        unavailableCapabilities.length > 0
+          ? { workerName, unavailableCapabilities }
+          : { workerName },
+        true,
+      ),
     );
   }
 

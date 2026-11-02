@@ -5949,6 +5949,18 @@
           "workerName": {
             "type": "string",
             "maxLength": 255
+          },
+          "unavailableCapabilities": {
+            "type": "array",
+            "enum": [
+              "fusion"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "fusion"
+              ]
+            }
           }
         }
       },

@@ -19,6 +19,8 @@ export interface LoopDeps {
   processJob: (client: WorkerBridgeClient, job: RemoteJob, config: WorkerConfig) => Promise<void>;
   processChatTurn: (chatClient: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig) => Promise<void>;
   withHeartbeat: <T>(client: WorkerBridgeClient, workerName: string, work: () => Promise<T>) => Promise<T>;
+  // Capabilities the worker has but cannot use right now (Fusion closed); absent = nothing to report.
+  unavailableCapabilities?: () => Promise<string[]>;
   sleep: (ms: number) => Promise<void>;
   log: {
     info: (obj: object, msg: string) => void;
@@ -82,7 +84,9 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
     let job: RemoteJob | null = null;
 
     try {
-      job = await clients.client.claim(config.workerName);
+      const unavailable = deps.unavailableCapabilities ? await deps.unavailableCapabilities().catch(() => []) : [];
+
+      job = await clients.client.claim(config.workerName, unavailable);
     } catch (error) {
       log.error({ err: error }, 'job poll failed');
     }

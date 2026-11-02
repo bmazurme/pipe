@@ -92,6 +92,16 @@ describe('claimEligibilitySql', () => {
     expect(params.slice(5)).toEqual([['haiku'], ['fusion']]);
   });
 
+  it('does not offer a capability the worker reports as unavailable', () => {
+    const params: unknown[] = [1, 2, 3, 4, 5];
+
+    claimEligibilitySql(worker({ capabilities: ['fusion'] }), params, [
+      'fusion',
+    ]);
+
+    expect(params.slice(5)).toEqual([[]]);
+  });
+
   it('skips the model filter when models is null', () => {
     const params: unknown[] = [1, 2, 3, 4, 5];
     const sql = claimEligibilitySql(worker(), params);

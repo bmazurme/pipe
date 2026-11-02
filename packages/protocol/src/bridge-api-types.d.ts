@@ -2808,6 +2808,8 @@ export interface components {
         };
         ClaimJobDto: {
             workerName?: string;
+            /** @enum {array} */
+            unavailableCapabilities?: "fusion";
         };
         HeartbeatDto: {
             workerName: string;
