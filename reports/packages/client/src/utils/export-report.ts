@@ -25,7 +25,7 @@ const thinBorder: Partial<ExcelJS.Borders> = {
   right: { style: 'thin' },
 };
 
-export type ExportSortField = 'number' | 'name' | 'status' | 'time';
+export type ExportSortField = 'number' | 'created' | 'name' | 'status' | 'time';
 export type ExportSortDirection = 'asc' | 'desc';
 export type ExportSort = { field: ExportSortField; direction: ExportSortDirection };
 
@@ -41,29 +41,43 @@ export function taskNumber(name: string): number | null {
 
 function compareRows(a: RowData, b: RowData, field: ExportSortField): number {
   if (field === 'time') return a.time - b.time;
-  if (field === 'number') {
-    const left = taskNumber(a.name);
-    const right = taskNumber(b.name);
-
-    // A row without a number has nothing to compare: it stays after the numbered ones in either direction (see below).
-    return (left ?? 0) - (right ?? 0);
-  }
+  if (field === 'number') return (taskNumber(a.name) ?? 0) - (taskNumber(b.name) ?? 0);
+  // YYYYMMDDHHMMSS has a fixed width, so comparing it as text is comparing the moments.
+  if (field === 'created') return a.created.localeCompare(b.created);
 
   return a[field].localeCompare(b[field], 'ru');
+}
+
+// A row without the value to sort by (no number in its name, no creation date) has nothing to compare:
+// it stays after the others in either direction.
+function hasSortKey(item: RowData, field: ExportSortField): boolean {
+  if (field === 'number') return taskNumber(item.name) !== null;
+  if (field === 'created') return item.created !== '';
+
+  return true;
 }
 
 // Only tasks with time spent go into the file; the sort is stable, so equal values keep the order of the table.
 export function sortReportRows(report: RowData[], { field, direction }: ExportSort): RowData[] {
   const sign = direction === 'asc' ? 1 : -1;
-  const hasNumber = (item: RowData) => field !== 'number' || taskNumber(item.name) !== null;
 
   return report
     .filter((item) => item.time > 0)
     .sort((a, b) => {
-      if (!hasNumber(a) || !hasNumber(b)) return Number(!hasNumber(a)) - Number(!hasNumber(b));
+      const aKeyed = hasSortKey(a, field);
+      const bKeyed = hasSortKey(b, field);
+
+      if (!aKeyed || !bKeyed) return Number(!aKeyed) - Number(!bKeyed);
 
       return sign * compareRows(a, b, field);
     });
+}
+
+// Sorted by creation date, the file shows that date (YYYYMMDDHHMMSS) where the issue number stood in the name.
+export function exportedName(item: RowData, field: ExportSortField): string {
+  if (field !== 'created' || item.created === '') return item.name;
+
+  return /^\s*\d+/.test(item.name) ? item.name.replace(/^\s*\d+/, item.created) : `${item.created} ${item.name}`;
 }
 
 type ExportReportParams = {
@@ -114,7 +128,7 @@ export async function exportReport({
   rows.forEach((item, index) => {
     const row = sheet.getRow(dataStartRow + index);
 
-    row.getCell(1).value = item.name;
+    row.getCell(1).value = exportedName(item, sort.field);
     row.getCell(2).value = item.status;
     row.getCell(3).value = item.time;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {

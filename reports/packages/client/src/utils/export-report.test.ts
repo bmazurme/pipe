@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RowData } from '../hocs/with-table-sorting';
-import { defaultExportSort, sortReportRows, taskNumber } from './export-report';
+import { defaultExportSort, exportedName, sortReportRows, taskNumber } from './export-report';
 
-const row = (name: string, status: string, time: number): RowData => ({
+const row = (name: string, status: string, time: number, created = ''): RowData => ({
   id: name,
   name,
   status,
   time,
+  created,
   meta: { sort: true },
 });
 
@@ -82,5 +83,53 @@ describe('taskNumber', () => {
   it('is null when the name does not start with digits', () => {
     expect(taskNumber('crm 12 Название')).toBeNull();
     expect(taskNumber('')).toBeNull();
+  });
+});
+
+describe('by creation date', () => {
+  const dated = [
+    row('3 crm Третья', 'Закрыта', 1, '20241103090000'),
+    row('1 crm Первая', 'Закрыта', 1, '20240102235959'),
+    row('2 crm Без даты', 'Закрыта', 1),
+    row('4 crm Вторая', 'Закрыта', 1, '20240615101500'),
+  ];
+
+  it('orders by the moment of creation, not by the issue number', () => {
+    expect(names(sortReportRows(dated, { field: 'created', direction: 'asc' }))).toEqual([
+      '1 crm Первая',
+      '4 crm Вторая',
+      '3 crm Третья',
+      '2 crm Без даты',
+    ]);
+  });
+
+  it('reverses on desc but keeps a row without a date last', () => {
+    expect(names(sortReportRows(dated, { field: 'created', direction: 'desc' }))).toEqual([
+      '3 crm Третья',
+      '4 crm Вторая',
+      '1 crm Первая',
+      '2 crm Без даты',
+    ]);
+  });
+});
+
+describe('exportedName', () => {
+  const item = row('1029 crm Название.', 'Закрыта', 1, '20241103090000');
+
+  it('puts the creation date in place of the number when sorted by creation date', () => {
+    expect(exportedName(item, 'created')).toBe('20241103090000 crm Название.');
+  });
+
+  it('keeps the name as it is for every other sort', () => {
+    expect(exportedName(item, 'number')).toBe('1029 crm Название.');
+    expect(exportedName(item, 'time')).toBe('1029 crm Название.');
+  });
+
+  it('keeps the number when the issue has no creation date', () => {
+    expect(exportedName(row('1029 crm Название.', 'Закрыта', 1), 'created')).toBe('1029 crm Название.');
+  });
+
+  it('puts the date in front of a name that has no number', () => {
+    expect(exportedName(row('Без номера', 'Закрыта', 1, '20241103090000'), 'created')).toBe('20241103090000 Без номера');
   });
 });

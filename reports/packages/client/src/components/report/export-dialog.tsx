@@ -7,6 +7,7 @@ import reportStyle from './report.module.css';
 
 const fieldOptions: { value: ExportSortField; content: string }[] = [
   { value: 'number', content: 'Номер задачи' },
+  { value: 'created', content: 'Дата создания' },
   { value: 'name', content: 'Наименование задачи' },
   { value: 'status', content: 'Статус задачи' },
   { value: 'time', content: 'Часы' },
