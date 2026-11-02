@@ -101,3 +101,10 @@
     flex: 1 1 0;
   }
 }
+
+.exportForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: min(360px, 100%);
+}
