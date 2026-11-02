@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IssueResponse } from '@reports/shared';
 
-import { toReportRows } from './report-rows';
+import { formatCreated, toReportRows } from './report-rows';
 
 const issue = (over: Partial<IssueResponse[number]> = {}): IssueResponse[number] => ({
   id: '1',
@@ -9,7 +9,7 @@ const issue = (over: Partial<IssueResponse[number]> = {}): IssueResponse[number]
   title: 'Fix it',
   project_id: 10,
   state: 'opened',
-  created_at: '2024-01-01',
+  created_at: new Date(2024, 0, 5, 9, 3, 7).toISOString(),
   time_stats: { human_time_estimate: '2h' },
   ...over,
 });
@@ -17,7 +17,7 @@ const issue = (over: Partial<IssueResponse[number]> = {}): IssueResponse[number]
 describe('toReportRows', () => {
   it('appends a trailing dot to a title without one', () => {
     expect(toReportRows([issue({ title: '  Fix it  ' })], { 10: 'PRJ' })).toEqual([
-      { name: '7 PRJ Fix it.', status: 'В работе', time: 2 },
+      { name: '7 PRJ Fix it.', status: 'В работе', time: 2, created: '20240105090307' },
     ]);
   });
 
@@ -39,5 +39,17 @@ describe('toReportRows', () => {
       ['1', 'Закрыта'],
       ['2', 'В работе'],
     ]);
+  });
+});
+
+describe('formatCreated', () => {
+  it('writes the local time as YYYYMMDDHHMMSS, zero-padded', () => {
+    expect(formatCreated(new Date(2024, 10, 3, 4, 5, 6).toISOString())).toBe('20241103040506');
+  });
+
+  it('is empty when GitLab gave no usable date', () => {
+    expect(formatCreated(undefined)).toBe('');
+    expect(formatCreated('')).toBe('');
+    expect(formatCreated('not a date')).toBe('');
   });
 });

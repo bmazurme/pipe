@@ -32,6 +32,8 @@ export type ReportType = {
   name: string;
   status: string;
   time: number;
+  // When the issue was created, as YYYYMMDDHHMMSS in the local time of the machine reports runs on; '' when GitLab gave none.
+  created: string;
 };
 
 export type SettingsType = {

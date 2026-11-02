@@ -5,6 +5,7 @@ export type RowData = {
   name: string;
   status: string;
   time: number;
+  created: string;
   meta: { sort: boolean };
 };
 
