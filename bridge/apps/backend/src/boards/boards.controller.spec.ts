@@ -26,6 +26,7 @@ describe('BoardsAgentController', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -117,11 +118,42 @@ describe('BoardsAgentController ups', () => {
       {} as never,
       {} as never,
       { record } as never,
+      {} as never,
     );
     const dto = { host: 'ubuntu-blue', status: 'OL CHRG' };
 
     await controller.upsReport(dto as never, { id: 7 });
 
     expect(record).toHaveBeenCalledWith(7, dto);
+  });
+});
+
+describe('BoardsAgentController router', () => {
+  const make = (router: object) =>
+    new BoardsAgentController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      router as never,
+    );
+
+  it("records the router's report and answers with the reboot waiting for the agent", async () => {
+    const record = jest.fn().mockResolvedValue({ rebootRequestId: 5 });
+    const dto = { host: 'asus', reachable: true, sshOk: true };
+
+    await expect(
+      make({ record }).routerReport(dto as never, { id: 7 }),
+    ).resolves.toEqual({ rebootRequestId: 5 });
+    expect(record).toHaveBeenCalledWith(7, dto);
+  });
+
+  it("passes the verdict on a reboot to the service, for the owner's account", async () => {
+    const finish = jest.fn().mockResolvedValue(undefined);
+    const dto = { ok: true, detail: 'x' };
+
+    await make({ finish }).routerRebootResult(5, dto as never, { id: 7 });
+
+    expect(finish).toHaveBeenCalledWith(7, 5, dto);
   });
 });

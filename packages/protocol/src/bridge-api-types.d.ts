@@ -1346,6 +1346,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/router": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getRouter"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/backups": {
         parameters: {
             query?: never;
@@ -1436,6 +1452,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["BoardsAgentController_upsReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/agent/router": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_routerReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/agent/router/reboots/{id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_routerRebootResult"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3185,6 +3233,25 @@ export interface components {
             batteryVolts?: number | null;
             nominalWatts?: number | null;
             testResult?: string | null;
+        };
+        RouterReportDto: {
+            host: string;
+            reachable: boolean;
+            sshOk: boolean;
+            model?: string | null;
+            uptimeSec?: number | null;
+            wanState?: number | null;
+            wanAux?: number | null;
+            internetOk?: boolean | null;
+            wanIp?: string | null;
+            pingMs?: number | null;
+            pingLossPct?: number | null;
+            rxBps?: number | null;
+            txBps?: number | null;
+        };
+        RouterRebootResultDto: {
+            ok: boolean;
+            detail?: string | null;
         };
         ReportedScriptDto: {
             installed: string;
@@ -5736,6 +5803,25 @@ export interface operations {
             };
         };
     };
+    DashboardController_getRouter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
     DashboardController_getBackups: {
         parameters: {
             query?: never;
@@ -5872,6 +5958,50 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpsReportDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsAgentController_routerReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterReportDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsAgentController_routerRebootResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouterRebootResultDto"];
             };
         };
         responses: {

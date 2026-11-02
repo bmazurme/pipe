@@ -25,9 +25,11 @@ import {
 import { BoardMetricsDto } from './dto/board-metrics.dto';
 import { NasReportDto } from './dto/nas.dto';
 import { UpsReportDto } from './dto/ups.dto';
+import { RouterRebootResultDto, RouterReportDto } from './dto/router.dto';
 import { BoardMetricsService } from './board-metrics.service';
 import { NasService } from './nas.service';
 import { UpsService } from './ups.service';
+import { RouterService } from './router.service';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
 // account is refused — the boards are the owner's.
@@ -40,6 +42,7 @@ export class BoardsAgentController {
     private readonly nas: NasService,
     private readonly metrics: BoardMetricsService,
     private readonly ups: UpsService,
+    private readonly router: RouterService,
   ) {}
 
   // The board's vital signs, every ~2 minutes (infra/boardagent, with the run that also asks for decisions).
@@ -70,6 +73,27 @@ export class BoardsAgentController {
     @CurrentUser() user: { id: number },
   ): Promise<void> {
     await this.ups.record(user.id, dto);
+  }
+
+  // The agent's account of the router (infra/router, every minute). The answer carries the reboot the owner asked for in Telegram, if one waits.
+  @Post('router')
+  @HttpCode(HttpStatus.OK)
+  routerReport(
+    @Body() dto: RouterReportDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<{ rebootRequestId: number | null }> {
+    return this.router.record(user.id, dto);
+  }
+
+  // How a reboot the agent took went (it waits for the router to come back first).
+  @Post('router/reboots/:id/result')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async routerRebootResult(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RouterRebootResultDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.router.finish(user.id, id, dto);
   }
 
   @Post('report')

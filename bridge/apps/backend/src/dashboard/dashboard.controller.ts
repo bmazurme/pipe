@@ -22,6 +22,7 @@ import {
   MAX_HOURS,
 } from '../boards/board-metrics.service';
 import { NasService, NasView } from '../boards/nas.service';
+import { RouterService, RouterView } from '../boards/router.service';
 import { UpsService, UpsView } from '../boards/ups.service';
 import { BackupStatus, BackupStatusService } from './backup-status.service';
 import {
@@ -50,6 +51,7 @@ export class DashboardController {
     private readonly nas: NasService,
     private readonly boardMetrics: BoardMetricsService,
     private readonly ups: UpsService,
+    private readonly router: RouterService,
   ) {}
 
   @Get('nodes')
@@ -86,6 +88,12 @@ export class DashboardController {
   @Get('ups')
   getUps(@CurrentUser() user: { id: number }): Promise<UpsView[]> {
     return this.ups.list(user.id);
+  }
+
+  // The router the home link goes through: WAN, internet, ping, uptime (infra/router reads it over SSH). Read-only; the reboot is a Telegram button.
+  @Get('router')
+  getRouter(@CurrentUser() user: { id: number }): Promise<RouterView[]> {
+    return this.router.list(user.id);
   }
 
   @Get('backups')

@@ -124,6 +124,32 @@ export interface DashboardUps {
   };
 }
 
+export type RouterStatus = 'ok' | 'warn' | 'bad';
+
+/** The router as the agent on a board last read it (infra/router), with bridge's verdict. */
+export interface DashboardRouter {
+  host: string;
+  reportedAt: string;
+  status: RouterStatus;
+  reasons: string[];
+  data: {
+    reachable: boolean;
+    sshOk: boolean;
+    model?: string | null;
+    uptimeSec?: number | null;
+    wanState?: number | null;
+    wanAux?: number | null;
+    internetOk?: boolean | null;
+    wanIp?: string | null;
+    pingMs?: number | null;
+    pingLossPct?: number | null;
+    rxBps?: number | null;
+    txBps?: number | null;
+  };
+  /** The newest reboot asked for in Telegram, if any. */
+  reboot: { status: 'pending' | 'taken' | 'done' | 'failed' | 'expired'; at: string; result: string | null } | null;
+}
+
 export type DeployResult = 'deployed' | 'rolled_back' | 'failed';
 
 /** What the deploying board reported about one release (infra/autodeploy → /loop/deploys). */
@@ -158,6 +184,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardUps: builder.query<DashboardUps[], void>({
       query: () => 'dashboard/ups',
     }),
+    getDashboardRouter: builder.query<DashboardRouter[], void>({
+      query: () => 'dashboard/router',
+    }),
     getDashboardDeploys: builder.query<DashboardDeploy[], void>({
       query: () => 'dashboard/deploys',
     }),
@@ -185,6 +214,7 @@ export const {
   useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
   useGetDashboardUpsQuery,
+  useGetDashboardRouterQuery,
   useGetGithubConnectionQuery,
   useSaveGithubConnectionMutation,
   useCheckGithubConnectionMutation,

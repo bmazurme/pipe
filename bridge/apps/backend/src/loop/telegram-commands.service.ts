@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 
 import { BoardsService } from '../boards/boards.service';
+import { RouterService } from '../boards/router.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { LoopControlService } from './loop-control.service';
 import { LoopService } from './loop.service';
@@ -17,8 +18,9 @@ export interface TelegramUpdate {
 }
 
 const HELP_TEXT =
-  '/status — последние циклы\n/pause [причина] — остановить новую автоматическую работу\n/resume — продолжить\n/help — эта справка';
+  '/status — последние циклы\n/pause [причина] — остановить новую автоматическую работу\n/resume — продолжить\n/router — состояние роутера и перезагрузка\n/help — эта справка';
 const MAX_REASON = 200;
+const ROUTER_CONFIRM_MINUTES = 5;
 
 // Command handling shared by both ways an update can arrive: the webhook
 // controller and the long-polling loop. Lives in the loop module (not
@@ -34,6 +36,7 @@ export class TelegramCommandsService {
     private readonly boards: BoardsService,
     // Optional in tests that do not exercise it.
     @Optional() private readonly control?: LoopControlService,
+    @Optional() private readonly router?: RouterService,
   ) {}
 
   async handle(update: TelegramUpdate): Promise<void> {
@@ -83,6 +86,10 @@ export class TelegramCommandsService {
           ? '▶️ Автоматика продолжает работу.'
           : 'Автоматика и не была на паузе.',
       );
+    } else if (command === '/router' && this.router) {
+      await this.telegram.sendWithButtons(await this.router.statusText(), [
+        [{ text: '🔄 Перезагрузить роутер', callback_data: 'rr:ask' }],
+      ]);
     } else if (command === '/help' || command === '/start') {
       await this.telegram.send(HELP_TEXT);
     }
@@ -113,6 +120,49 @@ export class TelegramCommandsService {
       await this.telegram.send(
         await this.boards.approveFromTelegram(update[1], update[2]),
       );
+
+      return;
+    }
+
+    // The router reboot is asked twice, so a stray tap does not cut the home link: `rr:ask` shows the question, `rr:go:<minute>` answers it
+    // (the minute is when the question was asked: a button from long ago is refused), `rr:no` drops it.
+    if (this.router && query.data === 'rr:ask') {
+      await this.telegram.answerCallback(query.id);
+      await this.telegram.sendWithButtons(
+        'Перезагрузить роутер? Интернет и Wi-Fi пропадут примерно на 1–2 минуты. Кнопка действует 5 минут.',
+        [
+          [
+            {
+              text: '✅ Да, перезагрузить',
+              callback_data: `rr:go:${Math.floor(Date.now() / 60_000)}`,
+            },
+            { text: 'Отмена', callback_data: 'rr:no' },
+          ],
+        ],
+      );
+
+      return;
+    }
+    if (this.router && query.data === 'rr:no') {
+      await this.telegram.answerCallback(query.id, 'Отменено');
+
+      return;
+    }
+
+    const go = /^rr:go:(\d+)$/.exec(query.data ?? '');
+
+    if (this.router && go) {
+      const askedMinutesAgo = Math.floor(Date.now() / 60_000) - Number(go[1]);
+
+      if (askedMinutesAgo > ROUTER_CONFIRM_MINUTES) {
+        await this.telegram.answerCallback(query.id, 'Кнопка устарела');
+        await this.telegram.send('Кнопка устарела. /router — спросить снова.');
+
+        return;
+      }
+
+      await this.telegram.answerCallback(query.id, 'Запрашиваю…');
+      await this.telegram.send(await this.router.requestFromTelegram());
 
       return;
     }
