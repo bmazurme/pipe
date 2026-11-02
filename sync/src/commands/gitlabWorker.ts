@@ -22,6 +22,12 @@ function belongsToTrackedProject(issue: GitlabIssue, project: ProjectConfig): bo
   return !project.gitlabProjectId || String(issue.project_id) === project.gitlabProjectId;
 }
 
+// GitLab matches labels case-insensitively; an issue without a `labels` field never matches.
+function hasLabel(issue: GitlabIssue, label: string): boolean {
+  const wanted = label.toLowerCase();
+  return (issue.labels ?? []).some((l) => l.toLowerCase() === wanted);
+}
+
 async function processIssue(
   issue: GitlabIssue,
   project: ProjectConfig,
@@ -50,7 +56,7 @@ export type PushBackoff = Map<string, { failures: number; nextAttemptAt: number 
 // `backoff` is only passed by --watch; without it every tick retries as before.
 export async function runGitlabWorkerOnce(
   name: string,
-  options: { strict?: boolean } = {},
+  options: { strict?: boolean; label?: string } = {},
   backoff?: PushBackoff,
   { intervalMs = 0, now = Date.now }: { intervalMs?: number; now?: () => number } = {},
 ): Promise<void> {
@@ -68,7 +74,9 @@ export async function runGitlabWorkerOnce(
     throw new Error('Not logged in to GitLab. Run "sync-cli login-gitlab <token>" first.');
   }
 
-  const issues = await listAssignedOpenIssues(config.gitlab.apiUrl, gitlabToken);
+  const { label } = options;
+  const assignedIssues = await listAssignedOpenIssues(config.gitlab.apiUrl, gitlabToken);
+  const issues = label ? assignedIssues.filter((issue) => hasLabel(issue, label)) : assignedIssues;
   const state = loadGitlabWorkerState();
 
   if (backoff) {
@@ -83,7 +91,7 @@ export async function runGitlabWorkerOnce(
   );
 
   if (newIssues.length === 0) {
-    log.info(`No new assigned open issues for "${name}".`);
+    log.info(`No new assigned open issues${label ? ` labelled "${label}"` : ''} for "${name}".`);
     return;
   }
 
@@ -115,7 +123,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function gitlabWorkerCommand(
   name: string,
-  options: { watch?: string; strict?: boolean },
+  options: { watch?: string; strict?: boolean; label?: string },
 ): Promise<void> {
   if (!options.watch) {
     await runGitlabWorkerOnce(name, options);
@@ -127,7 +135,8 @@ export async function gitlabWorkerCommand(
     throw new Error(`--watch expects a positive number of seconds, got "${options.watch}".`);
   }
 
-  log.info(`Watching GitLab for new assigned issues every ${intervalSec}s. Ctrl+C to stop.`);
+  const labelNote = options.label ? ` labelled "${options.label}"` : '';
+  log.info(`Watching GitLab for new assigned issues${labelNote} every ${intervalSec}s. Ctrl+C to stop.`);
   const backoff: PushBackoff = new Map();
   for (;;) {
     await runGitlabWorkerOnce(name, options, backoff, { intervalMs: intervalSec * 1000 }).catch((error: unknown) => {
