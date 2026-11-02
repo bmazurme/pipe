@@ -277,7 +277,9 @@ export function buildUsageReport(
       .map(tidy)
       .sort((a, b) => b.costUsd - a.costUsd || b.jobs - a.jobs),
     byRoute: [...routes.values()]
-      .map((row) => tidy({ ...row, pullRequests: routePrs.get(row.route)?.size ?? 0 }))
+      .map((row) =>
+        tidy({ ...row, pullRequests: routePrs.get(row.route)?.size ?? 0 }),
+      )
       .sort((a, b) => b.costUsd - a.costUsd || b.jobs - a.jobs),
     tasks: taskRows.slice(0, maxTasks).map(tidy),
   };
