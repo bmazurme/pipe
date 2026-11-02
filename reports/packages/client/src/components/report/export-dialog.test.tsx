@@ -23,7 +23,7 @@ describe('ExportDialog', () => {
     await renderDialog(onExport);
     await userEvent.click(screen.getByRole('button', { name: 'Выгрузить' }));
 
-    expect(onExport).toHaveBeenCalledWith({ field: 'time', direction: 'desc' });
+    expect(onExport).toHaveBeenCalledWith({ sort: { field: 'time', direction: 'desc' }, identifier: 'number' });
   });
 
   it('passes the chosen field and order on export', async () => {
@@ -36,7 +36,32 @@ describe('ExportDialog', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'По возрастанию' }));
     await userEvent.click(screen.getByRole('button', { name: 'Выгрузить' }));
 
-    expect(onExport).toHaveBeenCalledWith({ field: 'name', direction: 'asc' });
+    expect(onExport).toHaveBeenCalledWith({ sort: { field: 'name', direction: 'asc' }, identifier: 'number' });
+  });
+
+  it('has the number ticked, and exactly one of number / date at any time', async () => {
+    const onExport = vi.fn();
+
+    await renderDialog(onExport);
+
+    const number = screen.getByRole('checkbox', { name: 'Номер задачи' });
+    const created = screen.getByRole('checkbox', { name: /Дата создания/ });
+
+    expect(number).toBeChecked();
+    expect(created).not.toBeChecked();
+
+    await userEvent.click(created);
+    expect(created).toBeChecked();
+    expect(number).not.toBeChecked();
+
+    // unticking the chosen one does not leave both empty
+    await userEvent.click(created);
+    expect(created).toBeChecked();
+    expect(number).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Выгрузить' }));
+
+    expect(onExport).toHaveBeenCalledWith({ sort: { field: 'time', direction: 'desc' }, identifier: 'created' });
   });
 
   it('does not export on cancel', async () => {

@@ -73,9 +73,14 @@ export function sortReportRows(report: RowData[], { field, direction }: ExportSo
     });
 }
 
-// Sorted by creation date, the file shows that date (YYYYMMDDHHMMSS) where the issue number stood in the name.
-export function exportedName(item: RowData, field: ExportSortField): string {
-  if (field !== 'created' || item.created === '') return item.name;
+// What stands at the start of a task's name in the file: the issue number (as the name is built) or the creation date.
+export type ExportIdentifier = 'number' | 'created';
+
+export const defaultExportIdentifier: ExportIdentifier = 'number';
+
+// With the date chosen, the file shows it (YYYYMMDDHHMMSS) where the issue number stood in the name.
+export function exportedName(item: RowData, identifier: ExportIdentifier): string {
+  if (identifier !== 'created' || item.created === '') return item.name;
 
   return /^\s*\d+/.test(item.name) ? item.name.replace(/^\s*\d+/, item.created) : `${item.created} ${item.name}`;
 }
@@ -88,6 +93,7 @@ type ExportReportParams = {
   company: string;
   offDays: number;
   sort?: ExportSort;
+  identifier?: ExportIdentifier;
 };
 
 export async function exportReport({
@@ -98,6 +104,7 @@ export async function exportReport({
   company,
   offDays,
   sort = defaultExportSort,
+  identifier = defaultExportIdentifier,
 }: ExportReportParams) {
   // Loaded on demand — exceljs is ~1 MB and only needed when the user exports
   const { default: ExcelJSRuntime } = await import('exceljs');
@@ -128,7 +135,7 @@ export async function exportReport({
   rows.forEach((item, index) => {
     const row = sheet.getRow(dataStartRow + index);
 
-    row.getCell(1).value = exportedName(item, sort.field);
+    row.getCell(1).value = exportedName(item, identifier);
     row.getCell(2).value = item.status;
     row.getCell(3).value = item.time;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {

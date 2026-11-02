@@ -116,13 +116,12 @@ describe('by creation date', () => {
 describe('exportedName', () => {
   const item = row('1029 crm Название.', 'Закрыта', 1, '20241103090000');
 
-  it('puts the creation date in place of the number when sorted by creation date', () => {
+  it('puts the creation date in place of the number when the date is chosen', () => {
     expect(exportedName(item, 'created')).toBe('20241103090000 crm Название.');
   });
 
-  it('keeps the name as it is for every other sort', () => {
+  it('keeps the name as it is when the number is chosen', () => {
     expect(exportedName(item, 'number')).toBe('1029 crm Название.');
-    expect(exportedName(item, 'time')).toBe('1029 crm Название.');
   });
 
   it('keeps the number when the issue has no creation date', () => {
