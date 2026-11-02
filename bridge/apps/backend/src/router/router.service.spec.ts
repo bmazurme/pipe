@@ -88,7 +88,7 @@ describe('RouterClassifierService', () => {
 describe('RouterService', () => {
   const settings = { get: jest.fn() };
   const classifier = { classify: jest.fn() };
-  const router = new RouterService(settings as never, classifier as never);
+  let router: RouterService;
   const request = {
     userId: 7,
     title: 'T',
@@ -99,6 +99,7 @@ describe('RouterService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     settings.get.mockResolvedValue(DEFAULT_SETTINGS);
+    router = new RouterService(settings as never, classifier as never);
   });
 
   it('lets a model the owner named through untouched, with nothing decided and nobody asked', async () => {
@@ -159,6 +160,56 @@ describe('RouterService', () => {
 
     await expect(router.decide(request)).resolves.toMatchObject({
       model: 'haiku',
+    });
+  });
+
+  describe('classification cache', () => {
+    beforeEach(() => {
+      classifier.classify.mockResolvedValue({ tier: 2, needsGenerated: false });
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('asks once for the same user and task', async () => {
+      await router.decide(request);
+      await router.decide(request);
+
+      expect(classifier.classify).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks again for another task or another user', async () => {
+      await router.decide(request);
+      await router.decide({ ...request, task: 'Other task' });
+      await router.decide({ ...request, userId: 8 });
+
+      expect(classifier.classify).toHaveBeenCalledTimes(3);
+    });
+
+    it('asks again once the entry is past the TTL', async () => {
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      await router.decide(request);
+      now.mockReturnValue(1_000_000 + 7 * 24 * 60 * 60 * 1000 + 1);
+      await router.decide(request);
+
+      expect(classifier.classify).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not remember a null answer', async () => {
+      classifier.classify.mockResolvedValue(null);
+
+      await router.decide(request);
+      await router.decide(request);
+
+      expect(classifier.classify).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps at most 500 entries, dropping the oldest', async () => {
+      for (let i = 0; i < 501; i++)
+        await router.decide({ ...request, task: `task ${i}` });
+      await router.decide({ ...request, task: 'task 0' });
+
+      expect(classifier.classify).toHaveBeenCalledTimes(502);
     });
   });
 });

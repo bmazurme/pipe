@@ -89,6 +89,59 @@ describe('runGitlabWorkerOnce', () => {
   });
 });
 
+describe('runGitlabWorkerOnce --label', () => {
+  async function run(options: { label?: string }, backoff?: PushBackoff): Promise<string[]> {
+    rmSync(GITLAB_WORKER_STATE_PATH, { force: true });
+    const uploaded: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/issues?scope=assigned_to_me')) {
+        return new Response(
+          JSON.stringify([
+            { id: 1, iid: 1, project_id: 173, title: 'tagged', description: null, labels: ['Pipe', 'bug'] },
+            { id: 2, iid: 2, project_id: 173, title: 'other label', description: null, labels: ['bug'] },
+            { id: 3, iid: 3, project_id: 173, title: 'no labels field', description: null },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/api/v1/storage')) {
+        const body = init?.body as unknown as { get(name: string): { name: string } };
+        const filename = (body.get('file') as unknown as { name: string }).name;
+        uploaded.push(filename);
+        return new Response(
+          JSON.stringify({ id: 1, originalName: filename, mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString() }),
+          { status: 201 },
+        );
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch;
+    await runGitlabWorkerOnce('demo', options, backoff);
+    return uploaded;
+  }
+
+  it('pushes only issues carrying the label, ignoring case', async () => {
+    assert.deepEqual(await run({ label: 'pipe' }), ['173-1.subscription.zip']);
+  });
+
+  it('skips every issue when none carries the label', async () => {
+    assert.deepEqual(await run({ label: 'missing' }), []);
+  });
+
+  it('pushes all assigned issues without --label', async () => {
+    assert.deepEqual(await run({}), [
+      '173-1.subscription.zip',
+      '173-2.subscription.zip',
+      '173-3.subscription.zip',
+    ]);
+  });
+
+  it('drops the back-off entry of an issue that lost the label', async () => {
+    const backoff: PushBackoff = new Map([[issueKey(173, 2), { failures: 2, nextAttemptAt: Number.MAX_SAFE_INTEGER }]]);
+    await run({ label: 'pipe' }, backoff);
+    assert.equal(backoff.size, 0);
+  });
+});
+
 describe('runGitlabWorkerOnce back-off', () => {
   const originalPath = process.env.PATH;
   const notifyDir = mkdtempSync(path.join(tmpdir(), 'sync-cli-notify-test-'));

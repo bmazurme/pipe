@@ -68,6 +68,7 @@ export interface GitlabIssue {
   description: string | null;
   state?: string;
   user_notes_count?: number;
+  labels?: string[];
 }
 
 // A comment on an issue, as GitLab's notes API returns it — only what a parcel needs. `system` notes ("changed the
