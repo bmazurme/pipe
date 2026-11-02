@@ -1330,6 +1330,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/ups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getUps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/backups": {
         parameters: {
             query?: never;
@@ -1404,6 +1420,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["BoardsAgentController_nasReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/agent/ups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_upsReport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3141,6 +3173,18 @@ export interface components {
             raid: components["schemas"]["NasRaidDto"];
             volume: components["schemas"]["NasVolumeDto"];
             disks: components["schemas"]["NasDiskDto"][];
+        };
+        UpsReportDto: {
+            host: string;
+            status: string;
+            model?: string | null;
+            chargePct?: number | null;
+            runtimeSec?: number | null;
+            loadPct?: number | null;
+            inputVolts?: number | null;
+            batteryVolts?: number | null;
+            nominalWatts?: number | null;
+            testResult?: string | null;
         };
         ReportedScriptDto: {
             installed: string;
@@ -5673,6 +5717,25 @@ export interface operations {
             };
         };
     };
+    DashboardController_getUps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
     DashboardController_getBackups: {
         parameters: {
             query?: never;
@@ -5788,6 +5851,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NasReportDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsAgentController_upsReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsReportDto"];
             };
         };
         responses: {

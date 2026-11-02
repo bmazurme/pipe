@@ -101,6 +101,29 @@ export interface DashboardNas {
   };
 }
 
+export type UpsStatus = 'ok' | 'warn' | 'bad';
+
+/** The UPS as the board with its USB cable last reported it (infra/ups), with bridge's verdict. */
+export interface DashboardUps {
+  host: string;
+  reportedAt: string;
+  status: UpsStatus;
+  reasons: string[];
+  /** true while the UPS carries the load from its battery. */
+  onBattery: boolean;
+  data: {
+    status: string;
+    model?: string | null;
+    chargePct: number | null;
+    runtimeSec?: number | null;
+    loadPct?: number | null;
+    inputVolts?: number | null;
+    batteryVolts?: number | null;
+    nominalWatts?: number | null;
+    testResult?: string | null;
+  };
+}
+
 export type DeployResult = 'deployed' | 'rolled_back' | 'failed';
 
 /** What the deploying board reported about one release (infra/autodeploy → /loop/deploys). */
@@ -132,6 +155,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardNas: builder.query<DashboardNas[], void>({
       query: () => 'dashboard/nas',
     }),
+    getDashboardUps: builder.query<DashboardUps[], void>({
+      query: () => 'dashboard/ups',
+    }),
     getDashboardDeploys: builder.query<DashboardDeploy[], void>({
       query: () => 'dashboard/deploys',
     }),
@@ -158,6 +184,7 @@ export const {
   useGetDashboardDeploysQuery,
   useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
+  useGetDashboardUpsQuery,
   useGetGithubConnectionQuery,
   useSaveGithubConnectionMutation,
   useCheckGithubConnectionMutation,

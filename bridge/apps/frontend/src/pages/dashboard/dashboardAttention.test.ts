@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DashboardBoardMetrics, DashboardDeploy, DashboardNas } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardDeploy, DashboardNas, DashboardUps } from '../../store/api';
 import { type AttentionInput, buildAttention, summarize } from './dashboardAttention';
 
-const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], lastDeploy: null };
+const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], ups: [], lastDeploy: null };
 
 const board = (host: string, status: DashboardBoardMetrics['status'], reasons: string[] = []): DashboardBoardMetrics => ({ host, at: '2026-10-30T12:00:00Z', status, reasons, data: {}, series: [] });
 const nas = (status: DashboardNas['status'], reasons: string[] = []): DashboardNas => ({ host: 'MyCloudEX2Ultra', reportedAt: '2026-10-30T12:00:00Z', status, reasons, data: { uptimeSec: 1, backup: { snapshots: 1, bytes: 1 }, raid: { summary: '', degraded: false, syncing: false }, volume: { totalBytes: 1, usedBytes: 1 }, disks: [] } });
+const ups = (status: DashboardUps['status'], reasons: string[] = []): DashboardUps => ({ host: 'ubuntu-blue', reportedAt: '2026-11-02T12:00:00Z', status, reasons, onBattery: status === 'bad', data: { status: 'OL CHRG', chargePct: 100 } });
 const deploy = (result: DashboardDeploy['result'], prNumbers: number[] = []): DashboardDeploy => ({ sha: '9781a0d'.padEnd(40, 'a'), previousSha: null, result, detail: null, prNumbers, at: '2026-10-30T12:00:00Z' });
 
 describe('buildAttention', () => {
   it('is empty when everything is fine', () => {
-    expect(buildAttention({ ...calm, boards: [board('ubuntu-red', 'ok')], nas: [nas('ok')], lastDeploy: deploy('deployed') })).toEqual([]);
+    expect(buildAttention({ ...calm, boards: [board('ubuntu-red', 'ok')], nas: [nas('ok')], ups: [ups('ok')], lastDeploy: deploy('deployed') })).toEqual([]);
   });
 
   it('names what is wrong in each tile, the worst first', () => {
@@ -22,6 +23,7 @@ describe('buildAttention', () => {
       backupIssue: true,
       boards: [board('ubuntu-blue', 'warn', ['Процессор 66 °C']), board('ubuntu-green', 'bad', ['Нет данных 12 мин — плата выключена', 'второе'])],
       nas: [nas('warn', ['Копия бэкапа устарела: 27 ч'])],
+      ups: [ups('bad', ['Питание пропало, ИБП работает от батареи', 'Батарея почти разряжена'])],
       lastDeploy: deploy('rolled_back', [41, 42]),
     });
 
@@ -30,6 +32,7 @@ describe('buildAttention', () => {
       ['bad', 'Узлы не в строю: red'],
       ['bad', 'Бэкап: нет свежей копии базы'],
       ['bad', 'Плата green: Нет данных 12 мин — плата выключена (и ещё 1)'],
+      ['bad', 'ИБП: Питание пропало, ИБП работает от батареи (и ещё 1)'],
       ['bad', 'Релиз 9781a0d (#41, #42) откатился — автоматика на паузе'],
       ['warn', 'Плата blue: Процессор 66 °C'],
       ['warn', 'NAS: Копия бэкапа устарела: 27 ч'],

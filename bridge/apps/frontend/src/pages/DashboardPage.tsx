@@ -9,6 +9,7 @@ import {
   useGetDashboardBoardMetricsQuery,
   useGetDashboardDeploysQuery,
   useGetDashboardNasQuery,
+  useGetDashboardUpsQuery,
   useGetDashboardNodesQuery,
   useGetVpnConnectionStatusQuery,
   useGetVpnStatusQuery,
@@ -21,6 +22,7 @@ import { SectionHeader } from '../widgets/SectionHeader';
 import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import { BoardMetricsCard } from './dashboard/BoardMetricsCard';
 import { NasCard } from './dashboard/NasCard';
+import { UpsCard } from './dashboard/UpsCard';
 import { ReleasesCard } from './dashboard/ReleasesCard';
 import { buildAttention, summarize } from './dashboard/dashboardAttention';
 import styles from './DashboardPage.module.css';
@@ -133,6 +135,7 @@ export function DashboardPage() {
   // The same requests the tiles make (RTK Query shares them), so the header can say what is wrong anywhere on the page without a second round trip.
   const boardMetrics = useGetDashboardBoardMetricsQuery(24, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const ups = useGetDashboardUpsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const deploys = useGetDashboardDeploysQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
 
   const vpnDown = vpnActive.isError || !vpnActive.data?.lastOnline;
@@ -149,6 +152,7 @@ export function DashboardPage() {
     backupIssue: !backups.isLoading && backupIssue,
     boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
     nas: Array.isArray(nas.data) ? nas.data : [],
+    ups: Array.isArray(ups.data) ? ups.data : [],
     lastDeploy: Array.isArray(deploys.data) ? (deploys.data[0] ?? null) : null,
   });
   const summary = summarize(attention);
@@ -158,7 +162,7 @@ export function DashboardPage() {
     <div className={styles.page}>
       <PageHeader
         title="Дашборд"
-        description="Состояние инфраструктуры: туннель, узлы кластера, платы, NAS, бэкапы и релизы — на одной странице."
+        description="Состояние инфраструктуры: туннель, узлы кластера, платы, NAS, ИБП, бэкапы и релизы — на одной странице."
         actions={
           summaryReady ? (
             <Label theme={summary.theme} size="m">
@@ -260,6 +264,8 @@ export function DashboardPage() {
 
       <div className={styles.grid}>
         <NasCard />
+
+        <UpsCard />
 
         <GithubConnectionCard />
       </div>

@@ -2550,6 +2550,27 @@
         }
       }
     },
+    "/api/v1/dashboard/ups": {
+      "get": {
+        "operationId": "DashboardController_getUps",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/backups": {
       "get": {
         "operationId": "DashboardController_getBackups",
@@ -2671,6 +2692,27 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NasReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/ups": {
+      "post": {
+        "operationId": "BoardsAgentController_upsReport",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsReportDto"
               }
             }
           }
@@ -7348,6 +7390,69 @@
           "raid",
           "volume",
           "disks"
+        ]
+      },
+      "UpsReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "status": {
+            "type": "string",
+            "pattern": "/^[A-Z ]{1,40}$/"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "chargePct": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          "runtimeSec": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "loadPct": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 300
+          },
+          "inputVolts": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "batteryVolts": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "nominalWatts": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "testResult": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "host",
+          "status"
         ]
       },
       "ReportedScriptDto": {

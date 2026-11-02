@@ -22,6 +22,7 @@ import {
   MAX_HOURS,
 } from '../boards/board-metrics.service';
 import { NasService, NasView } from '../boards/nas.service';
+import { UpsService, UpsView } from '../boards/ups.service';
 import { BackupStatus, BackupStatusService } from './backup-status.service';
 import {
   CheckGithubConnectionDto,
@@ -48,6 +49,7 @@ export class DashboardController {
     private readonly deploys: DeploysService,
     private readonly nas: NasService,
     private readonly boardMetrics: BoardMetricsService,
+    private readonly ups: UpsService,
   ) {}
 
   @Get('nodes')
@@ -78,6 +80,12 @@ export class DashboardController {
   @Get('nas')
   getNas(@CurrentUser() user: { id: number }): Promise<NasView[]> {
     return this.nas.list(user.id);
+  }
+
+  // The UPS the boards stand on: status, charge, load, runtime (infra/ups reports it from the board its USB cable is in).
+  @Get('ups')
+  getUps(@CurrentUser() user: { id: number }): Promise<UpsView[]> {
+    return this.ups.list(user.id);
   }
 
   @Get('backups')

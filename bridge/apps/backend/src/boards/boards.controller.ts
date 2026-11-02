@@ -24,8 +24,10 @@ import {
 } from './dto/boards.dto';
 import { BoardMetricsDto } from './dto/board-metrics.dto';
 import { NasReportDto } from './dto/nas.dto';
+import { UpsReportDto } from './dto/ups.dto';
 import { BoardMetricsService } from './board-metrics.service';
 import { NasService } from './nas.service';
+import { UpsService } from './ups.service';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
 // account is refused — the boards are the owner's.
@@ -37,6 +39,7 @@ export class BoardsAgentController {
     private readonly boards: BoardsService,
     private readonly nas: NasService,
     private readonly metrics: BoardMetricsService,
+    private readonly ups: UpsService,
   ) {}
 
   // The board's vital signs, every ~2 minutes (infra/boardagent, with the run that also asks for decisions).
@@ -57,6 +60,16 @@ export class BoardsAgentController {
     @CurrentUser() user: { id: number },
   ): Promise<void> {
     await this.nas.record(user.id, dto);
+  }
+
+  // What the board with the UPS's USB cable reports about the UPS (infra/ups/report.sh), with the same boards-only key.
+  @Post('ups')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async upsReport(
+    @Body() dto: UpsReportDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.ups.record(user.id, dto);
   }
 
   @Post('report')
