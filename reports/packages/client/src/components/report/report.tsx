@@ -9,9 +9,10 @@ import { reportSelector, settingsSelector } from '../../store';
 import { useGetCountsQuery, useGetReportsQuery, usePushReportToBridgeMutation } from '../../store/api';
 import { useAppSelector } from '../../hooks';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { exportReport } from '../../utils/export-report';
+import { exportReport, type ExportSort } from '../../utils/export-report';
 import { describeError } from '../../utils/describe-error';
 import { EmptyState } from '../state';
+import ExportDialog from './export-dialog';
 
 import reportStyle from './report.module.css';
 
@@ -25,6 +26,7 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
   const { refetch: refetchReports, isFetching: isReportsFetching } = useGetReportsQuery();
   const [pushReportToBridge, { isLoading: isPushing }] = usePushReportToBridgeMutation();
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const isMobile = useMediaQuery('(max-width: 640px)');
   const columns = useMemo(() => getColumns(isMobile), [isMobile]);
 
@@ -33,7 +35,8 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
   const trackedHours = trackedRows.reduce((sum, item) => sum + item.time, 0);
   const entriesToSend = trackedRows.map((item) => ({ taskName: item.name, status: item.status, hours: item.time }));
 
-  const handleExport = async () => {
+  const handleExport = async (sort: ExportSort) => {
+    setIsExportDialogOpen(false);
     setIsExporting(true);
 
     try {
@@ -44,6 +47,7 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
         employee,
         company,
         offDays,
+        sort,
       });
       toaster.add({
         name: 'export-success',
@@ -115,7 +119,7 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
           <Button
             view="outlined"
             size="m"
-            onClick={handleExport}
+            onClick={() => setIsExportDialogOpen(true)}
             loading={isExporting}
             disabled={trackedRows.length === 0}
           >
@@ -138,6 +142,11 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
           </Tooltip>
         </div>
       </div>
+      <ExportDialog
+        open={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        onExport={handleExport}
+      />
       {report.length === 0 ? (
         <EmptyState
           icon={<Icon data={ListCheck} size={28} />}

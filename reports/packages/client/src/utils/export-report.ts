@@ -25,6 +25,22 @@ const thinBorder: Partial<ExcelJS.Borders> = {
   right: { style: 'thin' },
 };
 
+export type ExportSortField = 'name' | 'status' | 'time';
+export type ExportSortDirection = 'asc' | 'desc';
+export type ExportSort = { field: ExportSortField; direction: ExportSortDirection };
+
+// What the export did before the person could choose: the longest tasks first.
+export const defaultExportSort: ExportSort = { field: 'time', direction: 'desc' };
+
+// Only tasks with time spent go into the file; the sort is stable, so equal values keep the order of the table.
+export function sortReportRows(report: RowData[], { field, direction }: ExportSort): RowData[] {
+  const sign = direction === 'asc' ? 1 : -1;
+
+  return report
+    .filter((item) => item.time > 0)
+    .sort((a, b) => sign * (field === 'time' ? a.time - b.time : a[field].localeCompare(b[field], 'ru')));
+}
+
 type ExportReportParams = {
   report: RowData[];
   month: MonthKeyType;
@@ -32,9 +48,18 @@ type ExportReportParams = {
   employee: string;
   company: string;
   offDays: number;
+  sort?: ExportSort;
 };
 
-export async function exportReport({ report, month, year, employee, company, offDays }: ExportReportParams) {
+export async function exportReport({
+  report,
+  month,
+  year,
+  employee,
+  company,
+  offDays,
+  sort = defaultExportSort,
+}: ExportReportParams) {
   // Loaded on demand — exceljs is ~1 MB and only needed when the user exports
   const { default: ExcelJSRuntime } = await import('exceljs');
   const workbook = new ExcelJSRuntime.Workbook();
@@ -59,9 +84,7 @@ export async function exportReport({ report, month, year, employee, company, off
   sheet.getCell('B2').alignment = { horizontal: 'center' };
 
   const dataStartRow = 3;
-  const rows = report
-    .filter((item) => item.time > 0)
-    .sort((a, b) => b.time - a.time);
+  const rows = sortReportRows(report, sort);
 
   rows.forEach((item, index) => {
     const row = sheet.getRow(dataStartRow + index);
