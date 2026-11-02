@@ -32,4 +32,6 @@ export class ClaimedTurnResponseDto {
   // pending reply answers — worker is stateless between turns, so it needs
   // full context each time, not just the latest message.
   history: ClaimedTurnHistoryEntry[];
+  // True for an internal question (the router's classifier) that the worker must run with no tools at all.
+  toolless: boolean;
 }

@@ -92,6 +92,7 @@ describe('ChatService', () => {
         model: ChatModel.Gpt,
         providerCredentialId: null,
         title: null,
+        purpose: null,
       });
       expect(chat).toMatchObject({ id: 1, model: ChatModel.Gpt });
     });
@@ -112,6 +113,7 @@ describe('ChatService', () => {
         id: 1,
         userId: 7,
         title: null,
+        purpose: null,
       });
       chatRepository.save!.mockImplementation(async (chat) => chat);
 

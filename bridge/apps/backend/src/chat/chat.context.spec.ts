@@ -53,6 +53,7 @@ describe('ChatService context snapshot', () => {
       model: ChatModel.Sonnet,
       providerCredentialId: null,
       title: null,
+      purpose: null,
       contextName: 'Rules',
       contextText: 'Use tabs',
     });
@@ -80,6 +81,7 @@ describe('ChatResponseDto context', () => {
       id: 1,
       model: ChatModel.Gpt,
       title: null,
+      purpose: null,
       contextName: 'Rules',
       contextText: 'secret text',
       createdAt: new Date(),

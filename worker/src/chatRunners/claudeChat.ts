@@ -15,7 +15,7 @@ import type { ClaudeModel } from '../providers.js';
 // resume across separate chat turns (worker keeps no state between turns;
 // bridge is the source of truth for history), so each call has to restate
 // the whole conversation itself.
-export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<number> = new Set(), context?: string | null): string {
+export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<number> = new Set(), context?: string | null, withActions = true): string {
   const transcript = history
     .map((entry) => {
       const files = (entry.attachments ?? []).map((attachment) =>
@@ -29,7 +29,7 @@ export function buildPrompt(history: ChatHistoryEntry[], staged: ReadonlySet<num
     .join('\n\n');
   const hasFiles = staged.size > 0;
 
-  const prompt = `${CHAT_ACTIONS_INSTRUCTION}\n\n${transcript}\n\n${
+  const prompt = `${withActions ? `${CHAT_ACTIONS_INSTRUCTION}\n\n` : ''}${transcript}\n\n${
     hasFiles
       ? 'Files the user attached are in the ./attachments directory, at the paths shown in brackets. Open them with your file tools (images included) when they are relevant to the question.\n\n'
       : ''
@@ -61,13 +61,15 @@ export async function claudeChat(
   timeoutMs?: number,
   // Stops the CLI when aborted (worker shutdown).
   signal?: AbortSignal,
+  // No tools, no attachments, no chat-actions card: for a question that only wants text back.
+  toolless?: boolean,
 ): Promise<{ text: string; reasoning: string | null }> {
   mkdirSync(workDir, { recursive: true });
   const turnDir = makeRunDir(workDir, 'chat-');
 
   try {
-    const staged = downloadAttachment ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
-    const prompt = buildPrompt(history, staged, context);
+    const staged = downloadAttachment && !toolless ? await stageAttachments(turnDir, history, downloadAttachment) : new Set<number>();
+    const prompt = buildPrompt(history, staged, context, !toolless);
     const progress = onProgress ? createProgressReporter(onProgress) : undefined;
     const result = await runClaude(
       turnDir,
@@ -80,6 +82,7 @@ export async function claudeChat(
       undefined,
       signal,
       progress?.push,
+      toolless ? ['--tools', ''] : [],
     ).finally(() => progress?.stop());
 
     if (result.report) onReport?.(result.report);
