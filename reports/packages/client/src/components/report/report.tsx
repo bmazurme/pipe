@@ -9,7 +9,7 @@ import { reportSelector, settingsSelector } from '../../store';
 import { useGetCountsQuery, useGetReportsQuery, usePushReportToBridgeMutation } from '../../store/api';
 import { useAppSelector } from '../../hooks';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { exportReport, type ExportSort } from '../../utils/export-report';
+import { exportReport, type ExportIdentifier, type ExportSort } from '../../utils/export-report';
 import { describeError } from '../../utils/describe-error';
 import { EmptyState } from '../state';
 import ExportDialog from './export-dialog';
@@ -35,7 +35,7 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
   const trackedHours = trackedRows.reduce((sum, item) => sum + item.time, 0);
   const entriesToSend = trackedRows.map((item) => ({ taskName: item.name, status: item.status, hours: item.time }));
 
-  const handleExport = async (sort: ExportSort) => {
+  const handleExport = async ({ sort, identifier }: { sort: ExportSort; identifier: ExportIdentifier }) => {
     setIsExportDialogOpen(false);
     setIsExporting(true);
 
@@ -48,6 +48,7 @@ function Report({ report, offDays }: { report: RowData[]; offDays: number }) {
         company,
         offDays,
         sort,
+        identifier,
       });
       toaster.add({
         name: 'export-success',
