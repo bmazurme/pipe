@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RowData } from '../hocs/with-table-sorting';
-import { defaultExportSort, sortReportRows } from './export-report';
+import { defaultExportSort, sortReportRows, taskNumber } from './export-report';
 
 const row = (name: string, status: string, time: number): RowData => ({
   id: name,
@@ -43,5 +43,44 @@ describe('sortReportRows', () => {
 
     expect(names(sortReportRows(report, { field: 'name', direction: 'asc' }))).not.toContain('Без времени');
     expect(names(report)).toEqual(before);
+  });
+
+  describe('by task number', () => {
+    const numbered = [
+      row('120 crm Третья', 'Закрыта', 1),
+      row('9 crm Первая', 'В работе', 1),
+      row('Без номера', 'Закрыта', 1),
+      row('45 crm Вторая', 'Закрыта', 1),
+    ];
+
+    it('compares numbers as numbers, not as text (9 before 45 before 120)', () => {
+      expect(names(sortReportRows(numbered, { field: 'number', direction: 'asc' }))).toEqual([
+        '9 crm Первая',
+        '45 crm Вторая',
+        '120 crm Третья',
+        'Без номера',
+      ]);
+    });
+
+    it('reverses the numbers on desc but keeps a row without a number last', () => {
+      expect(names(sortReportRows(numbered, { field: 'number', direction: 'desc' }))).toEqual([
+        '120 crm Третья',
+        '45 crm Вторая',
+        '9 crm Первая',
+        'Без номера',
+      ]);
+    });
+  });
+});
+
+describe('taskNumber', () => {
+  it('reads the number the name starts with', () => {
+    expect(taskNumber('1029 crm Название')).toBe(1029);
+    expect(taskNumber('  7 crm')).toBe(7);
+  });
+
+  it('is null when the name does not start with digits', () => {
+    expect(taskNumber('crm 12 Название')).toBeNull();
+    expect(taskNumber('')).toBeNull();
   });
 });

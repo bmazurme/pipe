@@ -6,6 +6,7 @@ import { defaultExportSort, type ExportSort, type ExportSortDirection, type Expo
 import reportStyle from './report.module.css';
 
 const fieldOptions: { value: ExportSortField; content: string }[] = [
+  { value: 'number', content: 'Номер задачи' },
   { value: 'name', content: 'Наименование задачи' },
   { value: 'status', content: 'Статус задачи' },
   { value: 'time', content: 'Часы' },
