@@ -152,7 +152,11 @@ describe('lab RunsTab issue prefill', () => {
     const user = userEvent.setup();
     renderTab();
 
-    await user.click(await screen.findByRole('button', { name: 'Новый запуск' }));
+    // The button exists, disabled, before the projects arrive; a click on it then opens nothing, so wait until it is enabled.
+    const start = await screen.findByRole('button', { name: 'Новый запуск' });
+
+    await waitFor(() => expect(start).toBeEnabled());
+    await user.click(start);
     await waitFor(() => expect(gets).toContain('lab/projects/1/issues'));
     await user.click(await screen.findByText('Не выбрано'));
     await user.click(await screen.findByText('#5 Течёт кран'));
