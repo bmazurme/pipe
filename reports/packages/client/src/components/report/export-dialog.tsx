@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import { Dialog, DialogBody, DialogFooter, DialogHeader, Select } from '@gravity-ui/uikit';
+import { Checkbox, Dialog, DialogBody, DialogFooter, DialogHeader, Select, Text } from '@gravity-ui/uikit';
 
-import { defaultExportSort, type ExportSort, type ExportSortDirection, type ExportSortField } from '../../utils/export-report';
+import {
+  defaultExportIdentifier,
+  defaultExportSort,
+  type ExportIdentifier,
+  type ExportSort,
+  type ExportSortDirection,
+  type ExportSortField,
+} from '../../utils/export-report';
 
 import reportStyle from './report.module.css';
 
@@ -18,16 +25,22 @@ const directionOptions: { value: ExportSortDirection; content: string }[] = [
   { value: 'desc', content: 'По убыванию' },
 ];
 
+const identifierOptions: { value: ExportIdentifier; content: string }[] = [
+  { value: 'number', content: 'Номер задачи' },
+  { value: 'created', content: 'Дата создания (ГГГГММДДЧЧММСС)' },
+];
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  onExport: (sort: ExportSort) => void;
+  onExport: (options: { sort: ExportSort; identifier: ExportIdentifier }) => void;
 };
 
-// The sort is asked for before every export: the file is written in exactly the order chosen here.
+// The sort and what the task column starts with are asked for before every export: the file is written exactly as chosen here.
 function ExportDialog({ open, onClose, onExport }: Props) {
   const [field, setField] = useState<ExportSortField>(defaultExportSort.field);
   const [direction, setDirection] = useState<ExportSortDirection>(defaultExportSort.direction);
+  const [identifier, setIdentifier] = useState<ExportIdentifier>(defaultExportIdentifier);
 
   return (
     <Dialog open={open} onClose={onClose}>
@@ -48,11 +61,24 @@ function ExportDialog({ open, onClose, onExport }: Props) {
             options={directionOptions}
             width="max"
           />
+          <fieldset className={reportStyle.exportIdentifier}>
+            <Text as="legend" variant="body-2">В названии задачи указать</Text>
+            {identifierOptions.map((option) => (
+              <Checkbox
+                key={option.value}
+                checked={identifier === option.value}
+                // exactly one is always chosen: ticking the other moves the tick, unticking the chosen one does nothing
+                onUpdate={(checked) => checked && setIdentifier(option.value)}
+              >
+                {option.content}
+              </Checkbox>
+            ))}
+          </fieldset>
         </div>
       </DialogBody>
       <DialogFooter
         onClickButtonCancel={onClose}
-        onClickButtonApply={() => onExport({ field, direction })}
+        onClickButtonApply={() => onExport({ sort: { field, direction }, identifier })}
         textButtonApply="Выгрузить"
         textButtonCancel="Отмена"
       />

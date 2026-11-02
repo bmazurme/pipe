@@ -108,3 +108,12 @@
   gap: 12px;
   min-width: min(360px, 100%);
 }
+
+.exportIdentifier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+}
