@@ -10,6 +10,7 @@ import {
   useGetDashboardDeploysQuery,
   useGetDashboardNasQuery,
   useGetDashboardUpsQuery,
+  useGetDashboardRouterQuery,
   useGetDashboardNodesQuery,
   useGetVpnConnectionStatusQuery,
   useGetVpnStatusQuery,
@@ -22,6 +23,7 @@ import { SectionHeader } from '../widgets/SectionHeader';
 import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import { BoardMetricsCard } from './dashboard/BoardMetricsCard';
 import { NasCard } from './dashboard/NasCard';
+import { RouterCard } from './dashboard/RouterCard';
 import { UpsCard } from './dashboard/UpsCard';
 import { ReleasesCard } from './dashboard/ReleasesCard';
 import { buildAttention, summarize } from './dashboard/dashboardAttention';
@@ -136,6 +138,7 @@ export function DashboardPage() {
   const boardMetrics = useGetDashboardBoardMetricsQuery(24, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const ups = useGetDashboardUpsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const router = useGetDashboardRouterQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const deploys = useGetDashboardDeploysQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
 
   const vpnDown = vpnActive.isError || !vpnActive.data?.lastOnline;
@@ -153,6 +156,7 @@ export function DashboardPage() {
     boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
     nas: Array.isArray(nas.data) ? nas.data : [],
     ups: Array.isArray(ups.data) ? ups.data : [],
+    router: Array.isArray(router.data) ? router.data : [],
     lastDeploy: Array.isArray(deploys.data) ? (deploys.data[0] ?? null) : null,
   });
   const summary = summarize(attention);
@@ -162,7 +166,7 @@ export function DashboardPage() {
     <div className={styles.page}>
       <PageHeader
         title="Дашборд"
-        description="Состояние инфраструктуры: туннель, узлы кластера, платы, NAS, ИБП, бэкапы и релизы — на одной странице."
+        description="Состояние инфраструктуры: туннель, узлы кластера, платы, NAS, ИБП, роутер, бэкапы и релизы — на одной странице."
         actions={
           summaryReady ? (
             <Label theme={summary.theme} size="m">
@@ -266,6 +270,8 @@ export function DashboardPage() {
         <NasCard />
 
         <UpsCard />
+
+        <RouterCard />
 
         <GithubConnectionCard />
       </div>

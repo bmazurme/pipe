@@ -209,3 +209,121 @@ describe('TelegramCommandsService kill-switch', () => {
     expect(control.resume).not.toHaveBeenCalled();
   });
 });
+
+describe('TelegramCommandsService: the router', () => {
+  const cb = (data: string, id = 42) => ({
+    callback_query: { id: 'q1', data, message: { chat: { id } } },
+  });
+
+  function withRouter() {
+    const router = {
+      statusText: jest.fn().mockResolvedValue('ROUTER STATUS'),
+      requestFromTelegram: jest.fn().mockResolvedValue('REQUESTED'),
+    };
+    const telegram = {
+      chatId: () => '42',
+      send: jest.fn().mockResolvedValue(true),
+      sendWithButtons: jest.fn().mockResolvedValue(true),
+      answerCallback: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new TelegramCommandsService(
+      {} as never,
+      telegram as never,
+      {} as never,
+      {} as never,
+      undefined,
+      router as never,
+    );
+
+    return { service, router, telegram };
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  it('/router shows the state with a button that only asks the question', async () => {
+    const { service, telegram, router } = withRouter();
+
+    await service.handle(msg('/router'));
+
+    expect(router.statusText).toHaveBeenCalled();
+    expect(telegram.sendWithButtons).toHaveBeenCalledWith('ROUTER STATUS', [
+      [{ text: '🔄 Перезагрузить роутер', callback_data: 'rr:ask' }],
+    ]);
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+  });
+
+  it('the first press asks for a confirmation, with a button that carries the minute it was asked in', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-03T12:00:30Z'));
+    const { service, telegram, router } = withRouter();
+
+    await service.handle(cb('rr:ask'));
+
+    const [text, buttons] = telegram.sendWithButtons.mock.calls[0];
+
+    expect(text).toContain('Перезагрузить роутер?');
+    expect(buttons[0][0].callback_data).toBe(
+      `rr:go:${Math.floor(new Date('2026-11-03T12:00:30Z').getTime() / 60_000)}`,
+    );
+    expect(buttons[0][1].callback_data).toBe('rr:no');
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+  });
+
+  it('the confirmation asks for the reboot and sends what the service answered', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-03T12:03:00Z'));
+    const { service, telegram, router } = withRouter();
+    const asked = Math.floor(
+      new Date('2026-11-03T12:00:30Z').getTime() / 60_000,
+    );
+
+    await service.handle(cb(`rr:go:${asked}`));
+
+    expect(router.requestFromTelegram).toHaveBeenCalledTimes(1);
+    expect(telegram.send).toHaveBeenCalledWith('REQUESTED');
+  });
+
+  it('refuses a confirmation older than five minutes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-03T12:10:00Z'));
+    const { service, telegram, router } = withRouter();
+    const asked = Math.floor(
+      new Date('2026-11-03T12:00:30Z').getTime() / 60_000,
+    );
+
+    await service.handle(cb(`rr:go:${asked}`));
+
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+    expect(telegram.answerCallback).toHaveBeenCalledWith(
+      'q1',
+      'Кнопка устарела',
+    );
+    expect(telegram.send).toHaveBeenCalledWith(
+      expect.stringContaining('устарела'),
+    );
+  });
+
+  it('cancel does nothing but answer', async () => {
+    const { service, telegram, router } = withRouter();
+
+    await service.handle(cb('rr:no'));
+
+    expect(telegram.answerCallback).toHaveBeenCalledWith('q1', 'Отменено');
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+  });
+
+  it("ignores the presses from any chat but the owner's", async () => {
+    const { service, router, telegram } = withRouter();
+
+    await service.handle(cb('rr:go:1', 999));
+    await service.handle(cb('rr:ask', 999));
+
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+    expect(telegram.sendWithButtons).not.toHaveBeenCalled();
+  });
+
+  it('knows nothing of the router when the service is not there', async () => {
+    const { service, telegram } = setup();
+
+    await service.handle(msg('/router'));
+
+    expect(telegram.send).not.toHaveBeenCalled();
+  });
+});

@@ -8,10 +8,13 @@ import { BoardMetricsService } from './board-metrics.service';
 import { BoardsService } from './boards.service';
 import { NasService } from './nas.service';
 import { UpsService } from './ups.service';
+import { RouterService } from './router.service';
 import { BoardReport } from './entities/board-report.entity';
 import { BoardMetric } from './entities/board-metric.entity';
 import { NasReport } from './entities/nas-report.entity';
 import { UpsReport } from './entities/ups-report.entity';
+import { RouterReport } from './entities/router-report.entity';
+import { RouterReboot } from './entities/router-reboot.entity';
 import { ScriptUpdate } from './entities/script-update.entity';
 
 @Module({
@@ -21,13 +24,27 @@ import { ScriptUpdate } from './entities/script-update.entity';
       ScriptUpdate,
       NasReport,
       UpsReport,
+      RouterReport,
+      RouterReboot,
       BoardMetric,
     ]),
     AuthModule,
     TelegramModule,
   ],
   controllers: [BoardsAgentController, BoardsController],
-  providers: [BoardsService, NasService, UpsService, BoardMetricsService],
-  exports: [BoardsService, NasService, UpsService, BoardMetricsService],
+  providers: [
+    BoardsService,
+    NasService,
+    UpsService,
+    RouterService,
+    BoardMetricsService,
+  ],
+  exports: [
+    BoardsService,
+    NasService,
+    UpsService,
+    RouterService,
+    BoardMetricsService,
+  ],
 })
 export class BoardsModule {}

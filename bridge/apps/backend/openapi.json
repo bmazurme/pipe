@@ -2571,6 +2571,27 @@
         }
       }
     },
+    "/api/v1/dashboard/router": {
+      "get": {
+        "operationId": "DashboardController_getRouter",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/backups": {
       "get": {
         "operationId": "DashboardController_getBackups",
@@ -2713,6 +2734,57 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpsReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/router": {
+      "post": {
+        "operationId": "BoardsAgentController_routerReport",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouterReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/router/reboots/{id}/result": {
+      "post": {
+        "operationId": "BoardsAgentController_routerRebootResult",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouterRebootResultDto"
               }
             }
           }
@@ -7453,6 +7525,98 @@
         "required": [
           "host",
           "status"
+        ]
+      },
+      "RouterReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "sshOk": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "uptimeSec": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "wanState": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 20
+          },
+          "wanAux": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 20
+          },
+          "internetOk": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "wanIp": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "pingMs": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "pingLossPct": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          "rxBps": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000
+          },
+          "txBps": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000
+          }
+        },
+        "required": [
+          "host",
+          "reachable",
+          "sshOk"
+        ]
+      },
+      "RouterRebootResultDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "ok"
         ]
       },
       "ReportedScriptDto": {
