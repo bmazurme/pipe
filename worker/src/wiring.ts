@@ -15,6 +15,7 @@ export interface WiringInput {
   processChatTurn: (chatClient: ChatBridgeClient, turn: ClaimedChatTurn, config: WorkerConfig, signal: AbortSignal) => Promise<void>;
   withHeartbeat: LoopDeps['withHeartbeat'];
   sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+  unavailableCapabilities?: LoopDeps['unavailableCapabilities'];
   log: LoopDeps['log'];
   /** The worker's own VPN tunnel; absent when this image has none. */
   vpn?: { apply: (link: string | null | undefined) => Promise<string | null> };
@@ -61,6 +62,7 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
     processJob: (client, job, config) => input.processJob(client, job, config, signal),
     processChatTurn: (chatClient, turn, config) => input.processChatTurn(chatClient, turn, config, signal),
     withHeartbeat: input.withHeartbeat,
+    unavailableCapabilities: input.unavailableCapabilities,
     sleep: (ms) => input.sleep(ms, signal),
     log: input.log,
   };

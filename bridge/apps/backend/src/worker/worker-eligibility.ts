@@ -91,6 +91,7 @@ export function claimEligibilitySql(
         Partial<Pick<Worker, 'version'>>)
     | null,
   params: unknown[],
+  unavailableCapabilities: readonly string[] = [],
 ): string {
   if (!worker) {
     return ` AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL AND model::text <> 'custom'`;
@@ -108,7 +109,11 @@ export function claimEligibilitySql(
     ? ` AND (model::text <> 'custom' OR "providerCredentialId" IN (SELECT id FROM provider_credentials WHERE "allowedWorkerIds" IS NULL OR $5 = ANY("allowedWorkerIds")))`
     : ` AND model::text <> 'custom'`;
 
-  params.push(worker.capabilities ?? []);
+  params.push(
+    (worker.capabilities ?? []).filter(
+      (capability) => !unavailableCapabilities.includes(capability),
+    ),
+  );
   eligibility += ` AND ("requiredCapability" IS NULL OR "requiredCapability" = ANY($${params.length}::text[]))`;
 
   return eligibility;

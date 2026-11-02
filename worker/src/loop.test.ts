@@ -44,11 +44,13 @@ function harness(options: {
   turns?: (ClaimedChatTurn | null | Error)[];
   remotes?: (RemoteWorkerConfig | Error)[];
   passes: number;
+  unavailable?: string[];
   sessionAfterRevoke?: Session | null;
 }) {
   const controller = new AbortController();
   const events: string[] = [];
   const claimNames: string[] = [];
+  const claimUnavailable: (string[] | undefined)[] = [];
   const configsSeen: WorkerConfig[] = [];
   let pass = 0;
   const next = <T>(queue: T[] | undefined, fallback: T): T => (queue && queue.length > 0 ? (queue.shift() as T) : fallback);
@@ -75,8 +77,9 @@ function harness(options: {
 
       return {
         client: {
-          claim: async (name: string) => {
+          claim: async (name: string, unavailable?: string[]) => {
             claimNames.push(name);
+            claimUnavailable.push(unavailable);
             events.push('claim-job');
             const value = next<RemoteJob | null | Error>(jobs, null);
             if (value instanceof Error) throw value;
@@ -117,6 +120,7 @@ function harness(options: {
       tick();
       return result;
     },
+    ...(options.unavailable ? { unavailableCapabilities: async () => options.unavailable as string[] } : {}),
     sleep: async (ms) => {
       events.push(`sleep:${ms}`);
       tick();
@@ -124,7 +128,7 @@ function harness(options: {
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
   };
 
-  return { deps, events, claimNames, configsSeen };
+  return { deps, events, claimNames, claimUnavailable, configsSeen };
 }
 
 describe('configFor', () => {
@@ -144,6 +148,24 @@ describe('configFor', () => {
     assert.equal(config.chatTools, 'off');
     assert.equal(config.bridgeApiKey, 'brw_k');
     assert.equal(config.proxyUrl, 'http://vpn:1080');
+  });
+});
+
+describe('runLoop and unavailable capabilities', () => {
+  it('reports fusion as unavailable when Fusion is unreachable', async () => {
+    const h = harness({ session: legacy, passes: 1, unavailable: ['fusion'] });
+
+    await runLoop(h.deps);
+
+    assert.deepEqual(h.claimUnavailable[0], ['fusion']);
+  });
+
+  it('sends nothing when Fusion is reachable', async () => {
+    const h = harness({ session: legacy, passes: 1, unavailable: [] });
+
+    await runLoop(h.deps);
+
+    assert.deepEqual(h.claimUnavailable[0], []);
   });
 });
 

@@ -5949,6 +5949,12 @@
           "workerName": {
             "type": "string",
             "maxLength": 255
+          },
+          "unavailableCapabilities": {
+            "type": "string",
+            "enum": [
+              "fusion"
+            ]
           }
         }
       },

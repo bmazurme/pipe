@@ -8,6 +8,7 @@ import { processChatTurn } from './chatTurn.js';
 import { withHeartbeat } from './heartbeat.js';
 import { processJob } from './jobRunner.js';
 import { logger } from './logger.js';
+import { makeUnavailableCapabilities } from './fusion/ready.js';
 import { runLoop } from './loop.js';
 import { waitForSession } from './session.js';
 import { sleep } from './sleep.js';
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
       processJob: (client, job, config, signal) => processJob(client, job, config, { shutdown: signal, forceShutdown: forceShutdown.signal }),
       processChatTurn: (chatClient, turn, config, signal) => processChatTurn(chatClient, turn, config, { shutdown: signal }),
       withHeartbeat,
+      unavailableCapabilities: makeUnavailableCapabilities(),
       sleep,
       log: logger,
       vpn,
