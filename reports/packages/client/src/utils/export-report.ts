@@ -25,20 +25,45 @@ const thinBorder: Partial<ExcelJS.Borders> = {
   right: { style: 'thin' },
 };
 
-export type ExportSortField = 'name' | 'status' | 'time';
+export type ExportSortField = 'number' | 'name' | 'status' | 'time';
 export type ExportSortDirection = 'asc' | 'desc';
 export type ExportSort = { field: ExportSortField; direction: ExportSortDirection };
 
 // What the export did before the person could choose: the longest tasks first.
 export const defaultExportSort: ExportSort = { field: 'time', direction: 'desc' };
 
+// The server builds a row's name as `<issue number> <project> <title>`, so the number is the digits the name starts with.
+export function taskNumber(name: string): number | null {
+  const match = /^\s*(\d+)/.exec(name);
+
+  return match ? Number(match[1]) : null;
+}
+
+function compareRows(a: RowData, b: RowData, field: ExportSortField): number {
+  if (field === 'time') return a.time - b.time;
+  if (field === 'number') {
+    const left = taskNumber(a.name);
+    const right = taskNumber(b.name);
+
+    // A row without a number has nothing to compare: it stays after the numbered ones in either direction (see below).
+    return (left ?? 0) - (right ?? 0);
+  }
+
+  return a[field].localeCompare(b[field], 'ru');
+}
+
 // Only tasks with time spent go into the file; the sort is stable, so equal values keep the order of the table.
 export function sortReportRows(report: RowData[], { field, direction }: ExportSort): RowData[] {
   const sign = direction === 'asc' ? 1 : -1;
+  const hasNumber = (item: RowData) => field !== 'number' || taskNumber(item.name) !== null;
 
   return report
     .filter((item) => item.time > 0)
-    .sort((a, b) => sign * (field === 'time' ? a.time - b.time : a[field].localeCompare(b[field], 'ru')));
+    .sort((a, b) => {
+      if (!hasNumber(a) || !hasNumber(b)) return Number(!hasNumber(a)) - Number(!hasNumber(b));
+
+      return sign * compareRows(a, b, field);
+    });
 }
 
 type ExportReportParams = {
