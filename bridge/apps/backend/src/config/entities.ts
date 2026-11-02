@@ -5,6 +5,7 @@ import { Session } from '../auth/entities/session.entity';
 import { BoardReport } from '../boards/entities/board-report.entity';
 import { BoardMetric } from '../boards/entities/board-metric.entity';
 import { NasReport } from '../boards/entities/nas-report.entity';
+import { UpsReport } from '../boards/entities/ups-report.entity';
 import { ScriptUpdate } from '../boards/entities/script-update.entity';
 import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
@@ -52,6 +53,7 @@ export const ENTITIES = [
   TaskQuestion,
   BoardReport,
   NasReport,
+  UpsReport,
   BoardMetric,
   ScriptUpdate,
   User,

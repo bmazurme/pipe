@@ -29,6 +29,7 @@ describe('DashboardController routes', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -64,6 +65,7 @@ describe('DashboardController: the connection to GitHub', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -89,6 +91,7 @@ describe('DashboardController deploys', () => {
       { latest } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getDeploys()).resolves.toEqual([
@@ -106,6 +109,7 @@ describe('DashboardController nas', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
       {} as never,
     );
 
@@ -125,6 +129,7 @@ describe('DashboardController board metrics', () => {
       {} as never,
       {} as never,
       { summary } as never,
+      {} as never,
     );
 
   it("passes the owner and the window to the service, 24 hours by default via the pipe's value", async () => {
@@ -145,5 +150,25 @@ describe('DashboardController board metrics', () => {
     expect(() => controller.getBoardMetrics({ id: 7 }, 169)).toThrow(
       /between 1 and 168/,
     );
+  });
+});
+
+describe('DashboardController ups', () => {
+  it("lists the signed-in owner's UPS reports", async () => {
+    const list = jest.fn().mockResolvedValue([{ host: 'ubuntu-blue' }]);
+    const controller = new DashboardController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { list } as never,
+    );
+
+    await expect(controller.getUps({ id: 7 })).resolves.toEqual([
+      { host: 'ubuntu-blue' },
+    ]);
+    expect(list).toHaveBeenCalledWith(7);
   });
 });

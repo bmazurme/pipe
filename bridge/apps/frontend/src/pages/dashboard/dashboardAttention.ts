@@ -1,4 +1,4 @@
-import type { DashboardBoardMetrics, DashboardDeploy, DashboardNas } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardDeploy, DashboardNas, DashboardUps } from '../../store/api';
 
 // What the Dashboard header says in one line, and the list under it: everything on the page that is not fine, from every tile - so the
 // answer to "is anything wrong?" does not need scrolling through them. Pure; the page feeds it what its queries returned.
@@ -20,6 +20,7 @@ export interface AttentionInput {
   backupIssue: boolean;
   boards: DashboardBoardMetrics[];
   nas: DashboardNas[];
+  ups: DashboardUps[];
   /** The newest report of the deploying board, if any. */
   lastDeploy: DashboardDeploy | null;
 }
@@ -45,6 +46,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     if (nas.status === 'ok') continue;
 
     items.push({ id: `nas:${nas.host}`, level: nas.status, text: `NAS: ${nas.reasons[0] ?? 'есть замечания'}${nas.reasons.length > 1 ? ` (и ещё ${nas.reasons.length - 1})` : ''}` });
+  }
+
+  for (const ups of input.ups) {
+    if (ups.status === 'ok') continue;
+
+    items.push({ id: `ups:${ups.host}`, level: ups.status, text: `ИБП: ${ups.reasons[0] ?? 'есть замечания'}${ups.reasons.length > 1 ? ` (и ещё ${ups.reasons.length - 1})` : ''}` });
   }
 
   if (input.lastDeploy && input.lastDeploy.result !== 'deployed') {

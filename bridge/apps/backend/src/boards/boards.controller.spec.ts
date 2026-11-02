@@ -25,6 +25,7 @@ describe('BoardsAgentController', () => {
       service as unknown as BoardsService,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -105,5 +106,22 @@ describe('Boards controllers access', () => {
       JwtGuard,
       OwnerGuard,
     ]);
+  });
+});
+
+describe('BoardsAgentController ups', () => {
+  it("records the UPS report for the owner's account", async () => {
+    const record = jest.fn().mockResolvedValue(undefined);
+    const controller = new BoardsAgentController(
+      {} as never,
+      {} as never,
+      {} as never,
+      { record } as never,
+    );
+    const dto = { host: 'ubuntu-blue', status: 'OL CHRG' };
+
+    await controller.upsReport(dto as never, { id: 7 });
+
+    expect(record).toHaveBeenCalledWith(7, dto);
   });
 });
