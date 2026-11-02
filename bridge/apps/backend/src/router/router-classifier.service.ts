@@ -32,9 +32,11 @@ export class RouterClassifierService {
     let chatId: number | null = null;
 
     try {
-      const chat = await this.chats.createChat(userId, {
-        model: ChatModel.Haiku,
-      });
+      const chat = await this.chats.createChat(
+        userId,
+        { model: ChatModel.Haiku },
+        'router',
+      );
 
       chatId = chat.id;
       await this.chats.renameChat(

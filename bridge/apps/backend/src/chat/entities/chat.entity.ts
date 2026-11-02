@@ -44,4 +44,8 @@ export class Chat extends BaseEntity {
 
   @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
   contextText: string | null;
+
+  // What the chat is for when it is not a conversation ('router': the task-size classifier). Such a turn runs without tools.
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  purpose: string | null;
 }

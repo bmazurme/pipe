@@ -88,6 +88,33 @@ describe('ChatTurnsController claim', () => {
       claudeToken: 'tok',
       context: 'ctx',
       history: [],
+      toolless: false,
     });
+  });
+
+  it('marks a turn of a router chat as toolless', async () => {
+    const chatService = {
+      claim: jest.fn().mockResolvedValue({
+        chat: { id: 2, model: 'haiku', contextText: null, purpose: 'router' },
+        message: { id: 3 },
+        history: [],
+      }),
+    };
+    const controller = controllerWith({
+      chatService,
+      workersService: {},
+      runCredentials: {
+        resolve: jest
+          .fn()
+          .mockResolvedValue({ claudeToken: 'tok', provider: null }),
+      },
+    });
+    const r = res();
+
+    await controller.claim({ id: 1 }, r as never);
+
+    expect(r.json).toHaveBeenCalledWith(
+      expect.objectContaining({ toolless: true }),
+    );
   });
 });

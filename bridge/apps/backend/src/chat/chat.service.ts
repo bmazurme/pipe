@@ -85,7 +85,11 @@ export class ChatService {
     return providerCredentialId;
   }
 
-  async createChat(userId: number, dto: CreateChatDto): Promise<Chat> {
+  async createChat(
+    userId: number,
+    dto: CreateChatDto,
+    purpose: string | null = null,
+  ): Promise<Chat> {
     // Snapshot, like a Worker job: the chat keeps its own copy of the text.
     const context =
       dto.contextId === undefined || dto.contextId === null
@@ -103,6 +107,7 @@ export class ChatService {
       model: dto.model,
       providerCredentialId,
       title: null,
+      purpose,
       ...(context
         ? { contextName: context.name, contextText: context.content }
         : {}),

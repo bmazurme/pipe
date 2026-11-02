@@ -45,7 +45,11 @@ describe('RouterClassifierService', () => {
     );
 
     expect(result).toEqual({ tier: 2, needsGenerated: false });
-    expect(chats.createChat).toHaveBeenCalledWith(7, { model: 'haiku' });
+    expect(chats.createChat).toHaveBeenCalledWith(
+      7,
+      { model: 'haiku' },
+      'router',
+    );
     expect(chats.sendMessage.mock.calls[0][2]).toContain('TASK TITLE: Fix');
     expect(chats.removeChat).toHaveBeenCalledWith(11, 7);
   });

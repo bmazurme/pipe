@@ -166,3 +166,46 @@ describe('claudeChat deadline', () => {
     assert.deepEqual(readdirSync(work), []);
   });
 });
+
+describe('claudeChat toolless', () => {
+  const originalPath = process.env.PATH;
+
+  after(() => {
+    process.env.PATH = originalPath;
+  });
+
+  // A fake `claude` that answers with its own arguments.
+  function argsEchoingClaude(): void {
+    const dir = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-args-'));
+    const script = path.join(dir, 'claude');
+
+    writeFileSync(script, ['#!/usr/bin/env node', "console.log(JSON.stringify({ type: 'result', result: JSON.stringify(process.argv.slice(2)) }));", ''].join('\n'));
+    chmodSync(script, 0o755);
+    process.env.PATH = `${dir}:${originalPath}`;
+  }
+
+  it('starts the CLI with an empty --tools value, no attachments and no actions card when toolless', async () => {
+    argsEchoingClaude();
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+    let downloads = 0;
+
+    const reply = await claudeChat([{ role: 'user', content: 'hi', attachments: [{ id: 1, name: 'a.txt', size: 1, isImage: false }] }], 'haiku', work, undefined, async () => {
+      downloads += 1;
+      return Buffer.from('x');
+    }, undefined, undefined, undefined, undefined, undefined, undefined, true);
+    const args = JSON.parse(reply.text) as string[];
+
+    assert.equal(args[args.indexOf('--tools') + 1], '');
+    assert.equal(downloads, 0);
+    assert.ok(!args[1].includes(CHAT_ACTIONS_INSTRUCTION));
+  });
+
+  it('does not pass --tools for an ordinary chat', async () => {
+    argsEchoingClaude();
+    const work = mkdtempSync(path.join(tmpdir(), 'worker-claude-chat-work-'));
+
+    const reply = await claudeChat([{ role: 'user', content: 'hi' }], 'haiku', work);
+
+    assert.ok(!(JSON.parse(reply.text) as string[]).includes('--tools'));
+  });
+});

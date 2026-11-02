@@ -100,6 +100,7 @@ export class ChatTurnsController {
       claudeToken,
       context: claimed.chat.contextText ?? null,
       history: claimed.history,
+      toolless: claimed.chat.purpose === 'router',
     };
 
     res.status(HttpStatus.OK).json(payload);

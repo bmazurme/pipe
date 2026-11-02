@@ -29,6 +29,8 @@ export interface ClaimedChatTurn {
   // The stored API key for a gpt/deepseek/qwen turn; null/absent = this worker's own environment.
   provider?: ProviderOverride | null;
   history: ChatHistoryEntry[];
+  // An internal question (the router's classifier): run it with no tools and no attachments.
+  toolless?: boolean;
 }
 
 // Same auth shape as WorkerBridgeClient (a single personal API key, no
