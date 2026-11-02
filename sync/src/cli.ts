@@ -113,6 +113,7 @@ program
   )
   .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
   .option('--strict', 'skip (instead of just warning on) an issue whose leak scan finds something')
+  .option('--label <name>', 'only push assigned issues that carry this GitLab label')
   .action((name, options) => gitlabWorkerCommand(name, options));
 
 program
