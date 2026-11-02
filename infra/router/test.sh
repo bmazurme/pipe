@@ -26,7 +26,6 @@ if [ "${@: -1}" = reboot ]; then
   echo reboot >> "$FIX/reboots"
   exit "$(cat "$FIX/ssh_reboot_rc" 2>/dev/null || echo 255)"
 fi
-cat > "$FIX/ssh_stdin"
 [ -f "$FIX/router_raw" ] && cat "$FIX/router_raw"
 exit "$(cat "$FIX/ssh_rc" 2>/dev/null || echo 0)"
 SH
@@ -84,7 +83,8 @@ pyassert() { python3 -c "import json, sys; d = json.loads(sys.argv[1]); $2" "$(r
 reset; printf '%s\n' "$RAW" > "$FIX/router_raw"; agent
 pyassert x 'assert d == {"host": "asus", "reachable": True, "sshOk": True, "model": "RT-AX58U", "uptimeSec": 400000, "wanState": 2, "wanAux": 0, "internetOk": True, "wanIp": "89.207.218.46", "pingLossPct": 0, "pingMs": 12.4}, d'
 check "report: everything the router says, as numbers, with no speed on the first round" $?
-grep -q 'sh -s -- 1.1.1.1' "$FIX/ssh_calls" && grep -q -- '-o BatchMode=yes' "$FIX/ssh_calls" && grep -q 'StrictHostKeyChecking=accept-new' "$FIX/ssh_calls"; check "report: the ping target goes to the router as an argument; the key only, no password; the host key is pinned" $?
+grep -q 'ping -c 3 -W 2 1.1.1.1 ' "$FIX/ssh_calls" && grep -q -- '-o BatchMode=yes' "$FIX/ssh_calls" && grep -q 'StrictHostKeyChecking=accept-new' "$FIX/ssh_calls"; check "report: the ping target is in the commands sent to the router; the key only, no password; the host key is pinned" $?
+! grep -q -E '(^| )sh( -s|$)' "$FIX/ssh_calls"; check "report: never through «sh -s» (on this firmware sh is Broadcom's memory-write tool, not a shell)" $?
 grep -q 'Bearer brk_secret' "$FIX/curl_stdin" && ! grep -q brk_secret "$FIX/curl_args"; check "report: the key goes to curl on stdin, never in the arguments" $?
 [ ! -f "$FIX/reboots" ]; check "report: nothing is rebooted when bridge hands out no request" $?
 

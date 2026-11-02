@@ -8,7 +8,7 @@ request comes back in the answer to its own report — the same shape as `infra/
 Telegram: /router → state + [🔄 Перезагрузить роутер] → «Перезагрузить? …» [✅ Да] [Отмена]
           └─ bridge: a request (pending) ──┐
 blue: router-agent.sh, every minute         │
-   ping + `ssh router 'sh -s'` ──▶ POST /api/v1/boards/agent/router  ◀── the answer: { rebootRequestId } ─┘
+   ping + `ssh router '<commands>'` ──▶ POST /api/v1/boards/agent/router  ◀── the answer: { rebootRequestId } ─┘
    if there is one: `ssh router reboot` → wait until it stops answering and until it answers again → until 1.1.1.1 answers
    └──▶ POST …/router/reboots/<id>/result { ok, detail } ──▶ bridge ──▶ Telegram «✅ Роутер перезагружен: …»
 ```
@@ -19,6 +19,10 @@ blue: router-agent.sh, every minute         │
 `productid`; `/proc/uptime`; the WAN port's counters in `/proc/net/dev` (the agent turns two rounds into bit/s); a 3-packet ping from the router
 to `PING_TARGET`. If the router does not answer ping from the board, the report says «unreachable» and nothing else; if ping answers but the key is
 not accepted, `sshOk: false`.
+
+The commands go to the router as ssh's command string, **not** through `sh -s`: on this RT-AX58U firmware the `sh` in PATH is Broadcom's
+memory-write tool (`sw`/`sh`/`sb`), not a shell. Checked on the router (firmware 388): `nvram get wan0_state_t` = 2, `wan0_auxstate_t` = 0,
+`link_internet` = 2, `wan0_ipaddr`, the WAN port is `eth4`, busybox `ping -c 3 -W 2` prints «round-trip min/avg/max = …», `/sbin/reboot` exists.
 
 ## Install (on blue, once)
 

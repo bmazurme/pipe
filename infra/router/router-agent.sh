@@ -48,9 +48,9 @@ router_ssh() {
 }
 ping_ok() { ping -c 1 -W 2 "$1" >/dev/null 2>&1; }
 
-# What the router says about itself, as key=value lines (run on the router by `sh -s`; busybox only).
-collect() {
-  router_ssh "sh -s -- $PING_TARGET" <<'REMOTE'
+# What the router says about itself, as key=value lines. The commands go as ssh's command string for the router's login shell to run - NOT
+# through `sh -s`: on this firmware the `sh` in PATH is Broadcom's memory-write tool (sw/sh/sb), not a shell. Busybox applets only.
+read -r -d '' REMOTE_TEMPLATE <<'REMOTE' || true
 echo "model=$(nvram get productid 2>/dev/null)"
 echo "uptime=$(cut -d. -f1 /proc/uptime 2>/dev/null)"
 echo "wan_state=$(nvram get wan0_state_t 2>/dev/null)"
@@ -62,10 +62,11 @@ wif="$(nvram get wan0_pppoe_ifname 2>/dev/null)"
 echo "wan_if=$wif"
 [ -z "$wif" ] || echo "wan_counters=$(grep "^ *$wif:" /proc/net/dev 2>/dev/null | sed 's/^[^:]*://' | awk '{print $1, $9}')"
 echo "ping_begin"
-ping -c 3 -W 2 "$1" 2>&1 | tail -3
+ping -c 3 -W 2 @TARGET@ 2>&1 | tail -3
 echo "ping_end"
 REMOTE
-}
+# PING_TARGET has been checked to be a host name or an address before this runs.
+collect() { router_ssh "${REMOTE_TEMPLATE//@TARGET@/$PING_TARGET}"; }
 
 # The JSON for bridge, from the router's answer (RAW), whether it answered ping (REACHABLE) and let us in (SSHOK). Speeds come from the counters
 # of the previous round (kept in $STATE_DIR/last): not shown for the first round, nor when a counter went backwards (the router rebooted).
