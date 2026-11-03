@@ -61,6 +61,11 @@ export interface UsageRouteRow extends UsageTotals {
   pullRequests: number;
 }
 
+export interface UsageDayRow extends UsageTotals {
+  // UTC date of the job's createdAt, YYYY-MM-DD.
+  day: string;
+}
+
 export interface UsageTaskRow extends UsageTotals {
   key: string;
   kind: UsageTaskKind;
@@ -82,6 +87,7 @@ export interface UsageReport {
   costPerPullRequest: number | null;
   byModel: UsageModelRow[];
   byRoute: UsageRouteRow[];
+  byDay: UsageDayRow[];
   tasks: UsageTaskRow[];
 }
 
@@ -175,6 +181,7 @@ export function buildUsageReport(
   const tasks = new Map<string, UsageTaskRow>();
   const routes = new Map<string, UsageRouteRow>();
   const routePrs = new Map<string, Set<string>>();
+  const days = new Map<string, UsageDayRow>();
 
   for (const job of jobs) {
     add(totals, job);
@@ -186,6 +193,12 @@ export function buildUsageReport(
 
     add(model, job);
     models.set(job.model, model);
+
+    const day = job.createdAt.toISOString().slice(0, 10);
+    const dayRow = days.get(day) ?? { day, ...emptyTotals() };
+
+    add(dayRow, job);
+    days.set(day, dayRow);
 
     const run = runByJob.get(job.id);
     const decision = routeOf(run?.routing);
@@ -281,6 +294,9 @@ export function buildUsageReport(
         tidy({ ...row, pullRequests: routePrs.get(row.route)?.size ?? 0 }),
       )
       .sort((a, b) => b.costUsd - a.costUsd || b.jobs - a.jobs),
+    byDay: [...days.values()]
+      .map(tidy)
+      .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0)),
     tasks: taskRows.slice(0, maxTasks).map(tidy),
   };
 }

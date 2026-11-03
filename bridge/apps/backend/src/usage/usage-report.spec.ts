@@ -244,4 +244,39 @@ describe('buildUsageReport', () => {
       expect(report.byModel[0].jobs).toBe(5);
     });
   });
+
+  describe('byDay', () => {
+    const atTime = (day: number, hour: number, minute: number) =>
+      new Date(Date.UTC(2026, 9, day, hour, minute));
+
+    it('groups by UTC date of createdAt, newest first, summing to the totals', () => {
+      const report = buildUsageReport(
+        [
+          job(1, { createdAt: atTime(3, 23, 59), usage: usage(1) }),
+          job(2, {
+            createdAt: atTime(4, 0, 1),
+            usage: usage(2),
+            status: 'failed',
+          }),
+          job(3, { createdAt: atTime(4, 12, 0), usage: usage(0.5) }),
+        ],
+        [],
+        RANGE,
+      );
+
+      expect(
+        report.byDay.map((row) => [row.day, row.jobs, row.failed, row.costUsd]),
+      ).toEqual([
+        ['2026-10-04', 2, 1, 2.5],
+        ['2026-10-03', 1, 0, 1],
+      ]);
+      expect(report.byDay.reduce((sum, row) => sum + row.jobs, 0)).toBe(
+        report.totals.jobs,
+      );
+    });
+
+    it('is empty for no jobs', () => {
+      expect(buildUsageReport([], [], RANGE).byDay).toEqual([]);
+    });
+  });
 });
