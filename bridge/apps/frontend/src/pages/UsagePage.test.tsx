@@ -138,4 +138,22 @@ describe('UsagePage', () => {
     expect(await screen.findByText('Условная стоимость')).toBeTruthy();
     expect(screen.queryByText('Маршрутизатор «Авто»')).toBeNull();
   });
+
+  it('shows the per-day card with runs, failures and cost, and hides it when empty', async () => {
+    const byDay = [{ day: '2026-10-29', ...totals({ jobs: 4, failed: 2, costUsd: 1.5 }) }];
+    vi.stubGlobal('fetch', vi.fn(async () => json({ ...REPORT, byDay })));
+    const first = renderPage();
+
+    expect(await screen.findByText('По дням')).toBeTruthy();
+    expect(screen.getByText('2026-10-29')).toBeTruthy();
+    expect(screen.getByText(/2 ош\./)).toBeTruthy();
+    expect(screen.getAllByText(formatCost(1.5)).length).toBeGreaterThan(0);
+    first.unmount();
+
+    vi.stubGlobal('fetch', vi.fn(async () => json({ ...REPORT, byDay: [] })));
+    renderPage();
+
+    expect(await screen.findByText('Условная стоимость')).toBeTruthy();
+    expect(screen.queryByText('По дням')).toBeNull();
+  });
 });

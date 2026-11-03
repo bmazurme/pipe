@@ -154,6 +154,34 @@ export function UsagePage() {
             </table>
           </Card>
 
+          {data.byDay && data.byDay.length > 0 && (
+            <Card view="outlined" className={styles.card}>
+              <Text variant="subheader-2">По дням</Text>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>День</th>
+                    <th className={styles.num}>Запусков</th>
+                    <th className={styles.num}>Время</th>
+                    <th className={styles.num}>Токены</th>
+                    <th className={styles.num}>Стоимость</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byDay.map((row) => (
+                    <tr key={row.day}>
+                      <td>{row.day}</td>
+                      <TotalsCells row={row} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Text variant="caption-2" color="secondary">
+                Дни считаются по UTC.
+              </Text>
+            </Card>
+          )}
+
           {data.byRoute && data.byRoute.length > 0 && (
             <Card view="outlined" className={styles.card}>
               <Text variant="subheader-2">Маршрутизатор «Авто»</Text>

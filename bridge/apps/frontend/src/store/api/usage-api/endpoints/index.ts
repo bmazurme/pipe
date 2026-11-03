@@ -22,6 +22,10 @@ export interface UsageRouteRow extends UsageTotals {
   pullRequests: number;
 }
 
+export interface UsageDayRow extends UsageTotals {
+  day: string;
+}
+
 export type UsageTaskKind = 'improve' | 'lab' | 'analysis' | 'parcel';
 
 export interface UsageTaskRow extends UsageTotals {
@@ -43,6 +47,7 @@ export interface UsageReport {
   costPerPullRequest: number | null;
   byModel: UsageModelRow[];
   byRoute?: UsageRouteRow[];
+  byDay?: UsageDayRow[];
   tasks: UsageTaskRow[];
 }
 
