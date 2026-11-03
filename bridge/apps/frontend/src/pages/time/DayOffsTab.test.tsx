@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -70,5 +70,58 @@ describe('DayOffsTab weekday', () => {
     // A weekend is drawn in the danger colour, a working day in the quiet one.
     expect(saturday.className).toMatch(/color_danger/);
     expect(monday.className).toMatch(/color_secondary/);
+  });
+});
+
+describe('DayOffsTab add dialog', () => {
+  // The page has its own "Добавить" button; the dialog's one is the one inside the dialog.
+  const applyButton = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Добавить' });
+
+  async function openDialog() {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([])));
+    const user = userEvent.setup();
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <DayOffsTab />
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Добавить' }));
+    await screen.findByRole('dialog');
+
+    return user;
+  }
+
+  it('starts with nothing picked: the button is off and the hint says how to choose one day', async () => {
+    await openDialog();
+
+    expect(applyButton()).toBeDisabled();
+    expect(screen.getByText(/Для одного дня выберите одну и ту же дату/)).toBeInTheDocument();
+  });
+
+  it('explains what the chosen kind does to the month', async () => {
+    const user = await openDialog();
+
+    expect(screen.getByText(/Отпуск, отгул или больничный/)).toBeInTheDocument();
+
+    await user.click(screen.getByText('Короткий день'));
+    expect(screen.getByText(/норма часов за месяц уменьшается на 1 ч/)).toBeInTheDocument();
+
+    await user.click(screen.getByText('Рабочий выходной'));
+    expect(screen.getByText(/по переносу стали рабочими/)).toBeInTheDocument();
+  });
+
+  it('forgets the previous choice when opened again', async () => {
+    const user = await openDialog();
+
+    await user.click(screen.getByText('Праздник'));
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Добавить' }));
+
+    expect(await screen.findByText(/Отпуск, отгул или больничный/)).toBeInTheDocument();
   });
 });

@@ -284,6 +284,19 @@
   width: 100%;
 }
 
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: min(440px, 100%);
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .typeSummary {
   display: flex;
   flex-wrap: wrap;

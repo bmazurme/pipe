@@ -19,7 +19,7 @@ import {
 } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 import { RangeDatePicker, type RangeValue } from '@gravity-ui/date-components';
-import { DateTime } from '@gravity-ui/date-utils';
+import { dateTime, type DateTime } from '@gravity-ui/date-utils';
 
 import {
   DayOff,
@@ -33,7 +33,14 @@ import { timeYearSelector } from '../../store/slices';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../TimePage.module.css';
-import { groupConsecutiveDayOffs, isWeekend, weekdayShort } from './dayOffUtils';
+import {
+  countWeekends,
+  groupConsecutiveDayOffs,
+  isWeekend,
+  listDates,
+  MAX_RANGE_DAYS,
+  weekdayShort,
+} from './dayOffUtils';
 import { YearSwitcher } from './YearSwitcher';
 
 const PERIOD_COLOR_CLASSES = [styles.periodColorA, styles.periodColorB, styles.periodColorC];
@@ -48,6 +55,8 @@ const TYPE_META: Record<
     badgeTheme: 'utility' | 'danger' | 'warning' | 'info';
     icon: typeof Calendar;
     removalHint: string;
+    /** What the day does to the calendar and the month's hours norm — shown under the picker in the add dialog. */
+    description: string;
   }
 > = {
   off: {
@@ -56,6 +65,8 @@ const TYPE_META: Record<
     badgeTheme: 'utility',
     icon: Calendar,
     removalHint: 'снова станет обычным рабочим или выходным днём по календарю.',
+    description:
+      'Отпуск, отгул или больничный. День не считается рабочим, норма часов за месяц уменьшается на 8 ч.',
   },
   holiday: {
     optionLabel: 'Праздник',
@@ -63,6 +74,8 @@ const TYPE_META: Record<
     badgeTheme: 'danger',
     icon: Gift,
     removalHint: 'снова станет рабочим днём.',
+    description:
+      'Государственный праздник. День не считается рабочим, норма часов за месяц уменьшается на 8 ч.',
   },
   short: {
     optionLabel: 'Короткий день',
@@ -70,6 +83,7 @@ const TYPE_META: Record<
     badgeTheme: 'warning',
     icon: Clock,
     removalHint: 'снова станет днём обычной продолжительности.',
+    description: 'Предпраздничный день на час короче: норма часов за месяц уменьшается на 1 ч.',
   },
   compensatory: {
     optionLabel: 'Рабочий выходной',
@@ -77,8 +91,20 @@ const TYPE_META: Record<
     badgeTheme: 'info',
     icon: ArrowRightArrowLeft,
     removalHint: 'снова станет обычным выходным днём.',
+    description:
+      'Суббота или воскресенье, которые по переносу стали рабочими: день считается рабочим, норма — 8 ч.',
   },
 };
+
+function pluralDays(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+
+  if (mod10 === 1 && mod100 !== 11) return 'день';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'дня';
+
+  return 'дней';
+}
 
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('ru-RU', {
@@ -112,31 +138,49 @@ export function DayOffsTab() {
   const [selectedRange, setSelectedRange] = useState<RangeValue<DateTime> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [dayOffToRemove, setDayOffToRemove] = useState<DayOff | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
 
+  const openDialog = () => {
+    setSelectedType('off');
+    setSelectedRange(null);
+    setDialogError(null);
+    setIsDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    if (!isSaving) setIsDialogOpen(false);
+  };
+
+  // The days the current range would add, so the dialog can say how many before the owner presses "Добавить".
+  const rangeDates = useMemo(
+    () =>
+      selectedRange?.start && selectedRange?.end
+        ? listDates(
+            selectedRange.start.format('YYYY-MM-DD'),
+            selectedRange.end.format('YYYY-MM-DD'),
+          )
+        : [],
+    [selectedRange],
+  );
+  const rangeTooLong = rangeDates.length > MAX_RANGE_DAYS;
+  const rangeWeekends = countWeekends(rangeDates);
+
   const handleAdd = async () => {
-    if (!selectedRange?.start || !selectedRange?.end) return;
+    if (rangeDates.length === 0 || rangeTooLong) return;
 
     setIsSaving(true);
-    setError(null);
-
-    const dates: string[] = [];
-    let current = selectedRange.start.startOf('day');
-    const end = selectedRange.end.startOf('day');
-
-    while (!current.isAfter(end)) {
-      dates.push(current.format('YYYY-MM-DD'));
-      current = current.add(1, 'day');
-    }
+    setDialogError(null);
 
     let added = 0;
     let skipped = 0;
 
     // Sequential: the backend rejects a date that already exists, so
     // concurrent creates could race on the same duplicate check.
-    for (const date of dates) {
+    for (const date of rangeDates) {
       try {
         await createDayOff({ date, type: selectedType }).unwrap();
         added += 1;
@@ -145,13 +189,25 @@ export function DayOffsTab() {
       }
     }
 
-    if (skipped > 0 && added === 0) {
-      setError('Эти дни уже отмечены');
+    setIsSaving(false);
+
+    // Nothing went in: stay in the dialog so the range and the type are not lost.
+    if (added === 0) {
+      setDialogError(
+        rangeDates.length === 1
+          ? 'Этот день уже отмечен — выберите другой или удалите его в списке.'
+          : 'Все выбранные дни уже отмечены — выберите другие даты.',
+      );
+
+      return;
     }
 
-    setIsSaving(false);
+    setNotice(
+      skipped > 0
+        ? `Добавлено дней: ${added}. Пропущено: ${skipped} — они уже были отмечены.`
+        : null,
+    );
     setIsDialogOpen(false);
-    setSelectedRange(null);
   };
 
   const handleRemove = async () => {
@@ -185,10 +241,7 @@ export function DayOffsTab() {
             <Button
               view="action"
               size="m"
-              onClick={() => {
-                setSelectedType('off');
-                setIsDialogOpen(true);
-              }}
+              onClick={openDialog}
             >
               <Icon data={Plus} size={16} />
               Добавить
@@ -209,6 +262,10 @@ export function DayOffsTab() {
 
         {error && (
           <Alert theme="danger" view="filled" message={error} onClose={() => setError(null)} />
+        )}
+
+        {notice && (
+          <Alert theme="info" view="filled" message={notice} onClose={() => setNotice(null)} />
         )}
 
         {isError && !isLoading && (
@@ -286,35 +343,75 @@ export function DayOffsTab() {
         )}
       </Card>
 
-      <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
-        <Dialog.Header caption="Добавить дни отдыха" />
+      <Dialog open={isDialogOpen} onClose={closeDialog} aria-labelledby="add-day-offs-title">
+        <Dialog.Header caption="Добавить дни отдыха" id="add-day-offs-title" />
         <Dialog.Body>
           <div className={styles.form}>
-            <SegmentedRadioGroup
-              value={selectedType}
-              onUpdate={(value) => setSelectedType(value as DayOffType)}
-              width="max"
-            >
-              {DAY_OFF_TYPES.map((type) => (
-                <SegmentedRadioGroup.Option key={type} value={type}>
-                  {TYPE_META[type].optionLabel}
-                </SegmentedRadioGroup.Option>
-              ))}
-            </SegmentedRadioGroup>
+            <div className={styles.formField}>
+              <Text variant="subheader-1">Что отметить</Text>
+              <SegmentedRadioGroup
+                value={selectedType}
+                onUpdate={(value) => setSelectedType(value as DayOffType)}
+                width="max"
+                disabled={isSaving}
+              >
+                {DAY_OFF_TYPES.map((type) => (
+                  <SegmentedRadioGroup.Option key={type} value={type}>
+                    {TYPE_META[type].optionLabel}
+                  </SegmentedRadioGroup.Option>
+                ))}
+              </SegmentedRadioGroup>
+              <Text color="secondary" variant="body-short">
+                {TYPE_META[selectedType].description}
+              </Text>
+            </div>
 
-            <RangeDatePicker
-              className={styles.rangePicker}
-              value={selectedRange}
-              onUpdate={setSelectedRange}
-            />
+            <div className={styles.formField}>
+              <Text variant="subheader-1">Даты</Text>
+              <RangeDatePicker
+                className={styles.rangePicker}
+                value={selectedRange}
+                onUpdate={setSelectedRange}
+                placeholderValue={dateTime({ input: `${year}-01-01` })}
+                disabled={isSaving}
+                autoFocus
+                aria-label="Даты"
+              />
+              <Text color="secondary" variant="body-short">
+                {rangeDates.length === 0
+                  ? 'Для одного дня выберите одну и ту же дату в начале и в конце.'
+                  : `Будет отмечено: ${rangeDates.length} ${pluralDays(rangeDates.length)}${
+                      rangeWeekends > 0 && selectedType !== 'compensatory'
+                        ? `, из них выходных по календарю — ${rangeWeekends}`
+                        : ''
+                    }.`}
+              </Text>
+              {rangeTooLong && (
+                <Text color="danger" variant="body-short">
+                  Слишком длинный период: не больше {MAX_RANGE_DAYS} дн. за раз. Проверьте год.
+                </Text>
+              )}
+            </div>
+
+            {dialogError && (
+              <Alert
+                theme="danger"
+                view="filled"
+                message={dialogError}
+                onClose={() => setDialogError(null)}
+              />
+            )}
           </div>
         </Dialog.Body>
         <Dialog.Footer
           loading={isSaving}
-          textButtonApply="Добавить"
+          textButtonApply={
+            rangeDates.length > 1 && !rangeTooLong ? `Добавить (${rangeDates.length})` : 'Добавить'
+          }
           textButtonCancel="Отмена"
-          propsButtonApply={{ disabled: !selectedRange?.start || !selectedRange?.end }}
-          onClickButtonCancel={() => setIsDialogOpen(false)}
+          propsButtonApply={{ disabled: rangeDates.length === 0 || rangeTooLong }}
+          propsButtonCancel={{ disabled: isSaving }}
+          onClickButtonCancel={closeDialog}
           onClickButtonApply={() => void handleAdd()}
         />
       </Dialog>
