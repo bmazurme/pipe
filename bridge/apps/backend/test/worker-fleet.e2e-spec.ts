@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import cookieParser from 'cookie-parser';
+import { zipSync } from 'fflate';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
@@ -16,6 +17,10 @@ import { UsersService } from '../src/users/users.service';
 // Workers added in the UI: enrolled with a one-time code (no secret in their environment), authenticated with their
 // own scoped key, configured from the page, given work that is pinned to them or free for any, and deletable.
 // Real app, real database.
+// The bridge refuses to queue a job whose parcel is not a zip with a recognized manifest.
+const parcelZip = () =>
+  Buffer.from(zipSync({ '__sync_manifest__.json': Buffer.from('{}') }));
+
 describe('Worker fleet (e2e)', () => {
   let app: INestApplication<App>;
   const server = () => app.getHttpServer();
@@ -67,11 +72,7 @@ describe('Worker fleet (e2e)', () => {
   async function job(userId: number, token: string, extra = {}) {
     const file = await app
       .get(StorageService)
-      .createFromBuffer(
-        userId,
-        Buffer.from('parcel'),
-        `p-${Math.random()}.zip`,
-      );
+      .createFromBuffer(userId, parcelZip(), `p-${Math.random()}.zip`);
     const created = await as(
       request(server()).post('/api/v1/worker/jobs'),
       token,
@@ -404,7 +405,7 @@ describe('Worker fleet (e2e)', () => {
 
       const file = await app
         .get(StorageService)
-        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+        .createFromBuffer(userId, parcelZip(), 'p.zip');
 
       await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
         .send({
@@ -799,7 +800,7 @@ describe('Worker fleet (e2e)', () => {
         .expect(201);
       const file = await app
         .get(StorageService)
-        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+        .createFromBuffer(userId, parcelZip(), 'p.zip');
       const create = (providerCredentialId: number, model = 'gpt') =>
         as(request(server()).post('/api/v1/worker/jobs'), accessToken).send({
           sourceFileId: file.id,
@@ -873,7 +874,7 @@ describe('Worker fleet (e2e)', () => {
 
       const file = await app
         .get(StorageService)
-        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+        .createFromBuffer(userId, parcelZip(), 'p.zip');
 
       await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
         .send({ sourceFileId: file.id, model: 'custom' })
@@ -928,7 +929,7 @@ describe('Worker fleet (e2e)', () => {
       }).expect(201);
       const file = await app
         .get(StorageService)
-        .createFromBuffer(userId, Buffer.from('p'), 'p.zip');
+        .createFromBuffer(userId, parcelZip(), 'p.zip');
 
       await as(request(server()).post('/api/v1/worker/jobs'), accessToken)
         .send({

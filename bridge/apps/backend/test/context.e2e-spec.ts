@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
+import { zipSync } from 'fflate';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
@@ -14,7 +15,7 @@ import { ChatModel } from '../src/chat/entities/chat.entity';
 import { ImproveSchedule } from '../src/improve/entities/improve-schedule.entity';
 import { LabProject } from '../src/lab/entities/lab-project.entity';
 import { LabSchedule } from '../src/lab/entities/lab-schedule.entity';
-import { StoredFile } from '../src/storage/entities/stored-file.entity';
+import { StorageService } from '../src/storage/storage.service';
 import { UsersService } from '../src/users/users.service';
 import { JobModel } from '../src/worker/entities/job.entity';
 
@@ -121,17 +122,13 @@ describe('Contexts and chat attachments (e2e)', () => {
       .send({ name: 'Notes', content: 'Run the linter first.' })
       .expect(201);
 
-    const files = app.get(DataSource).getRepository(StoredFile);
-    const sourceFile = await files.save({
-      userId,
-      originalName: 'parcel.zip',
-      storedName: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`,
-      mimeType: 'application/zip',
-      size: 1,
-      channel: null,
-      taskKey: null,
-      direction: null,
-    });
+    const sourceFile = await app
+      .get(StorageService)
+      .createFromBuffer(
+        userId,
+        Buffer.from(zipSync({ '__sync_manifest__.json': Buffer.from('{}') })),
+        'parcel.zip',
+      );
 
     const job = await authed(
       request(app.getHttpServer()).post('/api/v1/worker/jobs'),
@@ -222,17 +219,13 @@ describe('Contexts and chat attachments (e2e)', () => {
       contextId,
     });
 
-    const files = dataSource.getRepository(StoredFile);
-    const sourceFile = await files.save({
-      userId,
-      originalName: 'parcel.zip',
-      storedName: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`,
-      mimeType: 'application/zip',
-      size: 1,
-      channel: null,
-      taskKey: null,
-      direction: null,
-    });
+    const sourceFile = await app
+      .get(StorageService)
+      .createFromBuffer(
+        userId,
+        Buffer.from(zipSync({ '__sync_manifest__.json': Buffer.from('{}') })),
+        'parcel.zip',
+      );
     await authed(
       request(app.getHttpServer()).post('/api/v1/worker/jobs'),
       accessToken,
