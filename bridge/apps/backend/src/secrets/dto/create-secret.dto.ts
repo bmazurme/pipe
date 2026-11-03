@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -10,10 +11,13 @@ export class CreateSecretDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
+  @Matches(/^[A-Za-z_][A-Za-z0-9_]*$/)
   name: string;
 
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[^\r\n]*$/)
+  @MaxLength(64000)
   value: string;
 
   @IsOptional()

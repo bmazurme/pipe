@@ -274,7 +274,22 @@ describe('SecretsService.exportEnv', () => {
     ]);
 
     expect(await service.exportEnv(1)).toBe(
-      'A="a b"\nB="x#y"\nC="it\'s"\nD=a=b\n',
+      "A='a b'\nB='x#y'\nC=\"it's\"\nD=a=b\n",
+    );
+  });
+
+  it('single-quotes shell metacharacters and skips unwritable rows', async () => {
+    repository.find!.mockResolvedValue([
+      { name: 'A', value: '$(id)', description: null },
+      { name: 'B', value: '`id`', description: null },
+      { name: 'C', value: 'x\nLD_PRELOAD=/tmp/x.so', description: null },
+      { name: 'D E', value: 'v', description: null },
+    ]);
+
+    expect(await service.exportEnv(1)).toBe(
+      "A='$(id)'\nB='`id`'\n" +
+        '# skipped: "C": cannot be written to .env\n' +
+        '# skipped: "D E": cannot be written to .env\n',
     );
   });
 
