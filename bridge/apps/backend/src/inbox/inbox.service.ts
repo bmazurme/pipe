@@ -26,6 +26,10 @@ const MAX_PULLS = 10;
 const MAX_FAILED_JOBS = 20;
 // GitHub is asked live for each open PR; the answer is reused briefly so a page that refreshes every half minute costs one round of calls.
 const PULL_CACHE_MS = 60_000;
+// A slow GitHub must not hold the whole inbox: past this a PR is shown as unknown, and the lookup still fills the cache when it settles.
+const PULL_DEADLINE_MS = 3_000;
+// A failed or timed-out lookup is remembered for less, so a down GitHub is asked once per window instead of on every poll.
+const PULL_FAILURE_CACHE_MS = 15_000;
 
 const SOURCE_LABELS = {
   pulls: 'GitHub',
@@ -40,6 +44,25 @@ interface CachedPull {
   at: number;
   ci: InboxPull['ci'];
   open: boolean;
+  ttl: number;
+}
+
+// Resolves to undefined if `promise` has not settled within `ms`; the promise itself keeps running.
+async function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 @Injectable()
@@ -174,25 +197,55 @@ export class InboxService {
 
         const cached = this.pullCache.get(number);
 
-        if (cached && now.getTime() - cached.at < PULL_CACHE_MS) {
+        if (cached && now.getTime() - cached.at < cached.ttl) {
           return cached.open ? { ...base, ci: cached.ci } : null;
         }
 
-        try {
-          const pull = await this.github.getPull(number);
-          const open = pull.state === 'open' && !pull.merged;
-          const ci = open ? await this.github.ciState(pull.headSha) : 'none';
+        const pull = await withDeadline(
+          this.lookupPull(number, now.getTime()),
+          PULL_DEADLINE_MS,
+        );
 
-          this.pullCache.set(number, { at: now.getTime(), ci, open });
+        if (!pull) {
+          this.cacheFailure(number, now.getTime());
 
-          return open ? { ...base, ci } : null;
-        } catch {
           return { ...base, ci: 'unknown' };
         }
+
+        return pull.open ? { ...base, ci: pull.ci } : null;
       }),
     );
 
     return pulls.filter((pull): pull is InboxPull => pull !== null);
+  }
+
+  // Never rejects: a failure is cached briefly as an unknown state, the same as a timeout.
+  private async lookupPull(number: number, at: number): Promise<CachedPull> {
+    try {
+      const pull = await this.github.getPull(number);
+      const open = pull.state === 'open' && !pull.merged;
+      const ci = open ? await this.github.ciState(pull.headSha) : 'none';
+      const entry: CachedPull = { at, ci, open, ttl: PULL_CACHE_MS };
+
+      this.pullCache.set(number, entry);
+
+      return entry;
+    } catch {
+      return this.cacheFailure(number, at);
+    }
+  }
+
+  private cacheFailure(number: number, at: number): CachedPull {
+    const entry: CachedPull = {
+      at,
+      ci: 'unknown',
+      open: true,
+      ttl: PULL_FAILURE_CACHE_MS,
+    };
+
+    this.pullCache.set(number, entry);
+
+    return entry;
   }
 
   private async workerFacts(userId: number, now: Date): Promise<InboxWorker[]> {

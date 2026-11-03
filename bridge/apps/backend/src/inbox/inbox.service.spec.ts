@@ -250,3 +250,75 @@ describe('InboxService', () => {
     }
   });
 });
+
+describe('InboxService, when GitHub is slow or down', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('returns the other sources after the deadline when GitHub hangs, with the PR as unknown', async () => {
+    jest.useFakeTimers();
+    const { service } = setup({
+      runs: [run(1)],
+      getPull: jest.fn(() => new Promise(() => undefined)),
+      failed: [
+        {
+          id: 3,
+          taskKey: 'c',
+          model: 'sonnet',
+          errorMessage: 'x',
+          updatedAt: new Date('2026-10-30T11:00:00Z'),
+        },
+      ],
+    });
+    let items: Awaited<ReturnType<typeof service.list>> | undefined;
+
+    void service.list(7, NOW).then((result) => (items = result));
+    await jest.advanceTimersByTimeAsync(2_999);
+    expect(items).toBeUndefined();
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(items?.map((item) => item.kind)).toEqual(
+      expect.arrayContaining(['pr_waiting', 'jobs_failed']),
+    );
+    expect(items?.find((item) => item.kind === 'pr_waiting')?.title).toContain(
+      'статус неизвестен',
+    );
+  });
+
+  it('does not ask again within 15 s after a timeout, and lets a late answer fill the cache', async () => {
+    jest.useFakeTimers();
+    let answer: (pull: unknown) => void = () => undefined;
+    const getPull = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { service, github } = setup({ runs: [run(1)], getPull });
+
+    const first = service.list(7, NOW);
+    await jest.advanceTimersByTimeAsync(3_000);
+    await first;
+    await service.list(7, new Date(NOW.getTime() + 10_000));
+    expect(getPull).toHaveBeenCalledTimes(1);
+
+    answer({ state: 'open', merged: false, headSha: 'h' });
+    await jest.advanceTimersByTimeAsync(0);
+    const items = await service.list(7, new Date(NOW.getTime() + 20_000));
+
+    expect(getPull).toHaveBeenCalledTimes(1);
+    expect(github.ciState).toHaveBeenCalledTimes(1);
+    expect(items[0].title).not.toContain('статус неизвестен');
+  });
+
+  it('asks a failing GitHub once per 15 s, not on every poll', async () => {
+    const getPull = jest.fn().mockRejectedValue(new Error('GitHub 502'));
+    const { service } = setup({ runs: [run(1)], getPull });
+
+    await service.list(7, NOW);
+    await service.list(7, new Date(NOW.getTime() + 14_000));
+    expect(getPull).toHaveBeenCalledTimes(1);
+
+    await service.list(7, new Date(NOW.getTime() + 16_000));
+    expect(getPull).toHaveBeenCalledTimes(2);
+  });
+});
