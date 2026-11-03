@@ -750,6 +750,70 @@ describe('processJob time limit chosen at launch', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
+  describe('partial result of a timed-out claude run', () => {
+    function setupTimeout(workDir: string, body: string): FakeClient & Record<string, unknown> {
+      const binDir = path.join(workDir, 'bin');
+      mkdirSync(binDir);
+      const script = path.join(binDir, 'claude');
+      writeFileSync(script, ['#!/usr/bin/env node', body, 'setInterval(() => {}, 1000);', ''].join('\n'));
+      chmodSync(script, 0o755);
+      process.env.PATH = `${binDir}:${originalPath}`;
+      const client = fakeClient(fakeParcel());
+      client.reportClaudeUsage = async () => {};
+
+      return client;
+    }
+
+    it('uploads the changed files and still reports the same failure', async () => {
+      const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-partial-'));
+      const client = setupTimeout(workDir, "require('node:fs').writeFileSync('partial.txt', 'x');");
+      const partialCalls: unknown[][] = [];
+      client.uploadPartialResult = async (...args: unknown[]) => {
+        partialCalls.push(args);
+      };
+      const job: RemoteJob = { id: 25, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 1, status: 'claimed' };
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 1000 });
+
+      assert.match(failureOf(client), /timed out/);
+      assert.equal(partialCalls.length, 1);
+      assert.equal(partialCalls[0][0], 25);
+      assert.match(String(partialCalls[0][1]), /-partial\.zip$/);
+      const names = new AdmZip(partialCalls[0][2] as Buffer).getEntries().map((e) => e.entryName);
+      assert.ok(names.includes('partial.txt'));
+      assert.equal(client.uploadResult.calls.length, 0);
+      rmSync(workDir, { recursive: true, force: true });
+    });
+
+    it('uploads nothing when the run changed no files', async () => {
+      const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-partial-'));
+      const client = setupTimeout(workDir, '');
+      let uploads = 0;
+      client.uploadPartialResult = async () => {
+        uploads++;
+      };
+      const job: RemoteJob = { id: 26, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 1, status: 'claimed' };
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 1000 });
+
+      assert.match(failureOf(client), /timed out/);
+      assert.equal(uploads, 0);
+      rmSync(workDir, { recursive: true, force: true });
+    });
+
+    it('leaves the failure report unchanged when the upload fails', async () => {
+      const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-partial-'));
+      const client = setupTimeout(workDir, "require('node:fs').writeFileSync('partial.txt', 'x');");
+      client.uploadPartialResult = async () => {
+        throw new Error('bridge down');
+      };
+      const job: RemoteJob = { id: 27, sourceFileId: 13, resultFileId: null, model: 'sonnet', timeoutSec: 1, status: 'claimed' };
+      await processJob(client as never, job, fakeConfig(workDir), { cancelPollMs: 1000 });
+
+      assert.match(failureOf(client), /^claude timed out after 1s/);
+      assert.equal(client.updateStatus.calls.filter((call) => call[1] === 'failed').length, 1);
+      rmSync(workDir, { recursive: true, force: true });
+    });
+  });
+
   it('passes the job’s own deadline to runOpenAiCompatible instead of the worker setting', async () => {
     const workDir = mkdtempSync(path.join(tmpdir(), 'worker-index-test-job-timeout-'));
     // A model that never answers until the request is aborted.

@@ -497,7 +497,7 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `result-${job.id}.zip`;
+        link.download = `result-${job.id}${job.status === 'succeeded' ? '' : '-partial'}.zip`;
         document.body.appendChild(link);
         link.click();
         link.remove();

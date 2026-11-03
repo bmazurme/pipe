@@ -1173,6 +1173,37 @@ export class WorkerService implements OnModuleInit {
     }
   }
 
+  // What a run that hit its time limit had already produced. Stored unaddressed (no taskKey/direction) so
+  // sync's pull-issue and reports' Subscription never take it for a real result; the status stays as it
+  // is and the source parcel is kept, so the owner can still retry the job.
+  async setPartialResult(
+    id: number,
+    userId: number,
+    file: Express.Multer.File,
+  ): Promise<void> {
+    const job = await this.jobRepository.findOne({
+      where: { id, userId },
+      select: ['id', 'userId', 'status'],
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    if (job.status === JobStatus.Cancelled) {
+      throw new ConflictException(
+        'Job was stopped — its result is not accepted',
+      );
+    }
+
+    const stored = await this.storageService.create(userId, file, {});
+
+    await this.jobRepository.update(
+      { id, userId },
+      { resultFileId: stored.id },
+    );
+  }
+
   async setResult(
     id: number,
     userId: number,

@@ -522,4 +522,33 @@ export class WorkerController {
     // setResult skips the log (up to 2M chars); the worker ignores the body anyway.
     return JobResponseDto.fromEntity({ ...job, logs: '' });
   }
+
+  // The files a timed-out run had already changed: only links the file to the job, see setPartialResult.
+  @Post(':id/partial-result')
+  @WorkerKeyAllowed()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseFilters(WorkerResultExceptionFilter)
+  @UseInterceptors(FileInterceptor('file', workerResultMulterConfig))
+  async uploadPartialResult(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() currentUser: { id: number; workerId?: number },
+  ): Promise<void> {
+    try {
+      await this.workerService.assertHeldBy(
+        id,
+        currentUser.id,
+        currentUser.workerId,
+      );
+    } catch (error) {
+      if (file?.path) await unlink(file.path).catch(() => undefined);
+      throw error;
+    }
+
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    await this.workerService.setPartialResult(id, currentUser.id, file);
+  }
 }

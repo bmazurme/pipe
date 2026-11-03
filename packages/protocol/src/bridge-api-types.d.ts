@@ -882,6 +882,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs/{id}/partial-result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkerController_uploadPartialResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker/claude-credentials": {
         parameters: {
             query?: never;
@@ -5052,6 +5068,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobResponseDto"];
                 };
+            };
+        };
+    };
+    WorkerController_uploadPartialResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

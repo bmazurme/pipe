@@ -47,6 +47,10 @@ function resultFilename(job: RemoteJob): string {
   return `worker-result-${job.id}.zip${job.resultPublicKey ? '.enc' : ''}`;
 }
 
+function partialResultFilename(job: RemoteJob): string {
+  return `worker-result-${job.id}-partial.zip${job.resultPublicKey ? '.enc' : ''}`;
+}
+
 // One job at a time, in a fresh temp directory that's always removed after
 // (success or failure) — worker has no persistent git clone/origin of
 // anything, it only ever round-trips a single parcel's own file set. Per
@@ -334,14 +338,22 @@ export async function processJob(
       }
     } else {
       if (error instanceof ClaudeRunError && /timed out/.test(error.message) && jobDir && downloadedParcel) {
-        // Best-effort: names only, so the owner can tell a nearly-done run from an empty one; never fails the report.
+        // Best-effort: names of what changed, and those files kept as a partial result; never fails the report.
         try {
           const base = downloadedParcel;
           const redactedBase = { files: base.files.map((f) => ({ ...f, content: redact(f.content) })), assets: base.assets };
-          const names = changedFiles(redactedBase, collectResult(jobDir, redact));
+          const collected = collectResult(jobDir, redact);
+          const names = changedFiles(redactedBase, collected);
           log(redact(describeChangedFiles(names)));
+
+          if (names.length > 0) {
+            const plainPartial = buildResultParcel(base, collected.files, collected.assets);
+            const partialBuffer = job.resultPublicKey ? encryptBuffer(plainPartial, job.resultPublicKey) : plainPartial;
+            await client.uploadPartialResult(job.id, partialResultFilename(job), partialBuffer);
+            log('Partial result saved.\n');
+          }
         } catch (collectError) {
-          jlog.warn({ err: collectError }, 'could not list the files changed before the time limit');
+          jlog.warn({ err: collectError }, 'could not list or save the files changed before the time limit');
         }
       }
       const message = redact(describeFailure(error));

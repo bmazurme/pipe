@@ -247,6 +247,30 @@ export class WorkerBridgeClient {
     );
   }
 
+  // Best-effort counterpart of uploadResult for a run that hit its time limit: bridge only links the file to
+  // the job, the job itself stays failed. The caller decides what a failure here means.
+  async uploadPartialResult(
+    jobId: number,
+    filename: string,
+    buffer: Buffer,
+    delaysMs: number[] = UPLOAD_RETRY_DELAYS_MS,
+  ): Promise<void> {
+    await this.withTransientRetry(
+      `Uploading partial result for job ${jobId}`,
+      () => {
+        const form = new FormData();
+        form.append("file", new Blob([new Uint8Array(buffer)]), filename);
+
+        return bridgeFetch(
+          `${this.apiUrl}/api/v1/worker/jobs/${jobId}/partial-result`,
+          { method: "POST", headers: bearer(this.apiKey), body: form },
+          { timeoutMs: TRANSFER_TIMEOUT_MS },
+        );
+      },
+      delaysMs,
+    );
+  }
+
   // Retries `attempt` on 502/503/504, a network TypeError or a TimeoutError; anything else throws at once.
   // `deliveredOnRetry` lists statuses that, on a retry only, mean the first attempt got through.
   private async withTransientRetry(
