@@ -51,3 +51,27 @@ export function isWeekend(date: string): boolean {
 
   return day === 0 || day === 6;
 }
+
+/** One range can add at most a year of days — each day is its own request, so a mistyped year would otherwise queue thousands. */
+export const MAX_RANGE_DAYS = 366;
+
+/** Every YYYY-MM-DD from `start` to `end` inclusive; empty when `end` is before `start`. */
+export function listDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const last = new Date(`${end}T00:00:00Z`).getTime();
+
+  for (
+    let current = new Date(`${start}T00:00:00Z`).getTime();
+    current <= last;
+    current += DAY_MS
+  ) {
+    dates.push(new Date(current).toISOString().slice(0, 10));
+  }
+
+  return dates;
+}
+
+/** How many of the given YYYY-MM-DD dates fall on a Saturday or Sunday. */
+export function countWeekends(dates: string[]): number {
+  return dates.filter(isWeekend).length;
+}

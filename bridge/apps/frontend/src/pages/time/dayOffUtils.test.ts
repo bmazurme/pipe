@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupConsecutiveDayOffs, isWeekend, weekdayShort } from './dayOffUtils';
+import {
+  countWeekends,
+  groupConsecutiveDayOffs,
+  isWeekend,
+  listDates,
+  weekdayShort,
+} from './dayOffUtils';
 
 function d(date: string, type: 'off' | 'holiday' | 'short' = 'off') {
   return { id: date, date, type };
@@ -65,5 +71,30 @@ describe('weekdayShort / isWeekend', () => {
 
   it('marks Saturday and Sunday only', () => {
     expect(['2026-10-19', '2026-10-23', '2026-10-24', '2026-10-25'].map(isWeekend)).toEqual([false, false, true, true]);
+  });
+});
+
+describe('listDates', () => {
+  it('returns a single date when start equals end', () => {
+    expect(listDates('2026-05-01', '2026-05-01')).toEqual(['2026-05-01']);
+  });
+
+  it('is inclusive and crosses month and year boundaries', () => {
+    expect(listDates('2026-12-30', '2027-01-02')).toEqual([
+      '2026-12-30',
+      '2026-12-31',
+      '2027-01-01',
+      '2027-01-02',
+    ]);
+  });
+
+  it('is empty when end is before start', () => {
+    expect(listDates('2026-05-02', '2026-05-01')).toEqual([]);
+  });
+});
+
+describe('countWeekends', () => {
+  it('counts Saturdays and Sundays only', () => {
+    expect(countWeekends(listDates('2026-10-19', '2026-10-25'))).toBe(2);
   });
 });
