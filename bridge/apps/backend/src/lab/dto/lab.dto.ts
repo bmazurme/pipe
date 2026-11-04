@@ -217,3 +217,11 @@ export class ListLabRunsQueryDto {
   @Min(1)
   projectId?: number;
 }
+
+export class AskLabKnowledgeDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  question: string;
+}

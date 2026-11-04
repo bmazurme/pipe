@@ -122,6 +122,20 @@ export interface LabPrRefresh {
   failed: number;
 }
 
+// How many of the project's own .md files are indexed for "Спросить" — not loaded until the knowledge section opens.
+export interface LabKnowledgeStatus {
+  files: number;
+  chunks: number;
+}
+
+// One ranked excerpt from the project's own markdown files, matched against a question.
+export interface LabKnowledgeMatch {
+  path: string;
+  heading: string | null;
+  content: string;
+  score: number;
+}
+
 function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
@@ -230,6 +244,20 @@ const labApiEndpoints = labApi.injectEndpoints({
       invalidatesTags: ['LabRuns'],
       transformErrorResponse: errorMessage('Не удалось проверить PR'),
     }),
+    getLabKnowledgeStatus: builder.query<LabKnowledgeStatus, number>({
+      query: (id) => `lab/projects/${id}/knowledge`,
+      providesTags: ['LabKnowledge'],
+      transformErrorResponse: errorMessage('Не удалось загрузить статус базы знаний'),
+    }),
+    reindexLabKnowledge: builder.mutation<LabKnowledgeStatus, number>({
+      query: (id) => ({ url: `lab/projects/${id}/knowledge/reindex`, method: 'POST' }),
+      invalidatesTags: ['LabKnowledge'],
+      transformErrorResponse: errorMessage('Не удалось переиндексировать'),
+    }),
+    askLabKnowledge: builder.mutation<LabKnowledgeMatch[], { id: number; question: string }>({
+      query: ({ id, question }) => ({ url: `lab/projects/${id}/knowledge/ask`, method: 'POST', body: { question } }),
+      transformErrorResponse: errorMessage('Не удалось найти ответ'),
+    }),
   }),
 });
 
@@ -252,6 +280,9 @@ export const {
   useGetRouterSettingsQuery,
   useSaveRouterSettingsMutation,
   usePreviewRoutingMutation,
+  useGetLabKnowledgeStatusQuery,
+  useReindexLabKnowledgeMutation,
+  useAskLabKnowledgeMutation,
 } = labApiEndpoints;
 
 export default labApiEndpoints;

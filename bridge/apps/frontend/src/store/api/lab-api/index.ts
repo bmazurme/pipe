@@ -5,7 +5,7 @@ import baseQuery from '../../base-query-with-reauth';
 const labApi = createApi({
   reducerPath: 'labApi',
   baseQuery,
-  tagTypes: ['LabProjects', 'LabSchedules', 'LabRuns', 'RouterSettings'],
+  tagTypes: ['LabProjects', 'LabSchedules', 'LabRuns', 'RouterSettings', 'LabKnowledge'],
   endpoints: () => ({}),
 });
 

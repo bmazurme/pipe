@@ -8,10 +8,12 @@ import { RouterModule } from '../router/router.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { WorkerModule } from '../worker/worker.module';
+import { LabDocumentChunk } from './entities/lab-document-chunk.entity';
 import { LabProject } from './entities/lab-project.entity';
 import { LabRun } from './entities/lab-run.entity';
 import { LabSchedule } from './entities/lab-schedule.entity';
 import { LabController } from './lab.controller';
+import { LabKnowledgeService } from './lab-knowledge.service';
 import { LabProjectsService } from './lab-projects.service';
 import { LabPublishService } from './lab-publish.service';
 import { LabRunsService } from './lab-runs.service';
@@ -19,7 +21,12 @@ import { LabSchedulesService } from './lab-schedules.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LabProject, LabSchedule, LabRun]),
+    TypeOrmModule.forFeature([
+      LabProject,
+      LabSchedule,
+      LabRun,
+      LabDocumentChunk,
+    ]),
     StorageModule,
     WorkerModule,
     ContextModule,
@@ -34,6 +41,7 @@ import { LabSchedulesService } from './lab-schedules.service';
     LabPublishService,
     LabRunsService,
     LabSchedulesService,
+    LabKnowledgeService,
   ],
 })
 export class LabModule {}
