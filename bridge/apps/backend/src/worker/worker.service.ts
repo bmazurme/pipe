@@ -46,6 +46,7 @@ import { FailureSummary, groupFailures } from './failure-summary';
 import { infraFailureWhere, isInfraFailure } from './infra-failure';
 import { JobFinishNotifier } from './job-finish-notifier';
 import { logJobOutcome } from './job-outcome-log';
+import { assertRunnableParcel } from './parcel-check';
 import { JobSweepService } from './job-sweep.service';
 import { Worker } from './entities/worker.entity';
 import {
@@ -230,6 +231,8 @@ export class WorkerService implements OnModuleInit {
         'Worker only accepts unencrypted parcels — this file is encrypted',
       );
     }
+
+    assertRunnableParcel(await this.storageService.readBytes(sourceFile));
 
     if (dto.claudeCredentialId !== undefined) {
       const token = await this.claudeCredentialsService.resolveToken(

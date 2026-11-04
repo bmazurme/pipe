@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
+import { strToU8, zipSync } from 'fflate';
 import { Repository } from 'typeorm';
 
 import { ContextUsageRegistry } from '../context/context-usage';
@@ -81,6 +82,11 @@ describe('WorkerService', () => {
     repository = createMockRepository();
     storageService = {
       findOwned: jest.fn(),
+      readBytes: jest
+        .fn()
+        .mockResolvedValue(
+          Buffer.from(zipSync({ '__sync_manifest__.json': strToU8('{}') })),
+        ),
       create: jest.fn(),
       download: jest.fn(),
     };
@@ -386,6 +392,19 @@ describe('WorkerService', () => {
         id: 1,
         originalName: '402-6.subscription.zip.enc',
       });
+
+      await expect(
+        service.create(7, { sourceFileId: 1, model: JobModel.Gpt }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a parcel that is not a runnable zip before saving a job', async () => {
+      storageService.findOwned!.mockResolvedValue({
+        id: 1,
+        originalName: '402-6.subscription.zip',
+      });
+      storageService.readBytes!.mockResolvedValue(Buffer.from('not a zip'));
 
       await expect(
         service.create(7, { sourceFileId: 1, model: JobModel.Gpt }),
