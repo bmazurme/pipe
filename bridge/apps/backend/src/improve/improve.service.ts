@@ -37,10 +37,12 @@ import {
   BACKLOG_FILE,
   buildAnalysisPrompt,
   buildLogDigest,
+  buildProposalDigest,
   categoryLabel,
   isCategory,
   parseBacklog,
   pickOnePerCategory,
+  type PastProposalItem,
 } from './analysis';
 import { ImproveHandoffService } from './improve-handoff.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
@@ -61,6 +63,9 @@ import { readResultParcel, utf8Text } from './parcel';
 
 const LOG_DIGEST_DAYS = 7;
 const LOG_DIGEST_ROWS = 300;
+// How many past analysis runs' proposals are candidates for the digest, most recent first — bounded so a long
+// history does not make every analysis slower; buildProposalDigest caps further, per direction.
+const PROPOSAL_DIGEST_RUNS = 20;
 export const ADVANCE_EVERY_MS = 15_000;
 // How long after failing a run still follows a retry of its job from the Worker page.
 const RETRY_FOLLOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -1101,11 +1106,13 @@ export class ImproveService {
 
         return { value, ms: Date.now() - started };
       };
-      const [titlesStep, digestStep, prepStep] = await Promise.all([
-        timed(this.github.listIssueTitles()),
-        timed(this.logDigest()),
-        timed(this.handoff.prepareSnapshot()),
-      ]);
+      const [titlesStep, digestStep, proposalStep, prepStep] =
+        await Promise.all([
+          timed(this.github.listIssueTitles()),
+          timed(this.logDigest()),
+          timed(this.proposalDigest(run.userId, categories)),
+          timed(this.handoff.prepareSnapshot()),
+        ]);
       const titles = titlesStep.value.map((issue) => issue.title);
       const date = new Date().toISOString().slice(0, 10);
       const { job, baseSha, fileCount } = await this.handoff.handToWorker(
@@ -1114,7 +1121,12 @@ export class ImproveService {
         {
           number: `analysis-${date}`,
           title: `Analysis ${date}`,
-          body: buildAnalysisPrompt(titles, categories, digestStep.value),
+          body: buildAnalysisPrompt(
+            titles,
+            categories,
+            digestStep.value,
+            proposalStep.value,
+          ),
         },
         'improve:analysis',
         `improve-analysis-${date}.subscription.zip`,
@@ -1149,6 +1161,7 @@ export class ImproveService {
           phaseMs: {
             titles: titlesStep.ms,
             logDigest: digestStep.ms,
+            proposalDigest: proposalStep.ms,
             snapshot: prepStep.ms,
             total: Date.now() - started,
           },
@@ -1190,6 +1203,39 @@ export class ImproveService {
       return buildLogDigest(summary, recent, LOG_DIGEST_ROWS);
     } catch (error) {
       this.logger.warn(`Log digest skipped: ${message(error)}`);
+
+      return '';
+    }
+  }
+
+  // Proposals from this account's past analysis runs in the directions being run now (filed, in progress, a
+  // duplicate, or shown and left unfiled) — see buildProposalDigest for why this is worth sending at all.
+  // Best-effort: an analysis must still run when a row's result does not parse.
+  private async proposalDigest(
+    userId: number,
+    categories: AnalysisCategory[],
+  ): Promise<string> {
+    try {
+      const rows = await this.runs.find({
+        where: { userId, kind: 'analysis', status: ImproveRunStatus.Analyzed },
+        select: { result: true },
+        order: { createdAt: 'DESC' },
+        take: PROPOSAL_DIGEST_RUNS,
+      });
+
+      const items = rows.flatMap((row) => {
+        try {
+          const parsed = JSON.parse(row.result ?? '{}') as AnalysisResult;
+
+          return Array.isArray(parsed.items) ? parsed.items : [];
+        } catch {
+          return [];
+        }
+      }) as PastProposalItem[];
+
+      return buildProposalDigest(items, categories);
+    } catch (error) {
+      this.logger.warn(`Proposal digest skipped: ${message(error)}`);
 
       return '';
     }
