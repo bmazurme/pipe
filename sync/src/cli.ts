@@ -103,6 +103,10 @@ program
   )
   .option('-f, --force', 'pull even with a dirty git tree')
   .option('-w, --watch <seconds>', 'keep polling every <seconds> until the result appears, then notify and exit')
+  .option(
+    '--comment <text>',
+    'after pulling, post this note on the GitLab issue ({{branch}} is replaced with the result branch)',
+  )
   .action((name, projectId, iid, options) => pullIssueCommand(name, projectId, iid, options));
 
 program
