@@ -10,6 +10,7 @@ import { log } from '../log.js';
 import type { BridgeClient } from '../bridgeClient.js';
 import type { ProjectConfig } from '../types.js';
 import { buildArchive, SYNC_MANIFEST_ENTRY } from '@pipe/protocol';
+import { buildIssueArchive } from '../issuePack.js';
 import { findCandidates, processCandidate, resultIsFreeOfOwnCredentials } from './agentRunner.js';
 
 function file(overrides: Partial<StoredFileResponse> = {}): StoredFileResponse {
@@ -183,6 +184,41 @@ describe('processCandidate parcel consumption', () => {
     const { client, deleted } = fakeClient(Buffer.from('not a zip'));
 
     await assert.rejects(processCandidate(candidate(false), project, client, false));
+
+    assert.deepEqual(deleted, []);
+  });
+});
+
+describe('processCandidate branch check', () => {
+  it('skips a parcel whose branch is main before any worktree or push work, and leaves it on bridge', async () => {
+    const buffer = buildIssueArchive([{ relPath: 'a.ts', content: 'x' }], {
+      issueId: '1',
+      issueIid: '6',
+      issueTitle: 't',
+      issueDescription: 'd',
+      projectId: 402,
+      branch: 'main',
+      createdAt: 'now',
+    });
+    const deleted: number[] = [];
+    const client = {
+      peek: async () => buffer,
+      delete: async (id: number) => {
+        deleted.push(id);
+      },
+    } as unknown as BridgeClient;
+    // A repo path that doesn't exist: addTaskWorktree/pushBranch would throw
+    // on it, so resolving at all shows neither was reached.
+    const project: ProjectConfig = { name: 'p', path: '/nonexistent' };
+    const errors = mock.method(log, 'error', () => {});
+
+    try {
+      await processCandidate({ file: file({ id: 9 }), projectId: '402', iid: '6', encrypted: false }, project, client, false);
+      const logged = errors.mock.calls.map((c) => String(c.arguments[0])).join('\n');
+      assert.match(logged, /refusing branch "main"/);
+    } finally {
+      errors.mock.restore();
+    }
 
     assert.deepEqual(deleted, []);
   });

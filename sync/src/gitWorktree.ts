@@ -91,6 +91,37 @@ function stripBuildArtifacts(worktreeDir: string): void {
   }
 }
 
+// The branch name comes from the parcel's manifest, which is untrusted
+// (anyone who can drop a parcel into the bridge account sets it). Checked
+// before any worktree work: a parcel naming `main` or the project's base
+// branch would otherwise get the parcel files and Claude's changes pushed
+// straight there, skipping review, and a leading `-` would be read by git as
+// an option. Throws with the reason; same rules as bridge Lab's
+// isValidBranch (lab-github.ts), plus the protected names.
+const PROTECTED_BRANCHES = new Set(['HEAD', 'main', 'master']);
+
+export function assertSafeTaskBranch(branch: string, baseBranch: string): void {
+  const refuse = (reason: string): never => {
+    throw new Error(`refusing branch ${JSON.stringify(branch)}: ${reason}`);
+  };
+
+  if (typeof branch !== 'string' || branch.length === 0) refuse('empty name');
+  if (branch.startsWith('-')) refuse('starts with "-"');
+  if (/[\s\x00-\x1f\x7f]/.test(branch)) refuse('contains whitespace or a control character');
+  if (/[~^:?*[\\]/.test(branch)) refuse('contains a character git does not allow in a ref name');
+  if (branch.includes('..')) refuse('contains ".."');
+  if (branch.includes('//')) refuse('contains "//"');
+  if (branch.includes('@{')) refuse('contains "@{"');
+  if (branch.startsWith('/') || branch.endsWith('/') || branch.endsWith('.')) {
+    refuse('starts or ends with "/", or ends with "."');
+  }
+  if (branch.split('/').some((part) => part.startsWith('.') || part.endsWith('.lock'))) {
+    refuse('a path segment starts with "." or ends with ".lock"');
+  }
+  if (branch.startsWith('refs/')) refuse('starts with "refs/"');
+  if (PROTECTED_BRANCHES.has(branch) || branch === baseBranch) refuse('is the base branch or a protected branch');
+}
+
 function branchExists(repoPath: string, branch: string): boolean {
   try {
     git(repoPath, ['show-ref', '--verify', `refs/heads/${branch}`]);
@@ -112,17 +143,17 @@ export function addTaskWorktree(
   baseBranch: string,
 ): void {
   if (branchExists(repoPath, branch)) {
-    git(repoPath, ['worktree', 'add', worktreeDir, branch]);
+    git(repoPath, ['worktree', 'add', '--', worktreeDir, branch]);
     return;
   }
 
   try {
     git(repoPath, ['fetch', '--quiet', 'origin', baseBranch]);
-    git(repoPath, ['worktree', 'add', worktreeDir, '-b', branch, `origin/${baseBranch}`]);
+    git(repoPath, ['worktree', 'add', '-b', branch, '--', worktreeDir, `origin/${baseBranch}`]);
   } catch {
     // No network / no such branch on origin (e.g. a fresh local-only repo) —
     // fall back to branching off whatever HEAD already points to locally.
-    git(repoPath, ['worktree', 'add', worktreeDir, '-b', branch, 'HEAD']);
+    git(repoPath, ['worktree', 'add', '-b', branch, '--', worktreeDir, 'HEAD']);
   }
 }
 
@@ -147,5 +178,5 @@ export function commitAll(worktreeDir: string, message: string): string {
 }
 
 export function pushBranch(worktreeDir: string, branch: string): void {
-  git(worktreeDir, ['push', '--quiet', '-u', 'origin', branch]);
+  git(worktreeDir, ['push', '--quiet', '-u', '--', 'origin', branch]);
 }

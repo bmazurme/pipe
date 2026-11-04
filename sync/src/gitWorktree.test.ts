@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { commitAll } from './gitWorktree.js';
+import { assertSafeTaskBranch, commitAll } from './gitWorktree.js';
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -79,4 +79,18 @@ describe('commitAll', () => {
     assert.equal(existsSync(path.join(dir, 'dist')), true, 'dist is gitignored, should survive');
     assert.equal(existsSync(path.join(dir, 'coverage')), false, 'coverage is not gitignored, should be stripped');
   });
+});
+
+describe('assertSafeTaskBranch', () => {
+  for (const branch of ['main', 'master', 'HEAD', 'develop', '-x', 'a..b', 'refs/heads/main', '', 'a b', 'a\nb', 'x@{1}', 'a//b', 'x.lock', '.hidden']) {
+    it(`refuses ${JSON.stringify(branch)}`, () => {
+      assert.throws(() => assertSafeTaskBranch(branch, 'develop'), /refusing branch/);
+    });
+  }
+
+  for (const branch of ['task/12-3', 'feature/x']) {
+    it(`accepts ${JSON.stringify(branch)}`, () => {
+      assert.doesNotThrow(() => assertSafeTaskBranch(branch, 'develop'));
+    });
+  }
 });

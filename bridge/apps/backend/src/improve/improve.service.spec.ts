@@ -1283,6 +1283,81 @@ describe('ImproveService.startMany concurrency', () => {
   });
 });
 
+describe('ImproveService.startMany lookups', () => {
+  const issue = (number: number) => ({
+    number,
+    title: `Issue ${number}`,
+    body: 'b',
+    state: 'open',
+    labels: [],
+    htmlUrl: `https://gh/issues/${number}`,
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+
+  // What the Issues tab's list left in the cache.
+  async function warm(service: ImproveService, numbers: number[]) {
+    await (
+      service as unknown as {
+        openIssues: { get: (k: string, b: () => Promise<unknown>) => unknown };
+      }
+    ).openIssues.get('', async () => numbers.map(issue));
+  }
+
+  it('checks blocking runs in one query and takes issues from a warm cache', async () => {
+    const { service, runs, github } = setup();
+
+    await warm(service, [1, 2, 3, 4, 5]);
+    const result = await service.startMany(3, [5, 2, 4, 1, 3], 'sonnet');
+    await settle();
+
+    expect(result).toEqual({ started: [5, 2, 4, 1, 3], skipped: [] });
+    expect(github.getIssue).not.toHaveBeenCalled();
+    expect(runs.find).toHaveBeenCalledTimes(1);
+    expect(runs.find.mock.calls[0][0].where.issueNumber.value).toEqual([
+      5, 2, 4, 1, 3,
+    ]);
+    expect(runs.findOne).not.toHaveBeenCalled();
+    expect(runs.create).toHaveBeenCalledWith(
+      expect.objectContaining({ issueNumber: 4, issueTitle: 'Issue 4' }),
+    );
+  });
+
+  it('skips blocked issues with the usual message, fetches the ones not cached and still refuses closed issues and PRs', async () => {
+    const { service, github } = setup({
+      runs: {
+        find: jest.fn().mockResolvedValue([
+          { issueNumber: 2, status: ImproveRunStatus.PrOpen, prNumber: 40 },
+          { issueNumber: 4, status: ImproveRunStatus.Running, prNumber: null },
+        ]),
+      },
+      github: {
+        getIssue: jest.fn(async (number: number) => ({
+          ...issue(number),
+          state: number === 6 ? 'closed' : 'open',
+          isPull: number === 7,
+        })),
+      },
+    });
+
+    await warm(service, [1, 2]);
+    const result = await service.startMany(3, [1, 2, 3, 4, 6, 7], 'sonnet');
+    await settle();
+
+    expect(result).toEqual({
+      started: [1, 3],
+      skipped: [
+        '#2: Для задачи #2 уже открыт PR #40',
+        '#4: Задача #4 уже выполняется',
+        '#6: #6 — не открытая задача',
+        '#7: #7 — не открытая задача',
+      ],
+    });
+    expect(github.getIssue.mock.calls.map(([n]) => n).sort()).toEqual([
+      3, 6, 7,
+    ]);
+  });
+});
+
 describe('ImproveService.redoOnConflict', () => {
   const parent = () => ({
     id: 9,

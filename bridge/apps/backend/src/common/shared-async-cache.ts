@@ -107,6 +107,15 @@ export class SharedAsyncCache<V> {
     return promise;
   }
 
+  // Every stored value still within its TTL, without building anything.
+  freshValues(): V[] {
+    const now = Date.now();
+
+    return [...this.values.values()]
+      .filter(({ at }) => this.ttlMs === undefined || now - at < this.ttlMs)
+      .map(({ value }) => value);
+  }
+
   // Forgets every stored value and detaches in-flight builds, so the next get() builds anew.
   clear(): void {
     this.epoch += 1;
