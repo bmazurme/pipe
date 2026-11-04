@@ -17,12 +17,14 @@ import {
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import {
+  AskLabKnowledgeDto,
   CreateLabProjectDto,
   ListLabRunsQueryDto,
   SaveLabScheduleDto,
   StartLabRunDto,
   UpdateLabProjectDto,
 } from './dto/lab.dto';
+import { LabKnowledgeService } from './lab-knowledge.service';
 import { LabProjectsService } from './lab-projects.service';
 import { LabRunsService } from './lab-runs.service';
 import { LabSchedulesService } from './lab-schedules.service';
@@ -36,6 +38,7 @@ export class LabController {
     private readonly projects: LabProjectsService,
     private readonly schedules: LabSchedulesService,
     private readonly runs: LabRunsService,
+    private readonly knowledge: LabKnowledgeService,
   ) {}
 
   @Get('projects')
@@ -84,6 +87,33 @@ export class LabController {
     @CurrentUser() user: { id: number },
   ) {
     await this.projects.remove(id, user.id);
+  }
+
+  @Get('projects/:id/knowledge')
+  getKnowledgeStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.knowledge.status(id, user.id);
+  }
+
+  @Post('projects/:id/knowledge/reindex')
+  @HttpCode(HttpStatus.OK)
+  reindexKnowledge(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.knowledge.reindex(id, user.id);
+  }
+
+  @Post('projects/:id/knowledge/ask')
+  @HttpCode(HttpStatus.OK)
+  askKnowledge(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AskLabKnowledgeDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.knowledge.ask(id, user.id, dto.question);
   }
 
   @Get('schedules')

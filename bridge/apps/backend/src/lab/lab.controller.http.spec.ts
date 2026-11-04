@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { LabController } from './lab.controller';
+import { LabKnowledgeService } from './lab-knowledge.service';
 import { LabProjectsService } from './lab-projects.service';
 import { LabRunsService } from './lab-runs.service';
 import { LabSchedulesService } from './lab-schedules.service';
@@ -22,6 +23,7 @@ describe('GET /api/v1/lab/runs (query handling)', () => {
         { provide: LabProjectsService, useValue: {} },
         { provide: LabSchedulesService, useValue: {} },
         { provide: LabRunsService, useValue: { list } },
+        { provide: LabKnowledgeService, useValue: {} },
       ],
     })
       .overrideGuard(JwtGuard)

@@ -611,3 +611,100 @@ describe('LabPage: checking pull requests on GitHub', () => {
     expect(screen.queryByRole('button', { name: 'Доработать' })).toBeNull();
   });
 });
+
+describe('LabPage: knowledge base', () => {
+  let knowledgeStatus: { files: number; chunks: number };
+  let askResult: unknown[];
+
+  function stubKnowledge() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const path = new URL(request.url).pathname.replace('/api/v1/', '');
+
+        if (request.method !== 'GET') {
+          const body = await request.json().catch(() => undefined);
+
+          sent.push({ path, method: request.method, body });
+
+          if (path === 'lab/projects/1/knowledge/reindex') {
+            knowledgeStatus = { files: 2, chunks: 5 };
+
+            return json(knowledgeStatus);
+          }
+          if (path === 'lab/projects/1/knowledge/ask') return json(askResult);
+
+          return json({ id: 9 });
+        }
+        if (path === 'lab/projects') return json(projects);
+        if (path === 'lab/schedules') return json(schedules);
+        if (path === 'lab/runs') return json(runs);
+        if (path === 'lab/projects/1/knowledge') return json(knowledgeStatus);
+
+        return json([]);
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    knowledgeStatus = { files: 0, chunks: 0 };
+    askResult = [];
+    stubKnowledge();
+  });
+
+  async function openKnowledgeDialog(user: ReturnType<typeof userEvent.setup>) {
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'База знаний: Катер' }));
+    await screen.findByRole('dialog');
+  }
+
+  it('shows the indexed file/chunk count once loaded, and a nudge to reindex when there is none yet', async () => {
+    const user = userEvent.setup();
+    await openKnowledgeDialog(user);
+
+    expect(await screen.findByText('Пока ничего не проиндексировано — нажмите «Переиндексировать».')).toBeInTheDocument();
+  });
+
+  it('reindexes on demand and refreshes the status', async () => {
+    const user = userEvent.setup();
+    await openKnowledgeDialog(user);
+
+    await user.click(screen.getByRole('button', { name: 'Переиндексировать' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'lab/projects/1/knowledge/reindex', body: undefined }));
+    expect(await screen.findByText('Проиндексировано: 2 файлов, 5 фрагментов')).toBeInTheDocument();
+  });
+
+  it('asks a question and shows the matched excerpts with their file and heading', async () => {
+    askResult = [{ path: 'DECISIONS.md', heading: 'D-048', content: 'Этап 0 закрыт как ненужный.', score: 0.8 }];
+    const user = userEvent.setup();
+    await openKnowledgeDialog(user);
+
+    await user.type(screen.getByLabelText('Вопрос'), 'этап 0');
+    await user.click(screen.getByRole('button', { name: 'Спросить' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'lab/projects/1/knowledge/ask', body: { question: 'этап 0' } }));
+    expect(await screen.findByText('DECISIONS.md · D-048')).toBeInTheDocument();
+    expect(screen.getByText('Этап 0 закрыт как ненужный.')).toBeInTheDocument();
+  });
+
+  it('shows no-match text when the question finds nothing', async () => {
+    const user = userEvent.setup();
+    await openKnowledgeDialog(user);
+
+    await user.type(screen.getByLabelText('Вопрос'), 'что-то совсем другое');
+    await user.click(screen.getByRole('button', { name: 'Спросить' }));
+
+    expect(await screen.findByText('Ничего не найдено — попробуйте другие слова.')).toBeInTheDocument();
+  });
+
+  it('disables "Спросить" while the question is empty', async () => {
+    const user = userEvent.setup();
+    await openKnowledgeDialog(user);
+
+    expect((screen.getByRole('button', { name: 'Спросить' }) as HTMLButtonElement).disabled).toBe(true);
+
+    await user.type(screen.getByLabelText('Вопрос'), 'x');
+    expect((screen.getByRole('button', { name: 'Спросить' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
