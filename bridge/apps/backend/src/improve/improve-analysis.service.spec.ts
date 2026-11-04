@@ -281,6 +281,78 @@ describe('ImproveService analysis', () => {
     expect(text).toContain('Top failure ×3: claude exited with code N');
   });
 
+  it('puts past proposals of the chosen directions into the task handed to the worker', async () => {
+    const { service, storage, runs } = setup({
+      find: jest.fn().mockResolvedValue([
+        {
+          result: JSON.stringify({
+            categories: ['security'],
+            autoCreate: false,
+            items: [
+              {
+                category: 'security',
+                title: 'Add rate limit',
+                risk: 'low',
+                value: 3,
+                effort: 's',
+                body: 'x',
+                issueNumber: 9,
+              },
+              {
+                category: 'docs',
+                title: 'Document X',
+                risk: 'low',
+                value: 2,
+                effort: 's',
+                body: 'y',
+              },
+            ],
+          }),
+        },
+      ]),
+    });
+
+    await service.startAnalysis(3, 'sonnet', ['security']);
+    await settle();
+
+    expect(runs.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: 3,
+          kind: 'analysis',
+          status: ImproveRunStatus.Analyzed,
+        },
+      }),
+    );
+
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const files = unzipSync(
+      new Uint8Array(storage.createFromBuffer.mock.calls[0][1]),
+    );
+    const text = Object.values(files)
+      .map((f) => strFromU8(f))
+      .join('\n');
+
+    expect(text).toContain(
+      'Proposals already made in these directions across earlier analyses',
+    );
+    expect(text).toContain('Add rate limit — filed as issue #9');
+    // Only the chosen direction (security) is included, not docs.
+    expect(text).not.toContain('Document X');
+  });
+
+  it('starts an analysis fine when a past run result does not parse', async () => {
+    const { service, workers } = setup({
+      find: jest.fn().mockResolvedValue([{ result: 'not json' }]),
+    });
+
+    await expect(service.startAnalysis(3, 'sonnet')).resolves.toMatchObject({
+      kind: 'analysis',
+    });
+    await settle();
+    expect(workers.create).toHaveBeenCalled();
+  });
+
   it('asks for warn and error log rows instead of filtering in memory', async () => {
     const { service, appLogs } = setup();
 
