@@ -97,14 +97,22 @@ export async function addComment(githubRepo: string, number: number | string, bo
   await githubFetch(`/repos/${githubRepo}/issues/${number}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
 }
 
-let cachedLogin: string | undefined;
+// Keyed by the token it was fetched with, so a changed GITHUB_TOKEN is picked
+// up without a restart.
+let cachedLogin: { key: string; login: string } | undefined;
 
 export async function getLogin(): Promise<string> {
-  if (!cachedLogin) {
-    cachedLogin = ((await (await githubFetch('/user')).json()) as { login: string }).login;
+  const key = token();
+
+  if (cachedLogin?.key === key) {
+    return cachedLogin.login;
   }
 
-  return cachedLogin;
+  const { login } = (await (await githubFetch('/user')).json()) as { login: string };
+
+  cachedLogin = { key, login };
+
+  return login;
 }
 
 export type GithubPull = { number: number; html_url: string; state: string };
