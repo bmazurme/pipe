@@ -352,7 +352,9 @@ describe('ImproveService analysis', () => {
 
     await service.startItems(1, 'opus');
 
-    expect(startRun).toHaveBeenCalledWith(3, 40, 'opus');
+    expect(startRun).toHaveBeenCalledWith(3, 40, 'opus', 'manual', null, null, {
+      issue: undefined,
+    });
     expect(JSON.parse(run.result).items[0]).toMatchObject({
       issueNumber: 40,
       started: true,
@@ -463,8 +465,12 @@ describe('ImproveService partial issue filing', () => {
     await retry.startItems(1, 'opus');
 
     expect(github2.createIssue).toHaveBeenCalledTimes(1);
-    expect(startRun).toHaveBeenCalledWith(3, 41, 'opus');
-    expect(startRun).toHaveBeenCalledWith(3, 42, 'opus');
+    expect(startRun).toHaveBeenCalledWith(3, 41, 'opus', 'manual', null, null, {
+      issue: undefined,
+    });
+    expect(startRun).toHaveBeenCalledWith(3, 42, 'opus', 'manual', null, null, {
+      issue: undefined,
+    });
   });
 });
 
