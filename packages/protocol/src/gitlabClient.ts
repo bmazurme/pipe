@@ -295,12 +295,12 @@ export async function getIssueImages(
       continue;
     }
 
-    const bytes = Buffer.from(await response.arrayBuffer());
-    totalBytes += bytes.length;
-    if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
+    const bytes = await readBodyWithinBudget(response, MAX_TOTAL_IMAGE_BYTES - totalBytes);
+    if (!bytes) {
       warn({ kind: 'limit' });
       break;
     }
+    totalBytes += bytes.length;
 
     let name = ref.url.split('/').pop() || 'image';
     while (usedNames.has(name)) {
@@ -312,6 +312,37 @@ export async function getIssueImages(
   }
 
   return images;
+}
+
+// The body as a Buffer, or null (with the body cancelled) as soon as it is known to exceed budget bytes — from Content-Length
+// before anything is read, else from a running count while streaming — so an oversized upload is never buffered whole.
+async function readBodyWithinBudget(response: Response, budget: number): Promise<Buffer | null> {
+  const declaredLength = Number(response.headers.get('content-length') ?? NaN);
+  if (Number.isFinite(declaredLength) && declaredLength > budget) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!response.body) {
+    return Buffer.alloc(0);
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    received += value.byteLength;
+    if (received > budget) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks, received);
 }
 
 // GET /projects/:id/uploads/:secret/:filename for an upload URL of the form <root>/uploads/<secret>/<filename>, else null.
