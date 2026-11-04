@@ -101,6 +101,8 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     job.usage ? { label: 'Расход', value: describeUsage(job.usage) } : null,
   ].filter((field): field is { label: string; value: string } => field !== null);
 
+  // A failed job keeps what a timed-out run had already produced, when the worker managed to upload it.
+  const hasPartialResult = job.status === 'failed' && job.resultFileId !== null;
   const canDelete = job.status !== 'claimed' && job.status !== 'running';
 
   const handleDelete = async () => {
@@ -205,8 +207,8 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
       </Dialog.Body>
       <Dialog.Footer
         textButtonCancel="Закрыть"
-        {...(job.status === 'succeeded' && {
-          textButtonApply: 'Скачать результат',
+        {...((job.status === 'succeeded' || hasPartialResult) && {
+          textButtonApply: hasPartialResult ? 'Скачать частичный результат' : 'Скачать результат',
           propsButtonApply: { loading: isDownloading },
           onClickButtonApply: () => void handleDownloadResult(),
         })}

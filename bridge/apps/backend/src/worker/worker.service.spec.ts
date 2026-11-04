@@ -1865,6 +1865,49 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('setPartialResult', () => {
+    const file = { originalname: 'partial.zip' } as Express.Multer.File;
+
+    it('links an unaddressed file without touching the status or the source parcel', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        userId: 7,
+        status: JobStatus.Running,
+      } as Job);
+      storageService.create!.mockResolvedValue({ id: 99 });
+      repository.update!.mockResolvedValue({ affected: 1 });
+
+      await service.setPartialResult(1, 7, file);
+
+      expect(storageService.create).toHaveBeenCalledWith(7, file, {});
+      expect(repository.update).toHaveBeenCalledWith(
+        { id: 1, userId: 7 },
+        { resultFileId: 99 },
+      );
+    });
+
+    it('refuses a stopped job', async () => {
+      repository.findOne!.mockResolvedValue({
+        id: 1,
+        userId: 7,
+        status: JobStatus.Cancelled,
+      } as Job);
+
+      await expect(service.setPartialResult(1, 7, file)).rejects.toThrow(
+        'Job was stopped',
+      );
+      expect(storageService.create).not.toHaveBeenCalled();
+    });
+
+    it('404s for an unknown job', async () => {
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.setPartialResult(1, 7, file)).rejects.toThrow(
+        'Job not found',
+      );
+    });
+  });
+
   describe('setResult', () => {
     it('clears the rejected mark of the token the job ran on', async () => {
       const job = {

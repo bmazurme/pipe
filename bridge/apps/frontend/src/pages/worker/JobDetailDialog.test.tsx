@@ -117,6 +117,24 @@ describe('JobDetailDialog', () => {
     expect(calls).toContain('GET worker/jobs/105/result/download');
   });
 
+  it('offers the partial result of a failed job that has one, and nothing for one that has none', async () => {
+    const user = userEvent.setup();
+    routes['GET worker/jobs/106'] = () => json({ ...job(106), status: 'failed', resultFileId: 30 });
+    renderDialog(106);
+
+    await user.click(await screen.findByRole('button', { name: 'Скачать частичный результат' }));
+
+    expect(calls).toContain('GET worker/jobs/106/result/download');
+  });
+
+  it('has no download button for a failed job without a partial result', async () => {
+    routes['GET worker/jobs/107'] = () => json({ ...job(107), status: 'failed', resultFileId: null });
+    renderDialog(107);
+
+    await screen.findByRole('button', { name: 'Удалить' });
+    expect(screen.queryByRole('button', { name: /^Скачать (частичный )?результат$/ })).toBeNull();
+  });
+
   it('shows what a running job is doing, with its worker and elapsed time', async () => {
     routes['GET worker/jobs/21'] = () =>
       json({
