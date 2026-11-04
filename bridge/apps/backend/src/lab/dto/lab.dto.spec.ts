@@ -95,3 +95,22 @@ describe('base branch names that git would refuse', () => {
     },
   );
 });
+
+describe('StartLabRunDto: the source issue of a run', () => {
+  it('takes no issue, or a positive issue number', async () => {
+    expect(await errorsFor({})).toEqual([]);
+    expect(await errorsFor({ sourceIssueNumber: 42 })).toEqual([]);
+  });
+
+  it('rejects 0 and non-integer values', async () => {
+    expect(await errorsFor({ sourceIssueNumber: 0 })).toEqual([
+      'sourceIssueNumber',
+    ]);
+    expect(await errorsFor({ sourceIssueNumber: 1.5 })).toEqual([
+      'sourceIssueNumber',
+    ]);
+    expect(await errorsFor({ sourceIssueNumber: '42' })).toEqual([
+      'sourceIssueNumber',
+    ]);
+  });
+});

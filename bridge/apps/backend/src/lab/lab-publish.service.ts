@@ -216,6 +216,10 @@ export class LabPublishService {
           // Runs from before the per-run branch have none: they target the project's.
           base: run.baseBranch ?? project.baseBranch,
           body: [
+            // Like Improve's: GitHub links the pull request to the issue and closes it on merge.
+            ...(run.sourceIssueNumber
+              ? [`Closes #${run.sourceIssueNumber}`, '']
+              : []),
             run.task,
             '',
             `Automated by bridge Lab (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(allowed)}.`,

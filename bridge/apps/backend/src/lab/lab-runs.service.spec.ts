@@ -443,6 +443,23 @@ describe('LabRunsService: the branch of a run', () => {
     });
   });
 
+  it('records the issue the run was started from, and null for a free-text task', async () => {
+    const fromIssue = await prepare({
+      projectId: project.id,
+      task: '#42 Fix the test',
+      model: 'sonnet',
+      sourceIssueNumber: 42,
+    });
+    const freeText = await prepare({
+      projectId: project.id,
+      task: 'Fix the test',
+      model: 'sonnet',
+    });
+
+    expect(fromIssue.sourceIssueNumber).toBe(42);
+    expect(freeText.sourceIssueNumber).toBeNull();
+  });
+
   it("uses the project's branch when none is chosen", async () => {
     const saved = await prepare({
       projectId: project.id,

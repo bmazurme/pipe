@@ -3519,6 +3519,7 @@ export interface components {
             prUrl: string | null;
             issueNumber: number | null;
             issueUrl: string | null;
+            sourceIssueNumber: number | null;
             note: string | null;
             error: string | null;
             /** Format: date-time */
@@ -3534,6 +3535,7 @@ export interface components {
             /** @enum {string} */
             executor?: "any" | "fusion";
             followUpOf?: number;
+            sourceIssueNumber?: number;
             projectId: number;
             task: string;
             model: string;

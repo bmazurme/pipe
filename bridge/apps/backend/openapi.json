@@ -8692,6 +8692,10 @@
             "type": "string",
             "nullable": true
           },
+          "sourceIssueNumber": {
+            "type": "number",
+            "nullable": true
+          },
           "note": {
             "type": "string",
             "nullable": true
@@ -8738,6 +8742,7 @@
           "prUrl",
           "issueNumber",
           "issueUrl",
+          "sourceIssueNumber",
           "note",
           "error",
           "finishedAt",
@@ -8762,6 +8767,10 @@
             ]
           },
           "followUpOf": {
+            "type": "number",
+            "minimum": 1
+          },
+          "sourceIssueNumber": {
             "type": "number",
             "minimum": 1
           },
