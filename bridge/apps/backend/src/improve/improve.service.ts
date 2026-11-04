@@ -224,6 +224,7 @@ export class ImproveService {
     trigger: ImproveTrigger = 'manual',
     scheduleId: number | null = null,
     contextId: number | null = null,
+    prechecked?: PrecheckedIssue,
   ): Promise<ImproveRun> {
     return this.withReserved(
       `issue:${issueNumber}`,
@@ -236,10 +237,12 @@ export class ImproveService {
           trigger,
           scheduleId,
           contextId,
+          prechecked,
         ),
     );
   }
 
+  // `prechecked` comes from a batch start: it already looked for a blocking run, and may carry the issue from the cached list.
   private async startRunReserved(
     userId: number,
     issueNumber: number,
@@ -247,27 +250,25 @@ export class ImproveService {
     trigger: ImproveTrigger,
     scheduleId: number | null,
     contextId: number | null,
+    prechecked?: PrecheckedIssue,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireIssueModel(model);
 
-    const blocking = await this.runs.findOne({
-      where: {
-        kind: 'issue',
-        issueNumber,
-        status: In([...ACTIVE_RUN_STATUSES, ImproveRunStatus.PrOpen]),
-      },
-    });
+    if (!prechecked) {
+      const blocking = await this.runs.findOne({
+        where: {
+          kind: 'issue',
+          issueNumber,
+          status: In([...ACTIVE_RUN_STATUSES, ImproveRunStatus.PrOpen]),
+        },
+      });
 
-    if (blocking) {
-      throw new ConflictException(
-        blocking.status === ImproveRunStatus.PrOpen
-          ? `Для задачи #${issueNumber} уже открыт PR #${blocking.prNumber}`
-          : `Задача #${issueNumber} уже выполняется`,
-      );
+      if (blocking) throw new ConflictException(blockedMessage(blocking));
     }
 
-    const issue = await this.github.getIssue(issueNumber);
+    const issue =
+      prechecked?.issue ?? (await this.github.getIssue(issueNumber));
 
     if (issue.isPull || issue.state !== 'open') {
       throw new BadRequestException(`#${issueNumber} — не открытая задача`);
@@ -1334,7 +1335,8 @@ export class ImproveService {
   }
 
   // Starts runs a few at a time; one failing start never stops the others. Outcomes keep input order.
-  private startEach(
+  // Blocking runs are looked up in one query, and issues come from the cached open-issue list when it has them.
+  private async startEach(
     userId: number,
     numbers: number[],
     model: string,
@@ -1344,9 +1346,42 @@ export class ImproveService {
       | { ok: false; number: number; error: string }
     )[]
   > {
+    const blocking = new Map<number, ImproveRun>();
+
+    if (numbers.length) {
+      const found = await this.runs.find({
+        where: {
+          kind: 'issue',
+          issueNumber: In(numbers),
+          status: In([...ACTIVE_RUN_STATUSES, ImproveRunStatus.PrOpen]),
+        },
+      });
+
+      for (const run of found) {
+        if (run.issueNumber != null && !blocking.has(run.issueNumber))
+          blocking.set(run.issueNumber, run);
+      }
+    }
+
+    // Only open, non-PR issues are cached: anything else is fetched and checked as before.
+    const cached = new Map<number, IssueInfo>();
+
+    for (const list of this.openIssues.freshValues()) {
+      for (const issue of list) cached.set(issue.number, issue);
+    }
+
     return mapInBatches(numbers, START_CONCURRENCY, async (number) => {
+      const blocked = blocking.get(number);
+
+      if (blocked)
+        return { ok: false as const, number, error: blockedMessage(blocked) };
+
+      const issue = cached.get(number);
+
       try {
-        await this.startRun(userId, number, model);
+        await this.startRun(userId, number, model, 'manual', null, null, {
+          issue: issue && { ...issue, isPull: false },
+        });
 
         return { ok: true as const, number };
       } catch (error) {
@@ -1413,5 +1448,13 @@ export class ImproveService {
 }
 
 const START_CONCURRENCY = 3;
+
+type PrecheckedIssue = { issue?: IssueInfo & { isPull: boolean } };
+
+function blockedMessage(blocking: ImproveRun): string {
+  return blocking.status === ImproveRunStatus.PrOpen
+    ? `Для задачи #${blocking.issueNumber} уже открыт PR #${blocking.prNumber}`
+    : `Задача #${blocking.issueNumber} уже выполняется`;
+}
 
 export { message, PR_LABEL };
