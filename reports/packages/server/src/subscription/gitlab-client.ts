@@ -53,25 +53,30 @@ export async function listAssignedOpenIssues(): Promise<ResType[]> {
   return issues as unknown as ResType[];
 }
 
-let cachedUsername: string | undefined;
+// Keyed by the credentials it was fetched with: Settings can change at
+// runtime (another account's token, a fixed URL), and every task branch is
+// named after this user.
+let cachedUsername: { key: string; username: string } | undefined;
 
 export async function getCurrentUsername(): Promise<string> {
-  if (cachedUsername) {
-    return cachedUsername;
-  }
-
   const { gitlabUrl, privateToken } = getSettings();
 
   if (!gitlabUrl || !privateToken) {
     throw new Error('Интеграция с GitLab не настроена: укажите адрес и токен на странице Settings');
   }
 
+  const key = `${gitlabUrl}\n${privateToken}`;
+
+  if (cachedUsername?.key === key) {
+    return cachedUsername.username;
+  }
+
   const response = await gitlabFetch(`${gitlabUrl}/user`, privateToken);
   const user = await response.json() as { username: string };
 
-  cachedUsername = user.username;
+  cachedUsername = { key, username: user.username };
 
-  return cachedUsername;
+  return user.username;
 }
 
 export async function addIssueNote(projectId: number | string, iid: number | string, body: string): Promise<void> {

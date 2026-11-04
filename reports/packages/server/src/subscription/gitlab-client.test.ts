@@ -11,7 +11,7 @@ import type { SettingsType } from '@reports/shared';
 const getSettingsMock = vi.fn<() => SettingsType>();
 vi.mock('../settings/props', () => ({ getSettings: () => getSettingsMock() }));
 
-const { getIssueImages, addIssueNote, setIssueTimeEstimate } = await import('./gitlab-client');
+const { getIssueImages, addIssueNote, setIssueTimeEstimate, getCurrentUsername } = await import('./gitlab-client');
 
 function stubSettings(overrides: Partial<SettingsType> = {}) {
   getSettingsMock.mockReturnValue({
@@ -137,6 +137,38 @@ describe('write helpers encode route params', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://gitlab.example.com/api/v4/projects/a%2Fb/issues/5%3Fx%23y/time_estimate?duration=1h',
+    );
+  });
+});
+
+describe('getCurrentUsername — cache keyed by the Settings credentials', () => {
+  it('fetches /user once while the settings stay the same', async () => {
+    stubSettings({ privateToken: 'token-same' });
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ username: 'alice' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getCurrentUsername()).resolves.toBe('alice');
+    await expect(getCurrentUsername()).resolves.toBe('alice');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches /user after the token changes', async () => {
+    stubSettings({ privateToken: 'token-alice' });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ username: 'alice' }))
+      .mockResolvedValueOnce(Response.json({ username: 'bob' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getCurrentUsername()).resolves.toBe('alice');
+
+    stubSettings({ privateToken: 'token-bob' });
+
+    await expect(getCurrentUsername()).resolves.toBe('bob');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ headers: expect.objectContaining({ 'Private-Token': 'token-bob' }) }),
     );
   });
 });

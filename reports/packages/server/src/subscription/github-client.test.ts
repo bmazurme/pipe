@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { addComment, getRepo, listIssues } from './github-client';
+import { addComment, getLogin, getRepo, listIssues } from './github-client';
 
 const original = globalThis.fetch;
 
@@ -66,5 +66,37 @@ describe('github-client', () => {
     expect(url).toBe('https://api.github.com/repos/a/b/issues/7/comments');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ body: 'done' });
+  });
+
+  it('fetches the login once while GITHUB_TOKEN stays the same', async () => {
+    process.env.GITHUB_TOKEN = 'ghp_same';
+    const fetchMock = vi.fn(async () => Response.json({ login: 'alice' }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(getLogin()).resolves.toBe('alice');
+    await expect(getLogin()).resolves.toBe('alice');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches the login after GITHUB_TOKEN changes', async () => {
+    process.env.GITHUB_TOKEN = 'ghp_alice';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ login: 'alice' }))
+      .mockResolvedValueOnce(Response.json({ login: 'bob' }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(getLogin()).resolves.toBe('alice');
+
+    process.env.GITHUB_TOKEN = 'ghp_bob';
+
+    await expect(getLogin()).resolves.toBe('bob');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+
+    expect(url).toBe('https://api.github.com/user');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ghp_bob');
   });
 });
