@@ -121,6 +121,13 @@ export class StartLabRunDto {
   @IsInt()
   @Min(1)
   followUpOf?: number;
+
+  // The repository issue the task was taken from («Из issue»): the pull request closes it.
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  sourceIssueNumber?: number;
 }
 
 export class SaveLabScheduleDto {

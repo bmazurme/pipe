@@ -36,6 +36,9 @@ const STATUS_THEME: Record<LabRunStatus, (typeof RUN_STATUS_THEME)[keyof typeof 
 const describeRefresh = ({ checked, merged, closed, failed }: LabPrRefresh) =>
   `Проверено PR: ${checked} · влито: ${merged} · закрыто: ${closed}${failed ? ` · не удалось проверить: ${failed}` : ''}`;
 
+// The issue a task was taken from stays only while the task still starts with it: a task replaced with other text no longer closes it.
+const keepsIssue = (task: string, issueNumber: number | undefined) => (issueNumber && task.trimStart().startsWith(`#${issueNumber} `) ? issueNumber : undefined);
+
 export function RunsTab() {
   const { options: modelOptions, label: modelLabel } = useModelOptions(true);
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
@@ -49,7 +52,7 @@ export function RunsTab() {
   const [retry, { isLoading: isRetrying }] = useRetryLabPublishMutation();
   const [refreshPrs, { isLoading: isRefreshing }] = useRefreshLabPrsMutation();
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
-  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number } | null>(null);
+  const [form, setForm] = useState<{ projectId: string; task: string; model: string; contextId: string; baseBranch: string; executor: LabExecutor; followUpOf?: number; sourceIssueNumber?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const issuesProjectId = form && !form.followUpOf && form.projectId ? Number(form.projectId) : null;
   const { data: issues, error: issuesError } = useListLabProjectIssuesQuery(issuesProjectId ?? 0, { skip: issuesProjectId === null });
@@ -68,7 +71,7 @@ export function RunsTab() {
     if (!form.baseBranch.trim()) return setError('Укажите ветку');
 
     try {
-      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim(), executor: form.executor, ...(form.followUpOf ? { followUpOf: form.followUpOf } : {}) }).unwrap();
+      await start({ projectId: Number(form.projectId), task: form.task.trim(), model: form.model, contextId: form.contextId ? Number(form.contextId) : null, baseBranch: form.baseBranch.trim(), executor: form.executor, ...(form.followUpOf ? { followUpOf: form.followUpOf } : {}), ...(form.sourceIssueNumber ? { sourceIssueNumber: form.sourceIssueNumber } : {}) }).unwrap();
       setForm(null);
       setError(null);
     } catch (err) {
@@ -150,6 +153,11 @@ export function RunsTab() {
                 Запуск #{run.jobId}
               </Button>
             )}
+            {run.sourceIssueNumber && (
+              <a href={`https://github.com/${run.repo}/issues/${run.sourceIssueNumber}`} target="_blank" rel="noreferrer noopener" aria-label={`Из issue #${run.sourceIssueNumber}`}>
+                <Text variant="body-2">#{run.sourceIssueNumber}</Text>
+              </a>
+            )}
             {run.prUrl && (
               <a href={run.prUrl} target="_blank" rel="noreferrer noopener" aria-label={`PR #${run.prNumber}`}>
                 <Icon data={ArrowUpRightFromSquare} size={16} />
@@ -171,7 +179,7 @@ export function RunsTab() {
                 size="s"
                 onClick={() => {
                   setError(null);
-                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '', baseBranch: run.baseBranch ?? branchOf(run.projectId), executor: run.executor ?? 'any' });
+                  setForm({ projectId: String(run.projectId), task: run.task, model: run.model, contextId: '', baseBranch: run.baseBranch ?? branchOf(run.projectId), executor: run.executor ?? 'any', sourceIssueNumber: run.sourceIssueNumber ?? undefined });
                 }}
               >
                 Запустить снова
@@ -226,7 +234,7 @@ export function RunsTab() {
                 label="Проект"
                 disabled={Boolean(form.followUpOf)}
                 value={[form.projectId]}
-                onUpdate={([projectId]) => setForm({ ...form, projectId: projectId ?? '', baseBranch: branchOf(projectId ?? '') })}
+                onUpdate={([projectId]) => setForm({ ...form, projectId: projectId ?? '', baseBranch: branchOf(projectId ?? ''), sourceIssueNumber: undefined })}
                 options={(projects ?? []).filter((project) => project.canWrite).map((project) => ({ value: String(project.id), content: `${project.name} (${project.repo})` }))}
                 width="max"
               />
@@ -240,7 +248,7 @@ export function RunsTab() {
                     onUpdate={([number]) => {
                       const issue = issues?.find((item) => String(item.number) === number);
 
-                      if (issue) setForm({ ...form, task: `#${issue.number} ${issue.title}\n\n${issue.body}\n\n${issue.htmlUrl}` });
+                      if (issue) setForm({ ...form, task: `#${issue.number} ${issue.title}\n\n${issue.body}\n\n${issue.htmlUrl}`, sourceIssueNumber: issue.number });
                     }}
                     options={(issues ?? []).map((issue) => ({ value: String(issue.number), content: `#${issue.number} ${issue.title}` }))}
                     width="max"
@@ -249,7 +257,7 @@ export function RunsTab() {
                 </>
               )}
               <Text variant="body-2">Задача</Text>
-              <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task })} />
+              <TextArea controlProps={{ 'aria-label': 'Задача' }} placeholder="Что сделать в репозитории — своими словами" minRows={4} maxRows={12} value={form.task} onUpdate={(task) => setForm({ ...form, task, sourceIssueNumber: keepsIssue(task, form.sourceIssueNumber) })} />
               <Select label="Модель" value={[form.model]} onUpdate={([model]) => setForm({ ...form, model })} options={modelsFor(modelOptions, form.executor)} width="max" />
               <Select label="Где выполнять" value={[form.executor]} onUpdate={([executor]) => setForm({ ...form, executor: (executor as LabExecutor) ?? 'any', model: modelAfterExecutor(form.model, (executor as LabExecutor) ?? 'any') })} options={EXECUTOR_OPTIONS} width="max" />
               {form.executor === 'fusion' && (

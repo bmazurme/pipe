@@ -86,6 +86,8 @@ export type LabStartInput = {
   executor?: LabExecutor;
   // A run (of this project, with its pull request open) whose PR branch this one adds a commit to.
   followUpOf?: number;
+  // The repository issue the task came from; the run's pull request closes it.
+  sourceIssueNumber?: number;
 };
 
 export function titleOf(task: string): string {
@@ -276,6 +278,7 @@ export class LabRunsService {
         executor,
         jobId: null,
         baseBranch,
+        sourceIssueNumber: input.sourceIssueNumber ?? null,
         ...pr,
       }),
     );

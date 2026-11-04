@@ -106,6 +106,24 @@ describe('LabPublishService', () => {
     expect(github.deleteBranch).toHaveBeenCalled();
     expect(failed.status).toBe(LabRunStatus.Failed);
   });
+
+  describe('the source issue of the run', () => {
+    const bodyOfPull = () =>
+      (github.createPull.mock.calls[0][0] as { body: string }).body;
+
+    it('starts the pull request body with «Closes #N» for a run started from an issue', async () => {
+      await service.publish({ ...run('main'), sourceIssueNumber: 42 }, 6);
+
+      expect(bodyOfPull()).toMatch(/^Closes #42\n\nFix the test\n/);
+    });
+
+    it('leaves the body of a free-text run as it was', async () => {
+      await service.publish({ ...run('main'), sourceIssueNumber: null }, 6);
+
+      expect(bodyOfPull()).toMatch(/^Fix the test\n/);
+      expect(bodyOfPull()).not.toContain('Closes');
+    });
+  });
 });
 
 describe('LabPublishService follow-up of a pull request', () => {

@@ -113,6 +113,11 @@ export class LabRun extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   issueUrl: string | null;
 
+  // The issue the run was started from («Из issue»), unlike issueNumber, which the run itself opened:
+  // its pull request says «Closes #N», so merging it closes the issue.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  sourceIssueNumber: number | null;
+
   @Column({ type: 'text', nullable: true })
   note: string | null;
 

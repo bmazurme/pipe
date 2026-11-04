@@ -27,6 +27,7 @@ const RUN = {
   prUrl: null,
   issueNumber: null,
   issueUrl: null,
+  sourceIssueNumber: null,
   note: null,
   error: null,
   createdAt: new Date().toISOString(),
@@ -166,6 +167,62 @@ describe('lab RunsTab issue prefill', () => {
     );
   });
 
+  const startedWith = () => {
+    const started: Record<string, unknown>[] = [];
+    const base = globalThis.fetch as unknown as (request: Request) => Promise<Response>;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.method === 'POST' && new URL(request.url).pathname === '/api/v1/lab/runs') started.push(await request.clone().json());
+
+        return base(request);
+      }),
+    );
+
+    return started;
+  };
+
+  const pickIssue = async (user: ReturnType<typeof userEvent.setup>) => {
+    const start = await screen.findByRole('button', { name: 'Новый запуск' });
+
+    await waitFor(() => expect(start).toBeEnabled());
+    await user.click(start);
+    await waitFor(() => expect(gets).toContain('lab/projects/1/issues'));
+    await user.click(await screen.findByText('Не выбрано'));
+    await user.click(await screen.findByText('#5 Течёт кран'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Задача' })).toHaveValue('#5 Течёт кран\n\nПодробности\n\nhttps://github.com/o/r/issues/5'));
+  };
+
+  it('fills the task from the chosen issue and sends the issue it came from', async () => {
+    stubIssues();
+    const started = startedWith();
+    const user = userEvent.setup();
+    renderTab();
+
+    await pickIssue(user);
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({ task: '#5 Течёт кран\n\nПодробности\n\nhttps://github.com/o/r/issues/5', sourceIssueNumber: 5 });
+  });
+
+  it('drops the issue once the task text is cleared and replaced', async () => {
+    stubIssues();
+    const started = startedWith();
+    const user = userEvent.setup();
+    renderTab();
+
+    await pickIssue(user);
+    await user.clear(screen.getByRole('textbox', { name: 'Задача' }));
+    await user.type(screen.getByRole('textbox', { name: 'Задача' }), 'Другая задача');
+    await user.click(screen.getByRole('button', { name: 'Запустить' }));
+
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({ task: 'Другая задача' });
+    expect(started[0]).not.toHaveProperty('sourceIssueNumber');
+  });
+
   it('hides the issue select when following up a pull request', async () => {
     const base = globalThis.fetch as unknown as (request: Request) => Promise<Response>;
 
@@ -182,5 +239,28 @@ describe('lab RunsTab issue prefill', () => {
     expect(await screen.findByText('Доработать PR')).toBeInTheDocument();
     expect(screen.queryByText('Из issue')).not.toBeInTheDocument();
     expect(gets.some((path) => path.endsWith('/issues'))).toBe(false);
+  });
+});
+
+describe('lab RunsTab source issue of a run', () => {
+  it('links the run to the issue it was started from', async () => {
+    const base = globalThis.fetch as unknown as (request: Request) => Promise<Response>;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) =>
+        new URL(request.url).pathname === '/api/v1/lab/runs' ? json([{ ...RUN, sourceIssueNumber: 5 }]) : base(request),
+      ),
+    );
+    renderTab();
+
+    expect(await screen.findByRole('link', { name: 'Из issue #5' })).toHaveAttribute('href', 'https://github.com/o/r/issues/5');
+  });
+
+  it('shows no issue link for a free-text run', async () => {
+    renderTab();
+
+    expect(await screen.findByText('Задача')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Из issue/ })).not.toBeInTheDocument();
   });
 });

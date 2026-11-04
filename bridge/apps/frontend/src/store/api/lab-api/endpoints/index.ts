@@ -91,6 +91,8 @@ export interface LabRun {
   // Set when the worker's result asked bridge to open a GitHub Issue; independent of prNumber/prUrl.
   issueNumber: number | null;
   issueUrl: string | null;
+  // The issue the run was started from («Из issue»); its pull request closes it.
+  sourceIssueNumber: number | null;
   note: string | null;
   error: string | null;
   createdAt: string;
@@ -108,6 +110,8 @@ export interface StartLabRunInput {
   executor?: LabExecutor;
   // Continue the open pull request of this run: the result is a new commit on its branch.
   followUpOf?: number;
+  // The issue the task was taken from: the pull request says «Closes #N».
+  sourceIssueNumber?: number;
 }
 
 // What "Проверить PR" found out about the open pull requests it asked GitHub about.
