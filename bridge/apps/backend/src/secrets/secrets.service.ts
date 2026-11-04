@@ -125,14 +125,29 @@ export class SecretsService {
     for (const secret of [...secrets].sort((a, b) =>
       a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
     )) {
+      // Rows stored before the DTO restrictions can't be written safely.
+      if (
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(secret.name) ||
+        /[\r\n]/.test(secret.value)
+      ) {
+        lines.push(
+          `# skipped: ${JSON.stringify(secret.name).replace(/[\r\n]/g, ' ')}: cannot be written to .env`,
+        );
+        continue;
+      }
       if (secret.description) {
         for (const line of secret.description.split(/\r\n|\r|\n/)) {
           lines.push(`# ${line}`.trimEnd());
         }
       }
-      const value = /[\s#"']/.test(secret.value)
-        ? `"${secret.value}"`
-        : secret.value;
+      let value: string;
+      if (/^[A-Za-z0-9_./:@+=,-]*$/.test(secret.value)) {
+        value = secret.value;
+      } else if (!secret.value.includes("'")) {
+        value = `'${secret.value}'`;
+      } else {
+        value = `"${secret.value}"`;
+      }
       lines.push(`${secret.name}=${value}`);
     }
 

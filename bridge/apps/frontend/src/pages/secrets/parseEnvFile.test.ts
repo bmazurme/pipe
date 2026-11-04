@@ -39,3 +39,18 @@ describe('parseEnvFile', () => {
     expect(r.invalidLines).toEqual([2, 3, 4, 5]);
   });
 });
+
+describe('parseEnvFile with exported files', () => {
+  it('reads single-quoted, skipped and bare lines back', () => {
+    const r = parseEnvFile(
+      "A='$(id)'\nB='a b'\n# skipped: \"C\": cannot be written to .env\nD=a=b\nE=\"it's\"\n",
+    );
+    expect(r.entries).toEqual([
+      { name: 'A', value: '$(id)' },
+      { name: 'B', value: 'a b' },
+      { name: 'D', value: 'a=b' },
+      { name: 'E', value: "it's" },
+    ]);
+    expect(r.invalidLines).toEqual([]);
+  });
+});

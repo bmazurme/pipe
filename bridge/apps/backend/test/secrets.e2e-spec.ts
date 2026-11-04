@@ -68,7 +68,7 @@ describe('Secrets API (e2e)', () => {
 
       const created = await authed(
         request(app.getHttpServer()).post('/api/v1/secrets').send({
-          name: 'e2e-no-store',
+          name: 'e2e_no_store',
           value: 'e2e-value',
         }),
         accessToken,
@@ -94,14 +94,14 @@ describe('Secrets API (e2e)', () => {
 
       const created = await authed(
         request(app.getHttpServer()).post('/api/v1/secrets').send({
-          name: 'e2e-secret',
+          name: 'e2e_secret',
           value: 'e2e-value',
           description: 'for the e2e suite',
         }),
         accessToken,
       ).expect(201);
       expect(created.body).toMatchObject({
-        name: 'e2e-secret',
+        name: 'e2e_secret',
         description: 'for the e2e suite',
       });
       expect(created.body.value).toBeUndefined();
@@ -130,7 +130,7 @@ describe('Secrets API (e2e)', () => {
           .send({ value: 'changed-value' }),
         accessToken,
       ).expect(200);
-      expect(updated.body).toMatchObject({ id, name: 'e2e-secret' });
+      expect(updated.body).toMatchObject({ id, name: 'e2e_secret' });
 
       const revealedAfterUpdate = await authed(
         request(app.getHttpServer()).get(`/api/v1/secrets/${id}/value`),
@@ -177,14 +177,14 @@ describe('Secrets API (e2e)', () => {
       await authed(
         request(app.getHttpServer())
           .post('/api/v1/secrets')
-          .send({ name: 'shared-name', value: 'a' }),
+          .send({ name: 'shared_name', value: 'a' }),
         userA.accessToken,
       ).expect(201);
 
       await authed(
         request(app.getHttpServer())
           .post('/api/v1/secrets')
-          .send({ name: 'shared-name', value: 'b' }),
+          .send({ name: 'shared_name', value: 'b' }),
         userB.accessToken,
       ).expect(201);
     });
@@ -196,7 +196,7 @@ describe('Secrets API (e2e)', () => {
       const created = await authed(
         request(app.getHttpServer())
           .post('/api/v1/secrets')
-          .send({ name: 'owners-secret', value: 'owners-value' }),
+          .send({ name: 'owners_secret', value: 'owners-value' }),
         owner.accessToken,
       ).expect(201);
       const id = created.body.id;
