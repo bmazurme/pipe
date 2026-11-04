@@ -10,7 +10,7 @@ import { buildIssuePrompt, runClaude } from '../claudeRunner.js';
 import { findProject, loadConfig, projectExclude, projectInclude } from '../config.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
 import { decryptBuffer, encryptBuffer } from '../encryption.js';
-import { addTaskWorktree, commitAll, pushBranch, removeTaskWorktree } from '../gitWorktree.js';
+import { addTaskWorktree, assertSafeTaskBranch, commitAll, pushBranch, removeTaskWorktree } from '../gitWorktree.js';
 import { buildIssueArchive, extractIssue, extractIssueArchive, updateIssueFile } from '../issuePack.js';
 import { findOwnCredentials } from '../ownCredentials.js';
 import { AGENT_WORK_DIR, resolveFromRoot } from '../paths.js';
@@ -126,6 +126,17 @@ export async function processCandidate(
   }
 
   const branch = manifest.branch || `task/${candidate.projectId}-${candidate.iid}`;
+  const baseBranch = project.baseBranch ?? 'main';
+
+  // The branch is as untrusted as the file paths below. A refused parcel is
+  // left on bridge so it can be inspected.
+  try {
+    assertSafeTaskBranch(branch, baseBranch);
+  } catch (err) {
+    log.error(`Skipping ${key}: ${(err as Error).message}. The parcel was left on bridge for inspection.`);
+    return;
+  }
+
   const worktreeDir = path.join(AGENT_WORK_DIR, `${candidate.projectId}-${candidate.iid}`);
 
   // The parcel is untrusted: reject escaping entry names before touching disk.
@@ -146,7 +157,7 @@ export async function processCandidate(
   // paths (Claude ran and failed cleanly, or the whole thing succeeded).
   // Without this, e.g. an ENOBUFS from a huge git push loses the agent's
   // work with no way to recover it (see incident when this was a `finally`).
-  addTaskWorktree(project.path, worktreeDir, branch, project.baseBranch ?? 'main');
+  addTaskWorktree(project.path, worktreeDir, branch, baseBranch);
 
   // Checked after the worktree exists, so links checked out into it count.
   // Every destination is verified before the first write.
