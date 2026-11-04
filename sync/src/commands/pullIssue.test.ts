@@ -8,7 +8,7 @@ import AdmZip from 'adm-zip';
 
 import { buildArchive, SYNC_MANIFEST_ENTRY } from '@pipe/protocol';
 
-import { saveApiKey } from '../credentials.js';
+import { saveApiKey, saveGitlabToken } from '../credentials.js';
 import { saveConfig } from '../config.js';
 import { buildIssueArchive, ISSUE_FILE_NAME } from '../issuePack.js';
 import { CONFIG_PATH, CREDENTIALS_PATH } from '../paths.js';
@@ -191,5 +191,127 @@ describe('pullIssueCommand assets', () => {
     await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true }));
 
     assert.deepEqual(deletes, []);
+  });
+});
+
+describe('pullIssueCommand --comment', () => {
+  const NAME = 'pull-issue-comment-test-project';
+  const apiUrl = 'https://bridge.example.com';
+  const gitlabUrl = 'https://gitlab.example.com/api/v4';
+  const originalFetch = globalThis.fetch;
+  const backedUp = [CONFIG_PATH, CREDENTIALS_PATH].map((p) => ({
+    path: p,
+    content: existsSync(p) ? readFileSync(p, 'utf-8') : null,
+  }));
+  const manifest = {
+    issueId: '1',
+    issueIid: '42',
+    issueTitle: 'Fix bug',
+    issueDescription: 'Details',
+    projectId: 173,
+    branch: 'user-20260914-42',
+    createdAt: '2026-09-14T10:00:00.000Z',
+  };
+
+  let root: string;
+  let projectPath: string;
+  let requests: string[];
+  let notes: Array<{ url: string; body: string }>;
+  let noteStatus: number;
+
+  function serve(): void {
+    const buffer = buildIssueArchive([{ relPath: 'src/a.ts', content: 'export const a = 1;' }], manifest, []);
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      requests.push(`${init?.method ?? 'GET'} ${u}`);
+      if (u.startsWith(`${apiUrl}/api/v1/storage?`)) {
+        return new Response(
+          JSON.stringify([{ id: 9, originalName: 'issue-42.zip', createdAt: '2026-09-14T10:00:00Z' }]),
+          { status: 200 },
+        );
+      }
+      if (/\/storage\/9\/peek$/.test(u)) return new Response(new Uint8Array(buffer), { status: 200 });
+      if (/\/storage\/9$/.test(u) && init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (u.startsWith(gitlabUrl)) {
+        notes.push({ url: u, body: String(init?.body) });
+        return new Response('{}', { status: noteStatus });
+      }
+      throw new Error(`unexpected request ${u}`);
+    }) as typeof fetch;
+  }
+
+  function configure(withGitlab: boolean): void {
+    const config: SyncConfig = {
+      bridge: { apiUrl },
+      projects: [{ name: NAME, path: projectPath }],
+      ...(withGitlab ? { gitlab: { apiUrl: gitlabUrl } } : {}),
+    };
+    saveConfig(config);
+  }
+
+  before(() => {
+    saveApiKey('brk_test-key');
+  });
+
+  after(() => {
+    for (const { path: p, content } of backedUp) {
+      if (content === null) rmSync(p, { force: true });
+      else writeFileSync(p, content);
+    }
+    globalThis.fetch = originalFetch;
+  });
+
+  beforeEach(() => {
+    requests = [];
+    notes = [];
+    noteStatus = 201;
+    root = mkdtempSync(path.join(tmpdir(), 'sync-cli-pull-issue-comment-test-'));
+    projectPath = path.join(root, 'project');
+    mkdirSync(projectPath);
+    saveApiKey('brk_test-key');
+    saveGitlabToken('glpat-test');
+    configure(true);
+    serve();
+  });
+
+  it('posts the note with the branch substituted', async () => {
+    await pullIssueCommand(NAME, '173', '42', { force: true, comment: 'ветка {{branch}}' });
+
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0].url, `${gitlabUrl}/projects/173/issues/42/notes`);
+    assert.deepEqual(JSON.parse(notes[0].body), { body: 'ветка user-20260914-42' });
+  });
+
+  it('makes no GitLab request without --comment', async () => {
+    await pullIssueCommand(NAME, '173', '42', { force: true });
+
+    assert.deepEqual(notes, []);
+    assert.equal(existsSync(path.join(projectPath, 'src/a.ts')), true);
+  });
+
+  it('fails before the download when GitLab is not configured', async () => {
+    configure(false);
+
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true, comment: 'x' }), /GitLab is not configured/);
+
+    assert.deepEqual(requests, []);
+  });
+
+  it('fails before the download when there is no GitLab token', async () => {
+    rmSync(CREDENTIALS_PATH, { force: true });
+    saveApiKey('brk_test-key');
+
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { force: true, comment: 'x' }), /Not logged in to GitLab/);
+
+    assert.deepEqual(requests, []);
+  });
+
+  it('keeps the pulled files when the note POST fails', async () => {
+    noteStatus = 500;
+
+    await pullIssueCommand(NAME, '173', '42', { force: true, comment: 'ветка {{branch}}' });
+
+    assert.equal(notes.length, 1);
+    assert.equal(readFileSync(path.join(projectPath, 'src/a.ts'), 'utf-8'), 'export const a = 1;');
   });
 });

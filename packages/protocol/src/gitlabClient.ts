@@ -210,6 +210,22 @@ export async function addSpentTime(
   await gitlabFetch(url, privateToken, { method: 'POST' });
 }
 
+// Posts a comment on the issue — the same note reports' publish step leaves.
+export async function addIssueNote(
+  apiUrl: string,
+  privateToken: string,
+  projectId: string | number,
+  iid: string | number,
+  body: string,
+): Promise<void> {
+  const url = `${apiUrl}/projects/${encodeURIComponent(String(projectId))}/issues/${encodeURIComponent(String(iid))}/notes`;
+  await gitlabFetch(url, privateToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+}
+
 export interface IssueImage {
   relPath: string;
   base64: string;

@@ -1,18 +1,47 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { addIssueNote } from '@pipe/protocol/gitlabClient';
 import { notify } from '@pipe/protocol/notify';
 import { assertNoSymlinkOnPath, resolveInDir } from '@pipe/protocol/resolveInDir';
 
 import { BridgeClient } from '../bridgeClient.js';
 import { findProject, loadConfig } from '../config.js';
 import { loadOptionalDictionary, localTransform } from '../dictionary.js';
+import { loadCredentialsOrEmpty } from '../credentials.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
 import { resolveFromRoot } from '../paths.js';
 import { log } from '../log.js';
 import { writeParcelFiles } from '../writeParcelFiles.js';
+
+interface CommentTarget {
+  apiUrl: string;
+  token: string;
+  template: string;
+}
+
+// Checked before anything is downloaded, so a misconfigured --comment never
+// consumes the parcel.
+function resolveCommentTarget(comment: string | undefined): CommentTarget | undefined {
+  if (comment === undefined) return undefined;
+  if (!comment.trim()) throw new Error('--comment expects a non-empty text.');
+
+  const apiUrl = loadConfig().gitlab?.apiUrl;
+  if (!apiUrl) {
+    throw new Error(
+      'GitLab is not configured — --comment needs "gitlab": { "apiUrl": "https://<host>/api/v4" } in sync.config.json.',
+    );
+  }
+
+  const { gitlabToken } = loadCredentialsOrEmpty();
+  if (!gitlabToken) {
+    throw new Error('Not logged in to GitLab — --comment needs it. Run "sync-cli login-gitlab <token>" first.');
+  }
+
+  return { apiUrl, token: gitlabToken, template: comment };
+}
 
 // Returns true once a parcel was found and pulled, false when there's
 // nothing on bridge yet — the shape --watch below polls on.
@@ -21,6 +50,7 @@ async function tryPullOnce(
   projectId: string,
   iid: string,
   options: { force?: boolean },
+  commentTarget?: CommentTarget,
 ): Promise<boolean> {
   const config = loadConfig();
   const project = findProject(config, name);
@@ -96,6 +126,21 @@ async function tryPullOnce(
     `Pulled ${files.length} files and ${assets.length} assets into ${project.path}${isEncrypted ? ' (decrypted)' : ''}.`,
   );
 
+  if (commentTarget) {
+    const branch = legacyManifest || !manifest.branch ? '' : localTransform(dictionary)(manifest.branch);
+    if (!branch) log.warn('Warning: the parcel has no branch — {{branch}} in --comment is left empty.');
+    const body = commentTarget.template.split('{{branch}}').join(branch);
+    try {
+      await addIssueNote(commentTarget.apiUrl, commentTarget.token, projectId, iid, body);
+      log.info(`Posted a comment on issue #${iid} (project ${projectId}).`);
+    } catch (error: unknown) {
+      // The files are written and the parcel is gone — failing here would only mislead.
+      log.warn(
+        `Warning: the comment was not posted to issue #${iid}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   return true;
 }
 
@@ -107,10 +152,12 @@ export async function pullIssueCommand(
   name: string,
   projectId: string,
   iid: string,
-  options: { force?: boolean; watch?: string },
+  options: { force?: boolean; watch?: string; comment?: string },
 ): Promise<void> {
+  const commentTarget = resolveCommentTarget(options.comment);
+
   if (!options.watch) {
-    await tryPullOnce(name, projectId, iid, options);
+    await tryPullOnce(name, projectId, iid, options, commentTarget);
     return;
   }
 
@@ -121,7 +168,7 @@ export async function pullIssueCommand(
 
   log.info(`Watching for issue #${iid} (project ${projectId})'s result every ${intervalSec}s. Ctrl+C to stop.`);
   await watchForResult(intervalSec, {
-    pullOnce: () => tryPullOnce(name, projectId, iid, options),
+    pullOnce: () => tryPullOnce(name, projectId, iid, options, commentTarget),
     onFound: () =>
       notify('Result ready', `Issue #${iid} (project ${projectId}) pulled into ${findProject(loadConfig(), name).path}.`),
   });

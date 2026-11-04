@@ -10,6 +10,7 @@ import {
   listAssignedOpenIssues,
   listMergeRequestsForBranch,
   addSpentTime,
+  addIssueNote,
   MAX_TOTAL_IMAGE_BYTES,
   resolveIssueUploadUrl,
   type IssueImageWarning,
@@ -235,6 +236,24 @@ describe('addSpentTime', () => {
 
     assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/173/issues/628/add_spent_time?duration=2h30m');
     assert.equal(capturedMethod, 'POST');
+  });
+});
+
+describe('addIssueNote', () => {
+  it('posts the body as JSON to the issue notes endpoint', async () => {
+    let capturedUrl: string | undefined;
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedInit = init;
+      return new Response('{}', { status: 201 });
+    }) as typeof fetch;
+
+    await addIssueNote('https://gitlab.example.com/api/v4', 'tok', 'group/proj', 628, 'ветка x');
+
+    assert.equal(capturedUrl, 'https://gitlab.example.com/api/v4/projects/group%2Fproj/issues/628/notes');
+    assert.equal(capturedInit?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), { body: 'ветка x' });
   });
 });
 
