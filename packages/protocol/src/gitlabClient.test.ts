@@ -466,6 +466,55 @@ describe('getIssueImages size budget while downloading', () => {
     assert.ok(sent <= MAX_TOTAL_IMAGE_BYTES + 2 * chunk.byteLength, `read ${sent} bytes`);
   });
 
+  it('still reports the limit when cancelling an over-length body fails', async () => {
+    const body = new ReadableStream<Uint8Array>(
+      {
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    globalThis.fetch = (async () =>
+      new Response(body, { status: 200, headers: { 'Content-Length': String(MAX_TOTAL_IMAGE_BYTES + 1) } })) as typeof fetch;
+    const warnings: IssueImageWarning[] = [];
+
+    const images = await getIssueImages(API_URL, 'tok', '![a](/uploads/1/a.png)', { onWarn: (w) => warnings.push(w) });
+
+    assert.deepEqual(images, []);
+    assert.deepEqual(warnings, [{ kind: 'limit' }]);
+  });
+
+  it('still reports the limit when cancelling a streamed body fails', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          controller.enqueue(chunk);
+        },
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    globalThis.fetch = (async () => new Response(body, { status: 200 })) as typeof fetch;
+    const warnings: IssueImageWarning[] = [];
+
+    const images = await getIssueImages(API_URL, 'tok', '![a](/uploads/1/a.png)', { onWarn: (w) => warnings.push(w) });
+
+    assert.deepEqual(images, []);
+    assert.deepEqual(warnings, [{ kind: 'limit' }]);
+  });
+
+  it('treats a response with no body as an empty image', async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 200 })) as typeof fetch;
+
+    const images = await getIssueImages(API_URL, 'tok', '![a](/uploads/1/a.png)');
+
+    assert.deepEqual(images, [{ relPath: 'issue-images/a.png', base64: '' }]);
+  });
+
   it('returns a chunked body within the budget byte-identical', async () => {
     const parts = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5]), new Uint8Array([6])];
     globalThis.fetch = (async () =>
