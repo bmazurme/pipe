@@ -30,12 +30,30 @@ export function buildIssueArchive(
 
 export const ISSUE_FILE_NAME = 'ISSUE.md';
 
+// The issue's comments (carried by parcels from both reports and push-issue/gitlab-worker), de-anonymized like the
+// description, so ISSUE.md shows the clarifications the agent would otherwise miss.
+function buildCommentsSection(manifest: SubscriptionManifest, transform: (text: string) => string): string[] {
+  const comments = manifest.issueComments ?? [];
+  if (comments.length === 0) return [];
+  return [
+    '## Comments',
+    '',
+    ...comments.flatMap((comment) => [
+      `### ${transform(comment.author) || 'unknown'}, ${comment.createdAt}`,
+      '',
+      transform(comment.body),
+      '',
+    ]),
+  ];
+}
+
 function buildIssueFileBody(
   manifest: SubscriptionManifest,
   title: string,
   description: string,
   imagePaths: string[],
   parcelId: number,
+  transform: (text: string) => string,
 ): string {
   return [
     `# Issue #${manifest.issueIid} (project ${manifest.projectId})`,
@@ -44,6 +62,7 @@ function buildIssueFileBody(
     '',
     description,
     '',
+    ...buildCommentsSection(manifest, transform),
     ...(imagePaths.length > 0 ? ['## Images', '', ...imagePaths.map((p) => `- ${p}`), ''] : []),
     '---',
     `Branch: ${manifest.branch}`,
@@ -85,14 +104,14 @@ export function extractIssue(
   });
 
   const destination = path.join(projectPath, ISSUE_FILE_NAME);
-  writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId), 'utf-8');
+  writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId, transform), 'utf-8');
 
   return { path: destination, title, description, imagePaths };
 }
 
 // Re-writes ISSUE.md after a `--review` edit — keeps the same branch/pulled
 // footer and image list extractIssue already wrote, just with the (possibly
-// edited) title/description, so the file on disk matches what was actually
+// edited) title/description and the same comments, so the file on disk matches what was actually
 // dispatched to the agent.
 export function updateIssueFile(
   destination: string,
@@ -101,6 +120,11 @@ export function updateIssueFile(
   description: string,
   imagePaths: string[],
   parcelId: number,
+  dictionary: Dictionary = {},
 ): void {
-  writeFileSync(destination, buildIssueFileBody(manifest, title, description, imagePaths, parcelId), 'utf-8');
+  writeFileSync(
+    destination,
+    buildIssueFileBody(manifest, title, description, imagePaths, parcelId, localTransform(dictionary)),
+    'utf-8',
+  );
 }

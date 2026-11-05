@@ -116,6 +116,47 @@ describe('extractIssue', () => {
   });
 });
 
+describe('extractIssue comments', () => {
+  const manifest = {
+    issueId: '1',
+    issueIid: '42',
+    issueTitle: 'Fix it',
+    issueDescription: 'Details',
+    issueComments: [
+      { author: '{{PERSON}}', createdAt: '2026-11-01T10:00:00Z', body: '{{SECRET}} must also cover refunds' },
+      { author: 'qa', createdAt: '2026-11-02T09:00:00Z', body: 'Looks good now' },
+    ],
+    projectId: 173,
+    branch: 'user-20260914-42',
+    createdAt: '2026-09-14T10:00:00.000Z',
+    contentHash: 'deadbeef',
+    schemaVersion: 1,
+  };
+
+  it('writes de-anonymized comments to ISSUE.md, oldest first', () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-issue-comments-test-'));
+    const result = extractIssue(projectPath, manifest, { 'Ivan Petrov': '{{PERSON}}', 'real-value': '{{SECRET}}' }, 7);
+
+    const written = readFileSync(result.path, 'utf-8');
+    assert.match(written, /## Comments/);
+    assert.match(written, /### Ivan Petrov, 2026-11-01T10:00:00Z\n\nreal-value must also cover refunds/);
+    assert.ok(written.indexOf('### Ivan Petrov') < written.indexOf('### qa, 2026-11-02T09:00:00Z'));
+    assert.doesNotMatch(written, /\{\{SECRET\}\}/);
+  });
+
+  it('updateIssueFile keeps the comments section', () => {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-issue-comments-update-test-'));
+    const result = extractIssue(projectPath, manifest, {}, 7);
+
+    updateIssueFile(result.path, manifest, 'Edited title', 'Edited description', result.imagePaths, 7);
+
+    const written = readFileSync(result.path, 'utf-8');
+    assert.match(written, /Edited description/);
+    assert.match(written, /## Comments/);
+    assert.match(written, /Looks good now/);
+  });
+});
+
 describe('extractIssue path containment', () => {
   it('rejects an asset path that escapes the project dir and writes nothing', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'issue-escape-'));

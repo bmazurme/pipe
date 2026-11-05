@@ -9,7 +9,7 @@ import { logFilePreview } from '../dryRunPreview.js';
 import { loadOptionalDictionary, remoteTransform } from '../dictionary.js';
 import { encryptBuffer } from '../encryption.js';
 import { getCurrentBranch } from '../gitStatus.js';
-import { getIssue, getIssueImages, type GitlabIssue } from '../gitlabClient.js';
+import { getIssue, getIssueImages, listIssueNotes, type GitlabIssue, type GitlabNote } from '../gitlabClient.js';
 import { buildIssueArchive } from '../issuePack.js';
 import { resolveFromRoot } from '../paths.js';
 import { readAndTransform } from '../pack.js';
@@ -66,8 +66,31 @@ export async function buildAndUploadIssueParcel(
   const files = readAndTransform(project.path, relPaths, transform);
   const issueTitle = transform(issue.title);
   const issueDescription = transform(issue.description ?? '');
+
+  // The issue's comments travel with it, as in reports' subscription/push.ts: a clarification or a screenshot in a
+  // comment is often the part of the task that matters. A failed notes request costs only the comments, not the push.
+  let notes: GitlabNote[] = [];
+  if (config.gitlab?.apiUrl) {
+    try {
+      notes = await listIssueNotes(config.gitlab.apiUrl, gitlabToken, issue.project_id, issue.iid);
+    } catch (error) {
+      log.warn(`Could not fetch the comments of issue #${issue.iid} — pushing without them:`, error);
+    }
+  }
+  const issueComments = notes.map((note) => ({
+    author: transform(note.author?.name || note.author?.username || ''),
+    createdAt: note.created_at,
+    body: transform(note.body),
+  }));
+
+  // Image refs come from the real markdown, not the anonymized one — a substitution could alter an /uploads/... path.
   const images = config.gitlab?.apiUrl
-    ? await getIssueImages(config.gitlab.apiUrl, gitlabToken, issue.description ?? '', issue.project_id)
+    ? await getIssueImages(
+        config.gitlab.apiUrl,
+        gitlabToken,
+        [issue.description ?? '', ...notes.map((note) => note.body)].join('\n\n'),
+        issue.project_id,
+      )
     : [];
 
   // Images never go through scanForLeaks — it operates on text content, not
@@ -81,6 +104,7 @@ export async function buildAndUploadIssueParcel(
     ...files.map((f) => ({ source: f.relPath, content: f.content })),
     { source: 'issue title', content: issueTitle },
     { source: 'issue description', content: issueDescription },
+    ...issueComments.map((comment, index) => ({ source: `issue comment ${index + 1}`, content: comment.body })),
   ]);
   if (leaks.length > 0) {
     log.warn(formatLeakFindings(leaks));
@@ -98,6 +122,7 @@ export async function buildAndUploadIssueParcel(
   if (options.dryRun) {
     log.info(`Dry run for issue #${issue.iid} (project ${issue.project_id}) — nothing will be uploaded.`);
     log.info(`Files: ${files.length}`);
+    log.info(`Comments: ${issueComments.length}`);
     log.info(`Images: ${images.length}`);
     log.info(`Parcel: ${filename}`);
     log.info(shouldEncrypt ? 'Encrypted: yes' : 'Encrypted: no');
@@ -112,6 +137,7 @@ export async function buildAndUploadIssueParcel(
       issueIid: String(issue.iid),
       issueTitle,
       issueDescription,
+      ...(issueComments.length > 0 ? { issueComments } : {}),
       projectId: issue.project_id,
       branch,
       createdAt: new Date().toISOString(),
