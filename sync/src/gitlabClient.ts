@@ -2,19 +2,21 @@ import {
   getIssue,
   getIssueImages as sharedGetIssueImages,
   listAssignedOpenIssues,
+  listIssueNotes,
   MAX_TOTAL_IMAGE_BYTES,
   type GitlabIssue,
+  type GitlabNote,
   type IssueImage,
 } from '@pipe/protocol';
 import { log } from './log.js';
 
-// getIssue/listAssignedOpenIssues/gitlabFetch/GitlabIssue are re-exported
+// getIssue/listAssignedOpenIssues/listIssueNotes/GitlabIssue/GitlabNote are re-exported
 // as-is (IMPROVEMENTS_TECH.md 2.1) — their signatures already matched the
 // shared module exactly (explicit apiUrl/token params, no config of sync's
 // own to thread through), so there's nothing sync-specific left to wrap
 // around them. getIssueImages is shared too; the only sync-specific part
 // left is wording its warnings for sync's own log.
-export { getIssue, listAssignedOpenIssues, type GitlabIssue, type IssueImage };
+export { getIssue, listAssignedOpenIssues, listIssueNotes, type GitlabIssue, type GitlabNote, type IssueImage };
 
 export function getIssueImages(apiUrl: string, privateToken: string, description: string, projectId?: string | number): Promise<IssueImage[]> {
   return sharedGetIssueImages(apiUrl, privateToken, description, {

@@ -185,3 +185,119 @@ describe('buildAndUploadIssueParcel', () => {
     rmSync(projectPath, { recursive: true, force: true });
   });
 });
+
+describe('buildAndUploadIssueParcel — issue comments', () => {
+  const gitlabConfig: SyncConfig = { ...config, gitlab: { apiUrl: 'https://gitlab.example.com/api/v4' } };
+  const PNG_BYTES = new Uint8Array([1, 2, 3, 4]);
+
+  // Routes the notes request, image downloads and the bridge upload; `notes` is what the notes API answers
+  // (a Response for a failure), and the uploaded parcel is handed back for inspection.
+  function mockFetch(notes: unknown[] | Response): { uploaded: () => Buffer | undefined; urls: string[] } {
+    let uploadedBuffer: Buffer | undefined;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      urls.push(url);
+      if (url.includes('/issues/628/notes')) {
+        return notes instanceof Response ? notes : new Response(JSON.stringify(notes), { status: 200 });
+      }
+      if (url.includes('/uploads/')) {
+        return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
+      }
+      if (url.includes('/api/v1/storage')) {
+        const body = init?.body as unknown as { get(name: string): unknown };
+        uploadedBuffer = Buffer.from(await (body.get('file') as Blob).arrayBuffer());
+        return new Response(
+          JSON.stringify({ id: 1, originalName: '173-628.subscription.zip', mimeType: 'application/zip', size: uploadedBuffer.length, createdAt: new Date().toISOString() }),
+          { status: 201 },
+        );
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch;
+    return { uploaded: () => uploadedBuffer, urls };
+  }
+
+  function makeProjectDir(prefix: string): string {
+    const projectPath = mkdtempSync(path.join(tmpdir(), prefix));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'export const a = 1;');
+    return projectPath;
+  }
+
+  it('anonymizes the non-system notes into issueComments, oldest first, and takes images from them', async () => {
+    const projectPath = makeProjectDir('sync-cli-push-issue-comments-');
+    const dictionaryPath = path.join(projectPath, 'dict.json');
+    writeFileSync(dictionaryPath, JSON.stringify({ ClearingIdentifier: '{{ENTITY}}', 'Ivan Petrov': '{{PERSON}}' }));
+
+    const fetchMock = mockFetch([
+      { id: 1, body: 'ClearingIdentifier must also cover refunds', system: false, created_at: '2026-11-01T10:00:00Z', author: { name: 'Ivan Petrov' } },
+      { id: 2, body: 'changed the description', system: true, created_at: '2026-11-01T11:00:00Z', author: { name: 'Ivan Petrov' } },
+      { id: 3, body: 'Screenshot: ![shot](/uploads/abc/shot.png)', system: false, created_at: '2026-11-02T09:00:00Z', author: { username: 'qa' } },
+    ]);
+
+    const project = makeProject(projectPath, { dictionary: dictionaryPath, include: ['**/*.ts'] });
+    const result = await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token');
+
+    assert.ok(result);
+    const { manifest, assets } = extractIssueArchive(fetchMock.uploaded()!);
+    assert.deepEqual(manifest.issueComments, [
+      { author: '{{PERSON}}', createdAt: '2026-11-01T10:00:00Z', body: '{{ENTITY}} must also cover refunds' },
+      { author: 'qa', createdAt: '2026-11-02T09:00:00Z', body: 'Screenshot: ![shot](/uploads/abc/shot.png)' },
+    ]);
+    assert.deepEqual(
+      assets.map((asset) => asset.relPath),
+      ['issue-images/shot.png'],
+    );
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('leaves issueComments out when the issue has no comments', async () => {
+    const projectPath = makeProjectDir('sync-cli-push-issue-no-comments-');
+    const fetchMock = mockFetch([]);
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token');
+
+    const { manifest } = extractIssueArchive(fetchMock.uploaded()!);
+    assert.equal('issueComments' in manifest, false);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('--strict aborts on a leak found in a comment', async () => {
+    const projectPath = makeProjectDir('sync-cli-push-issue-comment-leak-');
+    const fetchMock = mockFetch([
+      { id: 1, body: 'ping oncall@acme-corp.example', system: false, created_at: '2026-11-01T10:00:00Z', author: { name: 'x' } },
+    ]);
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+    try {
+      await assert.rejects(
+        buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token', { strict: true }),
+        /--strict/,
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.ok(warnings.some((line) => line.includes('issue comment 1')));
+    assert.equal(fetchMock.uploaded(), undefined);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('pushes without comments when the notes request fails', async () => {
+    const projectPath = makeProjectDir('sync-cli-push-issue-notes-fail-');
+    const fetchMock = mockFetch(new Response('boom', { status: 500 }));
+
+    const project = makeProject(projectPath, { include: ['**/*.ts'] });
+    const result = await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token');
+
+    assert.ok(result);
+    const { manifest } = extractIssueArchive(fetchMock.uploaded()!);
+    assert.equal(manifest.issueComments, undefined);
+
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+});
