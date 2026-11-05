@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ArrowUpRightFromSquare, BookOpen, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowUpRightFromSquare, MagicWand, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Link } from 'react-router-dom';
 import { Dialog } from '../../shared/ui/Dialog';
 import { LogoGithub } from '@gravity-ui/icons';
 
@@ -8,15 +9,11 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
   getErrorMessage,
   LabProject,
-  useAskLabKnowledgeMutation,
   useCheckLabProjectMutation,
   useCreateLabProjectMutation,
   useDeleteLabProjectMutation,
-  useGetLabKnowledgeStatusQuery,
   useListLabProjectsQuery,
-  useReindexLabKnowledgeMutation,
   useUpdateLabProjectMutation,
-  type LabKnowledgeMatch,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
@@ -70,47 +67,6 @@ export function ProjectsTab() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<LabProject | null>(null);
-
-  const [knowledgeProject, setKnowledgeProject] = useState<LabProject | null>(null);
-  const [question, setQuestion] = useState('');
-  const [matches, setMatches] = useState<LabKnowledgeMatch[] | null>(null);
-  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
-  const { data: knowledgeStatus, isFetching: isStatusLoading } = useGetLabKnowledgeStatusQuery(knowledgeProject?.id ?? 0, {
-    skip: knowledgeProject === null,
-  });
-  const [reindex, { isLoading: isReindexing }] = useReindexLabKnowledgeMutation();
-  const [ask, { isLoading: isAsking }] = useAskLabKnowledgeMutation();
-
-  const openKnowledge = (project: LabProject) => {
-    setKnowledgeProject(project);
-    setQuestion('');
-    setMatches(null);
-    setKnowledgeError(null);
-  };
-
-  const closeKnowledge = () => setKnowledgeProject(null);
-
-  const handleReindex = async () => {
-    if (!knowledgeProject) return;
-    setKnowledgeError(null);
-
-    try {
-      await reindex(knowledgeProject.id).unwrap();
-    } catch (err) {
-      setKnowledgeError(errorReason(err, 'Не удалось переиндексировать'));
-    }
-  };
-
-  const handleAsk = async () => {
-    if (!knowledgeProject || !question.trim()) return;
-    setKnowledgeError(null);
-
-    try {
-      setMatches(await ask({ id: knowledgeProject.id, question: question.trim() }).unwrap());
-    } catch (err) {
-      setKnowledgeError(errorReason(err, 'Не удалось найти ответ'));
-    }
-  };
 
   const handleCreate = async () => {
     if (!form) return;
@@ -253,9 +209,9 @@ export function ProjectsTab() {
             <Button view="outlined" size="s" loading={isChecking && checkingId === project.id} onClick={() => void handleCheck(project)}>
               Проверить
             </Button>
-            <Button view="flat" size="s" aria-label={`База знаний: ${project.name}`} title="Спросить по документам проекта" onClick={() => openKnowledge(project)}>
-              <Icon data={BookOpen} size={16} />
-            </Button>
+            <Link to={`/rag?project=${project.id}`} aria-label={`База знаний: ${project.name}`} title="Спросить по документам проекта (RAG)">
+              <Icon data={MagicWand} size={16} />
+            </Link>
             <Button view="flat" size="s" aria-label={`Изменить: ${project.name}`} title="Изменить проект или обновить токен" onClick={() => startEdit(project)}>
               <Icon data={Pencil} size={16} />
             </Button>
@@ -314,69 +270,6 @@ export function ProjectsTab() {
           onClickButtonCancel={closeEdit}
           onClickButtonApply={() => void handleSaveEdit()}
         />
-      </Dialog>
-
-      <Dialog open={knowledgeProject !== null} onClose={closeKnowledge} maxWidth="m" aria-labelledby="lab-knowledge-title">
-        <Dialog.Header caption={`База знаний: ${knowledgeProject?.name ?? ''}`} id="lab-knowledge-title" />
-        <Dialog.Body>
-          {knowledgeProject && (
-            <div className={styles.form}>
-              <Text variant="caption-2" color="secondary">
-                Вопрос по markdown-файлам проекта (решения, спецификации, README) — ответ приходит за секунды, без запуска worker. Поиск по словам и их весам, а не по смыслу фразы: короткий, точный вопрос работает лучше длинного.
-              </Text>
-              <div className={styles.toolbar}>
-                <Text variant="body-2">
-                  {isStatusLoading
-                    ? 'Загрузка…'
-                    : knowledgeStatus
-                      ? `Проиндексировано: ${knowledgeStatus.files} файлов, ${knowledgeStatus.chunks} фрагментов`
-                      : ''}
-                </Text>
-                <Button view="outlined" size="s" loading={isReindexing} onClick={() => void handleReindex()}>
-                  Переиндексировать
-                </Button>
-              </div>
-              {knowledgeStatus?.chunks === 0 && (
-                <Text variant="caption-2" color="warning">
-                  Пока ничего не проиндексировано — нажмите «Переиндексировать».
-                </Text>
-              )}
-              <TextInput
-                label="Вопрос"
-                value={question}
-                onUpdate={setQuestion}
-                controlProps={{
-                  onKeyDown: (event) => {
-                    if (event.key === 'Enter') void handleAsk();
-                  },
-                }}
-              />
-              <Button view="action" size="s" loading={isAsking} disabled={!question.trim()} onClick={() => void handleAsk()}>
-                Спросить
-              </Button>
-              {knowledgeError && <Alert theme="danger" view="filled" message={knowledgeError} />}
-              {matches && matches.length === 0 && (
-                <Text variant="caption-2" color="secondary">
-                  Ничего не найдено — попробуйте другие слова.
-                </Text>
-              )}
-              {matches?.map((match, index) => (
-                <div key={index} className={styles.row}>
-                  <div className={styles.rowMain}>
-                    <Text variant="caption-2" color="secondary">
-                      {match.path}
-                      {match.heading && ` · ${match.heading}`}
-                    </Text>
-                    <Text variant="body-2" style={{ whiteSpace: 'pre-wrap' }}>
-                      {match.content}
-                    </Text>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Dialog.Body>
-        <Dialog.Footer textButtonCancel="Закрыть" onClickButtonCancel={closeKnowledge} />
       </Dialog>
 
       <Dialog open={form !== null} onClose={() => setForm(null)} maxWidth="s" aria-labelledby="lab-project-title">

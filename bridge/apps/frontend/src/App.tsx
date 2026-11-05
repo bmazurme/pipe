@@ -72,6 +72,9 @@ const VpnPage = lazy(() =>
 const LabPage = lazy(() =>
   import('./pages/LabPage').then((m) => ({ default: m.LabPage })),
 );
+const RagPage = lazy(() =>
+  import('./pages/RagPage').then((m) => ({ default: m.RagPage })),
+);
 const NotFoundPage = lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
 );
@@ -147,6 +150,7 @@ export function App() {
                   }
                 />
                 <Route path="/lab" element={<LabPage />} />
+                <Route path="/rag" element={<RagPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Route>

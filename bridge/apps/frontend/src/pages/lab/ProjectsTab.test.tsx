@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 
 import { ProjectsTab } from './ProjectsTab';
@@ -29,7 +30,9 @@ function renderWith(tokenExpiresAt: string | null) {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <ProjectsTab />
+        <MemoryRouter>
+          <ProjectsTab />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );
