@@ -237,6 +237,20 @@
   flex: none;
 }
 
+.encryptSection {
+  /* Otherwise it sits flush against the log box right above it, with no visible seam between them. */
+  margin-top: 10px;
+}
+
+.footerActions {
+  /* Gravity's own footer wrapper has no gap between arbitrary children — left bare, two adjacent
+     buttons (e.g. "Обсудить в чате" and "Удалить") touch with no breathing room between them. */
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .logsSection {
   display: flex;
   flex: 1 1 auto;

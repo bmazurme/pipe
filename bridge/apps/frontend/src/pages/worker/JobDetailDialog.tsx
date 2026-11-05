@@ -228,16 +228,18 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         })}
         onClickButtonCancel={onClose}
       >
-        <ExtendJobButton job={job} />
-        <CancelJobButton job={job} />
-        <RetryJobButton job={job} />
-        <DiscussInChatButton job={job} />
-        {canDelete && (
-          <Button view="outlined-danger" onClick={() => setConfirmingDelete(true)}>
-            <Icon data={TrashBin} size={16} />
-            Удалить
-          </Button>
-        )}
+        <div className={styles.footerActions}>
+          <ExtendJobButton job={job} />
+          <CancelJobButton job={job} />
+          <RetryJobButton job={job} />
+          <DiscussInChatButton job={job} />
+          {canDelete && (
+            <Button view="outlined-danger" onClick={() => setConfirmingDelete(true)}>
+              <Icon data={TrashBin} size={16} />
+              Удалить
+            </Button>
+          )}
+        </div>
       </Dialog.Footer>
 
       <Dialog
