@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
+import { CircleCheckFill, CircleStopFill, CircleXmarkFill, TrashBin } from '@gravity-ui/icons';
+import { Alert, Button, Disclosure, Icon, Label, Loader, Text, TextArea } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import {
@@ -30,6 +30,15 @@ import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL
 function describeTimeout(seconds: number): string {
   return seconds % 3600 === 0 ? `${seconds / 3600} ч` : `${Math.round(seconds / 60)} мин`;
 }
+
+// A small glyph next to the outcome text, in the status's own color — so "done" vs "failed" vs
+// "stopped" reads at a glance instead of only from the word itself. Nothing while the job is active:
+// the loader already marks that.
+const OUTCOME_ICON: Partial<Record<string, { icon: typeof CircleCheckFill; color: string }>> = {
+  succeeded: { icon: CircleCheckFill, color: 'var(--g-color-text-success)' },
+  failed: { icon: CircleXmarkFill, color: 'var(--g-color-text-danger)' },
+  cancelled: { icon: CircleStopFill, color: 'var(--g-color-text-warning)' },
+};
 
 interface JobDetailDialogProps {
   jobId: number;
@@ -84,6 +93,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
 
   const duration = jobDuration(job, now);
   const stage = describeStage(job, now);
+  const outcomeIcon = !jobIsActive ? OUTCOME_ICON[job.status] : undefined;
   const fields: { label: string; value: string }[] = [
     { label: 'Worker', value: job.workerName ?? '—' },
     job.contextName ? { label: 'Контекст', value: job.contextName } : null,
@@ -161,7 +171,9 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
             )}
           </div>
           <Text color="secondary" className={styles.detailStage}>
-            {jobIsActive && <Loader size="s" />} {stage ?? describeOutcome(job.status)}
+            {jobIsActive && <Loader size="s" />}
+            {outcomeIcon && <Icon data={outcomeIcon.icon} size={14} style={{ color: outcomeIcon.color }} />}
+            {stage ?? describeOutcome(job.status)}
           </Text>
           {fields.length > 0 && (
             <dl className={styles.detailFields}>
@@ -183,24 +195,26 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         <JobLogs jobId={job.id} logs={job.logs ?? ''} active={jobIsActive} />
 
         {job.status === 'succeeded' && (
-          <div className={styles.encryptSection}>
-            <Text variant="body-2" color="secondary">
-              Публичный ключ получателя — чтобы скачать результат зашифрованным, а не в открытом виде
-            </Text>
-            <ParcelKeyPicker keys={parcelKeys} onPick={setEncryptKey} />
-            <div className={styles.encryptRow}>
-              <TextArea value={encryptKey} onUpdate={setEncryptKey} rows={2} placeholder="-----BEGIN PUBLIC KEY-----" />
-              <Button
-                view="outlined"
-                loading={isEncrypting}
-                disabled={!encryptKey.trim()}
-                onClick={() => void handleDownloadEncrypted()}
-              >
-                Скачать зашифрованным
-              </Button>
+          <Disclosure summary="Скачать зашифрованным" className={styles.encryptSection}>
+            <div className={styles.encryptBody}>
+              <Text variant="body-2" color="secondary">
+                Публичный ключ получателя — результат будет зашифрован им, а не передан в открытом виде
+              </Text>
+              <ParcelKeyPicker keys={parcelKeys} onPick={setEncryptKey} />
+              <div className={styles.encryptRow}>
+                <TextArea value={encryptKey} onUpdate={setEncryptKey} rows={2} placeholder="-----BEGIN PUBLIC KEY-----" />
+                <Button
+                  view="outlined"
+                  loading={isEncrypting}
+                  disabled={!encryptKey.trim()}
+                  onClick={() => void handleDownloadEncrypted()}
+                >
+                  Скачать зашифрованным
+                </Button>
+              </div>
+              {encryptError && <Alert theme="danger" view="filled" message={encryptError} />}
             </div>
-            {encryptError && <Alert theme="danger" view="filled" message={encryptError} />}
-          </div>
+          </Disclosure>
         )}
 
         {error && <Alert theme="danger" view="filled" message={error} className={styles.detailError} />}
