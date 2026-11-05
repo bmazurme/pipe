@@ -71,20 +71,23 @@ export function buildMenuItems(
     }
   });
 
-  return [
-    ...items,
-    { id: 'soon-divider', title: '', type: 'divider' as const },
-    ...SOON_SERVICES.map((item) => ({
-      id: item.id,
-      icon: item.icon,
-      title: soonTitle(item.title),
-      tooltipText: `${item.title} — скоро`,
-      className: 'ntlstl-soon-item',
-      // No handler, so tell assistive tech the row is inert rather than
-      // leaving it announced as a live button that does nothing.
-      menuItemAriaProps: { 'aria-disabled': true },
-    })),
-  ];
+  // No trailing divider when nothing is announced — an empty SOON_SERVICES must not leave a dangling separator.
+  return SOON_SERVICES.length === 0
+    ? items
+    : [
+        ...items,
+        { id: 'soon-divider', title: '', type: 'divider' as const },
+        ...SOON_SERVICES.map((item) => ({
+          id: item.id,
+          icon: item.icon,
+          title: soonTitle(item.title),
+          tooltipText: `${item.title} — скоро`,
+          className: 'ntlstl-soon-item',
+          // No handler, so tell assistive tech the row is inert rather than
+          // leaving it announced as a live button that does nothing.
+          menuItemAriaProps: { 'aria-disabled': true },
+        })),
+      ];
 }
 
 export function buildBurgerItems(
@@ -124,16 +127,18 @@ export function buildBurgerItems(
     }
   });
 
-  return [
-    ...items,
-    { id: 'soon-divider', title: '', type: 'divider' as const },
-    ...SOON_SERVICES.map((item) => ({
-      id: item.id,
-      icon: item.icon,
-      title: soonTitle(item.title),
-      // Tapping an unbuilt service otherwise dismisses the whole menu and
-      // leaves the user on the same screen, looking like a dropped tap.
-      closeMenuOnClick: false,
-    })),
-  ];
+  return SOON_SERVICES.length === 0
+    ? items
+    : [
+        ...items,
+        { id: 'soon-divider', title: '', type: 'divider' as const },
+        ...SOON_SERVICES.map((item) => ({
+          id: item.id,
+          icon: item.icon,
+          title: soonTitle(item.title),
+          // Tapping an unbuilt service otherwise dismisses the whole menu and
+          // leaves the user on the same screen, looking like a dropped tap.
+          closeMenuOnClick: false,
+        })),
+      ];
 }

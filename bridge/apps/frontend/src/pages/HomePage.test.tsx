@@ -38,13 +38,12 @@ describe('HomePage', () => {
     expect(screen.queryByText(/слева/)).toBeNull();
   });
 
-  it('lists unbuilt services without making them look openable', () => {
+  it('has nothing marked unbuilt right now — RAG graduated to a real page, same as Lab did before it', () => {
     renderHome();
 
-    // Only RAG is announced; Lab is a real page now.
-    expect(screen.getAllByText('скоро')).toHaveLength(1);
-    expect(screen.queryByRole('link', { name: /RAG/ })).toBeNull();
+    expect(screen.queryAllByText('скоро')).toHaveLength(0);
+    expect(screen.getByRole('link', { name: /RAG/ })).toHaveAttribute('href', '/rag');
+    expect(screen.getByRole('link', { name: /RAG/ })).not.toHaveTextContent('скоро');
     expect(screen.getByRole('link', { name: /Lab/ })).toHaveAttribute('href', '/lab');
-    expect(screen.getByRole('link', { name: /Lab/ })).not.toHaveTextContent('скоро');
   });
 });

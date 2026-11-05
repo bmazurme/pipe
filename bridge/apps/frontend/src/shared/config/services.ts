@@ -191,6 +191,14 @@ export const SERVICES: ServiceLink[] = [
     path: '/lab',
     group: 'work',
   },
+  {
+    id: 'rag',
+    title: 'RAG',
+    description: 'Поиск по своим документам с ответами на естественном языке.',
+    icon: MagicWand,
+    path: '/rag',
+    group: 'agent',
+  },
 ];
 
 /** The services an account can actually use: owner-only ones are dropped once it is known not to be the owner. */
@@ -198,15 +206,8 @@ export function visibleServices(isOwner?: boolean): ServiceLink[] {
   return isOwner === false ? SERVICES.filter((service) => !service.ownerOnly) : SERVICES;
 }
 
-/** Announced but not built yet — rendered inert wherever services are listed. */
-export const SOON_SERVICES: Omit<ServiceLink, 'path' | 'group'>[] = [
-  {
-    id: 'rag',
-    title: 'RAG',
-    description: 'Поиск по своим документам с ответами на естественном языке.',
-    icon: MagicWand,
-  },
-];
+/** Announced but not built yet — rendered inert wherever services are listed. None right now. */
+export const SOON_SERVICES: Omit<ServiceLink, 'path' | 'group'>[] = [];
 
 export const HOME_LINK = {
   id: 'home',

@@ -10,13 +10,14 @@ const ids = (items: { id: string; type?: string }[]) =>
 
 describe('the sidebar sections', () => {
   it('puts Home first, then the AI-agent pages, data, work tools and the operations pages last', () => {
-    expect(ids(buildMenuItems('/', navigate)).filter((id) => id !== 'rag')).toEqual([
+    expect(ids(buildMenuItems('/', navigate))).toEqual([
       'home',
       'worker',
       'chat',
       'improve',
       'context',
       'questions',
+      'rag',
       'storage',
       'purge',
       'keys',
@@ -32,15 +33,15 @@ describe('the sidebar sections', () => {
     ]);
   });
 
-  it('separates the sections with dividers, and the announced pages with one more', () => {
+  it('separates the sections with dividers, with nothing announced right now so no trailing one', () => {
     const items = buildMenuItems('/', navigate);
     const dividers = items.filter((item) => item.type === 'divider');
 
-    // Home | agent | data | work | system | soon
-    expect(dividers).toHaveLength(NAV_GROUP_ORDER.length + 1);
+    // Home | agent | data | work | system
+    expect(dividers).toHaveLength(NAV_GROUP_ORDER.length);
     expect(items[0].id).toBe('home');
     expect(items[1].type).toBe('divider');
-    expect(items.at(-1)?.id).toBe('rag');
+    expect(items.at(-1)?.id).toBe('vpn');
   });
 
   it('lists every service exactly once, whatever its section', () => {
@@ -51,7 +52,7 @@ describe('the sidebar sections', () => {
   it('the burger shows the same order and the same dividers', () => {
     expect(ids(buildBurgerItems('/', navigate))).toEqual(ids(buildMenuItems('/', navigate)));
     expect(buildBurgerItems('/', navigate).filter((item) => item.type === 'divider')).toHaveLength(
-      NAV_GROUP_ORDER.length + 1,
+      NAV_GROUP_ORDER.length,
     );
   });
 
@@ -118,6 +119,16 @@ describe('the owner-only pages', () => {
 
     expect(aside).toMatchObject({ href: '/lab' });
     expect(render(<>{aside?.title}</>).container).toHaveTextContent('Lab');
+    expect(screen.queryByText('скоро')).toBeNull();
+    expect(burger?.onItemClick).toBeTypeOf('function');
+  });
+
+  it('lists RAG as a plain link too, no longer announced as "скоро"', () => {
+    const aside = buildMenuItems('/', navigate).find((item) => item.id === 'rag');
+    const burger = buildBurgerItems('/', navigate).find((item) => item.id === 'rag');
+
+    expect(aside).toMatchObject({ href: '/rag' });
+    expect(render(<>{aside?.title}</>).container).toHaveTextContent('RAG');
     expect(screen.queryByText('скоро')).toBeNull();
     expect(burger?.onItemClick).toBeTypeOf('function');
   });
