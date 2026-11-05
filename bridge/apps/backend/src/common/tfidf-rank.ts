@@ -11,10 +11,12 @@
 // before this corpus could grow to true "many documents" scale.
 
 // Unicode letters/digits only, lowercased; 1-character tokens are almost always noise at this corpus size.
+// The match array is typed explicitly: `match()` with a global flag returns `RegExpMatchArray | null`, which an
+// inferred `?? []` has, on at least one combination of TypeScript/lib versions seen in CI, collapsed to `never[]`.
 function tokenize(text: string): string[] {
-  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter(
-    (token) => token.length > 1,
-  );
+  const matches: string[] = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+  return matches.filter((token) => token.length > 1);
 }
 
 function termFrequencies(tokens: string[]): Map<string, number> {
