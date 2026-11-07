@@ -7,7 +7,7 @@ export const DEFINITION_OF_DONE = `## Definition of done (added automatically)
 
 CI will build, lint and test this change exactly like a person's, and a red CI makes the pull request useless. Before you finish, run the commands for every package you touched (see CLAUDE.md for the full list) and fix what they report.
 
-**Dependencies are not installed.** The repository arrives as a bare snapshot with no \`node_modules\`: run \`npm ci\` first, once, from the folder the commands below name (\`bridge/\` for the bridge backend and frontend, the repository root for worker, sync, harness and packages/protocol, \`reports/\` for reports). It takes a few minutes and works through the proxy. A shell is available: do not skip the checks because they look slow, and never say a check passed that you did not run.
+**Dependencies are not installed.** The repository arrives as a bare snapshot with no \`node_modules\`: run \`npm install\` first, once, from the folder the commands below name (the snapshot has no lockfile, so install resolves from each \`package.json\`; any lockfile it writes is left out of the result automatically) (\`bridge/\` for the bridge backend and frontend, the repository root for worker, sync, harness and packages/protocol, \`reports/\` for reports). It takes a few minutes and works through the proxy. A shell is available: do not skip the checks because they look slow, and never say a check passed that you did not run.
 
 
 - **bridge backend** (\`bridge/apps/backend\`): \`npx eslint --fix <the files you changed>\` (CI fails on a single prettier formatting error), \`npx tsc --noEmit -p tsconfig.json\`, then \`npx jest <the folder you changed>\`.

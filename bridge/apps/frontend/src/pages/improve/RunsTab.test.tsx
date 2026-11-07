@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
+import { MemoryRouter } from 'react-router-dom';
 
 import { RunsTab } from './RunsTab';
 import { store } from '../../store';
@@ -38,7 +39,9 @@ function renderTab() {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <RunsTab />
+        <MemoryRouter>
+          <RunsTab />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );
@@ -56,6 +59,7 @@ beforeEach(() => {
 
       if (request.method !== 'GET') calls.push(`${request.method} ${path}`);
       if (path === 'improve/runs' && request.method === 'GET') return json(runs);
+      if (path === 'worker/jobs/1') return json({ id: 1, model: 'sonnet', status: 'running', logs: '', createdAt: new Date().toISOString() });
       if (path === 'improve/runs/7/cancel') return cancelFails ? json({ message: 'conflict' }, 409) : json({ ...RUN, status: 'cancelled' });
 
       return json([]);
@@ -104,5 +108,24 @@ describe('improve RunsTab stop', () => {
     await user.click(await screen.findByRole('button', { name: 'Остановить' }));
 
     expect(await screen.findByText(/Не удалось остановить|conflict/)).toBeInTheDocument();
+  });
+});
+
+describe('improve RunsTab job dialog', () => {
+  it("opens the run's worker job in place", async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(await screen.findByRole('button', { name: 'Запуск #1' }));
+
+    expect(await screen.findByText('Задача #1')).toBeInTheDocument();
+  });
+
+  it('shows no job button for a run that has no job yet', async () => {
+    runs = [{ ...RUN, jobId: null, status: 'preparing' }];
+    renderTab();
+
+    await screen.findByText(/Задача/);
+    expect(screen.queryByRole('button', { name: /^Запуск #/ })).not.toBeInTheDocument();
   });
 });

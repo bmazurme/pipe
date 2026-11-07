@@ -31,9 +31,12 @@ describe('withDefinitionOfDone', () => {
   });
 
   it('tells the worker to install dependencies first and not to claim unrun checks', () => {
-    // The sandbox starts from a bare snapshot; without `npm ci` every lint/test command fails
-    // and the worker used to give up and open an unchecked pull request.
-    expect(DEFINITION_OF_DONE).toContain('npm ci');
+    // The sandbox starts from a bare snapshot; without an install every lint/test command fails
+    // and the worker used to give up and open an unchecked pull request. The snapshot has no
+    // lockfile (parcel.ts excludes them), so `npm ci` would refuse to run: it must be `npm install`.
+    expect(DEFINITION_OF_DONE).toContain('npm install');
+    expect(DEFINITION_OF_DONE).not.toContain('`npm ci`');
+    expect(DEFINITION_OF_DONE).toContain('no lockfile');
     expect(DEFINITION_OF_DONE).toContain('node_modules');
     expect(DEFINITION_OF_DONE).toContain(
       'never say a check passed that you did not run',
