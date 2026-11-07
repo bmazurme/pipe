@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { assertSafeTaskBranch, commitAll } from './gitWorktree.js';
+import { assertSafeTaskBranch, checkoutTaskBranch, commitAll } from './gitWorktree.js';
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -91,6 +91,107 @@ describe('assertSafeTaskBranch', () => {
   for (const branch of ['task/12-3', 'feature/x']) {
     it(`accepts ${JSON.stringify(branch)}`, () => {
       assert.doesNotThrow(() => assertSafeTaskBranch(branch, 'develop'));
+    });
+  }
+});
+
+describe('checkoutTaskBranch', () => {
+  function out(cwd: string, args: string[]): string {
+    return execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim();
+  }
+
+  function currentBranch(dir: string): string {
+    return out(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  }
+
+  // A bare "origin" plus a clone of it, so fetch/merge have something real to talk to.
+  function cloneWithOrigin(): { origin: string; clone: string } {
+    const seed = initRepo();
+    git(seed, ['branch', '-M', 'main']);
+    const origin = mkdtempSync(path.join(tmpdir(), 'sync-cli-gitworktree-origin-'));
+    git(origin, ['clone', '--quiet', '--bare', seed, '.']);
+    const clone = mkdtempSync(path.join(tmpdir(), 'sync-cli-gitworktree-clone-'));
+    git(clone, ['clone', '--quiet', origin, '.']);
+    git(clone, ['config', 'user.email', 'test@example.com']);
+    git(clone, ['config', 'user.name', 'Test']);
+    return { origin, clone };
+  }
+
+  it('creates the branch from HEAD when origin has no such branch', () => {
+    const dir = initRepo();
+    git(dir, ['branch', '-M', 'main']);
+    const head = out(dir, ['rev-parse', 'HEAD']);
+
+    checkoutTaskBranch(dir, 'task/1-2', 'main');
+
+    assert.equal(currentBranch(dir), 'task/1-2');
+    assert.equal(out(dir, ['rev-parse', 'HEAD']), head);
+  });
+
+  it('reuses an existing local branch instead of recreating it', () => {
+    const dir = initRepo();
+    git(dir, ['branch', '-M', 'main']);
+    git(dir, ['checkout', '--quiet', '-b', 'task/1-2']);
+    writeFileSync(path.join(dir, 'task.txt'), 'x');
+    git(dir, ['add', '-A']);
+    git(dir, ['commit', '-m', 'task work', '--quiet']);
+    const taskHead = out(dir, ['rev-parse', 'HEAD']);
+    git(dir, ['checkout', '--quiet', 'main']);
+
+    checkoutTaskBranch(dir, 'task/1-2', 'main');
+
+    assert.equal(currentBranch(dir), 'task/1-2');
+    assert.equal(out(dir, ['rev-parse', 'HEAD']), taskHead);
+  });
+
+  it('tracks origin/<branch> when only the remote has it', () => {
+    const { clone } = cloneWithOrigin();
+    const other = mkdtempSync(path.join(tmpdir(), 'sync-cli-gitworktree-other-'));
+    git(other, ['clone', '--quiet', out(clone, ['remote', 'get-url', 'origin']), '.']);
+    git(other, ['config', 'user.email', 'test@example.com']);
+    git(other, ['config', 'user.name', 'Test']);
+    git(other, ['checkout', '--quiet', '-b', 'task/1-2']);
+    writeFileSync(path.join(other, 'agent.txt'), 'from agent');
+    git(other, ['add', '-A']);
+    git(other, ['commit', '-m', 'agent', '--quiet']);
+    git(other, ['push', '--quiet', 'origin', 'task/1-2']);
+
+    checkoutTaskBranch(clone, 'task/1-2', 'main');
+
+    assert.equal(currentBranch(clone), 'task/1-2');
+    assert.equal(out(clone, ['rev-parse', 'HEAD']), out(other, ['rev-parse', 'HEAD']));
+    assert.equal(out(clone, ['rev-parse', '--abbrev-ref', '@{upstream}']), 'origin/task/1-2');
+  });
+
+  it('fast-forwards an existing local branch that is behind origin', () => {
+    const { clone } = cloneWithOrigin();
+    git(clone, ['checkout', '--quiet', '-b', 'task/1-2']);
+    git(clone, ['push', '--quiet', '-u', 'origin', 'task/1-2']);
+    git(clone, ['checkout', '--quiet', 'main']);
+
+    const other = mkdtempSync(path.join(tmpdir(), 'sync-cli-gitworktree-other-'));
+    git(other, ['clone', '--quiet', '--branch', 'task/1-2', out(clone, ['remote', 'get-url', 'origin']), '.']);
+    git(other, ['config', 'user.email', 'test@example.com']);
+    git(other, ['config', 'user.name', 'Test']);
+    writeFileSync(path.join(other, 'agent.txt'), 'from agent');
+    git(other, ['add', '-A']);
+    git(other, ['commit', '-m', 'agent', '--quiet']);
+    git(other, ['push', '--quiet', 'origin', 'task/1-2']);
+
+    checkoutTaskBranch(clone, 'task/1-2', 'main');
+
+    assert.equal(currentBranch(clone), 'task/1-2');
+    assert.equal(out(clone, ['rev-parse', 'HEAD']), out(other, ['rev-parse', 'HEAD']));
+  });
+
+  for (const branch of ['main', 'develop', 'a..b']) {
+    it(`refuses ${JSON.stringify(branch)} and leaves HEAD where it was`, () => {
+      const dir = initRepo();
+      git(dir, ['branch', '-M', 'main']);
+
+      assert.throws(() => checkoutTaskBranch(dir, branch, 'develop'), /refusing branch/);
+
+      assert.equal(currentBranch(dir), 'main');
     });
   }
 });

@@ -157,6 +157,47 @@ export function addTaskWorktree(
   }
 }
 
+// pull-issue --checkout: unlike addTaskWorktree this switches project.path
+// itself, since that is where the pulled files are written — otherwise they
+// land on whatever branch the user happens to have checked out (main, another
+// task's branch). Same steps as reports' checkoutTaskBranch
+// (reports/packages/server/src/subscription/git.ts): the branch is caught up
+// with origin first, because agent-runner pushes to it from another clone.
+export function checkoutTaskBranch(repoPath: string, branch: string, baseBranch: string): void {
+  assertSafeTaskBranch(branch, baseBranch);
+
+  let remoteExists = false;
+  try {
+    git(repoPath, ['fetch', '--quiet', 'origin', branch]);
+    git(repoPath, ['show-ref', '--verify', `refs/remotes/origin/${branch}`]);
+    remoteExists = true;
+  } catch {
+    // No origin, no network, or nobody has pushed the branch yet — nothing
+    // to catch up on.
+  }
+
+  if (branchExists(repoPath, branch)) {
+    git(repoPath, ['checkout', '--quiet', branch, '--']);
+    if (remoteExists) {
+      try {
+        git(repoPath, ['merge', '--quiet', '--ff-only', `origin/${branch}`]);
+      } catch (error) {
+        throw new Error(
+          `branch ${branch} has diverged from origin/${branch} — reconcile it by hand before pulling. ` +
+            `(${(error as Error).message.trim()})`,
+        );
+      }
+    }
+    return;
+  }
+
+  if (remoteExists) {
+    git(repoPath, ['checkout', '--quiet', '-b', branch, '--track', `origin/${branch}`]);
+  } else {
+    git(repoPath, ['checkout', '--quiet', '-b', branch]);
+  }
+}
+
 // Silently a no-op (not an error) when worktreeDir was never registered —
 // e.g. the very first run for an issue, before any worktree has existed yet.
 export function removeTaskWorktree(repoPath: string, worktreeDir: string): void {
