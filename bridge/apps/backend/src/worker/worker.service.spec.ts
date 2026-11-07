@@ -727,6 +727,19 @@ describe('WorkerService', () => {
         );
       });
 
+      it('marks the token when the organization disabled subscription access', async () => {
+        await run(
+          JobStatus.Failed,
+          'Model run exited with code 1: Your organization has disabled Claude subscription access for Claude Code',
+        );
+
+        expect(claudeCredentialsService.markAuthFailed).toHaveBeenCalledWith(
+          12,
+          7,
+          4,
+        );
+      });
+
       it('leaves the token alone for any other failure', async () => {
         await run(
           JobStatus.Failed,

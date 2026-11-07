@@ -81,8 +81,9 @@ export type JobStatusRow = Pick<
 >;
 
 // What a Claude run that Anthropic refused prints (e.g. "Failed to authenticate. API Error: 403 Request not allowed").
-const AUTH_FAILURE_PATTERN =
-  /Failed to authenticate|\b401\b|\b403\b.*Request not allowed/i;
+// Also covers an organization that has disabled Claude subscription access.
+export const AUTH_FAILURE_PATTERN =
+  /Failed to authenticate|\b401\b|\b403\b.*Request not allowed|has disabled Claude subscription access/i;
 
 export const DEFAULT_JOBS_PAGE = 200;
 export const MAX_JOBS_PAGE = 500;
