@@ -8,6 +8,7 @@ import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImprov
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from '../ImprovePage.module.css';
 import { FAST_POLL_MS, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
+import { JobDetailDialog } from '../worker/JobDetailDialog';
 import { useModelOptions } from '../worker/useModelOptions';
 
 // Runs accumulate forever; the tab should open on what is recent, with the
@@ -35,6 +36,7 @@ export function RunsTab() {
   const [filter, setFilter] = useState<RunFilter>('all');
   const [showAll, setShowAll] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState<{ id: number } | null>(null);
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
 
   useEffect(() => {
     setPollingInterval(hasActive ? FAST_POLL_MS : SLOW_POLL_MS);
@@ -123,6 +125,11 @@ export function RunsTab() {
                 <Icon data={ArrowUpRightFromSquare} size={16} />
               </a>
             )}
+            {run.jobId !== null && (
+              <Button size="xs" view="flat" onClick={() => setOpenJobId(run.jobId)}>
+                Запуск #{run.jobId}
+              </Button>
+            )}
             {run.status === 'failed' && run.kind !== 'analysis' && run.jobId !== null && (
               <Button view="outlined" size="s" loading={isRetrying} onClick={() => void retry(run.id)}>
                 Повторить публикацию
@@ -159,6 +166,8 @@ export function RunsTab() {
           }}
         />
       </Dialog>
+
+      {openJobId !== null && <JobDetailDialog jobId={openJobId} onClose={() => setOpenJobId(null)} />}
     </div>
   );
 }
