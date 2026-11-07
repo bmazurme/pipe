@@ -11,6 +11,7 @@ import { loadOptionalDictionary, localTransform } from '../dictionary.js';
 import { loadCredentialsOrEmpty } from '../credentials.js';
 import { decryptBuffer } from '../encryption.js';
 import { isGitTreeClean } from '../gitStatus.js';
+import { checkoutTaskBranch } from '../gitWorktree.js';
 import { extractIssue, extractIssueArchive } from '../issuePack.js';
 import { resolveFromRoot } from '../paths.js';
 import { log } from '../log.js';
@@ -49,7 +50,7 @@ async function tryPullOnce(
   name: string,
   projectId: string,
   iid: string,
-  options: { force?: boolean },
+  options: { force?: boolean; checkout?: boolean },
   commentTarget?: CommentTarget,
 ): Promise<boolean> {
   const config = loadConfig();
@@ -96,6 +97,20 @@ async function tryPullOnce(
   }
 
   const { manifest, files, assets, legacyManifest } = extractIssueArchive(buffer);
+
+  // Before anything is written (and so before the delete below): a branch
+  // that can't be checked out leaves the parcel on bridge for another try.
+  if (options.checkout) {
+    const branch = legacyManifest || !manifest.branch ? '' : localTransform(dictionary)(manifest.branch);
+    if (!branch) {
+      throw new Error(
+        `"${newest.originalName}" carries no branch name (legacy or empty manifest) — --checkout needs one. ` +
+          'The parcel is left on bridge; re-run without --checkout to pull it into the current branch.',
+      );
+    }
+    checkoutTaskBranch(project.path, branch, project.baseBranch ?? 'main');
+    log.info(`Checked out ${branch}`);
+  }
 
   // Validate asset paths up front too, so a bad parcel writes nothing at all.
   const assetDestinations = assets.map((asset) => resolveInDir(project.path, asset.relPath));
@@ -152,7 +167,7 @@ export async function pullIssueCommand(
   name: string,
   projectId: string,
   iid: string,
-  options: { force?: boolean; watch?: string; comment?: string },
+  options: { force?: boolean; watch?: string; comment?: string; checkout?: boolean },
 ): Promise<void> {
   const commentTarget = resolveCommentTarget(options.comment);
 

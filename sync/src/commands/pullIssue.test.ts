@@ -1,4 +1,5 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -313,5 +314,136 @@ describe('pullIssueCommand --comment', () => {
 
     assert.equal(notes.length, 1);
     assert.equal(readFileSync(path.join(projectPath, 'src/a.ts'), 'utf-8'), 'export const a = 1;');
+  });
+});
+
+describe('pullIssueCommand --checkout', () => {
+  const NAME = 'pull-issue-checkout-test-project';
+  const apiUrl = 'https://bridge.example.com';
+  const originalFetch = globalThis.fetch;
+  const backedUp = [CONFIG_PATH, CREDENTIALS_PATH].map((p) => ({
+    path: p,
+    content: existsSync(p) ? readFileSync(p, 'utf-8') : null,
+  }));
+  const manifest = {
+    issueId: '1',
+    issueIid: '42',
+    issueTitle: 'Fix bug',
+    issueDescription: 'Details',
+    projectId: 173,
+    branch: 'task/173-42',
+    createdAt: '2026-09-14T10:00:00.000Z',
+  };
+
+  let projectPath: string;
+  let deletes: string[];
+
+  function git(args: string[]): string {
+    return execFileSync('git', args, { cwd: projectPath, encoding: 'utf-8' }).trim();
+  }
+
+  function serve(buffer: Buffer): void {
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.startsWith(`${apiUrl}/api/v1/storage?`)) {
+        return new Response(
+          JSON.stringify([{ id: 9, originalName: 'issue-42.zip', createdAt: '2026-09-14T10:00:00Z' }]),
+          { status: 200 },
+        );
+      }
+      if (/\/storage\/9\/peek$/.test(u)) return new Response(new Uint8Array(buffer), { status: 200 });
+      if (/\/storage\/9$/.test(u) && init?.method === 'DELETE') {
+        deletes.push(u);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected request ${u}`);
+    }) as typeof fetch;
+  }
+
+  function serveBranch(branch: string): void {
+    serve(buildIssueArchive([{ relPath: 'src/a.ts', content: 'export const a = 1;' }], { ...manifest, branch }, []));
+  }
+
+  before(() => {
+    saveApiKey('brk_test-key');
+  });
+
+  after(() => {
+    for (const { path: p, content } of backedUp) {
+      if (content === null) rmSync(p, { force: true });
+      else writeFileSync(p, content);
+    }
+    globalThis.fetch = originalFetch;
+  });
+
+  beforeEach(() => {
+    deletes = [];
+    const root = mkdtempSync(path.join(tmpdir(), 'sync-cli-pull-issue-checkout-test-'));
+    projectPath = path.join(root, 'project');
+    mkdirSync(projectPath);
+    git(['init', '--quiet']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'Test']);
+    writeFileSync(path.join(projectPath, 'README.md'), 'placeholder');
+    git(['add', '-A']);
+    git(['commit', '-m', 'initial', '--quiet']);
+    git(['branch', '-M', 'main']);
+    saveConfig({ bridge: { apiUrl }, projects: [{ name: NAME, path: projectPath, baseBranch: 'develop' }] });
+  });
+
+  it('writes the result onto the task branch and leaves main untouched', async () => {
+    serveBranch('task/173-42');
+
+    await pullIssueCommand(NAME, '173', '42', { checkout: true });
+
+    assert.equal(git(['rev-parse', '--abbrev-ref', 'HEAD']), 'task/173-42');
+    assert.equal(readFileSync(path.join(projectPath, 'src/a.ts'), 'utf-8'), 'export const a = 1;');
+    assert.deepEqual(deletes, [`${apiUrl}/api/v1/storage/9`]);
+
+    git(['add', '-A']);
+    git(['commit', '-m', 'pulled', '--quiet']);
+    git(['checkout', '--quiet', 'main']);
+    assert.equal(git(['status', '--porcelain']), '');
+    assert.equal(existsSync(path.join(projectPath, 'src/a.ts')), false);
+  });
+
+  it('reuses the task branch when it already exists locally', async () => {
+    git(['checkout', '--quiet', '-b', 'task/173-42']);
+    writeFileSync(path.join(projectPath, 'earlier.txt'), 'earlier pull');
+    git(['add', '-A']);
+    git(['commit', '-m', 'earlier', '--quiet']);
+    const taskHead = git(['rev-parse', 'HEAD']);
+    git(['checkout', '--quiet', 'main']);
+    serveBranch('task/173-42');
+
+    await pullIssueCommand(NAME, '173', '42', { checkout: true });
+
+    assert.equal(git(['rev-parse', '--abbrev-ref', 'HEAD']), 'task/173-42');
+    assert.equal(git(['rev-parse', 'HEAD']), taskHead);
+    assert.equal(existsSync(path.join(projectPath, 'earlier.txt')), true);
+  });
+
+  for (const branch of ['main', 'develop', 'task/..evil']) {
+    it(`refuses a parcel whose branch is ${JSON.stringify(branch)}, writing nothing and keeping it on bridge`, async () => {
+      serveBranch(branch);
+
+      await assert.rejects(pullIssueCommand(NAME, '173', '42', { checkout: true }), /refusing branch/);
+
+      assert.equal(git(['rev-parse', '--abbrev-ref', 'HEAD']), 'main');
+      assert.equal(existsSync(path.join(projectPath, 'src/a.ts')), false);
+      assert.equal(existsSync(path.join(projectPath, ISSUE_FILE_NAME)), false);
+      assert.deepEqual(deletes, []);
+    });
+  }
+
+  it('refuses a legacy-manifest parcel and keeps it on bridge', async () => {
+    const { buffer } = buildArchive(SYNC_MANIFEST_ENTRY, [{ relPath: 'a.ts', content: 'x' }], { createdAt: 'now' });
+    serve(buffer);
+
+    await assert.rejects(pullIssueCommand(NAME, '173', '42', { checkout: true }), /no branch name/);
+
+    assert.equal(git(['rev-parse', '--abbrev-ref', 'HEAD']), 'main');
+    assert.equal(existsSync(path.join(projectPath, 'a.ts')), false);
+    assert.deepEqual(deletes, []);
   });
 });
