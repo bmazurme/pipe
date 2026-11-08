@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 
 import type { StoredFileMeta } from '../../store/api';
@@ -15,17 +16,19 @@ const FILES: StoredFileMeta[] = [
 function renderList(files: StoredFileMeta[]) {
   return render(
     <ThemeProvider theme="light">
-      <StorageFileList
-        files={files}
-        isLoading={false}
-        isError={false}
-        onRetry={vi.fn()}
-        isMobile={false}
-        downloadingId={null}
-        onDownload={vi.fn()}
-        onOpenEncrypted={vi.fn()}
-        onDeleteRequest={vi.fn()}
-      />
+      <MemoryRouter>
+        <StorageFileList
+          files={files}
+          isLoading={false}
+          isError={false}
+          onRetry={vi.fn()}
+          isMobile={false}
+          downloadingId={null}
+          onDownload={vi.fn()}
+          onOpenEncrypted={vi.fn()}
+          onDeleteRequest={vi.fn()}
+        />
+      </MemoryRouter>
     </ThemeProvider>,
   );
 }
@@ -60,5 +63,21 @@ describe('StorageFileList parcel metadata', () => {
   it('shows the empty state when there are no files', () => {
     renderList([]);
     expect(screen.getByText('Файлов пока нет')).toBeTruthy();
+  });
+});
+
+describe('StorageFileList "На воркер" action', () => {
+  it('is shown for outbound and untagged rows, not for results', () => {
+    renderList(FILES);
+    expect(screen.getByLabelText('Запустить out.zip на воркере')).toBeTruthy();
+    expect(screen.getByLabelText('Запустить plain.txt на воркере')).toBeTruthy();
+    expect(screen.queryByLabelText('Запустить res.zip на воркере')).toBeNull();
+  });
+
+  it('links to the worker page with the parcel id', () => {
+    renderList(FILES);
+    expect(screen.getByLabelText('Запустить out.zip на воркере').getAttribute('href')).toBe(
+      '/worker?sourceFileId=1',
+    );
   });
 });
