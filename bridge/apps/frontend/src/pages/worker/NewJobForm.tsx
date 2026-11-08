@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FaceRobot, LockOpen } from '@gravity-ui/icons';
 import { Alert, Button, Card, Checkbox, Icon, Select, Switch, Text, TextArea } from '@gravity-ui/uikit';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import {
   ClaudeCredential,
@@ -88,6 +88,31 @@ export function NewJobForm({ onCreated, onOpenWorkers }: NewJobFormProps) {
   const files = filesData ?? [];
 
   const [sourceFileId, setSourceFileId] = useState<number | undefined>(undefined);
+  // `?sourceFileId=` (the Storage "На воркер" link) is read once on mount and applied as soon as
+  // the parcel list has loaded, then dropped so a reload does not pin the selection.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSourceFileId = useRef(searchParams.get('sourceFileId'));
+
+  useEffect(() => {
+    const requested = requestedSourceFileId.current;
+
+    if (requested === null || !filesData) return;
+    requestedSourceFileId.current = null;
+    if (filesData.some((file) => String(file.id) === requested)) {
+      setSourceFileId(Number(requested));
+    }
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+
+        next.delete('sourceFileId');
+
+        return next;
+      },
+      { replace: true },
+    );
+  }, [filesData, setSearchParams]);
+
   const [model, setModel] = useState<WorkerJobModel | undefined>(readLastModel);
   const [claudeCredentialId, setClaudeCredentialId] = useState<number | undefined>(undefined);
   // gpt/deepseek/qwen: which stored API key; undefined = the account's first one for that provider.

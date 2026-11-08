@@ -3,12 +3,14 @@ import {
   ArrowDownToLine,
   File,
   FileText,
+  FaceRobot,
   FileZipper,
   LockOpen,
   Magnifier,
   Picture,
   TrashBin,
 } from '@gravity-ui/icons';
+import { Link } from 'react-router-dom';
 import {
   ActionTooltip,
   Alert,
@@ -198,6 +200,20 @@ export function StorageFileList({
                   >
                     <Icon data={LockOpen} size={16} />
                     {!isMobile && 'Открыть'}
+                  </Button>
+                </ActionTooltip>
+              )}
+
+              {file.direction !== 'result' && (
+                <ActionTooltip title="На воркер" description="Открыть форму новой задачи с этой посылкой">
+                  <Button
+                    view="flat"
+                    component={Link}
+                    to={`/worker?sourceFileId=${file.id}`}
+                    aria-label={`Запустить ${file.originalName} на воркере`}
+                  >
+                    <Icon data={FaceRobot} size={16} />
+                    {!isMobile && 'На воркер'}
                   </Button>
                 </ActionTooltip>
               )}
