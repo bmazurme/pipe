@@ -3878,6 +3878,14 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "force",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

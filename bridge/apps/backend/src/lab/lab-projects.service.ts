@@ -95,6 +95,7 @@ export class LabProjectsService {
       if (!check.canRead || !check.branchFound)
         throw new BadRequestException(check.problems.join('. '));
 
+      if (baseBranch !== project.baseBranch) project.knowledgeSha = null;
       project.baseBranch = baseBranch;
       project.token = token;
       project.tokenHint = token.slice(-4);
@@ -106,6 +107,10 @@ export class LabProjectsService {
     if (input.name !== undefined) project.name = input.name;
 
     return toView(await this.projects.save(project));
+  }
+
+  async setKnowledgeSha(id: number, sha: string | null): Promise<void> {
+    await this.projects.update({ id }, { knowledgeSha: sha });
   }
 
   async check(
