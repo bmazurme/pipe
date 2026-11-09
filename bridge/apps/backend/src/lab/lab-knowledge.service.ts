@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -43,6 +47,9 @@ export interface LabKnowledgeStatus {
 // snapshot — this never touches worker/job infrastructure at all.
 @Injectable()
 export class LabKnowledgeService {
+  // Projects with a reindex running right now; a second one would interleave its delete/insert with the first.
+  private readonly reindexing = new Set<number>();
+
   constructor(
     @InjectRepository(LabDocumentChunk)
     private readonly chunks: Repository<LabDocumentChunk>,
@@ -70,6 +77,12 @@ export class LabKnowledgeService {
     userId: number,
   ): Promise<LabKnowledgeStatus> {
     const project = await this.projects.findOwned(projectId, userId);
+
+    if (this.reindexing.has(projectId)) {
+      throw new ConflictException('Индексация уже идёт');
+    }
+
+    this.reindexing.add(projectId);
 
     try {
       const github = githubFor(project);
@@ -110,12 +123,26 @@ export class LabKnowledgeService {
         }
       }
 
-      await this.chunks.delete({ projectId });
-      if (rows.length) await this.chunks.save(this.chunks.create(rows));
+      // One transaction: a failed insert rolls the delete back, so the previous index survives.
+      await this.chunks.manager.transaction(async (manager) => {
+        await manager.delete(LabDocumentChunk, { projectId });
+        if (rows.length) {
+          await manager.save(
+            LabDocumentChunk,
+            manager.create(LabDocumentChunk, rows),
+          );
+        }
+      });
 
-      return { files: files.length, chunks: rows.length };
+      // Files that actually produced chunks (the chunk cap can drop later ones) — what status() counts too.
+      return {
+        files: new Set(rows.map((row) => row.path)).size,
+        chunks: rows.length,
+      };
     } catch (error) {
       throw new BadRequestException(describeGithubError(error));
+    } finally {
+      this.reindexing.delete(projectId);
     }
   }
 

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 
 import { LabProject } from './entities/lab-project.entity';
 import * as labGithub from './lab-github';
@@ -16,6 +16,8 @@ describe('LabKnowledgeService', () => {
   } as LabProject;
   let github: Record<string, jest.Mock>;
   let chunks: Record<string, jest.Mock>;
+  let manager: Record<string, jest.Mock>;
+  let transaction: jest.Mock;
   let projects: { findOwned: jest.Mock };
   let service: LabKnowledgeService;
 
@@ -28,7 +30,24 @@ describe('LabKnowledgeService', () => {
       .spyOn(labGithub, 'downloadRepoZip')
       .mockResolvedValue(new Uint8Array());
     projects = { findOwned: jest.fn().mockResolvedValue(project) };
+    manager = {
+      delete: jest.fn().mockResolvedValue(undefined),
+      save: jest
+        .fn()
+        .mockImplementation((_target: unknown, rows: unknown[]) =>
+          Promise.resolve(rows),
+        ),
+      create: jest
+        .fn()
+        .mockImplementation((_target: unknown, rows: unknown) => rows),
+    };
+    transaction = jest
+      .fn()
+      .mockImplementation((cb: (m: unknown) => Promise<unknown>) =>
+        cb(manager),
+      );
     chunks = {
+      manager: { transaction } as never,
       delete: jest.fn().mockResolvedValue(undefined),
       save: jest
         .fn()
@@ -54,8 +73,10 @@ describe('LabKnowledgeService', () => {
 
       const result = await service.reindex(3, 1);
 
-      expect(chunks.delete).toHaveBeenCalledWith({ projectId: 3 });
-      expect(chunks.create).toHaveBeenCalledWith([
+      expect(manager.delete).toHaveBeenCalledWith(expect.anything(), {
+        projectId: 3,
+      });
+      expect(manager.create).toHaveBeenCalledWith(expect.anything(), [
         {
           projectId: 3,
           path: 'DECISIONS.md',
@@ -88,9 +109,56 @@ describe('LabKnowledgeService', () => {
 
       const result = await service.reindex(3, 1);
 
-      expect(chunks.delete).toHaveBeenCalledWith({ projectId: 3 });
-      expect(chunks.create).not.toHaveBeenCalled();
+      expect(manager.delete).toHaveBeenCalledWith(expect.anything(), {
+        projectId: 3,
+      });
+      expect(manager.create).not.toHaveBeenCalled();
       expect(result).toEqual({ files: 0, chunks: 0 });
+    });
+
+    it('keeps the old chunks when the insert fails, and releases the in-flight flag', async () => {
+      jest
+        .spyOn(zip, 'readZipball')
+        .mockResolvedValue([
+          { path: 'A.md', bytes: new TextEncoder().encode('# A\ntext') },
+        ]);
+      transaction.mockRejectedValueOnce(new Error('insert failed'));
+
+      await expect(service.reindex(3, 1)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      // the delete only ever runs inside the (rejected) transaction
+      expect(manager.delete).not.toHaveBeenCalled();
+
+      await expect(service.reindex(3, 1)).resolves.toEqual({
+        files: 1,
+        chunks: 1,
+      });
+    });
+
+    it('rejects a concurrent reindex of the same project with 409, not another project', async () => {
+      let release: (v: Uint8Array) => void = () => undefined;
+      jest
+        .spyOn(labGithub, 'downloadRepoZip')
+        .mockImplementationOnce(
+          () => new Promise<Uint8Array>((resolve) => (release = resolve)),
+        );
+      jest.spyOn(zip, 'readZipball').mockResolvedValue([]);
+
+      const first = service.reindex(3, 1);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await expect(service.reindex(3, 1)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      await expect(service.reindex(4, 1)).resolves.toEqual({
+        files: 0,
+        chunks: 0,
+      });
+
+      release(new Uint8Array());
+      await expect(first).resolves.toEqual({ files: 0, chunks: 0 });
+      await expect(service.reindex(3, 1)).resolves.toBeDefined();
     });
 
     it('wraps a GitHub failure in a BadRequestException with a readable message', async () => {
