@@ -36,6 +36,8 @@ Cross-cutting detail that spans more than one product — port assignments, the 
 
 Both are themselves npm workspace roots one level down (`reports/packages/{client,server,shared}`, `bridge/apps/{backend,frontend}`), independent of the outer root — folding either into the root workspace is a materially bigger, riskier change than sync/worker was (flattening an existing nested workspace, plus CWD-sensitive Vite/vitest config in both — see this file's own frontend-test-invocation warning below) and was deliberately scoped out of 5.1 rather than attempted in the same pass.
 
+The root `npm run build` (`scripts/build-all.mjs`) does the root install plus the protocol, harness, sync and worker builds in order, then installs and builds reports and bridge, from a bare clone.
+
 Consequences that still apply everywhere, workspace member or not:
 - After changing `packages/protocol`, run `npm run build` there before the change is visible anywhere — its `exports` map points at `dist/`, not the source, regardless of how a consumer depends on it.
 - `reports/` and `bridge/` each still need their own `npm install` from their own directory; `sync`/`worker` do not — a root `npm install` covers them.
@@ -107,7 +109,7 @@ npm run migration:check -w backend   # typeorm migration:generate --check — fa
 npm test -w frontend                 # Vitest
 npm test -w frontend -- <pattern>    # filters by filename, e.g. `npm test -w frontend -- PurgeApplyTab`
 ```
-Both apps also have a `test:coverage` script (Jest's/Vitest's own `--coverage`); every other package's `test:coverage` runs `node --test --experimental-test-coverage`. None of these are wired into CI as a gate yet.
+Both apps also have a `test:coverage` script (Jest's/Vitest's own `--coverage`); every other package's `test:coverage` runs `node --test --experimental-test-coverage`. Coverage is gated in CI for protocol, sync, worker and harness (the packages on Node's own test runner) by `npm run coverage:check`, run in the package directory: it cleans and builds, runs the tests with coverage via `scripts/check-coverage.mjs`, and fails if lines/branches/functions fall more than 0.01 points below the package's committed `coverage-baseline.json`. Update that baseline file deliberately when a drop is accepted, or to ratchet it up after coverage improved. bridge and reports (Jest/Vitest, different report format) have no gate.
 
 Dev no longer runs on `synchronize: true` — it runs real migrations now too (`migrationsRun: true` unconditionally in `config/type-orm.config.ts`), so an existing local dev database built before this changed needs recreating once (drop it, then `npm run migration:run -w backend`) before `npm run dev` works again.
 Run frontend tests via the `npm test -w frontend` script, not `vitest` invoked directly with `--config apps/frontend/vitest.config.ts` from the bridge root — vitest resolves the config's relative paths (`setupFiles`, etc.) against the invocation CWD rather than the config file's own directory, and fails to find `src/test/setup.ts`.
