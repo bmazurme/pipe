@@ -7010,7 +7010,9 @@ export interface operations {
     };
     LabController_reindexKnowledge: {
         parameters: {
-            query?: never;
+            query?: {
+                force?: string;
+            };
             header?: never;
             path: {
                 id: number;

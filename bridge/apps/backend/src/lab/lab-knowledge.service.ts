@@ -72,9 +72,11 @@ export class LabKnowledgeService {
 
   // Re-downloads the repository's markdown files at its current base branch and replaces the project's chunks
   // wholesale — simpler and, at this file count, cheaper than diffing which file changed since the last index.
+  // Skipped (current status returned) when the branch is still at the commit the chunks were built from, unless forced.
   async reindex(
     projectId: number,
     userId: number,
+    force = false,
   ): Promise<LabKnowledgeStatus> {
     const project = await this.projects.findOwned(projectId, userId);
 
@@ -89,6 +91,19 @@ export class LabKnowledgeService {
       const sha = await readStep(`ветка ${project.baseBranch}`, () =>
         github.getBranchSha(project.baseBranch),
       );
+
+      if (!force && project.knowledgeSha === sha) {
+        const existing = await this.chunks.find({
+          where: { projectId },
+          select: { path: true },
+        });
+
+        return {
+          chunks: existing.length,
+          files: new Set(existing.map((row) => row.path)).size,
+        };
+      }
+
       const zip = await readStep('скачивание репозитория', () =>
         downloadRepoZip(project.repo, project.token, sha),
       );
@@ -133,6 +148,8 @@ export class LabKnowledgeService {
           );
         }
       });
+
+      await this.projects.setKnowledgeSha(projectId, sha);
 
       // Files that actually produced chunks (the chunk cap can drop later ones) — what status() counts too.
       return {

@@ -41,4 +41,8 @@ export class LabProject extends BaseEntity {
 
   @Column({ type: 'boolean', default: false })
   canWrite: boolean;
+
+  // The commit of the base branch the knowledge chunks were last built from; null when never indexed or invalidated by an edit.
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  knowledgeSha: string | null;
 }

@@ -18,7 +18,7 @@ describe('LabKnowledgeService', () => {
   let chunks: Record<string, jest.Mock>;
   let manager: Record<string, jest.Mock>;
   let transaction: jest.Mock;
-  let projects: { findOwned: jest.Mock };
+  let projects: { findOwned: jest.Mock; setKnowledgeSha: jest.Mock };
   let service: LabKnowledgeService;
 
   beforeEach(() => {
@@ -29,7 +29,10 @@ describe('LabKnowledgeService', () => {
     jest
       .spyOn(labGithub, 'downloadRepoZip')
       .mockResolvedValue(new Uint8Array());
-    projects = { findOwned: jest.fn().mockResolvedValue(project) };
+    projects = {
+      findOwned: jest.fn().mockResolvedValue({ ...project }),
+      setKnowledgeSha: jest.fn().mockResolvedValue(undefined),
+    };
     manager = {
       delete: jest.fn().mockResolvedValue(undefined),
       save: jest
@@ -169,6 +172,48 @@ describe('LabKnowledgeService', () => {
       await expect(service.reindex(3, 1)).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+  });
+
+  describe('reindex sha cache', () => {
+    beforeEach(() => {
+      jest.spyOn(zip, 'readZipball').mockResolvedValue([]);
+    });
+
+    it('skips the download when the branch sha is unchanged', async () => {
+      projects.findOwned.mockResolvedValue({
+        ...project,
+        knowledgeSha: 'sha-1',
+      });
+      chunks.find.mockResolvedValue([{ path: 'A.md' }, { path: 'A.md' }]);
+
+      await expect(service.reindex(3, 1)).resolves.toEqual({
+        files: 1,
+        chunks: 2,
+      });
+      expect(labGithub.downloadRepoZip).not.toHaveBeenCalled();
+      expect(projects.setKnowledgeSha).not.toHaveBeenCalled();
+    });
+
+    it('reindexes and stores the sha when it changed', async () => {
+      projects.findOwned.mockResolvedValue({ ...project, knowledgeSha: 'old' });
+
+      await service.reindex(3, 1);
+
+      expect(labGithub.downloadRepoZip).toHaveBeenCalledTimes(1);
+      expect(projects.setKnowledgeSha).toHaveBeenCalledWith(3, 'sha-1');
+    });
+
+    it('always reindexes with force', async () => {
+      projects.findOwned.mockResolvedValue({
+        ...project,
+        knowledgeSha: 'sha-1',
+      });
+
+      await service.reindex(3, 1, true);
+
+      expect(labGithub.downloadRepoZip).toHaveBeenCalledTimes(1);
+      expect(projects.setKnowledgeSha).toHaveBeenCalledWith(3, 'sha-1');
     });
   });
 

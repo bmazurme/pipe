@@ -13,6 +13,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -98,12 +99,18 @@ export class LabController {
   }
 
   @Post('projects/:id/knowledge/reindex')
+  @ApiQuery({ name: 'force', required: false })
   @HttpCode(HttpStatus.OK)
   reindexKnowledge(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: { id: number },
+    @Query('force') force?: string,
   ) {
-    return this.knowledge.reindex(id, user.id);
+    return this.knowledge.reindex(
+      id,
+      user.id,
+      force === '1' || force === 'true',
+    );
   }
 
   @Post('projects/:id/knowledge/ask')
