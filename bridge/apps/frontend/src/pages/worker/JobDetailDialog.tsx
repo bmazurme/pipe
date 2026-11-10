@@ -23,6 +23,7 @@ import { ExtendJobButton } from './ExtendJobButton';
 import { JobLogs } from './JobLogs';
 import { describeOutcome, describeStage } from './jobStage';
 import { FailureDiagnosisCard } from './FailureDiagnosisCard';
+import { ResultFilesSection } from './ResultFilesSection';
 import { RetryJobButton } from './RetryJobButton';
 import { isActive, isStopping, JOB_POLL_INTERVAL_MS, MODEL_OPTIONS, STATUS_LABEL, STATUS_THEME } from './constants';
 
@@ -193,6 +194,8 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         <FailureDiagnosisCard job={job} />
 
         <JobLogs jobId={job.id} logs={job.logs ?? ''} active={jobIsActive} />
+
+        {(job.status === 'succeeded' || hasPartialResult) && <ResultFilesSection jobId={job.id} />}
 
         {job.status === 'succeeded' && (
           <Disclosure summary="Скачать зашифрованным" className={styles.encryptSection}>
