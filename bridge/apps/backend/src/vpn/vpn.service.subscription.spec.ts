@@ -193,6 +193,83 @@ describe('VpnService: a connection that is a subscription link', () => {
   });
 });
 
+describe('VpnService: the vpn-client config of a subscription with a pool', () => {
+  const second = LINK.replace('203.0.113.9:8443', '203.0.113.10:443').replace(
+    'PUBKEY',
+    'PUBKEY2',
+  );
+  const poolOf = (links: string[]) =>
+    jest.fn(async () => ({
+      link: links[0],
+      links,
+      unsupported: 0,
+      host: '203.0.113.9',
+      port: 8443,
+    }));
+  const pushed = async (links: string[]) => {
+    const { service, github } = build({ resolve: poolOf(links) });
+
+    await service.syncWorkerVpnConfig();
+
+    return JSON.parse(
+      (github.setSecret.mock.calls[0] as unknown as [string, string])[1],
+    );
+  };
+
+  it('is a pool: an outbound per link, probed through itself, a leastPing balancer with node-1 as the fallback', async () => {
+    const config = await pushed([LINK, second]);
+
+    expect(config.outbounds.map((o: { tag: string }) => o.tag)).toEqual([
+      'node-1',
+      'node-2',
+    ]);
+    expect(
+      config.outbounds.map(
+        (o: { settings: { vnext: { address: string }[] } }) =>
+          o.settings.vnext[0].address,
+      ),
+    ).toEqual(['203.0.113.9', '203.0.113.10']);
+    expect(config.outbounds[1].streamSettings.realitySettings.publicKey).toBe(
+      'PUBKEY2',
+    );
+    expect(config.observatory).toMatchObject({
+      subjectSelector: ['node-'],
+      probeInterval: '1m',
+    });
+    expect(config.routing.balancers).toEqual([
+      {
+        tag: 'pool',
+        selector: ['node-'],
+        strategy: { type: 'leastPing' },
+        fallbackTag: 'node-1',
+      },
+    ]);
+    expect(config.routing.rules).toEqual([
+      { type: 'field', inboundTag: ['in'], balancerTag: 'pool' },
+    ]);
+    expect(config.inbounds).toEqual([
+      { tag: 'in', listen: '0.0.0.0', port: 1080, protocol: 'http' },
+    ]);
+  });
+
+  it('is the plain config, with no tags, for a subscription of one link', async () => {
+    const config = await pushed([LINK]);
+
+    expect(config.outbounds).toHaveLength(1);
+    expect(config.outbounds[0].tag).toBeUndefined();
+    expect(config.routing).toBeUndefined();
+    expect(config.observatory).toBeUndefined();
+  });
+
+  it('takes at most 6 links of a long list', async () => {
+    const many = Array.from({ length: 9 }, (_, i) =>
+      LINK.replace('203.0.113.9', `203.0.113.${i + 20}`),
+    );
+
+    expect((await pushed(many)).outbounds).toHaveLength(6);
+  });
+});
+
 describe('VpnService.getConnectionLinks', () => {
   it("is every link of a subscription, in the provider's order and capped, not renamed", async () => {
     const many = Array.from(

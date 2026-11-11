@@ -59,6 +59,13 @@ The link comes from your VPN panel, from the VPN page in bridge (copy the connec
 saved connections yet) or from a VPN app on your phone. It contains the server address, your client UUID and the Reality keys,
 so treat it as a secret. (Hand-writing the file works too: `bridge/deploy/swarm/xray-client-config.example.json`.)
 
+**A pool instead of one link.** Give `vless-to-xray.sh` a file with several `vless://` links, one per line (the profile a device gets from the
+VPN page's «Профили устройств» is the same list, base64-decoded), and the config becomes a pool: Xray probes every exit through itself once a
+minute and a `leastPing` balancer sends Telegram/GitHub traffic to the fastest one that answers, falling back to the first link when every probe
+fails — a blocked exit is left on its own. One link gives the plain config as before; a bad link in the file refuses the whole file.
+`bash infra/bridge-pi/test-vless-to-xray.sh` checks it; as with the worker's tunnel, check the pool config with the pinned image
+(`docker run --rm -v ~/.pipe:/c ghcr.io/xtls/xray-core:26.3.27 run -test -c /c/xray-client.json`) before relying on it.
+
 ### A second worker on another board
 
 A worker added in the UI (recommended — no bridge API key or Claude token touch any board at all). Run this from

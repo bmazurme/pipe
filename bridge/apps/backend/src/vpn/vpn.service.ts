@@ -55,8 +55,7 @@ export interface VpnStatus {
   source?: 'subscription';
 }
 
-// The Xray client config the worker's vpn-client runs: an HTTP proxy in, one VLESS+Reality outbound.
-function vlessClientConfig(params: {
+interface ClientNode {
   address: string;
   port: number;
   uuid: string;
@@ -67,42 +66,77 @@ function vlessClientConfig(params: {
   publicKey: string;
   shortId: string;
   spiderX: string;
-}): string {
-  const config = {
-    log: { loglevel: 'warning' },
-    inbounds: [{ listen: '0.0.0.0', port: 1080, protocol: 'http' }],
-    outbounds: [
-      {
-        protocol: 'vless',
-        settings: {
-          vnext: [
-            {
-              address: params.address,
-              port: params.port,
-              users: [
-                {
-                  id: params.uuid,
-                  encryption: params.encryption,
-                  flow: params.flow,
-                },
-              ],
-            },
+}
+
+function clientOutbound(node: ClientNode, tag?: string): object {
+  return {
+    ...(tag ? { tag } : {}),
+    protocol: 'vless',
+    settings: {
+      vnext: [
+        {
+          address: node.address,
+          port: node.port,
+          users: [
+            { id: node.uuid, encryption: node.encryption, flow: node.flow },
           ],
         },
-        streamSettings: {
-          network: 'tcp',
-          security: 'reality',
-          realitySettings: {
-            serverName: params.serverName,
-            fingerprint: params.fingerprint,
-            publicKey: params.publicKey,
-            shortId: params.shortId,
-            spiderX: params.spiderX,
-          },
-        },
+      ],
+    },
+    streamSettings: {
+      network: 'tcp',
+      security: 'reality',
+      realitySettings: {
+        serverName: node.serverName,
+        fingerprint: node.fingerprint,
+        publicKey: node.publicKey,
+        shortId: node.shortId,
+        spiderX: node.spiderX,
       },
-    ],
+    },
   };
+}
+
+// The Xray client config the worker's vpn-client runs: an HTTP proxy in, VLESS+Reality out. One node is the plain config. Several
+// (a subscription's pool) are node-1 … node-N, probed through themselves once a minute (observatory) with a leastPing balancer that
+// falls back to node-1 — the same shape as the worker's own tunnel and infra/bridge-pi/vless-to-xray.sh, so Telegram and GitHub keep
+// going when one exit is blocked.
+function vlessClientConfig(nodes: ClientNode[]): string {
+  const base = { log: { loglevel: 'warning' } };
+  const config =
+    nodes.length === 1
+      ? {
+          ...base,
+          inbounds: [{ listen: '0.0.0.0', port: 1080, protocol: 'http' }],
+          outbounds: [clientOutbound(nodes[0])],
+        }
+      : {
+          ...base,
+          inbounds: [
+            { tag: 'in', listen: '0.0.0.0', port: 1080, protocol: 'http' },
+          ],
+          outbounds: nodes.map((node, index) =>
+            clientOutbound(node, `node-${index + 1}`),
+          ),
+          observatory: {
+            subjectSelector: ['node-'],
+            probeUrl: 'https://www.gstatic.com/generate_204',
+            probeInterval: '1m',
+            enableConcurrency: true,
+          },
+          routing: {
+            domainStrategy: 'AsIs',
+            balancers: [
+              {
+                tag: 'pool',
+                selector: ['node-'],
+                strategy: { type: 'leastPing' },
+                fallbackTag: 'node-1',
+              },
+            ],
+            rules: [{ type: 'field', inboundTag: ['in'], balancerTag: 'pool' }],
+          },
+        };
 
   return JSON.stringify(config, null, 2);
 }
@@ -362,13 +396,17 @@ export class VpnService {
   // that caused real production incidents earlier, automated away.
   private async buildClientConfig(connection: VpnConnection): Promise<string> {
     if (connection.kind === 'subscription') {
-      const { link } = await this.subscriptions.resolve(
+      const { links } = await this.subscriptions.resolve(
         connection.subscriptionUrl ?? '',
         connection.name,
       );
-      const params: VlessParams = parseVlessParams(link);
+      const nodes = links.slice(0, MAX_POOL_LINKS).map((link) => {
+        const params: VlessParams = parseVlessParams(link);
 
-      return vlessClientConfig({ ...params, address: params.host });
+        return { ...params, address: params.host };
+      });
+
+      return vlessClientConfig(nodes);
     }
 
     const inbound = await this.getInbound(connection);
@@ -381,18 +419,20 @@ export class VpnService {
       );
     }
 
-    return vlessClientConfig({
-      address: connection.serverAddress,
-      port: inbound.port,
-      uuid: client.id,
-      flow: client.flow,
-      encryption: 'none',
-      serverName: sniOf(reality),
-      fingerprint: reality.settings.fingerprint,
-      publicKey: reality.settings.publicKey,
-      shortId: reality.shortIds[0],
-      spiderX: reality.settings.spiderX,
-    });
+    return vlessClientConfig([
+      {
+        address: connection.serverAddress,
+        port: inbound.port,
+        uuid: client.id,
+        flow: client.flow,
+        encryption: 'none',
+        serverName: sniOf(reality),
+        fingerprint: reality.settings.fingerprint,
+        publicKey: reality.settings.publicKey,
+        shortId: reality.shortIds[0],
+        spiderX: reality.settings.spiderX,
+      },
+    ]);
   }
 
   // Pushes the worker's VPN client config built from the active connection's
