@@ -18,6 +18,8 @@ import { ImproveRun } from '../improve/entities/improve-run.entity';
 import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
 import { ImproveSettings } from '../improve/entities/improve-settings.entity';
 import { LabDocumentChunk } from '../lab/entities/lab-document-chunk.entity';
+import { LabDigest } from '../lab/entities/lab-digest.entity';
+import { LabDigestSettings } from '../lab/entities/lab-digest-settings.entity';
 import { LabProject } from '../lab/entities/lab-project.entity';
 import { LabRun } from '../lab/entities/lab-run.entity';
 import { LabSchedule } from '../lab/entities/lab-schedule.entity';
@@ -103,6 +105,8 @@ export const ENTITIES = [
   ImproveSchedule,
   ImproveSettings,
   LabProject,
+  LabDigest,
+  LabDigestSettings,
   LabSchedule,
   LabRun,
   LabDocumentChunk,

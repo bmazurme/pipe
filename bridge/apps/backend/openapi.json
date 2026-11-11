@@ -4365,6 +4365,267 @@
         }
       }
     },
+    "/api/v1/lab/digests": {
+      "get": {
+        "operationId": "LabDigestController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LabDigest"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "LabDigestController_start",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartLabDigestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDigest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/digests/settings": {
+      "get": {
+        "operationId": "LabDigestController_getSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "LabDigestController_saveSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLabDigestSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/digests/preview": {
+      "get": {
+        "operationId": "LabDigestController_preview",
+        "parameters": [
+          {
+            "name": "weekStart",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "pattern": "WEEK",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includePrivate",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/digests/{id}": {
+      "get": {
+        "operationId": "LabDigestController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDigest"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "LabDigestController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLabDigestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDigest"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "LabDigestController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/lab/digests/{id}/exported": {
+      "post": {
+        "operationId": "LabDigestController_markExported",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDigest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lab/digests/{id}/send": {
+      "post": {
+        "operationId": "LabDigestController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabDigest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "operationId": "LogsController_list",
@@ -9622,6 +9883,191 @@
           "task",
           "model"
         ]
+      },
+      "LabDigest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number"
+          },
+          "weekStart": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "generating",
+              "draft",
+              "exported",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "includePrivate": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": "number",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "excludedPrivate": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "preview": {
+            "type": "string",
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "noteType": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "noteId": {
+            "type": "number",
+            "nullable": true
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "exportedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "weekStart",
+          "status",
+          "includePrivate",
+          "model",
+          "jobId",
+          "items",
+          "excludedPrivate",
+          "title",
+          "preview",
+          "content",
+          "tags",
+          "noteType",
+          "error",
+          "noteId",
+          "sentAt",
+          "exportedAt",
+          "finishedAt",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SaveLabDigestSettingsDto": {
+        "type": "object",
+        "properties": {
+          "autoWeekly": {
+            "type": "boolean"
+          },
+          "includePrivate": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "notesUrl": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "notesKey": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "StartLabDigestDto": {
+        "type": "object",
+        "properties": {
+          "weekStart": {
+            "type": "string",
+            "pattern": "WEEK"
+          },
+          "includePrivate": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 32
+          }
+        },
+        "required": [
+          "weekStart"
+        ]
+      },
+      "UpdateLabDigestDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "preview": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            }
+          }
+        }
       },
       "AppLog": {
         "type": "object",
