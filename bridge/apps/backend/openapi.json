@@ -2480,6 +2480,100 @@
         }
       }
     },
+    "/api/v1/vpn/profiles": {
+      "get": {
+        "operationId": "VpnProfilesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VpnProfileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "VpnProfilesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVpnProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedVpnProfileDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/profiles/{id}": {
+      "delete": {
+        "operationId": "VpnProfilesController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/vpn/profile/{token}": {
+      "get": {
+        "operationId": "VpnProfileController_get",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/nodes": {
       "get": {
         "operationId": "DashboardController_getNodes",
@@ -7402,6 +7496,115 @@
       "UpdateVpnConnectionDto": {
         "type": "object",
         "properties": {}
+      },
+      "VpnProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "object"
+          },
+          "tokenPrefix": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "audience",
+          "tokenPrefix",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt"
+        ]
+      },
+      "CreateVpnProfileDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "phone",
+              "laptop",
+              "server"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "audience"
+        ]
+      },
+      "CreatedVpnProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "object"
+          },
+          "tokenPrefix": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "token": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "audience",
+          "tokenPrefix",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt",
+          "token",
+          "path"
+        ]
       },
       "SaveGithubConnectionDto": {
         "type": "object",

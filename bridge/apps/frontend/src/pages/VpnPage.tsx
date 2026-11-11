@@ -6,6 +6,7 @@ import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
 import { ProvisionServerForm } from './vpn/ProvisionServerForm';
 import { VpnConnectionsCard } from './vpn/VpnConnectionsCard';
+import { VpnProfilesCard } from './vpn/VpnProfilesCard';
 import { STATUS_POLL_FAILING_INTERVAL_MS, STATUS_POLL_INTERVAL_MS, useFailureAwarePollInterval } from './vpn/statusPollInterval';
 import styles from './VpnPage.module.css';
 
@@ -48,6 +49,8 @@ export function VpnPage() {
         isSyncing={isSyncing}
         syncResult={syncResult}
       />
+
+      <VpnProfilesCard />
 
       <ProvisionServerForm />
 

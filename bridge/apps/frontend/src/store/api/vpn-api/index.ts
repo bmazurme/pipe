@@ -5,7 +5,7 @@ import baseQuery from '../../base-query-with-reauth';
 const vpnApi = createApi({
   reducerPath: 'vpnApi',
   baseQuery,
-  tagTypes: ['VpnStatus', 'VpnConnection'],
+  tagTypes: ['VpnStatus', 'VpnConnection', 'VpnProfile'],
   endpoints: () => ({}),
 });
 
