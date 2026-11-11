@@ -7343,6 +7343,9 @@
           "serverAddress": {
             "type": "string"
           },
+          "kind": {
+            "type": "object"
+          },
           "isActive": {
             "type": "boolean"
           },
@@ -7355,6 +7358,7 @@
           "id",
           "name",
           "serverAddress",
+          "kind",
           "isActive",
           "createdAt"
         ]
@@ -7365,6 +7369,10 @@
           "name": {
             "type": "string",
             "maxLength": 255
+          },
+          "subscriptionUrl": {
+            "type": "string",
+            "maxLength": 2048
           },
           "panelUrl": {
             "type": "string",
@@ -7381,10 +7389,7 @@
           }
         },
         "required": [
-          "name",
-          "panelUrl",
-          "panelApiToken",
-          "serverAddress"
+          "name"
         ]
       },
       "UpdateVpnConnectionDto": {
