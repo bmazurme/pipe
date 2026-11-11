@@ -144,6 +144,44 @@ export interface DashboardCloud {
   };
 }
 
+export type ChannelsStatus = 'ok' | 'warn' | 'bad';
+export type ProbeResult = 'ok' | 'tcp_timeout' | 'tcp_refused' | 'tls_timeout' | 'tls_reset' | 'tls_error' | 'error';
+export type ChannelState = 'ok' | 'partial' | 'down' | 'unknown';
+
+/** One probe of a channel from one vantage point: how far a connection got, and how fast. */
+export interface ChannelCell {
+  vantage: string;
+  result: ProbeResult;
+  tcpMs: number | null;
+  tlsMs: number | null;
+  detail: string | null;
+  probedAt: string;
+  /** Since when this result holds. */
+  changedAt: string;
+  /** Older than five minutes: says nothing about now. */
+  stale: boolean;
+}
+
+export interface DashboardChannel {
+  /** host:port */
+  key: string;
+  name: string;
+  host: string;
+  port: number;
+  sni: string;
+  state: ChannelState;
+  cells: ChannelCell[];
+  reason: string | null;
+}
+
+/** The VPN channels (the servers the links of every connection point at) as probed from several places, with bridge's verdict. */
+export interface DashboardChannels {
+  status: ChannelsStatus;
+  reasons: string[];
+  channels: DashboardChannel[];
+  vantages: { name: string; lastProbeAt: string; stale: boolean }[];
+}
+
 export type UpsStatus = 'ok' | 'warn' | 'bad';
 
 /** The UPS as the board with its USB cable last reported it (infra/ups), with bridge's verdict. */
@@ -227,6 +265,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardCloud: builder.query<DashboardCloud[], void>({
       query: () => 'dashboard/cloud',
     }),
+    getDashboardChannels: builder.query<DashboardChannels, void>({
+      query: () => 'dashboard/channels',
+    }),
     getDashboardUps: builder.query<DashboardUps[], void>({
       query: () => 'dashboard/ups',
     }),
@@ -260,6 +301,7 @@ export const {
   useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
   useGetDashboardCloudQuery,
+  useGetDashboardChannelsQuery,
   useGetDashboardUpsQuery,
   useGetDashboardRouterQuery,
   useGetGithubConnectionQuery,

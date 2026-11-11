@@ -1,4 +1,4 @@
-import type { DashboardBoardMetrics, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
 
 // What the Dashboard header says in one line, and the list under it: everything on the page that is not fine, from every tile - so the
 // answer to "is anything wrong?" does not need scrolling through them. Pure; the page feeds it what its queries returned.
@@ -20,6 +20,7 @@ export interface AttentionInput {
   backupIssue: boolean;
   boards: DashboardBoardMetrics[];
   cloud?: DashboardCloud[];
+  channels?: DashboardChannels | null;
   nas: DashboardNas[];
   ups: DashboardUps[];
   router: DashboardRouter[];
@@ -48,6 +49,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     if (cloud.status === 'ok') continue;
 
     items.push({ id: `cloud:${cloud.host}`, level: cloud.status, text: `Облако ${cloud.host}: ${cloud.reasons[0] ?? 'есть замечания'}${cloud.reasons.length > 1 ? ` (и ещё ${cloud.reasons.length - 1})` : ''}` });
+  }
+
+  if (input.channels && input.channels.status !== 'ok') {
+    const { reasons } = input.channels;
+
+    items.push({ id: 'channels', level: input.channels.status, text: `Каналы: ${reasons[0] ?? 'есть замечания'}${reasons.length > 1 ? ` (и ещё ${reasons.length - 1})` : ''}` });
   }
 
   for (const nas of input.nas) {

@@ -15,6 +15,7 @@ import { ImproveModule } from './improve/improve.module';
 import { BoardsModule } from './boards/boards.module';
 import { LabModule } from './lab/lab.module';
 import { LogsModule } from './logs/logs.module';
+import { LinksModule } from './links/links.module';
 import { LoopModule } from './loop/loop.module';
 import { OauthModule } from './oauth/oauth.module';
 import { InboxModule } from './inbox/inbox.module';
@@ -58,6 +59,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     LabModule,
     BoardsModule,
     LogsModule,
+    LinksModule,
     LoopModule,
     OauthModule,
     PurgeModule,
