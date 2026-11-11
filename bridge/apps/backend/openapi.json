@@ -7052,6 +7052,12 @@
             "type": "string",
             "nullable": true
           },
+          "vpnLinks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "limitsRefreshMin": {
             "type": "number"
           },
@@ -7081,6 +7087,7 @@
           "proxyUrl",
           "chatEnabled",
           "vpnLink",
+          "vpnLinks",
           "limitsRefreshMin",
           "limitsRefreshRequestedAt",
           "limitProbe"

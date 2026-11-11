@@ -3186,6 +3186,7 @@ export interface components {
             proxyUrl: string | null;
             chatEnabled: boolean;
             vpnLink: string | null;
+            vpnLinks: string[];
             limitsRefreshMin: number;
             /** Format: date-time */
             limitsRefreshRequestedAt: string | null;
