@@ -45,6 +45,10 @@ when the copy is older than 26 hours (`healthcheck.sh`). Nothing alerts on Teleg
 - **The root file system is a RAM disk.** `~/.ssh/authorized_keys` of the NAS's root account (`sshd` in the web UI sense) is lost at every reboot.
   Everything that must survive lives on the data volume (`/mnt/HD/HD_a2/Nas_Prog/pipe-backup-pull/`: the key, the pinned host key, the copies) or in
   `/usr/local/config`. That is why the copy is made by a container with a restart policy and not by something installed on the NAS.
+  After a NAS reboot `Permission denied (publickey,password)` is therefore expected: `infra/nas/install.sh restore-ssh` puts the key back (it asks for the
+  NAS password once). The daily pulls do not need it — the container restarts by itself and opens its own connections — only deploying from the workstation
+  does. Making the key survive would mean editing the firmware's boot scripts (`/etc/rc.sh`, `system_init`; the only persistent file system is the 12 MB
+  `/usr/local/config`), which is not worth the risk on the machine that holds the backups.
 - **The runtime cannot run newer userlands.** Debian bookworm images fail to load glibc, Alpine 3.18+ exits 139 on the first command (so did the
   stock `registry` and `postgres` containers that were crash-looping — they were removed on 2026-10-30; their volumes are kept in
   `Nas_Prog/_docker/volumes`). Alpine 3.16 works, hence the pinned base in the Dockerfile.
