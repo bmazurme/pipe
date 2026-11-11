@@ -7776,6 +7776,35 @@
           "bytes"
         ]
       },
+      "NasVmBackupDto": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "imagesAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "snapshots": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "snapshots",
+          "bytes"
+        ]
+      },
       "NasRaidDto": {
         "type": "object",
         "properties": {
@@ -7880,6 +7909,9 @@
           },
           "backup": {
             "$ref": "#/components/schemas/NasBackupDto"
+          },
+          "vmBackup": {
+            "$ref": "#/components/schemas/NasVmBackupDto"
           },
           "raid": {
             "$ref": "#/components/schemas/NasRaidDto"

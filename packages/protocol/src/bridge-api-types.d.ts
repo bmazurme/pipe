@@ -3421,6 +3421,12 @@ export interface components {
             snapshots: number;
             bytes: number;
         };
+        NasVmBackupDto: {
+            createdAt?: string | null;
+            imagesAt?: string | null;
+            snapshots: number;
+            bytes: number;
+        };
         NasRaidDto: {
             summary: string;
             degraded: boolean;
@@ -3444,6 +3450,7 @@ export interface components {
             host: string;
             uptimeSec: number;
             backup: components["schemas"]["NasBackupDto"];
+            vmBackup?: components["schemas"]["NasVmBackupDto"];
             raid: components["schemas"]["NasRaidDto"];
             volume: components["schemas"]["NasVolumeDto"];
             disks: components["schemas"]["NasDiskDto"][];
