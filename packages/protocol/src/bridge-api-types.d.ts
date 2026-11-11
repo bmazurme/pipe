@@ -2290,6 +2290,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/digests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LabDigestController_list"];
+        put?: never;
+        post: operations["LabDigestController_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/digests/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LabDigestController_getSettings"];
+        put: operations["LabDigestController_saveSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/digests/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LabDigestController_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/digests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["LabDigestController_get"];
+        put?: never;
+        post?: never;
+        delete: operations["LabDigestController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["LabDigestController_update"];
+        trace?: never;
+    };
+    "/api/v1/lab/digests/{id}/exported": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LabDigestController_markExported"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/digests/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LabDigestController_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs": {
         parameters: {
             query?: never;
@@ -3838,6 +3934,53 @@ export interface components {
             task: string;
             model: string;
             baseBranch?: string;
+        };
+        LabDigest: {
+            userId: number;
+            weekStart: string;
+            /** @enum {string} */
+            status: "generating" | "draft" | "exported" | "failed";
+            includePrivate: boolean;
+            model: string;
+            jobId: number | null;
+            items: Record<string, never>[];
+            excludedPrivate: number;
+            title: string | null;
+            preview: string | null;
+            content: string | null;
+            tags: string[];
+            noteType: string;
+            error: string | null;
+            noteId: number | null;
+            /** Format: date-time */
+            sentAt: string | null;
+            /** Format: date-time */
+            exportedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            id: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SaveLabDigestSettingsDto: {
+            autoWeekly?: boolean;
+            includePrivate?: boolean;
+            model?: string;
+            notesUrl?: string;
+            notesKey?: string;
+        };
+        StartLabDigestDto: {
+            weekStart: string;
+            includePrivate?: boolean;
+            model?: string;
+        };
+        UpdateLabDigestDto: {
+            title?: string;
+            preview?: string;
+            content?: string;
+            tags?: string[];
         };
         AppLog: {
             level: Record<string, never>;
@@ -7679,6 +7822,219 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabRun"];
+                };
+            };
+        };
+    };
+    LabDigestController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"][];
+                };
+            };
+        };
+    };
+    LabDigestController_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartLabDigestDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"];
+                };
+            };
+        };
+    };
+    LabDigestController_getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LabDigestController_saveSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveLabDigestSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LabDigestController_preview: {
+        parameters: {
+            query: {
+                weekStart: string;
+                includePrivate?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LabDigestController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"];
+                };
+            };
+        };
+    };
+    LabDigestController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    LabDigestController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLabDigestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"];
+                };
+            };
+        };
+    };
+    LabDigestController_markExported: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"];
+                };
+            };
+        };
+    };
+    LabDigestController_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabDigest"];
                 };
             };
         };
