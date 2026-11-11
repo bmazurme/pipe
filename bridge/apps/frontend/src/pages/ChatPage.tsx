@@ -507,7 +507,8 @@ export function ChatPage() {
     <div className={styles.page}>
       <PageHeader
         title="Chat"
-        description="Диалог с моделью (Claude, GPT, DeepSeek, Qwen) через worker. В чатах с Claude можно прикреплять изображения и файлы, а весь диалог — сохранить в Context."
+        // Four lines of explanation on a phone are four lines less of conversation.
+        description={isMobile ? undefined : 'Диалог с моделью (Claude, GPT, DeepSeek, Qwen) через worker. В чатах с Claude можно прикреплять изображения и файлы, а весь диалог — сохранить в Context.'}
       />
 
       {composer.chatError && (

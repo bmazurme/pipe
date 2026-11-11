@@ -29,6 +29,14 @@ export type NavGroup = 'agent' | 'data' | 'work' | 'system';
 
 export const NAV_GROUP_ORDER: NavGroup[] = ['agent', 'data', 'work', 'system'];
 
+/** What each section is called on the home page. */
+export const NAV_GROUP_TITLES: Record<NavGroup, string> = {
+  agent: 'ИИ-агент',
+  data: 'Данные и безопасность',
+  work: 'Работа',
+  system: 'Система',
+};
+
 export interface ServiceLink {
   id: string;
   title: string;
@@ -204,6 +212,21 @@ export const SERVICES: ServiceLink[] = [
 /** The services an account can actually use: owner-only ones are dropped once it is known not to be the owner. */
 export function visibleServices(isOwner?: boolean): ServiceLink[] {
   return isOwner === false ? SERVICES.filter((service) => !service.ownerOnly) : SERVICES;
+}
+
+export interface ServiceSection {
+  group: NavGroup;
+  title: string;
+  items: ServiceLink[];
+}
+
+/** The services an account can use, split into the sidebar's sections in the sidebar's order; a section with nothing for this account is left out. */
+export function groupedServices(isOwner?: boolean): ServiceSection[] {
+  const visible = visibleServices(isOwner);
+
+  return NAV_GROUP_ORDER.map((group) => ({ group, title: NAV_GROUP_TITLES[group], items: visible.filter((service) => service.group === group) })).filter(
+    (section) => section.items.length > 0,
+  );
 }
 
 /** Announced but not built yet — rendered inert wherever services are listed. None right now. */
