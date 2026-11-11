@@ -17,7 +17,9 @@ export interface E2eTarget {
 export const E2E_TARGETS: E2eTarget[] = [
   { key: 'e2e:claude', url: 'https://api.anthropic.com/' },
   { key: 'e2e:telegram', url: 'https://api.telegram.org/' },
-  { key: 'e2e:github', url: 'https://api.github.com/' },
+  // GitHub's own «how much of my limit is left» endpoint: answers 200 and does not count against the anonymous 60-an-hour limit of the tunnel's
+  // exit address, which a probe every minute on every worker would otherwise use up (and then get 403 for).
+  { key: 'e2e:github', url: 'https://api.github.com/rate_limit' },
 ];
 
 export type E2eResultName = 'ok' | 'tcp_refused' | 'tls_timeout' | 'tls_reset' | 'error';
@@ -31,6 +33,8 @@ export interface E2eOutcome {
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
+// undici sends no User-Agent of its own, and GitHub's API answers such a request with 403 («Request forbidden by administrative rules»).
+export const PROBE_HEADERS = { 'user-agent': 'pipe-worker-e2e-probe' };
 const PROBE_EVERY_MS = 60_000;
 
 export interface ProbeLog {
@@ -66,6 +70,7 @@ export type RequestFn = (url: string, proxyUrl: string, timeoutMs: number) => Pr
 const defaultRequest: RequestFn = async (url, proxyUrl, timeoutMs) => {
   const response = await request(url, {
     method: 'GET',
+    headers: PROBE_HEADERS,
     dispatcher: resolveDispatcher(proxyUrl),
     signal: AbortSignal.timeout(timeoutMs),
     headersTimeout: timeoutMs,
