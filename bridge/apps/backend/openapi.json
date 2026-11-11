@@ -4578,6 +4578,66 @@
         }
       }
     },
+    "/api/v1/boards/agent/channels": {
+      "get": {
+        "operationId": "LinksAgentController_channels",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/links": {
+      "post": {
+        "operationId": "LinksAgentController_report",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkProbeReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/channels": {
+      "get": {
+        "operationId": "LinksDashboardController_view",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/oauth/providers": {
       "get": {
         "operationId": "OauthController_providers",
@@ -9503,6 +9563,68 @@
           "id",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "LinkProbeResultDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "/^[A-Za-z0-9.:[\\]_-]{1,200}:\\d{1,5}$/"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "tcp_timeout",
+              "tcp_refused",
+              "tls_timeout",
+              "tls_reset",
+              "tls_error",
+              "error"
+            ]
+          },
+          "tcpMs": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "tlsMs": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "key",
+          "result"
+        ]
+      },
+      "LinkProbeReportDto": {
+        "type": "object",
+        "properties": {
+          "vantage": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkProbeResultDto"
+            }
+          }
+        },
+        "required": [
+          "vantage",
+          "results"
         ]
       },
       "PurgeEntryResponseDto": {

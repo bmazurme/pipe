@@ -1,0 +1,51 @@
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.matrix {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.matrix th,
+.matrix td {
+  padding: 6px 10px 6px 0;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.matrix th {
+  font-weight: 400;
+}
+
+.channelName {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vantages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}

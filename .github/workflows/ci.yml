@@ -156,6 +156,7 @@ jobs:
       - run: bash infra/ups/test.sh
       - run: bash infra/cloudagent/test.sh
       - run: bash infra/bridge-pi/test-vless-to-xray.sh
+      - run: bash infra/linkprobe/test.sh
       - run: bash infra/router/test.sh
       - run: bash infra/autodeploy/test.sh
 

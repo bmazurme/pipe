@@ -8,6 +8,7 @@ import {
   useGetDashboardBackupsQuery,
   useGetDashboardBoardMetricsQuery,
   useGetDashboardDeploysQuery,
+  useGetDashboardChannelsQuery,
   useGetDashboardCloudQuery,
   useGetDashboardNasQuery,
   useGetDashboardUpsQuery,
@@ -23,6 +24,7 @@ import { PageHeader } from '../widgets/PageHeader';
 import { SectionHeader } from '../widgets/SectionHeader';
 import { GithubConnectionCard } from './dashboard/GithubConnectionCard';
 import { BoardMetricsCard } from './dashboard/BoardMetricsCard';
+import { ChannelsCard } from './dashboard/ChannelsCard';
 import { CloudCard } from './dashboard/CloudCard';
 import { NasCard } from './dashboard/NasCard';
 import { RouterCard } from './dashboard/RouterCard';
@@ -139,6 +141,7 @@ export function DashboardPage() {
   // The same requests the tiles make (RTK Query shares them), so the header can say what is wrong anywhere on the page without a second round trip.
   const boardMetrics = useGetDashboardBoardMetricsQuery(24, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const cloud = useGetDashboardCloudQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const channels = useGetDashboardChannelsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const ups = useGetDashboardUpsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const router = useGetDashboardRouterQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
@@ -158,6 +161,7 @@ export function DashboardPage() {
     backupIssue: !backups.isLoading && backupIssue,
     boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
     cloud: Array.isArray(cloud.data) ? cloud.data : [],
+    channels: channels.data && Array.isArray(channels.data.channels) ? channels.data : null,
     nas: Array.isArray(nas.data) ? nas.data : [],
     ups: Array.isArray(ups.data) ? ups.data : [],
     router: Array.isArray(router.data) ? router.data : [],
@@ -170,7 +174,7 @@ export function DashboardPage() {
     <div className={styles.page}>
       <PageHeader
         title="Дашборд"
-        description="Состояние инфраструктуры: туннель, облако, узлы кластера, платы, NAS, ИБП, роутер, бэкапы и релизы — на одной странице."
+        description="Состояние инфраструктуры: туннель, каналы связи, облако, узлы кластера, платы, NAS, ИБП, роутер, бэкапы и релизы — на одной странице."
         actions={
           summaryReady ? (
             <Label theme={summary.theme} size="m">
@@ -269,6 +273,8 @@ export function DashboardPage() {
       </div>
 
       <CloudCard />
+
+      <ChannelsCard />
 
       <BoardMetricsCard />
 

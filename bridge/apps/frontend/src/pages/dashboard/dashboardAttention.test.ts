@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DashboardBoardMetrics, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
 import { type AttentionInput, buildAttention, summarize } from './dashboardAttention';
 
 const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], ups: [], router: [], lastDeploy: null };
@@ -49,6 +49,17 @@ describe('buildAttention', () => {
     expect(items).toEqual([{ id: 'cloud:yc-vm', level: 'bad', text: 'Облако yc-vm: Порт 5432 открыт в интернет (и ещё 1)' }]);
     expect(buildAttention({ ...calm, cloud: [cloud('ok')] })).toEqual([]);
     expect(buildAttention({ ...calm })).toEqual([]);
+  });
+
+  it('names the channels, with the first reason and how many more there are; says nothing when they are fine or unknown', () => {
+    const channels = (status: DashboardChannels['status'], reasons: string[]): DashboardChannels => ({ status, reasons, channels: [], vantages: [] });
+
+    expect(buildAttention({ ...calm, channels: channels('bad', ['Ни один канал не доходит ни из одной точки', 'x']) })).toEqual([
+      { id: 'channels', level: 'bad', text: 'Каналы: Ни один канал не доходит ни из одной точки (и ещё 1)' },
+    ]);
+    expect(buildAttention({ ...calm, channels: channels('warn', ['Остался один живой канал: a']) })[0]).toMatchObject({ level: 'warn' });
+    expect(buildAttention({ ...calm, channels: channels('ok', []) })).toEqual([]);
+    expect(buildAttention({ ...calm, channels: null })).toEqual([]);
   });
 
   it('says a release that never came up did not come up, and ignores a release that went out', () => {

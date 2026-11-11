@@ -295,6 +295,16 @@ describe('DashboardPage', () => {
       expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toContain('Облако yc-vm: Память на исходе: доступно 92 МБ (5 %)');
     });
 
+    it('lists a problem of the channels among the others', async () => {
+      const CHANNELS_BAD = { status: 'bad', reasons: ['Ни один канал не доходит ни из одной точки'], channels: [], vantages: [] };
+
+      serve({ '/dashboard/channels': CHANNELS_BAD });
+      renderPage();
+
+      expect(await screen.findByText('Проблем: 1')).toBeTruthy();
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toContain('Каналы: Ни один канал не доходит ни из одной точки');
+    });
+
     it('says "Замечаний" when there are only remarks, and "Всё в порядке" with nothing to say', async () => {
       serve({ '/dashboard/board-metrics': [BOARD_WARM], '/dashboard/nas': [NAS_WARN] });
       renderPage();
