@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -87,5 +87,38 @@ describe('VpnConnectionRow', () => {
     await user.click(screen.getByRole('button', { name: 'Ссылка' }));
 
     expect(await screen.findByLabelText('Ссылка подключения office')).toBeTruthy();
+  });
+
+  it('shows "Скопировано" for a moment and goes back, and clears its timer when the row goes away', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ link: 'vless://abc' })));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => undefined) }, configurable: true });
+
+    const { unmount } = renderRow();
+
+    await user.click(screen.getByRole('button', { name: 'Ссылка' }));
+    await screen.findByLabelText('Ссылка подключения office');
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    try {
+      await act(async () => {
+        screen.getByRole('button', { name: 'Скопировать' }).click();
+      });
+      expect(screen.getByRole('button', { name: 'Скопировано' })).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByRole('button', { name: 'Скопировать' })).toBeTruthy();
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'Скопировать' }).click();
+      });
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
