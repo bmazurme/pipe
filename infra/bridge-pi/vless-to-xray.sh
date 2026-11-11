@@ -10,6 +10,11 @@
 #   ./vless-to-xray.sh                  # paste the link, press Enter (nothing is shown)
 #   ./vless-to-xray.sh link.txt         # or read it from a file (a vless:// link or a sing-box JSON)
 #
+# A file with SEVERAL vless:// links (one per line; blank lines and lines starting with # are skipped) makes a POOL: one outbound
+# per link (node-1 … node-N), Xray probes each exit through itself once a minute (observatory) and a leastPing balancer sends the
+# traffic to the fastest one that answers, falling back to node-1 when every probe fails — so a blocked exit is left on its own.
+# One link gives the plain single-outbound config, as before. (Telegram, GitHub and the like go through this proxy.)
+#
 # FINGERPRINT=firefox ./vless-to-xray.sh …   overrides the TLS fingerprint the link/JSON carries. On this network the
 # `chrome` fingerprint was throttled (about 80% of connections hung, in series) while `firefox` passed 48 of 48 — if
 # the tunnel is flaky, try another one (firefox, safari, randomized) before blaming the server.
@@ -20,12 +25,12 @@ set -euo pipefail
 
 OUT="${OUT:-$HOME/.pipe/xray-client.json}"
 if [ -n "${1:-}" ]; then
-  LINK="$(tr -d '[:space:]' < "$1")"
+  LINK="$(cat "$1")"
 else
   printf 'vless:// link (hidden): ' >&2
   read -rs LINK; echo >&2
 fi
-[ -n "$LINK" ] || { echo "empty link" >&2; exit 1; }
+[ -n "$(printf '%s' "$LINK" | tr -d '[:space:]')" ] || { echo "empty link" >&2; exit 1; }
 
 umask 077
 mkdir -p "$(dirname "$OUT")"
@@ -34,13 +39,14 @@ import json, os, sys
 from urllib.parse import urlsplit, parse_qs, unquote
 
 raw = os.environ['LINK'].strip()
+fingerprint_override = os.environ.get('FINGERPRINT')
 
 def need(q, key):
     if not q.get(key):
         sys.exit(f'the link has no "{key}" — it must be a Reality link (security=reality, pbk, sni, fp, sid)')
     return q[key]
 
-if raw.startswith('{'):
+def from_json(raw):
     # sing-box style: {"outbounds": [{"type": "vless", "server", "server_port", "uuid", "flow", "tls": {...}}]}
     try:
         doc = json.loads(raw)
@@ -62,8 +68,10 @@ if raw.startswith('{'):
     q = {'flow': o.get('flow', ''), 'encryption': 'none',
          'sni': tls.get('server_name', ''), 'fp': (tls.get('utls') or {}).get('fingerprint', 'chrome'),
          'pbk': reality.get('public_key', ''), 'sid': reality.get('short_id', ''), 'spx': '/'}
-else:
-    u = urlsplit(raw)
+    return host, port, uuid, q
+
+def from_link(line):
+    u = urlsplit(line)
     if u.scheme != 'vless' or not u.hostname or not u.username:
         sys.exit('not a vless:// link (vless://UUID@host:port?...) and not a JSON')
     q = {k: unquote(v[0]) for k, v in parse_qs(u.query).items()}
@@ -71,12 +79,10 @@ else:
         sys.exit('the link is not security=reality')
     if q.get('type', 'tcp') != 'tcp':
         sys.exit(f'transport "{q.get("type")}" is not supported here — only tcp')
-    host, port, uuid = u.hostname, u.port or 443, unquote(u.username)
+    return u.hostname, u.port or 443, unquote(u.username), q
 
-cfg = {
-    'log': {'loglevel': 'warning'},
-    'inbounds': [{'listen': '0.0.0.0', 'port': 1080, 'protocol': 'http'}],
-    'outbounds': [{
+def outbound(host, port, uuid, q, tag=None):
+    out = {
         'protocol': 'vless',
         'settings': {'vnext': [{
             'address': host,
@@ -89,17 +95,51 @@ cfg = {
             'security': 'reality',
             'realitySettings': {
                 'serverName': need(q, 'sni'),
-                'fingerprint': os.environ.get('FINGERPRINT') or q.get('fp', 'chrome'),
+                'fingerprint': fingerprint_override or q.get('fp', 'chrome'),
                 'publicKey': need(q, 'pbk'),
                 'shortId': q.get('sid', ''),
                 'spiderX': q.get('spx', '/'),
             },
         },
-    }],
-}
+    }
+    if tag:
+        out = {'tag': tag, **out}
+    return out
+
+if raw.startswith('{'):
+    links = [from_json(raw)]
+else:
+    lines = [l.strip() for l in raw.splitlines() if l.strip() and not l.strip().startswith('#')]
+    if not lines:
+        sys.exit('empty link')
+    links = [from_link(l) for l in lines]
+
+if len(links) == 1:
+    host, port, uuid, q = links[0]
+    cfg = {
+        'log': {'loglevel': 'warning'},
+        'inbounds': [{'listen': '0.0.0.0', 'port': 1080, 'protocol': 'http'}],
+        'outbounds': [outbound(host, port, uuid, q)],
+    }
+    summary = f'server {host}:{port}, sni {q["sni"]}'
+else:
+    cfg = {
+        'log': {'loglevel': 'warning'},
+        'inbounds': [{'tag': 'in', 'listen': '0.0.0.0', 'port': 1080, 'protocol': 'http'}],
+        'outbounds': [outbound(h, p, u, q, f'node-{i + 1}') for i, (h, p, u, q) in enumerate(links)],
+        'observatory': {'subjectSelector': ['node-'], 'probeUrl': 'https://www.gstatic.com/generate_204',
+                        'probeInterval': '1m', 'enableConcurrency': True},
+        'routing': {
+            'domainStrategy': 'AsIs',
+            'balancers': [{'tag': 'pool', 'selector': ['node-'], 'strategy': {'type': 'leastPing'}, 'fallbackTag': 'node-1'}],
+            'rules': [{'type': 'field', 'inboundTag': ['in'], 'balancerTag': 'pool'}],
+        },
+    }
+    summary = f'pool of {len(links)}: ' + ', '.join(f'{h}:{p}' for h, p, _, _ in links)
+
 with open(os.environ['OUT'], 'w') as f:
     json.dump(cfg, f, indent=2)
     f.write('\n')
 os.chmod(os.environ['OUT'], 0o600)
-print(f"wrote {os.environ['OUT']} (server {host}:{port}, sni {q['sni']})")
+print(f"wrote {os.environ['OUT']} ({summary})")
 PY
