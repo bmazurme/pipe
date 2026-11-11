@@ -5,6 +5,7 @@ import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnStatusAlertsService } from './vpn-status-alerts.service';
+import { SubscriptionService } from './subscription.service';
 import { VpnService } from './vpn.service';
 
 const ACTIVE_CONNECTION = {
@@ -59,11 +60,13 @@ function vpnService(
   connections?: VpnConnection[],
   github: ReturnType<typeof fakeGithub> = fakeGithub(),
   alerts: ReturnType<typeof fakeAlerts> = fakeAlerts(),
+  subscriptions: unknown = {},
 ): VpnService {
   return new VpnService(
     fakeVpnConnectionsService(connections),
     github as unknown as GithubActionsService,
     alerts as unknown as VpnStatusAlertsService,
+    subscriptions as SubscriptionService,
   );
 }
 

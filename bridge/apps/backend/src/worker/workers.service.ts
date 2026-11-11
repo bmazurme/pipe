@@ -28,7 +28,7 @@ import {
 } from './dto/worker-fleet.dto';
 import { VpnConnectionsService } from '../vpn/vpn-connections.service';
 import { VpnLinkResolver } from '../vpn/vpn-link-resolver.service';
-import { parseVlessLink } from './vless-link';
+import { isSubscriptionUrl, parseVlessLink } from './vless-link';
 import { touchWorker } from './worker-touch';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job, JobStatus } from './entities/job.entity';
@@ -90,12 +90,21 @@ export class WorkersService implements OnModuleInit {
   }
 
   // '' or null clears; anything else must be a link the worker can run a tunnel with.
-  private normalizeVpnLink(raw: string | null | undefined): string | null {
+  private async normalizeVpnLink(
+    raw: string | null | undefined,
+  ): Promise<string | null> {
     const link = raw?.trim() ?? '';
 
     if (link === '') return null;
 
     try {
+      if (isSubscriptionUrl(link)) {
+        // A subscription link is fetched now, so a wrong one is refused here and not found out when the worker polls.
+        await this.vpnLinks.checkSubscription(link);
+
+        return link;
+      }
+
       parseVlessLink(link);
     } catch (error) {
       throw new BadRequestException(
@@ -331,7 +340,7 @@ export class WorkersService implements OnModuleInit {
       proxyUrl: dto.proxyUrl?.trim() || null,
       chatEnabled: dto.chatEnabled ?? true,
       claudeCredentialId: dto.claudeCredentialId ?? null,
-      vpnLink: this.normalizeVpnLink(dto.vpnLink),
+      vpnLink: await this.normalizeVpnLink(dto.vpnLink),
       vpnSource: 'link',
       vpnConnectionId: null,
       capabilities: dto.capabilities?.length ? dto.capabilities : null,
@@ -389,7 +398,7 @@ export class WorkersService implements OnModuleInit {
       worker.limitsRefreshMin = dto.limitsRefreshMin;
     }
     if (dto.vpnLink !== undefined) {
-      worker.vpnLink = this.normalizeVpnLink(dto.vpnLink);
+      worker.vpnLink = await this.normalizeVpnLink(dto.vpnLink);
     }
     await this.applyVpnSource(worker, dto);
     if (dto.capabilities !== undefined) {
@@ -530,7 +539,19 @@ export class WorkersService implements OnModuleInit {
   private async vpnLinkOf(worker: Worker): Promise<string | null> {
     const source = worker.vpnSource ?? 'link';
 
-    if (source === 'link') return worker.vpnLink ?? null;
+    if (source === 'link') {
+      const own = worker.vpnLink ?? null;
+
+      if (!isSubscriptionUrl(own)) return own;
+
+      try {
+        return await this.vpnLinks.resolveSubscription(own as string);
+      } catch (error) {
+        throw new ServiceUnavailableException(
+          `VPN: не удалось получить ссылку из подписки (${error instanceof Error ? error.message : 'ошибка'})`,
+        );
+      }
+    }
 
     if (source === 'connection' && worker.vpnConnectionId === null) {
       return null;

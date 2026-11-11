@@ -272,6 +272,7 @@ describe('VpnPage', () => {
     renderPage();
     await screen.findByText('primary');
     await user.click(screen.getByText('Новое подключение'));
+    await user.click(screen.getByText('Панель 3x-ui'));
 
     await user.type(screen.getByPlaceholderText('Например, Нидерланды'), 'new');
     await user.type(screen.getByPlaceholderText('http://1.2.3.4:2053/abcdef'), 'http://panel.example.com');
@@ -310,6 +311,7 @@ describe('VpnPage', () => {
     renderPage();
     await screen.findByText('primary');
     await user.click(screen.getByText('Новое подключение'));
+    await user.click(screen.getByText('Панель 3x-ui'));
 
     await user.type(
       screen.getByPlaceholderText('vless://uuid@host:port?...#название'),

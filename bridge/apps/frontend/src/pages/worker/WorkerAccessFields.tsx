@@ -47,6 +47,11 @@ export function isVlessLink(value: string): boolean {
   return /^vless:\/\/\S+$/.test(value.trim());
 }
 
+// What a worker's VPN field takes: a vless:// Reality link, or an https:// subscription link that bridge turns into one.
+export function isVpnLink(value: string): boolean {
+  return isVlessLink(value) || /^https:\/\/\S+$/.test(value.trim());
+}
+
 interface VpnLinkFieldProps {
   /** host:port of the VPN already set for this worker, or null. */
   currentHost: string | null;
@@ -62,7 +67,7 @@ export function VpnLinkField({ currentHost, onChange }: VpnLinkFieldProps) {
   const [mode, setMode] = useState<'keep' | 'replace' | 'remove'>('keep');
   const [link, setLink] = useState('');
   const showInput = currentHost === null || mode === 'replace';
-  const invalid = link.trim() !== '' && !isVlessLink(link);
+  const invalid = link.trim() !== '' && !isVpnLink(link);
 
   const choose = (next: 'keep' | 'replace' | 'remove') => {
     setMode(next);
@@ -105,10 +110,10 @@ export function VpnLinkField({ currentHost, onChange }: VpnLinkFieldProps) {
               setLink(value);
               onChange(value.trim() === '' ? undefined : value.trim());
             }}
-            placeholder="vless://UUID@сервер:порт?security=reality&…"
+            placeholder="vless://UUID@сервер:порт?… или https://… (подписка)"
             hasClear
             validationState={invalid ? 'invalid' : undefined}
-            errorMessage={invalid ? 'Нужна ссылка vless://… (Reality)' : undefined}
+            errorMessage={invalid ? 'Нужна ссылка vless://… (Reality) или https://… (подписка)' : undefined}
             controlProps={{ 'aria-label': "VPN-ссылка worker'а" }}
           />
           {mode === 'replace' && (
@@ -120,9 +125,10 @@ export function VpnLinkField({ currentHost, onChange }: VpnLinkFieldProps) {
       )}
 
       <Text variant="caption-2" color="secondary">
-        Ссылка vless:// (Reality) из панели VPN или приложения. Worker сам поднимает с ней туннель и ходит к Claude и AI
-        через него — отдельный VPN-контейнер рядом не нужен. Ссылка хранится зашифрованной и больше не показывается;
-        применяется за один интервал опроса.
+        Ссылка vless:// (Reality) из панели VPN или приложения либо ссылка подписки https://… от VPN-провайдера: bridge
+        скачает список и возьмёт первую подходящую ссылку. Worker сам поднимает с ней туннель и ходит к Claude и AI через
+        него — отдельный VPN-контейнер рядом не нужен. Ссылка хранится зашифрованной и больше не показывается; применяется
+        за один интервал опроса.
       </Text>
     </div>
   );
@@ -131,7 +137,7 @@ export function VpnLinkField({ currentHost, onChange }: VpnLinkFieldProps) {
 export type VpnSource = 'link' | 'connection' | 'active';
 
 const VPN_SOURCE_OPTIONS: { value: VpnSource; content: string }[] = [
-  { value: 'link', content: 'Своя ссылка vless://' },
+  { value: 'link', content: 'Своя ссылка (vless:// или подписка)' },
   { value: 'connection', content: 'Подключение со страницы VPN' },
   { value: 'active', content: 'Активное подключение со страницы VPN' },
 ];

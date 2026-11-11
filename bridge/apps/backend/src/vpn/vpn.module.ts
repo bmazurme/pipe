@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
+import { SubscriptionService } from './subscription.service';
 import { VpnConnectionsController } from './vpn-connections.controller';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnStatusAlertsService } from './vpn-status-alerts.service';
@@ -25,6 +26,7 @@ import { VpnService } from './vpn.service';
     GithubActionsService,
     VpnStatusAlertsService,
     VpnLinkResolver,
+    SubscriptionService,
   ],
   exports: [VpnConnectionsService, VpnLinkResolver],
 })

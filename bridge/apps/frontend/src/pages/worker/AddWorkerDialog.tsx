@@ -5,7 +5,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { type CreatedFleetWorker, useCreateWorkerMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { EnrollInstructions } from './EnrollInstructions';
-import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVpnLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -110,7 +110,7 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
           propsButtonApply={{
             disabled:
               !name.trim() ||
-              (vpnSource === 'link' && typeof vpnLink === 'string' && !isVlessLink(vpnLink)) ||
+              (vpnSource === 'link' && typeof vpnLink === 'string' && !isVpnLink(vpnLink)) ||
               (vpnSource === 'connection' && vpnConnectionId === null),
           }}
           onClickButtonCancel={handleClose}

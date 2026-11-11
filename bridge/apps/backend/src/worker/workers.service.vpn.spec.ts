@@ -59,7 +59,11 @@ function build(row: Worker) {
     }),
   };
   const vpnConnections = { findAll: jest.fn().mockResolvedValue(connections) };
-  const vpnLinks = { resolve: jest.fn().mockResolvedValue(LINK) };
+  const vpnLinks = {
+    resolve: jest.fn().mockResolvedValue(LINK),
+    resolveSubscription: jest.fn().mockResolvedValue(LINK),
+    checkSubscription: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new WorkersService(
     workersRepo as never,
     jobsRepo as never,
@@ -161,5 +165,65 @@ describe('WorkersService: VPN source', () => {
     await expect(
       service.update(1, 42, { vpnSource: 'connection' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe("WorkersService: a subscription link as the worker's own VPN", () => {
+  const SUBSCRIPTION = 'https://api.provider.example/sub/SECRET#PaperVPN';
+
+  it('hands the worker the vless link the subscription holds, not the address', async () => {
+    const { service, vpnLinks } = build(worker({ vpnLink: SUBSCRIPTION }));
+
+    const config = await service.configFor(1);
+
+    expect(config.vpnLink).toBe(LINK);
+    expect(vpnLinks.resolveSubscription).toHaveBeenCalledWith(SUBSCRIPTION);
+    expect(vpnLinks.resolve).not.toHaveBeenCalled();
+  });
+
+  it('fails the settings fetch, so the worker keeps its tunnel, when the subscription gave nothing', async () => {
+    const { service, vpnLinks } = build(worker({ vpnLink: SUBSCRIPTION }));
+    vpnLinks.resolveSubscription.mockRejectedValue(
+      new Error('подписка ответила 500'),
+    );
+
+    await expect(service.configFor(1)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('checks a subscription link when it is saved, and keeps the address as given', async () => {
+    const { service, workersRepo, vpnLinks } = build(worker());
+
+    await service.update(1, 42, { vpnLink: `  ${SUBSCRIPTION}  ` });
+
+    expect(vpnLinks.checkSubscription).toHaveBeenCalledWith(SUBSCRIPTION);
+    expect(workersRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ vpnLink: SUBSCRIPTION }),
+    );
+  });
+
+  it('refuses to save a subscription that cannot be used, with the reason', async () => {
+    const { service, workersRepo, vpnLinks } = build(worker());
+    vpnLinks.checkSubscription.mockRejectedValue(
+      new Error('VPN «подписка»: подписка ответила 403'),
+    );
+
+    await expect(
+      service.update(1, 42, { vpnLink: SUBSCRIPTION }),
+    ).rejects.toThrow(/подписка ответила 403/);
+    await expect(
+      service.update(1, 42, { vpnLink: SUBSCRIPTION }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(workersRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('shows the worker card the host of the subscription, never its path', async () => {
+    const { service } = build(worker({ vpnLink: SUBSCRIPTION }));
+
+    const view = await service.update(1, 42, { chatEnabled: true });
+
+    expect(view.vpnHost).toBe('подписка · api.provider.example');
+    expect(JSON.stringify(view)).not.toContain('SECRET');
   });
 });
