@@ -16,6 +16,7 @@ import styles from '../VpnPage.module.css';
 
 // How long the armed "delete" button waits for its confirming second click.
 const CONFIRM_DELETE_MS = 4000;
+const COPIED_MS = 2000;
 import { VpnConnectionStatusGrid } from './VpnConnectionStatusGrid';
 
 interface VpnConnectionRowProps {
@@ -59,6 +60,15 @@ export function VpnConnectionRow({
 
     return () => clearTimeout(timer);
   }, [isConfirmingDelete]);
+
+  // "Скопировано" goes back by itself; the timer is cleared with the row, so it cannot fire into an unmounted component.
+  useEffect(() => {
+    if (!copied) return undefined;
+
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const handleActivate = async () => {
     setActionError(null);
@@ -167,7 +177,6 @@ export function VpnConnectionRow({
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }
