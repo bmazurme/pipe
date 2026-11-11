@@ -56,3 +56,35 @@ export class LinkProbeReportDto {
   @Type(() => LinkProbeResultDto)
   results: LinkProbeResultDto[];
 }
+
+export class E2eResultDto {
+  // e2e:claude, e2e:telegram, … — the keys of e2e.ts.
+  @IsString()
+  @Matches(/^e2e:[a-z0-9_-]{1,40}$/)
+  key: string;
+
+  @IsIn(PROBE_RESULTS)
+  result: ProbeResult;
+
+  // The whole request through the tunnel, in milliseconds.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600_000)
+  tcpMs?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  detail?: string | null;
+}
+
+// What a worker posts about requests it made through its own tunnel (worker/src/tunnelProbe.ts). The vantage point is the worker's
+// own name, taken from its key, never from the body.
+export class E2eReportDto {
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => E2eResultDto)
+  results: E2eResultDto[];
+}

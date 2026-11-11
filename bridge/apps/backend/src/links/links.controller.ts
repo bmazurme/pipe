@@ -7,12 +7,15 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 
 import { BoardAgentKeyAllowed } from '../auth/decorators/board-agent-key-allowed.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { WorkerKeyAllowed } from '../auth/decorators/worker-key-allowed.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
-import { LinkProbeReportDto } from './dto/link-probe.dto';
+import { E2eReportDto, LinkProbeReportDto } from './dto/link-probe.dto';
 import { Channel, ChannelsView } from './links';
 import { LinksService } from './links.service';
 
@@ -45,5 +48,24 @@ export class LinksDashboardController {
   @Get('channels')
   view(): Promise<ChannelsView> {
     return this.links.view();
+  }
+}
+
+// A worker's own report of the requests it made through its tunnel: its worker key, a managed worker only. Throttled well below the
+// default — one report a minute is normal.
+@Controller('api/v1/worker')
+@UseGuards(JwtOrApiKeyGuard)
+@WorkerKeyAllowed()
+export class LinksWorkerController {
+  constructor(private readonly links: LinksService) {}
+
+  @Post('links')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async report(
+    @Body() dto: E2eReportDto,
+    @CurrentUser() user: { id: number; workerId?: number },
+  ): Promise<void> {
+    await this.links.ingestWorker(user.workerId, dto.results);
   }
 }

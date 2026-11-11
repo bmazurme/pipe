@@ -201,6 +201,8 @@ describe('assessChannels', () => {
       reasons: [],
       channels: [],
       vantages: [],
+      e2e: [],
+      e2eVantages: [],
     });
   });
 

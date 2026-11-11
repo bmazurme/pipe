@@ -1,12 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 
 import { VpnConnectionsService } from '../vpn/vpn-connections.service';
 import { VpnLinkResolver } from '../vpn/vpn-link-resolver.service';
 import { parseVlessParams } from '../worker/vless-link';
-import { LinkProbeResultDto } from './dto/link-probe.dto';
+import { Worker } from '../worker/entities/worker.entity';
+import { E2eResultDto, LinkProbeResultDto } from './dto/link-probe.dto';
+import { isE2eKey } from './e2e';
 import { LinkProbe } from './entities/link-probe.entity';
 import { probeChannel } from './link-probe';
 import { assessChannels, Channel, ChannelsView } from './links';
@@ -16,6 +18,7 @@ import { LinksAlertsService } from './links-alerts.service';
 export const BRIDGE_VANTAGE = 'bridge';
 export const PROBE_EVERY_MS = 60_000;
 const PROBE_CONCURRENCY = 4;
+const RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 @Injectable()
 export class LinksService {
@@ -28,6 +31,8 @@ export class LinksService {
     private readonly connections: VpnConnectionsService,
     private readonly links: VpnLinkResolver,
     private readonly alerts: LinksAlertsService,
+    @InjectRepository(Worker)
+    private readonly workers: Repository<Worker>,
   ) {}
 
   // Every host:port a link of any connection points at, named after its connection (numbered when its pool has several links). A
@@ -108,6 +113,30 @@ export class LinksService {
     await this.probes.save(rows);
   }
 
+  // What a worker found out by making requests through its own tunnel. Filed under the worker's name (from its key, not from what it
+  // says), and only the end-to-end keys are taken: a worker has no business writing the probes of a channel.
+  async ingestWorker(
+    workerId: number | undefined,
+    results: E2eResultDto[],
+    now = new Date(),
+  ): Promise<void> {
+    if (workerId === undefined) {
+      throw new ForbiddenException(
+        'only a worker added on the Worker page reports through-tunnel probes',
+      );
+    }
+
+    const worker = await this.workers.findOneBy({ id: workerId });
+
+    if (!worker) throw new ForbiddenException('unknown worker');
+
+    await this.ingest(
+      `worker:${worker.name}`,
+      results.filter((entry) => isE2eKey(entry.key)) as LinkProbeResultDto[],
+      now,
+    );
+  }
+
   // Bridge probing every channel itself: the vantage point that needs no agent, so the tile has something from the first minute.
   async probeFromBridge(): Promise<number> {
     const channels = await this.channels();
@@ -141,6 +170,10 @@ export class LinksService {
 
     try {
       await this.probeFromBridge();
+      // A place or worker that has not reported for a week is gone: its last probes are dropped, not shown as "not reporting" forever.
+      await this.probes.delete({
+        probedAt: LessThan(new Date(Date.now() - RETENTION_MS)),
+      });
       // Judged on every probe round, with whatever the other vantage points have reported by now.
       await this.alerts.evaluate(await this.view());
     } catch (error) {

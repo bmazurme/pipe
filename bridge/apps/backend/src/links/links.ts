@@ -22,6 +22,8 @@ export const PROBE_RESULTS: ProbeResult[] = [
   'error',
 ];
 
+import { E2E_RESULT_TEXT, e2eTarget, isE2eKey } from './e2e';
+
 // What each failure usually means on the way to a VPN server; wording kept short, it goes into a tile and a Telegram line.
 export const RESULT_TEXT: Record<ProbeResult, string> = {
   ok: 'доступен',
@@ -77,6 +79,8 @@ export interface ChannelView extends Channel {
   reason: string | null;
 }
 
+export const DROP_AFTER_MS = 24 * 60 * 60_000;
+
 export interface VantageView {
   name: string;
   lastProbeAt: string;
@@ -90,6 +94,9 @@ export interface ChannelsView {
   reasons: string[];
   channels: ChannelView[];
   vantages: VantageView[];
+  /** The end-to-end checks through a worker's tunnel (Claude, Telegram, GitHub), one row per target, a column per worker. */
+  e2e: ChannelView[];
+  e2eVantages: VantageView[];
 }
 
 const MINUTE = 60_000;
@@ -124,73 +131,121 @@ export function classifyFailure(
 
 const list = (names: string[]) => names.join(', ');
 
-export function assessChannels(
-  channels: Channel[],
-  probes: ProbeRow[],
-  now: Date = new Date(),
-): ChannelsView {
-  const isStale = (at: Date) => now.getTime() - at.getTime() > STALE_AFTER_MS;
-  const known = new Set(channels.map((channel) => channel.key));
-  const mine = probes.filter((probe) => known.has(probe.channelKey));
+function viewOf(
+  channel: Channel,
+  rows: ProbeRow[],
+  isStale: (at: Date) => boolean,
+  textOf: (cell: ProbeCell) => string,
+  scope: string,
+): ChannelView {
+  const cells: ProbeCell[] = rows
+    .map((probe) => ({
+      vantage: probe.vantage,
+      result: probe.result,
+      tcpMs: probe.tcpMs,
+      tlsMs: probe.tlsMs,
+      detail: probe.detail,
+      probedAt: probe.probedAt.toISOString(),
+      changedAt: probe.changedAt.toISOString(),
+      stale: isStale(probe.probedAt),
+    }))
+    .sort((a, b) => a.vantage.localeCompare(b.vantage));
+  const fresh = cells.filter((cell) => !cell.stale);
+  const good = fresh.filter((cell) => cell.result === 'ok');
+  const bad = fresh.filter((cell) => cell.result !== 'ok');
 
-  const lastByVantage = new Map<string, Date>();
+  if (fresh.length === 0)
+    return { ...channel, state: 'unknown', cells, reason: null };
+  if (bad.length === 0) return { ...channel, state: 'ok', cells, reason: null };
 
-  for (const probe of probes) {
-    const seen = lastByVantage.get(probe.vantage);
+  // The distinct ways it fails (at most two): points that fail differently say more than the first of them.
+  const why = [...new Set(bad.map(textOf))].slice(0, 2).join('; ');
 
-    if (!seen || probe.probedAt > seen)
-      lastByVantage.set(probe.vantage, probe.probedAt);
+  return good.length === 0
+    ? {
+        ...channel,
+        state: 'down',
+        cells,
+        reason: `${scope}: ${why}`,
+      }
+    : {
+        ...channel,
+        state: 'partial',
+        cells,
+        reason: `не доходит из: ${list(bad.map((cell) => cell.vantage))} — ${why}`,
+      };
+}
+
+function vantagesOf(
+  rows: ProbeRow[],
+  isStale: (at: Date) => boolean,
+): VantageView[] {
+  const last = new Map<string, Date>();
+
+  for (const probe of rows) {
+    const seen = last.get(probe.vantage);
+
+    if (!seen || probe.probedAt > seen) last.set(probe.vantage, probe.probedAt);
   }
 
-  const vantages: VantageView[] = [...lastByVantage.entries()]
+  return [...last.entries()]
     .map(([name, at]) => ({
       name,
       lastProbeAt: at.toISOString(),
       stale: isStale(at),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
 
-  const views: ChannelView[] = channels.map((channel) => {
-    const cells: ProbeCell[] = mine
-      .filter((probe) => probe.channelKey === channel.key)
-      .map((probe) => ({
-        vantage: probe.vantage,
-        result: probe.result,
-        tcpMs: probe.tcpMs,
-        tlsMs: probe.tlsMs,
-        detail: probe.detail,
-        probedAt: probe.probedAt.toISOString(),
-        changedAt: probe.changedAt.toISOString(),
-        stale: isStale(probe.probedAt),
-      }))
-      .sort((a, b) => a.vantage.localeCompare(b.vantage));
-    const fresh = cells.filter((cell) => !cell.stale);
-    const good = fresh.filter((cell) => cell.result === 'ok');
-    const bad = fresh.filter((cell) => cell.result !== 'ok');
+export function assessChannels(
+  channels: Channel[],
+  allProbes: ProbeRow[],
+  now: Date = new Date(),
+): ChannelsView {
+  const isStale = (at: Date) => now.getTime() - at.getTime() > STALE_AFTER_MS;
+  // A vantage point (or a worker) that has been silent for a day is gone, not "not reporting".
+  const probes = allProbes.filter(
+    (probe) => now.getTime() - probe.probedAt.getTime() <= DROP_AFTER_MS,
+  );
+  const known = new Set(channels.map((channel) => channel.key));
+  const serverRows = probes.filter((probe) => !isE2eKey(probe.channelKey));
+  const e2eRows = probes.filter((probe) => isE2eKey(probe.channelKey));
+  const mine = serverRows.filter((probe) => known.has(probe.channelKey));
 
-    if (fresh.length === 0) {
-      return { ...channel, state: 'unknown', cells, reason: null };
-    }
+  const vantages = vantagesOf(serverRows, isStale);
+  const e2eVantages = vantagesOf(e2eRows, isStale);
 
-    if (bad.length === 0) {
-      return { ...channel, state: 'ok', cells, reason: null };
-    }
+  const views: ChannelView[] = channels.map((channel) =>
+    viewOf(
+      channel,
+      mine.filter((probe) => probe.channelKey === channel.key),
+      isStale,
+      (cell) => RESULT_TEXT[cell.result],
+      'не доходит ни из одной точки',
+    ),
+  );
 
-    const why = RESULT_TEXT[bad[0].result];
+  // End-to-end rows exist only for targets somebody has reported on.
+  const e2eKeys = [...new Set(e2eRows.map((probe) => probe.channelKey))].sort();
+  const e2e: ChannelView[] = e2eKeys.map((key) => {
+    const target = e2eTarget(key);
+    const host = target ? new URL(target.url).hostname : key;
+    const channel: Channel = {
+      key,
+      name: target?.label ?? key,
+      host,
+      port: 443,
+      sni: host,
+    };
 
-    return good.length === 0
-      ? {
-          ...channel,
-          state: 'down',
-          cells,
-          reason: `не доходит ни из одной точки: ${why}`,
-        }
-      : {
-          ...channel,
-          state: 'partial',
-          cells,
-          reason: `не доходит из: ${list(bad.map((cell) => cell.vantage))} — ${why}`,
-        };
+    return viewOf(
+      channel,
+      e2eRows.filter((probe) => probe.channelKey === key),
+      isStale,
+      (cell) =>
+        `${E2E_RESULT_TEXT[cell.result] ?? cell.result}${cell.detail ? ` (${cell.detail})` : ''}`,
+      'не проходит ни у одного воркера',
+    );
   });
 
   const reasons: string[] = [];
@@ -199,33 +254,46 @@ export function assessChannels(
     (view) => view.state === 'ok' || view.state === 'partial',
   );
   let status: ChannelsStatus = 'ok';
+  const raise = (to: ChannelsStatus) => {
+    if (to === 'bad' || (to === 'warn' && status === 'ok')) status = to;
+  };
 
   if (views.length > 0 && !hasFresh) {
-    status = 'warn';
+    raise('warn');
     reasons.push(
       'Нет свежих проб каналов — проверка не запущена или не присылает данные',
     );
   } else if (views.length > 0 && live.length === 0) {
-    status = 'bad';
+    raise('bad');
     reasons.push('Ни один канал не доходит ни из одной точки');
   } else if (views.length > 1 && live.length === 1) {
-    status = 'warn';
+    raise('warn');
     reasons.push(`Остался один живой канал: ${live[0].name}`);
   }
 
   for (const view of views) {
     if (view.state === 'down' || view.state === 'partial') {
-      if (status === 'ok') status = 'warn';
+      raise('warn');
       reasons.push(`Канал ${view.name}: ${view.reason}`);
     }
   }
 
   for (const vantage of vantages) {
     if (vantage.stale) {
-      if (status === 'ok') status = 'warn';
+      raise('warn');
       reasons.push(`Точка «${vantage.name}» не присылает пробы`);
     }
   }
 
-  return { status, reasons, channels: views, vantages };
+  // Through the tunnel: a target that no worker reaches is the harm itself — for the critical one (Claude) a problem.
+  for (const view of e2e) {
+    if (view.state !== 'down' && view.state !== 'partial') continue;
+
+    raise(
+      view.state === 'down' && e2eTarget(view.key)?.critical ? 'bad' : 'warn',
+    );
+    reasons.push(`Через туннель ${view.name}: ${view.reason}`);
+  }
+
+  return { status, reasons, channels: views, vantages, e2e, e2eVantages };
 }

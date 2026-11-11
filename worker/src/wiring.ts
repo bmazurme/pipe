@@ -23,6 +23,8 @@ export interface WiringInput {
   vpnRequired?: boolean;
   /** Refreshes the Claude plan limits when the settings say a probe is due; absent when this image does not probe. */
   limitsProbe?: { consider: (remote: RemoteWorkerConfig, key: string) => void };
+  /** Requests through the tunnel to Claude, Telegram and GitHub, reported to bridge; absent when this image does not probe. */
+  tunnelProbe?: { consider: (remote: { proxyUrl?: string | null }, key: string) => void };
 }
 
 // Joins the loop to the real bridge: clients carry the session's key and the base URL, settings come from that same
@@ -57,6 +59,7 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
         const runsThrough = applyRemoteConfig(baseConfig, effective).proxyUrl ?? null;
 
         input.limitsProbe?.consider({ ...effective, proxyUrl: runsThrough }, key);
+        input.tunnelProbe?.consider({ proxyUrl: runsThrough }, key);
       } catch {
         // a probe problem must never break the poll
       }

@@ -2,8 +2,9 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
-import { LinkProbeReportDto } from './dto/link-probe.dto';
+import { E2eReportDto, LinkProbeReportDto } from './dto/link-probe.dto';
 import * as probe from './link-probe';
+import { ForbiddenException } from '@nestjs/common';
 import { BRIDGE_VANTAGE, LinksService } from './links.service';
 
 const link = (host: string, port = 443, sni = 'example.com') =>
@@ -23,6 +24,7 @@ function build(
         ? rows.filter((row) => row.vantage === options.where?.vantage)
         : rows,
     ),
+    delete: jest.fn(async () => undefined),
     create: jest.fn((partial) => ({ ...partial })),
     save: jest.fn(async (saved: Array<Record<string, unknown>>) => saved),
   };
@@ -38,6 +40,11 @@ function build(
   };
 
   const alerts = { evaluate: jest.fn(async () => undefined) };
+  const workers = {
+    findOneBy: jest.fn(async (where: { id: number }) =>
+      where.id === 5 ? { id: 5, name: 'pi-red' } : null,
+    ),
+  };
 
   return {
     service: new LinksService(
@@ -45,7 +52,9 @@ function build(
       connections as never,
       links as never,
       alerts as never,
+      workers as never,
     ),
+    workers,
     probes,
     connections,
     links,
@@ -373,5 +382,127 @@ describe('LinkProbeReportDto', () => {
     ['a stray field', { shell: 'x' }],
   ])('refuses %s', async (_label, patch) => {
     expect((await errorsOf({ ...ok, ...patch })).length).toBeGreaterThan(0);
+  });
+});
+
+describe('LinksService: a worker reporting through its tunnel', () => {
+  const NOW = new Date('2026-11-11T12:00:00Z');
+
+  it("files the results under the worker's name from its key, as the worker:<name> vantage point", async () => {
+    const { service, probes } = build();
+
+    await service.ingestWorker(
+      5,
+      [
+        { key: 'e2e:claude', result: 'ok', tcpMs: 480 },
+        { key: 'e2e:telegram', result: 'tls_timeout', detail: 'timeout' },
+      ],
+      NOW,
+    );
+
+    const saved = probes.save.mock.calls[0][0] as Array<
+      Record<string, unknown>
+    >;
+
+    expect(
+      saved.map((row) => [row.vantage, row.channelKey, row.result]),
+    ).toEqual([
+      ['worker:pi-red', 'e2e:claude', 'ok'],
+      ['worker:pi-red', 'e2e:telegram', 'tls_timeout'],
+    ]);
+  });
+
+  it('takes only the end-to-end keys: a worker has no business writing the probes of a channel', async () => {
+    const { service, probes } = build();
+
+    await service.ingestWorker(
+      5,
+      [
+        { key: '203.0.113.1:443', result: 'ok' },
+        { key: 'e2e:github', result: 'ok' },
+      ],
+      NOW,
+    );
+
+    const saved = probes.save.mock.calls[0][0] as Array<{ channelKey: string }>;
+
+    expect(saved.map((row) => row.channelKey)).toEqual(['e2e:github']);
+  });
+
+  it('refuses a key that is not a managed worker (a personal API key has no worker behind it) and a worker that is gone', async () => {
+    const { service, probes } = build();
+
+    await expect(
+      service.ingestWorker(undefined, [{ key: 'e2e:claude', result: 'ok' }]),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.ingestWorker(99, [{ key: 'e2e:claude', result: 'ok' }]),
+    ).rejects.toThrow(ForbiddenException);
+    expect(probes.save).not.toHaveBeenCalled();
+  });
+
+  it('drops the probes that nobody has refreshed for a week, after each round', async () => {
+    const { service, probes } = build();
+    jest
+      .spyOn(probe, 'probeChannel')
+      .mockResolvedValue({ result: 'ok', tcpMs: 1, tlsMs: 1, detail: null });
+
+    await service.tick();
+
+    expect(probes.delete).toHaveBeenCalledTimes(1);
+    const where = (
+      probes.delete.mock.calls[0] as unknown as [{ probedAt: { value: Date } }]
+    )[0];
+
+    expect(Date.now() - where.probedAt.value.getTime()).toBeGreaterThan(
+      6.9 * 24 * 3600_000,
+    );
+  });
+});
+
+describe('LinkE2eReportDto', () => {
+  const errorsOf = async (body: unknown) =>
+    (
+      await validate(plainToInstance(E2eReportDto, body), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      })
+    ).map((e) => e.property);
+
+  it('accepts what the worker sends', async () => {
+    expect(
+      await errorsOf({
+        results: [
+          { key: 'e2e:claude', result: 'ok', tcpMs: 480 },
+          { key: 'e2e:telegram', result: 'error', detail: 'HTTP 403' },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'a server channel key',
+      { results: [{ key: '203.0.113.1:443', result: 'ok' }] },
+    ],
+    [
+      'an unknown result',
+      { results: [{ key: 'e2e:claude', result: 'great' }] },
+    ],
+    [
+      'too many results',
+      {
+        results: Array.from({ length: 11 }, () => ({
+          key: 'e2e:claude',
+          result: 'ok',
+        })),
+      },
+    ],
+    [
+      'a vantage name in the body (it comes from the key)',
+      { vantage: 'x', results: [] },
+    ],
+  ])('refuses %s', async (_label, body) => {
+    expect((await errorsOf(body)).length).toBeGreaterThan(0);
   });
 });
