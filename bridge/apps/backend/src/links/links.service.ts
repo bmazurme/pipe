@@ -10,6 +10,7 @@ import { LinkProbeResultDto } from './dto/link-probe.dto';
 import { LinkProbe } from './entities/link-probe.entity';
 import { probeChannel } from './link-probe';
 import { assessChannels, Channel, ChannelsView } from './links';
+import { LinksAlertsService } from './links-alerts.service';
 
 // The vantage point bridge's own probes are filed under.
 export const BRIDGE_VANTAGE = 'bridge';
@@ -26,6 +27,7 @@ export class LinksService {
     private readonly probes: Repository<LinkProbe>,
     private readonly connections: VpnConnectionsService,
     private readonly links: VpnLinkResolver,
+    private readonly alerts: LinksAlertsService,
   ) {}
 
   // Every host:port a link of any connection points at, named after its connection (numbered when its pool has several links). A
@@ -139,6 +141,8 @@ export class LinksService {
 
     try {
       await this.probeFromBridge();
+      // Judged on every probe round, with whatever the other vantage points have reported by now.
+      await this.alerts.evaluate(await this.view());
     } catch (error) {
       this.logger.warn(
         `channel probe failed: ${error instanceof Error ? error.message : String(error)}`,

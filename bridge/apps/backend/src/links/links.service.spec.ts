@@ -37,15 +37,19 @@ function build(
     }),
   };
 
+  const alerts = { evaluate: jest.fn(async () => undefined) };
+
   return {
     service: new LinksService(
       probes as never,
       connections as never,
       links as never,
+      alerts as never,
     ),
     probes,
     connections,
     links,
+    alerts,
   };
 }
 
@@ -262,6 +266,27 @@ describe('LinksService: probing from bridge', () => {
     await new Promise((r) => setImmediate(r));
     await service.tick();
     expect(spy.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  it('judges the channels after every probe round, with the view as it is by then', async () => {
+    jest.spyOn(probe, 'probeChannel').mockResolvedValue({
+      result: 'tcp_timeout',
+      tcpMs: null,
+      tlsMs: null,
+      detail: 'ETIMEDOUT',
+    });
+    const { service, alerts } = withTwo();
+
+    await service.tick();
+
+    expect(alerts.evaluate).toHaveBeenCalledTimes(1);
+    const view = (
+      alerts.evaluate.mock.calls[0] as unknown as [
+        { status: string; channels: unknown[] },
+      ]
+    )[0];
+
+    expect(view.channels).toHaveLength(2);
   });
 
   it('survives a failing round: it is logged, the next one is not blocked', async () => {
