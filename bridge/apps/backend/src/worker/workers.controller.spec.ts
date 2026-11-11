@@ -16,6 +16,7 @@ describe('WorkersController config limitProbe', () => {
     proxyUrl: null,
     chatEnabled: false,
     vpnLink: null,
+    vpnLinks: [],
     limitsRefreshMin: 0,
     limitsRefreshRequestedAt: null,
     limitProbe: null,

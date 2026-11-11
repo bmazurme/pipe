@@ -7,7 +7,7 @@ import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { parseVlessParams, VlessParams } from '../worker/vless-link';
 import { renameLink } from './subscription';
-import { SubscriptionService } from './subscription.service';
+import { MAX_POOL_LINKS, SubscriptionService } from './subscription.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 
@@ -454,6 +454,23 @@ export class VpnService {
     return {
       link: `vless://${client.id}@${connection.serverAddress}:${inbound.port}?${params.toString()}#pipe-vpn`,
     };
+  }
+
+  // Every link a tunnel can run with for this connection, in the provider's order: a panel has one, a subscription may list several
+  // (up to MAX_POOL_LINKS). A worker's tunnel balances over them; the first one is what the single-link routes show.
+  async getConnectionLinks(id: number): Promise<string[]> {
+    const connection = await this.vpnConnectionsService.findOne(id);
+
+    if (connection.kind === 'subscription') {
+      const { links } = await this.subscriptions.resolve(
+        connection.subscriptionUrl ?? '',
+        connection.name,
+      );
+
+      return links.slice(0, MAX_POOL_LINKS);
+    }
+
+    return [(await this.getConnectionLink(id)).link];
   }
 
   // Provisions a brand-new VPN node from a bare IP + SSH credentials: pushes

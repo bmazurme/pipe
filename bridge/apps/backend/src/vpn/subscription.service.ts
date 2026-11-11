@@ -13,6 +13,8 @@ import {
 export const MAX_SUBSCRIPTION_BYTES = 1_000_000;
 const MAX_REDIRECTS = 3;
 export const PROBE_TIMEOUT_MS = 5_000;
+// How many links of one subscription go into a tunnel's pool: more adds probing cost and nothing to resilience.
+export const MAX_POOL_LINKS = 6;
 
 export interface ResolvedSubscription extends ParsedSubscription {
   /** The first usable link — the one the tunnel runs with. */

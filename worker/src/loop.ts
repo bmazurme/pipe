@@ -43,6 +43,7 @@ export function configFor(baseConfig: WorkerConfig, session: Session, remote: Re
 export async function runLoop(deps: LoopDeps): Promise<void> {
   const { baseConfig, signal, log } = deps;
   let session = deps.initialSession;
+  let vpnDownLogged = false;
   let config = session ? configFor(baseConfig, session, null) : baseConfig;
   let clients = session ? deps.makeClients(session) : undefined;
 
@@ -79,6 +80,21 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
     if (remote && !remote.enabled) {
       await deps.sleep(config.pollIntervalSec * 1000);
       continue;
+    }
+
+    // A VPN is set for this worker but its tunnel is not up: a job would reach the model provider directly and fail (or leak the
+    // address of this machine to a provider that must not see it). Stay connected, take nothing, until the tunnel is back.
+    if (remote?.vpnDown) {
+      if (!vpnDownLogged) {
+        vpnDownLogged = true;
+        log.warn({}, 'the VPN tunnel is down — taking no jobs until it is back');
+      }
+      await deps.sleep(config.pollIntervalSec * 1000);
+      continue;
+    }
+    if (vpnDownLogged) {
+      vpnDownLogged = false;
+      log.info({}, 'the VPN tunnel is back — taking jobs again');
     }
 
     let job: RemoteJob | null = null;

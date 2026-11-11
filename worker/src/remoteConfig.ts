@@ -15,6 +15,11 @@ export interface RemoteWorkerConfig {
   chatEnabled: boolean;
   // The worker's own VPN (a vless:// Reality link), run as a local Xray tunnel — see vpn/tunnel.ts. Absent/null: none.
   vpnLink?: string | null;
+  // The whole pool the tunnel balances over; vpnLink is its first. Absent on an older bridge: the single vpnLink is the pool.
+  vpnLinks?: string[] | null;
+  // Set by the worker itself, never by bridge: a VPN is configured here but its tunnel is not up, so a job that needs the
+  // tunnel would only fail (wiring.ts decides; the loop then takes nothing until the tunnel is back).
+  vpnDown?: boolean;
   // Probing the Claude plan limits: every `limitsRefreshMin` minutes (0 = never by itself), once when the owner asked
   // (`limitsRefreshRequestedAt`), with the token bridge hands over only while a probe is due. Absent on an older bridge.
   limitsRefreshMin?: number;

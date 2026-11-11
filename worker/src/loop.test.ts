@@ -323,3 +323,43 @@ describe('runLoop when processing throws', () => {
     assert.equal(errors.length, 1);
   });
 });
+
+describe('runLoop: a VPN that is down', () => {
+  it('takes no job and no chat turn while the tunnel is down, and sleeps one poll interval instead', async () => {
+    const h = harness({ session: managed, passes: 2, remotes: [remote({ vpnDown: true }), remote({ vpnDown: true })], jobs: [job, job], turns: [turn, turn] });
+
+    await runLoop(h.deps);
+
+    assert.deepEqual(h.events.filter((event) => event.startsWith('claim') || event.startsWith('job') || event.startsWith('chat')), []);
+    assert.equal(h.events.filter((event) => event === 'sleep:3000').length, 2);
+  });
+
+  it('takes jobs again as soon as the tunnel is back', async () => {
+    const h = harness({ session: managed, passes: 2, remotes: [remote({ vpnDown: true }), remote({ vpnDown: false })], jobs: [job] });
+
+    await runLoop(h.deps);
+
+    assert.ok(h.events.includes('claim-job'));
+    assert.deepEqual(h.events.filter((event) => event === 'claim-job').length, 1);
+  });
+
+  it('says it once when the tunnel goes down and once when it is back, not on every poll', async () => {
+    const warns: string[] = [];
+    const infos: string[] = [];
+    const h = harness({ session: managed, passes: 4, remotes: [remote({ vpnDown: true }), remote({ vpnDown: true }), remote({ vpnDown: true }), remote({ vpnDown: false })] });
+
+    await runLoop({ ...h.deps, log: { info: (_o, m) => infos.push(m), warn: (_o, m) => warns.push(m), error: () => undefined } });
+
+    assert.equal(warns.filter((m) => m.includes('VPN tunnel is down')).length, 1);
+    assert.equal(infos.filter((m) => m.includes('VPN tunnel is back')).length, 1);
+  });
+
+  it('does not hold back a worker whose settings say nothing about a VPN', async () => {
+    const h = harness({ session: managed, passes: 1, remotes: [remote()], jobs: [job] });
+
+    await runLoop(h.deps);
+
+    assert.ok(h.events.includes('claim-job'));
+  });
+});
+

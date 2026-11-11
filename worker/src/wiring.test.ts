@@ -29,8 +29,9 @@ const baseConfig: WorkerConfig = {
 };
 
 function build(
-  vpn?: { apply: (link: string | null | undefined) => Promise<string | null> },
+  vpn?: { apply: (links: string | string[] | null | undefined) => Promise<string | null> },
   limitsProbe?: { consider: (remote: never, key: string) => void },
+  vpnRequired?: boolean,
 ) {
   const calls: string[] = [];
   const controller = new AbortController();
@@ -51,6 +52,7 @@ function build(
     },
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
     vpn,
+    vpnRequired,
     limitsProbe: limitsProbe as never,
   });
 
@@ -202,5 +204,50 @@ describe('buildLoopDeps', () => {
     assert.deepEqual(calls, ['chat']);
     assert.equal(deps.initialSession?.name, 'green');
     assert.equal(await deps.waitForSession(), null);
+  });
+
+  describe('the pool and the tunnel being down', () => {
+    const answer = (body: object) => {
+      globalThis.fetch = (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch;
+    };
+
+    it('applies the whole pool when bridge sends one, and the single link of an older bridge otherwise', async () => {
+      const applied: unknown[] = [];
+      const vpn = { apply: async (links: unknown) => (applied.push(links), 'http://127.0.0.1:18080') };
+
+      answer({ id: 1, vpnLink: 'vless://a', vpnLinks: ['vless://a', 'vless://b'] });
+      await build(vpn).deps.fetchRemoteConfig('brw_k');
+      answer({ id: 1, vpnLink: 'vless://a' });
+      await build(vpn).deps.fetchRemoteConfig('brw_k');
+      answer({ id: 1, vpnLink: 'vless://a', vpnLinks: [] });
+      await build(vpn).deps.fetchRemoteConfig('brw_k');
+
+      assert.deepEqual(applied, [['vless://a', 'vless://b'], 'vless://a', 'vless://a']);
+    });
+
+    it('says the VPN is down when one is set and its tunnel did not come up', async () => {
+      answer({ id: 1, vpnLinks: ['vless://a'], vpnLink: 'vless://a' });
+
+      const remote = await build({ apply: async () => null }).deps.fetchRemoteConfig('brw_k');
+
+      assert.equal(remote.vpnDown, true);
+    });
+
+    it('does not say it when the tunnel is up, when no VPN is set, or when the worker was told not to require one', async () => {
+      answer({ id: 1, vpnLinks: ['vless://a'], vpnLink: 'vless://a' });
+      assert.equal((await build({ apply: async () => 'http://127.0.0.1:18080' }).deps.fetchRemoteConfig('brw_k')).vpnDown, false);
+
+      answer({ id: 1, vpnLinks: [], vpnLink: null });
+      assert.equal((await build({ apply: async () => null }).deps.fetchRemoteConfig('brw_k')).vpnDown, false);
+
+      answer({ id: 1, vpnLinks: ['vless://a'], vpnLink: 'vless://a' });
+      assert.equal((await build({ apply: async () => null }, undefined, false).deps.fetchRemoteConfig('brw_k')).vpnDown, false);
+    });
+
+    it('never says it for an image with no tunnel at all (a stack\'s own vpn-client does the work)', async () => {
+      answer({ id: 1, vpnLinks: ['vless://a'], vpnLink: 'vless://a' });
+
+      assert.equal((await build().deps.fetchRemoteConfig('brw_k')).vpnDown, false);
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildXrayConfig, DEFAULT_FINGERPRINT, parseVless } from './vless.js';
+import { buildXrayConfig, DEFAULT_FINGERPRINT, parseVless, POOL_TAG_PREFIX, PROBE_URL } from './vless.js';
 
 const LINK =
   'vless://3f1c2d4e-0000-4000-8000-000000000001@vpn.example.com:8443?security=reality&type=tcp&pbk=PUB&sni=www.example.org&fp=firefox&sid=ab12&flow=xtls-rprx-vision&spx=%2F#node';
@@ -46,7 +46,7 @@ describe('buildXrayConfig', () => {
       outbounds: { protocol: string; settings: { vnext: { address: string; port: number; users: { id: string; flow?: string }[] }[] }; streamSettings: { security: string; realitySettings: { publicKey: string } } }[];
     };
 
-    assert.deepEqual(config.inbounds, [{ listen: '127.0.0.1', port: 18080, protocol: 'http' }]);
+    assert.deepEqual(config.inbounds, [{ tag: 'in', listen: '127.0.0.1', port: 18080, protocol: 'http' }]);
     assert.equal(config.outbounds[0].protocol, 'vless');
     assert.equal(config.outbounds[0].settings.vnext[0].address, 'vpn.example.com');
     assert.equal(config.outbounds[0].settings.vnext[0].port, 8443);
@@ -71,5 +71,61 @@ describe('buildXrayConfig', () => {
 
     assert.equal(fingerprintOf(buildXrayConfig(parseVless(chromeLink), 18080, 'safari')), 'safari');
     assert.equal(fingerprintOf(buildXrayConfig(parseVless(chromeLink), 18080, 'link')), 'chrome');
+  });
+});
+
+describe('buildXrayConfig: a pool of links', () => {
+  const OTHER = 'vless://3f1c2d4e-0000-4000-8000-000000000002@other.example.net:443?security=reality&type=tcp&pbk=PUB2&sni=www.example.com&fp=firefox&sid=cd34';
+  const THIRD = 'vless://3f1c2d4e-0000-4000-8000-000000000003@third.example.org:443?security=reality&type=tcp&pbk=PUB3&sni=www.example.net&fp=firefox&sid=';
+
+  type Pool = {
+    inbounds: { tag: string }[];
+    outbounds: { tag: string; settings: { vnext: { address: string }[] } }[];
+    observatory?: { subjectSelector: string[]; probeUrl: string; probeInterval: string };
+    routing?: { balancers: { tag: string; selector: string[]; strategy: { type: string }; fallbackTag: string }[]; rules: { inboundTag: string[]; balancerTag: string }[] };
+  };
+
+  it('is a plain tunnel for one link: one outbound, no probing, no balancer', () => {
+    const config = buildXrayConfig([parseVless(LINK)], 18080) as Pool;
+
+    assert.equal(config.outbounds.length, 1);
+    assert.equal(config.outbounds[0].tag, `${POOL_TAG_PREFIX}1`);
+    assert.equal(config.observatory, undefined);
+    assert.equal(config.routing, undefined);
+  });
+
+  it('is the same plain tunnel for a single params object as before', () => {
+    assert.deepEqual(buildXrayConfig(parseVless(LINK), 18080), buildXrayConfig([parseVless(LINK)], 18080));
+  });
+
+  it('gives every link of a pool an outbound, in order, and keeps each link\'s own server', () => {
+    const config = buildXrayConfig([parseVless(LINK), parseVless(OTHER), parseVless(THIRD)], 18080) as Pool;
+
+    assert.deepEqual(config.outbounds.map((outbound) => outbound.tag), ['node-1', 'node-2', 'node-3']);
+    assert.deepEqual(config.outbounds.map((outbound) => outbound.settings.vnext[0].address), ['vpn.example.com', 'other.example.net', 'third.example.org']);
+  });
+
+  it('probes the exits through themselves and sends everything from the inbound to the fastest one', () => {
+    const config = buildXrayConfig([parseVless(LINK), parseVless(OTHER)], 18080) as Pool;
+
+    assert.deepEqual(config.observatory?.subjectSelector, ['node-']);
+    assert.equal(config.observatory?.probeUrl, PROBE_URL);
+    assert.equal(config.observatory?.probeInterval, '1m');
+    assert.deepEqual(config.routing?.balancers, [{ tag: 'pool', selector: ['node-'], strategy: { type: 'leastPing' }, fallbackTag: 'node-1' }]);
+    assert.deepEqual(config.routing?.rules, [{ type: 'field', inboundTag: [config.inbounds[0].tag], balancerTag: 'pool' }]);
+  });
+
+  it('applies the fingerprint setting to every outbound of the pool', () => {
+    const config = buildXrayConfig([parseVless(LINK), parseVless(OTHER.replace('fp=firefox', 'fp=chrome'))], 18080) as {
+      outbounds: { streamSettings: { realitySettings: { fingerprint: string } } }[];
+    };
+
+    assert.deepEqual(config.outbounds.map((outbound) => outbound.streamSettings.realitySettings.fingerprint), ['firefox', 'firefox']);
+  });
+
+  it('keeps the loopback-only inbound whatever the pool', () => {
+    const config = buildXrayConfig([parseVless(LINK), parseVless(OTHER)], 18080) as { inbounds: { listen: string; port: number }[] };
+
+    assert.deepEqual(config.inbounds.map((inbound) => [inbound.listen, inbound.port]), [['127.0.0.1', 18080]]);
   });
 });
