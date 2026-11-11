@@ -71,3 +71,26 @@
   flex-direction: column;
   gap: 2px;
 }
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attentionLink {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Room between the lines of a list whose items wrap on a phone, so each link is a target a thumb can pick. */
+.attention li {
+  padding: 3px 0;
+}
+
+/* Jumping to a tile must not hide its heading under the sticky bar. */
+.page [id^='tile-'] {
+  scroll-margin-top: calc(var(--ntlstl-sticky-offset, 0px) + 64px);
+}

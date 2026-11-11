@@ -1,0 +1,66 @@
+.bar {
+  position: sticky;
+  top: var(--ntlstl-sticky-offset, 0px);
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  background-color: var(--g-color-base-background);
+  /* A phone swipes it; the scrollbar would only eat height. */
+  scrollbar-width: none;
+}
+
+.bar::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 36px tall: a thumb-sized target, not a 20px link. */
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--g-color-line-generic);
+  color: var(--g-color-text-primary);
+  text-decoration: none;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.chip:hover {
+  background-color: var(--g-color-base-simple-hover);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--g-color-line-focus);
+  outline-offset: 2px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ok {
+  background-color: var(--g-color-text-positive);
+}
+
+.warn {
+  background-color: var(--g-color-text-warning);
+}
+
+.bad {
+  background-color: var(--g-color-text-danger);
+}
+
+/* On a phone the mobile header wraps the page in a box that says `overflow: auto` but is as tall as its content, so it never scrolls
+   itself (the document does) — and a sticky element sticks to the nearest such box, i.e. to nothing. `clip` is the same on screen but
+   is not a scroll container, so the bar sticks to the real scroll. Scoped by :has to the page that carries the bar. */
+:global([class*='gn-mobile-header__content']:has(nav[aria-label='Плитки дашборда'])) {
+  overflow: clip;
+}

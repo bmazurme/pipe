@@ -51,7 +51,7 @@ export function GithubConnectionCard() {
   const urlChanged = Boolean(data) && url.trim() !== (data?.url ?? '');
 
   return (
-    <Card view="outlined" className={styles.card}>
+    <Card id="tile-github" view="outlined" className={styles.card}>
       <SectionHeader title="GitHub" icon={LogoGithub} />
       {isLoading ? (
         <Skeleton className={styles.statusSkeleton} />
