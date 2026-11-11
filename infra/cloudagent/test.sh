@@ -198,7 +198,7 @@ AGENT_ENV_FILE="$AGENT_ENV" bash "$HERE/report.sh" >"$T/out" 2>&1; code=$?
 reset; R="$T/root"; mkdir -p "$R"
 ROOT="$R" bash "$HERE/install.sh" >"$T/out" 2>&1
 [ -x "$R/usr/local/lib/pipe-cloudagent/report.sh" ] && [ -f "$R/usr/local/lib/pipe-cloudagent/collect.py" ]; check "install: puts report.sh and collect.py in place" $?
-[ -f "$R/etc/pipe-cloudagent.env" ] && [ "$(stat -f %Lp "$R/etc/pipe-cloudagent.env" 2>/dev/null || stat -c %a "$R/etc/pipe-cloudagent.env")" = "600" ]; check "install: the settings file is created with mode 600" $?
+[ -f "$R/etc/pipe-cloudagent.env" ] && [ "$(stat -c %a "$R/etc/pipe-cloudagent.env" 2>/dev/null || stat -f %Lp "$R/etc/pipe-cloudagent.env")" = "600" ]; check "install: the settings file is created with mode 600" $?
 grep -q '^BRIDGE_API_KEY=$' "$R/etc/pipe-cloudagent.env"; check "install: the template leaves the key empty for you to fill in" $?
 ( set -a; . "$R/etc/pipe-cloudagent.env"; ) >"$T/out" 2>&1; check "install: the template can be sourced by a shell" $?
 grep -q 'OnUnitActiveSec=1min' "$R/etc/systemd/system/pipe-cloudagent.timer" && grep -q 'enable --now pipe-cloudagent.timer' "$FIX/systemctl"; check "install: a one-minute timer is enabled" $?
