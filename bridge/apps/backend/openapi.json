@@ -2570,6 +2570,27 @@
         }
       }
     },
+    "/api/v1/dashboard/cloud": {
+      "get": {
+        "operationId": "DashboardController_getCloud",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/ups": {
       "get": {
         "operationId": "DashboardController_getUps",
@@ -2733,6 +2754,27 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NasReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/cloud": {
+      "post": {
+        "operationId": "BoardsAgentController_cloudReport",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudReportDto"
               }
             }
           }
@@ -7584,6 +7626,301 @@
           "raid",
           "volume",
           "disks"
+        ]
+      },
+      "CloudMemoryDto": {
+        "type": "object",
+        "properties": {
+          "totalMb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "availableMb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "swapTotalMb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "swapUsedMb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "totalMb",
+          "availableMb",
+          "swapTotalMb",
+          "swapUsedMb"
+        ]
+      },
+      "CloudDiskDto": {
+        "type": "object",
+        "properties": {
+          "totalBytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "usedBytes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "totalBytes",
+          "usedBytes"
+        ]
+      },
+      "CloudServiceDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "desired": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "running": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy",
+              "starting",
+              "none"
+            ]
+          },
+          "restarts24h": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "memMb": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "critical": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "desired",
+          "running",
+          "critical"
+        ]
+      },
+      "CloudProbeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "httpCode": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 999
+          },
+          "ms": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "critical": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ok",
+          "critical"
+        ]
+      },
+      "CloudLeaderDto": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string",
+            "pattern": "/^[a-z0-9_-]{1,32}$/"
+          },
+          "epoch": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "site",
+          "epoch"
+        ]
+      },
+      "CloudReplicationDto": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "lagSec": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "connected"
+        ]
+      },
+      "CloudBackupDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "ageHours": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CloudCertDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "days": {
+            "type": "number",
+            "minimum": -3650,
+            "maximum": 36500
+          }
+        },
+        "required": [
+          "name",
+          "days"
+        ]
+      },
+      "CloudReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "uptimeSec": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "cpus": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1024
+          },
+          "load5": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "memory": {
+            "$ref": "#/components/schemas/CloudMemoryDto"
+          },
+          "disk": {
+            "$ref": "#/components/schemas/CloudDiskDto"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloudServiceDto"
+            }
+          },
+          "probes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloudProbeDto"
+            }
+          },
+          "leader": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CloudLeaderDto"
+              }
+            ]
+          },
+          "replication": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CloudReplicationDto"
+              }
+            ]
+          },
+          "backups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloudBackupDto"
+            }
+          },
+          "certs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloudCertDto"
+            }
+          },
+          "exposedPorts": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
+            }
+          },
+          "version": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "host",
+          "uptimeSec",
+          "cpus",
+          "memory",
+          "disk",
+          "services",
+          "probes"
         ]
       },
       "UpsReportDto": {

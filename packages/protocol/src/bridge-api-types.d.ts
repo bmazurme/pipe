@@ -1346,6 +1346,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/cloud": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getCloud"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/ups": {
         parameters: {
             query?: never;
@@ -1452,6 +1468,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["BoardsAgentController_nasReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/agent/cloud": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_cloudReport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3285,6 +3317,65 @@ export interface components {
             raid: components["schemas"]["NasRaidDto"];
             volume: components["schemas"]["NasVolumeDto"];
             disks: components["schemas"]["NasDiskDto"][];
+        };
+        CloudMemoryDto: {
+            totalMb: number;
+            availableMb: number;
+            swapTotalMb: number;
+            swapUsedMb: number;
+        };
+        CloudDiskDto: {
+            totalBytes: number;
+            usedBytes: number;
+        };
+        CloudServiceDto: {
+            name: string;
+            desired: number;
+            running: number;
+            /** @enum {string} */
+            health?: "healthy" | "unhealthy" | "starting" | "none";
+            restarts24h?: number | null;
+            memMb?: number | null;
+            critical: boolean;
+        };
+        CloudProbeDto: {
+            name: string;
+            ok: boolean;
+            httpCode?: number | null;
+            ms?: number | null;
+            critical: boolean;
+        };
+        CloudLeaderDto: {
+            site: string;
+            epoch: number;
+        };
+        CloudReplicationDto: {
+            connected: boolean;
+            lagSec?: number | null;
+        };
+        CloudBackupDto: {
+            name: string;
+            ageHours?: number | null;
+        };
+        CloudCertDto: {
+            name: string;
+            days: number;
+        };
+        CloudReportDto: {
+            host: string;
+            uptimeSec: number;
+            cpus: number;
+            load5?: number | null;
+            memory: components["schemas"]["CloudMemoryDto"];
+            disk: components["schemas"]["CloudDiskDto"];
+            services: components["schemas"]["CloudServiceDto"][];
+            probes: components["schemas"]["CloudProbeDto"][];
+            leader?: components["schemas"]["CloudLeaderDto"] | null;
+            replication?: components["schemas"]["CloudReplicationDto"] | null;
+            backups?: components["schemas"]["CloudBackupDto"][];
+            certs?: components["schemas"]["CloudCertDto"][];
+            exposedPorts?: number[];
+            version?: string | null;
         };
         UpsReportDto: {
             host: string;
@@ -5872,6 +5963,25 @@ export interface operations {
             };
         };
     };
+    DashboardController_getCloud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
     DashboardController_getUps: {
         parameters: {
             query?: never;
@@ -6025,6 +6135,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NasReportDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsAgentController_cloudReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloudReportDto"];
             };
         };
         responses: {
