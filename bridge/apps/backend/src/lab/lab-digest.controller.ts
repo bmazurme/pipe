@@ -89,6 +89,16 @@ export class LabDigestController {
     return this.digests.markExported(id, user.id);
   }
 
+  // Sends the draft to notes.ntlstl.dev — still unpublished there.
+  @Post(':id/send')
+  @HttpCode(HttpStatus.OK)
+  send(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.digests.send(id, user.id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

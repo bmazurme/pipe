@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -31,6 +32,13 @@ import type {
 import { LabDigest, LabDigestStatus } from './entities/lab-digest.entity';
 import { LabDigestSettings } from './entities/lab-digest-settings.entity';
 import { LabRun, LabRunStatus } from './entities/lab-run.entity';
+import {
+  DEFAULT_NOTES_URL,
+  normalizeNotesUrl,
+  NOTES_KEY_MIN_LENGTH,
+  NotesSendError,
+  sendDraft,
+} from './lab-digest-notes';
 import {
   autoDigestDue,
   buildDigestInput,
@@ -67,6 +75,10 @@ export type DigestSettingsView = {
   autoWeekly: boolean;
   includePrivate: boolean;
   model: string;
+  // Where drafts are sent. The key itself never comes back: whether there is one, and its last characters.
+  notesUrl: string;
+  hasNotesKey: boolean;
+  notesKeyHint: string | null;
 };
 
 export type DigestPreview = {
@@ -106,13 +118,14 @@ export class LabDigestService {
   async getSettings(userId: number): Promise<DigestSettingsView> {
     const row = await this.settings.findOne({ where: { userId } });
 
-    return row
-      ? {
-          autoWeekly: row.autoWeekly,
-          includePrivate: row.includePrivate,
-          model: row.model,
-        }
-      : { ...DIGEST_DEFAULTS };
+    return {
+      autoWeekly: row?.autoWeekly ?? DIGEST_DEFAULTS.autoWeekly,
+      includePrivate: row?.includePrivate ?? DIGEST_DEFAULTS.includePrivate,
+      model: row?.model ?? DIGEST_DEFAULTS.model,
+      notesUrl: row?.notesUrl ?? DEFAULT_NOTES_URL,
+      hasNotesKey: Boolean(row?.notesKey),
+      notesKeyHint: row?.notesKey ? (row.notesKeyHint ?? null) : null,
+    };
   }
 
   async saveSettings(
@@ -131,9 +144,34 @@ export class LabDigestService {
     }
     if (dto.model !== undefined) row.model = dto.model;
 
+    if (dto.notesUrl !== undefined) {
+      row.notesUrl = dto.notesUrl ? this.notesOrigin(dto.notesUrl) : null;
+    }
+
+    if (dto.notesKey !== undefined) {
+      const key = dto.notesKey.trim();
+
+      if (key && key.length < NOTES_KEY_MIN_LENGTH) {
+        throw new BadRequestException(
+          `Ключ notes слишком короткий: нужно от ${NOTES_KEY_MIN_LENGTH} символов`,
+        );
+      }
+
+      row.notesKey = key || null;
+      row.notesKeyHint = key ? key.slice(-4) : null;
+    }
+
     await this.settings.save(row);
 
     return this.getSettings(userId);
+  }
+
+  private notesOrigin(raw: string): string {
+    try {
+      return normalizeNotesUrl(raw);
+    } catch (error) {
+      throw new BadRequestException(message(error));
+    }
   }
 
   // — what a week holds —
@@ -437,6 +475,8 @@ export class LabDigestService {
       tags: [],
       noteType: DIGEST_NOTE_TYPE,
       error: null,
+      noteId: null,
+      sentAt: null,
       exportedAt: null,
       finishedAt: null,
     });
@@ -515,6 +555,64 @@ export class LabDigestService {
     row.exportedAt = new Date();
 
     return this.digests.save(row);
+  }
+
+  // Sends the draft to notes.ntlstl.dev as an UNPUBLISHED note (the site forces that; the owner publishes it there). One send per
+  // digest: a second one would leave two drafts on the site, so it is refused — regenerate the digest to send again.
+  async send(id: number, userId: number): Promise<LabDigest> {
+    const row = await this.findOwned(id, userId);
+
+    if (
+      (row.status !== LabDigestStatus.Draft &&
+        row.status !== LabDigestStatus.Exported) ||
+      !row.title ||
+      !row.content
+    ) {
+      throw new ConflictException('Отправлять можно только готовый черновик');
+    }
+
+    if (row.noteId !== null) {
+      throw new ConflictException(
+        `Уже отправлен: черновик на сайте, заметка № ${row.noteId}`,
+      );
+    }
+
+    const settings = await this.settings.findOne({ where: { userId } });
+
+    if (!settings?.notesKey) {
+      throw new BadRequestException(
+        'Ключ notes не задан — укажите его в настройках дайджеста',
+      );
+    }
+
+    try {
+      const sent = await sendDraft({
+        baseUrl: settings.notesUrl ?? DEFAULT_NOTES_URL,
+        key: settings.notesKey,
+        typeName: row.noteType,
+        note: {
+          title: row.title,
+          preview: row.preview ?? '',
+          content: row.content,
+          tags: row.tags,
+        },
+      });
+
+      row.noteId = sent.id;
+      row.sentAt = new Date();
+      row.status = LabDigestStatus.Exported;
+      row.exportedAt = row.sentAt;
+
+      return await this.digests.save(row);
+    } catch (error) {
+      if (error instanceof NotesSendError) {
+        throw error.kind === 'config'
+          ? new BadRequestException(error.message)
+          : new BadGatewayException(error.message);
+      }
+
+      throw error;
+    }
   }
 
   async remove(id: number, userId: number): Promise<void> {

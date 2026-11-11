@@ -173,6 +173,9 @@ export interface LabDigest {
   tags: string[];
   noteType: string;
   error: string | null;
+  /** Set once the draft was sent to the site: the number of the (still unpublished) note there. */
+  noteId: number | null;
+  sentAt: string | null;
   exportedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
@@ -191,6 +194,20 @@ export interface LabDigestSettings {
   autoWeekly: boolean;
   includePrivate: boolean;
   model: string;
+  /** The site drafts are sent to. */
+  notesUrl: string;
+  /** Whether a key for the site is stored; the key itself never comes back. */
+  hasNotesKey: boolean;
+  notesKeyHint: string | null;
+}
+
+export interface LabDigestSettingsInput {
+  autoWeekly?: boolean;
+  includePrivate?: boolean;
+  model?: string;
+  notesUrl?: string;
+  /** Empty removes the stored key. */
+  notesKey?: string;
 }
 
 export interface LabDigestEdit {
@@ -332,7 +349,7 @@ const labApiEndpoints = labApi.injectEndpoints({
       providesTags: ['LabDigestSettings'],
       transformErrorResponse: errorMessage('Не удалось загрузить настройки дайджеста'),
     }),
-    saveLabDigestSettings: builder.mutation<LabDigestSettings, Partial<LabDigestSettings>>({
+    saveLabDigestSettings: builder.mutation<LabDigestSettings, LabDigestSettingsInput>({
       query: (body) => ({ url: 'lab/digests/settings', method: 'PUT', body }),
       invalidatesTags: ['LabDigestSettings', 'LabDigestPreview'],
       transformErrorResponse: errorMessage('Не удалось сохранить настройки'),
@@ -357,6 +374,11 @@ const labApiEndpoints = labApi.injectEndpoints({
       query: (id) => ({ url: `lab/digests/${id}/exported`, method: 'POST' }),
       invalidatesTags: ['LabDigests'],
       transformErrorResponse: errorMessage('Не удалось отметить'),
+    }),
+    sendLabDigest: builder.mutation<LabDigest, number>({
+      query: (id) => ({ url: `lab/digests/${id}/send`, method: 'POST' }),
+      invalidatesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось отправить в notes'),
     }),
     deleteLabDigest: builder.mutation<void, number>({
       query: (id) => ({ url: `lab/digests/${id}`, method: 'DELETE' }),
@@ -395,6 +417,7 @@ export const {
   useStartLabDigestMutation,
   useUpdateLabDigestMutation,
   useMarkLabDigestExportedMutation,
+  useSendLabDigestMutation,
   useDeleteLabDigestMutation,
 } = labApiEndpoints;
 

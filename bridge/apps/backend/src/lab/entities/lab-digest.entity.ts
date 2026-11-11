@@ -68,6 +68,13 @@ export class LabDigest extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   error: string | null;
 
+  // Set once the draft was sent to notes.ntlstl.dev: the id of the note there (it is unpublished until the owner publishes it).
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  noteId: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  sentAt: Date | null;
+
   @Column({ type: 'timestamp', nullable: true })
   exportedAt: Date | null;
 

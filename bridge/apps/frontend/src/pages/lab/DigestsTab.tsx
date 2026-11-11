@@ -8,12 +8,15 @@ import {
   getErrorMessage,
   type LabDigest,
   type LabDigestItem,
+  type LabDigestSettings,
+  type LabDigestSettingsInput,
   useDeleteLabDigestMutation,
   useGetLabDigestSettingsQuery,
   useListLabDigestsQuery,
   useMarkLabDigestExportedMutation,
   usePreviewLabDigestQuery,
   useSaveLabDigestSettingsMutation,
+  useSendLabDigestMutation,
   useStartLabDigestMutation,
   useUpdateLabDigestMutation,
 } from '../../store/api';
@@ -67,7 +70,7 @@ function SettingsCard() {
   const { options } = useModelOptions();
   const [error, setError] = useState<string | null>(null);
 
-  const change = async (patch: Parameters<typeof save>[0]) => {
+  const change = async (patch: LabDigestSettingsInput) => {
     setError(null);
 
     try {
@@ -89,8 +92,48 @@ function SettingsCard() {
         тоже считается приватным.
       </Text>
       <Select size="m" label="Модель:" value={[data.model]} onUpdate={([model]) => model && void change({ model })} options={options} width={280} />
+      <NotesSiteSettings settings={data} onSave={change} isSaving={isSaving} />
       {error && <Alert theme="danger" view="filled" message={error} />}
     </Card>
+  );
+}
+
+// Where the finished draft can be sent: the site and the key it accepts for creating a draft (stored encrypted, never shown again).
+function NotesSiteSettings({ settings, onSave, isSaving }: { settings: LabDigestSettings; onSave: (patch: LabDigestSettingsInput) => Promise<void>; isSaving: boolean }) {
+  const [url, setUrl] = useState(settings.notesUrl);
+  const [key, setKey] = useState('');
+
+  return (
+    <div className={styles.panel}>
+      <Text variant="subheader-1">Отправка на сайт заметок</Text>
+      <Text color="secondary" variant="caption-2">
+        Кнопка «Отправить в notes» создаёт на сайте только черновик — публикуете вы сами, из редактора сайта. Ключ задаётся на стороне сайта (NOTES_INGEST_KEY) и подходит только для создания черновика.
+      </Text>
+      <div className={styles.toolbar}>
+        <TextInput value={url} onUpdate={setUrl} label="Сайт" controlProps={{ 'aria-label': 'Адрес сайта заметок' }} />
+        <Button view="normal" loading={isSaving} disabled={url.trim() === settings.notesUrl} onClick={() => void onSave({ notesUrl: url.trim() })}>
+          Сохранить адрес
+        </Button>
+      </div>
+      <div className={styles.toolbar}>
+        <TextInput value={key} onUpdate={setKey} type="password" label="Ключ" placeholder={settings.hasNotesKey ? `сохранён …${settings.notesKeyHint ?? ''}` : 'вставьте ключ'} controlProps={{ 'aria-label': 'Ключ сайта заметок', autoComplete: 'off' }} />
+        <Button
+          view="normal"
+          loading={isSaving}
+          disabled={key.trim().length === 0}
+          onClick={() => {
+            void onSave({ notesKey: key.trim() }).then(() => setKey(''));
+          }}
+        >
+          Сохранить ключ
+        </Button>
+        {settings.hasNotesKey && (
+          <Button view="flat-danger" loading={isSaving} onClick={() => void onSave({ notesKey: '' })}>
+            Удалить ключ
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -160,6 +203,8 @@ function MakeCard({ onStarted }: { onStarted: (digest: LabDigest) => void }) {
 function DigestEditor({ digest }: { digest: LabDigest }) {
   const [update, { isLoading: isSaving }] = useUpdateLabDigestMutation();
   const [markExported, { isLoading: isMarking }] = useMarkLabDigestExportedMutation();
+  const [sendToNotes, { isLoading: isSending }] = useSendLabDigestMutation();
+  const { data: settings } = useGetLabDigestSettingsQuery();
   const [start, { isLoading: isRestarting }] = useStartLabDigestMutation();
   const [remove, { isLoading: isRemoving }] = useDeleteLabDigestMutation();
   const [title, setTitle] = useState(digest.title ?? '');
@@ -212,7 +257,7 @@ function DigestEditor({ digest }: { digest: LabDigest }) {
     <Card view="outlined" className={styles.card}>
       <SectionHeader title={`Заметка: ${weekLabel(digest.weekStart)}`} />
       <Text color="secondary" variant="caption-2">
-        Тип на сайте: «{digest.noteType}». Черновик хранится только в bridge — на notes.ntlstl.dev он не попадает, пока вы не перенесёте его сами.
+        Тип на сайте: «{digest.noteType}». Черновик хранится в bridge. На сайт он попадает, только когда вы нажмёте «Отправить в notes» (и там остаётся черновиком) или перенесёте его сами.
       </Text>
 
       <TextInput value={title} onUpdate={setTitle} label="Заголовок" controlProps={{ 'aria-label': 'Заголовок', maxLength: 100 }} />
@@ -248,8 +293,19 @@ function DigestEditor({ digest }: { digest: LabDigest }) {
         <Button view="normal" onClick={handleDownload}>
           Скачать .md
         </Button>
+        {digest.noteId === null && (
+          <Button
+            view="action"
+            loading={isSending}
+            disabled={dirty || !settings?.hasNotesKey}
+            title={settings?.hasNotesKey ? undefined : 'Сначала сохраните ключ сайта в настройках выше'}
+            onClick={() => void run(() => sendToNotes(digest.id).unwrap(), 'Отправлено: на сайте создан черновик', 'Не удалось отправить в notes')}
+          >
+            Отправить в notes
+          </Button>
+        )}
         <Button view="outlined" loading={isMarking} disabled={dirty || digest.status === 'exported'} onClick={() => void run(() => markExported(digest.id).unwrap(), 'Отмечено', 'Не удалось отметить')}>
-          {digest.status === 'exported' ? 'Уже перенесено' : 'Перенёс в notes'}
+          {digest.status === 'exported' ? 'Уже перенесено' : 'Перенёс в notes сам'}
         </Button>
         <a href={NOTES_URL} target="_blank" rel="noreferrer">
           notes.ntlstl.dev
@@ -259,6 +315,9 @@ function DigestEditor({ digest }: { digest: LabDigest }) {
         <Text color="secondary" variant="caption-2">
           Есть несохранённые правки.
         </Text>
+      )}
+      {digest.noteId !== null && (
+        <Alert theme="success" view="outlined" message={`Отправлено на сайт: черновик, заметка № ${digest.noteId}. Откройте сайт под своей учёткой, проверьте и опубликуйте. Правки здесь на сайт уже не попадут.`} />
       )}
 
       <details>
@@ -351,7 +410,7 @@ export function DigestsTab() {
     setPollMs(digests.some((digest) => digest.status === 'generating') ? POLL_MS : 0);
   }, [digests]);
 
-  const selected = digests.find((digest) => digest.id === selectedId) ?? digests.find((digest) => digest.status === 'draft') ?? null;
+  const selected = digests.find((digest) => digest.id === selectedId) ?? digests.find((digest) => digest.status === 'draft') ?? digests.find((digest) => digest.status !== 'generating') ?? null;
 
   return (
     <div className={styles.panel}>

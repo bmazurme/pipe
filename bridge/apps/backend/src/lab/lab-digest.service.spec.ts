@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { strToU8, zipSync } from 'fflate';
 
 import { JobStatus } from '../worker/entities/job.entity';
@@ -468,6 +472,167 @@ describe('LabDigestService', () => {
       await service.autoWeekly(new Date('2026-11-09T04:00:00Z'));
 
       expect(launchIssueJob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('notes settings and sending', () => {
+    const KEY = 'k'.repeat(40);
+    const draft = (over: Partial<LabDigest> = {}) => ({
+      id: 1,
+      userId: 7,
+      status: LabDigestStatus.Draft,
+      title: 'Неделя 2–8 ноября',
+      preview: 'Коротко',
+      content: '## Итоги\n\nСделано.',
+      tags: ['lab'],
+      noteType: 'Dev Work Diary',
+      noteId: null,
+      ...over,
+    });
+    const answer = (status: number, body: unknown = {}) =>
+      ({
+        status,
+        ok: status >= 200 && status < 300,
+        clone() {
+          return this;
+        },
+        json: async () => body,
+      }) as unknown as Response;
+
+    it('keeps the key write-only: the view has only its last characters', async () => {
+      const { service } = setup();
+      const settings = (
+        service as never as {
+          settings: { findOne: jest.Mock; save: jest.Mock };
+        }
+      ).settings;
+      const saved: Record<string, unknown>[] = [];
+
+      settings.findOne.mockResolvedValue(null);
+      settings.save.mockImplementation(async (row: Record<string, unknown>) => {
+        saved.push({ ...row });
+        settings.findOne.mockResolvedValue(row);
+      });
+
+      const view = await service.saveSettings(7, {
+        notesKey: ` ${KEY}abcd `,
+        notesUrl: 'https://notes.example.dev/x',
+      });
+
+      expect(saved[0]).toMatchObject({
+        notesKey: `${KEY}abcd`,
+        notesKeyHint: 'abcd',
+        notesUrl: 'https://notes.example.dev',
+      });
+      expect(view).toMatchObject({
+        hasNotesKey: true,
+        notesKeyHint: 'abcd',
+        notesUrl: 'https://notes.example.dev',
+      });
+      expect(JSON.stringify(view)).not.toContain(KEY);
+
+      const cleared = await service.saveSettings(7, { notesKey: '' });
+
+      expect(cleared).toMatchObject({ hasNotesKey: false, notesKeyHint: null });
+    });
+
+    it('refuses a short key and a bad address', async () => {
+      const { service } = setup();
+
+      await expect(
+        service.saveSettings(7, { notesKey: 'short' }),
+      ).rejects.toThrow('слишком короткий');
+      await expect(
+        service.saveSettings(7, { notesUrl: 'http://10.0.0.1' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('defaults to notes.ntlstl.dev and no key', async () => {
+      const { service } = setup();
+
+      expect(await service.getSettings(7)).toMatchObject({
+        notesUrl: 'https://notes.ntlstl.dev',
+        hasNotesKey: false,
+        notesKeyHint: null,
+      });
+    });
+
+    it('sends a draft and records the note id', async () => {
+      const { service, digests } = setup({
+        settings: {
+          userId: 7,
+          notesKey: KEY,
+          notesUrl: 'https://notes.example.dev',
+        },
+      });
+
+      digests.findOne.mockResolvedValue(draft());
+      fetchSpy.mockImplementation(async (url: string) =>
+        url.endsWith('/api/v1/types')
+          ? answer(200, [{ id: 6, name: 'Dev Work Diary' }])
+          : answer(201, { id: 42, slug: 's' }),
+      );
+
+      const row = await service.send(1, 7);
+
+      expect(row.noteId).toBe(42);
+      expect(row.status).toBe(LabDigestStatus.Exported);
+      expect(row.sentAt).toBeInstanceOf(Date);
+      expect(fetchSpy.mock.calls[1][0]).toBe(
+        'https://notes.example.dev/api/v1/notes/drafts',
+      );
+    });
+
+    it('does not send twice, without a key, or what is not ready', async () => {
+      const sent = setup({ settings: { userId: 7, notesKey: KEY } });
+
+      sent.digests.findOne.mockResolvedValue(draft({ noteId: 5 }));
+      await expect(sent.service.send(1, 7)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+
+      const keyless = setup({ settings: { userId: 7, notesKey: null } });
+
+      keyless.digests.findOne.mockResolvedValue(draft());
+      await expect(keyless.service.send(1, 7)).rejects.toThrow(
+        'Ключ notes не задан',
+      );
+
+      const busy = setup({ settings: { userId: 7, notesKey: KEY } });
+
+      busy.digests.findOne.mockResolvedValue(
+        draft({ status: LabDigestStatus.Generating, content: null }),
+      );
+      await expect(busy.service.send(1, 7)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('turns what the site says into 400 (fixable here) or 502 (try later), and keeps the draft unsent', async () => {
+      const wrongKey = setup({ settings: { userId: 7, notesKey: KEY } });
+      const row = draft();
+
+      wrongKey.digests.findOne.mockResolvedValue(row);
+      fetchSpy.mockImplementation(async (url: string) =>
+        url.endsWith('/api/v1/types')
+          ? answer(200, [{ id: 6, name: 'Dev Work Diary' }])
+          : answer(401),
+      );
+      await expect(wrongKey.service.send(1, 7)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+
+      fetchSpy.mockImplementation(async (url: string) =>
+        url.endsWith('/api/v1/types')
+          ? answer(200, [{ id: 6, name: 'Dev Work Diary' }])
+          : answer(500),
+      );
+      await expect(wrongKey.service.send(1, 7)).rejects.toBeInstanceOf(
+        BadGatewayException,
+      );
+      expect(row.noteId).toBeNull();
+      expect(wrongKey.digests.save).not.toHaveBeenCalled();
     });
   });
 });

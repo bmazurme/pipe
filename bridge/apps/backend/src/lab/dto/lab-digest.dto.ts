@@ -63,6 +63,19 @@ export class SaveLabDigestSettingsDto {
   @IsString()
   @MaxLength(32)
   model?: string;
+
+  // The site's address; empty = notes.ntlstl.dev.
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  notesUrl?: string;
+
+  // The key for POST /api/v1/notes/drafts; empty removes the stored one. Never returned.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  notesKey?: string;
 }
 
 // The owner's edits of a draft. Only what is given changes.

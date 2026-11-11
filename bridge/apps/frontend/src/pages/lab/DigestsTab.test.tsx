@@ -38,6 +38,8 @@ const digest = (over: Record<string, unknown> = {}) => ({
   tags: ['lab'],
   noteType: 'Dev Work Diary',
   error: null,
+  noteId: null,
+  sentAt: null,
   exportedAt: null,
   finishedAt: '2026-11-09T04:00:00.000Z',
   createdAt: '2026-11-09T03:59:00.000Z',
@@ -49,11 +51,13 @@ let sent: { method: string; path: string; body: unknown }[];
 let digests: unknown[];
 let preview: unknown;
 let startReply: () => Response;
+let settings: Record<string, unknown>;
 
 beforeEach(() => {
   sent = [];
   digests = [digest()];
   preview = { weekStart: '2026-11-02', items: [ITEM], omitted: 0, excludedPrivate: 2 };
+  settings = { autoWeekly: false, includePrivate: false, model: 'haiku', notesUrl: 'https://notes.ntlstl.dev', hasNotesKey: false, notesKeyHint: null };
   startReply = () => json(digest({ status: 'generating', title: null, content: null }));
   store.dispatch(labApi.util.resetApiState());
   store.dispatch(workerApi.util.resetApiState());
@@ -64,7 +68,7 @@ beforeEach(() => {
       const path = url.pathname.replace('/api/v1/', '');
 
       if (request.method !== 'GET') sent.push({ method: request.method, path, body: await request.clone().json().catch(() => undefined) });
-      if (path === 'lab/digests/settings') return json({ autoWeekly: false, includePrivate: false, model: 'haiku' });
+      if (path === 'lab/digests/settings') return request.method === 'PUT' ? json(settings) : json(settings);
       if (path === 'lab/digests/preview') return json(preview);
       if (path === 'lab/digests' && request.method === 'POST') return startReply();
       if (path === 'lab/digests') return json(digests);
@@ -93,7 +97,7 @@ describe('DigestsTab', () => {
     expect(screen.getByLabelText('Текст заметки')).toHaveValue(digest().content);
     expect(screen.getByLabelText('Теги')).toHaveValue('lab');
     expect(await screen.findByText(/скрыто приватных: 2/)).toBeTruthy();
-    expect(screen.getByText(/не попадает, пока вы не перенесёте его сами/)).toBeTruthy();
+    expect(screen.getByText(/Черновик хранится в bridge/)).toBeTruthy();
   });
 
   it('shows what would go into the digest of the chosen week before anything starts', async () => {
@@ -152,7 +156,7 @@ describe('DigestsTab', () => {
   it('marks the note as carried over only after it was saved', async () => {
     renderTab();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Перенёс в notes' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Перенёс в notes сам' }));
 
     await waitFor(() => expect(sent.find((call) => call.path === 'lab/digests/1/exported')?.method).toBe('POST'));
   });
@@ -165,5 +169,53 @@ describe('DigestsTab', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Открыть' }));
     expect(await screen.findByText('Worker не создал digest.json')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+  });
+
+  it('cannot send to the site until a key is saved, and says why', async () => {
+    renderTab();
+
+    const send = await screen.findByRole('button', { name: 'Отправить в notes' });
+
+    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute('title', expect.stringContaining('сохраните ключ'));
+  });
+
+  it('sends the draft to the site once a key is stored', async () => {
+    settings = { ...settings, hasNotesKey: true, notesKeyHint: 'abcd' };
+
+    renderTab();
+
+    const send = await screen.findByRole('button', { name: 'Отправить в notes' });
+
+    await waitFor(() => expect(send).toBeEnabled());
+    await userEvent.click(send);
+
+    await waitFor(() => expect(sent.find((call) => call.path === 'lab/digests/1/send')?.method).toBe('POST'));
+  });
+
+  it('shows where a sent draft went and offers no second send', async () => {
+    digests = [digest({ status: 'exported', noteId: 42, sentAt: '2026-11-12T01:00:00.000Z' })];
+
+    renderTab();
+
+    expect(await screen.findByText(/заметка № 42/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Отправить в notes' })).toBeNull();
+  });
+
+  it('saves the key from its field and never shows a stored one', async () => {
+    settings = { ...settings, hasNotesKey: true, notesKeyHint: 'abcd' };
+
+    renderTab();
+
+    const field = await screen.findByLabelText('Ключ сайта заметок');
+
+    expect(field).toHaveAttribute('placeholder', 'сохранён …abcd');
+    expect(field).toHaveValue('');
+
+    await userEvent.type(field, 'k'.repeat(40));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить ключ' }));
+
+    await waitFor(() => expect(sent.find((call) => call.method === 'PUT')?.body).toEqual({ notesKey: 'k'.repeat(40) }));
+    await waitFor(() => expect(field).toHaveValue(''));
   });
 });
