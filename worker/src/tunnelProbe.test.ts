@@ -1,10 +1,47 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 import { classifyError, classifyStatus, E2E_TARGETS, probeTarget, reportE2e, TunnelProbe, type E2eOutcome } from './tunnelProbe.js';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const err = (props: object) => Object.assign(new Error('x'), props);
+
+describe('what a probe sends', () => {
+  it('goes through the proxy with a User-Agent (GitHub answers a request without one with 403)', { timeout: 15_000 }, async () => {
+    const seen: { url?: string; userAgent?: string }[] = [];
+    const proxy = createServer((req, res) => {
+      seen.push({ url: req.url, userAgent: req.headers['user-agent'] });
+      res.statusCode = 200;
+      res.end('{}');
+    });
+
+    // undici's ProxyAgent tunnels with CONNECT: answer it, then serve the tunnelled request on the same socket.
+    proxy.on('connect', (_req, socket) => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      proxy.emit('connection', socket);
+    });
+
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const outcome = await probeTarget({ key: 'e2e:github', url: 'http://api.example.test/rate_limit' }, `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`);
+
+      assert.equal(outcome.result, 'ok');
+      assert.equal(seen.length, 1);
+      assert.match(seen[0].userAgent ?? '', /^pipe-worker-e2e-probe/);
+    } finally {
+      proxy.closeAllConnections();
+      proxy.close();
+    }
+  });
+
+  it('asks GitHub for /rate_limit, which does not use up the anonymous limit of the exit address', () => {
+    assert.equal(E2E_TARGETS.find((target) => target.key === 'e2e:github')?.url, 'https://api.github.com/rate_limit');
+  });
+});
 
 describe('classifyStatus', () => {
   it('treats an answer as the request going through — a 404 or a 302 is what a good exit gets', () => {
