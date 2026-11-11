@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 
 import { HomePage } from './HomePage';
-import { SERVICES } from '../shared/config/services';
+import { NAV_GROUP_ORDER, NAV_GROUP_TITLES, SERVICES } from '../shared/config/services';
 import { store } from '../store';
 
 function renderHome() {
@@ -30,6 +30,20 @@ describe('HomePage', () => {
       'href',
       '/profile',
     );
+  });
+
+  it('groups the cards into the sidebar sections, each under its own heading and in the sidebar order', () => {
+    renderHome();
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent ?? '');
+
+    expect(headings.slice(0, NAV_GROUP_ORDER.length).map((text) => text.replace(/\d+$/, ''))).toEqual(NAV_GROUP_ORDER.map((group) => NAV_GROUP_TITLES[group]));
+    expect(headings.at(-1)).toBe('Аккаунт');
+
+    const agent = screen.getByRole('region', { name: new RegExp(NAV_GROUP_TITLES.agent) });
+
+    expect(within(agent).getByRole('link', { name: /Chat/ })).toBeInTheDocument();
+    expect(within(agent).queryByRole('link', { name: /Storage/ })).toBeNull();
   });
 
   it('does not point at a sidebar — there is none on mobile', () => {

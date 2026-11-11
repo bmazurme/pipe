@@ -5,6 +5,30 @@
   max-width: var(--ntlstl-page-max);
 }
 
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--g-text-subheader-3-font-size, 16px);
+  font-weight: 600;
+  color: var(--g-color-text-secondary);
+}
+
+.sectionCount {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--g-color-base-generic);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr;

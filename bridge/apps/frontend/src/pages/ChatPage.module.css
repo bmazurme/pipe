@@ -3,11 +3,14 @@
   flex-direction: column;
   gap: var(--ntlstl-page-gap);
   max-width: var(--ntlstl-page-max);
-  height: 100%;
+  /* The viewport less the shell's 32px padding above and below. `height: 100%` resolved to «auto» here (the sidebar's content wrapper has no
+     height of its own), so the chat stopped at its minimum and left the rest of the window empty. */
+  height: calc(100dvh - 64px);
 }
 
 .container {
-  flex: 1 1 auto;
+  /* Takes whatever is left under the header and the search; the floor keeps it usable in a short window (the page then scrolls). */
+  flex: 1 1 0;
   min-height: 560px;
   border: 1px solid var(--g-color-line-generic);
   border-radius: var(--g-border-radius-l);
@@ -57,11 +60,16 @@
 }
 
 /* Phones: the desk-sized 560px floor plus the page header left the conversation a sliver
-   once the on-screen keyboard opened. Fill what is left of the viewport instead. */
+   once the on-screen keyboard opened. Fill what is left of the viewport instead. The page is exactly one screen tall — the viewport less
+   the 50px mobile header and the shell's 20px above and 32px (+ the home indicator) below — and the chat takes what the header and the
+   search leave; a guessed `calc(100dvh - 190px)` was ~60px short and pushed the composer under the edge of the screen. */
 @media (max-width: 767px) {
+  .page {
+    height: calc(100dvh - 102px - env(safe-area-inset-bottom));
+  }
+
   .container {
     min-height: 0;
-    height: calc(100dvh - 190px);
     border-radius: var(--g-border-radius-m);
   }
 
