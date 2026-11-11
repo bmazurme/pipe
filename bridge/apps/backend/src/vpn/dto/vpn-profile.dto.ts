@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 import {
@@ -15,6 +16,18 @@ export class CreateVpnProfileDto {
 
   @IsIn(VPN_PROFILE_AUDIENCES)
   audience: VpnProfileAudience;
+}
+
+// Renaming a device changes only how it is listed: its token, its link and what the client fetches stay as they are.
+export class UpdateVpnProfileDto {
+  // Trimmed before it is checked, so a name of spaces is empty (and refused) rather than a blank row in the list.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  label: string;
 }
 
 // What the owner sees of a token. The token itself only ever appears in CreatedVpnProfileDto, once.

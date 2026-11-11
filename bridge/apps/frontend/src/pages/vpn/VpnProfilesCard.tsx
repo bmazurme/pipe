@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Label, SegmentedRadioGroup, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Pencil } from '@gravity-ui/icons';
+import { Alert, Button, Card, Icon, Label, SegmentedRadioGroup, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import {
@@ -7,6 +8,7 @@ import {
   type CreatedVpnProfile,
   useCreateVpnProfileMutation,
   useListVpnProfilesQuery,
+  useRenameVpnProfileMutation,
   useRevokeVpnProfileMutation,
   type VpnProfile,
   type VpnProfileAudience,
@@ -14,11 +16,93 @@ import {
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../VpnPage.module.css';
 
+// The server refuses more (the same limit as when a device is made).
+const LABEL_MAX = 100;
+
 const AUDIENCE_LABEL: Record<VpnProfileAudience, string> = { phone: 'Телефон', laptop: 'Ноутбук', server: 'Сервер' };
 // How long the armed "revoke" button waits for its confirming second click.
 const CONFIRM_MS = 4000;
 
 const subscriptionUrl = (path: string) => `${API_URL.replace(/\/$/, '')}${path}`;
+
+// The device's name, as text with a pencil; while it is being edited, a field with Save and Cancel (Enter saves, Esc cancels). Only the
+// name changes — the link the device already has keeps working, which is why this is safe to do on a device in use.
+function ProfileName({ profile }: { profile: VpnProfile }) {
+  const [rename, { isLoading }] = useRenameVpnProfileMutation();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(profile.label);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = value.trim();
+
+  const open = () => {
+    setValue(profile.label);
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+
+  const save = async () => {
+    if (!trimmed || isLoading) return;
+
+    if (trimmed === profile.label) {
+      cancel();
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await rename({ id: profile.id, label: trimmed }).unwrap();
+      setEditing(false);
+    } catch {
+      // The field stays open with what was typed: a failed save must not cost the name that was just thought of.
+      setError('Не удалось переименовать');
+    }
+  };
+
+  if (!editing) {
+    return (
+      <>
+        <Text variant="body-2">{profile.label}</Text>
+        <Button view="flat-secondary" size="xs" aria-label={`Переименовать: ${profile.label}`} title="Переименовать" onClick={open}>
+          <Icon data={Pencil} size={14} />
+        </Button>
+      </>
+    );
+  }
+
+  return (
+    <span className={styles.renameRow}>
+      <TextInput
+        autoFocus
+        size="s"
+        value={value}
+        onUpdate={setValue}
+        validationState={!trimmed || value.length > LABEL_MAX ? 'invalid' : undefined}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') void save();
+          if (event.key === 'Escape') cancel();
+        }}
+        controlProps={{ 'aria-label': `Новое имя устройства ${profile.label}`, maxLength: LABEL_MAX }}
+      />
+      <Button view="action" size="s" loading={isLoading} disabled={!trimmed} onClick={() => void save()}>
+        Сохранить
+      </Button>
+      <Button view="flat" size="s" disabled={isLoading} onClick={cancel}>
+        Отмена
+      </Button>
+      {error && (
+        <Text color="danger" variant="caption-2" role="alert">
+          {error}
+        </Text>
+      )}
+    </span>
+  );
+}
 
 function ProfileRow({ profile }: { profile: VpnProfile }) {
   const [revoke, { isLoading }] = useRevokeVpnProfileMutation();
@@ -54,7 +138,7 @@ function ProfileRow({ profile }: { profile: VpnProfile }) {
     <li className={styles.connectionRow}>
       <div className={styles.connectionHeader}>
         <div className={styles.connectionTitle}>
-          <Text variant="body-2">{profile.label}</Text>
+          <ProfileName profile={profile} />
           <Label size="xs" theme="info">
             {AUDIENCE_LABEL[profile.audience]}
           </Label>

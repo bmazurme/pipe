@@ -156,4 +156,102 @@ describe('VpnProfilesCard', () => {
 
     expect(await screen.findByText('Не удалось создать ссылку')).toBeTruthy();
   });
+
+  describe('renaming a device', () => {
+    const patches: { url: string; body: unknown }[] = [];
+    const serveRename = (reply: () => Response = () => json({ ...PROFILES[0], label: 'x' })) =>
+      serve(async (request) => {
+        if (request.method !== 'PATCH') return undefined;
+
+        patches.push({ url: request.url, body: await request.clone().json() });
+
+        return reply();
+      });
+
+    beforeEach(() => {
+      patches.length = 0;
+    });
+
+    it('turns the name into a field, and Save sends the trimmed name for that device only', async () => {
+      const user = userEvent.setup();
+      serveRename();
+      renderCard();
+      await screen.findByText('iPhone');
+
+      await user.click(screen.getByLabelText('Переименовать: iPhone'));
+      const field = screen.getByLabelText('Новое имя устройства iPhone');
+
+      expect(field).toHaveFocus();
+      expect(field).toHaveValue('iPhone');
+      await user.clear(field);
+      await user.type(field, '  Телефон Богдана ');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(patches).toHaveLength(1));
+      expect(patches[0].url).toMatch(/\/vpn\/profiles\/1$/);
+      expect(patches[0].body).toEqual({ label: 'Телефон Богдана' });
+      await waitFor(() => expect(screen.queryByLabelText('Новое имя устройства iPhone')).toBeNull());
+    });
+
+    it('Enter saves and Escape cancels without a request', async () => {
+      const user = userEvent.setup();
+      serveRename();
+      renderCard();
+      await screen.findByText('iPhone');
+
+      await user.click(screen.getByLabelText('Переименовать: iPhone'));
+      await user.type(screen.getByLabelText('Новое имя устройства iPhone'), '2{Escape}');
+
+      expect(screen.queryByLabelText('Новое имя устройства iPhone')).toBeNull();
+      expect(patches).toHaveLength(0);
+      expect(screen.getByText('iPhone')).toBeTruthy();
+
+      await user.click(screen.getByLabelText('Переименовать: iPhone'));
+      await user.type(screen.getByLabelText('Новое имя устройства iPhone'), '2{Enter}');
+
+      await waitFor(() => expect(patches).toHaveLength(1));
+      expect(patches[0].body).toEqual({ label: 'iPhone2' });
+    });
+
+    it('cannot save an empty name, and an unchanged one closes without asking the server', async () => {
+      const user = userEvent.setup();
+      serveRename();
+      renderCard();
+      await screen.findByText('iPhone');
+
+      await user.click(screen.getByLabelText('Переименовать: iPhone'));
+      await user.clear(screen.getByLabelText('Новое имя устройства iPhone'));
+      expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+
+      await user.type(screen.getByLabelText('Новое имя устройства iPhone'), ' iPhone ');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(screen.queryByLabelText('Новое имя устройства iPhone')).toBeNull();
+      expect(patches).toHaveLength(0);
+    });
+
+    it('keeps the field open with what was typed when the server refuses', async () => {
+      const user = userEvent.setup();
+      serveRename(() => json({ message: 'no' }, 500));
+      renderCard();
+      await screen.findByText('iPhone');
+
+      await user.click(screen.getByLabelText('Переименовать: iPhone'));
+      const field = screen.getByLabelText('Новое имя устройства iPhone');
+      await user.clear(field);
+      await user.type(field, 'Новое');
+      await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+      expect(await screen.findByText('Не удалось переименовать')).toBeTruthy();
+      expect(screen.getByLabelText('Новое имя устройства iPhone')).toHaveValue('Новое');
+    });
+
+    it('offers it for a revoked device too — it is still in the list', async () => {
+      serveRename();
+      renderCard();
+      await screen.findByText('Старый Mac');
+
+      expect(screen.getByLabelText('Переименовать: Старый Mac')).toBeTruthy();
+    });
+  });
 });

@@ -1,7 +1,10 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, RequestMethod } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { OwnerGuard } from '../auth/guards/owner.guard';
+import { UpdateVpnProfileDto } from './dto/vpn-profile.dto';
 import {
   VpnProfileController,
   VpnProfilesController,
@@ -36,6 +39,50 @@ describe('VpnProfilesController (the owner)', () => {
         VpnProfilesController.prototype.revoke,
       ),
     ).toBe(204);
+  });
+});
+
+describe('VpnProfilesController: rename', () => {
+  it('hands the id and the new name to the service and returns what it answers', async () => {
+    const profiles = {
+      rename: jest.fn().mockResolvedValue({ id: 2, label: 'Новый' }),
+    };
+    const controller = new VpnProfilesController(profiles as never);
+
+    await expect(controller.rename(2, { label: 'Новый' })).resolves.toEqual({
+      id: 2,
+      label: 'Новый',
+    });
+    expect(profiles.rename).toHaveBeenCalledWith(2, 'Новый');
+  });
+
+  it('is a PATCH on the profile, behind the same guards as the rest of the owner routes', () => {
+    expect(
+      Reflect.getMetadata('method', VpnProfilesController.prototype.rename),
+    ).toBe(RequestMethod.PATCH);
+    expect(
+      Reflect.getMetadata('path', VpnProfilesController.prototype.rename),
+    ).toBe(':id');
+  });
+});
+
+describe('UpdateVpnProfileDto', () => {
+  const check = async (label: unknown) =>
+    validate(plainToInstance(UpdateVpnProfileDto, { label }));
+
+  it('trims the name, and accepts one that is left', async () => {
+    const dto = plainToInstance(UpdateVpnProfileDto, { label: '  Mac  ' });
+
+    expect(dto.label).toBe('Mac');
+    await expect(validate(dto)).resolves.toEqual([]);
+  });
+
+  it('refuses an empty one, spaces only, over 100 characters, and a non-string', async () => {
+    expect(await check('')).not.toEqual([]);
+    expect(await check('    ')).not.toEqual([]);
+    expect(await check('x'.repeat(101))).not.toEqual([]);
+    expect(await check('x'.repeat(100))).toEqual([]);
+    expect(await check(12)).not.toEqual([]);
   });
 });
 

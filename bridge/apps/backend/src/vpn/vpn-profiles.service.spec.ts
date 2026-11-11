@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 
 import {
@@ -279,5 +279,77 @@ describe('toSubscription', () => {
     expect(Buffer.from(encoded, 'base64').toString('utf8')).toBe(
       'vless://a#x\nvless://b#y',
     );
+  });
+});
+
+describe('VpnProfilesService: rename', () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 3,
+    label: 'iPhone',
+    audience: 'phone',
+    tokenHash: 'hash-stays',
+    tokenPrefix: 'brp_ab12',
+    createdAt: new Date('2026-11-11T10:00:00Z'),
+    lastUsedAt: null,
+    revokedAt: null,
+    ...over,
+  });
+
+  it('changes the name and nothing else — the token, its hash and the link stay', async () => {
+    const { service, tokens, store } = build([row()]);
+
+    const renamed = await service.rename(3, '  Телефон Богдана  ');
+
+    expect(renamed.label).toBe('Телефон Богдана');
+    expect(tokens.save).toHaveBeenCalledTimes(1);
+    expect(store[0]).toMatchObject({
+      tokenHash: 'hash-stays',
+      tokenPrefix: 'brp_ab12',
+      audience: 'phone',
+      revokedAt: null,
+    });
+    expect(Object.keys(renamed).sort()).toEqual([
+      'audience',
+      'createdAt',
+      'id',
+      'label',
+      'lastUsedAt',
+      'revokedAt',
+      'tokenPrefix',
+    ]);
+  });
+
+  it('writes nothing when the name is the one it already has', async () => {
+    const { service, tokens } = build([row()]);
+
+    await expect(service.rename(3, ' iPhone ')).resolves.toMatchObject({
+      label: 'iPhone',
+    });
+    expect(tokens.save).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty name, before it looks anything up', async () => {
+    const { service, tokens } = build([row()]);
+
+    await expect(service.rename(3, '   ')).rejects.toThrow(BadRequestException);
+    expect(tokens.findOneBy).not.toHaveBeenCalled();
+    expect(tokens.save).not.toHaveBeenCalled();
+  });
+
+  it('is a 404 for a device that is not there', async () => {
+    const { service } = build([row()]);
+
+    await expect(service.rename(99, 'x')).rejects.toThrow(NotFoundException);
+  });
+
+  it('renames a revoked device too: it is still in the list', async () => {
+    const { service, store } = build([
+      row({ revokedAt: new Date('2026-11-12T00:00:00Z') }),
+    ]);
+
+    await expect(service.rename(3, 'Старый телефон')).resolves.toMatchObject({
+      label: 'Старый телефон',
+    });
+    expect(store[0].label).toBe('Старый телефон');
   });
 });
