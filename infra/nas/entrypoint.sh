@@ -6,6 +6,9 @@
 #   entrypoint.sh once     one pull now, then exit with its status (used to prove the setup)
 #   entrypoint.sh keygen   make the pull key (kept in /keys, so it survives the container) and print the ONE line to add to the Pi's
 #                          authorized_keys; also pins the Pi's host key
+#   entrypoint.sh keygen-vm   the same for the cloud VM (VM_SOURCE): its own key, and the line for `infra/vmbackup/install.sh addkey`
+#   entrypoint.sh once-vm [snapshot|images]   one pull from the VM now (default snapshot), then exit with its status
+#   entrypoint.sh ping-vm  asks the VM for `ping`: proves the key, the forced command and sudo
 #
 # Settings (environment):
 #   SOURCE      required; the rsync source on the Pi, e.g. pi@192.168.50.12:latest/ (a path relative to its /srv/backups: the key there is
@@ -14,15 +17,24 @@
 #   TZ          the zone PULL_AT is in, default Europe/Moscow
 #   RETRY_MIN   minutes between attempts after a failed pull, default 30; gives up for the day after MAX_TRIES (default 6)
 #   KEEP        snapshots kept, default 14 (the NAS has the room; the Pis keep one)
+#   BRIDGE_API_KEY  optional; with it the container also tells bridge how the NAS is doing every REPORT_MIN minutes (report.sh, the Dashboard tile)
+#   REPORT_MIN  minutes between those reports, default 10
 #   FROM_IP     the address the Pi will see this container come from (the NAS), for the `from=` of the printed line
+#   VM_SOURCE   optional; user@host of the cloud VM (e.g. pipebackup@89.169.132.49). With it the container also pulls the encrypted backups of
+#               notes and places from the VM (vm-pull.sh) every day at VM_PULL_AT (default 03:20) and, on VM_IMAGES_DOW (1-7, default 7 = Sunday),
+#               the Docker images too. VM_FROM_IP is the address the VM sees the NAS come from (the home router's public one), for `from=`.
+#               VM_DIR (default /srv/vm-backups), VM_KEEP (14), VM_IMAGES_KEEP (4) are vm-pull.sh's.
 set -uo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/srv/backups}"
 KEYS_DIR="${KEYS_DIR:-/keys}"
 PULL_AT="${PULL_AT:-03:50}"
+VM_PULL_AT="${VM_PULL_AT:-03:20}"
+VM_IMAGES_DOW="${VM_IMAGES_DOW:-7}"
 RETRY_MIN="${RETRY_MIN:-30}"
 MAX_TRIES="${MAX_TRIES:-6}"
 export TZ="${TZ:-Europe/Moscow}" KEEP="${KEEP:-14}" BACKUP_DIR SSH_KEY="${SSH_KEY:-/root/.ssh/pull_backups}"
+export VM_KEY="${VM_KEY:-/root/.ssh/pull_vm}" VM_KNOWN_HOSTS="${VM_KNOWN_HOSTS:-/root/.ssh/known_hosts_vm}" VM_DIR="${VM_DIR:-/srv/vm-backups}"
 
 log() { echo "[$(date +%FT%T%z)] $*"; }
 
@@ -60,12 +72,59 @@ keygen() {
 }
 
 pull_once() { /usr/local/bin/pull.sh; }
+vm_pull() { /usr/local/bin/vm-pull.sh "$@"; }
+
+vm_host() { local h="${VM_SOURCE#*@}"; echo "${h%%:*}"; }
+
+keygen_vm() {
+  : "${VM_SOURCE:?VM_SOURCE is required}"
+  prepare_ssh
+  [ -f "$VM_KEY" ] || ssh-keygen -q -t ed25519 -N '' -C "pipe-nas-vm" -f "$VM_KEY"
+  # Pin the VM's host key now, so later runs refuse a different machine (BatchMode never asks). Its own file: the Pi's known_hosts stays as it is.
+  ssh-keyscan -T 10 "$(vm_host)" 2>/dev/null > "$VM_KNOWN_HOSTS.new" || true
+  if [ -s "$VM_KNOWN_HOSTS.new" ]; then mv "$VM_KNOWN_HOSTS.new" "$VM_KNOWN_HOSTS"; else rm -f "$VM_KNOWN_HOSTS.new"; echo "warning: could not read the host key of $(vm_host)" >&2; fi
+  echo
+  echo "Add this ONE line on the VM (it only accepts a line bound to the backup command): sudo bash install.sh addkey '<the line>'"
+  echo
+  echo "restrict,${VM_FROM_IP:+from=\"$VM_FROM_IP\",}command=\"sudo --preserve-env=SSH_ORIGINAL_COMMAND /usr/local/lib/pipe-vmbackup/serve.sh\" $(cat "$VM_KEY.pub")"
+  echo
+}
+
+# One day's pull from the VM: the snapshot (retried like the Pi's), and on VM_IMAGES_DOW the images too (one try: they are big, and next week is another).
+vm_daily() {
+  local tries=0
+  until vm_pull snapshot; do
+    tries=$((tries + 1))
+    [ "$tries" -lt "$MAX_TRIES" ] || { log "vm: giving up for today after $tries failed tries"; return 0; }
+    log "vm: pull failed (try $tries of $MAX_TRIES) - again in ${RETRY_MIN} min"
+    sleep $((RETRY_MIN * 60))
+  done
+  if [ "$(date +%u)" = "$VM_IMAGES_DOW" ]; then vm_pull images || log "vm: the images were not pulled this week"; fi
+}
 
 run() {
   : "${SOURCE:?SOURCE is required}"
   prepare_ssh
   [ -f "$SSH_KEY" ] || { log "no key yet - run: entrypoint.sh keygen"; sleep 60; exit 1; }
   log "daily pull of $SOURCE at $PULL_AT $TZ, keeping $KEEP snapshots"
+
+  if [ -n "${BRIDGE_API_KEY:-}" ]; then
+    log "reporting to bridge every ${REPORT_MIN:-10} min"
+    ( while true; do /usr/local/bin/report.sh || true; sleep $(( ${REPORT_MIN:-10} * 60 )); done ) &
+  fi
+
+  if [ -n "${VM_SOURCE:-}" ]; then
+    if [ -f "$VM_KEY" ]; then
+      log "daily pull from the VM $VM_SOURCE at $VM_PULL_AT $TZ, keeping ${VM_KEEP:-14} snapshots"
+      ( while true; do
+          sleep "$(seconds_until "$VM_PULL_AT")"
+          vm_daily || true
+          sleep 61
+        done ) &
+    else
+      log "VM_SOURCE is set but there is no key yet - run: entrypoint.sh keygen-vm (the Pi pull goes on without it)"
+    fi
+  fi
 
   while true; do
     wait=$(seconds_until "$PULL_AT")
@@ -88,6 +147,9 @@ case "${1:-run}" in
   run) run ;;
   once) prepare_ssh; pull_once ;;
   keygen) keygen ;;
+  keygen-vm) keygen_vm ;;
+  once-vm) prepare_ssh; vm_pull "${2:-snapshot}" ;;
+  ping-vm) prepare_ssh; vm_pull ping ;;
   seconds_until) seconds_until "${2:?HH:MM}" ;;   # for the tests
-  *) echo "usage: $0 run|once|keygen" >&2; exit 2 ;;
+  *) echo "usage: $0 run|once|keygen|keygen-vm|once-vm|ping-vm" >&2; exit 2 ;;
 esac

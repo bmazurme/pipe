@@ -103,6 +103,21 @@ function NasRow({ nas }: { nas: DashboardNas }) {
           )}
         </dd>
 
+        {data.vmBackup && (
+          <>
+            <Text as="dt" color="secondary" variant="body-1">
+              Бэкап VM
+            </Text>
+            <dd>
+              <Text variant="body-2">{data.vmBackup.createdAt ? formatRelativeTime(data.vmBackup.createdAt) : 'ещё нет'}</Text>
+              <Text color="secondary" variant="caption-2">
+                notes, places · снимков {data.vmBackup.snapshots} · {formatBytes(data.vmBackup.bytes)}
+                {data.vmBackup.imagesAt ? ` · образы ${formatRelativeTime(data.vmBackup.imagesAt)}` : ''}
+              </Text>
+            </dd>
+          </>
+        )}
+
         <Text as="dt" color="secondary" variant="body-1">
           RAID
         </Text>

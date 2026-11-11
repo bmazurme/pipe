@@ -178,4 +178,59 @@ describe('assessNas', () => {
       assessNas(mixed, minutesAgo(1), NOW).reasons.map((r) => r.split(' ')[0]),
     ).toEqual(['RAID', 'Том']);
   });
+
+  describe('the cloud VM backups it pulls', () => {
+    const vm = (createdH: number | null, imagesDays?: number) => ({
+      createdAt: createdH === null ? null : hoursAgo(createdH).toISOString(),
+      imagesAt:
+        imagesDays === undefined
+          ? null
+          : hoursAgo(imagesDays * 24).toISOString(),
+      snapshots: 14,
+      bytes: 50_000_000,
+    });
+
+    it('says nothing when the NAS is not set up to pull them', () => {
+      expect(assessNas(healthy(), minutesAgo(1), NOW).status).toBe('ok');
+    });
+
+    it('is fine with a fresh pull and recent images', () => {
+      expect(
+        assessNas(healthy({ vmBackup: vm(9, 3) }), minutesAgo(1), NOW),
+      ).toEqual({ status: 'ok', reasons: [] });
+    });
+
+    it('warns at 26 hours and is bad past 50 — they exist only on the NAS', () => {
+      expect(
+        assessNas(healthy({ vmBackup: vm(30) }), minutesAgo(1), NOW),
+      ).toEqual({
+        status: 'warn',
+        reasons: ['Бэкап VM (notes, places) устарел: 30 ч'],
+      });
+      expect(
+        assessNas(healthy({ vmBackup: vm(60) }), minutesAgo(1), NOW),
+      ).toEqual({
+        status: 'bad',
+        reasons: ['Бэкап VM (notes, places) старше 60 ч'],
+      });
+    });
+
+    it('is bad when a configured pull has never succeeded', () => {
+      expect(
+        assessNas(healthy({ vmBackup: vm(null) }), minutesAgo(1), NOW),
+      ).toEqual({
+        status: 'bad',
+        reasons: ['Бэкап VM (notes, places) ещё ни разу не получен'],
+      });
+    });
+
+    it('warns when the weekly Docker images are over 9 days old', () => {
+      expect(
+        assessNas(healthy({ vmBackup: vm(5, 10) }), minutesAgo(1), NOW),
+      ).toEqual({
+        status: 'warn',
+        reasons: ['Образы Docker с VM не обновлялись 10 дн'],
+      });
+    });
+  });
 });
