@@ -24,8 +24,10 @@ sha_check() { if command -v sha256sum >/dev/null; then sha256sum -c "$1" >/dev/n
 
 echo "fetching the latest snapshot from the NAS"
 ssh -i "$NAS_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$NAS_USER@$NAS_HOST" "tar -C '$NAS_VM_DIR/latest' -c ." | tar -x -C "$TMP"
-# shellcheck disable=SC1091
-. "$TMP/meta.env"
+# meta.env is read as data, never sourced (an older snapshot has DBS=notes-db places, which a shell would try to run).
+CREATED="$(sed -n 's/^CREATED=//p' "$TMP/meta.env" | head -1)"
+DBS="$(sed -n 's/^DBS=//p' "$TMP/meta.env" | head -1 | tr -d '"')"
+[ -n "$CREATED" ] && [ -n "$DBS" ] || { echo "meta.env of the snapshot is unreadable" >&2; exit 1; }
 echo "snapshot $CREATED (databases: $DBS)"
 (cd "$TMP" && sha_check SHA256SUMS) || { echo "checksum mismatch" >&2; exit 1; }
 echo "ok   checksums"
@@ -41,8 +43,8 @@ for db in $DBS; do
   docker exec "$NAME" createdb -U postgres "$db"
   if docker exec -i "$NAME" pg_restore -U postgres -d "$db" --no-owner < "$TMP/$db.dump"; then
     tables="$(docker exec "$NAME" psql -U postgres -d "$db" -Atc "select count(*) from pg_stat_user_tables")"
-    rows="$(docker exec "$NAME" psql -U postgres -d "$db" -Atc "select coalesce(sum(n_live_tup), 0) from pg_stat_user_tables")"
-    echo "ok   $db restores: $tables tables, about $rows rows"
+    rows="$(docker exec "$NAME" psql -U postgres -d "$db" -Atc "select coalesce(sum((xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', schemaname, relname), false, true, '')))[1]::text::bigint), 0) from pg_stat_user_tables")"
+    echo "ok   $db restores: $tables tables, $rows rows (counted)"
     [ "$tables" -gt 0 ] || { echo "FAIL $db has no tables" >&2; bad=1; }
   else
     echo "FAIL $db did not restore" >&2; bad=1
