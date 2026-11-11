@@ -27,6 +27,7 @@ describe('BoardsAgentController', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -119,6 +120,7 @@ describe('BoardsAgentController ups', () => {
       {} as never,
       { record } as never,
       {} as never,
+      {} as never,
     );
     const dto = { host: 'ubuntu-blue', status: 'OL CHRG' };
 
@@ -136,6 +138,7 @@ describe('BoardsAgentController router', () => {
       {} as never,
       {} as never,
       router as never,
+      {} as never,
     );
 
   it("records the router's report and answers with the reboot waiting for the agent", async () => {
@@ -155,5 +158,31 @@ describe('BoardsAgentController router', () => {
     await make({ finish }).routerRebootResult(5, dto as never, { id: 7 });
 
     expect(finish).toHaveBeenCalledWith(7, 5, dto);
+  });
+});
+
+describe('BoardsAgentController cloud', () => {
+  it("records the cloud VM's report for the signed-in owner and answers 204", async () => {
+    const record = jest.fn().mockResolvedValue(undefined);
+    const controller = new BoardsAgentController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { record } as never,
+    );
+    const dto = { host: 'yc-vm', uptimeSec: 100 };
+
+    await expect(
+      controller.cloudReport(dto as never, { id: 7 }),
+    ).resolves.toBeUndefined();
+    expect(record).toHaveBeenCalledWith(7, dto);
+    expect(
+      Reflect.getMetadata(
+        '__httpCode__',
+        BoardsAgentController.prototype.cloudReport,
+      ),
+    ).toBe(204);
   });
 });

@@ -285,6 +285,16 @@ describe('DashboardPage', () => {
       ]);
     });
 
+    it('lists a problem of the cloud VM among the others', async () => {
+      const CLOUD_BAD = { host: 'yc-vm', reportedAt: new Date().toISOString(), status: 'bad', reasons: ['Память на исходе: доступно 92 МБ (5 %)'], data: { uptimeSec: 100000, cpus: 2, load5: 0.2, memory: { totalMb: 1963, availableMb: 92, swapTotalMb: 0, swapUsedMb: 0 }, disk: { totalBytes: 1, usedBytes: 1 }, services: [], probes: [] } };
+
+      serve({ '/dashboard/cloud': [CLOUD_BAD] });
+      renderPage();
+
+      expect(await screen.findByText('Проблем: 1')).toBeTruthy();
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toContain('Облако yc-vm: Память на исходе: доступно 92 МБ (5 %)');
+    });
+
     it('says "Замечаний" when there are only remarks, and "Всё в порядке" with nothing to say', async () => {
       serve({ '/dashboard/board-metrics': [BOARD_WARM], '/dashboard/nas': [NAS_WARN] });
       renderPage();

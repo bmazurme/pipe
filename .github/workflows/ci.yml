@@ -154,6 +154,7 @@ jobs:
       - run: bash infra/boardagent/test.sh
       - run: bash infra/nas/test.sh
       - run: bash infra/ups/test.sh
+      - run: bash infra/cloudagent/test.sh
       - run: bash infra/router/test.sh
       - run: bash infra/autodeploy/test.sh
 
