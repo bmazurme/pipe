@@ -68,7 +68,7 @@ snapshot() {
   for db in $VM_DBS; do fetch "db $db" "$WORK/$db.dump.age"; done
   fetch files "$WORK/files.tar.age"
   fetch config "$WORK/config.tar.age"
-  printf 'CREATED=%s\nDBS=%s\nFILES=files.tar.age\nCONFIG=config.tar.age\nSOURCE=%s\n' "$stamp" "$VM_DBS" "${VM_SOURCE#*@}" > "$WORK/meta.env"
+  printf 'CREATED=%s\nDBS="%s"\nFILES=files.tar.age\nCONFIG=config.tar.age\nSOURCE=%s\n' "$stamp" "$VM_DBS" "${VM_SOURCE#*@}" > "$WORK/meta.env"
   [ ! -e "$VM_DIR/snapshots/$stamp" ] || fail "a snapshot named $stamp already exists"
   mv "$WORK" "$VM_DIR/snapshots/$stamp"; WORK=""
   ln -sfn "snapshots/$stamp" "$VM_DIR/latest.new" && mv -T "$VM_DIR/latest.new" "$VM_DIR/latest"

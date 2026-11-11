@@ -24,8 +24,10 @@ sha_check() { if command -v sha256sum >/dev/null; then sha256sum -c "$1" >/dev/n
 
 echo "fetching the latest snapshot from the NAS"
 ssh -i "$NAS_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$NAS_USER@$NAS_HOST" "tar -C '$NAS_VM_DIR/latest' -c ." | tar -x -C "$TMP"
-# shellcheck disable=SC1091
-. "$TMP/meta.env"
+# meta.env is read as data, never sourced (an older snapshot has DBS=notes-db places, which a shell would try to run).
+CREATED="$(sed -n 's/^CREATED=//p' "$TMP/meta.env" | head -1)"
+DBS="$(sed -n 's/^DBS=//p' "$TMP/meta.env" | head -1 | tr -d '"')"
+[ -n "$CREATED" ] && [ -n "$DBS" ] || { echo "meta.env of the snapshot is unreadable" >&2; exit 1; }
 echo "snapshot $CREATED (databases: $DBS)"
 (cd "$TMP" && sha_check SHA256SUMS) || { echo "checksum mismatch" >&2; exit 1; }
 echo "ok   checksums"

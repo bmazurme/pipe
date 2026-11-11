@@ -107,6 +107,7 @@ snap="$(readlink "$VM_DIR/latest")"
 [ -s "$VM_DIR/$snap/notes-db.dump.age" ] && [ -s "$VM_DIR/$snap/places.dump.age" ] && [ -s "$VM_DIR/$snap/files.tar.age" ] && [ -s "$VM_DIR/$snap/config.tar.age" ] && [ -s "$VM_DIR/$snap/meta.env" ]; check "snapshot: both databases, the files, the configuration and meta.env are there" $?
 (cd "$VM_DIR/$snap" && sha256sum -c SHA256SUMS >/dev/null 2>&1); check "snapshot: SHA256SUMS verifies" $?
 grep -q '^CREATED=' "$VM_DIR/$snap/meta.env"; check "snapshot: meta.env carries the creation time" $?
+( . "$VM_DIR/$snap/meta.env" && [ "$DBS" = "notes-db places" ] ); check "snapshot: meta.env can be sourced by a shell (DBS quoted)" $?
 [ -s "$VM_DIR/last-success" ] && [ -z "$(ls -A "$VM_DIR/snapshots" | grep '^\.incoming')" ]; check "snapshot: last-success written, no half-built directory left" $?
 
 before="$(cat "$VM_DIR/last-success")"; sleep 1
