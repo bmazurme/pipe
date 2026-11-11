@@ -63,7 +63,7 @@ bridge to the link's server, `lastOnline` = now and no traffic counters (`source
 `vpnSource: 'connection' | 'active'` and `POST /api/v1/vpn/sync` (`VPN_CLIENT_CONFIG`) work from that link the same way as from a panel. The
 address holds the provider's token, so `vpn_connections.subscriptionUrl` is encrypted like `panelApiToken` and never returned by any route; an
 edit with it left blank keeps it, a new one is fetched and checked before it is saved. A worker's own VPN field accepts such an address too
-(`workers.vpnLink`): bridge resolves it on every settings fetch (cached for a minute, the last good link kept while the provider is down).
+(`workers.vpnLink`): bridge resolves it on every settings fetch (cached for a minute, the last good link kept while the provider is down). A worker's settings carry the whole pool (`vpnLinks`, at most 6 links; `vpnLink` stays the first for an older worker) and its tunnel balances over it (see `worker/README.md`).
 
 A Claude usage-limits widget was tried here
 (`GET /api/v1/vpn/claude-usage`, backed by a self-refreshing credential from

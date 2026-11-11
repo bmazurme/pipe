@@ -69,6 +69,7 @@ async function main(): Promise<void> {
       sleep,
       log: logger,
       vpn,
+      vpnRequired: !['0', 'off', 'false'].includes((process.env.WORKER_VPN_REQUIRED ?? '').trim().toLowerCase()),
       limitsProbe: new LimitsProbe({ apiUrl: baseConfig.bridgeApiUrl, workDir: baseConfig.workDir, log: logger }),
     }),
   );

@@ -238,3 +238,66 @@ describe('VpnTunnel', () => {
     });
   });
 });
+
+describe('VpnTunnel: a pool of links', () => {
+  const configOf = (spawned: { args: string[] }[], at = 0) => JSON.parse(readFileSync(spawned[at].args[2], 'utf-8')) as { outbounds: { tag: string }[]; routing?: unknown };
+
+  it('runs one tunnel for the whole pool, with a balancer', async () => {
+    const { tunnel, spawned, logs } = setup();
+
+    assert.equal(await tunnel.apply([LINK, OTHER]), 'http://127.0.0.1:19999');
+    assert.equal(spawned.length, 1);
+    assert.deepEqual(configOf(spawned).outbounds.map((outbound) => outbound.tag), ['node-1', 'node-2']);
+    assert.ok(configOf(spawned).routing);
+    assert.ok(logs.includes('info:vpn tunnel is up'));
+  });
+
+  it('keeps the running tunnel for the same pool and restarts it for a changed one', async () => {
+    const { tunnel, spawned } = setup();
+
+    await tunnel.apply([LINK, OTHER]);
+    await tunnel.apply([LINK, OTHER]);
+    assert.equal(spawned.length, 1);
+
+    await tunnel.apply([OTHER, LINK]);
+    assert.equal(spawned.length, 2);
+    assert.equal(spawned[0].child.signals.length, 1);
+
+    await tunnel.apply([LINK]);
+    assert.equal(spawned.length, 3);
+  });
+
+  it('treats a single link as a pool of one, and a list of one the same as the bare link', async () => {
+    const { tunnel, spawned } = setup();
+
+    await tunnel.apply(LINK);
+    await tunnel.apply([LINK]);
+
+    assert.equal(spawned.length, 1);
+  });
+
+  it('leaves out a link of the pool that cannot be used, and says so, and still runs with the rest', async () => {
+    const { tunnel, spawned, logs } = setup();
+
+    assert.equal(await tunnel.apply([LINK, 'vmess://nope', '  ', OTHER]), 'http://127.0.0.1:19999');
+    assert.deepEqual(configOf(spawned).outbounds.map((outbound) => outbound.tag), ['node-1', 'node-2']);
+    assert.ok(logs.includes('warn:a vpn link of the pool cannot be used — left out'));
+  });
+
+  it('is a failure only when nothing in the pool can be used', async () => {
+    const { tunnel, spawned, logs } = setup();
+
+    assert.equal(await tunnel.apply(['vmess://nope', 'hello']), null);
+    assert.equal(spawned.length, 0);
+    assert.ok(logs.includes('error:vpn link from the Worker page cannot be used'));
+  });
+
+  it('stops for an empty pool, like for no link', async () => {
+    const { tunnel, spawned } = setup();
+
+    await tunnel.apply([LINK, OTHER]);
+    assert.equal(await tunnel.apply([]), null);
+    assert.equal(spawned[0].child.signals.length, 1);
+  });
+});
+

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 
@@ -60,8 +61,8 @@ function build(row: Worker) {
   };
   const vpnConnections = { findAll: jest.fn().mockResolvedValue(connections) };
   const vpnLinks = {
-    resolve: jest.fn().mockResolvedValue(LINK),
-    resolveSubscription: jest.fn().mockResolvedValue(LINK),
+    resolveMany: jest.fn().mockResolvedValue([LINK]),
+    resolveSubscriptionMany: jest.fn().mockResolvedValue([LINK]),
     checkSubscription: jest.fn().mockResolvedValue(undefined),
   };
   const service = new WorkersService(
@@ -84,7 +85,7 @@ describe('WorkersService: VPN source', () => {
     const config = await service.configFor(1);
 
     expect(config.vpnLink).toBe(OWN_LINK);
-    expect(vpnLinks.resolve).not.toHaveBeenCalled();
+    expect(vpnLinks.resolveMany).not.toHaveBeenCalled();
   });
 
   it("builds a 'connection' worker's link from that connection", async () => {
@@ -95,7 +96,7 @@ describe('WorkersService: VPN source', () => {
     const config = await service.configFor(1);
 
     expect(config.vpnLink).toBe(LINK);
-    expect(vpnLinks.resolve).toHaveBeenCalledWith(7);
+    expect(vpnLinks.resolveMany).toHaveBeenCalledWith(7);
   });
 
   it("follows the active connection for an 'active' worker", async () => {
@@ -103,7 +104,7 @@ describe('WorkersService: VPN source', () => {
 
     await service.configFor(1);
 
-    expect(vpnLinks.resolve).toHaveBeenCalledWith('active');
+    expect(vpnLinks.resolveMany).toHaveBeenCalledWith('active');
   });
 
   it('fails the settings fetch, rather than dropping the tunnel, when the panel gave no link', async () => {
@@ -111,7 +112,7 @@ describe('WorkersService: VPN source', () => {
       worker({ vpnSource: 'connection', vpnConnectionId: 7 }),
     );
 
-    vpnLinks.resolve.mockRejectedValue(new Error('unreachable'));
+    vpnLinks.resolveMany.mockRejectedValue(new Error('unreachable'));
 
     await expect(service.configFor(1)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -126,7 +127,7 @@ describe('WorkersService: VPN source', () => {
     const config = await service.configFor(1);
 
     expect(config.vpnLink).toBeNull();
-    expect(vpnLinks.resolve).not.toHaveBeenCalled();
+    expect(vpnLinks.resolveMany).not.toHaveBeenCalled();
   });
 
   it('selects a connection on update, drops it again on a switch to the own link, and reports the host', async () => {
@@ -177,13 +178,13 @@ describe("WorkersService: a subscription link as the worker's own VPN", () => {
     const config = await service.configFor(1);
 
     expect(config.vpnLink).toBe(LINK);
-    expect(vpnLinks.resolveSubscription).toHaveBeenCalledWith(SUBSCRIPTION);
-    expect(vpnLinks.resolve).not.toHaveBeenCalled();
+    expect(vpnLinks.resolveSubscriptionMany).toHaveBeenCalledWith(SUBSCRIPTION);
+    expect(vpnLinks.resolveMany).not.toHaveBeenCalled();
   });
 
   it('fails the settings fetch, so the worker keeps its tunnel, when the subscription gave nothing', async () => {
     const { service, vpnLinks } = build(worker({ vpnLink: SUBSCRIPTION }));
-    vpnLinks.resolveSubscription.mockRejectedValue(
+    vpnLinks.resolveSubscriptionMany.mockRejectedValue(
       new Error('подписка ответила 500'),
     );
 
@@ -225,5 +226,57 @@ describe("WorkersService: a subscription link as the worker's own VPN", () => {
 
     expect(view.vpnHost).toBe('подписка · api.provider.example');
     expect(JSON.stringify(view)).not.toContain('SECRET');
+  });
+});
+
+describe('WorkersService: a pool of links', () => {
+  const POOL = [
+    LINK,
+    'vless://uuid3@second.example:443?security=reality&encryption=none&pbk=k&fp=chrome&sni=s.example&sid=ab&type=tcp',
+  ];
+
+  it("hands a connection's whole pool to the worker, the first link also in vpnLink", async () => {
+    const { service, vpnLinks } = build(
+      worker({ vpnSource: 'connection', vpnConnectionId: 7 }),
+    );
+    vpnLinks.resolveMany.mockResolvedValue(POOL);
+
+    const config = await service.configFor(1);
+
+    expect(config.vpnLinks).toEqual(POOL);
+    expect(config.vpnLink).toBe(POOL[0]);
+  });
+
+  it("hands a subscription's pool the same way", async () => {
+    const { service, vpnLinks } = build(
+      worker({ vpnLink: 'https://api.provider.example/sub/x' }),
+    );
+    vpnLinks.resolveSubscriptionMany.mockResolvedValue(POOL);
+
+    const config = await service.configFor(1);
+
+    expect(config.vpnLinks).toEqual(POOL);
+    expect(config.vpnLink).toBe(POOL[0]);
+  });
+
+  it('a worker with its own single link gets a pool of one, and one with no VPN an empty one', async () => {
+    const own = await build(worker()).service.configFor(1);
+    const none = await build(worker({ vpnLink: null })).service.configFor(1);
+
+    expect(own.vpnLinks).toEqual([OWN_LINK]);
+    expect(none.vpnLinks).toEqual([]);
+    expect(none.vpnLink).toBeNull();
+  });
+
+  it("gives the 'active' worker an empty pool when nothing is active", async () => {
+    const { service, vpnLinks } = build(worker({ vpnSource: 'active' }));
+    vpnLinks.resolveMany.mockRejectedValue(
+      new NotFoundException('No active VPN connection'),
+    );
+
+    const config = await service.configFor(1);
+
+    expect(config.vpnLinks).toEqual([]);
+    expect(config.vpnLink).toBeNull();
   });
 });

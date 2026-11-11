@@ -192,3 +192,26 @@ describe('VpnService: a connection that is a subscription link', () => {
     });
   });
 });
+
+describe('VpnService.getConnectionLinks', () => {
+  it("is every link of a subscription, in the provider's order and capped, not renamed", async () => {
+    const many = Array.from(
+      { length: 9 },
+      (_, i) =>
+        `${LINK.slice(0, LINK.indexOf('@'))}@203.0.113.${i + 1}:443?${LINK.split('?')[1]}`,
+    );
+    const resolve = jest.fn(async () => ({
+      link: many[0],
+      links: many,
+      unsupported: 0,
+      host: '203.0.113.1',
+      port: 443,
+    }));
+    const { service } = build({ resolve });
+
+    const links = await service.getConnectionLinks(5);
+
+    expect(links).toHaveLength(6);
+    expect(links).toEqual(many.slice(0, 6));
+  });
+});

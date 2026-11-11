@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
-import { buildXrayConfig, parseVless } from './vless.js';
+import { buildXrayConfig, parseVless, type VlessParams } from './vless.js';
 
 export interface TunnelLog {
   info: (obj: object, msg: string) => void;
@@ -58,6 +58,7 @@ export function isPortOpen(port: number, timeoutMs: number): Promise<boolean> {
 // must not stop the worker polling (the failure is logged, and jobs then go out the way they did before).
 export class VpnTunnel {
   private child: ChildProcess | null = null;
+  // The pool the running tunnel was built from, joined into one comparable string.
   private currentLink: string | null = null;
   private readonly port: number;
   // Back-off for a link that failed to come up or whose tunnel exited on its own.
@@ -100,9 +101,13 @@ export class VpnTunnel {
     this.skipLogged = false;
   }
 
-  /** The proxy URL to route through, or null when there is no (working) tunnel. */
-  async apply(link: string | null | undefined): Promise<string | null> {
-    const wanted = link?.trim() || null;
+  /**
+   * The proxy URL to route through, or null when there is no (working) tunnel. `links` is the pool bridge holds for this worker
+   * (a single link or several); the same pool keeps the running tunnel, a changed one restarts it, none stops it.
+   */
+  async apply(links: string | string[] | null | undefined): Promise<string | null> {
+    const pool = (Array.isArray(links) ? links : [links]).map((entry) => entry?.trim() ?? '').filter((entry) => entry !== '');
+    const wanted = pool.length > 0 ? pool.join('\n') : null;
 
     if (!wanted) {
       this.resetBackoff();
@@ -126,7 +131,20 @@ export class VpnTunnel {
     this.stop();
 
     try {
-      const config = buildXrayConfig(parseVless(wanted), this.port, this.options.fingerprint?.trim() || undefined);
+      // A link of the pool that cannot be used is left out (and said so); only a pool with nothing usable is a failure.
+      const usable: VlessParams[] = [];
+
+      for (const entry of pool) {
+        try {
+          usable.push(parseVless(entry));
+        } catch (error) {
+          this.options.log?.warn({ err: error }, 'a vpn link of the pool cannot be used — left out');
+        }
+      }
+
+      if (usable.length === 0) throw new Error('none of the vpn links can be used');
+
+      const config = buildXrayConfig(usable, this.port, this.options.fingerprint?.trim() || undefined);
 
       mkdirSync(this.options.dir, { recursive: true });
       writeFileSync(this.configPath, JSON.stringify(config), { mode: 0o600 });
@@ -159,7 +177,7 @@ export class VpnTunnel {
       }
 
       this.resetBackoff();
-      this.options.log?.info({ proxy: this.proxyUrl }, 'vpn tunnel is up');
+      this.options.log?.info({ proxy: this.proxyUrl, links: pool.length }, 'vpn tunnel is up');
 
       return this.proxyUrl;
     } catch (error) {

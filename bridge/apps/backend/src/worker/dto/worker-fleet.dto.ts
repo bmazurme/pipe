@@ -326,6 +326,8 @@ export class WorkerConfigResponseDto {
   chatEnabled: boolean;
   // The VPN link, for this worker only (its key authenticates the fetch): the worker starts its own tunnel with it.
   vpnLink: string | null;
+  // The whole pool the tunnel balances over (vpnLink is its first); empty = no VPN.
+  vpnLinks: string[];
   // Probing the plan limits: the interval (0 = only on request), the last request, and — only while a probe is due — the token
   // to probe with (this worker's own, resolved like for a job). Absent/null when there is nothing to do.
   limitsRefreshMin: number;

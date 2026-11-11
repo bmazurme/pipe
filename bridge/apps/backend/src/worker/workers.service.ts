@@ -536,16 +536,17 @@ export class WorkersService implements OnModuleInit {
 
   // The tunnel link this worker should run with. From the VPN page the link is built from the panel; if that fails and no earlier
   // link exists the whole settings fetch fails, so the worker keeps its last settings (and tunnel) instead of dropping the VPN.
-  private async vpnLinkOf(worker: Worker): Promise<string | null> {
+  private async vpnLinksOf(worker: Worker): Promise<string[]> {
     const source = worker.vpnSource ?? 'link';
 
     if (source === 'link') {
       const own = worker.vpnLink ?? null;
 
-      if (!isSubscriptionUrl(own)) return own;
+      if (!own) return [];
+      if (!isSubscriptionUrl(own)) return [own];
 
       try {
-        return await this.vpnLinks.resolveSubscription(own as string);
+        return await this.vpnLinks.resolveSubscriptionMany(own);
       } catch (error) {
         throw new ServiceUnavailableException(
           `VPN: не удалось получить ссылку из подписки (${error instanceof Error ? error.message : 'ошибка'})`,
@@ -554,16 +555,16 @@ export class WorkersService implements OnModuleInit {
     }
 
     if (source === 'connection' && worker.vpnConnectionId === null) {
-      return null;
+      return [];
     }
 
     try {
-      return await this.vpnLinks.resolve(
+      return await this.vpnLinks.resolveMany(
         source === 'active' ? 'active' : (worker.vpnConnectionId as number),
       );
     } catch (error) {
       if (error instanceof NotFoundException && source === 'active') {
-        return null;
+        return [];
       }
 
       throw new ServiceUnavailableException(
@@ -596,7 +597,7 @@ export class WorkersService implements OnModuleInit {
       await this.workers.update({ id: worker.id }, { version });
     }
 
-    const vpnLink = await this.vpnLinkOf(worker);
+    const vpnLinks = await this.vpnLinksOf(worker);
 
     return {
       id: worker.id,
@@ -607,7 +608,9 @@ export class WorkersService implements OnModuleInit {
       jobTimeoutSec: worker.jobTimeoutSec,
       proxyUrl: worker.proxyUrl,
       chatEnabled: worker.chatEnabled,
-      vpnLink,
+      // The first link stays in vpnLink for a worker that predates the pool; a newer one balances over vpnLinks.
+      vpnLink: vpnLinks[0] ?? null,
+      vpnLinks,
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       limitProbe: null,
