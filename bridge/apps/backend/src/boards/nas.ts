@@ -22,6 +22,13 @@ export interface NasData {
     snapshots: number;
     bytes: number;
   };
+  // The cloud VM's backups (notes, places) the NAS pulls and keeps; absent when the NAS is not set up for it.
+  vmBackup?: {
+    createdAt?: string | null;
+    imagesAt?: string | null;
+    snapshots: number;
+    bytes: number;
+  };
   raid: { summary: string; degraded: boolean; syncing: boolean };
   volume: { totalBytes: number; usedBytes: number };
   disks: NasDisk[];
@@ -39,6 +46,8 @@ export const NAS_STALE_AFTER_MS = 30 * MINUTE;
 // The daily pull runs at 03:50; a copy older than this missed one (the container's own health check uses the same 26 hours).
 export const BACKUP_STALE_HOURS = 26;
 export const BACKUP_VERY_STALE_HOURS = 50;
+// The Docker images of the VM are pulled weekly (Sundays): a set older than this missed one.
+export const VM_IMAGES_STALE_DAYS = 9;
 export const VOLUME_WARN_PCT = 85;
 export const DISK_WARM_C = 50;
 
@@ -92,6 +101,30 @@ export function assessNas(
       warn.push(`Копия бэкапа устарела: ${Math.floor(ageH)} ч`);
   } else {
     warn.push('Копия бэкапа ещё не получена');
+  }
+
+  // The VM's backups exist only here (the VM and the Pis keep none), so a stale one is as serious as the Pi copy being stale.
+  if (data.vmBackup) {
+    if (data.vmBackup.createdAt) {
+      const ageH =
+        (now.getTime() - new Date(data.vmBackup.createdAt).getTime()) / HOUR;
+
+      if (ageH > BACKUP_VERY_STALE_HOURS)
+        bad.push(`Бэкап VM (notes, places) старше ${Math.floor(ageH)} ч`);
+      else if (ageH > BACKUP_STALE_HOURS)
+        warn.push(`Бэкап VM (notes, places) устарел: ${Math.floor(ageH)} ч`);
+    } else {
+      bad.push('Бэкап VM (notes, places) ещё ни разу не получен');
+    }
+
+    if (data.vmBackup.createdAt && data.vmBackup.imagesAt) {
+      const days =
+        (now.getTime() - new Date(data.vmBackup.imagesAt).getTime()) /
+        (24 * HOUR);
+
+      if (days > VM_IMAGES_STALE_DAYS)
+        warn.push(`Образы Docker с VM не обновлялись ${Math.floor(days)} дн`);
+    }
   }
 
   if (data.volume.totalBytes > 0) {

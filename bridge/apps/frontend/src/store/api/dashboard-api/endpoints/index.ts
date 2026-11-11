@@ -95,6 +95,8 @@ export interface DashboardNas {
   data: {
     uptimeSec: number;
     backup: { createdAt?: string | null; latest?: string | null; snapshots: number; bytes: number };
+    /** The cloud VM's backups the NAS pulls (notes, places); absent when the NAS is not set up for it. */
+    vmBackup?: { createdAt?: string | null; imagesAt?: string | null; snapshots: number; bytes: number };
     raid: { summary: string; degraded: boolean; syncing: boolean };
     volume: { totalBytes: number; usedBytes: number };
     disks: NasDisk[];

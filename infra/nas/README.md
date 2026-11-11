@@ -11,6 +11,21 @@ white (03:00 backup) ──pull 03:30──▶ red ──pull 03:50──▶ NAS
 The key the NAS holds is restricted on red to `rrsync -ro /srv/backups` from the NAS's address only: read-only, no shell. The files are the
 already `age`-encrypted dumps, so the NAS never sees a plaintext database.
 
+## The cloud VM's backups (notes and places) — only here
+
+The same container also pulls the **encrypted** backups of notes and places from the cloud VM (`vm-pull.sh`, 03:20, the VM's side is
+`infra/vmbackup`): both databases, the object storage and the configuration every day, the Docker images on Sundays. They are kept nowhere else — not
+on the VM, not on the Pis. `snapshots/<UTC>/` under `Nas_Prog/pipe-backup-pull/vm-backups/` (14 kept; images 4), each with `SHA256SUMS` and `meta.env`;
+a snapshot is all-or-nothing, and `last-success` moves only when a whole one landed. The NAS holds only ciphertext (no key that reads it), so it cannot
+check a dump itself — the VM checks before it sends, and `infra/vmbackup/verify-from-workstation.sh` proves a restore from your machine.
+The container is `unhealthy` when either pull is older than 26 hours.
+
+```bash
+infra/nas/install.sh build && infra/nas/install.sh keygen-vm   # a second key, only for the VM; prints the line for `infra/vmbackup/install.sh addkey`
+infra/nas/install.sh ping-vm && infra/nas/install.sh once-vm   # after the line is on the VM
+infra/nas/install.sh start                                     # recreate the container with VM_SOURCE (default pipebackup@89.169.132.49)
+```
+
 ## Install (from your workstation; needs the NAS root key, `~/.ssh/nas_ed25519`)
 
 ```bash
@@ -40,5 +55,18 @@ when the copy is older than 26 hours (`healthcheck.sh`). Nothing alerts on Teleg
 
 ## Tests
 
-`bash infra/nas/test.sh` (16 checks, Linux: GNU date, flock) — the schedule, the key and the printed restricted line, a pull, history kept, a
-failing/older source never touching the last good copy, the health check. Runs in the `infra scripts` CI job.
+`bash infra/nas/test.sh` (Linux: GNU date, flock) — the schedule, the key and the printed restricted line, a pull, history kept, a
+failing/older source never touching the last good copy, the health check, and the VM pull (an all-or-nothing snapshot, a plain-text or tiny stream
+refused, retention, the VM key's line accepted by the VM's `addkey`). Runs in the `infra scripts` CI job.
+
+## The Dashboard tile
+
+With a boards-only API key the container also reports how the NAS is doing every 10 minutes (`report.sh`): the age of the copy it keeps, the RAID state
+(the host's `/proc/mdstat`, mounted read-only), the data volume's free space, each disk's SMART (health, reallocated / pending / uncorrectable sectors, power-on
+hours, temperature — the container gets `--device /dev/sda --device /dev/sdb --cap-add SYS_RAWIO` for that) and the uptime. It goes to the stack's VIP
+(`--resolve api.bridge.ntlstl.dev:443:192.168.50.10`), so it does not need the internet or the router's port forwarding. Bridge shows it on the Дашборд page.
+
+```bash
+PI_KEY_SOURCE=pi@192.168.50.11 infra/nas/install.sh setkey   # copies the key from the board agent's settings to the NAS, never printing it
+infra/nas/install.sh build && infra/nas/install.sh start     # rebuild with the new files, recreate the container
+```

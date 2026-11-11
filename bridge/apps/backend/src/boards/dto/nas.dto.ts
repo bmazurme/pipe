@@ -39,6 +39,29 @@ export class NasBackupDto {
   bytes: number;
 }
 
+// The cloud VM's backups the NAS pulls (infra/nas/vm-pull.sh) — present only when the NAS is set up to pull them.
+export class NasVmBackupDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  createdAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  imagesAt?: string | null;
+
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  snapshots: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(BIG)
+  bytes: number;
+}
+
 export class NasRaidDto {
   @IsString()
   @MaxLength(200)
@@ -121,6 +144,11 @@ export class NasReportDto {
   @ValidateNested()
   @Type(() => NasBackupDto)
   backup: NasBackupDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NasVmBackupDto)
+  vmBackup?: NasVmBackupDto;
 
   @ValidateNested()
   @Type(() => NasRaidDto)

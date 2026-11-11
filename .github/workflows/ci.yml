@@ -153,6 +153,7 @@ jobs:
       - run: bash infra/scriptcheck/test.sh
       - run: bash infra/boardagent/test.sh
       - run: bash infra/nas/test.sh
+      - run: bash infra/vmbackup/test.sh
       - run: bash infra/ups/test.sh
       - run: bash infra/cloudagent/test.sh
       - run: bash infra/bridge-pi/test-vless-to-xray.sh

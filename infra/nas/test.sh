@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Tests for the NAS pull container's scripts, with a fake rsync (no network). Linux only (flock, GNU date):
-#   docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq openssh-client rsync util-linux coreutils >/dev/null && bash /r/infra/nas/test.sh'
+#   docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq openssh-client rsync util-linux coreutils jq >/dev/null && bash /r/infra/nas/test.sh'
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -17,8 +17,8 @@ export PATH="$T/bin:$PATH"
 # /root/.ssh is a symlink into the keys volume; tests run as whoever, so point it at a scratch HOME
 export HOME="$T/home"
 sed "s#/root/.ssh#$T/home/.ssh#g" "$HERE/entrypoint.sh" > "$T/entrypoint.sh"
-cp "$HERE/../backup/pull.sh" "$T/pull.sh"; cp "$HERE/healthcheck.sh" "$T/healthcheck.sh"
-sed -i "s#/usr/local/bin/pull.sh#$T/pull.sh#" "$T/entrypoint.sh"
+cp "$HERE/../backup/pull.sh" "$T/pull.sh"; cp "$HERE/healthcheck.sh" "$T/healthcheck.sh"; cp "$HERE/report.sh" "$T/report.sh"; cp "$HERE/vm-pull.sh" "$T/vm-pull.sh"
+sed -i "s#/usr/local/bin/pull.sh#$T/pull.sh#; s#/usr/local/bin/vm-pull.sh#$T/vm-pull.sh#" "$T/entrypoint.sh"
 chmod +x "$T"/*.sh
 
 # a fake source: what rrsync would serve from the Pi's /srv/backups/latest/
@@ -82,6 +82,177 @@ BACKUP_DIR="$BACKUP_DIR" "$T/healthcheck.sh" > "$T/out" 2>&1; code=$?
 rm -f "$BACKUP_DIR/last-success"
 BACKUP_DIR="$BACKUP_DIR" "$T/healthcheck.sh" > "$T/out" 2>&1; code=$?
 [ "$code" -ne 0 ]; check "unhealthy before any pull" $?
+
+echo "# the cloud VM's backups (vm-pull.sh)"
+export VM_DIR="$T/vm" VM_SOURCE="pipebackup@192.0.2.99" VM_KNOWN_HOSTS="$T/home/.ssh/known_hosts_vm"
+cat > "$T/bin/fakevm" <<'SH'
+#!/usr/bin/env bash
+# stands in for `ssh pipebackup@vm "<command>"`: the VM's serve.sh answers with an age stream
+verb="${1%% *}"
+[ "$verb" != ping ] || { echo ok; exit 0; }
+[ "${FAKE_VM_FAIL:-}" != "$verb" ] || { echo "pipe-vmbackup: pg_dump failed" >&2; exit 1; }
+case "$verb" in db|files|config|images) ;; *) exit 2 ;; esac
+[ -z "${FAKE_VM_PLAIN:-}" ] || { echo "plain text, not age"; head -c 400 /dev/zero | tr '\0' 'x'; exit 0; }
+[ -z "${FAKE_VM_SMALL:-}" ] || { printf 'age-encryption.org/v1\n'; exit 0; }
+printf 'age-encryption.org/v1\n'; head -c 400 /dev/zero | tr '\0' 'x'; echo " $1"
+SH
+chmod +x "$T/bin/fakevm"
+export VM_SSH="$T/bin/fakevm"
+vm() { "$T/vm-pull.sh" "$@" > "$T/out" 2>&1; }
+
+vm ping; [ "$(cat "$T/out")" = ok ]; check "ping: the VM answers ok" $?
+vm snapshot; code=$?
+snap="$(readlink "$VM_DIR/latest")"
+[ "$code" -eq 0 ] && [ -d "$VM_DIR/$snap" ]; check "snapshot: exits 0 and latest points at it" $?
+[ -s "$VM_DIR/$snap/notes-db.dump.age" ] && [ -s "$VM_DIR/$snap/places.dump.age" ] && [ -s "$VM_DIR/$snap/files.tar.age" ] && [ -s "$VM_DIR/$snap/config.tar.age" ] && [ -s "$VM_DIR/$snap/meta.env" ]; check "snapshot: both databases, the files, the configuration and meta.env are there" $?
+(cd "$VM_DIR/$snap" && sha256sum -c SHA256SUMS >/dev/null 2>&1); check "snapshot: SHA256SUMS verifies" $?
+grep -q '^CREATED=' "$VM_DIR/$snap/meta.env"; check "snapshot: meta.env carries the creation time" $?
+[ -s "$VM_DIR/last-success" ] && [ -z "$(ls -A "$VM_DIR/snapshots" | grep '^\.incoming')" ]; check "snapshot: last-success written, no half-built directory left" $?
+
+before="$(cat "$VM_DIR/last-success")"; sleep 1
+FAKE_VM_FAIL=files vm snapshot; code=$?
+[ "$code" -ne 0 ] && grep -q "'files'" "$T/out" && [ "$(readlink "$VM_DIR/latest")" = "$snap" ] && [ "$(cat "$VM_DIR/last-success")" = "$before" ]; check "one failing part fails the whole snapshot and changes nothing (latest, last-success)" $?
+[ "$(ls "$VM_DIR/snapshots" | wc -l)" -eq 1 ] && [ -z "$(ls -A "$VM_DIR/snapshots" | grep '^\.incoming')" ]; check "a failed snapshot leaves no directory behind" $?
+FAKE_VM_PLAIN=1 vm snapshot; code=$?
+[ "$code" -ne 0 ] && grep -q 'not give an age-encrypted stream' "$T/out"; check "a stream that is not age-encrypted is refused (never stored as a backup)" $?
+FAKE_VM_SMALL=1 vm snapshot; code=$?
+[ "$code" -ne 0 ] && grep -q 'only' "$T/out"; check "a stream far too small is refused" $?
+[ "$(readlink "$VM_DIR/latest")" = "$snap" ]; check "after those refusals the good snapshot is still latest" $?
+
+for old in 20260101T000000Z 20260102T000000Z 20260103T000000Z 20260104T000000Z; do mkdir -p "$VM_DIR/snapshots/$old"; done
+sleep 1; VM_KEEP=3 vm snapshot
+[ "$(ls "$VM_DIR/snapshots" | wc -l)" -eq 3 ] && [ ! -d "$VM_DIR/snapshots/20260101T000000Z" ] && [ -d "$VM_DIR/snapshots/20260104T000000Z" ]; check "VM_KEEP=3: the oldest snapshots are removed, the newest three stay" $?
+
+vm images; code=$?
+[ "$code" -eq 0 ] && [ -s "$VM_DIR/images-last-success" ] && ls "$VM_DIR"/images/[0-9]*/images.tar.gz.age >/dev/null 2>&1; check "images: stored under images/<stamp>/, with its own last-success" $?
+for old in 20260101T000000Z 20260102T000000Z 20260103T000000Z; do mkdir -p "$VM_DIR/images/$old"; done
+sleep 1; VM_IMAGES_KEEP=2 vm images
+[ "$(ls "$VM_DIR/images" | wc -l)" -eq 2 ]; check "VM_IMAGES_KEEP=2: only the newest two image sets stay" $?
+FAKE_VM_FAIL=images vm images; code=$?
+[ "$code" -ne 0 ] && [ "$(readlink "$VM_DIR/latest")" != "" ]; check "a failing images pull is an error of its own and leaves the snapshots alone" $?
+vm bogus; [ $? -eq 2 ]; check "an unknown subcommand is a usage error" $?
+
+echo "# the VM key (keygen-vm)"
+mkdir -p "$T/home/.ssh"; echo "pinned-pi-host-key" > "$T/home/.ssh/known_hosts"
+cat > "$T/bin/ssh-keyscan" <<'SH'
+#!/usr/bin/env bash
+[ -n "${FAKE_KEYSCAN:-}" ] || exit 1
+echo "$(for a in "$@"; do last="$a"; done; echo "$last") ssh-ed25519 AAAAFAKEHOSTKEY"
+SH
+chmod +x "$T/bin/ssh-keyscan"
+FAKE_KEYSCAN=1 VM_FROM_IP=203.0.113.5 run keygen-vm; code=$?
+[ "$code" -eq 0 ] && [ -f "$T/keys/ssh/pull_vm" ] && [ -f "$T/keys/ssh/pull_vm.pub" ]; check "keygen-vm: its own key is made in the keys volume" $?
+grep -q '^restrict,from="203.0.113.5",command="sudo --preserve-env=SSH_ORIGINAL_COMMAND /usr/local/lib/pipe-vmbackup/serve.sh" ssh-ed25519 ' "$T/out"; check "keygen-vm: prints the restricted line bound to the VM's backup command" $?
+[ "$(cat "$T/home/.ssh/known_hosts")" = pinned-pi-host-key ] && grep -q 'AAAAFAKEHOSTKEY' "$T/keys/ssh/known_hosts_vm"; check "keygen-vm: the VM's host key goes to its own file, the Pi's stays as it was" $?
+[ "$(cat "$T/keys/ssh/pull_vm.pub")" != "$(cat "$SSH_KEY.pub")" ]; check "keygen-vm: a different key from the Pi pull's" $?
+grep '^restrict,' "$T/out" > "$T/line"; mkdir -p "$T/vmroot"
+ROOT="$T/vmroot" bash "$HERE/../vmbackup/install.sh" addkey "$(cat "$T/line")" > "$T/out" 2>&1; check "the printed line is exactly what the VM's addkey accepts" $?
+before="$(cat "$T/keys/ssh/pull_vm.pub")"; FAKE_KEYSCAN=1 VM_FROM_IP=203.0.113.5 run keygen-vm
+[ "$(cat "$T/keys/ssh/pull_vm.pub")" = "$before" ]; check "keygen-vm: a second run keeps the same key" $?
+VM_FROM_IP= run keygen-vm; grep -q '^restrict,command=' "$T/out"; check "keygen-vm: without VM_FROM_IP the line simply has no from=" $?
+
+echo "# the entrypoint drives it"
+rm -rf "$VM_DIR"
+run once-vm; code=$?
+[ "$code" -eq 0 ] && [ -L "$VM_DIR/latest" ]; check "once-vm: one snapshot through the entrypoint" $?
+run ping-vm; [ "$(tail -1 "$T/out")" = ok ]; check "ping-vm: through the entrypoint" $?
+VM_SOURCE= run once-vm; code=$?
+[ "$code" -ne 0 ]; check "once-vm without VM_SOURCE is refused" $?
+
+echo "# health, with the VM's backups"
+mkdir -p "$BACKUP_DIR"; date +%s > "$BACKUP_DIR/last-success"
+BACKUP_DIR="$BACKUP_DIR" VM_SOURCE= "$T/healthcheck.sh" > "$T/out" 2>&1; check "no VM_SOURCE: the VM is not looked at" $?
+BACKUP_DIR="$BACKUP_DIR" "$T/healthcheck.sh" > "$T/out" 2>&1; check "with VM_SOURCE and a fresh VM pull: healthy" $?
+echo $(( $(date +%s) - 30 * 3600 )) > "$VM_DIR/last-success"
+BACKUP_DIR="$BACKUP_DIR" "$T/healthcheck.sh" > "$T/out" 2>&1; code=$?
+[ "$code" -ne 0 ] && grep -q "the VM's last backup is 30 h old" "$T/out"; check "the VM's pull 30 hours old: unhealthy, and says which one" $?
+rm -f "$VM_DIR/last-success"
+BACKUP_DIR="$BACKUP_DIR" "$T/healthcheck.sh" > "$T/out" 2>&1; code=$?
+[ "$code" -ne 0 ] && grep -q 'no successful pull from the VM' "$T/out"; check "never pulled from the VM: unhealthy" $?
+unset VM_SSH VM_SOURCE VM_DIR
+rm -f "$BACKUP_DIR/last-success"
+
+echo "# the report for the Dashboard (needs jq)"
+if command -v jq >/dev/null; then
+  mkdir -p "$T/disks"
+  cat > "$T/mdstat-ok" <<'MD'
+Personalities : [linear] [raid0] [raid1]
+md1 : active raid1 sda2[0] sdb2[1]
+      1900391288 blocks super 1.0 [2/2] [UU]
+      bitmap: 1/1 pages [32KB], 131072KB chunk
+
+md0 : active raid1 sdb1[1] sda1[0]
+      2094080 blocks super 1.2 [2/2] [UU]
+
+unused devices: <none>
+MD
+  sed 's/\[2\/2\] \[UU\]/[2\/1] [U_]/' "$T/mdstat-ok" > "$T/mdstat-degraded"
+  cat > "$T/bin/smartctl" <<'SH'
+#!/usr/bin/env bash
+dev="${@: -1}"
+case "$1" in
+  -H) if [ "${FAKE_SMART_FAIL:-}" = "$dev" ]; then echo "SMART overall-health self-assessment test result: FAILED!"; else echo "SMART overall-health self-assessment test result: PASSED"; fi;;
+  -i) echo "Device Model:     WDC WD20EFRX-68EUZN0";;
+  -A) cat <<'A'
+  5 Reallocated_Sector_Ct   0x0033   200   200   140    Pre-fail  Always       -       0
+  9 Power_On_Hours          0x0032   050   050   000    Old_age   Always       -       36848
+194 Temperature_Celsius     0x0022   103   091   000    Old_age   Always       -       44 (Min/Max 20/51)
+197 Current_Pending_Sector  0x0032   200   200   000    Old_age   Always       -       2
+198 Offline_Uncorrectable   0x0030   100   253   000    Old_age   Offline      -       0
+A
+  ;;
+esac
+SH
+  chmod +x "$T/bin/smartctl"
+  # "devices" for the DISKS loop: /dev/sdX is checked with -e, so point the script at files that exist
+  sed "s#\"/dev/\$d\"#\"$T/disks/\$d\"#; s#\"/dev/\$dev\"#\"/dev/\$dev\"#" "$HERE/report.sh" > "$T/report-t.sh"; chmod +x "$T/report-t.sh"
+  touch "$T/disks/sda" "$T/disks/sdb"
+  cat > "$T/bin/curl" <<'SH'
+#!/usr/bin/env bash
+echo "$@" >> "$FAKE_CURL_ARGS"
+cat > "$FAKE_CURL_STDIN"
+for a in "$@"; do last="$a"; done
+printf '%s\n' "$last" > "$FAKE_CURL_URL"
+# the --data body is the argument after --data
+while [ $# -gt 0 ]; do [ "$1" = --data ] && { printf '%s' "$2" > "$FAKE_CURL_BODY"; break; }; shift; done
+[ -z "${FAKE_CURL_FAIL:-}" ]
+SH
+  chmod +x "$T/bin/curl"
+  export FAKE_CURL_ARGS="$T/curl-args" FAKE_CURL_STDIN="$T/curl-stdin" FAKE_CURL_URL="$T/curl-url" FAKE_CURL_BODY="$T/curl-body"
+  rep() { MDSTAT="${MDSTAT_FILE:-$T/mdstat-ok}" NAS_NAME=TestNAS DISKS="sda sdb" "$T/report-t.sh" "$@" > "$T/out" 2>&1; }
+
+  # the state the history test left (3 snapshots kept, latest = the newest) with a known creation time
+  date -u -d 2026-10-30T00:02:07Z +%s > "$BACKUP_DIR/last-success"
+  rep --dry; check "report --dry: prints valid JSON" $?
+  jq -e '.host == "TestNAS" and .raid.degraded == false and .raid.syncing == false and (.raid.summary | test("md1 \\[UU\\]")) and (.disks | length == 2)' "$T/out" >/dev/null; check "report: RAID clean, both disks listed" $?
+  jq -e '.disks[0] | .name == "sda" and .healthPassed == true and .reallocated == 0 and .powerOnHours == 36848 and .tempC == 44 and .pending == 2 and .uncorrectable == 0 and .model == "WDC WD20EFRX-68EUZN0"' "$T/out" >/dev/null; check "report: the SMART numbers are read (raw values, the temperature without its Min/Max)" $?
+  jq -e '.backup.snapshots == 3 and .backup.latest == "20261103T030000Z" and .backup.createdAt == "2026-10-30T00:02:07Z" and .backup.bytes > 0 and .volume.totalBytes > 0' "$T/out" >/dev/null; check "report: the backup it keeps (latest, count, size) and the volume" $?
+  jq -e 'has("vmBackup") | not' "$T/out" >/dev/null; check "report: no vmBackup field when the NAS is not set up to pull the VM's backups" $?
+  mkdir -p "$T/vmrep/snapshots/20261030T032000Z" "$T/vmrep/snapshots/20261029T032000Z"; echo 12345 > "$T/vmrep/snapshots/20261030T032000Z/x"
+  date -u -d 2026-10-30T00:20:03Z +%s > "$T/vmrep/last-success"; date -u -d 2026-10-25T00:30:00Z +%s > "$T/vmrep/images-last-success"
+  VM_SOURCE=pipebackup@vm VM_DIR="$T/vmrep" rep --dry
+  jq -e '.vmBackup.createdAt == "2026-10-30T00:20:03Z" and .vmBackup.imagesAt == "2026-10-25T00:30:00Z" and .vmBackup.snapshots == 2 and .vmBackup.bytes > 0 and .host == "TestNAS"' "$T/out" >/dev/null; check "report: vmBackup carries the last pull, the images' last pull, the count and the size" $?
+  rm -f "$T/vmrep/last-success" "$T/vmrep/images-last-success"
+  VM_SOURCE=pipebackup@vm VM_DIR="$T/vmrep" rep --dry
+  jq -e '.vmBackup.createdAt == null and .vmBackup.imagesAt == null' "$T/out" >/dev/null; check "report: a configured pull that never succeeded says so with null" $?
+  MDSTAT_FILE="$T/mdstat-degraded" rep --dry
+  jq -e '.raid.degraded == true' "$T/out" >/dev/null; check "report: a missing RAID member is degraded" $?
+  FAKE_SMART_FAIL=/dev/sdb rep --dry
+  jq -e '.disks[1].healthPassed == false and .disks[0].healthPassed == true' "$T/out" >/dev/null; check "report: a disk failing SMART is marked, the other is not" $?
+
+  rm -f "$T/curl-args" "$T/curl-body"
+  rep; code=$?
+  [ "$code" -eq 0 ] && [ ! -e "$T/curl-args" ]; check "report: without BRIDGE_API_KEY nothing is sent" $?
+  BRIDGE_API_KEY=brk_secret BRIDGE_RESOLVE=api.test:443:192.0.2.10 BRIDGE_API_URL=https://api.test rep; code=$?
+  [ "$code" -eq 0 ] && [ "$(cat "$T/curl-url")" = https://api.test/api/v1/boards/agent/nas ]; check "report: with a key it POSTs to the boards-agent route" $?
+  grep -q -- '--resolve api.test:443:192.0.2.10' "$T/curl-args"; check "report: goes to the stack's address when BRIDGE_RESOLVE is set" $?
+  grep -q 'Authorization: Bearer brk_secret' "$T/curl-stdin" && ! grep -q brk_secret "$T/curl-args"; check "report: the key is on curl's stdin, not in its arguments" $?
+  jq -e '.host == "TestNAS"' "$T/curl-body" >/dev/null; check "report: the body that is sent is the report" $?
+  FAKE_CURL_FAIL=1 BRIDGE_API_KEY=brk_secret BRIDGE_API_URL=https://api.test rep; code=$?
+  [ "$code" -ne 0 ] && grep -q 'did not take' "$T/out"; check "report: bridge refusing it is a non-zero exit with a message" $?
+else
+  echo "skip the report tests: jq is not installed"
+fi
 
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
