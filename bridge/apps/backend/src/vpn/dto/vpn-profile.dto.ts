@@ -1,0 +1,47 @@
+import { IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+
+import {
+  VPN_PROFILE_AUDIENCES,
+  VpnProfileAudience,
+  VpnProfileToken,
+} from '../entities/vpn-profile-token.entity';
+
+export class CreateVpnProfileDto {
+  // What the device is called in the list: «iPhone», «MacBook», …
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  label: string;
+
+  @IsIn(VPN_PROFILE_AUDIENCES)
+  audience: VpnProfileAudience;
+}
+
+// What the owner sees of a token. The token itself only ever appears in CreatedVpnProfileDto, once.
+export class VpnProfileResponseDto {
+  id: number;
+  label: string;
+  audience: VpnProfileAudience;
+  tokenPrefix: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+
+  static fromEntity(entity: VpnProfileToken): VpnProfileResponseDto {
+    return {
+      id: entity.id,
+      label: entity.label,
+      audience: entity.audience,
+      tokenPrefix: entity.tokenPrefix,
+      createdAt: entity.createdAt,
+      lastUsedAt: entity.lastUsedAt ?? null,
+      revokedAt: entity.revokedAt ?? null,
+    };
+  }
+}
+
+export class CreatedVpnProfileDto extends VpnProfileResponseDto {
+  // Shown once. The device is given `path` appended to bridge's API address.
+  token: string;
+  path: string;
+}

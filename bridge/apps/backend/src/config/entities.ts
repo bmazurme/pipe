@@ -38,6 +38,7 @@ import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
+import { VpnProfileToken } from '../vpn/entities/vpn-profile-token.entity';
 import { SystemSettings } from '../dashboard/entities/system-settings.entity';
 import { ClaudeCredential } from '../worker/entities/claude-credential.entity';
 import { Job } from '../worker/entities/job.entity';
@@ -81,6 +82,7 @@ export const ENTITIES = [
   ClaudeCredential,
   Context,
   VpnConnection,
+  VpnProfileToken,
   WorkerHeartbeat,
   LimitAlertState,
   Secret,

@@ -65,6 +65,8 @@ address holds the provider's token, so `vpn_connections.subscriptionUrl` is encr
 edit with it left blank keeps it, a new one is fetched and checked before it is saved. A worker's own VPN field accepts such an address too
 (`workers.vpnLink`): bridge resolves it on every settings fetch (cached for a minute, the last good link kept while the provider is down). A worker's settings carry the whole pool (`vpnLinks`, at most 6 links; `vpnLink` stays the first for an older worker) and its tunnel balances over it (see `worker/README.md`).
 
+**Device profiles** (`vpn_profile_tokens`; VPN page, «Профили устройств»): a phone or laptop client (Hiddify, v2rayN, v2rayNG, sing-box) takes the links of **every** connection from `GET /api/v1/vpn/profile/<token>` — base64, one `vless://` link per line, the active connection first, each named after its connection (`name-1`, `name-2` for a pool), at most 20, with `profile-title` / `profile-update-interval` headers — and picks the working one itself, so a blocked server costs it seconds, not a visit to this page. One token per device (`brp_…`, made and revoked from the page by `POST/DELETE /api/v1/vpn/profiles`); only its SHA-256 is stored, the link is shown once. The fetch route has no session: the token is the credential (a throttle of 30/min of its own, 404 for an unknown or revoked token alike, `Cache-Control: no-store`); a connection that cannot be read at that moment is skipped and the rest still served.
+
 A Claude usage-limits widget was tried here
 (`GET /api/v1/vpn/claude-usage`, backed by a self-refreshing credential from
 Anthropic's undocumented `console.anthropic.com/v1/oauth/token`) and

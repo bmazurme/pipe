@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -173,11 +173,12 @@ describe('VpnPage: connections by subscription link', () => {
 
       renderPage();
 
-      expect(await screen.findByText('подписка · 203.0.113.9')).toBeTruthy();
-      expect(await screen.findByText(/отвечает/)).toBeTruthy();
-      expect(screen.getByText('Сервер')).toBeTruthy();
-      expect(screen.queryByText('Трафик')).toBeNull();
-      expect(screen.getByText('miro.com')).toBeTruthy();
+      const row = (await screen.findByText('подписка · 203.0.113.9')).closest('li') as HTMLElement;
+
+      expect(await within(row).findByText(/отвечает/)).toBeTruthy();
+      expect(within(row).getByText('Сервер')).toBeTruthy();
+      expect(within(row).queryByText('Трафик')).toBeNull();
+      expect(within(row).getByText('miro.com')).toBeTruthy();
     });
 
     it('does not mark a panel connection that way', async () => {

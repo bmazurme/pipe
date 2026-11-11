@@ -33,6 +33,31 @@ export interface VpnConnection {
   createdAt: string;
 }
 
+export type VpnProfileAudience = 'phone' | 'laptop' | 'server';
+
+/** A device's right to fetch the VPN profile (a subscription of links). The token itself is never listed. */
+export interface VpnProfile {
+  id: number;
+  label: string;
+  audience: VpnProfileAudience;
+  tokenPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** Answer to creating one: the only time the token (and so the link) is ever shown. */
+export interface CreatedVpnProfile extends VpnProfile {
+  token: string;
+  /** Appended to bridge's API address, this is the subscription link for the device. */
+  path: string;
+}
+
+export interface CreateVpnProfileBody {
+  label: string;
+  audience: VpnProfileAudience;
+}
+
 export type CreateVpnConnectionBody =
   | {
       name: string;
@@ -120,6 +145,18 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     getVpnConnectionStatus: builder.query<VpnStatus, number>({
       query: (id) => `vpn/connections/${id}/status`,
     }),
+    listVpnProfiles: builder.query<VpnProfile[], void>({
+      query: () => 'vpn/profiles',
+      providesTags: ['VpnProfile'],
+    }),
+    createVpnProfile: builder.mutation<CreatedVpnProfile, CreateVpnProfileBody>({
+      query: (body) => ({ url: 'vpn/profiles', method: 'POST', body }),
+      invalidatesTags: ['VpnProfile'],
+    }),
+    revokeVpnProfile: builder.mutation<void, number>({
+      query: (id) => ({ url: `vpn/profiles/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['VpnProfile'],
+    }),
     getVpnConnectionLink: builder.mutation<{ link: string }, number>({
       query: (id) => `vpn/connections/${id}/connection-link`,
     }),
@@ -139,5 +176,8 @@ export const {
   useCheckVpnConnectionStatusMutation,
   useGetVpnConnectionStatusQuery,
   useGetVpnConnectionLinkMutation,
+  useListVpnProfilesQuery,
+  useCreateVpnProfileMutation,
+  useRevokeVpnProfileMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };
