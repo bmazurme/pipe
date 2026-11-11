@@ -32,6 +32,7 @@ vi.mock('../store/api', async (importOriginal) => {
     useGetDashboardBackupsQuery: () => ({ isError: false, isLoading: false, data: { configured: false } }),
     useGetDashboardBoardMetricsQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardNasQuery: () => ({ isError: false, isLoading: false, data: [] }),
+    useGetDashboardCloudQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardUpsQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardRouterQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardDeploysQuery: () => ({ isError: false, isLoading: false, data: [] }),
@@ -41,6 +42,7 @@ vi.mock('../store/api', async (importOriginal) => {
 vi.mock('./dashboard/GithubConnectionCard', () => ({ GithubConnectionCard: () => null }));
 vi.mock('./dashboard/ReleasesCard', () => ({ ReleasesCard: () => null }));
 vi.mock('./dashboard/NasCard', () => ({ NasCard: () => null }));
+vi.mock('./dashboard/CloudCard', () => ({ CloudCard: () => null }));
 vi.mock('./dashboard/UpsCard', () => ({ UpsCard: () => null }));
 vi.mock('./dashboard/RouterCard', () => ({ RouterCard: () => null }));
 vi.mock('./dashboard/BoardMetricsCard', () => ({ BoardMetricsCard: () => null }));

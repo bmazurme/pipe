@@ -31,6 +31,7 @@ describe('DashboardController routes', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -68,6 +69,7 @@ describe('DashboardController: the connection to GitHub', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -95,6 +97,7 @@ describe('DashboardController deploys', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getDeploys()).resolves.toEqual([
@@ -112,6 +115,7 @@ describe('DashboardController nas', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -133,6 +137,7 @@ describe('DashboardController board metrics', () => {
       {} as never,
       {} as never,
       { summary } as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -170,6 +175,7 @@ describe('DashboardController ups', () => {
       {} as never,
       { list } as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getUps({ id: 7 })).resolves.toEqual([
@@ -191,10 +197,33 @@ describe('DashboardController router', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
     );
 
     await expect(controller.getRouter({ id: 7 })).resolves.toEqual([
       { host: 'asus' },
+    ]);
+    expect(list).toHaveBeenCalledWith(7);
+  });
+});
+
+describe('DashboardController cloud', () => {
+  it("lists the signed-in owner's cloud VM reports", async () => {
+    const list = jest.fn().mockResolvedValue([{ host: 'yc-vm' }]);
+    const controller = new DashboardController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { list } as never,
+    );
+
+    await expect(controller.getCloud({ id: 7 })).resolves.toEqual([
+      { host: 'yc-vm' },
     ]);
     expect(list).toHaveBeenCalledWith(7);
   });

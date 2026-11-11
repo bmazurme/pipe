@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DashboardBoardMetrics, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
 import { type AttentionInput, buildAttention, summarize } from './dashboardAttention';
 
 const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], ups: [], router: [], lastDeploy: null };
 
 const board = (host: string, status: DashboardBoardMetrics['status'], reasons: string[] = []): DashboardBoardMetrics => ({ host, at: '2026-10-30T12:00:00Z', status, reasons, data: {}, series: [] });
 const nas = (status: DashboardNas['status'], reasons: string[] = []): DashboardNas => ({ host: 'MyCloudEX2Ultra', reportedAt: '2026-10-30T12:00:00Z', status, reasons, data: { uptimeSec: 1, backup: { snapshots: 1, bytes: 1 }, raid: { summary: '', degraded: false, syncing: false }, volume: { totalBytes: 1, usedBytes: 1 }, disks: [] } });
+const cloud = (status: DashboardCloud['status'], reasons: string[] = []): DashboardCloud => ({ host: 'yc-vm', reportedAt: '2026-11-11T12:00:00Z', status, reasons, data: { uptimeSec: 1, cpus: 2, load5: 0.1, memory: { totalMb: 1, availableMb: 1, swapTotalMb: 1, swapUsedMb: 0 }, disk: { totalBytes: 1, usedBytes: 1 }, services: [], probes: [] } });
 const ups = (status: DashboardUps['status'], reasons: string[] = []): DashboardUps => ({ host: 'ubuntu-blue', reportedAt: '2026-11-02T12:00:00Z', status, reasons, onBattery: status === 'bad', data: { status: 'OL CHRG', chargePct: 100 } });
 const router = (status: DashboardRouter['status'], reasons: string[] = []): DashboardRouter => ({ host: 'asus', reportedAt: '2026-11-03T12:00:00Z', status, reasons, data: { reachable: true, sshOk: true }, reboot: null });
 const deploy = (result: DashboardDeploy['result'], prNumbers: number[] = []): DashboardDeploy => ({ sha: '9781a0d'.padEnd(40, 'a'), previousSha: null, result, detail: null, prNumbers, at: '2026-10-30T12:00:00Z' });
@@ -40,6 +41,14 @@ describe('buildAttention', () => {
       ['warn', 'NAS: Копия бэкапа устарела: 27 ч'],
       ['warn', 'Роутер: Задержка до внешнего адреса 240 мс'],
     ]);
+  });
+
+  it('names the cloud VM, with its worst reason first and how many more there are', () => {
+    const items = buildAttention({ ...calm, cloud: [cloud('bad', ['Порт 5432 открыт в интернет', 'Swarm'])] });
+
+    expect(items).toEqual([{ id: 'cloud:yc-vm', level: 'bad', text: 'Облако yc-vm: Порт 5432 открыт в интернет (и ещё 1)' }]);
+    expect(buildAttention({ ...calm, cloud: [cloud('ok')] })).toEqual([]);
+    expect(buildAttention({ ...calm })).toEqual([]);
   });
 
   it('says a release that never came up did not come up, and ignores a release that went out', () => {

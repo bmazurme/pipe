@@ -21,6 +21,7 @@ import {
   BoardMetricsView,
   MAX_HOURS,
 } from '../boards/board-metrics.service';
+import { CloudService, CloudView } from '../boards/cloud.service';
 import { NasService, NasView } from '../boards/nas.service';
 import { RouterService, RouterView } from '../boards/router.service';
 import { UpsService, UpsView } from '../boards/ups.service';
@@ -52,6 +53,7 @@ export class DashboardController {
     private readonly boardMetrics: BoardMetricsService,
     private readonly ups: UpsService,
     private readonly router: RouterService,
+    private readonly cloud: CloudService,
   ) {}
 
   @Get('nodes')
@@ -82,6 +84,12 @@ export class DashboardController {
   @Get('nas')
   getNas(@CurrentUser() user: { id: number }): Promise<NasView[]> {
     return this.nas.list(user.id);
+  }
+
+  // The cloud VM (the first layer): memory, disk, its services, replica lag, backups (infra/cloudagent reports it).
+  @Get('cloud')
+  getCloud(@CurrentUser() user: { id: number }): Promise<CloudView[]> {
+    return this.cloud.list(user.id);
   }
 
   // The UPS the boards stand on: status, charge, load, runtime (infra/ups reports it from the board its USB cable is in).

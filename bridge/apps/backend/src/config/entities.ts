@@ -4,6 +4,7 @@ import { EmergencyKey } from '../auth/entities/emergency-key.entity';
 import { Session } from '../auth/entities/session.entity';
 import { BoardReport } from '../boards/entities/board-report.entity';
 import { BoardMetric } from '../boards/entities/board-metric.entity';
+import { CloudReport } from '../boards/entities/cloud-report.entity';
 import { NasReport } from '../boards/entities/nas-report.entity';
 import { UpsReport } from '../boards/entities/ups-report.entity';
 import { RouterReport } from '../boards/entities/router-report.entity';
@@ -56,6 +57,7 @@ export const ENTITIES = [
   TaskQuestion,
   BoardReport,
   NasReport,
+  CloudReport,
   UpsReport,
   RouterReport,
   RouterReboot,

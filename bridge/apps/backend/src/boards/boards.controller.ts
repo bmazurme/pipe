@@ -24,10 +24,12 @@ import {
 } from './dto/boards.dto';
 import { BoardMetricsDto } from './dto/board-metrics.dto';
 import { NasReportDto } from './dto/nas.dto';
+import { CloudReportDto } from './dto/cloud.dto';
 import { UpsReportDto } from './dto/ups.dto';
 import { RouterRebootResultDto, RouterReportDto } from './dto/router.dto';
 import { BoardMetricsService } from './board-metrics.service';
 import { NasService } from './nas.service';
+import { CloudService } from './cloud.service';
 import { UpsService } from './ups.service';
 import { RouterService } from './router.service';
 
@@ -43,6 +45,7 @@ export class BoardsAgentController {
     private readonly metrics: BoardMetricsService,
     private readonly ups: UpsService,
     private readonly router: RouterService,
+    private readonly cloud: CloudService,
   ) {}
 
   // The board's vital signs, every ~2 minutes (infra/boardagent, with the run that also asks for decisions).
@@ -63,6 +66,16 @@ export class BoardsAgentController {
     @CurrentUser() user: { id: number },
   ): Promise<void> {
     await this.nas.record(user.id, dto);
+  }
+
+  // What the cloud VM reports about itself and its services (infra/cloudagent/report.sh), with the same boards-only key.
+  @Post('cloud')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cloudReport(
+    @Body() dto: CloudReportDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.cloud.record(user.id, dto);
   }
 
   // What the board with the UPS's USB cable reports about the UPS (infra/ups/report.sh), with the same boards-only key.

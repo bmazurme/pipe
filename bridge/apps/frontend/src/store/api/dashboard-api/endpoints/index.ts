@@ -101,6 +101,49 @@ export interface DashboardNas {
   };
 }
 
+export type CloudStatus = 'ok' | 'warn' | 'bad';
+
+export interface CloudService {
+  name: string;
+  desired: number;
+  running: number;
+  health?: 'healthy' | 'unhealthy' | 'starting' | 'none' | null;
+  restarts24h?: number | null;
+  memMb?: number | null;
+  critical: boolean;
+}
+
+export interface CloudProbe {
+  name: string;
+  ok: boolean;
+  httpCode?: number | null;
+  ms?: number | null;
+  critical: boolean;
+}
+
+/** The cloud VM (the first layer) as its agent last reported it (infra/cloudagent), with bridge's verdict. */
+export interface DashboardCloud {
+  host: string;
+  reportedAt: string;
+  status: CloudStatus;
+  reasons: string[];
+  data: {
+    uptimeSec: number;
+    cpus: number;
+    load5: number | null;
+    memory: { totalMb: number; availableMb: number; swapTotalMb: number; swapUsedMb: number };
+    disk: { totalBytes: number; usedBytes: number };
+    services: CloudService[];
+    probes: CloudProbe[];
+    leader?: { site: string; epoch: number } | null;
+    replication?: { connected: boolean; lagSec: number | null } | null;
+    backups?: { name: string; ageHours: number | null }[];
+    certs?: { name: string; days: number }[];
+    exposedPorts?: number[];
+    version?: string | null;
+  };
+}
+
 export type UpsStatus = 'ok' | 'warn' | 'bad';
 
 /** The UPS as the board with its USB cable last reported it (infra/ups), with bridge's verdict. */
@@ -181,6 +224,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardNas: builder.query<DashboardNas[], void>({
       query: () => 'dashboard/nas',
     }),
+    getDashboardCloud: builder.query<DashboardCloud[], void>({
+      query: () => 'dashboard/cloud',
+    }),
     getDashboardUps: builder.query<DashboardUps[], void>({
       query: () => 'dashboard/ups',
     }),
@@ -213,6 +259,7 @@ export const {
   useGetDashboardDeploysQuery,
   useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
+  useGetDashboardCloudQuery,
   useGetDashboardUpsQuery,
   useGetDashboardRouterQuery,
   useGetGithubConnectionQuery,
