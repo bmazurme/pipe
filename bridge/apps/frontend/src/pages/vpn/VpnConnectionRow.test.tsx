@@ -101,6 +101,10 @@ describe('VpnConnectionRow', () => {
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
+    // Other timers may exist (the store's cache timers, Gravity's): follow only the one that resets the label.
+    const started = vi.spyOn(globalThis, 'setTimeout');
+    const cleared = vi.spyOn(globalThis, 'clearTimeout');
+
     try {
       await act(async () => {
         screen.getByRole('button', { name: 'Скопировать' }).click();
@@ -115,9 +119,18 @@ describe('VpnConnectionRow', () => {
       await act(async () => {
         screen.getByRole('button', { name: 'Скопировать' }).click();
       });
+
+      const resetCall = started.mock.calls.map((call) => call[1]).lastIndexOf(2000);
+
+      expect(resetCall).toBeGreaterThanOrEqual(0);
+
+      const resetTimer = started.mock.results[resetCall].value;
+
       unmount();
-      expect(vi.getTimerCount()).toBe(0);
+      expect(cleared).toHaveBeenCalledWith(resetTimer);
     } finally {
+      started.mockRestore();
+      cleared.mockRestore();
       vi.useRealTimers();
     }
   });
