@@ -12,6 +12,8 @@ import { useAuth } from '../providers/AuthProvider';
 import { useAppTheme } from '../providers/ThemeProvider';
 import { useIsMobile } from '../../shared/lib/useIsMobile';
 import { useLocalStorage } from '../../shared/hooks/useLocalStorage';
+import { splitDismissed } from '../../pages/inbox/inboxDismissals';
+import { useInboxDismissed } from '../../pages/inbox/useInboxDismissed';
 import { LogoMark } from '../../shared/ui/Logo';
 import { createInitialIcon, getInitial } from '../../shared/ui/InitialIcon';
 import { AsideFooter } from './AsideFooter';
@@ -68,9 +70,11 @@ export function AppLayout() {
     pollingInterval: INBOX_POLL_MS,
     skipPollingIfUnfocused: true,
   });
+  const [inboxDismissed] = useInboxDismissed();
+  const inboxVisible = inboxItems && splitDismissed(inboxItems, inboxDismissed).visible;
   const navStatus: NavStatus = {
-    inboxTotal: inboxItems?.length,
-    inboxUrgent: inboxItems?.filter((item) => item.severity === 'high').length,
+    inboxTotal: inboxVisible?.length,
+    inboxUrgent: inboxVisible?.filter((item) => item.severity === 'high').length,
     workerUp: typeof workerStatus?.isUp === 'boolean' ? workerStatus.isUp : undefined,
     isOwner: user?.isOwner,
   };
