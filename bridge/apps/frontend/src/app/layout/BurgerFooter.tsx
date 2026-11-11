@@ -1,4 +1,4 @@
-import { ArrowRightFromSquare, ChevronRight } from '@gravity-ui/icons';
+import { ArrowRightFromSquare, ChevronRight, Magnifier } from '@gravity-ui/icons';
 import { Avatar, Button, Icon, Text } from '@gravity-ui/uikit';
 
 import { getInitial } from '../../shared/ui/InitialIcon';
@@ -11,13 +11,19 @@ interface BurgerFooterProps {
   username: string | undefined;
   goTo: (path: string) => void;
   closeBurger: () => void;
+  openQuickSwitch: () => void;
   logout: () => void | Promise<void>;
 }
 
 // Mobile: full-width burger footer, no compact mode to account for.
-export function BurgerFooter({ pathname, username, goTo, closeBurger, logout }: BurgerFooterProps) {
+export function BurgerFooter({ pathname, username, goTo, closeBurger, openQuickSwitch, logout }: BurgerFooterProps) {
   return (
     <div className={styles.burgerFooter}>
+      <Button view="outlined" size="l" width="max" onClick={openQuickSwitch}>
+        <Icon data={Magnifier} size={16} />
+        Найти раздел
+      </Button>
+
       <button
         type="button"
         className={styles.userRow}

@@ -27,7 +27,7 @@ export function ReleasesCard() {
   const releases = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={styles.card}>
+    <Card id="tile-releases" view="outlined" className={styles.card}>
       <SectionHeader title="Релизы" icon={Rocket} />
       {isLoading ? (
         <Skeleton className={styles.statusSkeleton} />

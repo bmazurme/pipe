@@ -61,3 +61,24 @@
     margin-bottom: 8px;
   }
 }
+
+/* Healthy services folded into one line; opening it shows the same list as always. */
+.fine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fineSummary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--g-color-text-secondary);
+  font-size: 13px;
+}
+
+.fineSummary:focus-visible {
+  outline: 2px solid var(--g-color-line-focus);
+  outline-offset: 2px;
+}

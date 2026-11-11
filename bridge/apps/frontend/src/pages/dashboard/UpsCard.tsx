@@ -151,7 +151,7 @@ export function UpsCard() {
   const list = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-ups" view="outlined" className={dashboardStyles.card}>
       <SectionHeader title="ИБП" icon={Thunderbolt} />
       {isLoading ? (
         <Skeleton className={dashboardStyles.statusSkeleton} />

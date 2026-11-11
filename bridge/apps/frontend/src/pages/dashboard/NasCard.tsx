@@ -178,7 +178,7 @@ export function NasCard() {
   const list = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-nas" view="outlined" className={dashboardStyles.card}>
       <SectionHeader title="NAS" icon={HardDrive} />
       {isLoading ? (
         <Skeleton className={dashboardStyles.statusSkeleton} />

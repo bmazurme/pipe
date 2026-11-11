@@ -115,7 +115,7 @@ export function BoardMetricsCard() {
   const boards = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-boards" view="outlined" className={dashboardStyles.card}>
       <SectionHeader
         title="Платы: температура и питание"
         icon={Thunderbolt}

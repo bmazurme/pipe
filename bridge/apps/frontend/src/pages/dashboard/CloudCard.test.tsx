@@ -83,17 +83,43 @@ describe('CloudCard', () => {
     renderCard();
 
     await screen.findByText('Сервисы');
-    const services = screen.getByText('bridge_backend').closest('dl') as HTMLElement;
 
-    expect(within(services).getByText('118 МБ')).toBeTruthy();
-    expect(within(services).getByText('0 из 1')).toBeTruthy();
-    expect(within(services).getByText('health не проходит')).toBeTruthy();
-    expect(within(services).getByText('перезапусков за сутки: 4')).toBeTruthy();
-    expect(within(services).getByText('выключен')).toBeTruthy();
+    // The healthy one (bridge_backend) and the ones that need a look are listed apart, but all of them are on the page.
+    expect(screen.getByText('bridge_backend')).toBeTruthy();
+    expect(screen.getByText('118 МБ')).toBeTruthy();
+    expect(screen.getByText('0 из 1')).toBeTruthy();
+    expect(screen.getByText('health не проходит')).toBeTruthy();
+    expect(screen.getByText('перезапусков за сутки: 4')).toBeTruthy();
+    expect(screen.getByText('выключен')).toBeTruthy();
     // notes_client and the one scaled to zero are not critical.
-    expect(within(services).getAllByText('не критичный')).toHaveLength(2);
+    expect(screen.getAllByText('не критичный')).toHaveLength(2);
     expect(screen.getByText('api.bridge.ntlstl.dev/api/v1/health: 200 · 38 мс')).toBeTruthy();
     expect(screen.getByText('notes.ntlstl.dev: код 502')).toBeTruthy();
+  });
+
+  it('folds services that are fine into one line, and keeps the ones that need a look on show', async () => {
+    const fine = (name: string) => ({ name, desired: 1, running: 1, health: 'healthy' as const, restarts24h: 0, critical: true });
+    const data = { ...CLOUD.data, services: [fine('a_one'), fine('b_two'), fine('c_three'), { name: 'd_broken', desired: 1, running: 0, health: 'none' as const, critical: true }] };
+    vi.stubGlobal('fetch', vi.fn(async () => json([{ ...CLOUD, data }])));
+    renderCard();
+
+    await screen.findByText('Сервисы');
+    const summary = screen.getByText('Остальные 3 в порядке');
+    const folded = summary.closest('details') as HTMLElement;
+
+    expect(folded).not.toHaveAttribute('open');
+    expect(within(folded).getByText('a_one')).toBeTruthy();
+    expect(screen.getByText('d_broken').closest('details')).toBeNull();
+  });
+
+  it('does not fold one or two healthy services — a fold would hide as much as it saves', async () => {
+    const data = { ...CLOUD.data, services: [{ name: 'only_one', desired: 1, running: 1, health: 'healthy' as const, restarts24h: 0, critical: true }] };
+    vi.stubGlobal('fetch', vi.fn(async () => json([{ ...CLOUD, data }])));
+    renderCard();
+
+    await screen.findByText('Сервисы');
+
+    expect(screen.getByText('only_one').closest('details')).toBeNull();
   });
 
   it('marks a replica that is not connected, and a VM without swap', async () => {

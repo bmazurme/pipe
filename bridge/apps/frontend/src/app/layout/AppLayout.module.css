@@ -18,6 +18,8 @@
 }
 
 .contentMobile {
+  /* How far down a sticky element in the page must stick to stay clear of the mobile header (sticky, 50px tall, above the content). */
+  --ntlstl-sticky-offset: 50px;
   /* Bottom padding clears the home indicator; the sides clear a notch in
      landscape. Extra bottom space keeps the last row above the gesture bar. */
   padding: 20px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom))

@@ -1,5 +1,6 @@
-import { Database, Server, ShieldKeyhole } from '@gravity-ui/icons';
-import { Alert, Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
+import { useEffect, useState } from 'react';
+import { ArrowsRotateRight, Database, Server, ShieldKeyhole } from '@gravity-ui/icons';
+import { Alert, Button, Card, Icon, Label, Skeleton, Text } from '@gravity-ui/uikit';
 
 import { formatDateTime, formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import {
@@ -30,7 +31,9 @@ import { NasCard } from './dashboard/NasCard';
 import { RouterCard } from './dashboard/RouterCard';
 import { UpsCard } from './dashboard/UpsCard';
 import { ReleasesCard } from './dashboard/ReleasesCard';
-import { buildAttention, summarize } from './dashboard/dashboardAttention';
+import { type AttentionItem, buildAttention, summarize } from './dashboard/dashboardAttention';
+import { DashboardTileNav } from './dashboard/DashboardTileNav';
+import { tileLevels, tileOfAttention } from './dashboard/dashboardTiles';
 import styles from './DashboardPage.module.css';
 import { formatBytes } from '../shared/lib/formatBytes';
 import { useFailureAwarePollInterval } from './vpn/statusPollInterval';
@@ -45,6 +48,40 @@ const VPN_RECENT_THRESHOLD_MS = 5 * 60 * 1000;
 // Matches infra/backup/backup.sh --check's own freshness threshold, so this
 // tile agrees with the system that already alerts on a stale backup.
 const BACKUP_STALE_THRESHOLD_MS = 26 * 60 * 60 * 1000;
+
+// The items of one level, each a link to the tile it is about: «Узлы не в строю: blue» leads to the nodes tile instead of leaving a hunt for it.
+function AttentionAlert({ items, theme, title }: { items: AttentionItem[]; theme: 'danger' | 'warning'; title: string }) {
+  if (items.length === 0) return null;
+
+  return (
+    <Alert
+      theme={theme}
+      view="filled"
+      title={title}
+      message={
+        <ul className={styles.attention}>
+          {items.map((item) => {
+            const tile = tileOfAttention(item.id);
+
+            return (
+              <li key={item.id}>
+                {tile ? (
+                  <a href={`#${tile}`} className={styles.attentionLink}>
+                    {item.text}
+                  </a>
+                ) : (
+                  item.text
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      }
+    />
+  );
+}
+
+const REFRESH_TICK_MS = 15_000;
 
 function LoadError({ error }: { error: unknown }) {
   return (
@@ -168,6 +205,25 @@ export function DashboardPage() {
     lastDeploy: Array.isArray(deploys.data) ? (deploys.data[0] ?? null) : null,
   });
   const summary = summarize(attention);
+
+  // When the newest answer came in, and one button that asks all of them again: the tiles poll on their own, but after fixing something
+  // «did it help?» should not mean waiting out a minute.
+  const queries = [vpnActive, nodes, backups, boardMetrics, cloud, channels, nas, ups, router, deploys];
+  const stamps = queries.map((query) => query.fulfilledTimeStamp).filter((stamp): stamp is number => typeof stamp === 'number');
+  const updatedAt = stamps.length > 0 ? Math.max(...stamps) : null;
+  const refreshing = queries.some((query) => query.isFetching);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    // The age ("12 с назад") is only worth redrawing now and then.
+    const timer = setInterval(() => setTick((tick) => tick + 1), REFRESH_TICK_MS);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const refreshAll = () => {
+    void Promise.all([...queries.map((query) => query.refetch()), vpnConnections.refetch()]);
+  };
   const summaryReady = !vpnActive.isLoading && !nodes.isLoading && !backups.isLoading && !vpnConnections.isLoading;
 
   return (
@@ -176,31 +232,31 @@ export function DashboardPage() {
         title="Дашборд"
         description="Состояние инфраструктуры: туннель, каналы связи, облако, узлы кластера, платы, NAS, ИБП, роутер, бэкапы и релизы — на одной странице."
         actions={
-          summaryReady ? (
-            <Label theme={summary.theme} size="m">
-              {summary.label}
-            </Label>
-          ) : undefined
+          <div className={styles.headerActions}>
+            {summaryReady && (
+              <Label theme={summary.theme} size="m">
+                {summary.label}
+              </Label>
+            )}
+            <Button view="outlined" size="m" onClick={refreshAll} loading={refreshing} title="Обновить все плитки">
+              <Icon data={ArrowsRotateRight} size={16} />
+              {updatedAt ? `Обновлено ${formatRelativeTime(new Date(updatedAt).toISOString())}` : 'Обновить'}
+            </Button>
+          </div>
         }
       />
 
-      {summaryReady && attention.length > 0 && (
-        <Alert
-          theme={attention.some((item) => item.level === 'bad') ? 'danger' : 'warning'}
-          view="filled"
-          title={attention.some((item) => item.level === 'bad') ? 'Что требует внимания' : 'Замечания'}
-          message={
-            <ul className={styles.attention}>
-              {attention.map((item) => (
-                <li key={item.id}>{item.text}</li>
-              ))}
-            </ul>
-          }
-        />
+      <DashboardTileNav levels={tileLevels(attention)} ready={summaryReady} />
+
+      {summaryReady && (
+        <>
+          <AttentionAlert items={attention.filter((item) => item.level === 'bad')} theme="danger" title="Что требует внимания" />
+          <AttentionAlert items={attention.filter((item) => item.level === 'warn')} theme="warning" title="Замечания" />
+        </>
       )}
 
       <div className={styles.grid}>
-        <Card view="outlined" className={styles.card}>
+        <Card id="tile-vpn" view="outlined" className={styles.card}>
           <SectionHeader
             title="VPN"
             icon={ShieldKeyhole}
@@ -221,7 +277,7 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card view="outlined" className={styles.card}>
+        <Card id="tile-nodes" view="outlined" className={styles.card}>
           <SectionHeader title="Узлы" icon={Server} meta={nodesList.length ? `${nodesList.length - nodesDownCount} из ${nodesList.length}` : undefined} />
           {nodes.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />
@@ -241,7 +297,7 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card view="outlined" className={styles.card}>
+        <Card id="tile-backups" view="outlined" className={styles.card}>
           <SectionHeader title="Бэкапы" icon={Database} />
           {backups.isLoading ? (
             <Skeleton className={styles.statusSkeleton} />

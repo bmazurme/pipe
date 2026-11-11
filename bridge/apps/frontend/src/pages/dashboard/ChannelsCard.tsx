@@ -146,7 +146,7 @@ export function ChannelsCard() {
   const channels = data && Array.isArray(data.channels) ? data.channels : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-channels" view="outlined" className={dashboardStyles.card}>
       <SectionHeader title="Каналы связи" icon={PlugConnection} />
       {isLoading ? (
         <Skeleton className={dashboardStyles.statusSkeleton} />

@@ -162,7 +162,7 @@ export function RouterCard() {
   const list = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-router" view="outlined" className={dashboardStyles.card}>
       <SectionHeader title="Роутер" icon={Globe} />
       {isLoading ? (
         <Skeleton className={dashboardStyles.statusSkeleton} />

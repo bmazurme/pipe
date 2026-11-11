@@ -52,6 +52,11 @@ function serviceTheme(service: CloudService): 'success' | 'warning' | 'danger' |
   return 'success';
 }
 
+// Up to this many healthy services are simply listed; more fold into a <details>.
+const FOLD_FROM = 2;
+
+const isFine = (service: CloudService) => serviceTheme(service) === 'success' && (service.restarts24h ?? 0) === 0;
+
 function ServiceRow({ service }: { service: CloudService }) {
   return (
     <>
@@ -95,6 +100,8 @@ function CloudRow({ cloud }: { cloud: DashboardCloud }) {
   const diskPct = pct(data.disk.usedBytes, data.disk.totalBytes);
   const backups = data.backups ?? [];
   const certs = data.certs ?? [];
+  const problemServices = data.services.filter((service) => !isFine(service));
+  const fineServices = data.services.filter(isFine);
 
   return (
     <div className={styles.block}>
@@ -255,11 +262,33 @@ function CloudRow({ cloud }: { cloud: DashboardCloud }) {
       {data.services.length > 0 && (
         <Fragment>
           <Text variant="subheader-1">Сервисы</Text>
-          <dl className={styles.services}>
-            {data.services.map((service) => (
-              <ServiceRow key={service.name} service={service} />
+          {/* What needs a look is always on show; the ones that are fine fold into one line, so a healthy VM is not eight rows of green. */}
+          {problemServices.length > 0 && (
+            <dl className={styles.services}>
+              {problemServices.map((service) => (
+                <ServiceRow key={service.name} service={service} />
+              ))}
+            </dl>
+          )}
+          {fineServices.length > 0 &&
+            (fineServices.length <= FOLD_FROM ? (
+              <dl className={styles.services}>
+                {fineServices.map((service) => (
+                  <ServiceRow key={service.name} service={service} />
+                ))}
+              </dl>
+            ) : (
+              <details className={styles.fine}>
+                <summary className={styles.fineSummary}>
+                  {problemServices.length > 0 ? 'Остальные' : 'Все'} {fineServices.length} в порядке
+                </summary>
+                <dl className={styles.services}>
+                  {fineServices.map((service) => (
+                    <ServiceRow key={service.name} service={service} />
+                  ))}
+                </dl>
+              </details>
             ))}
-          </dl>
         </Fragment>
       )}
     </div>
@@ -272,7 +301,7 @@ export function CloudCard() {
   const list = Array.isArray(data) ? data : [];
 
   return (
-    <Card view="outlined" className={dashboardStyles.card}>
+    <Card id="tile-cloud" view="outlined" className={dashboardStyles.card}>
       <SectionHeader title="Облако (VM)" icon={Cloud} />
       {isLoading ? (
         <Skeleton className={dashboardStyles.statusSkeleton} />

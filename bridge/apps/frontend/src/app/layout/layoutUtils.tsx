@@ -4,6 +4,8 @@ export const COMPACT_STORAGE_KEY = 'ntlstl-sidebar-compact';
 /** Collapses/expands the desktop sidebar; matches the hint in its tooltip. */
 export const COMPACT_HOTKEY = '[';
 export const MAIN_CONTENT_ID = 'main-content';
+/** The chord that opens the page switcher, as shown in tooltips (⌘ on a Mac, Ctrl elsewhere). */
+export const QUICK_SWITCH_HINT = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘K' : 'Ctrl+K';
 
 /**
  * True when the browser, not the router, should handle the click — a modified

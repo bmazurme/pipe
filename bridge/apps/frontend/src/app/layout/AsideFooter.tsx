@@ -1,10 +1,11 @@
-import { ArrowRightFromSquare } from '@gravity-ui/icons';
+import { ArrowRightFromSquare, Magnifier } from '@gravity-ui/icons';
 import { FooterItem } from '@gravity-ui/navigation';
 
 import { ThemeMode } from '../providers/ThemeProvider';
 import { createInitialIcon } from '../../shared/ui/InitialIcon';
 import styles from './AppLayout.module.css';
 import { isCurrentPath } from './layoutUtils';
+import { QUICK_SWITCH_HINT } from './layoutUtils';
 import { THEME_ICON, THEME_SHORT, THEME_TITLE } from './theme';
 
 interface AsideFooterProps {
@@ -16,6 +17,7 @@ interface AsideFooterProps {
   profileIcon: ReturnType<typeof createInitialIcon>;
   pathname: string;
   navigate: (path: string) => void;
+  openQuickSwitch: () => void;
   logout: () => void | Promise<void>;
 }
 
@@ -29,10 +31,20 @@ export function AsideFooter({
   profileIcon,
   pathname,
   navigate,
+  openQuickSwitch,
   logout,
 }: AsideFooterProps) {
   return (
     <>
+      <FooterItem
+        compact={isCompact}
+        enableTooltip
+        id="quick-switch"
+        title="Быстрый переход"
+        tooltipText={`Быстрый переход (${QUICK_SWITCH_HINT})`}
+        icon={Magnifier}
+        onItemClick={openQuickSwitch}
+      />
       <FooterItem
         compact={isCompact}
         enableTooltip

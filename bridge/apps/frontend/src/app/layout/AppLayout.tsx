@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { Loader } from '@gravity-ui/uikit';
 import {
   AsideHeader,
@@ -21,6 +21,8 @@ import { BurgerFooter } from './BurgerFooter';
 import { COMPACT_HOTKEY, COMPACT_STORAGE_KEY, isModifiedClick, MAIN_CONTENT_ID } from './layoutUtils';
 import { buildBurgerItems, buildMenuItems, type NavStatus } from './navItems';
 import { THEME_ORDER } from './theme';
+import { QuickSwitch } from './QuickSwitch';
+import { useQuickSwitchHotkey } from './useQuickSwitchHotkey';
 import { useCompactHotkey } from './useCompactHotkey';
 import styles from './AppLayout.module.css';
 
@@ -40,6 +42,13 @@ export function AppLayout() {
     THEME_ORDER[(THEME_ORDER.indexOf(themeMode) + 1) % THEME_ORDER.length];
 
   useCompactHotkey(compact, setCompact, isMobile);
+
+  // Ctrl/⌘+K opens a page switcher from anywhere; the footer row and the burger button open the same one.
+  const [quickOpen, setQuickOpen] = useState(false);
+  const toggleQuick = useCallback(() => setQuickOpen((open) => !open), []);
+  const closeQuick = useCallback(() => setQuickOpen(false), []);
+
+  useQuickSwitchHotkey(toggleQuick);
 
   // MobileHeader owns the burger's open state and exposes no imperative API —
   // it listens for these DOM events on its own root node instead. Footer
@@ -149,10 +158,15 @@ export function AppLayout() {
     </a>
   );
 
+  const quickSwitch = (
+    <QuickSwitch open={quickOpen} onClose={closeQuick} isOwner={user?.isOwner} currentPath={location.pathname} navigate={navigate} />
+  );
+
   if (isMobile) {
     return (
       <>
         {skipLink}
+        {quickSwitch}
         <MobileHeader
           ref={headerRef}
           logo={logo}
@@ -167,6 +181,10 @@ export function AppLayout() {
                 username={user?.username}
                 goTo={goTo}
                 closeBurger={closeBurger}
+                openQuickSwitch={() => {
+                  closeBurger();
+                  setQuickOpen(true);
+                }}
                 logout={logout}
               />
             ),
@@ -179,6 +197,7 @@ export function AppLayout() {
   return (
     <>
       {skipLink}
+      {quickSwitch}
       <AsideHeader
         compact={compact}
         onChangeCompact={setCompact}
@@ -197,6 +216,7 @@ export function AppLayout() {
             profileIcon={profileIcon}
             pathname={location.pathname}
             navigate={navigate}
+            openQuickSwitch={() => setQuickOpen(true)}
             logout={logout}
           />
         )}
