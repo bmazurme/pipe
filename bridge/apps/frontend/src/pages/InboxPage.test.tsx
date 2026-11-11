@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -73,5 +73,46 @@ describe('InboxPage', () => {
     renderPage();
 
     expect(await screen.findByText(/boom|Не удалось загрузить список/)).toBeTruthy();
+  });
+});
+
+describe('InboxPage dismissals', () => {
+  const waiting = { id: 'pr:7', kind: 'pr_waiting', severity: 'low', title: 'PR #7 ждёт', detail: 'CI не запускался', link: '/improve' };
+  const loop = { id: 'loop', kind: 'loop_paused', severity: 'high', title: 'Цикл на паузе', link: '/improve' };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+  });
+
+  it('keeps a hidden item hidden after a reload, and offers it back', async () => {
+    window.localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn(async () => json([loop, waiting])));
+    const first = renderPage();
+
+    expect(await screen.findByText('PR #7 ждёт')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Скрыть' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Скрыть' }));
+    expect(screen.queryByText('PR #7 ждёт')).toBeNull();
+    first.unmount();
+
+    renderPage();
+    expect(await screen.findByText('Цикл на паузе')).toBeTruthy();
+    expect(screen.queryByText('PR #7 ждёт')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Скрыто: 1/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Вернуть' }));
+    expect(await screen.findByText('PR #7 ждёт')).toBeTruthy();
+  });
+
+  it('says everything else is hidden rather than that nothing waits', async () => {
+    window.localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn(async () => json([waiting])));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Скрыть' }));
+
+    expect(await screen.findByText('Всё остальное скрыто')).toBeTruthy();
+    expect(screen.queryByText('Ничего не ждёт решения')).toBeNull();
   });
 });
