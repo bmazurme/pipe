@@ -35,7 +35,27 @@ const RESULT_TEXT: Record<ProbeResult, string> = {
   error: 'ошибка соединения',
 };
 
-function Cell({ cell }: { cell: ChannelCell | undefined }) {
+// The same results mean something else for a request through a tunnel than for a connection to a server.
+const E2E_SHORT: Record<Exclude<ProbeResult, 'ok'>, string> = {
+  tcp_timeout: 'нет ответа',
+  tcp_refused: 'туннель ✗',
+  tls_timeout: 'завис',
+  tls_reset: 'сброс',
+  tls_error: 'TLS ✗',
+  error: 'ошибка',
+};
+
+const E2E_TEXT: Record<ProbeResult, string> = {
+  ok: 'запрос через туннель проходит',
+  tcp_timeout: 'нет ответа',
+  tcp_refused: 'туннель не принимает соединения (он не поднят?)',
+  tls_timeout: 'запрос завис (тротлинг?)',
+  tls_reset: 'соединение сброшено',
+  tls_error: 'ошибка TLS',
+  error: 'ошибка запроса (например, 403 — выход не годится для этого сервиса)',
+};
+
+function Cell({ cell, e2e = false }: { cell: ChannelCell | undefined; e2e?: boolean }) {
   if (!cell) {
     return (
       <Text color="secondary" variant="caption-2">
@@ -46,7 +66,7 @@ function Cell({ cell }: { cell: ChannelCell | undefined }) {
 
   const ms = cell.tcpMs !== null || cell.tlsMs !== null ? (cell.tcpMs ?? 0) + (cell.tlsMs ?? 0) : null;
   const title = [
-    RESULT_TEXT[cell.result],
+    (e2e ? E2E_TEXT : RESULT_TEXT)[cell.result],
     cell.detail ? `(${cell.detail})` : null,
     `проверено ${formatDateTime(cell.probedAt)}`,
     `результат держится с ${formatDateTime(cell.changedAt)}`,
@@ -65,12 +85,12 @@ function Cell({ cell }: { cell: ChannelCell | undefined }) {
 
   return (
     <Label size="s" theme={cell.result === 'ok' ? 'success' : 'danger'} title={title}>
-      {cell.result === 'ok' ? `${ms ?? ''} мс` : RESULT_SHORT[cell.result]}
+      {cell.result === 'ok' ? `${ms ?? ''} мс` : e2e && cell.result === 'error' && cell.detail ? cell.detail : (e2e ? E2E_SHORT : RESULT_SHORT)[cell.result]}
     </Label>
   );
 }
 
-function Matrix({ channels, vantages }: { channels: DashboardChannel[]; vantages: string[] }) {
+function Matrix({ channels, vantages, e2e = false, label = 'Канал' }: { channels: DashboardChannel[]; vantages: string[]; e2e?: boolean; label?: string }) {
   return (
     <div className={styles.scroll}>
       <table className={styles.matrix}>
@@ -78,7 +98,7 @@ function Matrix({ channels, vantages }: { channels: DashboardChannel[]; vantages
           <tr>
             <th scope="col">
               <Text color="secondary" variant="caption-2">
-                Канал
+                {label}
               </Text>
             </th>
             {vantages.map((vantage) => (
@@ -102,13 +122,13 @@ function Matrix({ channels, vantages }: { channels: DashboardChannel[]; vantages
                     </Label>
                   </span>
                   <Text color="secondary" variant="caption-2">
-                    {channel.key} · SNI {channel.sni}
+                    {e2e ? channel.host : `${channel.key} · SNI ${channel.sni}`}
                   </Text>
                 </div>
               </th>
               {vantages.map((vantage) => (
                 <td key={vantage}>
-                  <Cell cell={channel.cells.find((cell) => cell.vantage === vantage)} />
+                  <Cell cell={channel.cells.find((cell) => cell.vantage === vantage)} e2e={e2e} />
                 </td>
               ))}
             </tr>
@@ -171,6 +191,17 @@ export function ChannelsCard() {
               </Text>
             ))}
           </div>
+
+          {(data.e2e ?? []).length > 0 && (
+            <>
+              <Text variant="subheader-1">Сквозная проверка через туннель</Text>
+              <Text color="secondary" variant="caption-2">
+                Запрос, который воркер делает через свой туннель: доходит ли он до сервиса, а не только до VPN-сервера. Claude API, недоступный ни у одного воркера, —
+                проблема: задачи не выполняются.
+              </Text>
+              <Matrix channels={data.e2e ?? []} vantages={(data.e2eVantages ?? []).map((vantage) => vantage.name)} e2e label="Сервис" />
+            </>
+          )}
         </div>
       )}
     </Card>

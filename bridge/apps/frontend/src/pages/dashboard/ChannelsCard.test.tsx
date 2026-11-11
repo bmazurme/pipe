@@ -126,3 +126,61 @@ describe('ChannelsCard', () => {
     expect(await screen.findByText('Не удалось загрузить')).toBeTruthy();
   });
 });
+
+describe('ChannelsCard: through the tunnel', () => {
+  const E2E_VIEW = {
+    ...VIEW,
+    status: 'bad',
+    reasons: ['Через туннель Claude API: не проходит ни у одного воркера: ошибка запроса (HTTP 403)'],
+    e2e: [
+      { key: 'e2e:claude', name: 'Claude API', host: 'api.anthropic.com', port: 443, sni: 'api.anthropic.com', state: 'down', reason: 'x', cells: [cell('worker:pi-red', 'error', { tcpMs: null, detail: 'HTTP 403' }), cell('worker:pi-blue', 'tls_timeout', { detail: 'timeout' })] },
+      { key: 'e2e:telegram', name: 'Telegram API', host: 'api.telegram.org', port: 443, sni: 'api.telegram.org', state: 'partial', reason: 'y', cells: [cell('worker:pi-red', 'ok', { tcpMs: 480, tlsMs: null }), cell('worker:pi-blue', 'tcp_refused')] },
+    ],
+    e2eVantages: [
+      { name: 'worker:pi-blue', lastProbeAt: now, stale: false },
+      { name: 'worker:pi-red', lastProbeAt: now, stale: false },
+    ],
+  };
+
+  it('shows a second table, a row per service and a column per worker', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(E2E_VIEW)));
+    renderCard();
+
+    expect(await screen.findByText('Сквозная проверка через туннель')).toBeTruthy();
+    const tables = screen.getAllByRole('table');
+
+    expect(tables).toHaveLength(2);
+    expect(within(tables[1]).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Сервис', 'worker:pi-blue', 'worker:pi-red']);
+    expect(within(tables[1]).getByText('api.anthropic.com')).toBeTruthy();
+  });
+
+  it('words a request through a tunnel as such: an HTTP status as itself, a dead proxy as the tunnel being down', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(E2E_VIEW)));
+    renderCard();
+    await screen.findByText('Сквозная проверка через туннель');
+
+    const [claude, telegram] = within(screen.getAllByRole('table')[1]).getAllByRole('row').slice(1);
+
+    expect(within(claude).getByText('HTTP 403')).toBeTruthy();
+    expect(within(claude).getByText('завис')).toBeTruthy();
+    expect(within(telegram).getByText('480 мс')).toBeTruthy();
+    expect(within(telegram).getByText('туннель ✗')).toBeTruthy();
+    expect(within(claude).getByText('HTTP 403').closest('[title]')?.getAttribute('title')).toMatch(/403 — выход не годится/);
+  });
+
+  it('counts the Claude API being down through every tunnel as a problem', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(E2E_VIEW)));
+    renderCard();
+
+    expect(await screen.findByText('проблема')).toBeTruthy();
+    expect(screen.getByText(/Через туннель Claude API: не проходит ни у одного воркера/)).toBeTruthy();
+  });
+
+  it('shows no second table when no worker has reported, or when the bridge is older and sends no such field', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ ...VIEW, e2e: [], e2eVantages: [] })));
+    renderCard();
+    await screen.findByText('IHOR-1');
+    expect(screen.getAllByRole('table')).toHaveLength(1);
+    expect(screen.queryByText('Сквозная проверка через туннель')).toBeNull();
+  });
+});

@@ -14,6 +14,7 @@ import { waitForSession } from './session.js';
 import { sleep } from './sleep.js';
 import { workerVersion } from './version.js';
 import { LimitsProbe } from './limitsProbe.js';
+import { TunnelProbe } from './tunnelProbe.js';
 import { VpnTunnel } from './vpn/tunnel.js';
 import { buildLoopDeps } from './wiring.js';
 import { resolveFileSecrets, SECRET_ENV_KEYS } from './secrets.js';
@@ -71,6 +72,8 @@ async function main(): Promise<void> {
       vpn,
       vpnRequired: !['0', 'off', 'false'].includes((process.env.WORKER_VPN_REQUIRED ?? '').trim().toLowerCase()),
       limitsProbe: new LimitsProbe({ apiUrl: baseConfig.bridgeApiUrl, workDir: baseConfig.workDir, log: logger }),
+      // Requests through the tunnel, reported to bridge's «Каналы связи» tile (WORKER_E2E_PROBE=off to switch off).
+      tunnelProbe: (process.env.WORKER_E2E_PROBE ?? '').trim().toLowerCase() === 'off' ? undefined : new TunnelProbe({ apiUrl: baseConfig.bridgeApiUrl, log: logger }),
     }),
   );
 

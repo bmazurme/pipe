@@ -2386,6 +2386,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LinksWorkerController_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/providers": {
         parameters: {
             query?: never;
@@ -3836,6 +3852,16 @@ export interface components {
         LinkProbeReportDto: {
             vantage: string;
             results: components["schemas"]["LinkProbeResultDto"][];
+        };
+        E2eResultDto: {
+            key: string;
+            /** @enum {string} */
+            result: "ok" | "tcp_timeout" | "tcp_refused" | "tls_timeout" | "tls_reset" | "tls_error" | "error";
+            tcpMs?: number | null;
+            detail?: string | null;
+        };
+        E2eReportDto: {
+            results: components["schemas"]["E2eResultDto"][];
         };
         PurgeEntryResponseDto: {
             id: number;
@@ -7754,6 +7780,27 @@ export interface operations {
                 content: {
                     "application/json": Record<string, never>;
                 };
+            };
+        };
+    };
+    LinksWorkerController_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["E2eReportDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -180,6 +180,9 @@ export interface DashboardChannels {
   reasons: string[];
   channels: DashboardChannel[];
   vantages: { name: string; lastProbeAt: string; stale: boolean }[];
+  /** Requests made through a worker's own tunnel to Claude, Telegram and GitHub: a row per target, a column per worker (absent on an older bridge). */
+  e2e?: DashboardChannel[];
+  e2eVantages?: { name: string; lastProbeAt: string; stale: boolean }[];
 }
 
 export type UpsStatus = 'ok' | 'warn' | 'bad';

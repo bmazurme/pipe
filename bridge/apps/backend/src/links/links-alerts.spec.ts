@@ -23,7 +23,15 @@ const channel = (
 const view = (
   channels: ReturnType<typeof channel>[],
   vantages: ChannelsView['vantages'] = [],
-): ChannelsView => ({ status: 'ok', reasons: [], channels, vantages });
+  e2e: ChannelsView['e2e'] = [],
+): ChannelsView => ({
+  status: 'ok',
+  reasons: [],
+  channels,
+  vantages,
+  e2e,
+  e2eVantages: [],
+});
 
 describe('desiredAlerts', () => {
   it('has nothing to say when every channel is fine', () => {

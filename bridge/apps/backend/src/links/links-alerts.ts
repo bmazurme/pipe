@@ -1,3 +1,4 @@
+import { e2eTarget } from './e2e';
 import { ChannelsView } from './links';
 
 // What is worth a Telegram message about the channels, as a set of keyed conditions. A condition that holds for a few checks in a row is
@@ -47,6 +48,18 @@ export function desiredAlerts(view: ChannelsView): DesiredAlert[] {
           recovered: `✅ VPN-канал ${channel.name} снова доступен`,
         });
       }
+    }
+  }
+
+  // Through the tunnel: urgent when the Claude API is unreachable from every worker — nothing can be run.
+  for (const row of view.e2e) {
+    if (row.state === 'down' || row.state === 'partial') {
+      alerts.push({
+        key: `e2e:${row.key}`,
+        text: `🔌 Через VPN-туннель ${row.name}: ${row.reason}`,
+        urgent: row.state === 'down' && !!e2eTarget(row.key)?.critical,
+        recovered: `✅ Через VPN-туннель ${row.name} снова проходит`,
+      });
     }
   }
 

@@ -4638,6 +4638,27 @@
         }
       }
     },
+    "/api/v1/worker/links": {
+      "post": {
+        "operationId": "LinksWorkerController_report",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/E2eReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/oauth/providers": {
       "get": {
         "operationId": "OauthController_providers",
@@ -9624,6 +9645,56 @@
         },
         "required": [
           "vantage",
+          "results"
+        ]
+      },
+      "E2eResultDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "/^e2e:[a-z0-9_-]{1,40}$/"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "tcp_timeout",
+              "tcp_refused",
+              "tls_timeout",
+              "tls_reset",
+              "tls_error",
+              "error"
+            ]
+          },
+          "tcpMs": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "key",
+          "result"
+        ]
+      },
+      "E2eReportDto": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/E2eResultDto"
+            }
+          }
+        },
+        "required": [
           "results"
         ]
       },

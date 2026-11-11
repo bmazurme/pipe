@@ -250,4 +250,76 @@ describe('buildLoopDeps', () => {
       assert.equal((await build().deps.fetchRemoteConfig('brw_k')).vpnDown, false);
     });
   });
+
+  describe('the through-tunnel probe', () => {
+    const answer = (body: object) => {
+      globalThis.fetch = (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch;
+    };
+    const withProbe = (proxyUrl: string | undefined, vpn?: { apply: () => Promise<string | null> }) => {
+      const seen: { proxyUrl: unknown; key: string }[] = [];
+      const deps = buildLoopDeps({
+        baseConfig: { ...baseConfig, proxyUrl },
+        signal: new AbortController().signal,
+        initialSession: { mode: 'managed', key: 'brw_k', name: 'green' },
+        waitForEnrolment: async () => null,
+        processJob: async () => undefined,
+        processChatTurn: async () => undefined,
+        withHeartbeat: async (_c, _n, work) => work(),
+        sleep: async () => undefined,
+        log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+        vpn,
+        tunnelProbe: { consider: (remote, key) => void seen.push({ proxyUrl: remote.proxyUrl, key }) },
+      });
+
+      return { deps, seen };
+    };
+
+    it('is told the proxy the worker really goes through: its tunnel, else the page\'s address, else the one from the environment', async () => {
+      answer({ id: 1, vpnLink: 'vless://l' });
+      const viaTunnel = withProbe(undefined, { apply: async () => 'http://127.0.0.1:18080' });
+      await viaTunnel.deps.fetchRemoteConfig('brw_k');
+      assert.deepEqual(viaTunnel.seen, [{ proxyUrl: 'http://127.0.0.1:18080', key: 'brw_k' }]);
+
+      answer({ id: 1, proxyUrl: 'http://manual:1' });
+      const viaPage = withProbe('http://env:1');
+      await viaPage.deps.fetchRemoteConfig('brw_k');
+      assert.deepEqual(viaPage.seen[0].proxyUrl, 'http://manual:1');
+
+      answer({ id: 1 });
+      const viaEnv = withProbe('http://vpn-client:1080');
+      await viaEnv.deps.fetchRemoteConfig('brw_k');
+      assert.deepEqual(viaEnv.seen[0].proxyUrl, 'http://vpn-client:1080');
+    });
+
+    it('is told there is no proxy when the worker goes out directly', async () => {
+      answer({ id: 1 });
+      const direct = withProbe(undefined);
+
+      await direct.deps.fetchRemoteConfig('brw_k');
+
+      assert.equal(direct.seen[0].proxyUrl, null);
+    });
+
+    it('never lets a failing probe break the settings fetch', async () => {
+      answer({ id: 1 });
+      const deps = buildLoopDeps({
+        baseConfig,
+        signal: new AbortController().signal,
+        initialSession: { mode: 'managed', key: 'brw_k', name: 'green' },
+        waitForEnrolment: async () => null,
+        processJob: async () => undefined,
+        processChatTurn: async () => undefined,
+        withHeartbeat: async (_c, _n, work) => work(),
+        sleep: async () => undefined,
+        log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+        tunnelProbe: {
+          consider: () => {
+            throw new Error('a broken probe');
+          },
+        },
+      });
+
+      await assert.doesNotReject(deps.fetchRemoteConfig('brw_k'));
+    });
+  });
 });
