@@ -153,6 +153,11 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
       query: (body) => ({ url: 'vpn/profiles', method: 'POST', body }),
       invalidatesTags: ['VpnProfile'],
     }),
+    // Only the name; the device's link is untouched.
+    renameVpnProfile: builder.mutation<VpnProfile, { id: number; label: string }>({
+      query: ({ id, label }) => ({ url: `vpn/profiles/${id}`, method: 'PATCH', body: { label } }),
+      invalidatesTags: ['VpnProfile'],
+    }),
     revokeVpnProfile: builder.mutation<void, number>({
       query: (id) => ({ url: `vpn/profiles/${id}`, method: 'DELETE' }),
       invalidatesTags: ['VpnProfile'],
@@ -178,6 +183,7 @@ export const {
   useGetVpnConnectionLinkMutation,
   useListVpnProfilesQuery,
   useCreateVpnProfileMutation,
+  useRenameVpnProfileMutation,
   useRevokeVpnProfileMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

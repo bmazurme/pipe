@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Res,
   UseGuards,
@@ -21,6 +22,7 @@ import { OwnerGuard } from '../auth/guards/owner.guard';
 import {
   CreatedVpnProfileDto,
   CreateVpnProfileDto,
+  UpdateVpnProfileDto,
   VpnProfileResponseDto,
 } from './dto/vpn-profile.dto';
 import { toSubscription, VpnProfilesService } from './vpn-profiles.service';
@@ -41,6 +43,15 @@ export class VpnProfilesController {
   @Header('Cache-Control', 'no-store')
   create(@Body() dto: CreateVpnProfileDto): Promise<CreatedVpnProfileDto> {
     return this.profiles.create(dto.label, dto.audience);
+  }
+
+  // Renames the device in the list; the link it already has keeps working.
+  @Patch(':id')
+  rename(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateVpnProfileDto,
+  ): Promise<VpnProfileResponseDto> {
+    return this.profiles.rename(id, dto.label);
   }
 
   @Delete(':id')

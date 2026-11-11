@@ -2528,6 +2528,41 @@
       }
     },
     "/api/v1/vpn/profiles/{id}": {
+      "patch": {
+        "operationId": "VpnProfilesController_rename",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVpnProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VpnProfileResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "VpnProfilesController_revoke",
         "parameters": [
@@ -7685,6 +7720,18 @@
           "revokedAt",
           "token",
           "path"
+        ]
+      },
+      "UpdateVpnProfileDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "label"
         ]
       },
       "SaveGithubConnectionDto": {

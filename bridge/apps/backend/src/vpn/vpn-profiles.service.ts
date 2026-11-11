@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'node:crypto';
 import { IsNull, Repository } from 'typeorm';
@@ -74,6 +79,29 @@ export class VpnProfilesService {
     const rows = await this.tokens.find({ order: { id: 'ASC' } });
 
     return rows.map(VpnProfileResponseDto.fromEntity);
+  }
+
+  // Only the name changes: the token (and so the link on the device) is untouched, and a revoked one can be renamed too — it stays in the list.
+  async rename(id: number, label: string): Promise<VpnProfileResponseDto> {
+    const next = label.trim();
+
+    if (!next) throw new BadRequestException('The name must not be empty');
+
+    const row = await this.tokens.findOneBy({ id });
+
+    if (!row) throw new NotFoundException('VPN profile token not found');
+
+    if (row.label !== next) {
+      const previous = row.label;
+
+      row.label = next;
+      await this.tokens.save(row);
+      this.logger.log(
+        `VPN profile token ${id} renamed «${previous}» → «${next}»`,
+      );
+    }
+
+    return VpnProfileResponseDto.fromEntity(row);
   }
 
   async revoke(id: number): Promise<void> {

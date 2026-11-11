@@ -1311,7 +1311,7 @@ export interface paths {
         delete: operations["VpnProfilesController_revoke"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["VpnProfilesController_rename"];
         trace?: never;
     };
     "/api/v1/vpn/profile/{token}": {
@@ -3411,6 +3411,9 @@ export interface components {
             revokedAt: string | null;
             token: string;
             path: string;
+        };
+        UpdateVpnProfileDto: {
+            label: string;
         };
         SaveGithubConnectionDto: {
             enabled: boolean;
@@ -6118,6 +6121,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    VpnProfilesController_rename: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVpnProfileDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VpnProfileResponseDto"];
+                };
             };
         };
     };

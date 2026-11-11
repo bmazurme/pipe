@@ -84,3 +84,16 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* The device's name while it is being renamed: the field takes what the row has, and Save and Cancel follow it. */
+.renameRow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.renameRow input {
+  min-width: 160px;
+}
