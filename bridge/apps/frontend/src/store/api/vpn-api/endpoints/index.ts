@@ -7,6 +7,8 @@ export interface VpnStatus {
   sni: string;
   fingerprint: string;
   port: number;
+  /** 'subscription': a connection by subscription link — no panel, so no traffic counters, and lastOnline means "the server answered now". */
+  source?: 'subscription';
 }
 
 export type WorkerSecretName =
@@ -25,16 +27,24 @@ export interface VpnConnection {
   id: number;
   name: string;
   serverAddress: string;
+  /** 'panel' (an x-ui panel) or 'subscription' (an https link that answers with vless:// links). */
+  kind: 'panel' | 'subscription';
   isActive: boolean;
   createdAt: string;
 }
 
-export interface CreateVpnConnectionBody {
-  name: string;
-  panelUrl: string;
-  panelApiToken: string;
-  serverAddress: string;
-}
+export type CreateVpnConnectionBody =
+  | {
+      name: string;
+      panelUrl: string;
+      panelApiToken: string;
+      serverAddress: string;
+    }
+  | {
+      name: string;
+      /** Holds the provider's token: write-only, never read back. */
+      subscriptionUrl: string;
+    };
 
 // panelUrl/panelApiToken are never read back (see VpnConnection above), so
 // an edit can only ever overwrite them blind — a field left out entirely
@@ -45,6 +55,8 @@ export interface UpdateVpnConnectionBody {
   panelUrl?: string;
   panelApiToken?: string;
   serverAddress?: string;
+  /** Only for a subscription connection; the server follows the new link. */
+  subscriptionUrl?: string;
 }
 
 const vpnApiEndpoints = vpnApi.injectEndpoints({
@@ -82,7 +94,11 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
     updateVpnConnection: builder.mutation<VpnConnection, UpdateVpnConnectionBody>({
       query: ({ id, ...body }) => ({ url: `vpn/connections/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['VpnConnection'],
-      transformErrorResponse: () => 'Не удалось сохранить изменения',
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+
+        return message ?? 'Не удалось сохранить изменения';
+      },
     }),
     deleteVpnConnection: builder.mutation<void, number>({
       query: (id) => ({ url: `vpn/connections/${id}`, method: 'DELETE' }),

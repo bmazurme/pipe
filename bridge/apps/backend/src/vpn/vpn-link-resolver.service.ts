@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
+import { SubscriptionService } from './subscription.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService } from './vpn.service';
 
@@ -18,12 +19,14 @@ interface CachedLink {
 @Injectable()
 export class VpnLinkResolver {
   private readonly cache = new Map<number, CachedLink>();
+  private readonly subscriptionCache = new Map<string, CachedLink>();
   private readonly failedAt = new Map<number, number>();
   private readonly inFlight = new Map<number, Promise<string>>();
 
   constructor(
     private readonly connections: VpnConnectionsService,
     private readonly vpn: VpnService,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   // 'active' follows the VPN page's active connection; a number is that connection.
@@ -47,6 +50,36 @@ export class VpnLinkResolver {
     }
 
     return this.refreshInBackground(id);
+  }
+
+  // A worker whose own VPN field holds a subscription link (https://…): the first usable vless:// link on it, cached for a minute
+  // like a panel's, and kept at its last good value while the provider is down.
+  async resolveSubscription(url: string): Promise<string> {
+    const cached = this.subscriptionCache.get(url);
+
+    if (cached && Date.now() - cached.at < LINK_TTL_MS) return cached.link;
+
+    try {
+      const { link } = await this.subscriptions.resolve(url, 'подписка');
+
+      this.subscriptionCache.set(url, { link, at: Date.now() });
+
+      return link;
+    } catch (error) {
+      if (cached) {
+        // Stale on purpose; try again after a TTL rather than on every settings fetch.
+        this.subscriptionCache.set(url, { link: cached.link, at: Date.now() });
+
+        return cached.link;
+      }
+
+      throw error;
+    }
+  }
+
+  // Whether a link can be used at all, asked fresh — what saving a worker's VPN field checks.
+  async checkSubscription(url: string): Promise<void> {
+    await this.subscriptions.resolve(url, 'подписка');
   }
 
   private async refreshInBackground(id: number): Promise<string> {

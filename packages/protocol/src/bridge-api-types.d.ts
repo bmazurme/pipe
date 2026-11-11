@@ -3255,15 +3255,17 @@ export interface components {
             id: number;
             name: string;
             serverAddress: string;
+            kind: Record<string, never>;
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
         };
         CreateVpnConnectionDto: {
             name: string;
-            panelUrl: string;
-            panelApiToken: string;
-            serverAddress: string;
+            subscriptionUrl?: string;
+            panelUrl?: string;
+            panelApiToken?: string;
+            serverAddress?: string;
         };
         UpdateVpnConnectionDto: Record<string, never>;
         SaveGithubConnectionDto: {

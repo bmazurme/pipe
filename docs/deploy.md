@@ -51,7 +51,21 @@ worker's `VPN_CLIENT_CONFIG`), and the Worker page's VPN dropdown
 (`POST /api/v1/vpn/connections/:id/activate`) all act on — each row also
 has its own on-demand status check and `vless://` connection link
 (`GET /api/v1/vpn/connections/:id/status` / `.../connection-link`), not
-just the active one. A Claude usage-limits widget was tried here
+just the active one.
+
+A connection is either an x-ui panel (above) or a **subscription link** (`kind: 'subscription'`; added from the same form, tab «Ссылка подписки»,
+`POST /api/v1/vpn/connections` with `{ name, subscriptionUrl }`): an `https://` address a VPN provider gives out
+(`https://host/<token>#Name`) that answers with a list of `vless://` links — plain text, one per line, or the same list in base64. Bridge fetches
+it (`vpn/subscription.service.ts`: https only, no private or loopback addresses, redirects re-checked, 10 s and 1 MB limits, no address in any
+error message) when the connection is added — a link it cannot read is refused with the reason — and runs with the **first** `vless://` link that
+is Reality over tcp (other kinds on the list are skipped). There is no panel to ask, so the status is «the server answers»: a TCP connect from
+bridge to the link's server, `lastOnline` = now and no traffic counters (`source: 'subscription'`); the connection link, the worker's
+`vpnSource: 'connection' | 'active'` and `POST /api/v1/vpn/sync` (`VPN_CLIENT_CONFIG`) work from that link the same way as from a panel. The
+address holds the provider's token, so `vpn_connections.subscriptionUrl` is encrypted like `panelApiToken` and never returned by any route; an
+edit with it left blank keeps it, a new one is fetched and checked before it is saved. A worker's own VPN field accepts such an address too
+(`workers.vpnLink`): bridge resolves it on every settings fetch (cached for a minute, the last good link kept while the provider is down).
+
+A Claude usage-limits widget was tried here
 (`GET /api/v1/vpn/claude-usage`, backed by a self-refreshing credential from
 Anthropic's undocumented `console.anthropic.com/v1/oauth/token`) and
 removed — that endpoint returns a deliberate `403 forbidden: "Request not

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -105,6 +105,118 @@ describe('VpnConnectionsService', () => {
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({ isActive: false }),
       );
+    });
+  });
+
+  describe('createFromSubscription', () => {
+    it('keeps the link, leaves the panel fields empty and takes the server from the link', async () => {
+      repository.count!.mockResolvedValue(1);
+      repository.save!.mockImplementation((entity) =>
+        Promise.resolve({ id: 3, ...entity }),
+      );
+
+      const connection = await service.createFromSubscription(
+        'PaperVPN',
+        'https://api.provider.example/sub/abc',
+        '203.0.113.9',
+      );
+
+      expect(repository.create).toHaveBeenCalledWith({
+        name: 'PaperVPN',
+        kind: 'subscription',
+        subscriptionUrl: 'https://api.provider.example/sub/abc',
+        panelUrl: '',
+        panelApiToken: '',
+        serverAddress: '203.0.113.9',
+        isActive: false,
+      });
+      expect(connection.id).toBe(3);
+    });
+
+    it('is active when it is the first connection ever', async () => {
+      repository.count!.mockResolvedValue(0);
+      repository.save!.mockImplementation((entity) => Promise.resolve(entity));
+
+      await service.createFromSubscription(
+        'A',
+        'https://p.example/s',
+        '203.0.113.9',
+      );
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ isActive: true }),
+      );
+    });
+  });
+
+  describe('update of a subscription connection', () => {
+    const subscription = () => ({
+      id: 4,
+      name: 'PaperVPN',
+      kind: 'subscription',
+      subscriptionUrl: 'https://p.example/sub/old',
+      panelUrl: '',
+      panelApiToken: '',
+      serverAddress: '203.0.113.9',
+      isActive: false,
+    });
+
+    beforeEach(() => {
+      repository.save!.mockImplementation((entity) => Promise.resolve(entity));
+    });
+
+    it('changes the link and the server that goes with it', async () => {
+      repository.findOneBy!.mockResolvedValue(subscription());
+
+      const result = await service.update(4, {
+        subscriptionUrl: 'https://p.example/sub/new',
+        serverAddress: '203.0.113.10',
+      });
+
+      expect(result).toMatchObject({
+        subscriptionUrl: 'https://p.example/sub/new',
+        serverAddress: '203.0.113.10',
+        panelUrl: '',
+      });
+    });
+
+    it('keeps the link when only the name changes', async () => {
+      repository.findOneBy!.mockResolvedValue(subscription());
+
+      const result = await service.update(4, { name: 'Renamed' });
+
+      expect(result).toMatchObject({
+        name: 'Renamed',
+        subscriptionUrl: 'https://p.example/sub/old',
+      });
+    });
+
+    it('refuses panel fields: there is no panel', async () => {
+      repository.findOneBy!.mockResolvedValue(subscription());
+
+      await expect(
+        service.update(4, { panelUrl: 'https://panel' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(service.update(4, { panelApiToken: 't' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses a subscription link on a panel connection', async () => {
+      repository.findOneBy!.mockResolvedValue({
+        id: 1,
+        name: 'NL',
+        kind: 'panel',
+        panelUrl: 'p',
+        panelApiToken: 't',
+        serverAddress: 'a',
+      });
+
+      await expect(
+        service.update(1, { subscriptionUrl: 'https://p.example/sub' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.save).not.toHaveBeenCalled();
     });
   });
 

@@ -16,3 +16,25 @@ export function parseVlessLink(raw: string): { serverAddress: string; name: stri
     name: url.hash ? decodeURIComponent(url.hash.slice(1)) || null : null,
   };
 }
+
+// A subscription link is an https:// address a provider gives out; bridge fetches it and runs with the first vless:// link on it.
+// The name after its # (Hiddify: …#PaperVPN) is the provider's name for the profile.
+export function parseSubscriptionLink(raw: string): { host: string; name: string | null } | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== 'https:' || !url.hostname) return null;
+
+  let name: string | null = null;
+  try {
+    name = decodeURIComponent(url.hash.slice(1)).trim() || null;
+  } catch {
+    name = null;
+  }
+
+  return { host: url.hostname, name };
+}

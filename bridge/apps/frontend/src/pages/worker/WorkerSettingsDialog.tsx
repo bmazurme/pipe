@@ -5,7 +5,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { type FleetWorker, useUpdateWorkerMutation, type WorkerJobModel } from '../../store/api';
 import styles from '../WorkerPage.module.css';
 import { MODEL_OPTIONS } from './constants';
-import { ClaudeTokenField, DEFAULT_TOKEN, isVlessLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
+import { ClaudeTokenField, DEFAULT_TOKEN, isVpnLink, VpnLinkField, VpnSourceField, type VpnSource } from './WorkerAccessFields';
 
 interface WorkerSettingsDialogProps {
   worker: FleetWorker;
@@ -46,7 +46,7 @@ export function WorkerSettingsDialog({ worker, onClose }: WorkerSettingsDialogPr
   const timeoutValid = timeoutMin !== null && timeoutMin >= MIN_TIMEOUT_MIN && timeoutMin <= MAX_TIMEOUT_MIN;
   const pollValid = pollIntervalSec !== null && pollIntervalSec >= 2 && pollIntervalSec <= 300;
   const proxyValid = proxyUrl.trim() === '' || /^https?:\/\/\S+$/.test(proxyUrl.trim());
-  const vpnValid = typeof vpnChange !== 'string' || isVlessLink(vpnChange);
+  const vpnValid = typeof vpnChange !== 'string' || isVpnLink(vpnChange);
   const vpnSourceValid = vpnSource !== 'connection' || vpnConnectionId !== null;
   const vpnSourceEdited =
     vpnSource !== (worker.vpnSource ?? 'link') || (vpnSource === 'connection' && vpnConnectionId !== (worker.vpnConnectionId ?? null));

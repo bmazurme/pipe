@@ -209,7 +209,7 @@ describe('WorkersTab — adding a worker', () => {
     expect(command).not.toContain('vless://');
   });
 
-  it('will not create a worker with a VPN link that is not vless://', async () => {
+  it('will not create a worker with a VPN link that is neither vless:// nor an https:// subscription', async () => {
     const user = userEvent.setup();
 
     renderTab();
@@ -220,7 +220,7 @@ describe('WorkersTab — adding a worker', () => {
     await user.type(within(dialog).getByPlaceholderText(/Например, green/), 'green');
     await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), 'http://not-a-vpn');
 
-    expect(within(dialog).getByText('Нужна ссылка vless://… (Reality)')).toBeTruthy();
+    expect(within(dialog).getByText('Нужна ссылка vless://… (Reality) или https://… (подписка)')).toBeTruthy();
     expect((within(dialog).getByRole('button', { name: 'Создать и получить код' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -616,7 +616,7 @@ describe('WorkersTab — settings', () => {
       await user.click(await screen.findByRole('button', { name: /Настройки/ }));
       const dialog = await screen.findByRole('dialog');
 
-      await user.click(within(dialog).getByText('Своя ссылка vless://'));
+      await user.click(within(dialog).getByText('Своя ссылка (vless:// или подписка)'));
       await user.click(await screen.findByText('Подключение со страницы VPN'));
 
       expect(within(dialog).queryByLabelText("VPN-ссылка worker'а")).toBeNull();
@@ -640,7 +640,7 @@ describe('WorkersTab — settings', () => {
       await user.click(await screen.findByRole('button', { name: /Настройки/ }));
       const dialog = await screen.findByRole('dialog');
 
-      await user.click(within(dialog).getByText('Своя ссылка vless://'));
+      await user.click(within(dialog).getByText('Своя ссылка (vless:// или подписка)'));
       await user.click(await screen.findByText('Активное подключение со страницы VPN'));
 
       expect(await within(dialog).findByText(/Сейчас активно: DE · de.example.com/)).toBeTruthy();

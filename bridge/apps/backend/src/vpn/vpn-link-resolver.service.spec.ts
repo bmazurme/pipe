@@ -5,9 +5,16 @@ function build() {
   const vpn = {
     getConnectionLink: jest.fn().mockResolvedValue({ link: 'vless://a' }),
   };
-  const resolver = new VpnLinkResolver(connections as never, vpn as never);
+  const subscriptions = {
+    resolve: jest.fn().mockResolvedValue({ link: 'vless://sub' }),
+  };
+  const resolver = new VpnLinkResolver(
+    connections as never,
+    vpn as never,
+    subscriptions as never,
+  );
 
-  return { resolver, connections, vpn };
+  return { resolver, connections, vpn, subscriptions };
 }
 
 describe('VpnLinkResolver', () => {
@@ -78,5 +85,59 @@ describe('VpnLinkResolver stale-while-revalidate', () => {
     now.mockReturnValue(start + LINK_TTL_MS);
     await resolver.resolve(7);
     expect(vpn.getConnectionLink).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('VpnLinkResolver: a subscription link of a worker', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('fetches the subscription once a minute, however often the worker polls', async () => {
+    const { resolver, subscriptions } = build();
+
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    await resolver.resolveSubscription('https://p.example/sub/b');
+
+    expect(subscriptions.resolve).toHaveBeenCalledTimes(2);
+    await expect(
+      resolver.resolveSubscription('https://p.example/sub/a'),
+    ).resolves.toBe('vless://sub');
+  });
+
+  it('keeps handing out the last good link while the provider is down, and tries again after a TTL', async () => {
+    const { resolver, subscriptions } = build();
+
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    subscriptions.resolve.mockRejectedValue(new Error('down'));
+    const start = Date.now() + LINK_TTL_MS + 1;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+
+    await expect(
+      resolver.resolveSubscription('https://p.example/sub/a'),
+    ).resolves.toBe('vless://sub');
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    expect(subscriptions.resolve).toHaveBeenCalledTimes(2);
+
+    now.mockReturnValue(start + LINK_TTL_MS);
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    expect(subscriptions.resolve).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails when a link was never fetched successfully', async () => {
+    const { resolver, subscriptions } = build();
+    subscriptions.resolve.mockRejectedValue(new Error('down'));
+
+    await expect(
+      resolver.resolveSubscription('https://p.example/sub/new'),
+    ).rejects.toThrow('down');
+  });
+
+  it('checks a link fresh, without the cache', async () => {
+    const { resolver, subscriptions } = build();
+
+    await resolver.resolveSubscription('https://p.example/sub/a');
+    await resolver.checkSubscription('https://p.example/sub/a');
+
+    expect(subscriptions.resolve).toHaveBeenCalledTimes(2);
   });
 });

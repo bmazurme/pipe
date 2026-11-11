@@ -5,6 +5,9 @@ import { OUTBOUND_FETCH_TIMEOUT_MS, isTimeoutError } from './outbound';
 import { WorkerSecretName } from './dto/set-worker-secret.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { VpnConnection } from './entities/vpn-connection.entity';
+import { parseVlessParams, VlessParams } from '../worker/vless-link';
+import { renameLink } from './subscription';
+import { SubscriptionService } from './subscription.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnStatusAlertsService } from './vpn-status-alerts.service';
 
@@ -47,6 +50,61 @@ export interface VpnStatus {
   sni: string;
   fingerprint: string;
   port: number;
+  // Only set for a subscription link: there is no panel to read traffic or the last connection from, so lastOnline is "the
+  // server answered just now" and the byte counters are zero.
+  source?: 'subscription';
+}
+
+// The Xray client config the worker's vpn-client runs: an HTTP proxy in, one VLESS+Reality outbound.
+function vlessClientConfig(params: {
+  address: string;
+  port: number;
+  uuid: string;
+  flow: string;
+  encryption: string;
+  serverName: string;
+  fingerprint: string;
+  publicKey: string;
+  shortId: string;
+  spiderX: string;
+}): string {
+  const config = {
+    log: { loglevel: 'warning' },
+    inbounds: [{ listen: '0.0.0.0', port: 1080, protocol: 'http' }],
+    outbounds: [
+      {
+        protocol: 'vless',
+        settings: {
+          vnext: [
+            {
+              address: params.address,
+              port: params.port,
+              users: [
+                {
+                  id: params.uuid,
+                  encryption: params.encryption,
+                  flow: params.flow,
+                },
+              ],
+            },
+          ],
+        },
+        streamSettings: {
+          network: 'tcp',
+          security: 'reality',
+          realitySettings: {
+            serverName: params.serverName,
+            fingerprint: params.fingerprint,
+            publicKey: params.publicKey,
+            shortId: params.shortId,
+            spiderX: params.spiderX,
+          },
+        },
+      },
+    ],
+  };
+
+  return JSON.stringify(config, null, 2);
 }
 
 // A fresh client never connected is reported here as lastOnline: 0 by x-ui,
@@ -85,6 +143,7 @@ export class VpnService {
     private readonly vpnConnectionsService: VpnConnectionsService,
     private readonly githubActions: GithubActionsService,
     private readonly alerts: VpnStatusAlertsService,
+    private readonly subscriptions: SubscriptionService,
   ) {}
 
   private async panelRequest<T>(
@@ -173,7 +232,43 @@ export class VpnService {
     };
   }
 
+  // A subscription has no panel: "online" is the VPN server answering from here, with what the link says about it.
+  private async getSubscriptionStatus(
+    connection: VpnConnection,
+  ): Promise<VpnStatus> {
+    const { link, host, port } = await this.subscriptions.resolve(
+      connection.subscriptionUrl ?? '',
+      connection.name,
+    );
+
+    try {
+      await this.subscriptions.probe(host, port);
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? 'ошибка';
+
+      throw new BadGatewayException(
+        `VPN «${connection.name}»: сервер ${host}:${port} недоступен из bridge (${code})`,
+      );
+    }
+
+    const params = parseVlessParams(link);
+
+    return {
+      lastOnline: new Date().toISOString(),
+      upBytes: 0,
+      downBytes: 0,
+      sni: params.serverName,
+      fingerprint: params.fingerprint,
+      port,
+      source: 'subscription',
+    };
+  }
+
   private async getStatusFor(connection: VpnConnection): Promise<VpnStatus> {
+    if (connection.kind === 'subscription') {
+      return this.getSubscriptionStatus(connection);
+    }
+
     const inbound = await this.getInbound(connection);
     const stats = inbound.clientStats?.[0];
     const reality = this.realityOf(inbound);
@@ -198,7 +293,10 @@ export class VpnService {
     connection: VpnConnection,
     force: boolean,
   ): Promise<VpnStatus> {
-    const signature = `${connection.panelUrl}\n${connection.panelApiToken}`;
+    const signature =
+      connection.kind === 'subscription'
+        ? `subscription\n${connection.subscriptionUrl}`
+        : `${connection.panelUrl}\n${connection.panelApiToken}`;
     const now = Date.now();
     const entry = this.statusCache.get(connection.id);
 
@@ -263,6 +361,16 @@ export class VpnService {
   // the exact drift (panel edited independently of the worker's config)
   // that caused real production incidents earlier, automated away.
   private async buildClientConfig(connection: VpnConnection): Promise<string> {
+    if (connection.kind === 'subscription') {
+      const { link } = await this.subscriptions.resolve(
+        connection.subscriptionUrl ?? '',
+        connection.name,
+      );
+      const params: VlessParams = parseVlessParams(link);
+
+      return vlessClientConfig({ ...params, address: params.host });
+    }
+
     const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
     const reality = this.realityOf(inbound);
@@ -273,39 +381,18 @@ export class VpnService {
       );
     }
 
-    const config = {
-      log: { loglevel: 'warning' },
-      inbounds: [{ listen: '0.0.0.0', port: 1080, protocol: 'http' }],
-      outbounds: [
-        {
-          protocol: 'vless',
-          settings: {
-            vnext: [
-              {
-                address: connection.serverAddress,
-                port: inbound.port,
-                users: [
-                  { id: client.id, encryption: 'none', flow: client.flow },
-                ],
-              },
-            ],
-          },
-          streamSettings: {
-            network: 'tcp',
-            security: 'reality',
-            realitySettings: {
-              serverName: sniOf(reality),
-              fingerprint: reality.settings.fingerprint,
-              publicKey: reality.settings.publicKey,
-              shortId: reality.shortIds[0],
-              spiderX: reality.settings.spiderX,
-            },
-          },
-        },
-      ],
-    };
-
-    return JSON.stringify(config, null, 2);
+    return vlessClientConfig({
+      address: connection.serverAddress,
+      port: inbound.port,
+      uuid: client.id,
+      flow: client.flow,
+      encryption: 'none',
+      serverName: sniOf(reality),
+      fingerprint: reality.settings.fingerprint,
+      publicKey: reality.settings.publicKey,
+      shortId: reality.shortIds[0],
+      spiderX: reality.settings.spiderX,
+    });
   }
 
   // Pushes the worker's VPN client config built from the active connection's
@@ -331,6 +418,16 @@ export class VpnService {
   // its own link.
   async getConnectionLink(id: number): Promise<{ link: string }> {
     const connection = await this.vpnConnectionsService.findOne(id);
+
+    if (connection.kind === 'subscription') {
+      const { link } = await this.subscriptions.resolve(
+        connection.subscriptionUrl ?? '',
+        connection.name,
+      );
+
+      return { link: renameLink(link, connection.name) };
+    }
+
     const inbound = await this.getInbound(connection);
     const client = inbound.settings.clients[0];
     const reality = this.realityOf(inbound);

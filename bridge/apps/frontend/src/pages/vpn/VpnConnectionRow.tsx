@@ -86,6 +86,7 @@ export function VpnConnectionRow({
     }
   };
 
+  const isSubscription = connection.kind === 'subscription';
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(connection.name);
   const [editServerAddress, setEditServerAddress] = useState(connection.serverAddress);
@@ -94,6 +95,8 @@ export function VpnConnectionRow({
   // the current value" on save, same convention as Secrets' edit form.
   const [editPanelUrl, setEditPanelUrl] = useState('');
   const [editPanelApiToken, setEditPanelApiToken] = useState('');
+  // A subscription link holds the provider's token, so it is write-only too: blank means "keep the current link".
+  const [editSubscriptionUrl, setEditSubscriptionUrl] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
   const startEdit = () => {
@@ -101,6 +104,7 @@ export function VpnConnectionRow({
     setEditServerAddress(connection.serverAddress);
     setEditPanelUrl('');
     setEditPanelApiToken('');
+    setEditSubscriptionUrl('');
     setEditError(null);
     setIsEditing(true);
   };
@@ -113,18 +117,26 @@ export function VpnConnectionRow({
   const handleSaveEdit = async () => {
     const name = editName.trim();
     const serverAddress = editServerAddress.trim();
-    if (!name || !serverAddress) return;
+    if (!name || (!isSubscription && !serverAddress)) return;
 
     setEditError(null);
 
     try {
-      await updateVpnConnection({
-        id: connection.id,
-        name,
-        serverAddress,
-        ...(editPanelUrl.trim() ? { panelUrl: editPanelUrl.trim() } : {}),
-        ...(editPanelApiToken.trim() ? { panelApiToken: editPanelApiToken.trim() } : {}),
-      }).unwrap();
+      await updateVpnConnection(
+        isSubscription
+          ? {
+              id: connection.id,
+              name,
+              ...(editSubscriptionUrl.trim() ? { subscriptionUrl: editSubscriptionUrl.trim() } : {}),
+            }
+          : {
+              id: connection.id,
+              name,
+              serverAddress,
+              ...(editPanelUrl.trim() ? { panelUrl: editPanelUrl.trim() } : {}),
+              ...(editPanelApiToken.trim() ? { panelApiToken: editPanelApiToken.trim() } : {}),
+            },
+      ).unwrap();
       setIsEditing(false);
     } catch (err) {
       setEditError(typeof err === 'string' ? err : 'Не удалось сохранить изменения');
@@ -173,6 +185,11 @@ export function VpnConnectionRow({
           {connection.isActive && (
             <Label theme="success" size="xs">
               Активно
+            </Label>
+          )}
+          {isSubscription && (
+            <Label theme="info" size="xs" title="Подключение по ссылке подписки">
+              подписка · {connection.serverAddress}
             </Label>
           )}
         </div>
@@ -236,41 +253,58 @@ export function VpnConnectionRow({
               </Text>
               <TextInput value={editName} onUpdate={setEditName} autoFocus />
             </label>
-            <label className={styles.secretField}>
-              <Text variant="body-2" color="secondary">
-                URL панели
-              </Text>
-              <TextInput
-                value={editPanelUrl}
-                onUpdate={setEditPanelUrl}
-                placeholder="оставьте пустым, чтобы не менять"
-              />
-            </label>
-            <label className={styles.secretField}>
-              <Text variant="body-2" color="secondary">
-                API-токен панели
-              </Text>
-              <TextInput
-                type="password"
-                value={editPanelApiToken}
-                onUpdate={setEditPanelApiToken}
-                placeholder="оставьте пустым, чтобы не менять"
-                hasClear
-              />
-            </label>
-            <label className={styles.secretField}>
-              <Text variant="body-2" color="secondary">
-                Адрес сервера
-              </Text>
-              <TextInput value={editServerAddress} onUpdate={setEditServerAddress} />
-            </label>
+            {isSubscription ? (
+              <label className={styles.secretField}>
+                <Text variant="body-2" color="secondary">
+                  Ссылка подписки
+                </Text>
+                <TextInput
+                  type="password"
+                  value={editSubscriptionUrl}
+                  onUpdate={setEditSubscriptionUrl}
+                  placeholder="оставьте пустым, чтобы не менять"
+                  hasClear
+                />
+              </label>
+            ) : (
+              <>
+                <label className={styles.secretField}>
+                  <Text variant="body-2" color="secondary">
+                    URL панели
+                  </Text>
+                  <TextInput
+                    value={editPanelUrl}
+                    onUpdate={setEditPanelUrl}
+                    placeholder="оставьте пустым, чтобы не менять"
+                  />
+                </label>
+                <label className={styles.secretField}>
+                  <Text variant="body-2" color="secondary">
+                    API-токен панели
+                  </Text>
+                  <TextInput
+                    type="password"
+                    value={editPanelApiToken}
+                    onUpdate={setEditPanelApiToken}
+                    placeholder="оставьте пустым, чтобы не менять"
+                    hasClear
+                  />
+                </label>
+                <label className={styles.secretField}>
+                  <Text variant="body-2" color="secondary">
+                    Адрес сервера
+                  </Text>
+                  <TextInput value={editServerAddress} onUpdate={setEditServerAddress} />
+                </label>
+              </>
+            )}
           </div>
           <div className={styles.connectionActions}>
             <Button
               view="action"
               size="s"
               loading={isSaving}
-              disabled={!editName.trim() || !editServerAddress.trim()}
+              disabled={!editName.trim() || (!isSubscription && !editServerAddress.trim())}
               onClick={() => void handleSaveEdit()}
             >
               <Icon data={Check} size={16} />

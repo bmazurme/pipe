@@ -52,6 +52,7 @@ function service(connection: VpnConnection | null = CONNECTION) {
       connections,
       github,
       new VpnStatusAlertsService(connections, appLogs as never),
+      {} as never,
     ),
     appLogs,
   };

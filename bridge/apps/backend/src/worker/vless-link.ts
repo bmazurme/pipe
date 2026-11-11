@@ -42,9 +42,54 @@ export function parseVlessLink(raw: string): VlessSummary {
   return { host: url.hostname, port: Number(url.port) || 443 };
 }
 
-// "host:port" for display, or null when there is no (valid) link.
+// Everything a tunnel needs from a Reality link (parseVlessLink has already vouched for the link's shape).
+export interface VlessParams extends VlessSummary {
+  uuid: string;
+  encryption: string;
+  flow: string;
+  serverName: string;
+  fingerprint: string;
+  publicKey: string;
+  shortId: string;
+  spiderX: string;
+}
+
+export function parseVlessParams(raw: string): VlessParams {
+  const { host, port } = parseVlessLink(raw);
+  const url = new URL(raw.trim());
+  const query = url.searchParams;
+
+  return {
+    host: host.replace(/^\[|\]$/g, ''),
+    port,
+    uuid: decodeURIComponent(url.username),
+    encryption: query.get('encryption') ?? 'none',
+    flow: query.get('flow') ?? '',
+    serverName: query.get('sni') as string,
+    fingerprint: query.get('fp') ?? 'chrome',
+    publicKey: query.get('pbk') as string,
+    shortId: query.get('sid') ?? '',
+    spiderX: query.get('spx') ?? '/',
+  };
+}
+
+// A worker's VPN field (and a VPN page connection) may hold a subscription link instead: an https:// address that answers
+// with a list of vless:// links (v2rayN / Hiddify style). Bridge fetches it and runs with the first link it can use.
+export function isSubscriptionUrl(raw: string | null | undefined): boolean {
+  return !!raw && /^https:\/\//i.test(raw.trim());
+}
+
+// "host:port" for display, or null when there is no (valid) link. A subscription shows as «подписка · host».
 export function describeVless(raw: string | null | undefined): string | null {
   if (!raw) return null;
+
+  if (isSubscriptionUrl(raw)) {
+    try {
+      return `подписка · ${new URL(raw.trim()).hostname}`;
+    } catch {
+      return null;
+    }
+  }
 
   try {
     const { host, port } = parseVlessLink(raw);

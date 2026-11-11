@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -35,6 +39,27 @@ export class VpnConnectionsService {
     );
   }
 
+  // A connection that is a subscription link: nothing to ask a panel, the server is the host of the link in use.
+  async createFromSubscription(
+    name: string,
+    subscriptionUrl: string,
+    serverAddress: string,
+  ): Promise<VpnConnection> {
+    const isFirst = (await this.repository.count()) === 0;
+
+    return this.repository.save(
+      this.repository.create({
+        name,
+        kind: 'subscription',
+        subscriptionUrl,
+        panelUrl: '',
+        panelApiToken: '',
+        serverAddress,
+        isActive: isFirst,
+      }),
+    );
+  }
+
   async findAll(): Promise<VpnConnection[]> {
     return this.repository.find({ order: { id: 'ASC' } });
   }
@@ -49,8 +74,25 @@ export class VpnConnectionsService {
     dto: UpdateVpnConnectionDto,
   ): Promise<VpnConnection> {
     const connection = await this.findOne(id);
+    const subscription = connection.kind === 'subscription';
+
+    if (
+      subscription &&
+      (dto.panelUrl !== undefined || dto.panelApiToken !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Это подключение по ссылке подписки: у него нет панели',
+      );
+    }
+    if (!subscription && dto.subscriptionUrl !== undefined) {
+      throw new BadRequestException(
+        'Это подключение через панель: ссылку подписки добавьте как новое подключение',
+      );
+    }
 
     if (dto.name !== undefined) connection.name = dto.name;
+    if (dto.subscriptionUrl !== undefined)
+      connection.subscriptionUrl = dto.subscriptionUrl;
     if (dto.panelUrl !== undefined) connection.panelUrl = dto.panelUrl;
     if (dto.panelApiToken !== undefined)
       connection.panelApiToken = dto.panelApiToken;

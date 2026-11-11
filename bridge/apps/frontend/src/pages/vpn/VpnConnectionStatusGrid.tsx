@@ -15,26 +15,35 @@ export function VpnConnectionStatusGrid({ status }: { status: VpnStatus }) {
     ? Date.now() - new Date(status.lastOnline).getTime() < RECENT_THRESHOLD_MS
     : false;
 
+  // A subscription has no panel to read traffic or the last connection from: all bridge knows is that the VPN server answers.
+  const bySubscription = status.source === 'subscription';
+
   return (
     <div className={styles.statGrid}>
       <div className={styles.stat}>
         <Text color="secondary" variant="caption-2">
-          Соединение
+          {bySubscription ? 'Сервер' : 'Соединение'}
         </Text>
-        <Label theme={isRecent ? 'success' : 'normal'}>
-          {status.lastOnline
-            ? `${isRecent ? 'активно' : 'было'} · ${formatRelativeTime(status.lastOnline)}`
-            : 'ещё не подключалось'}
-        </Label>
+        {bySubscription ? (
+          <Label theme="success">отвечает · {status.lastOnline ? formatRelativeTime(status.lastOnline) : 'только что'}</Label>
+        ) : (
+          <Label theme={isRecent ? 'success' : 'normal'}>
+            {status.lastOnline
+              ? `${isRecent ? 'активно' : 'было'} · ${formatRelativeTime(status.lastOnline)}`
+              : 'ещё не подключалось'}
+          </Label>
+        )}
       </div>
-      <div className={styles.stat}>
-        <Text color="secondary" variant="caption-2">
-          Трафик
-        </Text>
-        <Text variant="body-2">
-          ↑ {formatBytes(status.upBytes)} · ↓ {formatBytes(status.downBytes)}
-        </Text>
-      </div>
+      {!bySubscription && (
+        <div className={styles.stat}>
+          <Text color="secondary" variant="caption-2">
+            Трафик
+          </Text>
+          <Text variant="body-2">
+            ↑ {formatBytes(status.upBytes)} · ↓ {formatBytes(status.downBytes)}
+          </Text>
+        </div>
+      )}
       <div className={styles.stat}>
         <Text color="secondary" variant="caption-2">
           SNI

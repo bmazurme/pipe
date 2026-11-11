@@ -1,7 +1,9 @@
 import {
   describeVless,
+  isSubscriptionUrl,
   maskProxyUrl,
   parseVlessLink,
+  parseVlessParams,
   proxyHasCredentials,
 } from './vless-link';
 
@@ -61,5 +63,58 @@ describe('maskProxyUrl', () => {
   it('keeps null as null', () => {
     expect(maskProxyUrl(null)).toBeNull();
     expect(proxyHasCredentials(null)).toBe(false);
+  });
+});
+
+describe('parseVlessParams', () => {
+  it('reads everything a tunnel needs from a Reality link', () => {
+    expect(parseVlessParams(LINK)).toEqual({
+      host: 'vpn.example.com',
+      port: 8443,
+      uuid: '3f1c2d4e-0000-4000-8000-000000000001',
+      encryption: 'none',
+      flow: 'xtls-rprx-vision',
+      serverName: 'www.example.org',
+      fingerprint: 'firefox',
+      publicKey: 'PUBKEY',
+      shortId: 'ab12',
+      spiderX: '/',
+    });
+  });
+
+  it('takes an empty short id, a missing flow and the defaults for fp and spx', () => {
+    expect(
+      parseVlessParams(
+        'vless://u@[2001:db8::1]:443?security=reality&pbk=k&sni=s&sid=',
+      ),
+    ).toMatchObject({
+      host: '2001:db8::1',
+      flow: '',
+      shortId: '',
+      fingerprint: 'chrome',
+      spiderX: '/',
+    });
+  });
+
+  it('refuses what parseVlessLink refuses', () => {
+    expect(() => parseVlessParams('vless://u@h:1?security=tls')).toThrow();
+  });
+});
+
+describe('isSubscriptionUrl / describeVless for a subscription', () => {
+  it('knows an https address from a vless link', () => {
+    expect(isSubscriptionUrl('https://api.provider.example/sub/abc#Name')).toBe(
+      true,
+    );
+    expect(isSubscriptionUrl('  HTTPS://api.provider.example/sub')).toBe(true);
+    expect(isSubscriptionUrl('http://api.provider.example/sub')).toBe(false);
+    expect(isSubscriptionUrl(LINK)).toBe(false);
+    expect(isSubscriptionUrl(null)).toBe(false);
+  });
+
+  it('shows a subscription as «подписка · host», without its path (the token)', () => {
+    expect(describeVless('https://api.provider.example/sub/SECRET#Name')).toBe(
+      'подписка · api.provider.example',
+    );
   });
 });

@@ -397,7 +397,7 @@ Improve-запуск, опиравшийся на потерянную зада�
 
 ## VPN of a worker added in the UI
 
-Settings → VPN takes a `vless://` Reality link. The worker starts its own Xray client with it (`xray` ships in the image; `XRAY_BIN` overrides the path) on `127.0.0.1:18080` and sends Claude/AI traffic through it; the link is stored encrypted in bridge and only this worker ever receives it back. The tunnel always uses the `firefox` TLS fingerprint whatever the link says (`chrome` hung most connections on this network); `WORKER_VPN_FINGERPRINT` picks another, `link` keeps the link's own. Changing or removing the link applies within one poll interval. If the tunnel does not come up the worker keeps polling and logs `vpn tunnel did not come up` — jobs then go out as they did before.
+Settings → VPN takes a `vless://` Reality link, or an `https://` subscription link from a VPN provider (bridge fetches it and hands the worker the first usable `vless://` link on it — the worker itself only ever sees the vless link). The worker starts its own Xray client with it (`xray` ships in the image; `XRAY_BIN` overrides the path) on `127.0.0.1:18080` and sends Claude/AI traffic through it; the link is stored encrypted in bridge and only this worker ever receives it back. The tunnel always uses the `firefox` TLS fingerprint whatever the link says (`chrome` hung most connections on this network); `WORKER_VPN_FINGERPRINT` picks another, `link` keeps the link's own. Changing or removing the link applies within one poll interval. If the tunnel does not come up the worker keeps polling and logs `vpn tunnel did not come up` — jobs then go out as they did before.
 
 ## Resource limits of a worker started with the UI's command
 
