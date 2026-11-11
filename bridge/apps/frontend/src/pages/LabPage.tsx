@@ -3,12 +3,13 @@ import { Tab, TabList, TabPanel, TabProvider } from '@gravity-ui/uikit';
 import { useTabParam } from '../shared/hooks/useTabParam';
 import { PageHeader } from '../widgets/PageHeader';
 import styles from './ImprovePage.module.css';
+import { DigestsTab } from './lab/DigestsTab';
 import { ProjectsTab } from './lab/ProjectsTab';
 import { RouterTab } from './lab/RouterTab';
 import { RunsTab } from './lab/RunsTab';
 import { SchedulesTab } from './lab/SchedulesTab';
 
-const TABS = ['projects', 'schedules', 'runs', 'router'] as const;
+const TABS = ['projects', 'schedules', 'runs', 'digests', 'router'] as const;
 
 // Improve for somebody else's repository: the owner connects a GitHub project with their own token, and Lab hands the task (free text)
 // to a worker and opens a pull request in that repository — by hand or on a nightly schedule.
@@ -24,12 +25,14 @@ export function LabPage() {
           <Tab value="projects">Проекты</Tab>
           <Tab value="schedules">Расписания</Tab>
           <Tab value="runs">Запуски</Tab>
+          <Tab value="digests">Дайджесты</Tab>
           <Tab value="router">Маршрутизатор</Tab>
         </TabList>
 
         <TabPanel value="projects">{activeTab === 'projects' && <ProjectsTab />}</TabPanel>
         <TabPanel value="schedules">{activeTab === 'schedules' && <SchedulesTab />}</TabPanel>
         <TabPanel value="runs">{activeTab === 'runs' && <RunsTab />}</TabPanel>
+        <TabPanel value="digests">{activeTab === 'digests' && <DigestsTab />}</TabPanel>
         <TabPanel value="router">{activeTab === 'router' && <RouterTab />}</TabPanel>
       </TabProvider>
     </div>

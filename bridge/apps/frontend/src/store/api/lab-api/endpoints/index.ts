@@ -136,6 +136,70 @@ export interface LabKnowledgeMatch {
   score: number;
 }
 
+export type LabDigestSource = 'lab' | 'improve' | 'parcel';
+
+/** One finished piece of work of the week the digest is made of. */
+export interface LabDigestItem {
+  source: LabDigestSource;
+  id: number;
+  title: string;
+  /** 'owner/name' on GitHub; null for a parcel or when the repository is unknown. */
+  repo: string | null;
+  status: string;
+  url: string | null;
+  finishedAt: string;
+  jobId: number | null;
+  model: string | null;
+  costUsd: number | null;
+}
+
+export type LabDigestStatus = 'generating' | 'draft' | 'exported' | 'failed';
+
+/** The weekly digest: the work of one week and the note a worker wrote about it — a draft until the owner carries it to notes.ntlstl.dev. */
+export interface LabDigest {
+  id: number;
+  /** The Monday of the week, YYYY-MM-DD (Moscow time). */
+  weekStart: string;
+  status: LabDigestStatus;
+  includePrivate: boolean;
+  model: string;
+  jobId: number | null;
+  items: LabDigestItem[];
+  /** Finished works left out because their repository is not public. */
+  excludedPrivate: number;
+  title: string | null;
+  preview: string | null;
+  content: string | null;
+  tags: string[];
+  noteType: string;
+  error: string | null;
+  exportedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LabDigestPreview {
+  weekStart: string;
+  items: LabDigestItem[];
+  /** How many more finished works there are than the digest takes. */
+  omitted: number;
+  excludedPrivate: number;
+}
+
+export interface LabDigestSettings {
+  autoWeekly: boolean;
+  includePrivate: boolean;
+  model: string;
+}
+
+export interface LabDigestEdit {
+  title?: string;
+  preview?: string;
+  content?: string;
+  tags?: string[];
+}
+
 function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
@@ -258,6 +322,47 @@ const labApiEndpoints = labApi.injectEndpoints({
       query: ({ id, question }) => ({ url: `lab/projects/${id}/knowledge/ask`, method: 'POST', body: { question } }),
       transformErrorResponse: errorMessage('Не удалось найти ответ'),
     }),
+    listLabDigests: builder.query<LabDigest[], void>({
+      query: () => 'lab/digests',
+      providesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось загрузить дайджесты'),
+    }),
+    getLabDigestSettings: builder.query<LabDigestSettings, void>({
+      query: () => 'lab/digests/settings',
+      providesTags: ['LabDigestSettings'],
+      transformErrorResponse: errorMessage('Не удалось загрузить настройки дайджеста'),
+    }),
+    saveLabDigestSettings: builder.mutation<LabDigestSettings, Partial<LabDigestSettings>>({
+      query: (body) => ({ url: 'lab/digests/settings', method: 'PUT', body }),
+      invalidatesTags: ['LabDigestSettings', 'LabDigestPreview'],
+      transformErrorResponse: errorMessage('Не удалось сохранить настройки'),
+    }),
+    // What a digest of the week would be made of — nothing is started.
+    previewLabDigest: builder.query<LabDigestPreview, { weekStart: string }>({
+      query: ({ weekStart }) => `lab/digests/preview?weekStart=${weekStart}`,
+      providesTags: ['LabDigestPreview'],
+      transformErrorResponse: errorMessage('Не удалось собрать список работ'),
+    }),
+    startLabDigest: builder.mutation<LabDigest, { weekStart: string }>({
+      query: (body) => ({ url: 'lab/digests', method: 'POST', body }),
+      invalidatesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось собрать дайджест'),
+    }),
+    updateLabDigest: builder.mutation<LabDigest, { id: number; edit: LabDigestEdit }>({
+      query: ({ id, edit }) => ({ url: `lab/digests/${id}`, method: 'PATCH', body: edit }),
+      invalidatesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось сохранить заметку'),
+    }),
+    markLabDigestExported: builder.mutation<LabDigest, number>({
+      query: (id) => ({ url: `lab/digests/${id}/exported`, method: 'POST' }),
+      invalidatesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось отметить'),
+    }),
+    deleteLabDigest: builder.mutation<void, number>({
+      query: (id) => ({ url: `lab/digests/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['LabDigests'],
+      transformErrorResponse: errorMessage('Не удалось удалить дайджест'),
+    }),
   }),
 });
 
@@ -283,6 +388,14 @@ export const {
   useGetLabKnowledgeStatusQuery,
   useReindexLabKnowledgeMutation,
   useAskLabKnowledgeMutation,
+  useListLabDigestsQuery,
+  useGetLabDigestSettingsQuery,
+  useSaveLabDigestSettingsMutation,
+  usePreviewLabDigestQuery,
+  useStartLabDigestMutation,
+  useUpdateLabDigestMutation,
+  useMarkLabDigestExportedMutation,
+  useDeleteLabDigestMutation,
 } = labApiEndpoints;
 
 export default labApiEndpoints;
