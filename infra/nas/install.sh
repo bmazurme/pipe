@@ -11,6 +11,7 @@
 #   install.sh keygen-vm   make the key for the cloud VM and print the line for `infra/vmbackup/install.sh addkey` there (notes/places backups)
 #   install.sh ping-vm     ask the VM for `ping` (proves key + forced command + sudo), then:
 #   install.sh once-vm [snapshot|images]   one pull from the VM right now; the first run proves the whole VM chain
+#   install.sh restore-ssh   put the workstation key back on the NAS after a reboot (it asks for the NAS password once)
 #   install.sh status   the container, its health, the last lines of its log, and the copies on disk
 #
 # Settings (environment):
@@ -84,6 +85,15 @@ case "${1:-}" in
     : "${PI_KEY_SOURCE:?PI_KEY_SOURCE is required, e.g. pi@192.168.50.11}"
     ssh "$PI_KEY_SOURCE" "sudo sed -n 's/^BRIDGE_API_KEY=//p' /etc/pipe-boardagent.env" \
       | nas "umask 077; read -r k; [ -n \"\$k\" ] || { echo 'no key came through' >&2; exit 1; }; printf 'BRIDGE_API_KEY=%s\n' \"\$k\" > '$ENVFILE'; echo 'key stored (mode 600)'"
+    ;;
+  restore-ssh)
+    # The NAS's root file system is a RAM disk: ~/.ssh/authorized_keys is gone after every reboot (the container and its data are not).
+    # Logs in with the password (prompted, never stored) and adds the public key of NAS_KEY, once.
+    [ -f "$NAS_KEY.pub" ] || { echo "no $NAS_KEY.pub" >&2; exit 1; }
+    pub="$(cat "$NAS_KEY.pub")"
+    ssh -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o ConnectTimeout=15 "$NAS_USER@$NAS_HOST" \
+      "mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && { grep -qxF '$pub' ~/.ssh/authorized_keys || echo '$pub' >> ~/.ssh/authorized_keys; } && chmod 600 ~/.ssh/authorized_keys && echo 'key is in place'"
+    nas true && echo "key login works"
     ;;
   status)
     nas "docker ps -a --filter name=$NAME --format '{{.Names}}  {{.Status}}'; echo; docker logs --tail 8 $NAME 2>&1; echo; ls -l '$BACKUPS' '$BACKUPS/snapshots' '$VM_BACKUPS' '$VM_BACKUPS/snapshots' 2>&1 | head -30"
