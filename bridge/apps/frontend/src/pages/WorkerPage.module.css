@@ -202,7 +202,12 @@
 
 .logsActions {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+.logsFilter {
+  width: 200px;
 }
 
 .logsWrap {
