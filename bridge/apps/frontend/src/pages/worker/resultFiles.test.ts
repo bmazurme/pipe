@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
-import { listResultFiles, MAX_PREVIEW_BYTES, readResultText } from './resultFiles';
+import { isMarkdownFile, listResultFiles, MAX_PREVIEW_BYTES, readResultText } from './resultFiles';
 
 const zip = () =>
   zipSync({
@@ -35,5 +35,15 @@ describe('resultFiles', () => {
 
   it('throws on a non-zip', () => {
     expect(() => listResultFiles(strToU8('not a zip'))).toThrow();
+  });
+});
+
+describe('isMarkdownFile', () => {
+  it('matches .md and .markdown in any case, nothing else', () => {
+    expect(isMarkdownFile('docs/README.md')).toBe(true);
+    expect(isMarkdownFile('NOTES.MD')).toBe(true);
+    expect(isMarkdownFile('a.markdown')).toBe(true);
+    expect(isMarkdownFile('a.md.txt')).toBe(false);
+    expect(isMarkdownFile('md')).toBe(false);
   });
 });

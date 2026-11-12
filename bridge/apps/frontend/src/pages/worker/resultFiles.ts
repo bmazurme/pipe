@@ -22,6 +22,10 @@ export function listResultFiles(bytes: Uint8Array): ResultFile[] {
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
+export function isMarkdownFile(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
+}
+
 // Null when the entry is missing, binary (has a NUL byte) or too big to show in place.
 export function readResultText(bytes: Uint8Array, path: string): string | null {
   const entries = unzipSync(bytes, { filter: (file) => file.name === path });
