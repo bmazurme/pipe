@@ -1,11 +1,36 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowDownToLine, Copy } from '@gravity-ui/icons';
-import { Button, Icon, Text, TextInput } from '@gravity-ui/uikit';
+import { Button, Icon, Loader, SegmentedRadioGroup, Text, TextInput } from '@gravity-ui/uikit';
 
 import { plural } from '../../shared/lib/plural';
 import { triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import styles from '../WorkerPage.module.css';
 import { filterLogLines } from './jobLogFilter';
+import { logToMarkdown } from './logMarkdown';
+
+// Loaded on first use: the markdown pipeline is large and most logs are read as plain text.
+const MarkdownRenderer = lazy(() => import('@gravity-ui/aikit').then((module) => ({ default: module.MarkdownRenderer })));
+
+type LogView = 'text' | 'markdown';
+
+const VIEW_KEY = 'pipe.jobLogs.view';
+
+// A per-viewer convenience: storage can be missing or throw (private window), the log then opens as text.
+function loadView(): LogView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'markdown' ? 'markdown' : 'text';
+  } catch {
+    return 'text';
+  }
+}
+
+function saveView(view: LogView) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Not remembered — fine.
+  }
+}
 
 // How far from the end still counts as "reading the tail" — a few pixels of slack so a fractional scrollTop does not unpin.
 const PIN_SLACK_PX = 24;
@@ -21,14 +46,19 @@ interface JobLogsProps {
 // read something (a terminal's behavior) — with a button to jump back down instead of being yanked there on every poll.
 // A filter narrows the box to the lines containing a typed text; copy and download always take the full log.
 export function JobLogs({ jobId, logs, active }: JobLogsProps) {
-  const ref = useRef<HTMLPreElement>(null);
+  const ref = useRef<HTMLPreElement & HTMLDivElement>(null);
   const pinnedRef = useRef(true);
   const [pinned, setPinned] = useState(true);
   const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  const [view, setView] = useState<LogView>(loadView);
   const [filter, setFilter] = useState('');
 
   const { text: shown, matched, total: lines } = filterLogLines(logs, filter);
   const filtering = filter.trim() !== '';
+
+  const nothingMatches = filtering && matched === 0;
+  // The filter narrows the lines first; the markdown view then formats what is left.
+  const rendered = view === 'markdown' && shown && !nothingMatches ? logToMarkdown(shown) : null;
 
   useEffect(() => {
     const element = ref.current;
@@ -36,7 +66,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
     if (element && active && pinnedRef.current) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [shown.length, active]);
+  }, [shown.length, active, view]);
 
   const handleScroll = () => {
     const element = ref.current;
@@ -55,6 +85,13 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
     element.scrollTop = element.scrollHeight;
     pinnedRef.current = true;
     setPinned(true);
+  };
+
+  const handleView = (value: string) => {
+    const next: LogView = value === 'markdown' ? 'markdown' : 'text';
+
+    setView(next);
+    saveView(next);
   };
 
   const handleCopy = async () => {
@@ -84,6 +121,10 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
         </Text>
         {logs && (
           <div className={styles.logsActions}>
+            <SegmentedRadioGroup size="s" value={view} onUpdate={handleView} aria-label="Вид лога">
+              <SegmentedRadioGroup.Option value="text">Текст</SegmentedRadioGroup.Option>
+              <SegmentedRadioGroup.Option value="markdown">Markdown</SegmentedRadioGroup.Option>
+            </SegmentedRadioGroup>
             <TextInput
               className={styles.logsFilter}
               size="s"
@@ -121,16 +162,36 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
         )}
       </div>
       <div className={styles.logsWrap}>
-        <pre
-          ref={ref}
-          className={styles.logs}
-          onScroll={handleScroll}
-          tabIndex={0}
-          role="region"
-          aria-label="Лог задачи"
-        >
-          {filtering && matched === 0 ? `Нет строк с «${filter.trim()}»` : shown || '(пока пусто)'}
-        </pre>
+        {rendered ? (
+          <div
+            ref={ref}
+            className={`${styles.logs} ${styles.logsMarkdown}`}
+            onScroll={handleScroll}
+            tabIndex={0}
+            role="region"
+            aria-label="Лог задачи"
+          >
+            {rendered.truncated && (
+              <Text color="secondary" variant="body-1" as="div">
+                Показан конец лога — весь текст в режиме «Текст» и в .log.
+              </Text>
+            )}
+            <Suspense fallback={<Loader size="s" />}>
+              <MarkdownRenderer content={rendered.markdown} openLinksInNewTab />
+            </Suspense>
+          </div>
+        ) : (
+          <pre
+            ref={ref}
+            className={styles.logs}
+            onScroll={handleScroll}
+            tabIndex={0}
+            role="region"
+            aria-label="Лог задачи"
+          >
+            {nothingMatches ? `Нет строк с «${filter.trim()}»` : shown || '(пока пусто)'}
+          </pre>
+        )}
         {active && !pinned && (
           <Button className={styles.logsJump} view="raised" size="s" onClick={jumpToEnd}>
             <Icon data={ArrowDown} size={14} />К концу

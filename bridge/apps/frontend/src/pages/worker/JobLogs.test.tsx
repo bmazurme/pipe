@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@gravity-ui/uikit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +22,10 @@ function sizeLogBox(box: HTMLElement, { scrollHeight, clientHeight }: { scrollHe
   Object.defineProperty(box, 'clientHeight', { configurable: true, value: clientHeight });
 }
 
-afterEach(() => download.mockReset());
+afterEach(() => {
+  download.mockReset();
+  localStorage.clear();
+});
 
 describe('JobLogs', () => {
   it('counts the lines and shows the text', () => {
@@ -222,5 +225,44 @@ describe('JobLogs filter', () => {
 
     expect(box.textContent).toBe('two\nthree\nten');
     expect(box.scrollTop).toBe(1000);
+  });
+
+  it('shows the log as formatted markdown on request: reply text rendered, worker lines kept literal, choice remembered', async () => {
+    const user = userEvent.setup();
+    const logs = 'Claimed job 5 (model: opus)\n## Итог\n\nсделано **всё**\nFailed: a_b_c\n';
+    const { container, unmount } = renderLogs({ logs });
+
+    expect(container.querySelector('pre')).toBeTruthy();
+    await user.click(screen.getByText('Markdown'));
+
+    const region = await screen.findByRole('region', { name: 'Лог задачи' });
+    await waitFor(() => expect(region.querySelector('h2')?.textContent).toContain('Итог'));
+    expect(region.querySelector('strong')?.textContent).toBe('всё');
+    expect(region.querySelectorAll('pre')).toHaveLength(2);
+    expect(region.textContent).toContain('Failed: a_b_c');
+
+    // The raw log is what copy/download keep, whatever the view.
+    unmount();
+    renderLogs({ logs });
+    expect(await screen.findByRole('region', { name: 'Лог задачи' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Markdown' })).toBeChecked();
+
+    await user.click(screen.getByText('Текст'));
+    expect(screen.getByRole('region', { name: 'Лог задачи' }).tagName).toBe('PRE');
+  });
+
+  it('applies the filter before formatting, and says when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderLogs({ logs: '## Один\n\n## Два\n' });
+
+    await user.click(screen.getByText('Markdown'));
+    await user.type(screen.getByLabelText('Фильтр строк лога'), 'Два');
+    const region = await screen.findByRole('region', { name: 'Лог задачи' });
+    await waitFor(() => expect(region.querySelectorAll('h2')).toHaveLength(1));
+    expect(region.textContent).toContain('Два');
+    expect(region.textContent).not.toContain('Один');
+
+    await user.type(screen.getByLabelText('Фильтр строк лога'), 'zzz');
+    expect(screen.getByText('Нет строк с «Дваzzz»')).toBeInTheDocument();
   });
 });
