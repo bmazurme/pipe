@@ -265,6 +265,8 @@ Repo → Settings → Secrets and variables → Actions.
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | опционально: бот для уведомлений самоулучшающегося цикла ([SELF_IMPROVEMENT_PLAN.md](../docs/improvements/SELF_IMPROVEMENT_PLAN.md)); `TELEGRAM_CHAT_ID` — единственный чат, с которым бот говорит и от которого принимает команды |
 | `LIMIT_ALERTS` | опционально: `off` выключает Telegram-предупреждения о лимитах плана Claude (окно токена или worker'а перешло 80 % / 95 % или отклонено — одно сообщение на уровень и окно; тихие часы `NOTIFY_QUIET_HOURS` соблюдаются). По умолчанию включены |
 | `VPN_ALERTS` | опционально: `off` выключает Telegram-предупреждения о недоступности VPN-подключения (активного или проверяемого вручную) — одно сообщение при падении, ещё одно когда панель снова отвечает; не на каждый опрос. По умолчанию включены |
+| `LINK_PROBES` | опционально: `off` выключает собственные пробы bridge каналов связи (раз в минуту: TCP + TLS-рукопожатие с SNI из ссылки); пробы агентов `infra/linkprobe` и воркеров не затрагиваются. По умолчанию включены |
+| `LINK_ALERTS` | опционально: `off` выключает Telegram-тревоги о каналах связи (проверка и плитка работают). Условие должно продержаться 2 проверки подряд, чтобы его объявили, и 3 — чтобы объявили о конце. По умолчанию включены |
 | `TELEGRAM_WEBHOOK_SECRET` | секрет `secret_token` из `setWebhook` (`POST /api/v1/telegram/webhook`, команды `/status`, `/help`); пусто = эндпоинт отвечает 503 |
 | `GITHUB_WEBHOOK_SECRET` | секрет репо-вебхука GitHub (`POST /api/v1/github/webhook`, события Pull requests + Workflow runs, HMAC по сырому телу); пусто = 503 |
 | `GITHUB_CI_WORKFLOW`, `GITHUB_DEPLOY_WORKFLOW` | имена workflow (`name:`), на которые реагирует цикл; по умолчанию `CI` и `Deploy bridge` |
