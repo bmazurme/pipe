@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowDownToLine, Copy } from '@gravity-ui/icons';
-import { Button, Icon, Text } from '@gravity-ui/uikit';
+import { Button, Icon, Text, TextInput } from '@gravity-ui/uikit';
 
 import { plural } from '../../shared/lib/plural';
 import { triggerBlobDownload } from '../../shared/lib/parcelCrypto';
 import styles from '../WorkerPage.module.css';
+import { filterLogLines } from './jobLogFilter';
 
 // How far from the end still counts as "reading the tail" — a few pixels of slack so a fractional scrollTop does not unpin.
 const PIN_SLACK_PX = 24;
@@ -18,11 +19,16 @@ interface JobLogsProps {
 
 // The job's log: follows the tail while the reader is at the bottom, and stops following the moment they scroll up to
 // read something (a terminal's behavior) — with a button to jump back down instead of being yanked there on every poll.
+// A filter narrows the box to the lines containing a typed text; copy and download always take the full log.
 export function JobLogs({ jobId, logs, active }: JobLogsProps) {
   const ref = useRef<HTMLPreElement>(null);
   const pinnedRef = useRef(true);
   const [pinned, setPinned] = useState(true);
   const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  const [filter, setFilter] = useState('');
+
+  const { text: shown, matched, total: lines } = filterLogLines(logs, filter);
+  const filtering = filter.trim() !== '';
 
   useEffect(() => {
     const element = ref.current;
@@ -30,7 +36,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
     if (element && active && pinnedRef.current) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [logs.length, active]);
+  }, [shown.length, active]);
 
   const handleScroll = () => {
     const element = ref.current;
@@ -61,8 +67,6 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const lines = logs ? logs.replace(/\n$/, '').split('\n').length : 0;
-
   return (
     <section aria-label="Логи" className={styles.logsSection}>
       <div className={styles.logsHeader}>
@@ -71,12 +75,36 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
           {lines > 0 && (
             <Text color="secondary" variant="body-1">
               {' '}
-              · {lines} {plural(lines, ['строка', 'строки', 'строк'])}
+              ·{' '}
+              {filtering
+                ? `${matched} из ${lines} ${plural(lines, ['строки', 'строк', 'строк'])}`
+                : `${lines} ${plural(lines, ['строка', 'строки', 'строк'])}`}
             </Text>
           )}
         </Text>
         {logs && (
           <div className={styles.logsActions}>
+            <TextInput
+              className={styles.logsFilter}
+              size="s"
+              placeholder="Фильтр"
+              value={filter}
+              onUpdate={setFilter}
+              controlProps={{ 'aria-label': 'Фильтр строк лога' }}
+              // TextInput's own onKeyDown, not controlProps.onKeyDown: the control overrides the latter with the former.
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && filter) {
+                  // Escape here clears the filter instead of closing the dialog the log sits in.
+                  event.stopPropagation();
+                  setFilter('');
+                }
+              }}
+            />
+            {filter && (
+              <Button view="flat-secondary" size="s" onClick={() => setFilter('')}>
+                Сбросить
+              </Button>
+            )}
             <Button view="flat-secondary" size="s" onClick={() => void handleCopy()}>
               <Icon data={Copy} size={14} />
               {copied === 'ok' ? 'Скопировано' : copied === 'failed' ? 'Не удалось скопировать' : 'Копировать'}
@@ -101,7 +129,7 @@ export function JobLogs({ jobId, logs, active }: JobLogsProps) {
           role="region"
           aria-label="Лог задачи"
         >
-          {logs || '(пока пусто)'}
+          {filtering && matched === 0 ? `Нет строк с «${filter.trim()}»` : shown || '(пока пусто)'}
         </pre>
         {active && !pinned && (
           <Button className={styles.logsJump} view="raised" size="s" onClick={jumpToEnd}>
