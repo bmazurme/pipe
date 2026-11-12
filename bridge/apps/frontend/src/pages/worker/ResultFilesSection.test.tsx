@@ -59,6 +59,29 @@ describe('ResultFilesSection', () => {
     expect(calls).toEqual(['GET worker/jobs/1/result/download']);
   });
 
+  it('renders a .md result formatted and lets the reader switch to its source', async () => {
+    respond = () =>
+      new Response(zipSync({ 'notes/README.md': strToU8('# Заголовок\n\nтекст **жирный**'), 'a.txt': strToU8('# not md') }));
+    const user = userEvent.setup();
+    renderSection(5);
+
+    await user.click(screen.getByText('Файлы результата'));
+    await user.click(await screen.findByText(/README\.md/));
+
+    const region = screen.getByRole('region', { name: 'Содержимое notes/README.md' });
+    await vi.waitFor(() => expect(region.querySelector('h1')?.textContent).toContain('Заголовок'));
+    expect(region.querySelector('strong')?.textContent).toBe('жирный');
+
+    await user.click(screen.getByText('Исходник'));
+    expect(screen.getByLabelText('Содержимое notes/README.md').textContent).toBe('# Заголовок\n\nтекст **жирный**');
+
+    // Another file goes back to its own view; a plain text file is never formatted.
+    await user.click(screen.getByText(/a\.txt/));
+    expect(screen.getByLabelText('Содержимое a.txt').tagName).toBe('PRE');
+    await user.click(screen.getByText(/README\.md/));
+    expect(screen.getByRole('region', { name: 'Содержимое notes/README.md' })).toBeTruthy();
+  });
+
   it('shows a loader while the result is being fetched', async () => {
     respond = () => new Promise<Response>(() => {});
     const user = userEvent.setup();

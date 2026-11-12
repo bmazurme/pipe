@@ -1,9 +1,12 @@
-import { useRef, useState } from 'react';
-import { Alert, Button, Disclosure, Loader, Text } from '@gravity-ui/uikit';
+import { lazy, Suspense, useRef, useState } from 'react';
+import { Alert, Button, Disclosure, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
 
 import { usePeekJobResultMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
-import { listResultFiles, readResultText, type ResultFile } from './resultFiles';
+import { isMarkdownFile, listResultFiles, readResultText, type ResultFile } from './resultFiles';
+
+// Loaded on first use: the markdown pipeline is large and most job dialogs never open a .md result.
+const MarkdownRenderer = lazy(() => import('@gravity-ui/aikit').then((module) => ({ default: module.MarkdownRenderer })));
 
 interface ResultFilesSectionProps {
   jobId: number;
@@ -25,6 +28,8 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // A .md result opens formatted (that is how it is read); the source stays one click away.
+  const [showSource, setShowSource] = useState(false);
 
   // Fetched once, on the first expansion — not on dialog open or on every job poll.
   const load = async () => {
@@ -51,6 +56,7 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
 
   const handleSelect = (path: string) => {
     setSelected(path);
+    setShowSource(false);
     setPreview(bytesRef.current ? readResultText(bytesRef.current, path) : null);
   };
 
@@ -74,8 +80,31 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
             <Text variant="body-2" color="secondary">
               Не показать — скачайте результат
             </Text>
+          ) : isMarkdownFile(selected) ? (
+            <>
+              <SegmentedRadioGroup
+                size="s"
+                value={showSource ? 'source' : 'rendered'}
+                onUpdate={(value) => setShowSource(value === 'source')}
+                aria-label="Вид файла"
+              >
+                <SegmentedRadioGroup.Option value="rendered">Просмотр</SegmentedRadioGroup.Option>
+                <SegmentedRadioGroup.Option value="source">Исходник</SegmentedRadioGroup.Option>
+              </SegmentedRadioGroup>
+              {showSource ? (
+                <pre aria-label={`Содержимое ${selected}`} className={styles.resultPreview}>
+                  {preview}
+                </pre>
+              ) : (
+                <div role="region" aria-label={`Содержимое ${selected}`} className={styles.resultMarkdown}>
+                  <Suspense fallback={<Loader size="s" />}>
+                    <MarkdownRenderer content={preview} openLinksInNewTab />
+                  </Suspense>
+                </div>
+              )}
+            </>
           ) : (
-            <pre aria-label={`Содержимое ${selected}`} style={{ maxHeight: 300, overflow: 'auto', margin: 0 }}>
+            <pre aria-label={`Содержимое ${selected}`} className={styles.resultPreview}>
               {preview}
             </pre>
           ))}
