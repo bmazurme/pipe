@@ -1,19 +1,15 @@
 import { useState } from 'react';
-import { Copy, Key, Plus, TrashBin } from '@gravity-ui/icons';
+import { Key, Plus, TrashBin } from '@gravity-ui/icons';
 import {
   ActionTooltip,
   Alert,
   Button,
   Card,
-  Checkbox,
   ClipboardButton,
   Icon,
-  Select,
   Skeleton,
   Text,
-  TextInput,
 } from '@gravity-ui/uikit';
-import { Dialog } from '../../shared/ui/Dialog';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { EmptyState } from '../../widgets/EmptyState';
@@ -21,21 +17,13 @@ import { SectionHeader } from '../../widgets/SectionHeader';
 import {
   API_URL,
   ApiKey,
-  ApiKeyExpiryDays,
-  useCreateApiKeyMutation,
   useListApiKeysQuery,
   useRevokeApiKeyMutation,
 } from '../../store/api';
 import { useAppSelector } from '../../store/hooks';
 import { apiKeysSelector } from '../../store/slices';
 import styles from '../ProfilePage.module.css';
-
-const EXPIRY_OPTIONS = [
-  { value: 'never', content: 'Бессрочно' },
-  { value: '30', content: '30 дней' },
-  { value: '90', content: '90 дней' },
-  { value: '365', content: '1 год' },
-];
+import { ApiKeyDialog } from './ApiKeyDialog';
 
 function describeExpiry(expiresAt: string | null | undefined): string {
   if (!expiresAt) return '';
@@ -50,52 +38,12 @@ const USAGE_EXAMPLE = `curl -H "X-Api-Key: brk_…" ${API_URL}/api/v1/worker/sta
 export function ApiKeysSection() {
   const { isLoading, isError } = useListApiKeysQuery();
   const apiKeys = useAppSelector(apiKeysSelector);
-  const [createApiKey, { isLoading: isCreating }] = useCreateApiKeyMutation();
   const [revokeApiKey] = useRevokeApiKeyMutation();
 
   const [revokingId, setRevokingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [boardsOnly, setBoardsOnly] = useState(false);
-  const [expiry, setExpiry] = useState('never');
-  // Set only right after creation, from the mutation's own response — never
-  // persisted to the store, so the plaintext token exists in memory only
-  // for as long as this dialog stays open.
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const handleOpenCreate = () => {
-    setName('');
-    setBoardsOnly(false);
-    setExpiry('never');
-    setCreatedToken(null);
-    setCreateError(null);
-    setIsCreateOpen(true);
-  };
-
-  const handleCloseCreate = () => {
-    setIsCreateOpen(false);
-    setCreatedToken(null);
-  };
-
-  const handleCreate = async () => {
-    if (!name.trim()) return;
-
-    setCreateError(null);
-
-    try {
-      const created = await createApiKey({
-        name: name.trim(),
-        scope: boardsOnly ? 'boards' : undefined,
-        expiresInDays: expiry === 'never' ? undefined : (Number(expiry) as ApiKeyExpiryDays),
-      }).unwrap();
-      setCreatedToken(created.token);
-    } catch {
-      setCreateError('Не удалось создать ключ');
-    }
-  };
 
   const handleRevoke = async (apiKey: ApiKey) => {
     setError(null);
@@ -117,7 +65,7 @@ export function ApiKeysSection() {
           title="API-ключи"
           meta={apiKeys.length > 0 ? String(apiKeys.length) : undefined}
           actions={
-            <Button view="normal" size="s" onClick={handleOpenCreate}>
+            <Button view="normal" size="s" onClick={() => setIsCreateOpen(true)}>
               <Icon data={Plus} size={16} />
               Создать
             </Button>
@@ -201,75 +149,7 @@ export function ApiKeysSection() {
         )}
       </div>
 
-      <Dialog open={isCreateOpen} onClose={handleCloseCreate} maxWidth="s" aria-labelledby="create-api-key-title">
-        {createdToken ? (
-          <>
-            <Dialog.Header caption="Ключ создан" id="create-api-key-title" />
-            <Dialog.Body>
-              <Text color="secondary">
-                Скопируйте ключ сейчас — второй раз он не будет показан.
-              </Text>
-              <div className={styles.endpointRow}>
-                <Text variant="code-inline-2" ellipsis title={createdToken}>
-                  {createdToken}
-                </Text>
-                <ClipboardButton
-                  text={createdToken}
-                  size="xs"
-                  view="flat-secondary"
-                  tooltipInitialText="Скопировать ключ"
-                  tooltipSuccessText="Скопировано"
-                >
-                  <Icon data={Copy} size={14} />
-                </ClipboardButton>
-              </div>
-            </Dialog.Body>
-            <Dialog.Footer textButtonApply="Готово" onClickButtonApply={handleCloseCreate} />
-          </>
-        ) : (
-          <>
-            <Dialog.Header caption="Новый API-ключ" id="create-api-key-title" />
-            <Dialog.Body>
-              <label className={styles.field}>
-                <Text variant="body-2" color="secondary">
-                  Название
-                </Text>
-                <TextInput
-                  value={name}
-                  onUpdate={setName}
-                  placeholder="sync-cli на ноутбуке"
-                  autoFocus
-                  hasClear
-                />
-              </label>
-              <label className={styles.field}>
-                <Text variant="body-2" color="secondary">
-                  Срок действия
-                </Text>
-                <Select
-                  aria-label="Срок действия"
-                  value={[expiry]}
-                  onUpdate={([value]) => setExpiry(value ?? 'never')}
-                  options={EXPIRY_OPTIONS}
-                  width="max"
-                />
-              </label>
-              <Checkbox checked={boardsOnly} onUpdate={setBoardsOnly}>
-                только для плат
-              </Checkbox>
-              {createError && <Alert theme="danger" view="filled" message={createError} />}
-            </Dialog.Body>
-            <Dialog.Footer
-              textButtonCancel="Отмена"
-              textButtonApply="Создать"
-              loading={isCreating}
-              propsButtonApply={{ disabled: !name.trim() }}
-              onClickButtonCancel={handleCloseCreate}
-              onClickButtonApply={() => void handleCreate()}
-            />
-          </>
-        )}
-      </Dialog>
+      <ApiKeyDialog open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </Card>
   );
 }

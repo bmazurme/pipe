@@ -253,3 +253,38 @@
 .logsSkeleton {
   height: 90px;
 }
+
+/* The API-key dialog: a token that wraps (it is long and must be read whole), and the quick name chips. */
+.copyRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tokenBox {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-generic);
+  font-family: var(--g-font-family-monospace);
+  font-size: var(--g-text-code-2-font-size, 13px);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: all;
+  cursor: text;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Gravity's dialog body puts no space between its children: the form blocks get it here. */
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
