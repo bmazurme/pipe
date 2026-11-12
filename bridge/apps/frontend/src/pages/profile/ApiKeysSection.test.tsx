@@ -47,9 +47,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// The dialog copies through the browser's clipboard; jsdom has none.
+function stubClipboard(writeText: () => Promise<void> = async () => undefined) {
+  const spy = vi.fn(writeText);
+
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText: spy }, configurable: true });
+
+  return spy;
+}
+
+const createButton = async () => (await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!;
+
 describe('ApiKeysSection', () => {
   it('shows the created token once and forgets it when the dialog is closed', async () => {
     const user = userEvent.setup();
+    const clipboard = stubClipboard();
     const requests: Request[] = [];
 
     vi.stubGlobal(
@@ -73,6 +85,7 @@ describe('ApiKeysSection', () => {
     await screen.findByText('brk_secret-plaintext-token');
     expect(screen.getByText('Ключ создан')).toBeTruthy();
 
+    await user.click(screen.getByRole('button', { name: 'Скопировать ключ' }));
     await user.click(screen.getByRole('button', { name: 'Готово' }));
     // Immediately, not eventually: the dialog is still mid-exit-transition here, so
     // only clearing the token on close (not merely on re-open) makes this pass.
@@ -88,6 +101,7 @@ describe('ApiKeysSection', () => {
     const posts = requests.filter((r) => r.method === 'POST');
     expect(posts).toHaveLength(1);
     expect(JSON.parse(await posts[0].text())).toEqual({ name: 'sync-cli' });
+    expect(clipboard).toHaveBeenCalledWith('brk_secret-plaintext-token');
   });
 
   it('sends no request for a blank or whitespace name', async () => {
@@ -128,7 +142,7 @@ describe('ApiKeysSection', () => {
     await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'sync-cli');
     await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
 
-    await screen.findByText('Не удалось создать ключ');
+    await screen.findByText(/Не удалось создать ключ: boom \(HTTP 500\)/);
     expect(screen.getByPlaceholderText('sync-cli на ноутбуке')).toBeTruthy();
   });
 
@@ -270,5 +284,131 @@ describe('ApiKeysSection expiry', () => {
 
     expect(screen.getByText(/истёк/)).toBeTruthy();
     expect(screen.getByText(/действует до \d/)).toBeTruthy();
+  });
+});
+
+describe('ApiKeysSection new-key dialog', () => {
+  const openDialog = async (user: ReturnType<typeof userEvent.setup>, token = 'brk_new-token') => {
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST') return jsonResponse({ ...KEYS[0], token });
+
+        return jsonResponse([]);
+      }),
+    );
+
+    renderSection();
+    await screen.findByText('Ключей ещё нет');
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+    await screen.findByPlaceholderText('sync-cli на ноутбуке');
+
+    return requests;
+  };
+
+  it('fills the name from a quick choice, and the boards-only switch for the boards agent', async () => {
+    const user = userEvent.setup();
+    const requests = await openDialog(user);
+
+    await user.click(screen.getByRole('button', { name: 'агент плат' }));
+    expect(screen.getByPlaceholderText('sync-cli на ноутбуке')).toHaveValue('агент плат');
+    expect(screen.getByLabelText('только для плат')).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: 'reports' }));
+    expect(screen.getByPlaceholderText('sync-cli на ноутбуке')).toHaveValue('reports');
+    expect(screen.getByLabelText('только для плат')).not.toBeChecked();
+
+    await user.click(await createButton());
+    await screen.findByText('brk_new-token');
+    expect(JSON.parse(await requests.find((r) => r.method === 'POST')!.text())).toEqual({ name: 'reports' });
+  });
+
+  it('creates the key on Enter in the name field', async () => {
+    const user = userEvent.setup();
+    const requests = await openDialog(user);
+
+    await user.type(screen.getByPlaceholderText('sync-cli на ноутбуке'), 'laptop{Enter}');
+
+    await screen.findByText('brk_new-token');
+    expect(requests.filter((r) => r.method === 'POST')).toHaveLength(1);
+  });
+
+  it('says when the key will stop working, in words', async () => {
+    const user = userEvent.setup();
+
+    await openDialog(user);
+    expect(screen.getByText(/Работает, пока вы его не отзовёте/)).toBeTruthy();
+
+    await user.click(await screen.findByText('Бессрочно'));
+    await user.click(await screen.findByText('30 дней'));
+    expect(screen.getByText(/Перестанет работать \d{1,2} \S+ \d{4}/)).toBeTruthy();
+  });
+
+  it('asks once more before closing with the token not copied, and keeps it until then', async () => {
+    const user = userEvent.setup();
+
+    stubClipboard();
+
+    await openDialog(user, 'brk_unsaved');
+    await user.type(screen.getByPlaceholderText('sync-cli на ноутбуке'), 'laptop{Enter}');
+    await screen.findByText('brk_unsaved');
+
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    expect(await screen.findByText(/Вы ещё не скопировали ключ/)).toBeTruthy();
+    expect(screen.getByText('brk_unsaved')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Закрыть без копирования' }));
+    expect(screen.queryByText('brk_unsaved')).toBeNull();
+  });
+
+  it('does not close on Escape until the token is copied or the owner confirms', async () => {
+    const user = userEvent.setup();
+
+    stubClipboard();
+
+    await openDialog(user, 'brk_esc');
+    await user.type(screen.getByPlaceholderText('sync-cli на ноутбуке'), 'laptop{Enter}');
+    await screen.findByText('brk_esc');
+
+    await user.keyboard('{Escape}');
+    expect(await screen.findByText(/Вы ещё не скопировали ключ/)).toBeTruthy();
+    expect(screen.getByText('brk_esc')).toBeTruthy();
+  });
+
+  it('closes at once after the token was copied, and shows the request to test it with the token in it', async () => {
+    const user = userEvent.setup();
+
+    stubClipboard();
+
+    await openDialog(user, 'brk_ok');
+    await user.type(screen.getByPlaceholderText('sync-cli на ноутбуке'), 'laptop{Enter}');
+    await screen.findByText('brk_ok');
+
+    expect(screen.getByText(/X-Api-Key: brk_ok/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Скопировать ключ' }));
+    expect(await screen.findByText('Скопировано')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    expect(screen.queryByText('brk_ok')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('says so when the browser refuses to copy', async () => {
+    const user = userEvent.setup();
+
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+
+    await openDialog(user, 'brk_denied');
+    await user.type(screen.getByPlaceholderText('sync-cli на ноутбуке'), 'laptop{Enter}');
+    await screen.findByText('brk_denied');
+
+    await user.click(screen.getByRole('button', { name: 'Скопировать ключ' }));
+    expect(await screen.findByText(/Браузер не дал скопировать/)).toBeTruthy();
   });
 });
