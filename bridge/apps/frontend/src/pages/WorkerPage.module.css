@@ -670,3 +670,11 @@
   border: 1px solid var(--g-color-line-generic);
   border-radius: 8px;
 }
+
+/* The log as markdown: reading text instead of a terminal — proportional font, wrapped, the reply's own code blocks kept. */
+.logsMarkdown {
+  font-family: var(--g-font-family-sans, sans-serif);
+  font-size: 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
