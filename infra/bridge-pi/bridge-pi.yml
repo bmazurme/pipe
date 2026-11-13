@@ -203,12 +203,14 @@ services:
     environment:
       APP_HOST: ${APP_HOST:-bridge.ntlstl.dev}
       API_HOST: ${API_HOST:-api.bridge.ntlstl.dev}
+      LANDING_HOST: ${LANDING_HOST:-proto450.ntlstl.dev}
     configs:
       - source: caddyfile
         target: /etc/caddy/Caddyfile
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      - landing_site:/srv/landing:ro
     logging:
       driver: json-file
       options: { max-size: 10m, max-file: '3' }
@@ -267,6 +269,7 @@ volumes:
   bridge_uploads:
   caddy_data:
   caddy_config:
+  landing_site:
 
 configs:
   caddyfile:

@@ -40,6 +40,20 @@ cd ~/bridge-pi
    failed attempts count against Let's Encrypt's rate limit.
 4. Sign in with Yandex → profile → «Способы входа» (GitHub appears once its secrets are set, see PR #221).
 
+## A static landing page (Caddy, `LANDING_HOST`)
+
+The same Caddy also serves one static site from the `landing_site` volume for `LANDING_HOST` (default
+`proto450.ntlstl.dev`, see the Caddyfile). The page is not in git or in an image: publishing or changing it is one
+command from the workstation that has it, and never redeploys bridge.
+
+```bash
+infra/bridge-pi/deploy-landing.sh /path/to/landing.html     # → index.html + only the files the page itself references
+```
+
+The first time: add the A record (reg.ru) → the home address **before** the stack with the new Caddyfile is rolled
+out, or Let's Encrypt's failed attempts count against the rate limit (same rule as for bridge itself). A board that
+took over in a failover has an empty volume: the landing answers 404 there, bridge is unaffected.
+
 ## worker + VPN client (stack `bridgew`)
 
 Runs on green, separate from the core stack. The AI providers answer 403 from Russia (checked from the board), so the
