@@ -24,7 +24,10 @@ trap 'rm -rf "$STAGE"' EXIT
 cp "$PAGE" "$STAGE/index.html"
 
 # relative local references only: not http(s)://, //, data:, mailto:, #anchors, absolute paths or anything with ..
-refs="$(grep -oE '(src|href)="[^"]+"' "$PAGE" | sed -E 's/^(src|href)="//; s/"$//' | sed -E 's/[?#].*$//' \
+# the page's inline CSS may load fonts and images with url(…) as well
+refs="$( { grep -oE '(src|href)="[^"]+"' "$PAGE" | sed -E 's/^(src|href)="//; s/"$//'
+           grep -oE 'url\([^)]+\)' "$PAGE" | sed -E "s/^url\\(//; s/\\)\$//; s/^[\"']//; s/[\"']\$//"
+         } | sed -E 's/[?#].*$//' \
   | grep -vE '^(https?:|//|data:|mailto:|tel:|/|#|$)' | grep -vE '(^|/)\.\.(/|$)' | sort -u || true)"
 missing=0
 while IFS= read -r ref; do
