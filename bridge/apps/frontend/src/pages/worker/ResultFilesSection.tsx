@@ -1,15 +1,16 @@
 import { lazy, Suspense, useRef, useState } from 'react';
-import { Alert, Button, Disclosure, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Disclosure, Label, Loader, SegmentedRadioGroup, Switch, Text } from '@gravity-ui/uikit';
 
-import { usePeekJobResultMutation } from '../../store/api';
+import { usePeekFileMutation, usePeekJobResultMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
-import { isMarkdownFile, listResultFiles, readResultText, type ResultFile } from './resultFiles';
+import { compareWithSource, isMarkdownFile, listResultFiles, readResultText, type ComparedFile, type ResultFile } from './resultFiles';
 
 // Loaded on first use: the markdown pipeline is large and most job dialogs never open a .md result.
 const MarkdownRenderer = lazy(() => import('@gravity-ui/aikit').then((module) => ({ default: module.MarkdownRenderer })));
 
 interface ResultFilesSectionProps {
   jobId: number;
+  sourceFileId?: number | null;
 }
 
 function formatSize(size: number): string {
@@ -19,12 +20,16 @@ function formatSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
+export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSectionProps) {
+  const [peekFile] = usePeekFileMutation();
+  const [deleted, setDeleted] = useState<string[]>([]);
+  const [compared, setCompared] = useState(false);
+  const [onlyChanged, setOnlyChanged] = useState(true);
   const [peekJobResult] = usePeekJobResultMutation();
   const bytesRef = useRef<Uint8Array | null>(null);
   const requested = useRef(false);
   const [loading, setLoading] = useState(false);
-  const [files, setFiles] = useState<ResultFile[] | null>(null);
+  const [files, setFiles] = useState<(ResultFile | ComparedFile)[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -39,7 +44,22 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
       const blob = await peekJobResult(jobId).unwrap();
       const bytes = new Uint8Array(await blob.arrayBuffer());
       bytesRef.current = bytes;
-      setFiles(listResultFiles(bytes));
+      let result: (ResultFile | ComparedFile)[] | null = null;
+
+      if (sourceFileId !== null) {
+        // Any failure (gone, encrypted, not a zip) silently falls back to the plain list.
+        try {
+          const source = new Uint8Array(await (await peekFile(sourceFileId).unwrap()).arrayBuffer());
+          const diff = compareWithSource(bytes, source);
+          result = diff.files;
+          setDeleted(diff.deleted);
+          setCompared(true);
+        } catch {
+          result = null;
+        }
+      }
+
+      setFiles(result ?? listResultFiles(bytes));
     } catch (err) {
       requested.current = false;
       setError(typeof err === 'string' ? err : 'Не удалось прочитать файлы результата');
@@ -60,6 +80,9 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
     setPreview(bytesRef.current ? readResultText(bytesRef.current, path) : null);
   };
 
+  const visibleFiles =
+    compared && onlyChanged ? files?.filter((file) => !('change' in file) || file.change !== 'unchanged') : files;
+
   return (
     <Disclosure summary="Файлы результата" className={styles.encryptSection} onUpdate={handleUpdate}>
       <div className={styles.encryptBody}>
@@ -70,9 +93,27 @@ export function ResultFilesSection({ jobId }: ResultFilesSectionProps) {
             Файлов нет
           </Text>
         )}
-        {files?.map((file) => (
+        {files && compared && (
+          <>
+            <Text variant="body-2">
+              Изменено {files.filter((file) => 'change' in file && file.change !== 'unchanged').length} из {files.length} файлов
+            </Text>
+            <Switch checked={onlyChanged} onUpdate={setOnlyChanged} content="Только изменённые" />
+            {deleted.length > 0 && (
+              <Text variant="body-2" color="secondary">
+                Удалены: {deleted.join(', ')}
+              </Text>
+            )}
+          </>
+        )}
+        {visibleFiles?.map((file) => (
           <Button key={file.path} view={file.path === selected ? 'normal' : 'flat'} onClick={() => handleSelect(file.path)}>
             {file.path} ({formatSize(file.size)})
+            {'change' in file && file.change !== 'unchanged' && (
+              <Label size="xs" theme={file.change === 'added' ? 'success' : 'warning'}>
+                {file.change === 'added' ? 'новый' : 'изменён'}
+              </Label>
+            )}
           </Button>
         ))}
         {selected !== null &&
