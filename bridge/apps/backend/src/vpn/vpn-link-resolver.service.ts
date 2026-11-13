@@ -20,7 +20,7 @@ interface CachedLinks {
 export class VpnLinkResolver {
   private readonly cache = new Map<number, CachedLinks>();
   private readonly subscriptionCache = new Map<string, CachedLinks>();
-  private readonly failedAt = new Map<number, number>();
+  private readonly failedAt = new Map<number, { at: number; error: unknown }>();
   private readonly inFlight = new Map<number, Promise<string[]>>();
 
   constructor(
@@ -45,14 +45,20 @@ export class VpnLinkResolver {
     if (cached) {
       // Stale-while-revalidate: a down panel must not stall a settings fetch, so hand out the old link at once and
       // refresh behind it, but not again until a TTL has passed since the last failure.
-      const failedAt = this.failedAt.get(id);
+      const failed = this.failedAt.get(id);
 
-      if (failedAt === undefined || Date.now() - failedAt >= LINK_TTL_MS) {
+      if (!failed || Date.now() - failed.at >= LINK_TTL_MS) {
         this.refreshInBackground(id).catch(() => undefined);
       }
 
       return cached.links;
     }
+
+    // Never resolved: a panel that is down must not be asked on every call (each wait is a 10 s timeout), so within
+    // a TTL of the last failure rethrow that failure instead.
+    const failed = this.failedAt.get(id);
+
+    if (failed && Date.now() - failed.at < LINK_TTL_MS) throw failed.error;
 
     return this.refreshInBackground(id);
   }
@@ -104,7 +110,7 @@ export class VpnLinkResolver {
 
       return links;
     } catch (error) {
-      this.failedAt.set(id, Date.now());
+      this.failedAt.set(id, { at: Date.now(), error });
 
       throw error;
     }

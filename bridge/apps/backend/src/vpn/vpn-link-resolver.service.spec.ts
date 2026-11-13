@@ -90,6 +90,26 @@ describe('VpnLinkResolver stale-while-revalidate', () => {
   });
 });
 
+describe('VpnLinkResolver: a panel that never answered', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is not asked again within one TTL, and is asked again after it', async () => {
+    const { resolver, vpn } = build();
+    vpn.getConnectionLinks.mockRejectedValue(new Error('down'));
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+
+    await expect(resolver.resolve(9)).rejects.toThrow('down');
+    now.mockReturnValue(start + LINK_TTL_MS - 1);
+    await expect(resolver.resolve(9)).rejects.toThrow('down');
+    expect(vpn.getConnectionLinks).toHaveBeenCalledTimes(1);
+
+    now.mockReturnValue(start + LINK_TTL_MS);
+    await expect(resolver.resolve(9)).rejects.toThrow('down');
+    expect(vpn.getConnectionLinks).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('VpnLinkResolver: a subscription link of a worker', () => {
   afterEach(() => jest.restoreAllMocks());
 
