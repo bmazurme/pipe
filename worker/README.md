@@ -109,7 +109,7 @@ Worker добавляется на странице **Worker → Worker'ы → �
 |---|---|---|
 | `BRIDGE_API_URL` | да | URL bridge backend, например `https://bridge.example.com` |
 | `WORKER_STATE_DIR` | нет (по умолчанию `./.worker-state`, в Docker `/app/.worker-state`) | где подключённый worker хранит свой ключ. Должен переживать перезапуск (том) |
-| `WORKER_RUN_AS` | нет (в образе Docker задавайте `pipe-runner`) | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет `sudo -n -u … true` и не стартует, если не получилось. См. «Два пользователя ОС» |
+| `WORKER_RUN_AS` | нет (образ Docker её не задаёт — передайте `pipe-runner` сами) | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет `sudo -n -u … true` и не стартует, если не получилось. См. «Два пользователя ОС» |
 | `WORKER_ENROLL_CODE` | нет | одноразовый код со страницы Worker: при старте, если ключа ещё нет, обменивается на ключ. Допускает `WORKER_ENROLL_CODE_FILE` |
 | `BRIDGE_API_KEY` | нет (устарело) | персональный API-ключ bridge (`brk_...`) — прежний способ; пока задан, он главнее подключения кодом |
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
@@ -419,6 +419,6 @@ The `docker run` command the Add-worker dialog generates caps the container: `--
 Оба входят в группу `pipe-jobs`, которой принадлежит `/app/.worker-work` (`2770`). Рабочая директория каждой задачи
 создаётся с правами `2770`, поэтому результат, записанный моделью, worker по-прежнему собирает. В sudoers одно правило:
 `pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude`. Переменные окружения для CLI — по-прежнему
-только из белого списка `buildClaudeEnv`; `HOME`/`USER` worker'а не передаются. В образе задайте `-e WORKER_RUN_AS=pipe-runner`.
+только из белого списка `buildClaudeEnv`; `HOME`/`USER` worker'а не передаются. Образ только создаёт пользователя `pipe-runner` и правило sudoers, но сам `WORKER_RUN_AS` **не задаёт** (по умолчанию выключено): его нужно передать явно — `-e WORKER_RUN_AS=pipe-runner` в `docker run` или `environment:` в стеке. Проверка: `docker exec <контейнер> sudo -n -u pipe-runner sh -c 'ls /app/.worker-state'` должна ответить `Permission denied`; если задан только worker-пользователь, содержимое каталога видно.
 Файлы, созданные моделью с `umask 022`, в подкаталогах worker'у доступны только на чтение — если нужна и очистка, задайте
 пользователю `pipe-runner` `umask 007`. Без `WORKER_RUN_AS` поведение прежнее (CLI от пользователя worker'а).

@@ -122,7 +122,7 @@ bridge's own DB (`POST /api/v1/worker/claude-credentials`, managed from the
 Worker page), in which case bridge resolves and hands worker the actual
 token value on claim (`RemoteJob.claudeToken`), overriding the inherited one
 for just that job's `claude` invocation — see `worker/src/modelRunners/claudeRunner.ts`.
-Optional `WORKER_PROXY_URL` (an HTTP — not SOCKS5, neither
+Optional `WORKER_RUN_AS=pipe-runner` (the image creates that user but does not set the variable, so it is off in the shipped stack: job code runs as the worker's own user and can read `credentials.json`/`xray-tunnel.json` in the state dir; see worker/README «Два пользователя ОС» for the check), and `WORKER_PROXY_URL` (an HTTP — not SOCKS5, neither
 the `claude` CLI nor undici's `ProxyAgent` support that — proxy for reaching
 AI providers from behind a geo-restricted host; scoped to provider calls
 only, never bridge's own API). Any of worker's five secrets above can
