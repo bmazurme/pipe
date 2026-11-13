@@ -35,3 +35,42 @@ export function readResultText(bytes: Uint8Array, path: string): string | null {
 
   return new TextDecoder('utf-8').decode(data);
 }
+
+export type FileChange = 'added' | 'modified' | 'unchanged';
+
+export interface ComparedFile extends ResultFile {
+  change: FileChange;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+
+  return true;
+}
+
+// Byte-compares the result tree with the source parcel it was produced from; throws when either is not a zip.
+export function compareWithSource(result: Uint8Array, source: Uint8Array): { files: ComparedFile[]; deleted: string[] } {
+  const filter = (file: { name: string }) => isListed(file.name);
+  const after = unzipSync(result, { filter });
+  const before = unzipSync(source, { filter });
+  const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+  const files = Object.keys(after)
+    .sort(byPath)
+    .map((path): ComparedFile => {
+      const data = after[path];
+      const old = before[path];
+      const change: FileChange = !old ? 'added' : sameBytes(old, data) ? 'unchanged' : 'modified';
+
+      return { path, size: data.length, change };
+    });
+  const deleted = Object.keys(before)
+    .filter((path) => !(path in after))
+    .sort(byPath);
+
+  return { files, deleted };
+}

@@ -195,7 +195,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
 
         <JobLogs jobId={job.id} logs={job.logs ?? ''} active={jobIsActive} />
 
-        {(job.status === 'succeeded' || hasPartialResult) && <ResultFilesSection jobId={job.id} />}
+        {(job.status === 'succeeded' || hasPartialResult) && <ResultFilesSection jobId={job.id} sourceFileId={job.sourceFileId} />}
 
         {job.status === 'succeeded' && (
           <Disclosure summary="Скачать зашифрованным" className={styles.encryptSection}>
