@@ -5285,6 +5285,134 @@
         }
       }
     },
+    "/api/v1/promo/posts/{id}/publish-now": {
+      "post": {
+        "operationId": "PromoController_publishNow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoPostResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/promo/posts/{id}/test": {
+      "post": {
+        "operationId": "PromoController_sendTest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/promo/telegram": {
+      "get": {
+        "operationId": "PromoController_telegramState",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/promo/telegram/targets/{role}": {
+      "post": {
+        "operationId": "PromoController_bindTarget",
+        "parameters": [
+          {
+            "name": "role",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "news",
+                "discussion"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindTargetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "PromoController_unbindTarget",
+        "parameters": [
+          {
+            "name": "role",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "news",
+                "discussion"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/promo/assets": {
       "get": {
         "operationId": "PromoController_listAssets",
@@ -10688,6 +10816,9 @@
             "type": "string",
             "nullable": true
           },
+          "announceInGroup": {
+            "type": "boolean"
+          },
           "captionLength": {
             "type": "number"
           },
@@ -10717,6 +10848,7 @@
           "error",
           "publishedAt",
           "utmCampaign",
+          "announceInGroup",
           "captionLength",
           "captionLimit",
           "createdAt",
@@ -10763,6 +10895,9 @@
             "type": "string",
             "nullable": true
           },
+          "announceInGroup": {
+            "type": "boolean"
+          },
           "utmCampaign": {
             "type": "string",
             "nullable": true,
@@ -10786,6 +10921,18 @@
             "maxLength": 500
           }
         }
+      },
+      "BindTargetDto": {
+        "type": "object",
+        "properties": {
+          "chat": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "chat"
+        ]
       },
       "PromoAssetResponseDto": {
         "type": "object",

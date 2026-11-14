@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Select, TextArea, TextInput, Text } from '@gravity-ui/uikit';
+import { Alert, Checkbox, Select, TextArea, TextInput, Text } from '@gravity-ui/uikit';
 
 import { Dialog } from '../../shared/ui/Dialog';
 import {
@@ -12,7 +12,7 @@ import {
   useUpdatePromoPostMutation,
 } from '../../store/api';
 import styles from '../PromoPage.module.css';
-import { captionLimitFor, CHANNEL_LABEL, CHANNELS, fromLocalInput, joinCaption, MODE_LABEL, toLocalInput } from './promoLabels';
+import { captionLength, captionLimitFor, CHANNEL_LABEL, CHANNELS, fromLocalInput, joinCaption, MODE_LABEL, toLocalInput } from './promoLabels';
 
 interface Props {
   /** The post being edited, or null for a new one. */
@@ -33,9 +33,10 @@ export function PostDialog({ post, assets, onClose }: Props) {
   const [mode, setMode] = useState<PromoMode>(post?.mode ?? (channel === 'telegram' ? 'auto' : 'reminder'));
   const [scheduled, setScheduled] = useState(toLocalInput(post?.scheduledAt ?? null));
   const [utm, setUtm] = useState(post?.utmCampaign ?? '');
+  const [announce, setAnnounce] = useState(post?.announceInGroup ?? false);
   const [error, setError] = useState<string | null>(null);
 
-  const length = joinCaption(textRu, textEn).length;
+  const length = captionLength(channel, joinCaption(textRu, textEn));
   const limit = captionLimitFor(channel, assetIds.length > 0);
   const tooLong = length > limit;
 
@@ -56,6 +57,7 @@ export function PostDialog({ post, assets, onClose }: Props) {
       mode,
       scheduledAt: fromLocalInput(scheduled),
       utmCampaign: utm.trim() || null,
+      announceInGroup: channel === 'telegram' && announce,
     };
 
     try {
@@ -84,6 +86,11 @@ export function PostDialog({ post, assets, onClose }: Props) {
           <TextInput size="m" placeholder="Название" value={title} controlProps={{ 'aria-label': 'Название', maxLength: 200 }} onUpdate={setTitle} />
           <TextArea minRows={5} placeholder="Текст (русский)" value={textRu} controlProps={{ 'aria-label': 'Текст (русский)' }} onUpdate={setTextRu} />
           <TextArea minRows={3} placeholder="Абзац на английском" value={textEn} controlProps={{ 'aria-label': 'Абзац на английском' }} onUpdate={setTextEn} />
+          {channel === 'telegram' && (
+            <Text variant="caption-2" color="secondary">
+              В тексте работают **жирный** и `код`; остальное выходит как написано.
+            </Text>
+          )}
           <Text variant="caption-2" color={tooLong ? 'danger' : 'secondary'} aria-live="polite">
             {length} / {limit} знаков{assetIds.length > 0 && channel === 'telegram' ? ' (подпись к медиа)' : ''}
           </Text>
@@ -119,6 +126,9 @@ export function PostDialog({ post, assets, onClose }: Props) {
               onChange={(event) => setScheduled(event.target.value)}
             />
           </label>
+          {channel === 'telegram' && (
+            <Checkbox size="m" checked={announce} onUpdate={setAnnounce} content="Анонс в группу обсуждений (со ссылкой на пост)" />
+          )}
           <TextInput size="m" placeholder="utm_campaign (необязательно)" value={utm} controlProps={{ 'aria-label': 'utm_campaign', maxLength: 64 }} onUpdate={setUtm} />
           {error && <Alert theme="danger" view="filled" message={error} />}
         </div>

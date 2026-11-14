@@ -17,7 +17,7 @@ import {
 } from './promo-limits';
 
 // A post that has gone out (or was handed to the owner as a reminder) is a record, not a draft any more.
-const FROZEN: PromoPostStatus[] = ['published', 'reminded'];
+const FROZEN: PromoPostStatus[] = ['publishing', 'published', 'reminded'];
 
 @Injectable()
 export class PromoPostsService {
@@ -65,6 +65,7 @@ export class PromoPostsService {
         mode: dto.mode ?? (dto.channel === 'telegram' ? 'auto' : 'reminder'),
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         utmCampaign: dto.utmCampaign ?? null,
+        announceInGroup: dto.announceInGroup ?? false,
         status: 'draft',
       }),
     );
@@ -86,6 +87,9 @@ export class PromoPostsService {
       post.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     }
     if (dto.utmCampaign !== undefined) post.utmCampaign = dto.utmCampaign;
+    if (dto.announceInGroup !== undefined) {
+      post.announceInGroup = dto.announceInGroup;
+    }
 
     // What was approved is not what is on the screen any more: back to a draft, so a changed text is never sent unseen.
     if (post.status === 'approved' || post.status === 'failed') {
@@ -98,6 +102,10 @@ export class PromoPostsService {
 
   async remove(id: number): Promise<void> {
     const post = await this.get(id);
+
+    if (post.status === 'publishing') {
+      throw new ConflictException('Пост сейчас отправляется: подождите минуту');
+    }
 
     await this.posts.remove(post);
   }

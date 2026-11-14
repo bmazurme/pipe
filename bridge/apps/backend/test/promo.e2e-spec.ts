@@ -19,7 +19,9 @@ describe('Promo API (e2e)', () => {
   let landingDir: string;
   let owner: string;
   let stranger: string;
+  // New addresses on every run: the test database is shared and keeps its users.
   const ownerEmail = `e2e-promo-owner-${Date.now()}@ntlstl.test`;
+  const strangerEmail = `e2e-promo-stranger-${Date.now()}@ntlstl.test`;
 
   async function tokenFor(email: string): Promise<string> {
     const user = await app.get(UsersService).create({ email });
@@ -36,7 +38,7 @@ describe('Promo API (e2e)', () => {
 
   beforeAll(async () => {
     process.env.POSTGRES_DB = 'ntlstl-db-test';
-    process.env.EMAILS = `${ownerEmail},e2e-promo-stranger@ntlstl.test`;
+    process.env.EMAILS = `${ownerEmail},${strangerEmail}`;
     landingDir = await mkdtemp(join(tmpdir(), 'e2e-landing-'));
     process.env.LANDING_DIR = landingDir;
 
@@ -51,7 +53,7 @@ describe('Promo API (e2e)', () => {
     await app.init();
 
     owner = await tokenFor(ownerEmail);
-    stranger = await tokenFor('e2e-promo-stranger@ntlstl.test');
+    stranger = await tokenFor(strangerEmail);
   });
 
   afterAll(async () => {
@@ -315,5 +317,124 @@ describe('Promo API (e2e)', () => {
         .attach('file', Buffer.from('plain text'), 'site.txt'),
       owner,
     ).expect(400);
+  });
+
+  describe('Telegram targets and publishing', () => {
+    it('reports the state, with nothing bound at first', async () => {
+      const state = await as(
+        http().get('/api/v1/promo/telegram'),
+        owner,
+      ).expect(200);
+
+      expect(state.body).toMatchObject({ news: null, discussion: null });
+      expect(Array.isArray(state.body.candidates)).toBe(true);
+      await as(http().get('/api/v1/promo/telegram'), stranger).expect(403);
+    });
+
+    it('refuses a bad role or chat reference before asking Telegram, and a bind when the bot is not set up', async () => {
+      await as(
+        http()
+          .post('/api/v1/promo/telegram/targets/owner')
+          .send({ chat: '@x' }),
+        owner,
+      ).expect(400);
+      await as(
+        http().post('/api/v1/promo/telegram/targets/news').send({}),
+        owner,
+      ).expect(400);
+      expect(
+        (
+          await as(
+            http()
+              .post('/api/v1/promo/telegram/targets/news')
+              .send({ chat: 'https://t.me/+abcdef' }),
+            owner,
+          ).expect(400)
+        ).body.message,
+      ).toMatch(/числовой id/);
+      // the e2e environment has no bot token: Telegram is never called, and the reason says so
+      expect(
+        (
+          await as(
+            http()
+              .post('/api/v1/promo/telegram/targets/news')
+              .send({ chat: '@ntlstl_news' }),
+            owner,
+          ).expect(400)
+        ).body.message,
+      ).toMatch(/TELEGRAM_BOT_TOKEN/);
+      await as(
+        http().delete('/api/v1/promo/telegram/targets/news'),
+        owner,
+      ).expect(204);
+    });
+
+    it('publishes only an approved Telegram post, and only with a channel bound', async () => {
+      const draft = await as(
+        http().post('/api/v1/promo/posts').send({
+          channel: 'telegram',
+          title: 'p',
+          textRu: 'x',
+          announceInGroup: true,
+        }),
+        owner,
+      ).expect(201);
+
+      expect(draft.body.announceInGroup).toBe(true);
+      expect(
+        (
+          await as(
+            http().post(`/api/v1/promo/posts/${draft.body.id}/publish-now`),
+            owner,
+          ).expect(400)
+        ).body.message,
+      ).toMatch(/Согласовать/);
+
+      await as(
+        http().post(`/api/v1/promo/posts/${draft.body.id}/approve`),
+        owner,
+      ).expect(200);
+      expect(
+        (
+          await as(
+            http().post(`/api/v1/promo/posts/${draft.body.id}/publish-now`),
+            owner,
+          ).expect(400)
+        ).body.message,
+      ).toMatch(/не привязан/);
+      // still approved: a refusal must not take the post out of the queue
+      expect(
+        (
+          await as(
+            http().get(`/api/v1/promo/posts/${draft.body.id}`),
+            owner,
+          ).expect(200)
+        ).body.status,
+      ).toBe('approved');
+
+      const insta = await as(
+        http()
+          .post('/api/v1/promo/posts')
+          .send({ channel: 'instagram', title: 'i', textRu: 'x' }),
+        owner,
+      ).expect(201);
+
+      await as(
+        http().post(`/api/v1/promo/posts/${insta.body.id}/approve`),
+        owner,
+      ).expect(200);
+      expect(
+        (
+          await as(
+            http().post(`/api/v1/promo/posts/${insta.body.id}/publish-now`),
+            owner,
+          ).expect(400)
+        ).body.message,
+      ).toMatch(/только в Telegram/);
+      await as(
+        http().post(`/api/v1/promo/posts/${draft.body.id}/test`),
+        owner,
+      ).expect(400);
+    });
   });
 });

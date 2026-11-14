@@ -40,6 +40,8 @@ import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
 import { LinkAlert } from '../links/entities/link-alert.entity';
+import { TelegramChat } from '../telegram/entities/telegram-chat.entity';
+import { PromoTelegramTarget } from '../promo/entities/promo-telegram-target.entity';
 import { PromoAsset } from '../promo/entities/promo-asset.entity';
 import { PromoLandingRelease } from '../promo/entities/promo-landing-release.entity';
 import { PromoPost } from '../promo/entities/promo-post.entity';
@@ -117,4 +119,6 @@ export const ENTITIES = [
   PromoPost,
   PromoAsset,
   PromoLandingRelease,
+  PromoTelegramTarget,
+  TelegramChat,
 ];

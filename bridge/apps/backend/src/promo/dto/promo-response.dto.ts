@@ -1,6 +1,7 @@
 import type { PromoAsset } from '../entities/promo-asset.entity';
 import type { PromoPost } from '../entities/promo-post.entity';
 import {
+  captionLength,
   captionLimit,
   joinCaption,
   type PromoChannel,
@@ -22,6 +23,7 @@ export class PromoPostResponseDto {
   error: string | null;
   publishedAt: Date | null;
   utmCampaign: string | null;
+  announceInGroup: boolean;
   // How long the joined caption is and what the channel allows, so the editor can show «812 / 1024» without knowing the limits.
   captionLength: number;
   captionLimit: number;
@@ -43,7 +45,11 @@ export class PromoPostResponseDto {
       error: post.error,
       publishedAt: post.publishedAt,
       utmCampaign: post.utmCampaign,
-      captionLength: joinCaption(post.textRu, post.textEn).length,
+      announceInGroup: post.announceInGroup,
+      captionLength: captionLength(
+        post.channel,
+        joinCaption(post.textRu, post.textEn),
+      ),
       captionLimit: captionLimit(post.channel, post.assetIds.length > 0).limit,
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,

@@ -56,6 +56,13 @@ import {
   PromoOverviewService,
 } from './promo-overview.service';
 import { PromoPostsService } from './promo-posts.service';
+import { PromoPublisherService } from './promo-publisher.service';
+import {
+  type TargetView,
+  type TelegramState,
+  PromoTelegramService,
+} from './promo-telegram.service';
+import { BindTargetDto, TelegramRoleParam } from './dto/promo-telegram.dto';
 
 const AssetTooLarge = multerExceptionFilterFor(
   MAX_ASSET_BYTES,
@@ -89,6 +96,8 @@ export class PromoController {
     private readonly assets: PromoAssetsService,
     private readonly landing: PromoLandingService,
     private readonly overviewService: PromoOverviewService,
+    private readonly publisher: PromoPublisherService,
+    private readonly telegram: PromoTelegramService,
   ) {}
 
   @Get('overview')
@@ -164,6 +173,43 @@ export class PromoController {
     return PromoPostResponseDto.fromEntity(
       await this.posts.markPublished(id, dto.externalUrl),
     );
+  }
+
+  // Out now, whatever its time (an approved Telegram post), and a preview to the owner's own chat.
+  @Post('posts/:id/publish-now')
+  @HttpCode(HttpStatus.OK)
+  async publishNow(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<PromoPostResponseDto> {
+    return PromoPostResponseDto.fromEntity(await this.publisher.publishNow(id));
+  }
+
+  @Post('posts/:id/test')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async sendTest(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.telegram.sendTest(await this.posts.get(id));
+  }
+
+  // --- Telegram: the channel for the news and the group for the discussion
+
+  @Get('telegram')
+  telegramState(): Promise<TelegramState> {
+    return this.telegram.state();
+  }
+
+  @Post('telegram/targets/:role')
+  @HttpCode(HttpStatus.OK)
+  bindTarget(
+    @Param() params: TelegramRoleParam,
+    @Body() dto: BindTargetDto,
+  ): Promise<TargetView> {
+    return this.telegram.bind(params.role, dto.chat);
+  }
+
+  @Delete('telegram/targets/:role')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  unbindTarget(@Param() params: TelegramRoleParam): Promise<void> {
+    return this.telegram.unbind(params.role);
   }
 
   // --- files a post carries

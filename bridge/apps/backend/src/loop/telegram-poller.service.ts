@@ -63,7 +63,14 @@ export class TelegramPollerService
       {
         offset: this.offset,
         timeout: LONG_POLL_SECONDS,
-        allowed_updates: ['message', 'callback_query'],
+        // my_chat_member / channel_post: the bot being added to a channel or group, and a post in a channel it administers — the promo
+        // module offers those chats for binding (TelegramChatsService).
+        allowed_updates: [
+          'message',
+          'callback_query',
+          'my_chat_member',
+          'channel_post',
+        ],
       },
       POLL_REQUEST_TIMEOUT_MS,
     );

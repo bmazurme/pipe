@@ -13,6 +13,8 @@ import {
   useListPromoAssetsQuery,
   useListPromoPostsQuery,
   useMarkPromoPostPublishedMutation,
+  usePublishPromoPostNowMutation,
+  useTestPromoPostMutation,
   useUnapprovePromoPostMutation,
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
@@ -29,6 +31,9 @@ export function PostsTab() {
   const [unapprove] = useUnapprovePromoPostMutation();
   const [markPublished] = useMarkPromoPostPublishedMutation();
   const [remove] = useDeletePromoPostMutation();
+  const [publishNow] = usePublishPromoPostNowMutation();
+  const [sendTest] = useTestPromoPostMutation();
+  const [notice, setNotice] = useState<string | null>(null);
   const [filter, setFilter] = useState<PromoChannel | 'all'>('all');
   const [editing, setEditing] = useState<Editing>(null);
   const [closing, setClosing] = useState<PromoPost | null>(null);
@@ -38,6 +43,7 @@ export function PostsTab() {
 
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
+    setNotice(null);
 
     try {
       await action();
@@ -73,6 +79,7 @@ export function PostsTab() {
       </div>
 
       {error && <Alert theme="danger" view="filled" message={error} onClose={() => setError(null)} />}
+      {notice && <Alert theme="success" view="filled" message={notice} onClose={() => setNotice(null)} />}
 
       {shown.length === 0 ? (
         <EmptyState
@@ -82,7 +89,7 @@ export function PostsTab() {
         />
       ) : (
         shown.map((post) => {
-          const frozen = post.status === 'published' || post.status === 'reminded';
+          const frozen = post.status === 'published' || post.status === 'reminded' || post.status === 'publishing';
 
           return (
             <Card key={post.id} view="outlined" className={styles.card}>
@@ -118,6 +125,23 @@ export function PostsTab() {
                 {(post.status === 'draft' || post.status === 'failed') && (
                   <Button view="action" size="m" onClick={() => void run(() => approve(post.id).unwrap())}>
                     Согласовать
+                  </Button>
+                )}
+                {post.channel === 'telegram' && post.status === 'approved' && (
+                  <Button view="action" size="m" onClick={() => void run(() => publishNow(post.id).unwrap())}>
+                    Опубликовать сейчас
+                  </Button>
+                )}
+                {post.channel === 'telegram' && !frozen && (
+                  <Button
+                    view="outlined"
+                    size="m"
+                    onClick={() => void run(async () => {
+                      await sendTest(post.id).unwrap();
+                      setNotice('Тест отправлен вам в личный чат с ботом.');
+                    })}
+                  >
+                    Тест мне
                   </Button>
                 )}
                 {post.status === 'approved' && (

@@ -2692,6 +2692,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/promo/posts/{id}/publish-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PromoController_publishNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promo/posts/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PromoController_sendTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promo/telegram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PromoController_telegramState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promo/telegram/targets/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PromoController_bindTarget"];
+        delete: operations["PromoController_unbindTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/promo/assets": {
         parameters: {
             query?: never;
@@ -4240,6 +4304,7 @@ export interface components {
             /** Format: date-time */
             publishedAt: string | null;
             utmCampaign: string | null;
+            announceInGroup: boolean;
             captionLength: number;
             captionLimit: number;
             /** Format: date-time */
@@ -4257,11 +4322,15 @@ export interface components {
             /** @enum {string} */
             mode?: "auto" | "reminder";
             scheduledAt?: string | null;
+            announceInGroup?: boolean;
             utmCampaign?: string | null;
         };
         UpdatePromoPostDto: Record<string, never>;
         MarkPublishedDto: {
             externalUrl?: string;
+        };
+        BindTargetDto: {
+            chat: string;
         };
         PromoAssetResponseDto: {
             id: number;
@@ -8747,6 +8816,109 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PromoPostResponseDto"];
                 };
+            };
+        };
+    };
+    PromoController_publishNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoPostResponseDto"];
+                };
+            };
+        };
+    };
+    PromoController_sendTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PromoController_telegramState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    PromoController_bindTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: "news" | "discussion";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindTargetDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    PromoController_unbindTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: "news" | "discussion";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

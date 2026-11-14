@@ -2,7 +2,8 @@ import promoApi from '..';
 
 export type PromoChannel = 'telegram' | 'youtube' | 'instagram';
 export type PromoMode = 'auto' | 'reminder';
-export type PromoPostStatus = 'draft' | 'approved' | 'published' | 'reminded' | 'failed';
+export type PromoPostStatus = 'draft' | 'approved' | 'publishing' | 'published' | 'reminded' | 'failed';
+export type TelegramRole = 'news' | 'discussion';
 
 export interface PromoPost {
   id: number;
@@ -18,6 +19,8 @@ export interface PromoPost {
   error: string | null;
   publishedAt: string | null;
   utmCampaign: string | null;
+  /** Telegram: after the post goes to the channel, say so in the group with a link. */
+  announceInGroup: boolean;
   /** The joined RU + EN text and what the channel allows for it (the editor shows «812 / 1024»). */
   captionLength: number;
   captionLimit: number;
@@ -34,6 +37,7 @@ export interface PromoPostInput {
   mode?: PromoMode;
   scheduledAt?: string | null;
   utmCampaign?: string | null;
+  announceInGroup?: boolean;
 }
 
 export interface PromoAsset {
@@ -53,9 +57,34 @@ export interface ChannelOverview {
   next: { id: number; title: string; scheduledAt: string } | null;
 }
 
+export interface TelegramTarget {
+  role: TelegramRole;
+  chatId: string;
+  title: string | null;
+  username: string | null;
+}
+
+/** A chat the bot has been seen in, offered for binding. */
+export interface TelegramCandidate {
+  chatId: string;
+  type: string;
+  title: string | null;
+  username: string | null;
+  botStatus: string | null;
+  roles: TelegramRole[];
+}
+
+export interface TelegramState {
+  botConfigured: boolean;
+  news: TelegramTarget | null;
+  discussion: TelegramTarget | null;
+  candidates: TelegramCandidate[];
+}
+
 export interface PromoOverview {
   channels: ChannelOverview[];
   landing: { configured: boolean; url: string | null; activeDirName: string | null; releases: number };
+  telegram: TelegramState;
 }
 
 export interface LandingRelease {
@@ -140,6 +169,28 @@ const promoApiEndpoints = promoApi.injectEndpoints({
       transformErrorResponse: errorMessage('Не удалось отметить пост опубликованным'),
     }),
 
+    publishPromoPostNow: builder.mutation<PromoPost, number>({
+      query: (id) => ({ url: `promo/posts/${id}/publish-now`, method: 'POST' }),
+      invalidatesTags: ['PromoPosts', 'PromoOverview'],
+      transformErrorResponse: errorMessage('Не удалось опубликовать пост'),
+    }),
+    /** The same post, to the owner's own chat only. */
+    testPromoPost: builder.mutation<void, number>({
+      query: (id) => ({ url: `promo/posts/${id}/test`, method: 'POST' }),
+      transformErrorResponse: errorMessage('Не удалось отправить тест'),
+    }),
+
+    bindTelegramTarget: builder.mutation<TelegramTarget, { role: TelegramRole; chat: string }>({
+      query: ({ role, chat }) => ({ url: `promo/telegram/targets/${role}`, method: 'POST', body: { chat } }),
+      invalidatesTags: ['PromoOverview'],
+      transformErrorResponse: errorMessage('Не удалось привязать чат'),
+    }),
+    unbindTelegramTarget: builder.mutation<void, TelegramRole>({
+      query: (role) => ({ url: `promo/telegram/targets/${role}`, method: 'DELETE' }),
+      invalidatesTags: ['PromoOverview'],
+      transformErrorResponse: errorMessage('Не удалось отвязать чат'),
+    }),
+
     listPromoAssets: builder.query<PromoAsset[], void>({
       query: () => 'promo/assets',
       providesTags: ['PromoAssets'],
@@ -189,6 +240,10 @@ export const {
   useApprovePromoPostMutation,
   useUnapprovePromoPostMutation,
   useMarkPromoPostPublishedMutation,
+  usePublishPromoPostNowMutation,
+  useTestPromoPostMutation,
+  useBindTelegramTargetMutation,
+  useUnbindTelegramTargetMutation,
   useListPromoAssetsQuery,
   useUploadPromoAssetMutation,
   useDeletePromoAssetMutation,
