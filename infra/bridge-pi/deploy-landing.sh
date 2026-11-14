@@ -6,7 +6,7 @@
 #   infra/bridge-pi/deploy-landing.sh /path/to/landing.html            # → index.html, plus every local file it references
 #   WHITE=pi@192.168.50.11 infra/bridge-pi/deploy-landing.sh page.html
 #
-# Only files the page references with src="…" / href="…" (relative paths, no `..`) are copied, so a folder with drafts and
+# Only files the page references with src="…" / href="…" / poster="…" (relative paths, no `..`) are copied, so a folder with drafts and
 # source material next to the page never goes public by accident.
 set -euo pipefail
 
@@ -25,7 +25,7 @@ cp "$PAGE" "$STAGE/index.html"
 
 # relative local references only: not http(s)://, //, data:, mailto:, #anchors, absolute paths or anything with ..
 # the page's inline CSS may load fonts and images with url(…) as well
-refs="$( { grep -oE '(src|href)="[^"]+"' "$PAGE" | sed -E 's/^(src|href)="//; s/"$//'
+refs="$( { grep -oE '(src|href|poster)="[^"]+"' "$PAGE" | sed -E 's/^(src|href|poster)="//; s/"$//'
            grep -oE 'url\([^)]+\)' "$PAGE" | sed -E "s/^url\\(//; s/\\)\$//; s/^[\"']//; s/[\"']\$//"
          } | sed -E 's/[?#].*$//' \
   | grep -vE '^(https?:|//|data:|mailto:|tel:|/|#|$)' | grep -vE '(^|/)\.\.(/|$)' | sort -u || true)"
