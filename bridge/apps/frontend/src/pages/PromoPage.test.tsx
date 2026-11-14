@@ -16,6 +16,9 @@ let assets: Record<string, unknown>[];
 let landing: Record<string, unknown>;
 let failWith: { path: RegExp; message: string } | null;
 let telegram: Record<string, unknown>;
+// While set, a send (publish-now / test) is not answered: the request is «in flight» until the test lets it go.
+let hold: Promise<void> | null;
+let publishAnswer: Record<string, unknown> | null;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
@@ -61,6 +64,8 @@ beforeEach(() => {
   posts = [post()];
   assets = [];
   failWith = null;
+  hold = null;
+  publishAnswer = null;
   telegram = { botConfigured: true, news: null, discussion: null, candidates: [] };
   landing = { configured: true, url: 'https://landing.example', activeDirName: null, releases: [] };
   store.dispatch(promoApi.util.resetApiState());
@@ -75,7 +80,12 @@ beforeEach(() => {
 
         sent.push({ method: request.method, path, body });
 
+        if (hold && /(publish-now|test)$/.test(path)) await hold;
+
         if (failWith && failWith.path.test(path)) return json({ message: failWith.message }, 400);
+
+        if (path.endsWith('/test')) return new Response(null, { status: 204 });
+        if (path.endsWith('/publish-now')) return json(publishAnswer ?? post({ status: 'published', externalUrl: 'https://t.me/c/4423121675/5' }));
 
         return request.method === 'DELETE' ? new Response(null, { status: 204 }) : json(post({ ...(body as object), status: path.endsWith('/approve') ? 'approved' : 'draft' }));
       }
@@ -358,17 +368,111 @@ describe('PromoPage: Telegram', () => {
 });
 
 describe('PromoPage: publishing', () => {
-  it('publishes an approved Telegram post now, and shows the refusal', async () => {
+  const confirm = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: 'Опубликовать сейчас' }));
+
+    return within(await screen.findByRole('dialog'));
+  };
+
+  it('asks before publishing, and says where the post goes, when, and that it cannot be taken back', async () => {
+    const user = userEvent.setup();
+    telegram = { botConfigured: true, news: { role: 'news', chatId: '-100', title: 'NTLSTL · Proto 450', username: null }, discussion: null, candidates: [] };
+    posts = [post({ status: 'approved', scheduledAt: iso(86_400_000), assetIds: [1], announceInGroup: true })];
+    renderPage('posts');
+
+    const dialog = await confirm(user);
+
+    expect(dialog.getByText(/«Самопереворот» уйдёт в канал «NTLSTL · Proto 450» сразу, не дожидаясь/)).toBeTruthy();
+    expect(dialog.getByText(/Отозвать пост из bridge нельзя/)).toBeTruthy();
+    expect(dialog.getByText(/загрузка видео может занять несколько минут/)).toBeTruthy();
+    expect(dialog.getByText(/В группу обсуждений уйдёт анонс/)).toBeTruthy();
+    // nothing is sent until the owner confirms
+    expect(sent).toEqual([]);
+  });
+
+  it('sends nothing when the owner cancels', async () => {
     const user = userEvent.setup();
     posts = [post({ status: 'approved' })];
     renderPage('posts');
 
-    await user.click(await screen.findByRole('button', { name: 'Опубликовать сейчас' }));
+    const dialog = await confirm(user);
+
+    await user.click(dialog.getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([]);
+  });
+
+  it('publishes an approved Telegram post after the confirmation, and shows the refusal', async () => {
+    const user = userEvent.setup();
+    posts = [post({ status: 'approved' })];
+    renderPage('posts');
+
+    await user.click((await confirm(user)).getByRole('button', { name: 'Опубликовать' }));
     await waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ method: 'POST', path: 'promo/posts/1/publish-now' })));
+    expect(await screen.findByText(/Пост опубликован: https:\/\/t\.me\/c\/4423121675\/5/)).toBeTruthy();
 
     failWith = { path: /publish-now$/, message: 'Канал новостей не привязан (Промо → Обзор → Telegram)' };
-    await user.click(await screen.findByRole('button', { name: 'Опубликовать сейчас' }));
+    await user.click((await confirm(user)).getByRole('button', { name: 'Опубликовать' }));
     expect(await screen.findByText(/Канал новостей не привязан/)).toBeTruthy();
+  });
+
+  it('shows the reason when the server answers 200 but Telegram refused (the post is «ошибка»)', async () => {
+    const user = userEvent.setup();
+    posts = [post({ status: 'approved' })];
+    publishAnswer = post({ status: 'failed', error: 'Telegram: Forbidden: bot was kicked' });
+    renderPage('posts');
+
+    await user.click((await confirm(user)).getByRole('button', { name: 'Опубликовать' }));
+
+    expect(await screen.findByText('Telegram: Forbidden: bot was kicked')).toBeTruthy();
+    expect(screen.queryByText(/Пост опубликован/)).toBeNull();
+  });
+
+  it('shows that the post is being sent, with the buttons locked, until Telegram answers', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    posts = [post({ status: 'approved' })];
+    renderPage('posts');
+
+    await user.click((await confirm(user)).getByRole('button', { name: 'Опубликовать' }));
+
+    const status = await screen.findByRole('status');
+
+    expect(status.textContent).toMatch(/Отправляется в Telegram… Видео может грузиться до 5 минут/);
+    expect(screen.getByRole('button', { name: 'Тест мне' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Удалить' }).hasAttribute('disabled')).toBe(true);
+
+    release();
+    expect(await screen.findByText(/Пост опубликован/)).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('shows the same while a test goes to the owner, and then says it was sent', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderPage('posts');
+
+    await user.click(await screen.findByRole('button', { name: 'Тест мне' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/Отправляю тест вам в личный чат/);
+
+    release();
+    expect(await screen.findByText(/Тест отправлен вам в личный чат/)).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('shows a post that the scheduler is sending as being sent, with no click needed', async () => {
+    posts = [post({ status: 'publishing' })];
+    renderPage('posts');
+
+    expect((await screen.findByRole('status')).textContent).toMatch(/Отправляется в Telegram/);
   });
 
   it('does not offer to publish a draft, or a post of another channel, but offers a test to Telegram posts', async () => {

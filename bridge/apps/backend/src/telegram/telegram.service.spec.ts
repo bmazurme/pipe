@@ -157,7 +157,12 @@ describe('TelegramService', () => {
       jest.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('down'));
       await expect(
         make({ TELEGRAM_BOT_TOKEN: 'T' }).request('getMe', {}),
-      ).resolves.toEqual({ ok: false, reason: 'нет связи с Telegram: down' });
+      ).resolves.toEqual({
+        ok: false,
+        reason: 'нет связи с Telegram: down',
+        // no answer came back: the request may still have been carried out
+        uncertain: true,
+      });
     });
 
     it('uploads a FormData as it is, without a JSON content type', async () => {

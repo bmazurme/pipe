@@ -64,6 +64,10 @@ interface Message {
 }
 
 const fail = (message: string) => new BadRequestException(message);
+
+// A file goes to Telegram through the VPN tunnel at whatever speed it has that minute (an 11 MB video took 77 s on 2026-11-14), so the
+// upload gets generous time.
+const UPLOAD_TIMEOUT_MS = 300_000;
 const asTarget = (row: PromoTelegramTarget | null): TargetView | null =>
   row
     ? {
@@ -353,10 +357,18 @@ export class PromoTelegramService {
     const response = await this.telegram.request<T>(
       method,
       body,
-      body instanceof FormData ? 120_000 : undefined,
+      body instanceof FormData ? UPLOAD_TIMEOUT_MS : undefined,
     );
 
     if (response.ok) return response.result;
+
+    // No answer to a send: Telegram may have posted it all the same. Say so, so the owner looks at the channel before publishing again
+    // (a second publish would be a duplicate).
+    if (response.uncertain && method.startsWith('send')) {
+      throw fail(
+        `Telegram не подтвердил отправку (${response.reason}). Пост мог выйти: проверьте канал, прежде чем публиковать снова`,
+      );
+    }
 
     throw fail(
       hint ? `${hint} (${response.reason})` : `Telegram: ${response.reason}`,

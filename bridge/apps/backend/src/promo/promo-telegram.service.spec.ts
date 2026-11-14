@@ -4,12 +4,18 @@ import type { PromoPost } from './entities/promo-post.entity';
 import type { PromoTelegramTarget } from './entities/promo-telegram-target.entity';
 import { PromoTelegramService } from './promo-telegram.service';
 
-type Call = { method: string; body: Record<string, unknown> | FormData };
+type Call = {
+  method: string;
+  body: Record<string, unknown> | FormData;
+  timeoutMs?: number;
+};
 
 // Telegram as the tests want it: answers per method, and every call recorded.
 function fakeTelegram(
   answers: Record<string, unknown>,
   failures: Record<string, string> = {},
+  // methods Telegram never answers (a timeout): the request may still have gone through
+  noAnswer: string[] = [],
 ) {
   const calls: Call[] = [];
 
@@ -17,22 +23,32 @@ function fakeTelegram(
     calls,
     isConfigured: () => true,
     chatId: () => '42',
-    request: jest.fn(async (method: string, body: Call['body']) => {
-      calls.push({ method, body });
+    request: jest.fn(
+      async (method: string, body: Call['body'], timeoutMs?: number) => {
+        calls.push({ method, body, timeoutMs });
 
-      if (failures[method])
-        return { ok: false as const, reason: failures[method] };
+        if (noAnswer.includes(method))
+          return {
+            ok: false as const,
+            reason:
+              'нет связи с Telegram: The operation was aborted due to timeout',
+            uncertain: true,
+          };
 
-      const answer = answers[method];
+        if (failures[method])
+          return { ok: false as const, reason: failures[method] };
 
-      return {
-        ok: true as const,
-        result:
-          typeof answer === 'function'
-            ? (answer as (b: Call['body']) => unknown)(body)
-            : answer,
-      };
-    }),
+        const answer = answers[method];
+
+        return {
+          ok: true as const,
+          result:
+            typeof answer === 'function'
+              ? (answer as (b: Call['body']) => unknown)(body)
+              : answer,
+        };
+      },
+    ),
   };
 }
 
@@ -283,6 +299,61 @@ describe('PromoTelegramService.publish', () => {
     expect(form.get('caption')).toBe('<b>Привет</b>\n\nHello');
     expect(form.get('parse_mode')).toBe('HTML');
     expect((form.get('video') as File).name).toBe('N4.mp4');
+  });
+
+  it('gives an upload five minutes, not two', async () => {
+    const tg = fakeTelegram({ sendVideo: { message_id: 8 } });
+    const { service } = setup(
+      tg,
+      [target()],
+      [
+        {
+          id: 5,
+          originalName: 'N4.mp4',
+          mime: 'video/mp4',
+          size: 1000,
+          storedName: 'x.mp4',
+        },
+      ],
+    );
+
+    await service.publish(post({ assetIds: [5] }));
+
+    expect(tg.calls[0].timeoutMs).toBe(300_000);
+  });
+
+  it('says the post may have gone out when Telegram does not answer a send, so nobody publishes it twice', async () => {
+    const { service } = setup(
+      fakeTelegram({}, {}, ['sendVideo']),
+      [target()],
+      [
+        {
+          id: 5,
+          originalName: 'N4.mp4',
+          mime: 'video/mp4',
+          size: 1000,
+          storedName: 'x.mp4',
+        },
+      ],
+    );
+
+    await expect(service.publish(post({ assetIds: [5] }))).rejects.toThrow(
+      /Пост мог выйти: проверьте канал/,
+    );
+  });
+
+  it('keeps the plain reason when Telegram answered no, or a read got no answer', async () => {
+    await expect(
+      setup(fakeTelegram({}, { sendMessage: 'Forbidden: bot was kicked' }), [
+        target(),
+      ]).service.publish(post()),
+    ).rejects.toThrow(/^Telegram: Forbidden: bot was kicked$/);
+    await expect(
+      setup(fakeTelegram({}, {}, ['getChat'])).service.bind(
+        'news',
+        '@ntlstl_news',
+      ),
+    ).rejects.not.toThrow(/мог выйти/);
   });
 
   it('sends several files as an album with the caption on the first', async () => {
