@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Puts a static landing page into the `landing_site` volume that Caddy serves for LANDING_HOST (Caddyfile).
+# Puts a static landing page into the `landing_site` volume that Caddy serves for LANDING_HOST (Caddyfile) — the same thing
+# bridge's «Промо → Лендинг» page does from a zip; this is the way from a terminal.
 # Run it from the workstation that has the page; it needs ssh to white and nothing else — the page is not in git or in an image.
 #
 #   infra/bridge-pi/deploy-landing.sh /path/to/landing.html            # → index.html, plus every local file it references
@@ -45,8 +46,23 @@ done <<< "$refs"
 echo "publishing $(find "$STAGE" -type f | wc -l | tr -d ' ') files ($(du -sh "$STAGE" | cut -f1)) to $WHITE:$VOLUME"
 ( cd "$STAGE" && find . -type f | sort | sed 's/^\.\//  /' )
 
-# extract next to the live files, then swap: a visitor never sees a half-written site
+# The volume holds releases/<name>/ (one directory per version) and `current`, a symlink to the live one, which is what Caddy serves and
+# what the promo module in bridge manages too (Промо → Лендинг). A script release is written next to the others and the symlink is
+# moved onto it with one rename: a visitor never sees a half-written site, and the previous release stays for a way back.
 # (COPYFILE_DISABLE: macOS tar would otherwise add ._* AppleDouble files)
+REMOTE='set -e
+cd /site
+name="script-$(date -u +%Y%m%d%H%M%S)"
+mkdir -p releases ".new-$name"
+tar -x -C ".new-$name"
+mv ".new-$name" "releases/$name"
+ln -s "releases/$name" .current-new
+mv -T .current-new current
+# the old flat layout (index.html straight in the volume) is no longer served: remove it
+find /site -mindepth 1 -maxdepth 1 ! -name releases ! -name current ! -name ".*" -exec rm -rf {} +
+# keep the last five script releases
+ls -1d releases/script-* | sort -r | tail -n +6 | xargs -r rm -rf
+echo "live: $(readlink current)"'
 COPYFILE_DISABLE=1 tar -C "$STAGE" -cf - . | ssh -o BatchMode=yes "$WHITE" \
-  "docker volume create $VOLUME >/dev/null && docker run --rm -i -v $VOLUME:/site $IMAGE sh -c 'rm -rf /site/.new && mkdir /site/.new && tar -x -C /site/.new && find /site -mindepth 1 -maxdepth 1 ! -name .new -exec rm -rf {} + && mv /site/.new/* /site/ && rmdir /site/.new && ls /site'"
+  "docker volume create $VOLUME >/dev/null && docker run --rm -i -v $VOLUME:/site $IMAGE sh -c '$REMOTE'"
 echo "done. Served by Caddy once the stack with LANDING_HOST is deployed and DNS points at the board."

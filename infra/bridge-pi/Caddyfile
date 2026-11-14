@@ -19,12 +19,13 @@
 	}
 }
 
-# A static landing page (NTLSTL Proto 450). The files live in the `landing_site` volume and are put there by
-# deploy-landing.sh — the page is not part of any image, so publishing it never redeploys bridge. A node without the
-# volume's content (a failover board) serves a 404 for this host only; bridge itself is not affected.
+# A static landing page (NTLSTL Proto 450). The files live in the `landing_site` volume: releases/<name>/ and `current`, a symlink to
+# the live one. bridge's «Промо → Лендинг» page (or deploy-landing.sh) writes them — the page is not part of any image, so publishing it
+# never redeploys bridge. A failover board starts with an empty volume: bridge unpacks the last live release from its file store
+# on start; until then (or if it cannot) this host answers 404, bridge itself is not affected.
 {$LANDING_HOST} {
 	encode zstd gzip
-	root * /srv/landing
+	root * /srv/landing/current
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin

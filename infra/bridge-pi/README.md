@@ -43,16 +43,31 @@ cd ~/bridge-pi
 ## A static landing page (Caddy, `LANDING_HOST`)
 
 The same Caddy also serves one static site from the `landing_site` volume for `LANDING_HOST` (default
-`proto450.ntlstl.dev`, see the Caddyfile). The page is not in git or in an image: publishing or changing it is one
-command from the workstation that has it, and never redeploys bridge.
+`proto450.ntlstl.dev`, see the Caddyfile). The page is not in git or in an image: publishing or changing it never
+redeploys bridge.
+
+The volume holds `releases/<name>/` (one directory per version) and `current`, a symlink to the live one; Caddy serves
+`/srv/landing/current`. Two ways to publish, which share that layout:
+
+- **bridge → Промо → Лендинг** (the backend mounts the volume read-write at `LANDING_DIR=/app/landing`): upload a `.zip`
+  (`index.html` in its root, plus what it references), then «Включить». Going back to an earlier release is the same
+  button; the zip of every release stays in bridge's file store, so a board that took over in a failover unpacks the
+  last live release again at start.
+- **from a terminal**, one command from the workstation that has the page:
 
 ```bash
 infra/bridge-pi/deploy-landing.sh /path/to/landing.html     # → index.html + only the files the page itself references
 ```
 
+Both keep the last few releases and move `current` with one rename, so a visitor never sees a half-written site.
+Anything the old script put straight into the volume (`index.html` in the root) is moved to `releases/legacy` by bridge at start.
+
 The first time: add the A record (reg.ru) → the home address **before** the stack with the new Caddyfile is rolled
-out, or Let's Encrypt's failed attempts count against the rate limit (same rule as for bridge itself). A board that
-took over in a failover has an empty volume: the landing answers 404 there, bridge is unaffected.
+out, or Let's Encrypt's failed attempts count against the rate limit (same rule as for bridge itself).
+
+**Rolling out the `current` layout.** The Caddyfile now serves `/srv/landing/current`, so between Caddy picking up the new
+file and the new backend starting (it adopts the old flat site into `releases/legacy`), the landing answers 404 for up to a
+minute. If that matters, run `deploy-landing.sh` once right after the deploy.
 
 ## worker + VPN client (stack `bridgew`)
 

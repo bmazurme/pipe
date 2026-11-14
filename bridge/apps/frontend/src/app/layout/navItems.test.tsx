@@ -25,6 +25,7 @@ describe('the sidebar sections', () => {
       'time',
       'reports',
       'lab',
+      'promo',
       'inbox',
       'usage',
       'dashboard',

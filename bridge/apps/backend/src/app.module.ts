@@ -20,6 +20,7 @@ import { LoopModule } from './loop/loop.module';
 import { OauthModule } from './oauth/oauth.module';
 import { InboxModule } from './inbox/inbox.module';
 import { QuestionsModule } from './questions/questions.module';
+import { PromoModule } from './promo/promo.module';
 import { PurgeModule } from './purge/purge.module';
 import { ReportsReleaseModule } from './reports-release/reports-release.module';
 import { ReportsSettingsModule } from './reports-settings/reports-settings.module';
@@ -62,6 +63,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     LinksModule,
     LoopModule,
     OauthModule,
+    PromoModule,
     PurgeModule,
     QuestionsModule,
     InboxModule,

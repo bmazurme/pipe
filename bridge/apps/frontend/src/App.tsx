@@ -72,6 +72,9 @@ const VpnPage = lazy(() =>
 const LabPage = lazy(() =>
   import('./pages/LabPage').then((m) => ({ default: m.LabPage })),
 );
+const PromoPage = lazy(() =>
+  import('./pages/PromoPage').then((m) => ({ default: m.PromoPage })),
+);
 const RagPage = lazy(() =>
   import('./pages/RagPage').then((m) => ({ default: m.RagPage })),
 );
@@ -150,6 +153,14 @@ export function App() {
                   }
                 />
                 <Route path="/lab" element={<LabPage />} />
+                <Route
+                  path="/promo"
+                  element={
+                    <OwnerOnlyPage title="Промо">
+                      <PromoPage />
+                    </OwnerOnlyPage>
+                  }
+                />
                 <Route path="/rag" element={<RagPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
