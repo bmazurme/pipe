@@ -11,6 +11,7 @@ export const CHANNEL_LABEL: Record<PromoChannel, string> = {
 export const STATUS_LABEL: Record<PromoPostStatus, string> = {
   draft: 'черновик',
   approved: 'согласован',
+  publishing: 'публикуется',
   published: 'опубликован',
   reminded: 'напоминание отправлено',
   failed: 'ошибка',
@@ -19,6 +20,7 @@ export const STATUS_LABEL: Record<PromoPostStatus, string> = {
 export const STATUS_THEME: Record<PromoPostStatus, 'normal' | 'info' | 'success' | 'warning' | 'danger'> = {
   draft: 'normal',
   approved: 'info',
+  publishing: 'info',
   published: 'success',
   reminded: 'warning',
   failed: 'danger',
@@ -34,6 +36,13 @@ export function captionLimitFor(channel: PromoChannel, hasMedia: boolean): numbe
   if (channel === 'telegram') return hasMedia ? 1024 : 4096;
 
   return channel === 'instagram' ? 2200 : 5000;
+}
+
+// Telegram counts a caption as the reader sees it: without the **bold** and `code` marks the editor accepts.
+export function captionLength(channel: PromoChannel, text: string): number {
+  if (channel !== 'telegram') return text.length;
+
+  return text.replace(/\*\*([^*\s](?:[^*\n]*?[^*\s])?)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1').length;
 }
 
 // The caption the channel receives: Russian, a blank line, the English paragraph.

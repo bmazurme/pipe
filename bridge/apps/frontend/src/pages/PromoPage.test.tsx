@@ -15,6 +15,7 @@ let posts: Record<string, unknown>[];
 let assets: Record<string, unknown>[];
 let landing: Record<string, unknown>;
 let failWith: { path: RegExp; message: string } | null;
+let telegram: Record<string, unknown>;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
@@ -33,6 +34,7 @@ const post = (over: Record<string, unknown> = {}) => ({
   error: null,
   publishedAt: null,
   utmCampaign: null,
+  announceInGroup: false,
   captionLength: 40,
   captionLimit: 4096,
   createdAt: iso(0),
@@ -59,6 +61,7 @@ beforeEach(() => {
   posts = [post()];
   assets = [];
   failWith = null;
+  telegram = { botConfigured: true, news: null, discussion: null, candidates: [] };
   landing = { configured: true, url: 'https://landing.example', activeDirName: null, releases: [] };
   store.dispatch(promoApi.util.resetApiState());
   vi.stubGlobal(
@@ -85,6 +88,7 @@ beforeEach(() => {
             { channel: 'instagram', autoPublish: false, ready: false, note: 'Пока только напоминания; автопубликация после аудита API', counts: counts(), next: null },
           ],
           landing: { configured: true, url: 'https://landing.example', activeDirName: 'legacy', releases: 0 },
+          telegram,
         });
       }
 
@@ -282,5 +286,131 @@ describe('PromoPage: landing', () => {
 
     expect(await screen.findByText('В корне архива нет index.html')).toBeTruthy();
     expect(sent).toContainEqual({ method: 'POST', path: 'promo/landing/releases', body: 'multipart' });
+  });
+});
+
+describe('PromoPage: Telegram', () => {
+  const candidate = (over: Record<string, unknown> = {}) => ({ chatId: '-1001', type: 'channel', title: 'NTLSTL news', username: null, botStatus: 'administrator', roles: ['news'], ...over });
+
+  it('offers the chats the bot has seen, per role, and binds one', async () => {
+    const user = userEvent.setup();
+    telegram = {
+      botConfigured: true,
+      news: null,
+      discussion: null,
+      candidates: [candidate(), candidate({ chatId: '-1002', type: 'supergroup', title: 'NTLSTL', roles: ['discussion'], botStatus: null })],
+    };
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Канал и группа' }));
+
+    const news = within(screen.getByRole('region', { name: 'Канал новостей' }));
+    const group = within(screen.getByRole('region', { name: 'Группа обсуждений' }));
+
+    // a channel is offered for the news only, a group for the discussion only
+    expect(news.getByText('NTLSTL news')).toBeTruthy();
+    expect(news.queryByText('NTLSTL')).toBeNull();
+    expect(group.getByText('NTLSTL')).toBeTruthy();
+
+    await user.click(news.getByRole('button', { name: 'Привязать' }));
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'promo/telegram/targets/news', body: { chat: '-1001' } }));
+  });
+
+  it('binds by name, and shows why Telegram refused', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Канал и группа' }));
+
+    failWith = { path: /targets\/discussion$/, message: 'chat not found' };
+    await user.type(screen.getByLabelText('Чат для роли «Группа обсуждений»'), '@nobody_here');
+    await user.click(within(screen.getByRole('region', { name: 'Группа обсуждений' })).getByRole('button', { name: 'Привязать по имени' }));
+
+    expect(await screen.findByText('chat not found')).toBeTruthy();
+    expect(sent).toContainEqual({ method: 'POST', path: 'promo/telegram/targets/discussion', body: { chat: '@nobody_here' } });
+  });
+
+  it('shows a bound channel and unbinds it', async () => {
+    const user = userEvent.setup();
+    telegram = { botConfigured: true, news: { role: 'news', chatId: '-1001', title: 'NTLSTL news', username: 'ntlstl_news' }, discussion: null, candidates: [] };
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Канал и группа' }));
+
+    const news = within(screen.getByRole('region', { name: 'Канал новостей' }));
+
+    expect(news.getByText('привязан')).toBeTruthy();
+    expect(news.getByText('NTLSTL news (@ntlstl_news)')).toBeTruthy();
+
+    await user.click(news.getByRole('button', { name: 'Отвязать' }));
+    await waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ method: 'DELETE', path: 'promo/telegram/targets/news' })));
+  });
+
+  it('warns that nothing can be bound without the bot', async () => {
+    const user = userEvent.setup();
+
+    telegram = { botConfigured: false, news: null, discussion: null, candidates: [] };
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Канал и группа' }));
+
+    expect(screen.getByText(/Бот не настроен на этом bridge/)).toBeTruthy();
+  });
+});
+
+describe('PromoPage: publishing', () => {
+  it('publishes an approved Telegram post now, and shows the refusal', async () => {
+    const user = userEvent.setup();
+    posts = [post({ status: 'approved' })];
+    renderPage('posts');
+
+    await user.click(await screen.findByRole('button', { name: 'Опубликовать сейчас' }));
+    await waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ method: 'POST', path: 'promo/posts/1/publish-now' })));
+
+    failWith = { path: /publish-now$/, message: 'Канал новостей не привязан (Промо → Обзор → Telegram)' };
+    await user.click(await screen.findByRole('button', { name: 'Опубликовать сейчас' }));
+    expect(await screen.findByText(/Канал новостей не привязан/)).toBeTruthy();
+  });
+
+  it('does not offer to publish a draft, or a post of another channel, but offers a test to Telegram posts', async () => {
+    posts = [post({ id: 1, title: 'Черновик' }), post({ id: 2, title: 'Инста', channel: 'instagram', status: 'approved', mode: 'reminder' })];
+    renderPage('posts');
+
+    expect(await screen.findByText('Черновик')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Опубликовать сейчас' })).toBeNull();
+    // one test button: the Telegram draft only
+    expect(screen.getAllByRole('button', { name: 'Тест мне' })).toHaveLength(1);
+  });
+
+  it('sends the test to the owner and says so', async () => {
+    const user = userEvent.setup();
+    renderPage('posts');
+
+    await user.click(await screen.findByRole('button', { name: 'Тест мне' }));
+    await waitFor(() => expect(sent).toContainEqual(expect.objectContaining({ method: 'POST', path: 'promo/posts/1/test' })));
+    expect(await screen.findByText(/Тест отправлен вам в личный чат/)).toBeTruthy();
+  });
+
+  it('shows a post being sent as frozen', async () => {
+    posts = [post({ status: 'publishing' })];
+    renderPage('posts');
+
+    expect(await screen.findByText('публикуется')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Опубликовать сейчас' })).toBeNull();
+  });
+
+  it('counts a Telegram caption without the bold marks, and sends the announce switch', async () => {
+    const user = userEvent.setup();
+    renderPage('posts');
+
+    await user.click(await screen.findByRole('button', { name: /Новый пост/ }));
+    await user.type(screen.getByLabelText('Название'), 'А');
+    await user.type(screen.getByLabelText('Текст (русский)'), '**Привет**');
+    expect(screen.getByText(/6 \/ 4096 знаков/)).toBeTruthy();
+
+    await user.click(screen.getByRole('checkbox', { name: /Анонс в группу обсуждений/ }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => expect(sent.find((s) => s.path === 'promo/posts')?.body).toMatchObject({ textRu: '**Привет**', announceInGroup: true }));
   });
 });

@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 
-import { TelegramService } from '../telegram/telegram.service';
 import { PromoPost } from './entities/promo-post.entity';
 import {
   PROMO_CHANNELS,
@@ -12,6 +10,10 @@ import {
   type PromoPostStatus,
 } from './promo-limits';
 import { PromoLandingService } from './promo-landing.service';
+import {
+  type TelegramState,
+  PromoTelegramService,
+} from './promo-telegram.service';
 
 export interface ChannelOverview {
   channel: PromoChannel;
@@ -32,6 +34,8 @@ export interface PromoOverview {
     activeDirName: string | null;
     releases: number;
   };
+  // Where Telegram posts go: the bound channel and group (and the chats the bot has seen, for binding more).
+  telegram: TelegramState;
 }
 
 @Injectable()
@@ -40,8 +44,7 @@ export class PromoOverviewService {
     @InjectRepository(PromoPost)
     private readonly posts: Repository<PromoPost>,
     private readonly landing: PromoLandingService,
-    private readonly telegram: TelegramService,
-    private readonly config: ConfigService,
+    private readonly promoTelegram: PromoTelegramService,
   ) {}
 
   async overview(): Promise<PromoOverview> {
@@ -62,6 +65,7 @@ export class PromoOverviewService {
       order: { scheduledAt: 'ASC' },
     });
     const landing = await this.landing.state();
+    const telegram = await this.promoTelegram.state();
 
     return {
       channels: PROMO_CHANNELS.map((channel) => {
@@ -79,7 +83,7 @@ export class PromoOverviewService {
 
         return {
           channel,
-          ...this.readiness(channel),
+          ...this.readiness(channel, telegram),
           counts,
           next: next?.scheduledAt
             ? { id: next.id, title: next.title, scheduledAt: next.scheduledAt }
@@ -92,27 +96,23 @@ export class PromoOverviewService {
         activeDirName: landing.activeDirName,
         releases: landing.releases.length,
       },
+      telegram,
     };
   }
 
   private readiness(
     channel: PromoChannel,
+    telegram: TelegramState,
   ): Pick<ChannelOverview, 'autoPublish' | 'ready' | 'note'> {
     if (channel === 'telegram') {
-      const bot = this.telegram.isConfigured();
-      const target = Boolean(
-        this.config.get<string>('PROMO_TELEGRAM_CHANNEL_ID'),
-      );
-
       return {
-        // The publisher itself is stage 2; until then a Telegram post is prepared here and posted by hand.
-        autoPublish: false,
-        ready: bot && target,
-        note: !bot
+        autoPublish: true,
+        ready: telegram.botConfigured && telegram.news !== null,
+        note: !telegram.botConfigured
           ? 'Не настроен бот (TELEGRAM_BOT_TOKEN)'
-          : !target
-            ? 'Не задан канал (PROMO_TELEGRAM_CHANNEL_ID)'
-            : 'Готов; автопубликация появится на следующем этапе',
+          : !telegram.news
+            ? 'Канал новостей не привязан'
+            : `Публикует в «${telegram.news.title ?? telegram.news.chatId}»${telegram.discussion ? `, обсуждение в «${telegram.discussion.title ?? telegram.discussion.chatId}»` : ''}`,
       };
     }
 

@@ -1,3 +1,5 @@
+import { visibleText } from './telegram-format';
+
 // What each channel accepts. A post is kept as two texts (Russian, then English) because the channel is bilingual; the channel
 // itself gets them joined into one caption.
 export const PROMO_CHANNELS = ['telegram', 'youtube', 'instagram'] as const;
@@ -6,6 +8,8 @@ export type PromoChannel = (typeof PROMO_CHANNELS)[number];
 export const PROMO_POST_STATUSES = [
   'draft',
   'approved',
+  // being sent right now: a post is claimed by one sender, so the tick and «опубликовать сейчас» never send it twice
+  'publishing',
   'published',
   'reminded',
   'failed',
@@ -52,6 +56,11 @@ export function joinCaption(textRu: string, textEn: string): string {
   return `${ru}\n\n${en}`;
 }
 
+// Telegram counts the caption as the reader sees it, without the **bold** and `code` marks the editor accepts.
+export function captionLength(channel: PromoChannel, text: string): number {
+  return channel === 'telegram' ? visibleText(text).length : text.length;
+}
+
 // Returns why the post cannot go out as it is, or null. Counted in UTF-16 code units, like Telegram counts them.
 export function captionProblem(
   channel: PromoChannel,
@@ -66,8 +75,10 @@ export function captionProblem(
 
   const { limit, what } = captionLimit(channel, hasMedia);
 
-  if (text.length > limit) {
-    return `Текст длиннее лимита: ${text.length} из ${limit} знаков (${what})`;
+  const length = captionLength(channel, text);
+
+  if (length > limit) {
+    return `Текст длиннее лимита: ${length} из ${limit} знаков (${what})`;
   }
 
   if (channel === 'youtube' && title.trim().length > YOUTUBE_TITLE_LIMIT) {

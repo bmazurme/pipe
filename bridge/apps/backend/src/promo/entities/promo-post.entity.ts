@@ -46,6 +46,10 @@ export class PromoPost extends BaseEntity {
   @Column({ type: 'timestamp', nullable: true })
   publishedAt: Date | null;
 
+  // Telegram only: after the post goes to the channel, say so in the discussion group with a link to it.
+  @Column({ type: 'boolean', default: false })
+  announceInGroup: boolean;
+
   // utm_campaign for the links in this post, so the site can tell where a visit came from.
   @Column({ type: 'varchar', length: 64, nullable: true })
   utmCampaign: string | null;

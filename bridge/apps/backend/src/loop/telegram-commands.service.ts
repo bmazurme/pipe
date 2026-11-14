@@ -2,14 +2,19 @@ import { Injectable, Optional } from '@nestjs/common';
 
 import { BoardsService } from '../boards/boards.service';
 import { RouterService } from '../boards/router.service';
+import { TelegramChatsService } from '../telegram/telegram-chats.service';
+import type {
+  ObservedUpdate,
+  TelegramChatInfo,
+} from '../telegram/telegram-chats';
 import { TelegramService } from '../telegram/telegram.service';
 import { LoopControlService } from './loop-control.service';
 import { LoopService } from './loop.service';
 import { MergeService } from './merge.service';
 
-export interface TelegramUpdate {
+export interface TelegramUpdate extends ObservedUpdate {
   update_id?: number;
-  message?: { text?: string; chat?: { id?: number } };
+  message?: { text?: string; chat?: TelegramChatInfo };
   callback_query?: {
     id?: string;
     data?: string;
@@ -37,9 +42,13 @@ export class TelegramCommandsService {
     // Optional in tests that do not exercise it.
     @Optional() private readonly control?: LoopControlService,
     @Optional() private readonly router?: RouterService,
+    @Optional() private readonly chats?: TelegramChatsService,
   ) {}
 
   async handle(update: TelegramUpdate): Promise<void> {
+    // Which channels and groups the bot is in (for the promo bindings); a chat that is not the owner's is otherwise ignored below.
+    await this.chats?.observe(update);
+
     if (update.callback_query) {
       await this.handleCallback(update.callback_query);
 

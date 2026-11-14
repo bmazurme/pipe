@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Alert, Button, Card, Label, Skeleton, Text } from '@gravity-ui/uikit';
 import { Link } from 'react-router-dom';
 
 import { formatDateTime } from '../../shared/lib/formatRelativeTime';
 import { describeApiError, useGetPromoOverviewQuery, useListPromoPostsQuery } from '../../store/api';
 import styles from '../PromoPage.module.css';
+import { TelegramDialog } from './TelegramDialog';
 import { CHANNEL_LABEL, channelSummary, needsAttention, STATUS_LABEL, STATUS_THEME, upcoming } from './promoLabels';
 
 const POLL_MS = 60_000;
@@ -12,6 +14,7 @@ const POLL_MS = 60_000;
 export function OverviewTab({ onOpenTab }: { onOpenTab: (tab: string) => void }) {
   const overview = useGetPromoOverviewQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
   const posts = useListPromoPostsQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
+  const [telegramOpen, setTelegramOpen] = useState(false);
 
   if (overview.isLoading) return <Skeleton style={{ height: 160 }} />;
 
@@ -19,7 +22,7 @@ export function OverviewTab({ onOpenTab }: { onOpenTab: (tab: string) => void })
     return <Alert theme="danger" view="filled" title="Не удалось загрузить обзор" message={describeApiError(overview.error)} />;
   }
 
-  const { channels, landing } = overview.data;
+  const { channels, landing, telegram } = overview.data;
   const coming = upcoming(posts.data ?? []).slice(0, 5);
   const attention = needsAttention(posts.data ?? []);
 
@@ -59,6 +62,18 @@ export function OverviewTab({ onOpenTab }: { onOpenTab: (tab: string) => void })
               {channel.note}
             </Text>
             <Text variant="body-1">{channelSummary(channel)}</Text>
+            {channel.channel === 'telegram' && (
+              <div className={styles.actions}>
+                <Button view="outlined" size="m" onClick={() => setTelegramOpen(true)}>
+                  Канал и группа
+                </Button>
+                {telegram.discussion && (
+                  <Label theme="success" size="s">
+                    группа: {telegram.discussion.title ?? telegram.discussion.chatId}
+                  </Label>
+                )}
+              </div>
+            )}
             {channel.next ? (
               <Text variant="body-1" color="secondary">
                 Следующий: «{channel.next.title}», {formatDateTime(channel.next.scheduledAt)}
@@ -130,6 +145,8 @@ export function OverviewTab({ onOpenTab }: { onOpenTab: (tab: string) => void })
           </ul>
         )}
       </Card>
+
+      {telegramOpen && <TelegramDialog state={telegram} onClose={() => setTelegramOpen(false)} />}
 
       <Text variant="caption-2" color="secondary">
         Материалы для постов лежат в exp2/proto-450/promotion (telegram.md). <Link to="/dashboard">Дашборд инфраструктуры</Link>

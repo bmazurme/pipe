@@ -128,4 +128,66 @@ describe('TelegramService', () => {
       text: 'ok',
     });
   });
+
+  describe('request()', () => {
+    it("returns Telegram's own reason when it refuses", async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          ok: false,
+          description: 'Bad Request: chat not found',
+        }),
+      } as Response);
+
+      await expect(
+        make({ TELEGRAM_BOT_TOKEN: 'T' }).request('getChat', { chat_id: '@x' }),
+      ).resolves.toEqual({
+        ok: false,
+        reason: 'Bad Request: chat not found',
+      });
+    });
+
+    it('says why when the bot is not configured or the network is down', async () => {
+      await expect(make({}).request('getMe', {})).resolves.toMatchObject({
+        ok: false,
+        reason: expect.stringContaining('TELEGRAM_BOT_TOKEN'),
+      });
+
+      jest.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('down'));
+      await expect(
+        make({ TELEGRAM_BOT_TOKEN: 'T' }).request('getMe', {}),
+      ).resolves.toEqual({ ok: false, reason: 'нет связи с Telegram: down' });
+    });
+
+    it('uploads a FormData as it is, without a JSON content type', async () => {
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(telegramOk({ message_id: 5 }));
+      const form = new FormData();
+
+      form.append('chat_id', '-100');
+
+      await expect(
+        make({ TELEGRAM_BOT_TOKEN: 'T' }).request('sendPhoto', form),
+      ).resolves.toEqual({ ok: true, result: { message_id: 5 } });
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+
+      expect(init.body).toBe(form);
+      expect(init.headers).toBeUndefined();
+    });
+
+    it('keeps api() returning just the result, or null', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ description: 'x' }),
+      } as Response);
+
+      await expect(
+        make({ TELEGRAM_BOT_TOKEN: 'T' }).api('getMe', {}),
+      ).resolves.toBeNull();
+    });
+  });
 });

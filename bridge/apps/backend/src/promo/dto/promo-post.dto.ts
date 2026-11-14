@@ -1,6 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
 import {
   ArrayMaxSize,
+  IsBoolean,
   IsArray,
   IsDateString,
   IsIn,
@@ -53,6 +54,10 @@ export class CreatePromoPostDto {
   @IsOptional()
   @IsDateString()
   scheduledAt?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  announceInGroup?: boolean;
 
   @IsOptional()
   @Matches(/^[A-Za-z0-9_-]{1,64}$/, {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { PromoPost } from '../../store/api';
-import { captionLimitFor, fromLocalInput, joinCaption, needsAttention, toLocalInput, upcoming } from './promoLabels';
+import { captionLength, captionLimitFor, fromLocalInput, joinCaption, needsAttention, toLocalInput, upcoming } from './promoLabels';
 
 const post = (over: Partial<PromoPost>): PromoPost => ({
   id: 1,
@@ -17,6 +17,7 @@ const post = (over: Partial<PromoPost>): PromoPost => ({
   error: null,
   publishedAt: null,
   utmCampaign: null,
+  announceInGroup: false,
   captionLength: 1,
   captionLimit: 4096,
   createdAt: '2026-11-14T00:00:00Z',
@@ -30,6 +31,15 @@ describe('captionLimitFor', () => {
     expect(captionLimitFor('telegram', false)).toBe(4096);
     expect(captionLimitFor('instagram', true)).toBe(2200);
     expect(captionLimitFor('youtube', false)).toBe(5000);
+  });
+});
+
+describe('captionLength', () => {
+  it('counts a Telegram caption as the reader sees it, other channels as written', () => {
+    expect(captionLength('telegram', '**Привет** `мир`')).toBe(10);
+    expect(captionLength('instagram', '**Привет** `мир`')).toBe(16);
+    // a stray pair of stars is text, not a mark
+    expect(captionLength('telegram', '2 ** 3')).toBe(6);
   });
 });
 

@@ -6,6 +6,9 @@ import { AppLogService } from '../logs/app-log.service';
 
 const TELEGRAM_TIMEOUT_MS = 10_000;
 
+export type TelegramResult<T> =
+  { ok: true; result: T } | { ok: false; reason: string };
+
 export type InlineButton =
   { text: string; callback_data: string } | { text: string; url: string };
 // Telegram rejects a message over 4096 characters outright.
@@ -111,11 +114,25 @@ export class TelegramService {
     body: Record<string, unknown>,
     timeoutMs = TELEGRAM_TIMEOUT_MS,
   ): Promise<T | null> {
+    const response = await this.request<T>(method, body, timeoutMs);
+
+    return response.ok ? response.result : null;
+  }
+
+  // The same call, but a failure says why («Bad Request: chat not found»): the promo module shows that reason to the owner when
+  // binding a channel or posting. `body` may be a FormData (sendPhoto/sendVideo/sendMediaGroup upload the file itself).
+  async request<T = unknown>(
+    method: string,
+    body: Record<string, unknown> | FormData,
+    timeoutMs = TELEGRAM_TIMEOUT_MS,
+  ): Promise<TelegramResult<T>> {
     const token = this.botToken();
 
     if (!token) {
-      return null;
+      return { ok: false, reason: 'бот не настроен (TELEGRAM_BOT_TOKEN)' };
     }
+
+    const isForm = body instanceof FormData;
 
     try {
       // `dispatcher` is a Node/undici-specific fetch extension not in the
@@ -124,33 +141,42 @@ export class TelegramService {
         `https://api.telegram.org/bot${token}/${method}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          // A FormData sets its own multipart boundary header.
+          headers: isForm ? undefined : { 'Content-Type': 'application/json' },
+          body: isForm ? body : JSON.stringify(body),
           dispatcher: this.dispatcher(),
           signal: AbortSignal.timeout(timeoutMs),
         } as RequestInit,
       );
+      const data = (
+        typeof response.json === 'function'
+          ? await response.json().catch(() => ({}))
+          : {}
+      ) as { ok?: boolean; result?: T; description?: string };
 
       if (!response.ok) {
+        const reason = data.description ?? `HTTP ${response.status}`;
+
         this.logger.warn(`Telegram ${method} failed: HTTP ${response.status}`);
         this.logFailure(method, `HTTP ${response.status}`);
-        return null;
-      }
 
-      const data = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        result?: T;
-      };
+        return { ok: false, reason };
+      }
 
       // Some callers/tests only care about 2xx; a body without `ok` is
       // treated as success with an empty result.
-      return data.ok === false ? null : (data.result ?? (true as T));
+      if (data.ok === false) {
+        return { ok: false, reason: data.description ?? 'Telegram отказал' };
+      }
+
+      return { ok: true, result: data.result ?? (true as T) };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
 
       this.logger.warn(`Telegram ${method} failed: ${reason}`);
       this.logFailure(method, reason);
-      return null;
+
+      return { ok: false, reason: `нет связи с Telegram: ${reason}` };
     }
   }
 
