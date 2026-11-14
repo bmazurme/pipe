@@ -3,7 +3,7 @@ import { Alert, Button, Disclosure, Label, Loader, SegmentedRadioGroup, Switch, 
 
 import { usePeekFileMutation, usePeekJobResultMutation } from '../../store/api';
 import styles from '../WorkerPage.module.css';
-import { compareWithSource, isMarkdownFile, listResultFiles, readResultText, type ComparedFile, type ResultFile } from './resultFiles';
+import { compareWithSource, isMarkdownFile, lineDiff, listResultFiles, readResultText, readSourceText, type DiffLine, type ComparedFile, type ResultFile } from './resultFiles';
 
 // Loaded on first use: the markdown pipeline is large and most job dialogs never open a .md result.
 const MarkdownRenderer = lazy(() => import('@gravity-ui/aikit').then((module) => ({ default: module.MarkdownRenderer })));
@@ -27,6 +27,7 @@ export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSe
   const [onlyChanged, setOnlyChanged] = useState(true);
   const [peekJobResult] = usePeekJobResultMutation();
   const bytesRef = useRef<Uint8Array | null>(null);
+  const sourceRef = useRef<Uint8Array | null>(null);
   const requested = useRef(false);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState<(ResultFile | ComparedFile)[] | null>(null);
@@ -35,6 +36,8 @@ export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSe
   const [preview, setPreview] = useState<string | null>(null);
   // A .md result opens formatted (that is how it is read); the source stays one click away.
   const [showSource, setShowSource] = useState(false);
+  const [diff, setDiff] = useState<DiffLine[] | null>(null);
+  const [showWhole, setShowWhole] = useState(false);
 
   // Fetched once, on the first expansion — not on dialog open or on every job poll.
   const load = async () => {
@@ -50,6 +53,7 @@ export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSe
         // Any failure (gone, encrypted, not a zip) silently falls back to the plain list.
         try {
           const source = new Uint8Array(await (await peekFile(sourceFileId).unwrap()).arrayBuffer());
+          sourceRef.current = source;
           const diff = compareWithSource(bytes, source);
           result = diff.files;
           setDeleted(diff.deleted);
@@ -77,7 +81,14 @@ export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSe
   const handleSelect = (path: string) => {
     setSelected(path);
     setShowSource(false);
-    setPreview(bytesRef.current ? readResultText(bytesRef.current, path) : null);
+    setShowWhole(false);
+
+    const text = bytesRef.current ? readResultText(bytesRef.current, path) : null;
+    const modified = files?.some((file) => file.path === path && 'change' in file && file.change === 'modified');
+    const old = modified && text !== null && sourceRef.current ? readSourceText(sourceRef.current, path) : null;
+
+    setPreview(text);
+    setDiff(text !== null && old !== null ? lineDiff(old, text) : null);
   };
 
   const visibleFiles =
@@ -116,11 +127,33 @@ export function ResultFilesSection({ jobId, sourceFileId = null }: ResultFilesSe
             )}
           </Button>
         ))}
+        {selected !== null && preview !== null && diff !== null && (
+          <SegmentedRadioGroup
+            size="s"
+            value={showWhole ? 'whole' : 'diff'}
+            onUpdate={(value) => setShowWhole(value === 'whole')}
+            aria-label="Режим просмотра"
+          >
+            <SegmentedRadioGroup.Option value="diff">Изменения</SegmentedRadioGroup.Option>
+            <SegmentedRadioGroup.Option value="whole">Файл целиком</SegmentedRadioGroup.Option>
+          </SegmentedRadioGroup>
+        )}
         {selected !== null &&
           (preview === null ? (
             <Text variant="body-2" color="secondary">
               Не показать — скачайте результат
             </Text>
+          ) : diff !== null && !showWhole ? (
+            <pre aria-label={`Изменения ${selected}`} className={styles.resultPreview}>
+              {diff.map((line, index) => (
+                <div
+                  key={index}
+                  className={line.kind === '+' ? styles.diffAdded : line.kind === '-' ? styles.diffRemoved : undefined}
+                >
+                  {line.kind} {line.text}
+                </div>
+              ))}
+            </pre>
           ) : isMarkdownFile(selected) ? (
             <>
               <SegmentedRadioGroup

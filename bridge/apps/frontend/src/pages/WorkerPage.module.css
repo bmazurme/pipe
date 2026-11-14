@@ -662,6 +662,14 @@
   overflow: auto;
 }
 
+.diffAdded {
+  background: var(--g-color-base-positive-light);
+}
+
+.diffRemoved {
+  background: var(--g-color-base-danger-light);
+}
+
 .resultMarkdown {
   max-height: 420px;
   padding: 8px 12px;
