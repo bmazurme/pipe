@@ -83,3 +83,12 @@
   border: 1px solid var(--g-color-line-generic);
   border-radius: var(--g-border-radius-m);
 }
+
+.sending {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-info-light);
+}

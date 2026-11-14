@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Label, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Label, Loader, Select, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
 import { Plus } from '@gravity-ui/icons';
 
 import { formatDateTime } from '../../shared/lib/formatRelativeTime';
@@ -10,6 +10,7 @@ import {
   type PromoPost,
   useApprovePromoPostMutation,
   useDeletePromoPostMutation,
+  useGetPromoOverviewQuery,
   useListPromoAssetsQuery,
   useListPromoPostsQuery,
   useMarkPromoPostPublishedMutation,
@@ -24,8 +25,15 @@ import { CHANNEL_LABEL, CHANNELS, MODE_LABEL, STATUS_LABEL, STATUS_THEME } from 
 
 type Editing = PromoPost | 'new' | null;
 
+// A post being sent by hand: which one, and what for (a test to the owner, or the real thing to the channel).
+type Busy = { id: number; what: 'publish' | 'test' } | null;
+
+// Posts are polled while the tab is open: a post sent by the scheduler (not by a click here) turns from «публикуется» to «опубликован» by itself.
+const POLL_MS = 5_000;
+
 export function PostsTab() {
-  const posts = useListPromoPostsQuery();
+  const posts = useListPromoPostsQuery(undefined, { pollingInterval: POLL_MS, skipPollingIfUnfocused: true });
+  const overview = useGetPromoOverviewQuery();
   const assets = useListPromoAssetsQuery();
   const [approve] = useApprovePromoPostMutation();
   const [unapprove] = useUnapprovePromoPostMutation();
@@ -34,6 +42,8 @@ export function PostsTab() {
   const [publishNow] = usePublishPromoPostNowMutation();
   const [sendTest] = useTestPromoPostMutation();
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [confirming, setConfirming] = useState<PromoPost | null>(null);
   const [filter, setFilter] = useState<PromoChannel | 'all'>('all');
   const [editing, setEditing] = useState<Editing>(null);
   const [closing, setClosing] = useState<PromoPost | null>(null);
@@ -51,6 +61,30 @@ export function PostsTab() {
       setError(describeApiError(err));
     }
   };
+
+  // The request stays open until Telegram has taken the post (a video can take minutes), so the card shows that it is being sent.
+  const track = (id: number, what: 'publish' | 'test', action: () => Promise<unknown>) =>
+    run(async () => {
+      setBusy({ id, what });
+
+      try {
+        await action();
+      } finally {
+        setBusy(null);
+      }
+    });
+
+  const publish = (post: PromoPost) =>
+    track(post.id, 'publish', async () => {
+      const result = await publishNow(post.id).unwrap();
+
+      // The server answers 200 also when Telegram refused: the post is then «ошибка» with the reason.
+      if (result.status === 'failed') {
+        setError(result.error ?? 'Telegram не принял пост');
+      } else {
+        setNotice(result.externalUrl ? `Пост опубликован: ${result.externalUrl}` : 'Пост опубликован.');
+      }
+    });
 
   if (posts.isLoading) return <Skeleton style={{ height: 160 }} />;
 
@@ -90,6 +124,9 @@ export function PostsTab() {
       ) : (
         shown.map((post) => {
           const frozen = post.status === 'published' || post.status === 'reminded' || post.status === 'publishing';
+          const testing = busy?.id === post.id && busy.what === 'test';
+          const publishing = (busy?.id === post.id && busy.what === 'publish') || post.status === 'publishing';
+          const sending = testing || publishing;
 
           return (
             <Card key={post.id} view="outlined" className={styles.card}>
@@ -116,19 +153,29 @@ export function PostsTab() {
                 )}
               </Text>
               {post.error && <Alert theme="danger" view="filled" message={post.error} />}
+              {sending && (
+                <div className={styles.sending} role="status">
+                  <Loader size="s" />
+                  <Text variant="body-1">
+                    {testing
+                      ? 'Отправляю тест вам в личный чат…'
+                      : 'Отправляется в Telegram… Видео может грузиться до 5 минут. Это идёт на сервере: вкладку можно закрыть.'}
+                  </Text>
+                </div>
+              )}
               <div className={styles.actions}>
                 {!frozen && (
-                  <Button view="outlined" size="m" onClick={() => setEditing(post)}>
+                  <Button view="outlined" size="m" disabled={sending} onClick={() => setEditing(post)}>
                     Редактировать
                   </Button>
                 )}
                 {(post.status === 'draft' || post.status === 'failed') && (
-                  <Button view="action" size="m" onClick={() => void run(() => approve(post.id).unwrap())}>
+                  <Button view="action" size="m" disabled={sending} onClick={() => void run(() => approve(post.id).unwrap())}>
                     Согласовать
                   </Button>
                 )}
                 {post.channel === 'telegram' && post.status === 'approved' && (
-                  <Button view="action" size="m" onClick={() => void run(() => publishNow(post.id).unwrap())}>
+                  <Button view="action" size="m" loading={publishing} disabled={sending} onClick={() => setConfirming(post)}>
                     Опубликовать сейчас
                   </Button>
                 )}
@@ -136,16 +183,20 @@ export function PostsTab() {
                   <Button
                     view="outlined"
                     size="m"
-                    onClick={() => void run(async () => {
-                      await sendTest(post.id).unwrap();
-                      setNotice('Тест отправлен вам в личный чат с ботом.');
-                    })}
+                    loading={testing}
+                    disabled={sending}
+                    onClick={() =>
+                      void track(post.id, 'test', async () => {
+                        await sendTest(post.id).unwrap();
+                        setNotice('Тест отправлен вам в личный чат с ботом.');
+                      })
+                    }
                   >
                     Тест мне
                   </Button>
                 )}
                 {post.status === 'approved' && (
-                  <Button view="outlined" size="m" onClick={() => void run(() => unapprove(post.id).unwrap())}>
+                  <Button view="outlined" size="m" disabled={sending} onClick={() => void run(() => unapprove(post.id).unwrap())}>
                     В черновики
                   </Button>
                 )}
@@ -153,6 +204,7 @@ export function PostsTab() {
                   <Button
                     view="flat"
                     size="m"
+                    disabled={sending}
                     onClick={() => {
                       setLink('');
                       setClosing(post);
@@ -161,7 +213,7 @@ export function PostsTab() {
                     Отметить опубликованным
                   </Button>
                 )}
-                <Button view="flat-danger" size="m" onClick={() => setDeleting(post)}>
+                <Button view="flat-danger" size="m" disabled={sending} onClick={() => setDeleting(post)}>
                   Удалить
                 </Button>
               </div>
@@ -171,6 +223,38 @@ export function PostsTab() {
       )}
 
       {editing && <PostDialog post={editing === 'new' ? null : editing} assets={assets.data ?? []} onClose={() => setEditing(null)} />}
+
+      <Dialog open={Boolean(confirming)} onClose={() => setConfirming(null)} maxWidth="s" aria-labelledby="promo-confirm-title">
+        <Dialog.Header caption="Опубликовать сейчас?" id="promo-confirm-title" />
+        <Dialog.Body>
+          {confirming && (
+            <div className={styles.form}>
+              <Text variant="body-1">
+                «{confirming.title}» уйдёт в канал «{overview.data?.telegram.news?.title ?? 'новостей'}» сразу
+                {confirming.scheduledAt ? `, не дожидаясь ${formatDateTime(confirming.scheduledAt)}` : ''}.
+              </Text>
+              <Text variant="body-1" color="secondary">
+                Отозвать пост из bridge нельзя: удалить его можно только в самом Telegram.
+                {confirming.assetIds.length > 0 ? ' К посту прикреплены файлы, загрузка видео может занять несколько минут.' : ''}
+                {confirming.announceInGroup ? ' В группу обсуждений уйдёт анонс.' : ''}
+              </Text>
+            </div>
+          )}
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonCancel="Отмена"
+          textButtonApply="Опубликовать"
+          propsButtonApply={{ view: 'action' }}
+          onClickButtonCancel={() => setConfirming(null)}
+          onClickButtonApply={() => {
+            const target = confirming;
+
+            setConfirming(null);
+
+            if (target) void publish(target);
+          }}
+        />
+      </Dialog>
 
       <Dialog open={Boolean(closing)} onClose={() => setClosing(null)} maxWidth="s" aria-labelledby="promo-publish-title">
         <Dialog.Header caption="Пост опубликован" id="promo-publish-title" />

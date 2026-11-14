@@ -6,8 +6,10 @@ import { AppLogService } from '../logs/app-log.service';
 
 const TELEGRAM_TIMEOUT_MS = 10_000;
 
+// `uncertain`: no answer came back (a timeout, a dropped connection), so the request may still have been carried out — as opposed to
+// Telegram answering «no». A caller that sends something to a channel must not just try again.
 export type TelegramResult<T> =
-  { ok: true; result: T } | { ok: false; reason: string };
+  { ok: true; result: T } | { ok: false; reason: string; uncertain?: boolean };
 
 export type InlineButton =
   { text: string; callback_data: string } | { text: string; url: string };
@@ -176,7 +178,11 @@ export class TelegramService {
       this.logger.warn(`Telegram ${method} failed: ${reason}`);
       this.logFailure(method, reason);
 
-      return { ok: false, reason: `нет связи с Telegram: ${reason}` };
+      return {
+        ok: false,
+        reason: `нет связи с Telegram: ${reason}`,
+        uncertain: true,
+      };
     }
   }
 
