@@ -96,6 +96,11 @@ services:
       # network that holds only this backend and vpn-client) and receives updates by long polling — only one
       # consumer per bot may poll, so never run a second backend with the same token.
       TELEGRAM_PROXY_URL: http://vpn-client:1080
+      # The promo module: where the landing volume is mounted, the public address of the page, and the Telegram channel it posts to
+      # (the same bot as the alerts, which has to be an admin of that channel).
+      LANDING_DIR: /app/landing
+      LANDING_URL: https://${LANDING_HOST:-proto450.ntlstl.dev}
+      PROMO_TELEGRAM_CHANNEL_ID: ${PROMO_TELEGRAM_CHANNEL_ID:-}
       TELEGRAM_POLLING: 'true'
       # api.github.com answers slowly or not at all from here at times ("The operation was aborted due to timeout" in Improve runs, CI
       # checks, Lab): set GITHUB_PROXY_URL=http://vpn-client:1080 in ~/.pipe/bridge.env to send the calls to GitHub through the same
@@ -120,6 +125,9 @@ services:
         mode: ingress
     volumes:
       - bridge_uploads:/app/uploads
+      # The landing page (Промо → Лендинг): bridge unpacks uploaded releases here and moves `current` onto the live one;
+      # Caddy serves the same volume read-only. Both services are pinned to the bridge-primary board, so they share one volume.
+      - landing_site:/app/landing
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:3000/api/v1/health >/dev/null || exit 1']
       interval: 15s

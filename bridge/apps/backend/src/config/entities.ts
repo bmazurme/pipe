@@ -40,6 +40,9 @@ import { DayOff } from '../time/entities/day-off.entity';
 import { TimeReportEntry } from '../time/entities/time-report-entry.entity';
 import { User } from '../users/entities/user.entity';
 import { LinkAlert } from '../links/entities/link-alert.entity';
+import { PromoAsset } from '../promo/entities/promo-asset.entity';
+import { PromoLandingRelease } from '../promo/entities/promo-landing-release.entity';
+import { PromoPost } from '../promo/entities/promo-post.entity';
 import { LinkProbe } from '../links/entities/link-probe.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
 import { VpnProfileToken } from '../vpn/entities/vpn-profile-token.entity';
@@ -111,4 +114,7 @@ export const ENTITIES = [
   LabRun,
   LabDocumentChunk,
   RouterSettingsRow,
+  PromoPost,
+  PromoAsset,
+  PromoLandingRelease,
 ];

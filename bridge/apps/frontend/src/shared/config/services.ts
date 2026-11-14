@@ -12,6 +12,7 @@ import {
   Key,
   Lock,
   MagicWand,
+  Megaphone,
   Pulse,
   Rocket,
   Server,
@@ -198,6 +199,15 @@ export const SERVICES: ServiceLink[] = [
     icon: Flask,
     path: '/lab',
     group: 'work',
+  },
+  {
+    id: 'promo',
+    title: 'Промо',
+    description: 'Каналы проекта (Telegram, YouTube, Instagram) и лендинг: очередь постов, файлы, релизы сайта.',
+    icon: Megaphone,
+    path: '/promo',
+    group: 'work',
+    ownerOnly: true,
   },
   {
     id: 'rag',
