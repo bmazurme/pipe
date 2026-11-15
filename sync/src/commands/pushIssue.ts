@@ -52,7 +52,7 @@ export async function buildAndUploadIssueParcel(
   issue: GitlabIssue,
   branch: string,
   gitlabToken: string,
-  options: { strict?: boolean; dryRun?: boolean } = {},
+  options: { strict?: boolean; dryRun?: boolean; note?: string } = {},
 ): Promise<PushedIssueParcel | null> {
   const dictionary = loadOptionalDictionary(project.dictionary);
 
@@ -82,6 +82,17 @@ export async function buildAndUploadIssueParcel(
     createdAt: note.created_at,
     body: transform(note.body),
   }));
+  const gitlabCommentCount = issueComments.length;
+  // A private operator instruction: lives only in the parcel (never posted to GitLab), goes last so it wins.
+  const noteText = options.note?.trim() ?? '';
+  const hasNote = noteText.length > 0;
+  if (hasNote) {
+    issueComments.push({
+      author: 'operator note (sync-cli)',
+      createdAt: new Date().toISOString(),
+      body: transform(noteText),
+    });
+  }
 
   // Image refs come from the real markdown, not the anonymized one — a substitution could alter an /uploads/... path.
   const images = config.gitlab?.apiUrl
@@ -104,7 +115,10 @@ export async function buildAndUploadIssueParcel(
     ...files.map((f) => ({ source: f.relPath, content: f.content })),
     { source: 'issue title', content: issueTitle },
     { source: 'issue description', content: issueDescription },
-    ...issueComments.map((comment, index) => ({ source: `issue comment ${index + 1}`, content: comment.body })),
+    ...issueComments.map((comment, index) => ({
+      source: index < gitlabCommentCount ? `issue comment ${index + 1}` : 'operator note',
+      content: comment.body,
+    })),
   ]);
   if (leaks.length > 0) {
     log.warn(formatLeakFindings(leaks));
@@ -122,8 +136,9 @@ export async function buildAndUploadIssueParcel(
   if (options.dryRun) {
     log.info(`Dry run for issue #${issue.iid} (project ${issue.project_id}) — nothing will be uploaded.`);
     log.info(`Files: ${files.length}`);
-    log.info(`Comments: ${issueComments.length}`);
+    log.info(`Comments: ${gitlabCommentCount}`);
     log.info(`Images: ${images.length}`);
+    if (hasNote) log.info(`Note: yes (${noteText.length} chars)`);
     log.info(`Parcel: ${filename}`);
     log.info(shouldEncrypt ? 'Encrypted: yes' : 'Encrypted: no');
     logFilePreview(files, leaks.length);
@@ -169,7 +184,7 @@ export async function pushIssueCommand(
   name: string,
   projectId: string,
   iid: string,
-  options: { strict?: boolean; dryRun?: boolean } = {},
+  options: { strict?: boolean; dryRun?: boolean; note?: string } = {},
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);

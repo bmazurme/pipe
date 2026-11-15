@@ -301,3 +301,112 @@ describe('buildAndUploadIssueParcel — issue comments', () => {
     rmSync(projectPath, { recursive: true, force: true });
   });
 });
+
+describe('buildAndUploadIssueParcel — operator note', () => {
+  const gitlabConfig: SyncConfig = { ...config, gitlab: { apiUrl: 'https://gitlab.example.com/api/v4' } };
+
+  function mockFetch(notes: unknown[]): { uploaded: () => Buffer | undefined; calls: string[] } {
+    let uploadedBuffer: Buffer | undefined;
+    const calls: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url.includes('/issues/628/notes')) return new Response(JSON.stringify(notes), { status: 200 });
+      if (url.includes('/api/v1/storage')) {
+        const body = init?.body as unknown as { get(name: string): unknown };
+        uploadedBuffer = Buffer.from(await (body.get('file') as Blob).arrayBuffer());
+        return new Response(
+          JSON.stringify({ id: 1, originalName: 'x.zip', mimeType: 'application/zip', size: uploadedBuffer.length, createdAt: new Date().toISOString() }),
+          { status: 201 },
+        );
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch;
+    return { uploaded: () => uploadedBuffer, calls };
+  }
+
+  function makeDir(prefix: string): string {
+    const dir = mkdtempSync(path.join(tmpdir(), prefix));
+    writeFileSync(path.join(dir, 'a.ts'), 'export const a = 1;');
+    return dir;
+  }
+
+  it('appends the note as the last issueComments entry, anonymized, without touching GitLab', async () => {
+    const dir = makeDir('sync-cli-note-');
+    const dictionaryPath = path.join(dir, 'dict.json');
+    writeFileSync(dictionaryPath, JSON.stringify({ ClearingIdentifier: '{{ENTITY}}' }));
+    const fetchMock = mockFetch([
+      { id: 1, body: 'first', system: false, created_at: '2026-11-01T10:00:00Z', author: { name: 'qa' } },
+    ]);
+
+    const project = makeProject(dir, { dictionary: dictionaryPath, include: ['**/*.ts'] });
+    await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token', {
+      note: 'only change ClearingIdentifier parser',
+    });
+
+    const { manifest } = extractIssueArchive(fetchMock.uploaded()!);
+    const comments = manifest.issueComments!;
+    assert.equal(comments.length, 2);
+    assert.equal(comments[0]!.body, 'first');
+    assert.equal(comments[1]!.author, 'operator note (sync-cli)');
+    assert.equal(comments[1]!.body, 'only change {{ENTITY}} parser');
+    assert.equal(fetchMock.calls.some((c) => c.startsWith('POST') && c.includes('/notes')), false);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('ignores an empty note', async () => {
+    const dir = makeDir('sync-cli-note-empty-');
+    const fetchMock = mockFetch([]);
+    const project = makeProject(dir, { include: ['**/*.ts'] });
+    await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token', { note: '  ' });
+    const { manifest } = extractIssueArchive(fetchMock.uploaded()!);
+    assert.equal('issueComments' in manifest, false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('--strict aborts on a leak in the note', async () => {
+    const dir = makeDir('sync-cli-note-leak-');
+    const fetchMock = mockFetch([]);
+    const project = makeProject(dir, { include: ['**/*.ts'] });
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+    try {
+      await assert.rejects(
+        buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token', {
+          strict: true,
+          note: 'ping oncall@acme-corp.example',
+        }),
+        /--strict/,
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.ok(warnings.some((line) => line.includes('operator note')));
+    assert.equal(fetchMock.uploaded(), undefined);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('--dry-run reports the note and uploads nothing', async () => {
+    const dir = makeDir('sync-cli-note-dry-');
+    const fetchMock = mockFetch([]);
+    const project = makeProject(dir, { include: ['**/*.ts'] });
+    const infos: string[] = [];
+    const originalLog = console.log;
+    const originalInfo = console.info;
+    console.log = console.info = (...args: unknown[]) => void infos.push(args.map(String).join(' '));
+    try {
+      const result = await buildAndUploadIssueParcel(project, gitlabConfig, issue, 'task/173-628', 'gitlab-token', {
+        dryRun: true,
+        note: 'abc',
+      });
+      assert.equal(result, null);
+    } finally {
+      console.log = originalLog;
+      console.info = originalInfo;
+    }
+    assert.ok(infos.some((l) => l.includes('Note: yes (3 chars)')));
+    assert.equal(fetchMock.uploaded(), undefined);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

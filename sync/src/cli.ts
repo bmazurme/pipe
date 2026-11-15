@@ -93,6 +93,7 @@ program
   )
   .option('--strict', 'abort instead of just warning when the leak scan finds something')
   .option('--dry-run', 'show files, parcel name, encryption and leak findings without uploading')
+  .option('--note <text>', 'private instruction for the agent, carried in the parcel only (not posted to GitLab)')
   .action((name, projectId, iid, options) => pushIssueCommand(name, projectId, iid, options));
 
 program
