@@ -1237,6 +1237,44 @@ describe('WorkerService', () => {
       });
     });
 
+    describe('run again a finished job', () => {
+      const finished = (over: Record<string, unknown>) => ({
+        id: 5,
+        userId: 7,
+        sourceFileId: 1,
+        model: JobModel.Opus,
+        claudeCredentialId: null,
+        status: JobStatus.Succeeded,
+        ...over,
+      });
+
+      it('queues a new job for a succeeded job with a kept source', async () => {
+        const original = finished({});
+        repository.findOne!.mockResolvedValue(original);
+
+        const retried = await service.retry(5, 7);
+
+        expect(retried).toMatchObject({ status: JobStatus.Queued });
+        expect(original.status).toBe(JobStatus.Succeeded);
+      });
+
+      it('refuses a succeeded job whose source was consumed', async () => {
+        repository.findOne!.mockResolvedValue(finished({ sourceFileId: null }));
+
+        await expect(service.retry(5, 7)).rejects.toThrow(
+          'The source parcel was already consumed',
+        );
+      });
+
+      it('still refuses a running job', async () => {
+        repository.findOne!.mockResolvedValue(
+          finished({ status: JobStatus.Running }),
+        );
+
+        await expect(service.retry(5, 7)).rejects.toThrow(ConflictException);
+      });
+    });
+
     describe('retry with another context', () => {
       const failed = () => ({
         id: 5,
@@ -1776,7 +1814,7 @@ describe('WorkerService', () => {
       });
     });
 
-    it.each([JobStatus.Queued, JobStatus.Running, JobStatus.Succeeded])(
+    it.each([JobStatus.Queued, JobStatus.Running])(
       'refuses a %s job',
       async (status) => {
         repository.findOne!.mockResolvedValue(failed({ status }));

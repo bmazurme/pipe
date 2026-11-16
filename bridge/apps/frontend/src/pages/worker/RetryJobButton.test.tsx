@@ -45,7 +45,7 @@ describe('RetryJobButton', () => {
     await waitFor(() => expect(calls).toContain('POST worker/jobs/7/retry'));
   });
 
-  it.each(['queued', 'running', 'succeeded'])('offers nothing for a %s job', (status) => {
+  it.each(['queued', 'running'])('offers nothing for a %s job', (status) => {
     renderButton(job(status));
 
     expect(screen.queryByRole('button')).toBeNull();
