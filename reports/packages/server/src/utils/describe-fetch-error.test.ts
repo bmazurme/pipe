@@ -37,4 +37,33 @@ describe('describeFetchError', () => {
 
     expect(describeFetchError(original, 'https://example.com')).toBe(original);
   });
+
+  it('explains a proxy that refuses the tunnel and suggests NO_PROXY', () => {
+    const error = new TypeError('fetch failed');
+    (error as { cause?: unknown }).cause = { message: 'Request was cancelled.', cause: { message: 'Proxy response (403) !== 200 when HTTP Tunneling' } };
+
+    const result = describeFetchError(error, 'https://git.example.dom/api/v4');
+
+    expect(result.message).toContain('Прокси отклонил');
+    expect(result.message).toContain('403');
+    expect(result.message).toContain('NO_PROXY=git.example.dom');
+  });
+
+  it('points to NODE_EXTRA_CA_CERTS for an untrusted certificate', () => {
+    expect(describeFetchError(fetchFailed('SELF_SIGNED_CERT_IN_CHAIN'), 'https://git.example.dom').message).toContain('NODE_EXTRA_CA_CERTS');
+  });
+
+  it('reads the code from a nested cause', () => {
+    const error = new TypeError('fetch failed');
+    (error as { cause?: unknown }).cause = { cause: { code: 'ENOTFOUND' } };
+
+    expect(describeFetchError(error, 'https://x.example').message).toContain('DNS');
+  });
+
+  it('describes a timeout with the host', () => {
+    const timeout = new Error('The operation was aborted due to timeout');
+    timeout.name = 'TimeoutError';
+
+    expect(describeFetchError(timeout, 'https://slow.example/x').message).toContain('slow.example');
+  });
 });

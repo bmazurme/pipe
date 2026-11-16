@@ -2,6 +2,8 @@ import { createApi, retry } from '@reduxjs/toolkit/query/react';
 import type {
   CommentTemplateType,
   BacklogType,
+  ConnectionCheckResultType,
+  ConnectionCheckTarget,
   CreateBacklogIssuesPayload,
   CreateBacklogIssuesResult,
   CreateMigrationTaskPayload,
@@ -120,6 +122,15 @@ const reportsApi = createApi({
       }),
       transformResponse: unwrap<SettingsType>('Не удалось сохранить настройки'),
       invalidatesTags: ['Settings'],
+    }),
+    // Probes one integration with the form's (possibly unsaved) values; saves nothing.
+    checkConnection: builder.mutation<ConnectionCheckResultType, { target: ConnectionCheckTarget; settings: SettingsType }>({
+      query: ({ target, settings }) => ({
+        url: `settings/check/${target}`,
+        method: 'POST',
+        body: { settings },
+      }),
+      transformResponse: unwrap<ConnectionCheckResultType>('Не удалось проверить соединение'),
     }),
     exportSettingsBundle: builder.query<SettingsBundleType, void>({
       query: () => 'settings/export',
@@ -375,6 +386,7 @@ export const {
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,
+  useCheckConnectionMutation,
   useLazyExportSettingsBundleQuery,
   useImportSettingsBundleMutation,
   usePushSettingsToBridgeMutation,

@@ -5,7 +5,7 @@ import { Provider } from 'react-redux';
 import { ThemeProvider, Toaster, ToasterProvider } from '@gravity-ui/uikit';
 import type { SettingsType } from '@reports/shared';
 
-import { store } from '../../store';
+import { store, setSettings, initialStateSettings } from '../../store';
 import Settings from './index';
 import EncryptionSection from './encryption-section';
 import TrackedProjectsSection from './tracked-projects-section';
@@ -31,9 +31,16 @@ const addTrackedProject = vi.fn((project: object) => {
 });
 let subscriptionConfig: { encryption: { enabled: boolean; publicKey: string; privateKey: string } } | undefined;
 
+const checkUnwrap = vi.fn();
+const checkConnection = vi.fn((arg: { target: string; settings: SettingsType }) => {
+  void arg;
+  return { unwrap: checkUnwrap };
+});
+
 vi.mock('../../store/api', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useSetSettingsMutation: () => [setSettingsRequest, { isLoading: false }],
+  useCheckConnectionMutation: () => [checkConnection, { isLoading: false }],
   useGetSubscriptionConfigQuery: () => ({ data: subscriptionConfig }),
   useAddTrackedProjectMutation: () => [addTrackedProject, { isLoading: false }],
   useGenerateEncryptionKeyPairMutation: () => [generateKeyPair, { isLoading: false }],
@@ -84,6 +91,130 @@ describe('Settings page', () => {
     expect(setSettingsRequest.mock.calls[0][0]).toMatchObject({
       gitlabUrl: 'https://gitlab.example.com/api/v4',
     });
+  });
+});
+
+describe('Settings: connection checks', () => {
+  beforeEach(() => {
+    // The store is a module singleton: an earlier test's save must not prefill this one's form.
+    store.dispatch(setSettings({ ...initialStateSettings, gitlabUrl: '', privateToken: '', bridgeApiUrl: '' }));
+    setSettingsRequest.mockClear();
+    checkConnection.mockClear();
+    checkUnwrap.mockReset();
+    localStorage.clear();
+  });
+
+  const result = (target: string, items: { label: string; status: string; message: string }[], status = 'ok') => ({
+    target, status, items, ms: 12,
+  });
+
+  it('disables the GitLab check until URL and token are typed', async () => {
+    renderSettings();
+
+    const button = screen.getByRole('button', { name: 'Проверить соединение: GitLab' });
+    expect(button).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com/api/v4');
+    await userEvent.type(screen.getByLabelText('Токен доступа'), 'glpat-x');
+
+    expect(button).toBeEnabled();
+  });
+
+  it('sends the unsaved form values and shows every item of the answer', async () => {
+    checkUnwrap.mockResolvedValue(result('gitlab', [
+      { label: 'GitLab', status: 'ok', message: 'Подключено как @ivan, 120 мс' },
+      { label: 'ID пользователя', status: 'warn', message: 'В настройках 5, а токен принадлежит 7' },
+    ], 'warn'));
+    renderSettings();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com/api/v4');
+    await userEvent.type(screen.getByLabelText('Токен доступа'), 'glpat-x');
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить соединение: GitLab' }));
+
+    expect(await screen.findByText('Подключено как @ivan, 120 мс')).toBeInTheDocument();
+    expect(screen.getByText('В настройках 5, а токен принадлежит 7')).toBeInTheDocument();
+    expect(checkConnection).toHaveBeenCalledTimes(1);
+    expect(checkConnection.mock.calls[0][0]).toMatchObject({
+      target: 'gitlab',
+      settings: { gitlabUrl: 'https://gitlab.example.com/api/v4', privateToken: 'glpat-x' },
+    });
+    expect(setSettingsRequest).not.toHaveBeenCalled();
+  });
+
+  it('hides a result once the values it was obtained with change', async () => {
+    checkUnwrap.mockResolvedValue(result('gitlab', [{ label: 'GitLab', status: 'ok', message: 'Подключено как @ivan' }]));
+    renderSettings();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com/api/v4');
+    await userEvent.type(screen.getByLabelText('Токен доступа'), 'glpat-x');
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить соединение: GitLab' }));
+    await screen.findByText('Подключено как @ivan');
+
+    await userEvent.type(screen.getByLabelText('Токен доступа'), 'y');
+
+    expect(screen.queryByText('Подключено как @ivan')).not.toBeInTheDocument();
+    expect(screen.getByText(/Значения изменились после проверки/)).toBeInTheDocument();
+  });
+
+  it('shows a transport failure as an error line', async () => {
+    checkUnwrap.mockRejectedValue(new Error('Сервер reports не отвечает'));
+    renderSettings();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить соединение: GitHub' }));
+
+    expect(await screen.findByText(/Сервер reports не отвечает/)).toBeInTheDocument();
+  });
+
+  it('runs all three checks from the header button', async () => {
+    checkUnwrap.mockImplementation(() => Promise.resolve(result('x', [{ label: 'Ок', status: 'ok', message: 'готово' }])));
+    renderSettings();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить все соединения' }));
+
+    await waitFor(() => expect(checkConnection).toHaveBeenCalledTimes(3));
+    expect(checkConnection.mock.calls.map((c) => c[0].target).sort()).toEqual(['bridge', 'github', 'gitlab']);
+  });
+
+  it('flags a malformed address and blocks Save until it is fixed', async () => {
+    renderSettings();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'gitlab.example.com');
+
+    expect(screen.getByText(/не похоже на адрес/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('GitLab URL'));
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com/api/v4');
+
+    expect(screen.getByRole('button', { name: 'Сохранить' })).toBeEnabled();
+  });
+
+  it('hints at /api/v4 when the address lacks it', async () => {
+    renderSettings();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com');
+
+    expect(screen.getByText('Обычно адрес заканчивается на /api/v4')).toBeInTheDocument();
+  });
+
+  it('saves on Ctrl+S', async () => {
+    renderSettings();
+
+    await userEvent.type(screen.getByLabelText('GitLab URL'), 'https://gitlab.example.com/api/v4');
+    await userEvent.keyboard('{Control>}s{/Control}');
+
+    await waitFor(() => expect(setSettingsRequest).toHaveBeenCalledTimes(1));
+  });
+
+  it('reveals a secret with its own toggle', async () => {
+    renderSettings();
+
+    const token = screen.getByLabelText('Токен доступа');
+    expect(token).toHaveAttribute('type', 'password');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Показать токен' }));
+
+    expect(token).toHaveAttribute('type', 'text');
   });
 });
 
