@@ -44,6 +44,20 @@ one of them still reports through another. Without a key the probe does nothing 
 shows a point that stopped reporting as «Точка … не присылает пробы» by itself. `install.sh --dry-run` shows what it would do; `--remove` takes
 the probe away and leaves `/etc/pipe-linkprobe.env` (and the key in it) for you to delete.
 
+## When bridge is slow
+
+The channel-list request (`GET …/agent/channels`) and the report request (`POST …/agent/links`) each have a **fixed 20 s deadline**
+(`urlopen(..., timeout=20)` in `probe.py`). It is not configurable and has nothing to do with `PROBE_TIMEOUT`, which is the per-channel
+probe timeout (default 6 s). A request that times out or fails counts as «bridge did not answer»: the next `BRIDGE_API_URL` address is
+tried, and if none answers the run exits 0 with «nothing reported». The point then reports nothing, and bridge shows it as «Точка …
+не присылает пробы» only after 5 minutes (a probe older than that says nothing). So a slow channel list looks like a vantage point that
+went missing, not like an error.
+
+The list is slow most often when a connection's VPN panel is down: bridge resolves the links of every connection to build it
+(`LinksService.channels`, `bridge/apps/backend/src/links/links.service.ts`), and each unreachable panel adds its own wait. Look at the
+VPN page (connection status) first; a request that comes close to 20 s (bridge logs it as `http.slow` for
+`/api/v1/boards/agent/channels`) is the sign the probe is about to give up.
+
 Python 3 standard library only; any Linux with systemd. For a laptop or a phone-hotspot beacon the same `probe.py` can be run by hand or from cron
 with the settings in the environment.
 
