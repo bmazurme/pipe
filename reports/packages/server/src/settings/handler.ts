@@ -5,6 +5,7 @@ import { getSettings, setSettings } from './props';
 import { withStream } from '../utils/stream';
 import { redactSettings, restoreMaskedSecrets } from './redact';
 import { buildSettingsBundle, applySettingsBundle } from './bundle';
+import { isConnectionCheckTarget, runConnectionCheck } from './connection-check';
 
 export async function handleGetSettings(req: Request, res: Response) {
   await withStream(res, 'Get settings', async () => {
@@ -33,5 +34,23 @@ export async function handleSetSettings(req: Request, res: Response) {
 
     // The saved settings go back to the UI masked, like GET: the secret was just stored, not echoed.
     return redactSettings(settings);
+  });
+}
+
+// Checks what is in the form, not only what is saved: the body may carry unsaved settings, and a
+// masked secret in it stands for the stored one — so a check never needs a Save first.
+export async function handleCheckConnection(req: Request, res: Response) {
+  await withStream(res, 'Check connection', async () => {
+    const { target } = req.params;
+
+    if (!isConnectionCheckTarget(target)) {
+      throw new Error(`Неизвестная проверка: ${target}`);
+    }
+
+    const stored = getSettings();
+    const incoming = (req.body as { settings?: Partial<SettingsType> } | undefined)?.settings;
+    const settings = incoming ? restoreMaskedSecrets({ ...stored, ...incoming }, stored) : stored;
+
+    return runConnectionCheck(target, settings);
   });
 }

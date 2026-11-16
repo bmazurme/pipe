@@ -53,6 +53,24 @@ export type SettingsType = {
   bridgeStorageApiKey: string;
 };
 
+// Settings → «Проверить соединение»: one probe per integration. `skip` = nothing to check
+// (not configured / optional), `warn` = works but looks wrong.
+export type ConnectionCheckTarget = 'gitlab' | 'github' | 'bridge';
+
+export type ConnectionCheckItemType = {
+  label: string;
+  status: 'ok' | 'warn' | 'error' | 'skip';
+  message: string;
+};
+
+export type ConnectionCheckResultType = {
+  target: ConnectionCheckTarget;
+  // Worst status of the items: error > warn > ok; skip when every item was skipped.
+  status: 'ok' | 'warn' | 'error' | 'skip';
+  items: ConnectionCheckItemType[];
+  ms: number;
+};
+
 export type DayOffsImportType = {
   year: number;
   holidays: string[];

@@ -9,6 +9,7 @@ export {
   usePushReportToBridgeMutation,
   useGetSettingsQuery,
   useSetSettingsMutation,
+  useCheckConnectionMutation,
   useLazyExportSettingsBundleQuery,
   useImportSettingsBundleMutation,
   usePushSettingsToBridgeMutation,

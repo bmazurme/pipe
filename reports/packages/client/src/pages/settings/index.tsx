@@ -3,7 +3,7 @@ import {
   Button, TextInput, Text, Icon, Dialog, DialogHeader, DialogBody, DialogFooter, useToaster,
   TabProvider, TabList, Tab, TabPanel,
 } from '@gravity-ui/uikit';
-import { CodeFork, Eye, EyeSlash, Gear, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowsRotateRight, CodeFork, Eye, EyeSlash, Gear, Plus, TrashBin } from '@gravity-ui/icons';
 
 import { settingsSelector, setSettings, type SettingsState } from '../../store';
 import { useSetSettingsMutation, useGetProjectDictQuery, useAddProjectCodeMutation, useRemoveProjectCodeMutation } from '../../store/api';
@@ -18,8 +18,55 @@ import DictionarySection from './dictionary-section';
 import CommentTemplatesSection from './comment-templates-section';
 import EncryptionSection from './encryption-section';
 import SettingsTransferSection from './settings-transfer-section';
+import ConnectionCheckPanel from './connection-check-panel';
+import { useConnectionChecks } from './use-connection-checks';
 
 import style from './settings.module.css';
+
+// Empty is fine (the integration is simply off); anything else must be an http(s) address.
+function urlProblem(value: string | undefined): string | undefined {
+  const trimmed = (value ?? '').trim();
+
+  if (!trimmed) return undefined;
+
+  try {
+    const { protocol } = new URL(trimmed);
+
+    return protocol === 'http:' || protocol === 'https:' ? undefined : 'Адрес должен начинаться с http:// или https://';
+  } catch {
+    return 'Это не похоже на адрес: ожидается вид https://хост/путь';
+  }
+}
+
+type SecretInputProps = {
+  label: string;
+  value: string;
+  onUpdate: (value: string) => void;
+  note?: string;
+  revealLabel: string;
+  hideLabel: string;
+};
+
+// A password-style field with its own show/hide toggle, so the form keeps no per-secret state.
+function SecretInput({ label, value, onUpdate, note, revealLabel, hideLabel }: SecretInputProps) {
+  const [shown, setShown] = useState(false);
+
+  return (
+    <TextInput
+      label={label}
+      type={shown ? 'text' : 'password'}
+      value={value}
+      onUpdate={onUpdate}
+      autoComplete="off"
+      note={note}
+      endContent={(
+        <Button view="flat" size="s" onClick={() => setShown((prev) => !prev)} aria-label={shown ? hideLabel : revealLabel}>
+          <Icon data={shown ? EyeSlash : Eye} size={16} />
+        </Button>
+      )}
+    />
+  );
+}
 
 function Settings() {
   const dispatch = useAppDispatch();
@@ -27,9 +74,6 @@ function Settings() {
   const settings = useAppSelector(settingsSelector);
   const [form, setForm] = useState<SettingsState>(settings);
   const [syncedSettings, setSyncedSettings] = useState(settings);
-  const [showToken, setShowToken] = useState(false);
-  const [showBridgeKey, setShowBridgeKey] = useState(false);
-  const [showBridgeStorageApiKey, setShowBridgeStorageApiKey] = useState(false);
   const [setSettingsRequest, { isLoading: isSaving }] = useSetSettingsMutation();
   const [activeTab, setActiveTab] = useState('general');
 
@@ -39,6 +83,8 @@ function Settings() {
     setSyncedSettings(settings);
     setForm(settings);
   }
+
+  const checks = useConnectionChecks(form);
 
   const { data: projectDict = {} } = useGetProjectDictQuery();
   const [addProjectCode] = useAddProjectCodeMutation();
@@ -51,6 +97,13 @@ function Settings() {
   const isDirty = JSON.stringify(form) !== JSON.stringify(settings);
   const isDuplicateCode = Boolean(codeForm.code) && codeForm.code in projectDict;
 
+  const gitlabUrlProblem = urlProblem(form.gitlabUrl);
+  const bridgeUrlProblem = urlProblem(form.bridgeApiUrl);
+  const hasProblems = Boolean(gitlabUrlProblem || bridgeUrlProblem);
+  const gitlabUrlHint = !gitlabUrlProblem && (form.gitlabUrl ?? '').trim() && !/\/api\/v\d/.test(form.gitlabUrl ?? '')
+    ? 'Обычно адрес заканчивается на /api/v4'
+    : undefined;
+
   useUnsavedChangesGuard('settings-general', isDirty);
 
   const handleChange = (key: keyof SettingsState) => (value: string) => {
@@ -59,6 +112,10 @@ function Settings() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+
+    if (!isDirty || hasProblems) {
+      return;
+    }
 
     try {
       const saved = await setSettingsRequest(form).unwrap();
@@ -132,6 +189,12 @@ function Settings() {
         <PageHeader
           title="Настройки"
           description="Подключение к GitLab, реквизиты отчёта и интеграция с bridge"
+          actions={(
+            <Button view="outlined" size="m" loading={checks.anyLoading} onClick={() => void checks.runAll()}>
+              <Icon data={ArrowsRotateRight} size={16} />
+              Проверить все соединения
+            </Button>
+          )}
         />
         <SettingsTransferSection />
         <TabProvider value={activeTab} onUpdate={setActiveTab}>
@@ -141,7 +204,16 @@ function Settings() {
           </TabList>
 
           <TabPanel value="general" className={style.page}>
-          <form className={style.form} onSubmit={handleSubmit}>
+          <form
+            className={style.form}
+            onSubmit={handleSubmit}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                event.currentTarget.requestSubmit();
+              }
+            }}
+          >
             <section className={style.section}>
               <div className={style.sectionHead}>
                 <Text variant="subheader-2">Подключение к GitLab</Text>
@@ -156,24 +228,43 @@ function Settings() {
                   value={form.gitlabUrl}
                   onUpdate={handleChange('gitlabUrl')}
                   autoComplete="off"
+                  validationState={gitlabUrlProblem ? 'invalid' : undefined}
+                  errorMessage={gitlabUrlProblem}
+                  note={gitlabUrlHint}
                 />
-                <TextInput
+                <SecretInput
                   label="Токен доступа"
-                  type={showToken ? 'text' : 'password'}
                   value={form.privateToken}
                   onUpdate={handleChange('privateToken')}
-                  autoComplete="off"
                   note="Personal access token с правом read_api"
-                  endContent={(
-                    <Button
-                      view="flat"
-                      size="s"
-                      onClick={() => setShowToken((prev) => !prev)}
-                      aria-label={showToken ? 'Скрыть токен' : 'Показать токен'}
-                    >
-                      <Icon data={showToken ? EyeSlash : Eye} size={16} />
-                    </Button>
-                  )}
+                  revealLabel="Показать токен"
+                  hideLabel="Скрыть токен"
+                />
+                <ConnectionCheckPanel
+                  label="GitLab"
+                  state={checks.stateOf('gitlab')}
+                  onRun={() => void checks.run('gitlab')}
+                  disabledReason={!(form.gitlabUrl ?? '').trim() || !form.privateToken ? 'Укажите URL и токен' : gitlabUrlProblem}
+                />
+              </div>
+            </section>
+
+            <section className={style.section}>
+              <div className={style.sectionHead}>
+                <Text variant="subheader-2">Подключение к GitHub</Text>
+                <Text variant="caption-2" color="secondary">
+                  Нужно только для отслеживания GitHub-репозиториев
+                </Text>
+              </div>
+              <div className={style.group}>
+                <Text variant="body-1" color="secondary">
+                  Токен задаётся в <code>packages/server/.env</code> (<code>GITHUB_TOKEN</code>) и здесь не хранится,
+                  чтобы не попадать в экспорт настроек.
+                </Text>
+                <ConnectionCheckPanel
+                  label="GitHub"
+                  state={checks.stateOf('github')}
+                  onRun={() => void checks.run('github')}
                 />
               </div>
             </section>
@@ -221,47 +312,35 @@ function Settings() {
                   value={form.bridgeApiUrl}
                   onUpdate={handleChange('bridgeApiUrl')}
                   autoComplete="off"
+                  validationState={bridgeUrlProblem ? 'invalid' : undefined}
+                  errorMessage={bridgeUrlProblem}
                 />
-                <TextInput
+                <SecretInput
                   label="Bridge API key"
-                  type={showBridgeKey ? 'text' : 'password'}
                   value={form.bridgeApiKey}
                   onUpdate={handleChange('bridgeApiKey')}
-                  autoComplete="off"
-                  endContent={(
-                    <Button
-                      view="flat"
-                      size="s"
-                      onClick={() => setShowBridgeKey((prev) => !prev)}
-                      aria-label={showBridgeKey ? 'Скрыть ключ' : 'Показать ключ'}
-                    >
-                      <Icon data={showBridgeKey ? EyeSlash : Eye} size={16} />
-                    </Button>
-                  )}
+                  revealLabel="Показать ключ"
+                  hideLabel="Скрыть ключ"
                 />
-                <TextInput
+                <SecretInput
                   label="Bridge storage API key"
-                  type={showBridgeStorageApiKey ? 'text' : 'password'}
                   value={form.bridgeStorageApiKey}
                   onUpdate={handleChange('bridgeStorageApiKey')}
-                  autoComplete="off"
                   note="Личный API-ключ (Профиль → API-ключи в bridge) — единственный способ авторизации для интеграции с bridge storage"
-                  endContent={(
-                    <Button
-                      view="flat"
-                      size="s"
-                      onClick={() => setShowBridgeStorageApiKey((prev) => !prev)}
-                      aria-label={showBridgeStorageApiKey ? 'Скрыть ключ' : 'Показать ключ'}
-                    >
-                      <Icon data={showBridgeStorageApiKey ? EyeSlash : Eye} size={16} />
-                    </Button>
-                  )}
+                  revealLabel="Показать ключ"
+                  hideLabel="Скрыть ключ"
+                />
+                <ConnectionCheckPanel
+                  label="Bridge"
+                  state={checks.stateOf('bridge')}
+                  onRun={() => void checks.run('bridge')}
+                  disabledReason={!(form.bridgeApiUrl ?? '').trim() ? 'Укажите Bridge API URL' : bridgeUrlProblem}
                 />
               </div>
             </section>
 
             <div className={style.formActions}>
-              <Button view="action" size="l" type="submit" loading={isSaving} disabled={!isDirty}>
+              <Button view="action" size="l" type="submit" loading={isSaving} disabled={!isDirty || hasProblems}>
                 Сохранить
               </Button>
               {isDirty && (
@@ -270,7 +349,7 @@ function Settings() {
                 </Button>
               )}
               <Text variant="caption-2" color="secondary" className={style.dirtyHint}>
-                {isDirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}
+                {hasProblems ? 'Исправьте адрес, чтобы сохранить' : isDirty ? 'Есть несохранённые изменения (Ctrl+S — сохранить)' : 'Все изменения сохранены'}
               </Text>
             </div>
           </form>
