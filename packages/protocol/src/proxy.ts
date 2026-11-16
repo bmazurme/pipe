@@ -1,4 +1,4 @@
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { EnvHttpProxyAgent, setGlobalDispatcher } from 'undici';
 
 export interface SetupProxyOptions {
   env?: NodeJS.ProcessEnv;
@@ -9,6 +9,9 @@ export interface SetupProxyOptions {
 // own — without this, outbound calls silently try to connect directly and
 // hang until they time out on networks that require a proxy to reach the
 // internet. Returns the proxy URL it applied, or undefined if none is set.
+// NO_PROXY / no_proxy (comma-separated hosts, `.suffix`, `*`, optional :port)
+// lists destinations that must bypass the proxy — typically an intranet GitLab
+// that a corporate proxy refuses to tunnel to (403 on CONNECT).
 export function setupProxy(opts: SetupProxyOptions = {}): string | undefined {
   const env = opts.env ?? process.env;
   const log = opts.log ?? console.log;
@@ -19,7 +22,11 @@ export function setupProxy(opts: SetupProxyOptions = {}): string | undefined {
     return undefined;
   }
 
-  setGlobalDispatcher(new ProxyAgent(proxyUrl));
+  setGlobalDispatcher(new EnvHttpProxyAgent({
+    httpProxy: proxyUrl,
+    httpsProxy: proxyUrl,
+    noProxy: env.NO_PROXY ?? env.no_proxy ?? '',
+  }));
 
   // Only protocol//host: the URL may carry credentials.
   const { protocol, host } = new URL(proxyUrl);
