@@ -25,7 +25,8 @@ interface RetryJobButtonProps {
   compact?: boolean;
 }
 
-// "Retry" for a job that failed or was stopped: queues a NEW job over the same
+// "Retry" for a job that failed or was stopped (or "Запустить снова" for a succeeded
+// one whose source parcel is still in Storage): queues a NEW job over the same
 // parcel, model and credential (the failed one stays as history). Only the
 // failure case needs a dialog — a retry itself is cheap and undoable (stop it).
 export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
@@ -42,7 +43,9 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
 
   const { data: contexts } = useListContextsQuery(undefined, { skip: !otherOpen });
 
-  if (job.status !== 'failed' && job.status !== 'cancelled') return null;
+  const isSucceeded = job.status === 'succeeded';
+  if (job.status !== 'failed' && job.status !== 'cancelled' && !(isSucceeded && job.sourceFileId !== null)) return null;
+  const mainLabel = isSucceeded ? 'Запустить снова' : 'Перезапустить';
 
   const credential = credentials?.find((item) => item.id === job.claudeCredentialId || item.name === job.usedClaudeCredentialName);
   const resetAt = limitResetAt(job.errorMessage, credential?.limits, Date.now());
@@ -105,12 +108,12 @@ export function RetryJobButton({ job, compact = false }: RetryJobButtonProps) {
         view={compact ? 'flat-secondary' : 'outlined'}
         size={compact ? 's' : 'm'}
         loading={isLoading}
-        aria-label={compact ? `Перезапустить: задача #${job.id}` : undefined}
-        title={compact ? 'Перезапустить' : undefined}
+        aria-label={compact ? `${mainLabel}: задача #${job.id}` : undefined}
+        title={compact ? mainLabel : undefined}
         onClick={() => void handleRetry()}
       >
         <Icon data={ArrowRotateRight} size={16} />
-        {!compact && 'Перезапустить'}
+        {!compact && mainLabel}
       </Button>
 
       {resetAt && (

@@ -357,9 +357,13 @@ export class WorkerService implements OnModuleInit {
   ): Promise<Job> {
     const job = await this.findOwned(id, userId);
 
-    if (job.status !== JobStatus.Failed && job.status !== JobStatus.Cancelled) {
+    if (
+      job.status !== JobStatus.Failed &&
+      job.status !== JobStatus.Cancelled &&
+      job.status !== JobStatus.Succeeded
+    ) {
       throw new ConflictException(
-        `Only a failed or stopped job can be retried — this one is ${job.status}`,
+        `Only a finished job can be run again — this one is ${job.status}`,
       );
     }
 
