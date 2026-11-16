@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { Agent, ProxyAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
+import { Agent, EnvHttpProxyAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 
 import { setupProxy } from './proxy.js';
 
@@ -40,7 +40,7 @@ describe('setupProxy', () => {
       const result = setupProxy({ env: { [name]: url }, log: () => {} });
 
       assert.equal(result, url);
-      assert.ok(getGlobalDispatcher() instanceof ProxyAgent);
+      assert.ok(getGlobalDispatcher() instanceof EnvHttpProxyAgent);
     });
   }
 
@@ -57,6 +57,36 @@ describe('setupProxy', () => {
       arm();
       assert.equal(setupProxy({ env: { ...env }, log: () => {} }), expected[i]);
       delete env[PROXY_VARS[i]];
+    }
+  });
+
+  it('sends requests to hosts listed in NO_PROXY directly and the rest through the proxy', async () => {
+    arm();
+    const seen: string[] = [];
+    // Stand-in for the corporate proxy: records every CONNECT it receives.
+    const net = await import('node:net');
+    const proxy = net.createServer((sock) => {
+      sock.once('data', (d) => {
+        seen.push(String(d).split(' ')[1]);
+        sock.end('HTTP/1.1 403 Forbidden\r\n\r\n');
+      });
+    });
+    await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', r));
+    const { port } = proxy.address() as import('node:net').AddressInfo;
+    try {
+      setupProxy({
+        env: { HTTPS_PROXY: `http://127.0.0.1:${port}`, NO_PROXY: 'internal.test,.corp.test' },
+        log: () => {},
+      });
+      // Bypassed hosts must not reach the proxy (they fail on DNS instead).
+      await assert.rejects(fetch('https://gitlab.internal.test/'));
+      await assert.rejects(fetch('https://git.corp.test/'));
+      assert.deepEqual(seen, []);
+      // Anything else is tunnelled through the proxy (which answers 403 here).
+      await assert.rejects(fetch('https://example.test/'));
+      assert.deepEqual(seen, ['example.test:443']);
+    } finally {
+      proxy.close();
     }
   });
 
