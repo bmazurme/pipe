@@ -26,11 +26,18 @@
    invisible), this keeps the area usable regardless. Plain, non-hashed AIKit
    class names, scoped under .container so no other page is affected. */
 .container :global(.g-aikit-chat-container__content) {
-  min-height: 400px;
+  min-height: 160px;
 }
 
 .container :global(.g-aikit-message-list) {
-  min-height: 300px;
+  min-height: 120px;
+}
+
+/* The composer must never be pushed out of the card. The container clips its overflow, so a tall message area (a 400px floor used to sit
+   here) plus a composer that grows with a multi-line draft left the model picker and the send button below the edge. Both floors now
+   leave the composer room, and the draft scrolls inside its own box once it reaches this height instead of growing the card. */
+.container {
+  --g-aikit-prompt-input-body-textarea-max-height: min(240px, 30dvh);
 }
 
 .modelPicker {
@@ -74,7 +81,7 @@
   }
 
   .container :global(.g-aikit-chat-container__content) {
-    min-height: 240px;
+    min-height: 120px;
     padding-left: 8px;
     padding-right: 8px;
   }
