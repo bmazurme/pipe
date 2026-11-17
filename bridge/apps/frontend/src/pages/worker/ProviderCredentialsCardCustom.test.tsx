@@ -169,6 +169,52 @@ describe('ProviderCredentialsCard — a custom model', () => {
     });
   });
 
+  it('Yandex: the folder id builds the DeepSeek V4.1 Flash model name, and the key goes as Api-Key with no folder header', async () => {
+    const user = userEvent.setup();
+
+    await startCustom(user);
+    await user.click(screen.getByText('Другой OpenAI-совместимый'));
+    await user.click(await screen.findByText('Yandex AI Studio'));
+
+    const add = screen.getByRole('button', { name: 'Добавить ключ' });
+
+    await user.type(screen.getByPlaceholderText(/Название ключа/), 'Yandex DeepSeek');
+    await user.type(screen.getByLabelText('API-ключ'), 'AQVN-secret');
+    // No folder yet, so no model to call.
+    expect(add).toBeDisabled();
+
+    await user.type(screen.getByLabelText('ID каталога Yandex Cloud'), 'b1gabc123');
+    expect(screen.getByLabelText('Модель')).toHaveValue('gpt://b1gabc123/deepseek-v4.1-flash');
+    await user.click(add);
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].body).toMatchObject({
+      provider: 'custom',
+      name: 'Yandex DeepSeek',
+      apiKey: 'AQVN-secret',
+      baseUrl: 'https://llm.api.cloud.yandex.net/v1',
+      model: 'gpt://b1gabc123/deepseek-v4.1-flash',
+      authScheme: 'api-key',
+      route: 'direct',
+      supportsTools: true,
+      preset: 'yandex',
+    });
+    expect(posted[0].body).not.toHaveProperty('extraHeaders');
+  });
+
+  it('Yandex: a folder id with a slash or a space is refused instead of making a broken model name', async () => {
+    const user = userEvent.setup();
+
+    await startCustom(user);
+    await user.click(screen.getByText('Другой OpenAI-совместимый'));
+    await user.click(await screen.findByText('Yandex AI Studio'));
+    await user.type(screen.getByPlaceholderText(/Название ключа/), 'Yandex');
+    await user.type(screen.getByLabelText('API-ключ'), 'AQVN-secret');
+    await user.type(screen.getByLabelText('ID каталога Yandex Cloud'), 'b1g/abc');
+
+    expect(screen.getByRole('button', { name: 'Добавить ключ' })).toBeDisabled();
+  });
+
   it('a named provider still needs a key and sends none of the custom fields', async () => {
     const user = userEvent.setup();
 

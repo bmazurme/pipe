@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeKey, parseHeaderLines, presetById, PROVIDER_PRESETS } from './providerPresets';
+import { describeKey, modelForFolder, parseHeaderLines, presetById, PROVIDER_PRESETS } from './providerPresets';
 
 describe('parseHeaderLines', () => {
   it('reads "name: value" lines, keeps colons inside a value, skips blank lines', () => {
@@ -27,6 +27,21 @@ describe('presets', () => {
     expect(presetById('ollama')).toMatchObject({ route: 'direct', authScheme: 'none' });
     expect(presetById('yandex')).toMatchObject({ authScheme: 'api-key', route: 'direct' });
     expect(presetById('nope')).toBeUndefined();
+  });
+});
+
+describe('modelForFolder', () => {
+  it('builds the Yandex model name from the folder id, empty without one or for a preset with no folder', () => {
+    const yandex = presetById('yandex');
+
+    expect(modelForFolder(yandex, ' b1gabc ')).toBe('gpt://b1gabc/deepseek-v4.1-flash');
+    expect(modelForFolder(yandex, '  ')).toBe('');
+    expect(modelForFolder(presetById('ollama'), 'b1g')).toBe('');
+    expect(modelForFolder(undefined, 'b1g')).toBe('');
+  });
+
+  it('Yandex asks for no folder header: the folder is part of the model name', () => {
+    expect(presetById('yandex')?.headerHints).toEqual({});
   });
 });
 
