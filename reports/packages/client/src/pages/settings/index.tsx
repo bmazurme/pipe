@@ -19,6 +19,7 @@ import CommentTemplatesSection from './comment-templates-section';
 import EncryptionSection from './encryption-section';
 import SettingsTransferSection from './settings-transfer-section';
 import ConnectionCheckPanel from './connection-check-panel';
+import { Field } from './field';
 import { useConnectionChecks } from './use-connection-checks';
 
 import style from './settings.module.css';
@@ -42,29 +43,32 @@ type SecretInputProps = {
   label: string;
   value: string;
   onUpdate: (value: string) => void;
-  note?: string;
+  hint?: string;
   revealLabel: string;
   hideLabel: string;
 };
 
 // A password-style field with its own show/hide toggle, so the form keeps no per-secret state.
-function SecretInput({ label, value, onUpdate, note, revealLabel, hideLabel }: SecretInputProps) {
+function SecretInput({ label, value, onUpdate, hint, revealLabel, hideLabel }: SecretInputProps) {
   const [shown, setShown] = useState(false);
 
   return (
-    <TextInput
-      label={label}
-      type={shown ? 'text' : 'password'}
-      value={value}
-      onUpdate={onUpdate}
-      autoComplete="off"
-      note={note}
-      endContent={(
-        <Button view="flat" size="s" onClick={() => setShown((prev) => !prev)} aria-label={shown ? hideLabel : revealLabel}>
-          <Icon data={shown ? EyeSlash : Eye} size={16} />
-        </Button>
+    <Field label={label} hint={hint}>
+      {(id) => (
+        <TextInput
+          id={id}
+          type={shown ? 'text' : 'password'}
+          value={value}
+          onUpdate={onUpdate}
+          autoComplete="off"
+          endContent={(
+            <Button view="flat" size="s" onClick={() => setShown((prev) => !prev)} aria-label={shown ? hideLabel : revealLabel}>
+              <Icon data={shown ? EyeSlash : Eye} size={16} />
+            </Button>
+          )}
+        />
       )}
-    />
+    </Field>
   );
 }
 
@@ -203,7 +207,7 @@ function Settings() {
             <Tab value="subscription" icon={<Icon data={CodeFork} size={16} />}>Subscription</Tab>
           </TabList>
 
-          <TabPanel value="general" className={style.page}>
+          <TabPanel value="general" className={style.pageWide}>
           <form
             className={style.form}
             onSubmit={handleSubmit}
@@ -214,123 +218,170 @@ function Settings() {
               }
             }}
           >
-            <section className={style.section}>
-              <div className={style.sectionHead}>
-                <Text variant="subheader-2">Подключение к GitLab</Text>
-                <Text variant="caption-2" color="secondary">
-                  Откуда берутся задачи и списанное время
-                </Text>
-              </div>
-              <div className={style.group}>
-                <TextInput
-                  label="GitLab URL"
-                  placeholder="https://gitlab.com/api/v4"
-                  value={form.gitlabUrl}
-                  onUpdate={handleChange('gitlabUrl')}
-                  autoComplete="off"
-                  validationState={gitlabUrlProblem ? 'invalid' : undefined}
-                  errorMessage={gitlabUrlProblem}
-                  note={gitlabUrlHint}
-                />
-                <SecretInput
-                  label="Токен доступа"
-                  value={form.privateToken}
-                  onUpdate={handleChange('privateToken')}
-                  note="Personal access token с правом read_api"
-                  revealLabel="Показать токен"
-                  hideLabel="Скрыть токен"
-                />
-                <ConnectionCheckPanel
-                  label="GitLab"
-                  state={checks.stateOf('gitlab')}
-                  onRun={() => void checks.run('gitlab')}
-                  disabledReason={!(form.gitlabUrl ?? '').trim() || !form.privateToken ? 'Укажите URL и токен' : gitlabUrlProblem}
-                />
-              </div>
-            </section>
+            <div className={style.columns}>
+              <div className={style.col}>
+                <section className={style.section}>
+                  <div className={style.sectionHead}>
+                    <Text variant="subheader-2">Подключение к GitLab</Text>
+                    <Text variant="caption-2" color="secondary">
+                      Откуда берутся задачи и списанное время
+                    </Text>
+                  </div>
+                  <div className={style.group}>
+                    <Field label="GitLab URL" error={gitlabUrlProblem} hint={gitlabUrlHint}>
+                      {(id) => (
+                        <TextInput
+                          id={id}
+                          placeholder="https://gitlab.com/api/v4"
+                          value={form.gitlabUrl}
+                          onUpdate={handleChange('gitlabUrl')}
+                          autoComplete="off"
+                          validationState={gitlabUrlProblem ? 'invalid' : undefined}
+                        />
+                      )}
+                    </Field>
+                    <SecretInput
+                      label="Токен доступа"
+                      value={form.privateToken}
+                      onUpdate={handleChange('privateToken')}
+                      hint="Personal access token с правом read_api"
+                      revealLabel="Показать токен"
+                      hideLabel="Скрыть токен"
+                    />
+                    <ConnectionCheckPanel
+                      label="GitLab"
+                      state={checks.stateOf('gitlab')}
+                      onRun={() => void checks.run('gitlab')}
+                      disabledReason={!(form.gitlabUrl ?? '').trim() || !form.privateToken ? 'Укажите URL и токен' : gitlabUrlProblem}
+                    />
+                  </div>
+                </section>
 
-            <section className={style.section}>
-              <div className={style.sectionHead}>
-                <Text variant="subheader-2">Подключение к GitHub</Text>
-                <Text variant="caption-2" color="secondary">
-                  Нужно только для отслеживания GitHub-репозиториев
-                </Text>
-              </div>
-              <div className={style.group}>
-                <Text variant="body-1" color="secondary">
-                  Токен задаётся в <code>packages/server/.env</code> (<code>GITHUB_TOKEN</code>) и здесь не хранится,
-                  чтобы не попадать в экспорт настроек.
-                </Text>
-                <ConnectionCheckPanel
-                  label="GitHub"
-                  state={checks.stateOf('github')}
-                  onRun={() => void checks.run('github')}
-                />
-              </div>
-            </section>
+                <section className={style.section}>
+                  <div className={style.sectionHead}>
+                    <Text variant="subheader-2">Интеграция с bridge</Text>
+                    <Text variant="caption-2" color="secondary">
+                      Обмен задачами, отгулы и отправка готового отчёта
+                    </Text>
+                  </div>
+                  <div className={style.group}>
+                    <Field label="Bridge API URL" error={bridgeUrlProblem}>
+                      {(id) => (
+                        <TextInput
+                          id={id}
+                          placeholder="https://bridge.example.com/api/v1"
+                          value={form.bridgeApiUrl}
+                          onUpdate={handleChange('bridgeApiUrl')}
+                          autoComplete="off"
+                          validationState={bridgeUrlProblem ? 'invalid' : undefined}
+                        />
+                      )}
+                    </Field>
+                    <SecretInput
+                      label="Bridge API key"
+                      value={form.bridgeApiKey}
+                      onUpdate={handleChange('bridgeApiKey')}
+                      hint="Личный API-ключ (Профиль → API-ключи в bridge): один на всё — отгулы, отчёт, обмен задачами, автопилот и обновления"
+                      revealLabel="Показать ключ"
+                      hideLabel="Скрыть ключ"
+                    />
+                    <ConnectionCheckPanel
+                      label="Bridge"
+                      state={checks.stateOf('bridge')}
+                      onRun={() => void checks.run('bridge')}
+                      disabledReason={!(form.bridgeApiUrl ?? '').trim() ? 'Укажите Bridge API URL' : bridgeUrlProblem}
+                    />
+                  </div>
+                </section>
 
-            <section className={style.section}>
-              <div className={style.sectionHead}>
-                <Text variant="subheader-2">Реквизиты отчёта</Text>
-                <Text variant="caption-2" color="secondary">
-                  Подставляются в имя и шапку выгружаемого файла
-                </Text>
               </div>
-              <div className={style.group}>
-                <TextInput
-                  label="ID пользователя"
-                  placeholder="123"
-                  value={form.userId}
-                  onUpdate={handleChange('userId')}
-                />
-                <TextInput
-                  label="Сотрудник"
-                  placeholder="Иванов И. И."
-                  value={form.employee}
-                  onUpdate={handleChange('employee')}
-                />
-                <TextInput
-                  label="Компания"
-                  placeholder="Название компании"
-                  value={form.company}
-                  onUpdate={handleChange('company')}
-                />
-              </div>
-            </section>
 
-            <section className={style.section}>
-              <div className={style.sectionHead}>
-                <Text variant="subheader-2">Интеграция с bridge</Text>
-                <Text variant="caption-2" color="secondary">
-                  Импорт отгулов и отправка готового отчёта
-                </Text>
+              <div className={style.col}>
+                <section className={style.section}>
+                  <div className={style.sectionHead}>
+                    <Text variant="subheader-2">Реквизиты отчёта</Text>
+                    <Text variant="caption-2" color="secondary">
+                      Подставляются в имя и шапку выгружаемого файла
+                    </Text>
+                  </div>
+                  <div className={style.group}>
+                    <Field label="ID пользователя" hint="Ваш ID в GitLab: с ним сверяется токен при проверке соединения">
+                      {(id) => <TextInput id={id} placeholder="123" value={form.userId} onUpdate={handleChange('userId')} />}
+                    </Field>
+                    <Field label="Сотрудник">
+                      {(id) => <TextInput id={id} placeholder="Иванов И. И." value={form.employee} onUpdate={handleChange('employee')} />}
+                    </Field>
+                    <Field label="Компания">
+                      {(id) => <TextInput id={id} placeholder="Название компании" value={form.company} onUpdate={handleChange('company')} />}
+                    </Field>
+                  </div>
+                </section>
+
+                <section className={style.section}>
+                  <div className={style.sectionHead}>
+                    <Text variant="subheader-2">Коды проектов</Text>
+                    <Text variant="caption-2" color="secondary">
+                      Сопоставление ID проекта GitLab с названием в отчёте
+                    </Text>
+                  </div>
+                  <div className={style.group}>
+                  {codes.length === 0 ? (
+                    <Text variant="body-2" color="secondary" className={style.codesEmpty}>
+                      Коды ещё не добавлены
+                    </Text>
+                  ) : (
+                    <ul className={style.codesList}>
+                      {codes.map(([code, label]) => (
+                        <li key={code} className={style.codesItem}>
+                          <span className={style.codesCode}>{code}</span>
+                          <span className={style.codesLabel}>{label}</span>
+                          <Button
+                            view="flat"
+                            size="s"
+                            onClick={() => setCodeToRemove(code)}
+                            aria-label={`Удалить код ${code}`}
+                            className={style.codesRemove}
+                          >
+                            <Icon data={TrashBin} size={16} />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Button
+                    view="outlined"
+                    size="m"
+                    width="max"
+                    onClick={() => setIsCodeDialogOpen(true)}
+                    className={style.codesAdd}
+                  >
+                    <Icon data={Plus} size={16} />
+                    Добавить код
+                  </Button>
+                            </div>
+                </section>
+
+                <section className={style.section}>
+                  <div className={style.sectionHead}>
+                    <Text variant="subheader-2">Подключение к GitHub</Text>
+                    <Text variant="caption-2" color="secondary">
+                      Нужно только для отслеживания GitHub-репозиториев
+                    </Text>
+                  </div>
+                  <div className={style.group}>
+                    <Text variant="body-1" color="secondary">
+                      Токен задаётся в <code>packages/server/.env</code> (<code>GITHUB_TOKEN</code>) и здесь не хранится,
+                      чтобы не попадать в экспорт настроек.
+                    </Text>
+                    <ConnectionCheckPanel
+                      label="GitHub"
+                      state={checks.stateOf('github')}
+                      onRun={() => void checks.run('github')}
+                    />
+                  </div>
+                </section>
               </div>
-              <div className={style.group}>
-                <TextInput
-                  label="Bridge API URL"
-                  placeholder="http://localhost:3002/api/v1/time"
-                  value={form.bridgeApiUrl}
-                  onUpdate={handleChange('bridgeApiUrl')}
-                  autoComplete="off"
-                  validationState={bridgeUrlProblem ? 'invalid' : undefined}
-                  errorMessage={bridgeUrlProblem}
-                />
-                <SecretInput
-                  label="Bridge API key"
-                  value={form.bridgeApiKey}
-                  onUpdate={handleChange('bridgeApiKey')}
-                  note="Личный API-ключ (Профиль → API-ключи в bridge): один на всё — отгулы, отчёт, обмен задачами, автопилот и обновления"
-                  revealLabel="Показать ключ"
-                  hideLabel="Скрыть ключ"
-                />
-                <ConnectionCheckPanel
-                  label="Bridge"
-                  state={checks.stateOf('bridge')}
-                  onRun={() => void checks.run('bridge')}
-                  disabledReason={!(form.bridgeApiUrl ?? '').trim() ? 'Укажите Bridge API URL' : bridgeUrlProblem}
-                />
-              </div>
-            </section>
+            </div>
 
             <div className={style.formActions}>
               <Button view="action" size="l" type="submit" loading={isSaving} disabled={!isDirty || hasProblems}>
@@ -347,47 +398,6 @@ function Settings() {
             </div>
           </form>
 
-          <section className={style.codes}>
-            <div className={style.sectionHead}>
-              <Text variant="subheader-2">Коды проектов</Text>
-              <Text variant="caption-2" color="secondary">
-                Сопоставление ID проекта GitLab с названием в отчёте
-              </Text>
-            </div>
-            {codes.length === 0 ? (
-              <Text variant="body-2" color="secondary" className={style.codesEmpty}>
-                Коды ещё не добавлены
-              </Text>
-            ) : (
-              <ul className={style.codesList}>
-                {codes.map(([code, label]) => (
-                  <li key={code} className={style.codesItem}>
-                    <span className={style.codesCode}>{code}</span>
-                    <span className={style.codesLabel}>{label}</span>
-                    <Button
-                      view="flat"
-                      size="s"
-                      onClick={() => setCodeToRemove(code)}
-                      aria-label={`Удалить код ${code}`}
-                      className={style.codesRemove}
-                    >
-                      <Icon data={TrashBin} size={16} />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button
-              view="outlined"
-              size="m"
-              width="max"
-              onClick={() => setIsCodeDialogOpen(true)}
-              className={style.codesAdd}
-            >
-              <Icon data={Plus} size={16} />
-              Добавить код
-            </Button>
-          </section>
           </TabPanel>
 
           <TabPanel value="subscription" className={style.page}>

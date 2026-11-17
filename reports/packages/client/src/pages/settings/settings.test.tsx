@@ -67,9 +67,9 @@ describe('Settings page', () => {
   it('groups GitLab URL/token separately from the report fields', () => {
     renderSettings();
 
-    const gitlabUrlGroup = screen.getByLabelText('GitLab URL').closest('div');
-    const privateTokenGroup = screen.getByLabelText('Токен доступа').closest('div');
-    const userIdGroup = screen.getByLabelText('ID пользователя').closest('div');
+    const gitlabUrlGroup = screen.getByLabelText('GitLab URL').closest('section');
+    const privateTokenGroup = screen.getByLabelText('Токен доступа').closest('section');
+    const userIdGroup = screen.getByLabelText('ID пользователя').closest('section');
 
     expect(gitlabUrlGroup).toBe(privateTokenGroup);
     expect(gitlabUrlGroup).not.toBe(userIdGroup);

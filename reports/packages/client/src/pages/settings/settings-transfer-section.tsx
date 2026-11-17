@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  Button, Icon, Text, TextInput, useToaster,
+  Button, Disclosure, Icon, Text, TextInput, useToaster,
   Dialog, DialogHeader, DialogBody, DialogFooter,
 } from '@gravity-ui/uikit';
 import { ArrowDownToLine, ArrowUpFromLine, ArrowDownToSquare, ArrowUpFromSquare } from '@gravity-ui/icons';
@@ -163,47 +163,47 @@ function SettingsTransferSection() {
   };
 
   return (
-    <section className={style.section}>
-      <div className={style.sectionHead}>
-        <Text variant="subheader-2">Перенос настроек</Text>
-        <Text variant="caption-2" color="secondary">
-          Один файл со всем, что настроено вручную — для переезда на другую машину
-        </Text>
-      </div>
+    <section className={style.transfer}>
+      <Disclosure size="l" summary="Перенос настроек на другую машину">
+        <div className={style.transferBody}>
+          <Text variant="body-1" color="secondary">
+            Один файл со всем, что настроено вручную: основные настройки, Subscription, коды проектов и отгулы.
+          </Text>
+          <Text variant="body-1" color="warning">
+            Файл содержит GitLab-токен и ключ bridge в открытом виде — храните его так же осторожно, как пароль.
+          </Text>
 
-      <Text variant="body-2" color="warning">
-        Файл содержит GitLab-токен и ключи bridge в открытом виде — храните его так же осторожно, как пароль
-      </Text>
-
-      <div className={style.toolbar}>
-        <Button view="outlined" size="m" onClick={() => void handleExport()} loading={isExporting}>
-          <Icon data={ArrowDownToLine} size={16} />
-          Экспорт всех настроек
-        </Button>
-        <Button view="outlined" size="m" onClick={() => fileInputRef.current?.click()}>
-          <Icon data={ArrowUpFromLine} size={16} />
-          Импорт
-        </Button>
-        <Button view="outlined" size="m" onClick={() => void handlePushToBridge()} loading={isPushing}>
-          <Icon data={ArrowUpFromSquare} size={16} />
-          Экспорт в Bridge
-        </Button>
-        <Button view="outlined" size="m" onClick={handleOpenBridgeImport}>
-          <Icon data={ArrowDownToSquare} size={16} />
-          Импорт из Bridge
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void handleImportFile(file);
-          }}
-        />
-      </div>
+          <div className={style.toolbar}>
+            <Button view="outlined" size="m" onClick={() => void handleExport()} loading={isExporting}>
+              <Icon data={ArrowDownToLine} size={16} />
+              Экспорт всех настроек
+            </Button>
+            <Button view="outlined" size="m" onClick={() => fileInputRef.current?.click()}>
+              <Icon data={ArrowUpFromLine} size={16} />
+              Импорт
+            </Button>
+            <Button view="outlined" size="m" onClick={() => void handlePushToBridge()} loading={isPushing}>
+              <Icon data={ArrowUpFromSquare} size={16} />
+              Экспорт в Bridge
+            </Button>
+            <Button view="outlined" size="m" onClick={handleOpenBridgeImport}>
+              <Icon data={ArrowDownToSquare} size={16} />
+              Импорт из Bridge
+            </Button>
+          </div>
+        </div>
+      </Disclosure>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) void handleImportFile(file);
+        }}
+      />
 
       <Dialog open={pendingBundle !== null} onClose={() => setPendingBundle(null)}>
         <DialogHeader caption="Импортировать настройки?" />

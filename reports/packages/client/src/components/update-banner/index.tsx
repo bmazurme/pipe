@@ -154,7 +154,7 @@ function UpdateBanner() {
           </>
         )}
         actions={(
-          <>
+          <div className={style.actions}>
             {state.canUpdate && (
               <Button view="action" size="s" loading={isStarting} onClick={() => void handleUpdate()}>
                 Обновить
@@ -163,7 +163,7 @@ function UpdateBanner() {
             <Button view="outlined" size="s" loading={isFetching} onClick={() => void check({ refresh: true })}>
               Проверить снова
             </Button>
-          </>
+          </div>
         )}
         onClose={() => setDismissed(latest.releaseId)}
       />
