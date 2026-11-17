@@ -14,3 +14,10 @@
 .error {
   color: var(--g-color-text-danger);
 }
+
+/* In a vertical Alert its children stretch over the whole width; the buttons keep their own size inside this row. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
