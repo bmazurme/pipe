@@ -10,8 +10,14 @@ export interface ProviderPreset {
   modelHint: string;
   authScheme: ProviderAuthScheme;
   route: ProviderRoute;
-  /** Header name → hint for its value (the value is the owner's own, e.g. a folder id). */
+  /** Header name → hint for its value (the value is the owner's own). */
   headerHints: Record<string, string>;
+  /**
+   * For a service that addresses a model by the owner's folder (Yandex: `gpt://<folder>/<model>`): the model with `{folder}` where
+   * the owner's id goes. The form then asks for the id on its own and builds the model from it; the model field stays editable.
+   */
+  folderModel?: string;
+  folderLabel?: string;
   /** Where the content of jobs and chats goes when this key is used. */
   dataGoesTo: string;
   note: string;
@@ -22,12 +28,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'yandex',
     label: 'Yandex AI Studio',
     baseUrl: 'https://llm.api.cloud.yandex.net/v1',
-    modelHint: 'gpt://<id каталога>/<модель>',
+    modelHint: 'gpt://<id каталога>/deepseek-v4.1-flash',
     authScheme: 'api-key',
     route: 'direct',
-    headerHints: { 'x-folder-id': 'id каталога Yandex Cloud' },
+    headerHints: {},
+    folderModel: 'gpt://{folder}/deepseek-v4.1-flash',
+    folderLabel: 'ID каталога Yandex Cloud',
     dataGoesTo: 'Yandex Cloud',
-    note: 'Ключ — API-ключ сервисного аккаунта. Формат адреса и названия модели сверьте с документацией Yandex AI Studio.',
+    note: 'По умолчанию — DeepSeek V4.1 Flash; другую модель каталога (deepseek-v4.1-flash, gpt-oss-120b…) впишите в поле «Модель». Ключ — API-ключ сервисного аккаунта с ролью ai.languageModels.user из того же каталога; id каталога в заголовке не нужен — он в названии модели. Название модели сверяйте со списком в документации Yandex AI Studio.',
   },
   {
     id: 'gemini',
@@ -74,6 +82,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     note: 'Любой сервер с /chat/completions: llama.cpp, vLLM, шлюз вроде LiteLLM.',
   },
 ];
+
+/** The model for a folder id from a preset's `folderModel`; empty until the id is filled in. */
+export function modelForFolder(preset: ProviderPreset | undefined, folder: string): string {
+  const id = folder.trim();
+
+  return preset?.folderModel && id !== '' ? preset.folderModel.replace('{folder}', id) : '';
+}
 
 export function presetById(id: string | null | undefined): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((preset) => preset.id === id);

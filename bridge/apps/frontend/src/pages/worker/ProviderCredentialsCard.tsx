@@ -16,7 +16,7 @@ import {
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 import { modelName } from './fleet';
-import { AUTH_OPTIONS, describeKey, parseHeaderLines, presetById, PROVIDER_PRESETS, ROUTE_OPTIONS } from './providerPresets';
+import { AUTH_OPTIONS, describeKey, modelForFolder, parseHeaderLines, presetById, PROVIDER_PRESETS, ROUTE_OPTIONS } from './providerPresets';
 
 const PROVIDERS: ProviderModel[] = ['gpt', 'deepseek', 'qwen', 'custom'];
 const DEFAULT_PRESET = 'other';
@@ -31,6 +31,7 @@ export function ProviderCredentialsCard() {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
+  const [folder, setFolder] = useState('');
   // A custom key (any OpenAI-compatible server): a template fills these in, every one stays editable.
   const [presetId, setPresetId] = useState(DEFAULT_PRESET);
   const [authScheme, setAuthScheme] = useState<ProviderAuthScheme>('bearer');
@@ -60,6 +61,7 @@ export function ProviderCredentialsCard() {
     ? name.trim() !== '' &&
       baseUrl.trim() !== '' &&
       model.trim() !== '' &&
+      !/\s|\//.test(folder) &&
       (authScheme === 'none' || apiKey.trim() !== '') &&
       headers.invalid.length === 0 &&
       timeoutValid &&
@@ -71,11 +73,18 @@ export function ProviderCredentialsCard() {
     const chosen = presetById(id);
 
     setPresetId(id);
+    setFolder('');
     if (!chosen) return;
+    setModel('');
     setBaseUrl(chosen.baseUrl);
     setAuthScheme(chosen.authScheme);
     setRoute(chosen.route);
     setHeaderText(Object.keys(chosen.headerHints).map((header) => `${header}: `).join('\n'));
+  };
+
+  const changeFolder = (value: string) => {
+    setFolder(value);
+    setModel(modelForFolder(preset, value));
   };
 
   const handleCreate = async () => {
@@ -108,6 +117,7 @@ export function ProviderCredentialsCard() {
       setApiKey('');
       setBaseUrl('');
       setModel('');
+      setFolder('');
       setHeaderText('');
       setTimeoutSec('');
       setSupportsTools(true);
@@ -243,6 +253,16 @@ export function ProviderCredentialsCard() {
                     Содержимое задач и чатов уйдёт: <b>{preset.dataGoesTo}</b>. {preset.note}
                   </>
                 }
+              />
+            )}
+            {preset?.folderModel && (
+              <TextInput
+                value={folder}
+                onUpdate={changeFolder}
+                placeholder={`${preset.folderLabel ?? 'ID каталога'} — из него собирается название модели`}
+                controlProps={{ 'aria-label': preset.folderLabel ?? 'ID каталога' }}
+                validationState={/\s|\//.test(folder) ? 'invalid' : undefined}
+                autoComplete="off"
               />
             )}
             <div className={styles.fieldRow}>
