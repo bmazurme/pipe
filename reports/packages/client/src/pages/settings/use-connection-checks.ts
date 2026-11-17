@@ -11,7 +11,7 @@ export const CHECK_TARGETS: ConnectionCheckTarget[] = ['gitlab', 'github', 'brid
 const inputsOf: Record<ConnectionCheckTarget, (s: SettingsType) => string> = {
   gitlab: (s) => [s.gitlabUrl, s.privateToken, s.userId].join('\n'),
   github: () => '',
-  bridge: (s) => [s.bridgeApiUrl, s.bridgeApiKey, s.bridgeStorageApiKey].join('\n'),
+  bridge: (s) => [s.bridgeApiUrl, s.bridgeApiKey].join('\n'),
 };
 
 export type CheckState = {

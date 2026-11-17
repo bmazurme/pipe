@@ -155,7 +155,7 @@ describe('fetchLatestRelease', () => {
   });
 
   it('asks the bridge of the settings, with the key, at its release route', async () => {
-    state.settings = { bridgeApiUrl: 'https://api.bridge.example/api/v1/time/export/day-offs', bridgeApiKey: 'brk_one', bridgeStorageApiKey: 'brk_two' };
+    state.settings = { bridgeApiUrl: 'https://api.bridge.example/api/v1/time/export/day-offs', bridgeApiKey: 'brk_two' };
     let seen: { url: string; key: string } | undefined;
     globalThis.fetch = (async (url: URL, init: RequestInit) => {
       seen = { url: url.href, key: (init.headers as Record<string, string>)['X-Api-Key'] };

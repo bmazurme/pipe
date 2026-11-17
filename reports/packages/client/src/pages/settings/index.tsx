@@ -319,14 +319,7 @@ function Settings() {
                   label="Bridge API key"
                   value={form.bridgeApiKey}
                   onUpdate={handleChange('bridgeApiKey')}
-                  revealLabel="Показать ключ"
-                  hideLabel="Скрыть ключ"
-                />
-                <SecretInput
-                  label="Bridge storage API key"
-                  value={form.bridgeStorageApiKey}
-                  onUpdate={handleChange('bridgeStorageApiKey')}
-                  note="Личный API-ключ (Профиль → API-ключи в bridge) — единственный способ авторизации для интеграции с bridge storage"
+                  note="Личный API-ключ (Профиль → API-ключи в bridge): один на всё — отгулы, отчёт, обмен задачами, автопилот и обновления"
                   revealLabel="Показать ключ"
                   hideLabel="Скрыть ключ"
                 />

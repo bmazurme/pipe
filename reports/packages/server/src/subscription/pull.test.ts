@@ -99,8 +99,7 @@ beforeEach(() => {
     employee: '',
     company: '',
     bridgeApiUrl: 'https://bridge.example.com',
-    bridgeApiKey: '',
-    bridgeStorageApiKey: 'brk_test',
+    bridgeApiKey: 'brk_test',
   });
 });
 

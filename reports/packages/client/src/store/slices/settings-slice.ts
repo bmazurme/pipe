@@ -10,7 +10,6 @@ export interface SettingsState {
   company: string;
   bridgeApiUrl: string;
   bridgeApiKey: string;
-  bridgeStorageApiKey: string;
 }
 
 const STORAGE_KEY = 'settings';
@@ -23,7 +22,6 @@ const initialSettings: SettingsState = {
   company: '',
   bridgeApiUrl: '',
   bridgeApiKey: '',
-  bridgeStorageApiKey: '',
 };
 
 const loadState = (): SettingsState => {

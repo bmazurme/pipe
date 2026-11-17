@@ -33,22 +33,22 @@ function getOrigin(): string {
 }
 
 // bridge Storage integration supports exactly one auth path: a personal API
-// key (Settings → "Bridge storage API key", minted from bridge's Profile
+// key (Settings → "Bridge API key", minted from bridge's Profile
 // page) — a static credential, presented as-is until revoked, no browser
 // session or refresh-token replay involved.
 async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const origin = getOrigin();
-  const { bridgeStorageApiKey } = getSettings();
+  const { bridgeApiKey } = getSettings();
 
-  if (!bridgeStorageApiKey) {
-    throw new Error('Интеграция с bridge storage не настроена: укажите Личный API-ключ на странице Settings');
+  if (!bridgeApiKey) {
+    throw new Error('Интеграция с bridge не настроена: укажите личный API-ключ на странице Settings');
   }
 
   const url = `${origin}${path}`;
 
   const response = await fetch(url, {
     ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${bridgeStorageApiKey}` },
+    headers: { ...init.headers, Authorization: `Bearer ${bridgeApiKey}` },
     signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
   }).catch((error) => {
     throw describeFetchError(error, url);

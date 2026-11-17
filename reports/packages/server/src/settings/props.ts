@@ -15,7 +15,6 @@ const defaultSettings: SettingsType = {
   company: '',
   bridgeApiUrl: '',
   bridgeApiKey: '',
-  bridgeStorageApiKey: '',
 };
 
 export const getSettings = (): SettingsType => {
@@ -23,7 +22,13 @@ export const getSettings = (): SettingsType => {
     return defaultSettings;
   }
 
-  return { ...defaultSettings, ...JSON.parse(readFileSync(settingsPath, 'utf-8')) };
+  const { bridgeStorageApiKey, ...stored } = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Partial<SettingsType> & {
+    bridgeStorageApiKey?: string;
+  };
+
+  // Until the single-key change there were two fields holding personal bridge API keys; the storage one was the one the
+  // parcel flow and the autopilot used, so it wins when both are present. The next save drops it from the file.
+  return { ...defaultSettings, ...stored, bridgeApiKey: bridgeStorageApiKey || stored.bridgeApiKey || '' };
 };
 
 export const setSettings = (settings: SettingsType): SettingsType => {

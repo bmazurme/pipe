@@ -12,7 +12,6 @@ const stored = {
   company: '',
   bridgeApiUrl: '',
   bridgeApiKey: '',
-  bridgeStorageApiKey: '',
 };
 
 vi.mock('./props', () => ({ getSettings: vi.fn(() => stored), setSettings: vi.fn() }));

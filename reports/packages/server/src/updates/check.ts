@@ -29,8 +29,7 @@ export interface UpdateCheckerDeps {
 
 // The owner's API key and bridge's address come from Settings, as for every other call to bridge.
 export async function fetchLatestRelease(): Promise<BridgeReleaseInfo> {
-  const { bridgeApiUrl, bridgeApiKey, bridgeStorageApiKey } = getSettings();
-  const apiKey = bridgeStorageApiKey || bridgeApiKey;
+  const { bridgeApiUrl, bridgeApiKey: apiKey } = getSettings();
 
   if (!bridgeApiUrl || !apiKey) {
     throw new Error('Проверка обновлений: укажите адрес bridge и API-ключ на странице Settings');

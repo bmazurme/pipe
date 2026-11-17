@@ -43,14 +43,10 @@ export type SettingsType = {
   employee: string;
   company: string;
   bridgeApiUrl: string;
+  // One personal bridge API key (Profile page → API keys) for everything reports
+  // asks of bridge: time endpoints, parcel storage, autopilot, updates. Older
+  // settings files kept a second `bridgeStorageApiKey`; getSettings folds it in.
   bridgeApiKey: string;
-  // Bridge Storage personal API key (Profile page → API keys). bridgeApiKey
-  // above is also a personal API key now (bridge's /api/v1/time/* no longer has
-  // a separate shared secret), kept as its own field for the time endpoints'
-  // URL. The only auth path bridge Storage
-  // integration supports — no impersonated browser session/refresh-token
-  // replay fallback.
-  bridgeStorageApiKey: string;
 };
 
 // Settings → «Проверить соединение»: one probe per integration. `skip` = nothing to check
