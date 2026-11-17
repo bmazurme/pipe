@@ -47,8 +47,26 @@ describe('getSettings', () => {
       company: '',
       bridgeApiUrl: '',
       bridgeApiKey: '',
-      bridgeStorageApiKey: '',
     });
+  });
+});
+
+describe('getSettings: legacy second bridge key', () => {
+  const base = { gitlabUrl: '', privateToken: '', userId: '', employee: '', company: '', bridgeApiUrl: 'https://b.example/api/v1' };
+
+  it('folds a separate bridgeStorageApiKey into bridgeApiKey and does not return it', () => {
+    writeFileSync(settingsPath, JSON.stringify({ ...base, bridgeApiKey: 'brk_old_time', bridgeStorageApiKey: 'brk_storage' }));
+
+    const settings = getSettings();
+
+    expect(settings.bridgeApiKey).toBe('brk_storage');
+    expect(settings).not.toHaveProperty('bridgeStorageApiKey');
+  });
+
+  it('keeps bridgeApiKey when there is no legacy key', () => {
+    writeFileSync(settingsPath, JSON.stringify({ ...base, bridgeApiKey: 'brk_one' }));
+
+    expect(getSettings().bridgeApiKey).toBe('brk_one');
   });
 });
 
@@ -62,7 +80,6 @@ describe('setSettings', () => {
       company: 'Test Company',
       bridgeApiUrl: 'http://localhost:3002/api/v1/time/export/day-offs',
       bridgeApiKey: 'bridge-key-123',
-      bridgeStorageApiKey: 'brk_abc123',
     };
 
     const result = setSettings(newSettings);

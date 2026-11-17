@@ -19,7 +19,6 @@ describe('setSettings file mode', () => {
       company: '',
       bridgeApiUrl: '',
       bridgeApiKey: '',
-      bridgeStorageApiKey: '',
     });
 
     expect(writeJsonFileSync).toHaveBeenCalledWith(expect.stringMatching(/settings\.json$/), expect.anything(), { mode: 0o600 });

@@ -20,9 +20,8 @@ so a machine caller no longer has to impersonate a human's browser session.
   stores it alongside (not instead of) the existing refresh-token login;
   [bridgeClient.ts](../sync/src/bridgeClient.ts) prefers it when present, with
   no refresh dance needed at all.
-- **reports**: new Settings field "Bridge storage API key"
-  (`bridgeStorageApiKey`, distinct from the pre-existing `bridgeApiKey`,
-  which used to be a separate shared secret and is now just another personal API key) — preferred by
+- **reports**: Settings field "Bridge API key" (`bridgeApiKey`, one personal API key for time endpoints, parcel
+  storage, autopilot and updates; an older separate `bridgeStorageApiKey` is folded into it on read) — preferred by
   [subscription/bridge-client.ts](../reports/packages/server/src/subscription/bridge-client.ts)
   over replaying `bridgeRefreshToken` when set.
 - **worker**: authenticates with a single `brw_` key of its own, consumed by

@@ -99,7 +99,7 @@ rebuildable from the panel via the VPN page rather than hand-maintained).
 **reports** (`SettingsType`, stored in the gitignored
 `reports/packages/server/src/settings/settings.json`, edited from the
 client's Settings page): `gitlabUrl`, `privateToken` (GitLab PAT),
-`bridgeApiUrl`, `bridgeApiKey` (a personal bridge API key for the `time` endpoints), `bridgeStorageApiKey` (personal bridge API key, preferred — see
+`bridgeApiUrl`, `bridgeApiKey` (the one personal bridge API key, for everything reports asks of bridge — see
 [auth.md](auth.md)), `bridgeRefreshToken` (fallback: pasted from a
 bridge browser session cookie).
 

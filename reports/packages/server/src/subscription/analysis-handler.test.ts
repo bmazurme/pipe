@@ -91,7 +91,7 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   for (const key of Object.keys(stores.state)) delete stores.state[key];
   process.env.GITHUB_TOKEN = 'ghp_test';
-  getSettingsMock.mockReturnValue({ gitlabUrl: '', privateToken: '', userId: '', employee: '', company: '', bridgeApiUrl: 'https://bridge.example.com', bridgeApiKey: '', bridgeStorageApiKey: 'brk' });
+  getSettingsMock.mockReturnValue({ gitlabUrl: '', privateToken: '', userId: '', employee: '', company: '', bridgeApiUrl: 'https://bridge.example.com', bridgeApiKey: 'brk' });
 });
 
 afterEach(() => {

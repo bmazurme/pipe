@@ -1,7 +1,7 @@
 import type { SettingsType } from '@reports/shared';
 
 // The three fields that are credentials, not preferences.
-export const SECRET_SETTING_KEYS = ['privateToken', 'bridgeApiKey', 'bridgeStorageApiKey'] as const;
+export const SECRET_SETTING_KEYS = ['privateToken', 'bridgeApiKey'] as const;
 
 // What the UI is shown (and sends back unchanged) in place of a stored secret.
 export const SECRET_MASK = '••••••••';

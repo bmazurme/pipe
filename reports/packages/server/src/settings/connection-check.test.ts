@@ -11,7 +11,6 @@ const settings = (overrides: Partial<SettingsType> = {}): SettingsType => ({
   company: '',
   bridgeApiUrl: 'https://bridge.example.com/api/v1/time',
   bridgeApiKey: 'brk',
-  bridgeStorageApiKey: 'brs',
   ...overrides,
 });
 
@@ -148,7 +147,7 @@ describe('checkBridge', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('checks the origin health, then each key against the same guarded route', async () => {
+  it('checks the origin health, then the key against a guarded route', async () => {
     stubFetch(() => json(null));
 
     const items = await checkBridge(settings());
@@ -156,11 +155,9 @@ describe('checkBridge', () => {
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
       'https://bridge.example.com/api/v1/health',
       'https://bridge.example.com/api/v1/reports-settings',
-      'https://bridge.example.com/api/v1/reports-settings',
     ]);
     expect((fetchMock.mock.calls[1][1].headers as Record<string, string>)['X-Api-Key']).toBe('brk');
-    expect((fetchMock.mock.calls[2][1].headers as Record<string, string>).Authorization).toBe('Bearer brs');
-    expect(items.map((i) => i.status)).toEqual(['ok', 'ok', 'ok']);
+    expect(items.map((i) => i.status)).toEqual(['ok', 'ok']);
   });
 
   it('reports a rejected key separately from a reachable server', async () => {
@@ -173,16 +170,15 @@ describe('checkBridge', () => {
     const items = await checkBridge(settings());
 
     expect(items[0].status).toBe('ok');
-    expect(items[1]).toMatchObject({ label: 'Bridge API key', status: 'error' });
-    expect(items[2]).toMatchObject({ label: 'Storage API key', status: 'ok' });
+    expect(items[1]).toMatchObject({ label: 'API-ключ', status: 'error' });
   });
 
   it('skips keys that are not set', async () => {
     stubFetch(() => json(null));
 
-    const items = await checkBridge(settings({ bridgeApiKey: '', bridgeStorageApiKey: '' }));
+    const items = await checkBridge(settings({ bridgeApiKey: '' }));
 
-    expect(items.map((i) => i.status)).toEqual(['ok', 'skip', 'skip']);
+    expect(items.map((i) => i.status)).toEqual(['ok', 'skip']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -136,8 +136,7 @@ function stubSettings(overrides: Partial<SettingsType> = {}) {
     employee: '',
     company: '',
     bridgeApiUrl: 'https://bridge.example.com',
-    bridgeApiKey: '',
-    bridgeStorageApiKey: 'brk_test',
+    bridgeApiKey: 'brk_test',
     ...overrides,
   });
 }

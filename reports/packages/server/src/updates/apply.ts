@@ -87,8 +87,7 @@ export interface ReleaseDownload {
 }
 
 export async function downloadRelease(): Promise<ReleaseDownload> {
-  const { bridgeApiUrl, bridgeApiKey, bridgeStorageApiKey } = getSettings();
-  const apiKey = bridgeStorageApiKey || bridgeApiKey;
+  const { bridgeApiUrl, bridgeApiKey: apiKey } = getSettings();
 
   if (!bridgeApiUrl || !apiKey) throw new Error('Обновление: укажите адрес bridge и API-ключ на странице Settings');
 

@@ -29,9 +29,9 @@ export type AutopilotDeps = {
 
 const defaultDeps: AutopilotDeps = {
   hasBridge: () => {
-    const { bridgeApiUrl, bridgeStorageApiKey } = getSettings();
+    const { bridgeApiUrl, bridgeApiKey } = getSettings();
 
-    return Boolean(bridgeApiUrl && bridgeStorageApiKey);
+    return Boolean(bridgeApiUrl && bridgeApiKey);
   },
   heartbeat: sendHeartbeat,
   event: sendClientEvent,

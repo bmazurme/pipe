@@ -170,31 +170,26 @@ export async function checkBridge(settings: SettingsType): Promise<ConnectionChe
     return failure('Bridge', error);
   }
 
-  const keys: { label: string; value: string; header: (value: string) => Record<string, string> }[] = [
-    { label: 'Bridge API key', value: settings.bridgeApiKey, header: (value) => ({ 'X-Api-Key': value }) },
-    { label: 'Storage API key', value: settings.bridgeStorageApiKey, header: (value) => ({ Authorization: `Bearer ${value}` }) },
-  ];
+  const label = 'API-ключ';
 
-  for (const key of keys) {
-    if (!key.value) {
-      items.push(item(key.label, 'skip', 'Не указан'));
-      continue;
+  if (!settings.bridgeApiKey) {
+    items.push(item(label, 'skip', 'Не указан'));
+    return items;
+  }
+
+  try {
+    // A light route behind the same guard as Storage/time; only the status is read, never the payload.
+    const { response } = await timed(`${origin}/api/v1/reports-settings`, { headers: { 'X-Api-Key': settings.bridgeApiKey } });
+
+    if (response.status === 401 || response.status === 403) {
+      items.push(item(label, 'error', `Ключ отклонён (${response.status}): он неверный или отозван — создайте новый в bridge (Профиль → API-ключи)`));
+    } else if (response.ok) {
+      items.push(item(label, 'ok', 'Принят'));
+    } else {
+      items.push(item(label, 'error', `Bridge ответил ${response.status}`));
     }
-
-    try {
-      // A light route behind the same guard as Storage/time; only the status is read, never the payload.
-      const { response } = await timed(`${origin}/api/v1/reports-settings`, { headers: key.header(key.value) });
-
-      if (response.status === 401 || response.status === 403) {
-        items.push(item(key.label, 'error', `Ключ отклонён (${response.status}): он неверный или отозван — создайте новый в bridge (Профиль → API-ключи)`));
-      } else if (response.ok) {
-        items.push(item(key.label, 'ok', 'Принят'));
-      } else {
-        items.push(item(key.label, 'error', `Bridge ответил ${response.status}`));
-      }
-    } catch (error) {
-      items.push(...failure(key.label, error));
-    }
+  } catch (error) {
+    items.push(...failure(label, error));
   }
 
   return items;

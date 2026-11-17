@@ -9,7 +9,6 @@ const stored = {
   privateToken: 'glpat-real',
   bridgeApiUrl: 'https://bridge.example',
   bridgeApiKey: 'bridge-key-real',
-  bridgeStorageApiKey: 'storage-key-real',
 };
 
 vi.mock('./props', () => ({
@@ -34,7 +33,7 @@ const fakeRes = () => {
 };
 
 const expectOnlySkippedYears = (output: string) => {
-  for (const secret of ['glpat-real', 'bridge-key-real', 'storage-key-real']) {
+  for (const secret of ['glpat-real', 'bridge-key-real']) {
     expect(output).not.toContain(secret);
   }
 
