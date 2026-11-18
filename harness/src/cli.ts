@@ -8,6 +8,7 @@ import { exitCodeFor } from './deriveStatus.js';
 import { recordTransitions, readTaskEvents } from './events.js';
 import { formatNextRecommendation, pickNextTask } from './next.js';
 import { notifyTransitions } from './notifyTransitions.js';
+import { runPullReady } from './pullReady.js';
 import { buildReportData, formatBuiltReport } from './reportBuilder.js';
 import { logTime } from './timeTracking.js';
 
@@ -165,6 +166,18 @@ export async function main(): Promise<void> {
 
   if (options.next) {
     process.exitCode = await runNext(paths, options);
+    return;
+  }
+
+  if (options.pullReady) {
+    const built = await buildReportData({ paths, filter: options.filter, live: true, staleHours: options.staleHours });
+    const result = await runPullReady(built.data.tasks, built.liveResult, {
+      yes: options.yes,
+      dryRun: options.dryRun,
+      project: options.project,
+    });
+    if (result.output) console.log(result.output);
+    process.exitCode = result.code;
     return;
   }
 

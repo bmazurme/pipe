@@ -48,6 +48,16 @@ function sortByKey<T extends { key: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => compareIssueKeys(a.key, b.key));
 }
 
+// Keys --pull-ready should pull: gitlab-worker + agent-runner tasks bridge
+// storage confirms have a result. Deliberately narrower than the 'ready'
+// bucket — reports' 'pulled' tasks are also "ready", but need publish next,
+// not pull.
+export function pullableKeys(tasks: AnnotatedTaskEntry[], liveTasks: Map<string, LiveTaskInfo> | undefined): string[] {
+  return sortByKey(
+    tasks.filter((task) => Boolean(task.gitlabWorker && task.syncAgent && liveTasks?.get(task.key)?.hasResultInStorage)),
+  ).map((task) => task.key);
+}
+
 // IMPROVEMENTS_HARNESS.md 2.4 — the TUI's task list needs every task
 // ranked, not just the single winner pickNextTask (below) returns; same 4
 // buckets, same priority order, just not stopping at the first match. A
