@@ -17,6 +17,7 @@ export interface CliOptions {
   notify: boolean;
   next: boolean;
   brief: boolean;
+  pullReady: boolean;
   recentHours?: number;
   action?: { kind: ActionKind; key: string };
   yes: boolean;
@@ -74,6 +75,13 @@ Options:
   --recent-hours <hours>     with --brief, how far back "moved recently"
                               looks (default: ${DEFAULT_RECENT_HOURS})
   --pull <projectId:iid>     run sync-cli pull-issue for this task, then exit
+  --pull-ready               run sync-cli pull-issue for every task bridge
+                              confirms has a result ready (always checks
+                              bridge, like --live), behind one confirmation
+                              for the whole list, one after another; a
+                              failed pull doesn't stop the rest. Works with
+                              --yes/--dry-run/--project; can't be combined
+                              with --pull/--retry/--publish
   --retry <projectId:iid>    re-run sync-cli push-issue for this task (a
                               fresh parcel for agent-runner to pick up again),
                               then exit
@@ -122,6 +130,7 @@ export function parseArgs(argv: string[]): CliOptions {
   let notify = false;
   let next = false;
   let brief = false;
+  let pullReady = false;
   let recentHours: number | undefined;
   let action: { kind: ActionKind; key: string } | undefined;
   let yes = false;
@@ -161,6 +170,11 @@ export function parseArgs(argv: string[]): CliOptions {
 
     if (arg === '--brief') {
       brief = true;
+      continue;
+    }
+
+    if (arg === '--pull-ready') {
+      pullReady = true;
       continue;
     }
 
@@ -277,5 +291,9 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg} (see --help)`);
   }
 
-  return { paths, json, filter, watchSeconds, staleHours, live, logKey, logTimeKey, notify, next, brief, recentHours, action, yes, dryRun, project, reportsUrl, help };
+  if (pullReady && action) {
+    throw new Error('--pull-ready cannot be combined with --pull/--retry/--publish');
+  }
+
+  return { paths, json, filter, watchSeconds, staleHours, live, logKey, logTimeKey, notify, next, brief, pullReady, recentHours, action, yes, dryRun, project, reportsUrl, help };
 }

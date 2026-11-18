@@ -71,6 +71,10 @@ below.
 --pull/--retry/--publish <projectId:iid>
                             run a next action against one task, then exit
                             (see "Running actions" below)
+--pull-ready               pull every task bridge confirms has a result ready
+                            (gitlab-worker + agent-runner tasks only), one
+                            confirmation for the whole list, sequentially;
+                            a failed pull doesn't stop the rest
 --yes                      skip the confirmation prompt before an action
 --dry-run                  print what an action would do instead of doing it
 --project <name>           override project-name resolution for --pull/--retry (a configured name)

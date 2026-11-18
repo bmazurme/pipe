@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { TaskEntry } from './collect.js';
 import { annotateTasks } from './deriveStatus.js';
-import { pickNextTask, rankTasks } from './next.js';
+import { pickNextTask, pullableKeys, rankTasks } from './next.js';
 
 const NOW = Date.parse('2026-10-05T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -131,5 +131,34 @@ describe('rankTasks', () => {
     const annotated = annotateTasks(tasks, 24, NOW);
 
     assert.deepEqual(rankTasks(annotated), []);
+  });
+});
+
+describe('pullableKeys', () => {
+  const agentTask = (key: string): TaskEntry => ({
+    key,
+    gitlabWorker: { pushedAt: new Date(NOW - HOUR).toISOString(), filename: 'x.zip' },
+    syncAgent: { lastOwnOutputHash: 'abc' },
+  });
+
+  it('returns sorted keys of confirmed gitlab-worker + agent-runner tasks only', () => {
+    const tasks: TaskEntry[] = [
+      agentTask('402:10'),
+      agentTask('402:6'),
+      agentTask('402:7'), // not confirmed in storage
+      { key: '1:1', subscription: { step: 'pulled' } }, // ready, but needs publish
+    ];
+    const annotated = annotateTasks(tasks, 24, NOW);
+    const liveTasks = new Map([
+      ['402:10', { hasResultInStorage: true }],
+      ['402:6', { hasResultInStorage: true }],
+      ['402:7', { hasResultInStorage: false }],
+      ['1:1', { hasResultInStorage: true }],
+    ]);
+    assert.deepEqual(pullableKeys(annotated, liveTasks), ['402:6', '402:10']);
+  });
+
+  it('returns nothing without live data', () => {
+    assert.deepEqual(pullableKeys(annotateTasks([agentTask('1:1')], 24, NOW), undefined), []);
   });
 });

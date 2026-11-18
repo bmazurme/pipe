@@ -114,3 +114,22 @@ describe('HELP_TEXT', () => {
     assert.match(HELP_TEXT, /--stale-after/);
   });
 });
+
+describe('--pull-ready', () => {
+  it('parses --pull-ready, defaulting to false', () => {
+    assert.equal(parseArgs([]).pullReady, false);
+    const options = parseArgs(['--pull-ready', '--yes', '--dry-run']);
+    assert.equal(options.pullReady, true);
+    assert.equal(options.yes, true);
+    assert.equal(options.dryRun, true);
+  });
+
+  it('rejects combining it with --pull/--retry/--publish in either order', () => {
+    assert.throws(() => parseArgs(['--pull-ready', '--pull', '402:6']), /--pull-ready cannot be combined/);
+    assert.throws(() => parseArgs(['--retry', '402:6', '--pull-ready']), /--pull-ready cannot be combined/);
+  });
+
+  it('documents it in HELP_TEXT', () => {
+    assert.match(HELP_TEXT, /--pull-ready/);
+  });
+});
