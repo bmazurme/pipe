@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
@@ -21,6 +22,10 @@ function writeFakeClaude(dir: string): void {
     [
       '#!/usr/bin/env node',
       "process.argv.slice(2).forEach((arg, i) => console.log(`ARG${i}:${arg}`));",
+      "const stdinText = require('node:fs').readFileSync(0, 'utf-8');",
+      "console.log(`STDIN_LEN:${stdinText.length}`);",
+      "console.log(`STDIN_SUM:${require('node:crypto').createHash('sha256').update(stdinText).digest('hex')}`);",
+      "console.log(`STDIN_HEAD:${stdinText.slice(0, 20)}`);",
       "console.log(`TOKEN:${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? ''}`);",
       "console.log(`PROXY:${process.env.HTTP_PROXY ?? ''}`);",
       "console.log(`BRIDGEKEY:${process.env.BRIDGE_API_KEY ?? ''}`);",
@@ -140,11 +145,24 @@ describe('runClaude', () => {
 
     assert.equal(result.exitCode, 0);
     assert.match(result.output, /ARG0:-p/);
-    assert.match(result.output, /ARG1:do the thing/);
+    assert.match(result.output, /ARG1:--dangerously-skip-permissions/);
+    assert.ok(!/^ARG\d+:do the thing/m.test(result.output));
+    assert.match(result.output, /STDIN_HEAD:do the thing/);
     assert.match(result.output, /ARG\d+:--dangerously-skip-permissions/);
     assert.match(result.output, /ARG\d+:--model/);
     assert.match(result.output, /ARG\d+:sonnet/);
     assert.equal(chunks.join(''), result.output);
+  });
+
+  it('delivers a 200 000-character prompt intact on stdin, not argv', async () => {
+    const prompt = Array.from({ length: 20_100 }, (_, i) => `line${String(i).padStart(5, '0')}`).join('\n').slice(0, 200_000);
+    assert.equal(prompt.length, 200_000);
+    const result = await runClaude('/tmp', prompt, 'sonnet', () => {});
+
+    assert.equal(result.exitCode, 0);
+    assert.match(result.output, /STDIN_LEN:200000$/m);
+    assert.ok(result.output.includes(`STDIN_SUM:${createHash('sha256').update(prompt).digest('hex')}`));
+    assert.ok(!result.output.includes('line00010'));
   });
 
   it('overrides the inherited Claude token with a per-job one when given', async () => {
