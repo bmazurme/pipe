@@ -489,7 +489,7 @@ An MCP server (IMPROVEMENTS_HARNESS.md 5.1) wrapping everything above as
 tools for Claude Code (or any other MCP client — bridge's own Chat, once it
 grows tool use) instead of a human having to run `pipe-status` in a
 terminal and paste the output in: `status`, `next`, `task_log`, `pull`,
-`retry`, `publish`, `log_time` — same underlying functions, same behavior, just called
+`pull_ready`, `retry`, `publish`, `log_time` — same underlying functions, same behavior, just called
 over MCP instead of argv.
 
 ```bash
@@ -525,6 +525,11 @@ claude mcp add pipe-mcp -- node /absolute/path/to/pipe/harness/dist/mcp.js
   (nothing to prompt against: stdin is the JSON-RPC channel itself), so
   this explicit-argument-plus-host-approval pairing *is* the confirmation
   layer here, not a second copy of the CLI's `readline` prompt.
+- **`pull_ready`** — `{ yes, dryRun?, project?, filter?, staleHours? }`, the
+  same as `pipe-status --pull-ready`: checks bridge live and pulls every
+  ready result in one call (one approval instead of one per key). `yes` is
+  **required**; `yes: false` refuses, naming the keys. If the bridge live
+  check is unavailable it returns that message as an error.
 - **`log_time`** — `{ key, yes, dryRun? }`, the same as `pipe-status
   --log-time <key>`: logs a finished push→pull cycle's duration to GitLab as
   spent time. `key` must match `^\d+:\d+$`; `yes` is **required** and

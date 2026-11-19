@@ -116,4 +116,21 @@ describe('runPullReady', () => {
     assert.equal(result.code, 1);
     assert.equal(result.output, 'pulled 2, failed 1 (402:7)');
   });
+
+  it('writes nothing to console.log and returns per-key output before the summary', async () => {
+    const { deps } = makeDeps({ runSyncCli: async (args) => ({ code: 0, output: `out-${args[4]}` }) });
+    const logged: unknown[][] = [];
+    const original = console.log;
+    console.log = (...a: unknown[]) => {
+      logged.push(a);
+    };
+    let result;
+    try {
+      result = await runPullReady(tasks, live(['402:6', '402:7']), { yes: true, dryRun: false }, deps);
+    } finally {
+      console.log = original;
+    }
+    assert.equal(logged.length, 0);
+    assert.equal(result.output, 'out-6\nout-7\npulled 2, failed 0');
+  });
 });

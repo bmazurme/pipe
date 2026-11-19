@@ -48,17 +48,18 @@ export async function runPullReady(
     }
   }
 
+  // Output is collected, never printed: in an MCP stdio server stdout is the
+  // JSON-RPC channel (see mcp.ts), so the caller prints the returned output.
+  const lines: string[] = [];
   const failed: string[] = [];
   let pulled = 0;
   for (const key of keys) {
     const result = await runAction('pull', key, actionOptions, deps);
-    if (result.output) console.log(result.output);
+    if (result.output) lines.push(result.output);
     if (result.code === 0) pulled++;
     else failed.push(key);
   }
 
-  return {
-    code: failed.length > 0 ? 1 : 0,
-    output: `pulled ${pulled}, failed ${failed.length}${failed.length > 0 ? ` (${failed.join(', ')})` : ''}`,
-  };
+  lines.push(`pulled ${pulled}, failed ${failed.length}${failed.length > 0 ? ` (${failed.join(', ')})` : ''}`);
+  return { code: failed.length > 0 ? 1 : 0, output: lines.join('\n') };
 }
