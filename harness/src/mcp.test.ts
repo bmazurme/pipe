@@ -12,6 +12,8 @@ import type { StatusPaths } from './collect.js';
 import { buildBrief, formatBrief } from './brief.js';
 import type { EventsPaths } from './events.js';
 import type { LogTimeDeps } from './timeTracking.js';
+import { annotateTasks } from './deriveStatus.js';
+import type { buildReportData } from './reportBuilder.js';
 import { createPipeMcpServer, mcpRunSyncCli } from './mcp.js';
 
 // Real protocol round-trip (InMemoryTransport.createLinkedPair — a real
@@ -79,12 +81,12 @@ describe('pipe-mcp', () => {
     assert.equal(result.content[0].text, expected);
   });
 
-  it('lists all eight tools', async () => {
+  it('lists all nine tools', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['brief', 'log_time', 'next', 'publish', 'pull', 'retry', 'status', 'task_log'],
+      ['brief', 'log_time', 'next', 'publish', 'pull', 'pull_ready', 'retry', 'status', 'task_log'],
     );
   });
 
@@ -344,5 +346,74 @@ describe('mcpRunSyncCli', () => {
     assert.ok(result.output.startsWith('[…truncated]'));
     assert.ok(result.output.endsWith('TAIL'));
     assert.ok(!result.output.includes('HEAD'));
+  });
+});
+
+describe('pipe-mcp pull_ready', () => {
+  let client: Client;
+  afterEach(async () => {
+    await client?.close();
+  });
+
+  const task = (key: string) => ({
+    key,
+    gitlabWorker: { pushedAt: new Date().toISOString(), filename: 'x.zip' },
+    syncAgent: { lastOwnOutputHash: 'abc' },
+  });
+  const textOf = (result: object) => ((result as { content: { text: string }[] }).content)[0].text;
+
+  async function connect(liveAvailable: boolean) {
+    const calls: string[][] = [];
+    const actionDeps = makeFakeActionDeps({
+      runSyncCli: async (args) => {
+        calls.push(args);
+        return { code: 0, output: `pulled-out-${args[4]}` };
+      },
+    });
+    const buildReport = (async () => ({
+      data: { tasks: annotateTasks([task('402:6'), task('402:7')] as never, 24, Date.now()) },
+      liveResult: liveAvailable
+        ? { available: true, data: { tasks: new Map([['402:6', { hasResultInStorage: true }], ['402:7', { hasResultInStorage: true }]]) } }
+        : { available: false, reason: 'no key' },
+    })) as unknown as typeof buildReportData;
+    const server = createPipeMcpServer({ actionDeps, buildReport });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    client = new Client({ name: 'test-client', version: '0.0.0' });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    return { c: client, calls };
+  }
+
+  it('refuses without yes, naming both keys', async () => {
+    const { c, calls } = await connect(true);
+    const result = await c.callTool({ name: 'pull_ready', arguments: { yes: false } });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /402:6, 402:7/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('dry-run lists a would-pull line per key', async () => {
+    const { c, calls } = await connect(true);
+    const result = await c.callTool({ name: 'pull_ready', arguments: { yes: false, dryRun: true } });
+    assert.equal(result.isError, false);
+    assert.match(textOf(result), /402 6/);
+    assert.match(textOf(result), /402 7/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('pulls every key with yes and returns captured output plus the summary', async () => {
+    const { c, calls } = await connect(true);
+    const result = await c.callTool({ name: 'pull_ready', arguments: { yes: true } });
+    assert.equal(result.isError, false);
+    assert.equal(calls.length, 2);
+    assert.match(textOf(result), /pulled-out-6/);
+    assert.match(textOf(result), /pulled-out-7/);
+    assert.match(textOf(result), /pulled 2, failed 0/);
+  });
+
+  it('returns the unavailable message as an error', async () => {
+    const { c } = await connect(false);
+    const result = await c.callTool({ name: 'pull_ready', arguments: { yes: true } });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /Bridge live check unavailable: no key/);
   });
 });

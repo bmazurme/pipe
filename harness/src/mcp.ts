@@ -11,6 +11,7 @@ import { DEFAULT_ACTION_DEPS, runAction, type ActionDeps, type ActionKind, type 
 import type { StatusPaths } from './collect.js';
 import { readTaskEvents, type EventsPaths } from './events.js';
 import { formatNextRecommendation, pickNextTask } from './next.js';
+import { runPullReady } from './pullReady.js';
 import { buildReportData, formatBuiltReport } from './reportBuilder.js';
 import { DEFAULT_LOG_TIME_DEPS, logTime, type LogTimeDeps } from './timeTracking.js';
 
@@ -146,12 +147,15 @@ export interface PipeMcpServerOptions {
   eventsPaths?: EventsPaths;
   actionDeps?: ActionDeps;
   logTimeDeps?: LogTimeDeps;
+  // Injectable so tests can stub the live bridge data pull_ready depends on.
+  buildReport?: typeof buildReportData;
 }
 
 export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'pipe-mcp', version: '0.1.0' });
   const actionDeps = options.actionDeps ?? MCP_ACTION_DEPS;
   const logTimeDeps = options.logTimeDeps ?? MCP_LOG_TIME_DEPS;
+  const buildReport = options.buildReport ?? buildReportData;
 
   server.registerTool(
     'status',
@@ -230,6 +234,33 @@ export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServ
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     (args) => runWriteAction('pull', args, actionDeps),
+  );
+
+  server.registerTool(
+    'pull_ready',
+    {
+      description:
+        'Pull every result bridge confirms is ready (like pipe-status --pull-ready), one sync-cli pull-issue per task, in one call. ' +
+        'Always checks bridge live. A write action — see the yes input.',
+      inputSchema: {
+        yes: z.boolean().describe('Must be true to actually pull — false (or omitted) always refuses, same as pipe-status without --yes'),
+        dryRun: z.boolean().optional().describe('Describe what would be pulled instead of pulling'),
+        project: z.string().optional().describe('Override local project-name resolution when ambiguous — must be a project name from sync.config.json'),
+        filter: z.string().optional().describe('Scope to one project ("402") or one issue ("402:6")'),
+        staleHours: z.number().optional().describe('Mark a task stale after this many hours with no movement (default 24)'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ yes, dryRun, project, filter, staleHours }) => {
+      const built = await buildReport({ filter, live: true, staleHours, paths: options.paths });
+      const { code, output } = await runPullReady(
+        built.data.tasks,
+        built.liveResult,
+        { yes, dryRun: dryRun ?? false, project },
+        actionDeps,
+      );
+      return textResult(output || '(no output)', code !== 0);
+    },
   );
 
   server.registerTool(
