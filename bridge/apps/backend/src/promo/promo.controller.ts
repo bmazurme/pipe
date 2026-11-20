@@ -55,6 +55,7 @@ import {
   type PromoOverview,
   PromoOverviewService,
 } from './promo-overview.service';
+import { type LandingStats, PromoHitsService } from './promo-hits.service';
 import { PromoPostsService } from './promo-posts.service';
 import { PromoPublisherService } from './promo-publisher.service';
 import {
@@ -98,11 +99,24 @@ export class PromoController {
     private readonly overviewService: PromoOverviewService,
     private readonly publisher: PromoPublisherService,
     private readonly telegram: PromoTelegramService,
+    private readonly hits: PromoHitsService,
   ) {}
 
   @Get('overview')
   overview(): Promise<PromoOverview> {
     return this.overviewService.overview();
+  }
+
+  // Visits to the landing page over the last `days` days (1–365, 30 by default).
+  @Get('landing/stats')
+  landingStats(@Query('days') days?: string): Promise<LandingStats> {
+    const parsed = days === undefined || days === '' ? 30 : Number(days);
+
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+      throw new BadRequestException('days: целое число от 1 до 365');
+    }
+
+    return this.hits.stats(parsed);
   }
 
   // --- posts

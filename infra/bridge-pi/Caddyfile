@@ -23,15 +23,28 @@
 # the live one. bridge's «Промо → Лендинг» page (or deploy-landing.sh) writes them — the page is not part of any image, so publishing it
 # never redeploys bridge. A failover board starts with an empty volume: bridge unpacks the last live release from its file store
 # on start; until then (or if it cannot) this host answers 404, bridge itself is not affected.
+# Visits: the page's own script reports a view, a click or a video play with POST /_s/hit on its own origin (no cookie, no third-party
+# host), and this passes it on to bridge's promo module, which stores a pseudonymous event; «Промо → Статистика» shows them. Everything
+# else is the static site. A visitor never sees the reply of the counter: a failure there is invisible on the page.
 {$LANDING_HOST} {
 	encode zstd gzip
-	root * /srv/landing/current
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options DENY
 	}
-	@assets path /images/* /fonts/*
-	header @assets Cache-Control "public, max-age=86400"
-	file_server
+	@hit {
+		path /_s/hit
+		method POST
+	}
+	handle @hit {
+		rewrite * /api/v1/promo/hit
+		reverse_proxy backend:3000
+	}
+	handle {
+		root * /srv/landing/current
+		@assets path /images/* /fonts/*
+		header @assets Cache-Control "public, max-age=86400"
+		file_server
+	}
 }

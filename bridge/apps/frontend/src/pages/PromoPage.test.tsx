@@ -19,6 +19,9 @@ let telegram: Record<string, unknown>;
 // While set, a send (publish-now / test) is not answered: the request is «in flight» until the test lets it go.
 let hold: Promise<void> | null;
 let publishAnswer: Record<string, unknown> | null;
+// The statistics the server answers with, and the periods asked for.
+let stats: Record<string, unknown>;
+let statsAsked: string[];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
@@ -45,6 +48,29 @@ const post = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const day = (n: number) => new Date(Date.UTC(2026, 10, 20 - n)).toISOString().slice(0, 10);
+
+// `days` days ending on 20 Nov 2026, the last two with visits.
+const statsFor = (days: number, over: Record<string, unknown> = {}) => ({
+  days,
+  from: day(days - 1),
+  to: day(0),
+  totals: { views: 8, visitors: 6, clicks: 3, plays: 1 },
+  daily: Array.from({ length: days }, (_, i) => {
+    const n = days - 1 - i;
+
+    return { day: day(n), views: n === 0 ? 5 : n === 1 ? 3 : 0, visitors: n === 0 ? 4 : n === 1 ? 2 : 0, clicks: n === 0 ? 2 : n === 1 ? 1 : 0, plays: n === 0 ? 1 : 0 };
+  }),
+  sources: [{ name: 't.me', views: 5 }, { name: null, views: 3 }],
+  campaigns: [{ source: 'telegram', medium: 'post', campaign: 'launch', views: 4, clicks: 2 }],
+  targets: [{ name: 'youtube.com', clicks: 2 }, { name: 't.me', clicks: 1 }],
+  sections: [{ name: 'water', clicks: 2 }, { name: 'top', clicks: 1 }],
+  langs: [{ name: 'ru', views: 7 }, { name: 'en', views: 1 }],
+  devices: [{ name: 'mobile', views: 6 }, { name: 'desktop', views: 2 }],
+  lastEventAt: iso(-60_000),
+  ...over,
+});
+
 const counts = (over: Record<string, number> = {}) => ({ draft: 0, approved: 0, published: 0, reminded: 0, failed: 0, ...over });
 
 const release = (over: Record<string, unknown> = {}) => ({
@@ -66,6 +92,8 @@ beforeEach(() => {
   failWith = null;
   hold = null;
   publishAnswer = null;
+  statsAsked = [];
+  stats = statsFor(30);
   telegram = { botConfigured: true, news: null, discussion: null, candidates: [] };
   landing = { configured: true, url: 'https://landing.example', activeDirName: null, releases: [] };
   store.dispatch(promoApi.util.resetApiState());
@@ -105,6 +133,13 @@ beforeEach(() => {
       if (path === 'promo/posts') return json(posts);
       if (path === 'promo/assets') return json(assets);
       if (path === 'promo/landing') return json(landing);
+      if (path === 'promo/landing/stats') {
+        const days = new URL(request.url).searchParams.get('days') ?? '';
+
+        statsAsked.push(days);
+
+        return json(days === '30' ? stats : statsFor(Number(days)));
+      }
 
       return json({});
     }),
@@ -296,6 +331,53 @@ describe('PromoPage: landing', () => {
 
     expect(await screen.findByText('В корне архива нет index.html')).toBeTruthy();
     expect(sent).toContainEqual({ method: 'POST', path: 'promo/landing/releases', body: 'multipart' });
+  });
+});
+
+describe('PromoPage: landing statistics', () => {
+  it('shows the totals, today against yesterday, and where visits come from and go', async () => {
+    renderPage('stats');
+
+    expect(await screen.findByText('Просмотры')).toBeTruthy();
+    expect(screen.getByText('сегодня 5, вчера 3')).toBeTruthy();
+    expect(screen.getByText('Посетители')).toBeTruthy();
+    expect(screen.getByText('Переходы по ссылкам')).toBeTruthy();
+    expect(screen.getByText('38% от просмотров')).toBeTruthy();
+    // sources, targets, sections, campaign
+    expect(screen.getByText('t.me', { selector: 'span' })).toBeTruthy();
+    expect(screen.getByText('прямой заход / источник скрыт')).toBeTruthy();
+    expect(screen.getByText('YouTube (youtube.com)')).toBeTruthy();
+    expect(screen.getByText('видео с воды')).toBeTruthy();
+    expect(screen.getByText('telegram / post / launch')).toBeTruthy();
+    expect(screen.getByText('телефон')).toBeTruthy();
+  });
+
+  it('asks for another period when it is switched', async () => {
+    const user = userEvent.setup();
+
+    renderPage('stats');
+    await screen.findByText('Просмотры');
+    await user.click(screen.getByText('7 дней'));
+
+    await waitFor(() => expect(statsAsked).toContain('7'));
+  });
+
+  it('explains an empty counter instead of showing a blank page', async () => {
+    stats = statsFor(30, {
+      totals: { views: 0, visitors: 0, clicks: 0, plays: 0 },
+      daily: statsFor(30).daily.map((d) => ({ ...d, views: 0, visitors: 0, clicks: 0, plays: 0 })),
+      sources: [],
+      campaigns: [],
+      targets: [],
+      sections: [],
+      langs: [],
+      devices: [],
+      lastEventAt: null,
+    });
+    renderPage('stats');
+
+    expect(await screen.findByText('Данных пока нет')).toBeTruthy();
+    expect(screen.getByText('Ссылок с метками ещё не открывали')).toBeTruthy();
   });
 });
 

@@ -65,6 +65,12 @@ Anything the old script put straight into the volume (`index.html` in the root) 
 The first time: add the A record (reg.ru) → the home address **before** the stack with the new Caddyfile is rolled
 out, or Let's Encrypt's failed attempts count against the rate limit (same rule as for bridge itself).
 
+**Visit counter.** The landing host also passes `POST /_s/hit` to the backend (`/api/v1/promo/hit`, see the Caddyfile): the
+page's own script reports a view, a click on an outgoing link and a video play there, and bridge → Промо → Статистика shows the
+numbers. Nothing else of the site is proxied, and the same origin means no CORS entry and no third-party host. A page without
+the script simply sends nothing; a backend that is down or not yet updated answers the beacon with an error nobody sees. The
+route trusts `X-Forwarded-For` like every other (`TRUST_PROXY`), only to build a one-day pseudonym — the address is not stored.
+
 **Rolling out the `current` layout.** The Caddyfile now serves `/srv/landing/current`, so between Caddy picking up the new
 file and the new backend starting (it adopts the old flat site into `releases/legacy`), the landing answers 404 for up to a
 minute. If that matters, run `deploy-landing.sh` once right after the deploy.

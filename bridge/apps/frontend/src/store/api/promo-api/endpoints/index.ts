@@ -57,6 +57,30 @@ export interface ChannelOverview {
   next: { id: number; title: string; scheduledAt: string } | null;
 }
 
+export interface LandingDay {
+  day: string;
+  views: number;
+  visitors: number;
+  clicks: number;
+  plays: number;
+}
+
+/** Visits to the landing page over the last `days` days; `visitors` is the sum of each day's distinct visitors. */
+export interface LandingStats {
+  days: number;
+  from: string;
+  to: string;
+  totals: { views: number; visitors: number; clicks: number; plays: number };
+  daily: LandingDay[];
+  sources: { name: string | null; views: number }[];
+  campaigns: { source: string | null; medium: string | null; campaign: string | null; views: number; clicks: number }[];
+  targets: { name: string | null; clicks: number }[];
+  sections: { name: string | null; clicks: number }[];
+  langs: { name: string | null; views: number }[];
+  devices: { name: string | null; views: number }[];
+  lastEventAt: string | null;
+}
+
 export interface TelegramTarget {
   role: TelegramRole;
   chatId: string;
@@ -213,6 +237,10 @@ const promoApiEndpoints = promoApi.injectEndpoints({
       providesTags: ['PromoLanding'],
       transformErrorResponse: errorMessage('Не удалось загрузить релизы лендинга'),
     }),
+    getLandingStats: builder.query<LandingStats, number>({
+      query: (days) => `promo/landing/stats?days=${days}`,
+      transformErrorResponse: errorMessage('Не удалось загрузить статистику лендинга'),
+    }),
     uploadLandingRelease: builder.mutation<LandingRelease, { file: File; label?: string }>({
       query: ({ file, label }) => ({ url: 'promo/landing/releases', method: 'POST', body: uploadBody(file, label) }),
       invalidatesTags: ['PromoLanding', 'PromoOverview'],
@@ -248,6 +276,7 @@ export const {
   useUploadPromoAssetMutation,
   useDeletePromoAssetMutation,
   useGetPromoLandingQuery,
+  useGetLandingStatsQuery,
   useUploadLandingReleaseMutation,
   useActivateLandingReleaseMutation,
   useDeleteLandingReleaseMutation,

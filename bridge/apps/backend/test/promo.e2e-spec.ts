@@ -319,6 +319,68 @@ describe('Promo API (e2e)', () => {
     ).expect(400);
   });
 
+  describe('landing visits', () => {
+    const BROWSER =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15';
+    const report = (body: object, userAgent = BROWSER) =>
+      http().post('/api/v1/promo/hit').set('User-Agent', userAgent).send(body);
+
+    it('takes a report without any login, always answers 204, and counts only real visits', async () => {
+      const before = await as(
+        http().get('/api/v1/promo/landing/stats?days=7'),
+        owner,
+      ).expect(200);
+
+      await report({
+        t: 'view',
+        l: 'ru',
+        r: 'https://t.me/',
+        uc: 'e2e',
+      }).expect(204);
+      await report({
+        t: 'click',
+        to: 'https://www.youtube.com/@Ntlstl',
+        s: 'hero',
+      }).expect(204);
+      // a bot and a nonsense body get the same answer and are not stored
+      await report({ t: 'view' }, 'Googlebot/2.1').expect(204);
+      await report({ t: 'purchase' }).expect(204);
+
+      const after = await as(
+        http().get('/api/v1/promo/landing/stats?days=7'),
+        owner,
+      ).expect(200);
+      const body = after.body as {
+        totals: { views: number; clicks: number };
+        daily: unknown[];
+        sources: { name: string | null; views: number }[];
+        targets: { name: string; clicks: number }[];
+        campaigns: { campaign: string }[];
+      };
+      const prev = before.body as { totals: { views: number; clicks: number } };
+
+      expect(body.daily).toHaveLength(7);
+      expect(body.totals.views).toBe(prev.totals.views + 1);
+      expect(body.totals.clicks).toBe(prev.totals.clicks + 1);
+      expect(body.sources.some((row) => row.name === 't.me')).toBe(true);
+      expect(body.targets.some((row) => row.name === 'youtube.com')).toBe(true);
+      expect(body.campaigns.some((row) => row.campaign === 'e2e')).toBe(true);
+    });
+
+    it('shows the statistics to the owner only, and checks the period', async () => {
+      await http().get('/api/v1/promo/landing/stats').expect(401);
+      process.env.EMAILS = ownerEmail;
+      await as(http().get('/api/v1/promo/landing/stats'), stranger).expect(403);
+      await as(http().get('/api/v1/promo/landing/stats?days=0'), owner).expect(
+        400,
+      );
+      await as(
+        http().get('/api/v1/promo/landing/stats?days=abc'),
+        owner,
+      ).expect(400);
+    });
+  });
+
   describe('Telegram targets and publishing', () => {
     it('reports the state, with nothing bound at first', async () => {
       const state = await as(
