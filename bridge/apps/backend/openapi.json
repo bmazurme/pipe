@@ -5050,6 +5050,33 @@
         }
       }
     },
+    "/api/v1/promo/landing/stats": {
+      "get": {
+        "operationId": "PromoController_landingStats",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/promo/posts": {
       "get": {
         "operationId": "PromoController_listPosts",
@@ -5563,6 +5590,34 @@
             "in": "path",
             "schema": {
               "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/promo/hit": {
+      "post": {
+        "operationId": "PromoHitController_hit",
+        "parameters": [
+          {
+            "name": "origin",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user-agent",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
             }
           }
         ],

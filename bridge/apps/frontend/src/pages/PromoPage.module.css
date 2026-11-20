@@ -92,3 +92,89 @@
   border-radius: var(--g-border-radius-m);
   background: var(--g-color-base-info-light);
 }
+
+/* Statistics: a bar chart of views per day and ranked lists with a bar behind each row. */
+.chartBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 160px;
+  border-bottom: 1px solid var(--g-color-line-generic);
+}
+
+.chartCol {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 0;
+  height: 100%;
+  min-width: 0;
+}
+
+.chartBar {
+  width: 100%;
+  min-height: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--g-color-base-brand);
+}
+
+.chartCol:hover .chartBar {
+  background: var(--g-color-base-brand-hover);
+}
+
+.chartAxis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rankRow {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: var(--g-border-radius-s);
+}
+
+.rankBar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--g-color-base-selection);
+  z-index: 0;
+}
+
+.rankRow > :not(.rankBar) {
+  position: relative;
+  z-index: 1;
+}
+
+.rankName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rankValue {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.rankLabel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}

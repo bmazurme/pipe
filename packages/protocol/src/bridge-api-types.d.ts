@@ -2612,6 +2612,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/promo/landing/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PromoController_landingStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/promo/posts": {
         parameters: {
             query?: never;
@@ -2863,6 +2879,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["PromoController_removeRelease"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promo/hit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PromoHitController_hit"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -8642,6 +8674,27 @@ export interface operations {
             };
         };
     };
+    PromoController_landingStats: {
+        parameters: {
+            query: {
+                days: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     PromoController_listPosts: {
         parameters: {
             query: {
@@ -9064,6 +9117,26 @@ export interface operations {
             path: {
                 id: number;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PromoHitController_hit: {
+        parameters: {
+            query?: never;
+            header: {
+                origin: string;
+                "user-agent": string;
+            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

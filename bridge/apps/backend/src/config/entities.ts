@@ -44,6 +44,7 @@ import { TelegramChat } from '../telegram/entities/telegram-chat.entity';
 import { PromoTelegramTarget } from '../promo/entities/promo-telegram-target.entity';
 import { PromoAsset } from '../promo/entities/promo-asset.entity';
 import { PromoLandingRelease } from '../promo/entities/promo-landing-release.entity';
+import { PromoLandingHit } from '../promo/entities/promo-landing-hit.entity';
 import { PromoPost } from '../promo/entities/promo-post.entity';
 import { LinkProbe } from '../links/entities/link-probe.entity';
 import { VpnConnection } from '../vpn/entities/vpn-connection.entity';
@@ -120,5 +121,6 @@ export const ENTITIES = [
   PromoAsset,
   PromoLandingRelease,
   PromoTelegramTarget,
+  PromoLandingHit,
   TelegramChat,
 ];

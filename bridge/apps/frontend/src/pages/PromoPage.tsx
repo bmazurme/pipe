@@ -6,9 +6,10 @@ import { AssetsTab } from './promo/AssetsTab';
 import { LandingTab } from './promo/LandingTab';
 import { OverviewTab } from './promo/OverviewTab';
 import { PostsTab } from './promo/PostsTab';
+import { StatsTab } from './promo/StatsTab';
 import styles from './PromoPage.module.css';
 
-const TABS = ['overview', 'posts', 'assets', 'landing'] as const;
+const TABS = ['overview', 'posts', 'assets', 'landing', 'stats'] as const;
 
 // The promotion dashboard: the project's channels (Telegram, YouTube, Instagram) and the landing page in one place.
 export function PromoPage() {
@@ -27,6 +28,7 @@ export function PromoPage() {
           <Tab value="posts">Посты</Tab>
           <Tab value="assets">Файлы</Tab>
           <Tab value="landing">Лендинг</Tab>
+          <Tab value="stats">Статистика</Tab>
         </TabList>
 
         {/* Only the open tab loads: TabPanel merely hides the others with CSS. */}
@@ -34,6 +36,7 @@ export function PromoPage() {
         <TabPanel value="posts">{activeTab === 'posts' && <PostsTab />}</TabPanel>
         <TabPanel value="assets">{activeTab === 'assets' && <AssetsTab />}</TabPanel>
         <TabPanel value="landing">{activeTab === 'landing' && <LandingTab />}</TabPanel>
+        <TabPanel value="stats">{activeTab === 'stats' && <StatsTab />}</TabPanel>
       </TabProvider>
     </div>
   );
