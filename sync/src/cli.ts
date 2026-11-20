@@ -13,6 +13,7 @@ import { pushIssueCommand } from './commands/pushIssue.js';
 import { pullIssueCommand } from './commands/pullIssue.js';
 import { gitlabWorkerCommand } from './commands/gitlabWorker.js';
 import { inboxCommand } from './commands/inbox.js';
+import { recallCommand } from './commands/recall.js';
 import { doctorCommand } from './commands/doctor.js';
 import { log, setVerbose } from './log.js';
 import { setupProxy } from '@pipe/protocol/proxy';
@@ -129,6 +130,12 @@ program
   .option('--direction <direction>', 'only "result" or "outbound" parcels')
   .option('--json', 'print the raw list as JSON')
   .action((options) => inboxCommand(options));
+
+program
+  .command('recall <projectId> <iid>')
+  .description('Delete an issue parcel still waiting in bridge (not yet taken by an agent); never touches result parcels')
+  .option('-y, --yes', 'do not ask for confirmation')
+  .action((projectId, iid, options) => recallCommand(projectId, iid, options));
 
 program
   .command('generate-keys <name>')
