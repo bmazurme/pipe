@@ -1,4 +1,7 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 
 import { VpnConnection } from './entities/vpn-connection.entity';
 import { GithubActionsService } from './github-actions.service';
@@ -121,6 +124,27 @@ describe('VPN status failures say why', () => {
       'not a VLESS Reality inbound',
     );
   });
+
+  it.each(['<html>login</html>', ''])(
+    'reports a 200 reply that is not JSON (%j) as a 502 naming the connection and path',
+    async (text) => {
+      globalThis.fetch = jest.fn(
+        async () => new Response(text, { status: 200 }),
+      ) as typeof fetch;
+
+      const error = await service()
+        .vpn.getStatus()
+        .catch((e: Error) => e);
+
+      expect(error).toBeInstanceOf(BadGatewayException);
+      const message = (error as Error).message;
+
+      expect(message).toContain('VPN panel "primary" returned a non-JSON');
+      expect(message).toContain('/panel/api/inbounds');
+      expect(message).not.toContain('panel-token');
+      expect(message).not.toContain('login');
+    },
+  );
 
   it('keeps the "no active connection" explanation', async () => {
     await expect(service(null).vpn.getStatus()).rejects.toThrow(
