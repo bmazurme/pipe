@@ -6299,6 +6299,24 @@
           }
         }
       }
+    },
+    "/api/v1/vpn/bridge-tunnel": {
+      "get": {
+        "operationId": "TunnelController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "info": {

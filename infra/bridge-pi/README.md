@@ -65,6 +65,12 @@ Anything the old script put straight into the volume (`index.html` in the root) 
 The first time: add the A record (reg.ru) → the home address **before** the stack with the new Caddyfile is rolled
 out, or Let's Encrypt's failed attempts count against the rate limit (same rule as for bridge itself).
 
+**bridge's own tunnel.** The backend runs its own Xray client from the active connection of the VPN page (the backend image ships the
+binary; `BRIDGE_TUNNEL=off` disables it) and Telegram and GitHub go through it while Telegram answers through it. The stack's `vpn-client`
+stays as the fallback (`TELEGRAM_PROXY_URL=http://vpn-client:1080`): its configuration is fixed when the stack is deployed, so it no longer
+has to be redone whenever a link changes, but while it is still deployed it should hold a working link too. The VPN page shows which
+path is in use.
+
 **Visit counter.** The landing host also passes `POST /_s/hit` to the backend (`/api/v1/promo/hit`, see the Caddyfile): the
 page's own script reports a view, a click on an outgoing link and a video play there, and bridge → Промо → Статистика shows the
 numbers. Nothing else of the site is proxied, and the same origin means no CORS entry and no third-party host. A page without

@@ -4,6 +4,7 @@ import { ShieldKeyhole } from '@gravity-ui/icons';
 import { describeApiError, useGetVpnStatusQuery, useSyncVpnConfigMutation } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
+import { BridgeTunnelCard } from './vpn/BridgeTunnelCard';
 import { ProvisionServerForm } from './vpn/ProvisionServerForm';
 import { VpnConnectionsCard } from './vpn/VpnConnectionsCard';
 import { VpnProfilesCard } from './vpn/VpnProfilesCard';
@@ -49,6 +50,8 @@ export function VpnPage() {
         isSyncing={isSyncing}
         syncResult={syncResult}
       />
+
+      <BridgeTunnelCard />
 
       <VpnProfilesCard />
 

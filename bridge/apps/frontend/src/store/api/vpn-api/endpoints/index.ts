@@ -17,6 +17,25 @@ export type WorkerSecretName =
   | 'WORKER_QWEN_API_KEY'
   | 'WORKER_CLAUDE_CODE_OAUTH_TOKEN';
 
+export interface BridgeTunnelCheck {
+  key: 'telegram' | 'github';
+  label: string;
+  ok: boolean;
+  ms: number | null;
+  error: string | null;
+  at: string;
+}
+
+/** bridge's own tunnel on the active connection: whether Telegram and GitHub go through it right now. */
+export interface BridgeTunnelStatus {
+  mode: 'on' | 'off';
+  reason: string | null;
+  links: number;
+  inUse: boolean;
+  checks: BridgeTunnelCheck[];
+  since: string | null;
+}
+
 export interface ProvisionVpnServerBody {
   host: string;
   sshUser: string;
@@ -86,6 +105,9 @@ export interface UpdateVpnConnectionBody {
 
 const vpnApiEndpoints = vpnApi.injectEndpoints({
   endpoints: (builder) => ({
+    getBridgeTunnel: builder.query<BridgeTunnelStatus, void>({
+      query: () => 'vpn/bridge-tunnel',
+    }),
     getVpnStatus: builder.query<VpnStatus, void>({
       query: () => 'vpn/status',
       providesTags: ['VpnStatus'],
@@ -169,6 +191,7 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
 });
 
 export const {
+  useGetBridgeTunnelQuery,
   useGetVpnStatusQuery,
   useSyncVpnConfigMutation,
   useSetWorkerSecretMutation,
