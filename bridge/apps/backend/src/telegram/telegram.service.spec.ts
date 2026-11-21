@@ -195,4 +195,73 @@ describe('TelegramService', () => {
       ).resolves.toBeNull();
     });
   });
+
+  describe('health', () => {
+    const configured = { TELEGRAM_BOT_TOKEN: 'T', TELEGRAM_CHAT_ID: '42' };
+
+    it('is up until the calls have been failing for a few minutes, and counts any answer as reachable', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-21T09:00:00Z'));
+      const service = make(configured);
+
+      jest
+        .spyOn(global, 'fetch')
+        .mockRejectedValue(
+          new Error('The operation was aborted due to timeout'),
+        );
+      await service.send('a');
+
+      expect(service.health().down).toBe(false);
+      expect(service.health().failingSince).toEqual(
+        new Date('2026-11-21T09:00:00Z'),
+      );
+      expect(service.health().lastError).toContain('aborted due to timeout');
+
+      jest.setSystemTime(new Date('2026-11-21T09:04:00Z'));
+      expect(service.health().down).toBe(true);
+
+      // «chat not found» is an answer: Telegram is reachable, the run of failures is over
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ description: 'chat not found' }),
+      } as Response);
+      await service.send('b');
+
+      expect(service.health().down).toBe(false);
+      expect(service.health().failingSince).toBeNull();
+      jest.useRealTimers();
+    });
+
+    it('counts a 5xx as not reachable, and keeps the first failure of a run', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-21T09:00:00Z'));
+      const service = make(configured);
+
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 504,
+        json: async () => ({ description: 'Gateway Timeout' }),
+      } as Response);
+      await service.send('a');
+      jest.setSystemTime(new Date('2026-11-21T09:02:00Z'));
+      await service.send('b');
+
+      expect(service.health().failingSince).toEqual(
+        new Date('2026-11-21T09:00:00Z'),
+      );
+      expect(service.health().lastError).toBe('HTTP 504');
+      jest.useRealTimers();
+    });
+
+    it('lets the window be set with TELEGRAM_DOWN_AFTER_SEC', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-21T09:00:00Z'));
+      const service = make({ ...configured, TELEGRAM_DOWN_AFTER_SEC: '30' });
+
+      jest.spyOn(global, 'fetch').mockRejectedValue(new Error('down'));
+      await service.send('a');
+      jest.setSystemTime(new Date('2026-11-21T09:01:00Z'));
+
+      expect(service.health().down).toBe(true);
+      jest.useRealTimers();
+    });
+  });
 });

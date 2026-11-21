@@ -28,6 +28,14 @@ export class TelegramService {
   private readonly logger = new Logger(TelegramService.name);
   private proxy: { url: string; agent: Dispatcher } | undefined;
 
+  // Whether Telegram can be reached at all, as the calls themselves show it: an answer of any kind (even «chat not found») means yes, a
+  // network failure or a 5xx means no. `failingSince` is the first failure of the current run of failures; it is what the health check
+  // turns into «Telegram is down» after a few minutes.
+  private lastOkAt: number | null = null;
+  private lastAttemptAt: number | null = null;
+  private failingSince: number | null = null;
+  private lastError: string | null = null;
+
   // One stored log per method per window: the poller retries a dead network
   // every few seconds, which must not turn into thousands of identical rows.
   private lastLoggedFailure = new Map<string, number>();
@@ -56,6 +64,44 @@ export class TelegramService {
 
   isConfigured(): boolean {
     return Boolean(this.botToken() && this.chatId());
+  }
+
+  private noteReachable(): void {
+    this.lastOkAt = this.lastAttemptAt = Date.now();
+    this.failingSince = null;
+    this.lastError = null;
+  }
+
+  private noteUnreachable(reason: string): void {
+    const now = Date.now();
+
+    this.lastAttemptAt = now;
+    this.failingSince ??= now;
+    this.lastError = reason;
+  }
+
+  // `down` once the calls have been failing for `downAfterMs` without a single answer in between.
+  health(
+    now = Date.now(),
+    downAfterMs = (Number(this.configService.get('TELEGRAM_DOWN_AFTER_SEC')) ||
+      180) * 1000,
+  ): {
+    down: boolean;
+    failingSince: Date | null;
+    lastError: string | null;
+    lastOkAt: Date | null;
+    lastAttemptAt: Date | null;
+  } {
+    return {
+      down:
+        this.failingSince !== null && now - this.failingSince >= downAfterMs,
+      failingSince:
+        this.failingSince === null ? null : new Date(this.failingSince),
+      lastError: this.lastError,
+      lastOkAt: this.lastOkAt === null ? null : new Date(this.lastOkAt),
+      lastAttemptAt:
+        this.lastAttemptAt === null ? null : new Date(this.lastAttemptAt),
+    };
   }
 
   // The only chat the bot talks to and takes commands from.
@@ -158,6 +204,13 @@ export class TelegramService {
           : {}
       ) as { ok?: boolean; result?: T; description?: string };
 
+      // A 5xx (a gateway timeout from the proxy or from Telegram) is not an answer from the bot API; anything else is.
+      if (response.status >= 500) {
+        this.noteUnreachable(`HTTP ${response.status}`);
+      } else {
+        this.noteReachable();
+      }
+
       if (!response.ok) {
         const reason = data.description ?? `HTTP ${response.status}`;
 
@@ -177,6 +230,7 @@ export class TelegramService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
 
+      this.noteUnreachable(reason);
       this.logger.warn(`Telegram ${method} failed: ${reason}`);
       this.logFailure(method, reason);
 
