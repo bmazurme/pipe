@@ -111,6 +111,16 @@ export function WorkerCard({ worker, activeJob, onOpenJob, onSettings, onReconne
               {worker.vpnSource === 'active' ? ' (активное)' : ''}
             </Text>
           )}
+          {!worker.vpnHost && worker.vpnSource === 'active' && (
+            <Text variant="caption-2" color="warning">
+              VPN: на странице VPN нет активного подключения — worker без туннеля
+            </Text>
+          )}
+          {worker.vpnSource === 'none' && (
+            <Text variant="caption-2" color="secondary">
+              VPN: выключен для этого worker&apos;а
+            </Text>
+          )}
           {worker.proxyUrl && (
             <Text variant="caption-2" color="secondary">
               Прокси: {worker.proxyUrl}

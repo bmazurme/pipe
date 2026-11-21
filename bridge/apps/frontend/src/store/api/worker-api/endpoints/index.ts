@@ -161,8 +161,8 @@ export interface WorkerSettings {
   claudeCredentialId?: number | null;
   /** The worker's own VPN: a vless:// Reality link; '' or null removes it, omitted leaves it. */
   vpnLink?: string | null;
-  /** Where the tunnel comes from: the worker's own link (default), a connection of the VPN page, or the page's active one. */
-  vpnSource?: 'link' | 'connection' | 'active';
+  /** Where the tunnel comes from: the VPN page's active connection (default), the worker's own link, a chosen connection, or none. */
+  vpnSource?: 'active' | 'link' | 'connection' | 'none';
   /** The VPN page connection for vpnSource 'connection'. */
   vpnConnectionId?: number | null;
   /** Minutes between automatic probes of the Claude plan limits; 0 = only on request. */

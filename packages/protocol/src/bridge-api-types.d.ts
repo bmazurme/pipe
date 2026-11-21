@@ -3620,7 +3620,7 @@ export interface components {
         WorkerResponseDto: {
             models: ("sonnet" | "opus" | "haiku" | "gpt" | "deepseek" | "qwen" | "custom")[] | null;
             /** @enum {string} */
-            vpnSource: "link" | "connection" | "active";
+            vpnSource: "active" | "link" | "connection" | "none";
             capabilities: "fusion"[];
             claudeLimits: {
                 [key: string]: unknown;
@@ -3659,7 +3659,7 @@ export interface components {
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             /** @enum {string} */
-            vpnSource?: "link" | "connection" | "active";
+            vpnSource?: "active" | "link" | "connection" | "none";
             vpnConnectionId?: number | null;
             /** @enum {array} */
             capabilities?: "fusion";
@@ -3711,7 +3711,7 @@ export interface components {
             claudeCredentialId?: number | null;
             vpnLink?: string | null;
             /** @enum {string} */
-            vpnSource?: "link" | "connection" | "active";
+            vpnSource?: "active" | "link" | "connection" | "none";
             vpnConnectionId?: number | null;
             /** @enum {array} */
             capabilities?: "fusion";

@@ -132,7 +132,7 @@ export class WorkersService implements OnModuleInit {
       : null;
   }
 
-  // 'link' keeps the worker's own link; the other two take it from the VPN page, so a stray pasted link is dropped.
+  // 'link' keeps the worker's own link; 'connection' and 'active' take it from the VPN page, so a stray pasted link is dropped there.
   private async applyVpnSource(
     worker: Worker,
     dto: { vpnSource?: WorkerVpnSource; vpnConnectionId?: number | null },
@@ -341,7 +341,8 @@ export class WorkersService implements OnModuleInit {
       chatEnabled: dto.chatEnabled ?? true,
       claudeCredentialId: dto.claudeCredentialId ?? null,
       vpnLink: await this.normalizeVpnLink(dto.vpnLink),
-      vpnSource: 'link',
+      // Unless the owner says otherwise (a source, or a link of this worker's own) the worker follows the active connection.
+      vpnSource: dto.vpnSource ?? (dto.vpnLink?.trim() ? 'link' : 'active'),
       vpnConnectionId: null,
       capabilities: dto.capabilities?.length ? dto.capabilities : null,
     });
@@ -399,6 +400,11 @@ export class WorkersService implements OnModuleInit {
     }
     if (dto.vpnLink !== undefined) {
       worker.vpnLink = await this.normalizeVpnLink(dto.vpnLink);
+      // A link pasted for this worker is a statement of its own: it is what the worker runs, not the page's active connection.
+      if (worker.vpnLink && dto.vpnSource === undefined) {
+        worker.vpnSource = 'link';
+        worker.vpnConnectionId = null;
+      }
     }
     await this.applyVpnSource(worker, dto);
     if (dto.capabilities !== undefined) {
@@ -538,6 +544,8 @@ export class WorkersService implements OnModuleInit {
   // link exists the whole settings fetch fails, so the worker keeps its last settings (and tunnel) instead of dropping the VPN.
   private async vpnLinksOf(worker: Worker): Promise<string[]> {
     const source = worker.vpnSource ?? 'link';
+
+    if (source === 'none') return [];
 
     if (source === 'link') {
       const own = worker.vpnLink ?? null;
