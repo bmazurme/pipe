@@ -9,6 +9,7 @@ import {
   useCreateVpnProfileMutation,
   useListVpnProfilesQuery,
   useRenameVpnProfileMutation,
+  useRemoveVpnProfileMutation,
   useRevokeVpnProfileMutation,
   type VpnProfile,
   type VpnProfileAudience,
@@ -106,6 +107,7 @@ function ProfileName({ profile }: { profile: VpnProfile }) {
 
 function ProfileRow({ profile }: { profile: VpnProfile }) {
   const [revoke, { isLoading }] = useRevokeVpnProfileMutation();
+  const [removeProfile, { isLoading: isRemoving }] = useRemoveVpnProfileMutation();
   const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,6 +136,23 @@ function ProfileRow({ profile }: { profile: VpnProfile }) {
     }
   };
 
+  // Only an already revoked entry can be taken off the list, and it takes the same second click as a revoke.
+  const handleRemove = async () => {
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+
+    setArmed(false);
+    setError(null);
+
+    try {
+      await removeProfile(profile.id).unwrap();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Не удалось удалить ссылку из списка');
+    }
+  };
+
   return (
     <li className={styles.connectionRow}>
       <div className={styles.connectionHeader}>
@@ -154,6 +173,20 @@ function ProfileRow({ profile }: { profile: VpnProfile }) {
             {profile.lastUsedAt ? `последний запрос ${formatRelativeTime(profile.lastUsedAt)}` : 'ещё не запрашивалась'}
           </Text>
         </div>
+        {profile.revokedAt && (
+          <div className={styles.connectionActions}>
+            <Button
+              view={armed ? 'outlined-danger' : 'flat-danger'}
+              size="s"
+              loading={isRemoving}
+              title={armed ? 'Нажмите ещё раз для подтверждения' : 'Убрать отозванную ссылку из списка'}
+              aria-label={armed ? `Подтвердить удаление ссылки: ${profile.label}` : `Удалить ссылку: ${profile.label}`}
+              onClick={() => void handleRemove()}
+            >
+              {armed ? 'Удалить?' : 'Удалить'}
+            </Button>
+          </div>
+        )}
         {!profile.revokedAt && (
           <div className={styles.connectionActions}>
             <Button

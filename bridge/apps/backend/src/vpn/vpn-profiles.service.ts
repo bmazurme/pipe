@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   BadRequestException,
   Injectable,
   Logger,
@@ -113,6 +114,22 @@ export class VpnProfilesService {
     row.revokedAt = new Date();
     await this.tokens.save(row);
     this.logger.warn(`VPN profile token ${id} («${row.label}») revoked`);
+  }
+
+  // Takes a REVOKED entry off the list for good. A live one is refused: removing it would cut a device off without the owner having
+  // said so — revoke it first (the same two steps the page shows).
+  async remove(id: number): Promise<void> {
+    const row = await this.tokens.findOneBy({ id });
+
+    if (!row) throw new NotFoundException('VPN profile token not found');
+    if (!row.revokedAt) {
+      throw new ConflictException(
+        'Сначала отзовите ссылку: удалить из списка можно только отозванную',
+      );
+    }
+
+    await this.tokens.delete({ id });
+    this.logger.warn(`VPN profile token ${id} («${row.label}») removed`);
   }
 
   // The token a device presented, or null for an unknown or revoked one (the caller answers both the same way).

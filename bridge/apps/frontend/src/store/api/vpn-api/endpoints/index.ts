@@ -194,6 +194,11 @@ const vpnApiEndpoints = vpnApi.injectEndpoints({
       query: (id) => ({ url: `vpn/profiles/${id}`, method: 'DELETE' }),
       invalidatesTags: ['VpnProfile'],
     }),
+    removeVpnProfile: builder.mutation<void, number>({
+      query: (id) => ({ url: `vpn/profiles/${id}/entry`, method: 'DELETE' }),
+      invalidatesTags: ['VpnProfile'],
+      transformErrorResponse: (response) => (response.data as { message?: string } | undefined)?.message ?? 'Не удалось удалить ссылку из списка',
+    }),
     getVpnConnectionLink: builder.mutation<{ link: string }, number>({
       query: (id) => `vpn/connections/${id}/connection-link`,
     }),
@@ -218,5 +223,6 @@ export const {
   useCreateVpnProfileMutation,
   useRenameVpnProfileMutation,
   useRevokeVpnProfileMutation,
+  useRemoveVpnProfileMutation,
 } = vpnApiEndpoints;
 export { vpnApiEndpoints };

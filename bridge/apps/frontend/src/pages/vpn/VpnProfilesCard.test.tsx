@@ -66,6 +66,42 @@ describe('VpnProfilesCard', () => {
     expect(screen.queryByLabelText('Отозвать ссылку: Старый Mac')).toBeNull();
   });
 
+  it('offers a removal only for a revoked entry, and removes it after a second click', async () => {
+    const user = userEvent.setup();
+    const removed: string[] = [];
+    serve((request) => {
+      if (request.method === 'DELETE') {
+        removed.push(new URL(request.url).pathname.replace('/api/v1/', ''));
+
+        return new Response(null, { status: 204 });
+      }
+
+      return undefined;
+    });
+    renderCard();
+    await screen.findByText('iPhone');
+
+    expect(screen.queryByLabelText('Удалить ссылку: iPhone')).toBeNull();
+
+    await user.click(screen.getByLabelText('Удалить ссылку: Старый Mac'));
+    expect(removed).toEqual([]);
+    await user.click(screen.getByLabelText('Подтвердить удаление ссылки: Старый Mac'));
+
+    await waitFor(() => expect(removed).toEqual(['vpn/profiles/2/entry']));
+  });
+
+  it('tells the owner why a removal was refused', async () => {
+    const user = userEvent.setup();
+    serve((request) => (request.method === 'DELETE' ? json({ message: 'Сначала отзовите ссылку' }, 409) : undefined));
+    renderCard();
+    await screen.findByText('iPhone');
+
+    await user.click(screen.getByLabelText('Удалить ссылку: Старый Mac'));
+    await user.click(screen.getByLabelText('Подтвердить удаление ссылки: Старый Mac'));
+
+    expect(await screen.findByText('Сначала отзовите ссылку')).toBeTruthy();
+  });
+
   it('says so when there are no links yet', async () => {
     serve(() => undefined, []);
     renderCard();

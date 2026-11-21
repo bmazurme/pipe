@@ -2582,6 +2582,26 @@
         }
       }
     },
+    "/api/v1/vpn/profiles/{id}/entry": {
+      "delete": {
+        "operationId": "VpnProfilesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/vpn/profile/{token}": {
       "get": {
         "operationId": "VpnProfileController_get",

@@ -18,6 +18,24 @@ describe('VpnProfilesController (the owner)', () => {
     ]);
   });
 
+  it('removes a revoked entry through the service, with a 204', async () => {
+    const profiles = { remove: jest.fn().mockResolvedValue(undefined) };
+    const controller = new VpnProfilesController(profiles as never);
+
+    await controller.remove(2);
+
+    expect(profiles.remove).toHaveBeenCalledWith(2);
+    expect(
+      Reflect.getMetadata(
+        '__httpCode__',
+        VpnProfilesController.prototype.remove,
+      ),
+    ).toBe(204);
+    expect(
+      Reflect.getMetadata('path', VpnProfilesController.prototype.remove),
+    ).toBe(':id/entry');
+  });
+
   it('lists, creates (token in the answer) and revokes through the service', async () => {
     const profiles = {
       list: jest.fn().mockResolvedValue([{ id: 1 }]),
