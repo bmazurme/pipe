@@ -10,8 +10,8 @@ import { vpnApi } from '../store/api';
 
 const STATUS = { lastOnline: new Date().toISOString(), upBytes: 1, downBytes: 1, sni: 'x', fingerprint: 'chrome', port: 443 };
 const CONNECTIONS = [
-  { id: 1, name: 'primary', serverAddress: '203.0.113.5', isActive: true, inPool: false, createdAt: '2026-09-30T07:00:00.000Z' },
-  { id: 2, name: 'backup', serverAddress: '203.0.113.6', isActive: false, inPool: false, createdAt: '2026-09-30T08:00:00.000Z' },
+  { id: 1, name: 'primary', serverAddress: '203.0.113.5', isActive: true, standby: false, createdAt: '2026-09-30T07:00:00.000Z' },
+  { id: 2, name: 'backup', serverAddress: '203.0.113.6', isActive: false, standby: false, createdAt: '2026-09-30T08:00:00.000Z' },
 ];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -101,7 +101,7 @@ describe('VPN connection actions', () => {
     expect(await screen.findByText('Не удалось сделать подключение активным')).toBeTruthy();
   });
 
-  it('puts an inactive connection into the pool with its switch, and the active one has no switch', async () => {
+  it('makes an inactive connection a cold standby with its switch, and the active one has no switch', async () => {
     const user = userEvent.setup();
     const patched: unknown[] = [];
     const base = globalThis.fetch;
@@ -113,11 +113,11 @@ describe('VPN connection actions', () => {
     renderPage();
     await screen.findByText('backup');
 
-    expect(screen.getAllByRole('switch', { name: 'В пуле' })).toHaveLength(1);
+    expect(screen.getAllByRole('switch', { name: 'Резерв' })).toHaveLength(1);
 
-    await user.click(screen.getByRole('switch', { name: 'В пуле' }));
+    await user.click(screen.getByRole('switch', { name: 'Резерв' }));
 
-    await waitFor(() => expect(patched).toEqual([{ inPool: true }]));
+    await waitFor(() => expect(patched).toEqual([{ standby: true }]));
     expect(calls).toContain('PATCH vpn/connections/2');
   });
 
@@ -127,9 +127,9 @@ describe('VPN connection actions', () => {
     renderPage();
     await screen.findByText('backup');
 
-    await user.click(screen.getByRole('switch', { name: 'В пуле' }));
+    await user.click(screen.getByRole('switch', { name: 'Резерв' }));
 
-    expect(await screen.findByText('Не удалось изменить участие в пуле')).toBeTruthy();
+    expect(await screen.findByText('Не удалось изменить резерв')).toBeTruthy();
   });
 
   it('labels the share-link field', async () => {

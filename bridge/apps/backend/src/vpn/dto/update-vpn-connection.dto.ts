@@ -6,8 +6,8 @@ import { CreateVpnConnectionDto } from './create-vpn-connection.dto';
 export class UpdateVpnConnectionDto extends PartialType(
   CreateVpnConnectionDto,
 ) {
-  // Joins the active connection's links in the tunnel (see VpnConnection.inPool).
+  // A cold standby behind the active connection (see VpnConnection.standby).
   @IsOptional()
   @IsBoolean()
-  inPool?: boolean;
+  standby?: boolean;
 }

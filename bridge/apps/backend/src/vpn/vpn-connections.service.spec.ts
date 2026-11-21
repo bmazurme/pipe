@@ -246,29 +246,34 @@ describe('VpnConnectionsService', () => {
 
   describe('the pool', () => {
     it('puts a connection into the pool and takes it out, leaving the rest as it was', async () => {
-      const connection = { id: 2, name: 'gru', inPool: false, isActive: false };
+      const connection = {
+        id: 2,
+        name: 'gru',
+        standby: false,
+        isActive: false,
+      };
       repository.findOneBy!.mockResolvedValue(connection);
       repository.save!.mockImplementation((entity) => Promise.resolve(entity));
 
-      expect(await service.update(2, { inPool: true })).toMatchObject({
+      expect(await service.update(2, { standby: true })).toMatchObject({
         name: 'gru',
-        inPool: true,
+        standby: true,
       });
-      expect(await service.update(2, { inPool: false })).toMatchObject({
+      expect(await service.update(2, { standby: false })).toMatchObject({
         name: 'gru',
-        inPool: false,
+        standby: false,
       });
       expect(await service.update(2, { name: 'gru2' })).toMatchObject({
-        inPool: false,
+        standby: false,
       });
     });
 
     it('lists the pooled connections without the active one', async () => {
       repository.find!.mockResolvedValue([{ id: 2 }]);
 
-      expect(await service.findPooled()).toEqual([{ id: 2 }]);
+      expect(await service.findStandby()).toEqual([{ id: 2 }]);
       expect(repository.find).toHaveBeenCalledWith({
-        where: { inPool: true, isActive: false },
+        where: { standby: true, isActive: false },
         order: { id: 'ASC' },
       });
     });

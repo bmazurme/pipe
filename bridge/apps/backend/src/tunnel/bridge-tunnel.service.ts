@@ -55,6 +55,8 @@ export interface BridgeTunnelStatus {
   reason: string | null;
   // The links of the active connection the tunnel was built from.
   links: number;
+  /** How many of the tunnel's links are the cold standby (carry nothing while the main links live). */
+  standby: number;
   // Whether Telegram traffic goes through it right now (it is up and Telegram answers through it).
   inUse: boolean;
   checks: TunnelCheck[];
@@ -193,6 +195,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
         this.disabledReason ??
         (missing ? 'xray не установлен в этом образе' : null),
       links: this.tunnel.linkCount,
+      standby: this.tunnel.standbyCount,
       inUse: this.inUse,
       checks: this.checks,
       since: this.since,
@@ -218,11 +221,15 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
 
   // The links of the active connection: [] when nothing is active (the tunnel is then stopped), undefined when the panel could not be
   // asked and nobody ever built them — the tunnel that already runs is left alone rather than dropped on a hiccup.
-  private async activeLinks(): Promise<string[] | undefined> {
+  private async activeLinks(): Promise<
+    { links: string[]; standby: string[] } | undefined
+  > {
     try {
-      return await this.resolver.resolveMany('active');
+      const links = await this.resolver.resolveMany('active');
+
+      return { links, standby: await this.resolver.resolveStandby(links) };
     } catch (error) {
-      if (error instanceof NotFoundException) return [];
+      if (error instanceof NotFoundException) return { links: [], standby: [] };
 
       this.logger.warn(
         `The links of the active connection could not be read: ${error instanceof Error ? error.message : String(error)}`,
@@ -239,19 +246,19 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
 
     try {
-      const links = await this.activeLinks();
+      const wanted = await this.activeLinks();
       const proxy =
-        links === undefined
+        wanted === undefined
           ? this.tunnel.linkCount > 0
             ? this.tunnel.proxyUrl
             : null
-          : await this.tunnel.apply(links);
+          : await this.tunnel.apply(wanted.links, wanted.standby);
 
       if (!proxy) {
         this.checks = [];
         this.publish(
           false,
-          links?.length === 0
+          wanted?.links.length === 0
             ? 'нет активного подключения'
             : 'туннель не поднят',
         );

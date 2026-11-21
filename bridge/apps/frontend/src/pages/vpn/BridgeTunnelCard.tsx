@@ -33,7 +33,7 @@ export function BridgeTunnelCard() {
         {data.mode === 'off'
           ? `${data.reason ?? 'Туннель выключен'}: Telegram и GitHub идут через прокси из окружения.`
           : data.inUse
-            ? `Telegram и GitHub идут через активное подключение (ссылок: ${data.links}).`
+            ? `Telegram и GitHub идут через активное подключение (ссылок: ${data.links}${data.standby > 0 ? `, в холодном резерве: ${data.standby}` : ''}).`
             : data.links === 0
               ? 'Нет активного подключения: Telegram и GitHub идут через прокси из окружения.'
               : 'Туннель поднят, но Telegram через него не отвечает: используется прокси из окружения.'}

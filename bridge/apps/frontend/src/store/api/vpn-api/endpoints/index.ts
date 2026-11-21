@@ -31,6 +31,8 @@ export interface BridgeTunnelStatus {
   mode: 'on' | 'off';
   reason: string | null;
   links: number;
+  /** How many of the tunnel's links are the cold standby (carry nothing while the main links live). */
+  standby: number;
   inUse: boolean;
   checks: BridgeTunnelCheck[];
   since: string | null;
@@ -53,8 +55,8 @@ export interface VpnConnection {
   /** 'panel' (an x-ui panel) or 'subscription' (an https link that answers with vless:// links). */
   kind: 'panel' | 'subscription';
   isActive: boolean;
-  /** Its links join the active connection's in the tunnel, so a dead link is replaced by a live one by itself. */
-  inPool: boolean;
+  /** A cold standby: used only when every link of the active connection is dead. */
+  standby: boolean;
   createdAt: string;
 }
 
@@ -107,8 +109,8 @@ export interface UpdateVpnConnectionBody {
   serverAddress?: string;
   /** Only for a subscription connection; the server follows the new link. */
   subscriptionUrl?: string;
-  /** Join (or leave) the pool of the active connection. */
-  inPool?: boolean;
+  /** Make the connection a cold standby behind the active one (or not). */
+  standby?: boolean;
 }
 
 const vpnApiEndpoints = vpnApi.injectEndpoints({

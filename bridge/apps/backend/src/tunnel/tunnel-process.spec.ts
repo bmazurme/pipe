@@ -81,11 +81,48 @@ describe('TunnelProcess', () => {
     expect(tunnel.linkCount).toBe(0);
   });
 
+  it('takes a cold standby: it restarts when the standby changes, counts it apart, and says so', async () => {
+    const { tunnel, children, logs } = setup();
+
+    expect(
+      await tunnel.apply([link('a.example')], [link('s1.example')]),
+    ).not.toBeNull();
+    expect(tunnel.linkCount).toBe(1);
+    expect(tunnel.standbyCount).toBe(1);
+    expect(logs.some((l) => l.includes('1 in cold standby'))).toBe(true);
+
+    await tunnel.apply([link('a.example')], [link('s1.example')]);
+    expect(children).toHaveLength(1);
+
+    await tunnel.apply(
+      [link('a.example')],
+      [link('s1.example'), link('s2.example')],
+    );
+    expect(children).toHaveLength(2);
+    expect(tunnel.standbyCount).toBe(2);
+
+    await tunnel.apply([link('a.example')]);
+    expect(children).toHaveLength(3);
+    expect(tunnel.standbyCount).toBe(0);
+  });
+
+  it('has nothing to back up without a main pool, and leaves out a standby link it cannot use', async () => {
+    const { tunnel, children } = setup();
+
+    expect(await tunnel.apply([], [link('s1.example')])).toBeNull();
+    expect(children).toHaveLength(0);
+
+    expect(
+      await tunnel.apply([link('a.example')], ['garbage', link('s1.example')]),
+    ).not.toBeNull();
+    expect(tunnel.standbyCount).toBe(1);
+  });
+
   it('leaves out a link that cannot be used, and fails when none can', async () => {
     const { tunnel, children, logs } = setup();
 
     expect(await tunnel.apply(['garbage', link('a.example')])).not.toBeNull();
-    expect(tunnel.linkCount).toBe(2);
+    expect(tunnel.linkCount).toBe(1);
     expect(logs.some((l) => l.includes('left out'))).toBe(true);
 
     const none = setup();

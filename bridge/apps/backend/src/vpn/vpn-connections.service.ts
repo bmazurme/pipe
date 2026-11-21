@@ -91,7 +91,7 @@ export class VpnConnectionsService {
     }
 
     if (dto.name !== undefined) connection.name = dto.name;
-    if (dto.inPool !== undefined) connection.inPool = dto.inPool;
+    if (dto.standby !== undefined) connection.standby = dto.standby;
     if (dto.subscriptionUrl !== undefined)
       connection.subscriptionUrl = dto.subscriptionUrl;
     if (dto.panelUrl !== undefined) connection.panelUrl = dto.panelUrl;
@@ -114,9 +114,9 @@ export class VpnConnectionsService {
   }
 
   // The connections whose links join the active one's in the tunnel (the active connection itself is never listed here).
-  async findPooled(): Promise<VpnConnection[]> {
+  async findStandby(): Promise<VpnConnection[]> {
     return this.repository.find({
-      where: { inPool: true, isActive: false },
+      where: { standby: true, isActive: false },
       order: { id: 'ASC' },
     });
   }

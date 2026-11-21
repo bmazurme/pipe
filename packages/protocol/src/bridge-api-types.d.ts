@@ -3747,6 +3747,7 @@ export interface components {
             chatEnabled: boolean;
             vpnLink: string | null;
             vpnLinks: string[];
+            vpnStandbyLinks: string[];
             limitsRefreshMin: number;
             /** Format: date-time */
             limitsRefreshRequestedAt: string | null;
@@ -3818,7 +3819,7 @@ export interface components {
             serverAddress: string;
             kind: Record<string, never>;
             isActive: boolean;
-            inPool: boolean;
+            standby: boolean;
             /** Format: date-time */
             createdAt: string;
         };
@@ -3830,7 +3831,7 @@ export interface components {
             serverAddress?: string;
         };
         UpdateVpnConnectionDto: {
-            inPool?: boolean;
+            standby?: boolean;
         };
         VpnProfileResponseDto: {
             id: number;

@@ -152,15 +152,15 @@ describe('UpdateVpnConnectionDto', () => {
     ).toContain('subscriptionUrl');
   });
 
-  it('takes inPool as a boolean and nothing else', async () => {
-    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: true })).toEqual(
+  it('takes standby as a boolean and nothing else', async () => {
+    expect(await errorsOf(UpdateVpnConnectionDto, { standby: true })).toEqual(
       [],
     );
-    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: false })).toEqual(
+    expect(await errorsOf(UpdateVpnConnectionDto, { standby: false })).toEqual(
       [],
     );
-    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: 'yes' })).toContain(
-      'inPool',
-    );
+    expect(
+      await errorsOf(UpdateVpnConnectionDto, { standby: 'yes' }),
+    ).toContain('standby');
   });
 });

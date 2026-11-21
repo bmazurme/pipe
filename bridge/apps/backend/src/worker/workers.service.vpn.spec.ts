@@ -65,6 +65,7 @@ function build(row: Worker) {
   const vpnConnections = { findAll: jest.fn().mockResolvedValue(connections) };
   const vpnLinks = {
     resolveMany: jest.fn().mockResolvedValue([LINK]),
+    resolveStandby: jest.fn().mockResolvedValue([] as string[]),
     resolveSubscriptionMany: jest.fn().mockResolvedValue([LINK]),
     checkSubscription: jest.fn().mockResolvedValue(undefined),
   };
@@ -112,6 +113,35 @@ describe('WorkersService: VPN source', () => {
     await service.configFor(1);
 
     expect(vpnLinks.resolveMany).toHaveBeenCalledWith('active');
+  });
+
+  it("hands an 'active' worker the cold standby links, and no other kind of worker", async () => {
+    const standby = ['vless://standby-1', 'vless://standby-2'];
+    const active = build(worker({ vpnSource: 'active' }));
+
+    active.vpnLinks.resolveStandby.mockResolvedValue(standby);
+
+    expect((await active.service.configFor(1)).vpnStandbyLinks).toEqual(
+      standby,
+    );
+    expect(active.vpnLinks.resolveStandby).toHaveBeenCalledWith([LINK]);
+
+    const chosen = build(
+      worker({ vpnSource: 'connection', vpnConnectionId: 7 }),
+    );
+
+    chosen.vpnLinks.resolveStandby.mockResolvedValue(standby);
+
+    expect((await chosen.service.configFor(1)).vpnStandbyLinks).toEqual([]);
+    expect(chosen.vpnLinks.resolveStandby).not.toHaveBeenCalled();
+  });
+
+  it('never fails the settings fetch because the standby could not be read', async () => {
+    const { service, vpnLinks } = build(worker({ vpnSource: 'active' }));
+
+    vpnLinks.resolveStandby.mockRejectedValue(new Error('db'));
+
+    expect((await service.configFor(1)).vpnStandbyLinks).toEqual([]);
   });
 
   it('fails the settings fetch, rather than dropping the tunnel, when the panel gave no link', async () => {

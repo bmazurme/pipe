@@ -38,38 +38,42 @@ export class VpnLinkResolver {
     return (await this.resolveMany(target))[0];
   }
 
-  // 'active' follows the VPN page's active connection AND the connections marked «in the pool» — its links first, then theirs, so a
-  // tunnel that balances over them keeps working when the active one dies; a number is just that connection. A pooled connection that
-  // cannot be read is skipped (the active one failing is still an error): the pool is a spare, it must never break the main path.
+  // 'active' follows the VPN page's active connection; a number is that connection. All the links a tunnel can balance over.
   async resolveMany(target: number | 'active'): Promise<string[]> {
-    if (target !== 'active') return this.linksOf(target);
+    const id =
+      target === 'active' ? (await this.connections.getActive()).id : target;
 
-    const active = await this.connections.getActive();
-    const links = await this.linksOf(active.id);
-    const pooled = await this.pooledLinks();
-
-    return [...new Set([...links, ...pooled])].slice(0, MAX_POOL_LINKS);
+    return this.linksOf(id);
   }
 
-  private async pooledLinks(): Promise<string[]> {
+  // The links of the connections marked «Резерв»: a COLD standby behind the active connection's links — a tunnel keeps them out of its
+  // balancing and sends nothing through them until every active link is dead (see buildXrayConfig). A links already in the main pool is not
+  // repeated, and a standby connection that cannot be read is skipped with a throttled warning — a spare must never break the main path.
+  async resolveStandby(primary: string[] = []): Promise<string[]> {
+    const taken = new Set(primary);
     const links: string[] = [];
 
-    for (const connection of await this.connections.findPooled()) {
+    for (const connection of await this.connections.findStandby()) {
       try {
-        links.push(...(await this.linksOf(connection.id)));
+        for (const link of await this.linksOf(connection.id)) {
+          if (!taken.has(link)) {
+            taken.add(link);
+            links.push(link);
+          }
+        }
       } catch (error) {
         const last = this.skippedWarnedAt.get(connection.id) ?? 0;
 
         if (Date.now() - last >= SKIPPED_WARN_EVERY_MS) {
           this.skippedWarnedAt.set(connection.id, Date.now());
           this.logger.warn(
-            `VPN «${connection.name}» is in the pool but its links could not be read, skipped: ${error instanceof Error ? error.message : String(error)}`,
+            `VPN «${connection.name}» is a standby but its links could not be read, skipped: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       }
     }
 
-    return links;
+    return links.slice(0, MAX_POOL_LINKS);
   }
 
   private async linksOf(id: number): Promise<string[]> {

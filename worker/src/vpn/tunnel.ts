@@ -105,9 +105,12 @@ export class VpnTunnel {
    * The proxy URL to route through, or null when there is no (working) tunnel. `links` is the pool bridge holds for this worker
    * (a single link or several); the same pool keeps the running tunnel, a changed one restarts it, none stops it.
    */
-  async apply(links: string | string[] | null | undefined): Promise<string | null> {
-    const pool = (Array.isArray(links) ? links : [links]).map((entry) => entry?.trim() ?? '').filter((entry) => entry !== '');
-    const wanted = pool.length > 0 ? pool.join('\n') : null;
+  async apply(links: string | string[] | null | undefined, standbyLinks?: string[] | null): Promise<string | null> {
+    const clean = (list: (string | null | undefined)[]) => list.map((entry) => entry?.trim() ?? '').filter((entry) => entry !== '');
+    const pool = clean(Array.isArray(links) ? links : [links]);
+    // The cold standby (see buildXrayConfig): links that only carry traffic when every pool link is dead. Without a pool there is nothing to back up.
+    const standby = pool.length > 0 ? clean(standbyLinks ?? []) : [];
+    const wanted = pool.length > 0 ? [...pool, ...(standby.length > 0 ? ['--standby--', ...standby] : [])].join('\n') : null;
 
     if (!wanted) {
       this.resetBackoff();
@@ -144,7 +147,17 @@ export class VpnTunnel {
 
       if (usable.length === 0) throw new Error('none of the vpn links can be used');
 
-      const config = buildXrayConfig(usable, this.port, this.options.fingerprint?.trim() || undefined);
+      const usableStandby: VlessParams[] = [];
+
+      for (const entry of standby) {
+        try {
+          usableStandby.push(parseVless(entry));
+        } catch (error) {
+          this.options.log?.warn({ err: error }, 'a standby vpn link cannot be used — left out');
+        }
+      }
+
+      const config = buildXrayConfig(usable, this.port, this.options.fingerprint?.trim() || undefined, usableStandby);
 
       mkdirSync(this.options.dir, { recursive: true });
       writeFileSync(this.configPath, JSON.stringify(config), { mode: 0o600 });
@@ -177,7 +190,7 @@ export class VpnTunnel {
       }
 
       this.resetBackoff();
-      this.options.log?.info({ proxy: this.proxyUrl, links: pool.length }, 'vpn tunnel is up');
+      this.options.log?.info({ proxy: this.proxyUrl, links: pool.length, standby: standby.length }, 'vpn tunnel is up');
 
       return this.proxyUrl;
     } catch (error) {

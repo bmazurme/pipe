@@ -39,6 +39,13 @@ const renderCard = () =>
   );
 
 describe('BridgeTunnelCard', () => {
+  it('mentions the cold standby only when there is one', async () => {
+    answer = { mode: 'on', reason: null, links: 1, standby: 5, inUse: true, since: iso(-120_000), checks: [check()] };
+    renderCard();
+
+    expect(await screen.findByText(/ссылок: 1, в холодном резерве: 5/)).toBeTruthy();
+  });
+
   it('says Telegram and GitHub go through the active connection, with each check', async () => {
     answer = { mode: 'on', reason: null, links: 2, inUse: true, since: iso(-120_000), checks: [check(), check({ key: 'github', label: 'GitHub API', ms: 410 })] };
     renderCard();

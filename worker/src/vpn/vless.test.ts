@@ -129,3 +129,32 @@ describe('buildXrayConfig: a pool of links', () => {
     assert.deepEqual(config.inbounds.map((inbound) => [inbound.listen, inbound.port]), [['127.0.0.1', 18080]]);
   });
 });
+
+describe('buildXrayConfig with a cold standby', () => {
+  type Cfg = {
+    outbounds: { tag: string; protocol: string; settings?: { inboundTag?: string } }[];
+    observatory: { subjectSelector: string[]; probeInterval: string };
+    routing: { balancers: { tag: string; selector: string[]; strategy: { type: string }; fallbackTag?: string }[]; rules: { inboundTag: string[]; balancerTag: string }[] };
+  };
+  const spare = (host: string) => parseVless(LINK.replace('vpn.example.com', host));
+
+  it('observes and balances only the main links; the standby is a fallback through a loopback into a random, unprobed balancer', () => {
+    const config = buildXrayConfig([parseVless(LINK)], 18080, undefined, [spare('s1.example.com'), spare('s2.example.com')]) as Cfg;
+
+    assert.deepEqual(config.outbounds.map((o) => o.tag), ['node-1', 'standby-1', 'standby-2', 'to-standby']);
+    assert.equal(config.outbounds[3].protocol, 'loopback');
+    assert.equal(config.outbounds[3].settings?.inboundTag, 'standby-in');
+    assert.deepEqual(config.observatory.subjectSelector, ['node-']);
+    assert.equal(config.observatory.probeInterval, '30s');
+    assert.equal(config.routing.balancers[0].fallbackTag, 'to-standby');
+    assert.deepEqual(config.routing.balancers[1], { tag: 'standby', selector: ['standby-'], strategy: { type: 'random' } });
+    assert.deepEqual(config.routing.rules.map((rule) => [rule.inboundTag[0], rule.balancerTag]), [['standby-in', 'standby'], ['in', 'pool']]);
+  });
+
+  it('is the plain tunnel again without a standby', () => {
+    const config = buildXrayConfig([parseVless(LINK)], 18080, undefined, []) as { outbounds: unknown[]; observatory?: unknown };
+
+    assert.equal(config.outbounds.length, 1);
+    assert.equal(config.observatory, undefined);
+  });
+});

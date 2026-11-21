@@ -80,13 +80,13 @@ export function VpnConnectionRow({
     }
   };
 
-  const handlePool = async (inPool: boolean) => {
+  const handleStandby = async (standby: boolean) => {
     setActionError(null);
 
     try {
-      await updateVpnConnection({ id: connection.id, inPool }).unwrap();
+      await updateVpnConnection({ id: connection.id, standby }).unwrap();
     } catch {
-      setActionError('Не удалось изменить участие в пуле');
+      setActionError('Не удалось изменить резерв');
     }
   };
 
@@ -206,9 +206,9 @@ export function VpnConnectionRow({
               Активно
             </Label>
           )}
-          {!connection.isActive && connection.inPool && (
-            <Label theme="info" size="xs" title="Ссылки этого подключения идут в туннель вместе с активным">
-              в пуле
+          {!connection.isActive && connection.standby && (
+            <Label theme="info" size="xs" title="Холодный резерв: трафик пойдёт через это подключение, только если все ссылки активного не отвечают">
+              резерв
             </Label>
           )}
           {isSubscription && (
@@ -222,12 +222,12 @@ export function VpnConnectionRow({
             <>
               <Switch
                 size="m"
-                checked={connection.inPool}
+                checked={connection.standby}
                 disabled={isSaving}
-                onUpdate={(checked) => void handlePool(checked)}
-                title="Ссылки этого подключения попадают в туннель вместе со ссылками активного: если активное упадёт, трафик пойдёт через это само"
+                onUpdate={(checked) => void handleStandby(checked)}
+                title="Холодный резерв: пока хоть одна ссылка активного подключения жива, через это подключение не идёт ни трафик, ни проверки; когда все ссылки активного мертвы, туннель переходит на него сам"
               >
-                В пуле
+                Резерв
               </Switch>
               <Button
                 view="normal"
