@@ -17,6 +17,14 @@ export interface BoardHealth {
   sshPasswordAuth?: boolean;
   sshAuthorizedKeys?: number;
   sshdActive?: boolean;
+  workers?: BoardWorker[];
+}
+
+/** A worker container (pipe-worker-pi-…) the board's agent found, with the image it runs. */
+export interface BoardWorker {
+  name: string;
+  image: string;
+  running: boolean;
 }
 
 export interface Board {
@@ -38,6 +46,11 @@ export interface Board {
   /** The owner's decision waiting for the board to pick it up. */
   pending: { id: number; sha: string; via: string; createdAt: string } | null;
   lastUpdate: { id: number; status: string; sha: string; result: string | null; finishedAt: string | null; createdAt: string } | null;
+  /** The worker containers on this board; «Обновить worker» is offered only where there are some. */
+  workers: BoardWorker[];
+  /** The owner's decision to update the worker(s), waiting for the board to pick it up. */
+  workerPending: { id: number; via: string; createdAt: string } | null;
+  workerLast: { id: number; status: string; result: string | null; finishedAt: string | null; createdAt: string } | null;
 }
 
 function errorMessage(fallback: string) {
@@ -56,6 +69,16 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
       invalidatesTags: ['Boards'],
       transformErrorResponse: errorMessage('Не удалось разрешить обновление'),
     }),
+    requestWorkerUpdate: builder.mutation<{ id: number; status: string }, string>({
+      query: (host) => ({ url: `boards/${encodeURIComponent(host)}/worker-update`, method: 'POST' }),
+      invalidatesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось разрешить обновление worker'),
+    }),
+    cancelWorkerUpdate: builder.mutation<void, string>({
+      query: (host) => ({ url: `boards/${encodeURIComponent(host)}/worker-update/cancel`, method: 'POST' }),
+      invalidatesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось отменить обновление worker'),
+    }),
     cancelBoardUpdate: builder.mutation<void, string>({
       query: (host) => ({ url: `boards/${encodeURIComponent(host)}/updates/cancel`, method: 'POST' }),
       invalidatesTags: ['Boards'],
@@ -64,6 +87,12 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
   }),
 });
 
-export const { useListBoardsQuery, useRequestBoardUpdateMutation, useCancelBoardUpdateMutation } = boardsApiEndpoints;
+export const {
+  useListBoardsQuery,
+  useRequestBoardUpdateMutation,
+  useCancelBoardUpdateMutation,
+  useRequestWorkerUpdateMutation,
+  useCancelWorkerUpdateMutation,
+} = boardsApiEndpoints;
 
 export default boardsApiEndpoints;

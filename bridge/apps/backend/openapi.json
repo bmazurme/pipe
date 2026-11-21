@@ -3099,6 +3099,46 @@
         }
       }
     },
+    "/api/v1/boards/{host}/worker-update": {
+      "post": {
+        "operationId": "BoardsController_workerUpdate",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/{host}/worker-update/cancel": {
+      "post": {
+        "operationId": "BoardsController_cancelWorkerUpdate",
+        "parameters": [
+          {
+            "name": "host",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/boards/{host}/updates/cancel": {
       "post": {
         "operationId": "BoardsController_cancel",
@@ -9377,6 +9417,27 @@
           "status"
         ]
       },
+      "BoardWorkerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "WORKER_CONTAINER_PATTERN"
+          },
+          "image": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "running": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "image",
+          "running"
+        ]
+      },
       "BoardHealthDto": {
         "type": "object",
         "properties": {
@@ -9404,6 +9465,12 @@
           },
           "sshdActive": {
             "type": "boolean"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BoardWorkerDto"
+            }
           }
         }
       },

@@ -6,6 +6,7 @@ import { formatRelativeTime } from '../shared/lib/formatRelativeTime';
 import { type Board, type BoardScript, getErrorMessage, useCancelBoardUpdateMutation, useListBoardsQuery, useRequestBoardUpdateMutation } from '../store/api';
 import { EmptyState } from '../widgets/EmptyState';
 import { PageHeader } from '../widgets/PageHeader';
+import { WorkerUpdateRow } from './boards/WorkerUpdateRow';
 import styles from './BoardsPage.module.css';
 
 const FAST_POLL_MS = 10_000;
@@ -125,6 +126,8 @@ function BoardCard({ board, onUpdate, onCancel, busy, cancelling, error, onDismi
         </div>
       )}
 
+      <WorkerUpdateRow board={board} />
+
       {board.lastUpdate && (
         <Text variant="caption-2" color={board.lastUpdate.status === 'failed' ? 'danger' : 'secondary'}>
           Последнее обновление: {UPDATE_LABEL[board.lastUpdate.status] ?? board.lastUpdate.status}, {board.lastUpdate.sha.slice(0, 7)},{' '}
@@ -143,7 +146,7 @@ export function BoardsPage() {
   const { data: boards, isLoading, isError, error } = useListBoardsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
   const [request, { isLoading: isRequesting, originalArgs: requestingHost, error: requestError, reset: resetRequest }] = useRequestBoardUpdateMutation();
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingHost, error: cancelError, reset: resetCancel }] = useCancelBoardUpdateMutation();
-  const anyPending = Boolean(boards?.some((board) => board.pending));
+  const anyPending = Boolean(boards?.some((board) => board.pending || board.workerPending));
 
   const errorFor = (host: string): string | null => {
     if (requestError && requestingHost === host) return typeof requestError === 'string' ? requestError : getErrorMessage(requestError, 'Не удалось разрешить обновление');
@@ -165,7 +168,7 @@ export function BoardsPage() {
     <div className={styles.page}>
       <PageHeader
         title="Платы"
-        description="Скрипты, установленные на платах, против main. Кнопка «Обновить» разрешает плате поставить именно этот коммит: она проверяет, что он влит в main, и отчитывается о результате."
+        description="Скрипты, установленные на платах, против main. Кнопка «Обновить» разрешает плате поставить именно этот коммит: она проверяет, что он влит в main, и отчитывается о результате. «Обновить worker» разрешает плате скачать свежий образ worker и пересоздать его контейнер с теми же настройками."
       />
 
       {isLoading && <Skeleton style={{ height: 120 }} />}

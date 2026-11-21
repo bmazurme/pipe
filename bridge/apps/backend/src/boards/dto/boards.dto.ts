@@ -46,6 +46,22 @@ export class ReportedScriptDto {
   mainHash?: string | null;
 }
 
+export const WORKER_CONTAINER_PATTERN =
+  /^pipe-worker-pi-[a-z0-9][a-z0-9-]{0,40}$/;
+
+export class BoardWorkerDto {
+  @IsString()
+  @Matches(WORKER_CONTAINER_PATTERN)
+  name: string;
+
+  @IsString()
+  @MaxLength(200)
+  image: string;
+
+  @IsBoolean()
+  running: boolean;
+}
+
 // What a board can say about itself besides its scripts (infra/boardagent `collect_health`): the root disk and the SSH door. Every field
 // is optional — a probe that failed on the board is simply absent.
 export class BoardHealthDto {
@@ -79,6 +95,14 @@ export class BoardHealthDto {
   @IsOptional()
   @IsBoolean()
   sshdActive?: boolean;
+
+  // The worker containers on this board (pipe-worker-pi-…): what «Обновить worker» acts on.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => BoardWorkerDto)
+  workers?: BoardWorkerDto[];
 }
 
 // What a board's agent posts about itself.

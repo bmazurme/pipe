@@ -23,6 +23,14 @@
 #     of the decision fails to install or to verify.
 # The result goes back to bridge (a message on Telegram and the page).
 #
+# A second kind of decision, «update the worker» (the button on the page «Платы»): the board's own worker containers are named
+# pipe-worker-pi-<colour> and run the project's image, ghcr.io/bmazurme/pipe-worker:stable. The agent pulls that image and recreates each
+# such container with the SAME settings (read back from `docker inspect`, so nothing is typed from memory): the old one is stopped
+# gracefully (the worker finishes the job it is on, up to its own stop timeout), renamed aside, the new one must stay up for a while, and if it
+# does not the old container is put back and started. What it will touch is fixed HERE, not by bridge: only containers with that name
+# pattern whose image is that repository, only the `stable` tag of it, and only a container whose settings it can reproduce exactly
+# (named volumes, env, restart policy, limits — a bind mount, a published port, a device or extra privileges is refused, never guessed).
+#
 # Settings (/etc/pipe-boardagent.env, mode 600): BRIDGE_API_URL (https://api.bridge.ntlstl.dev), BRIDGE_API_KEY (a boards-only API key of
 # the OWNER, brk_…), OWNER, REPO, BRANCH, STATE_DIR, BRIDGE_PI_DIR, MANIFEST_FILE, CHECK_SCRIPT, BOARD_HOST. Tests: GITHUB_API.
 set -uo pipefail
@@ -37,9 +45,14 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=2
+AGENT_VERSION=3
 # The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
 METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
+# The worker update: the only image it will pull and the only container names it will touch (see the header). Tests change the image.
+WORKER_IMAGE="${WORKER_IMAGE:-ghcr.io/bmazurme/pipe-worker:stable}"
+WORKER_NAME_RE='^pipe-worker-pi-[a-z0-9][a-z0-9-]{0,40}$'
+# How long a new worker container must stay up before the old one is thrown away.
+WORKER_STAY_UP_SEC="${WORKER_STAY_UP_SEC:-45}"
 # The reliable way to bridge: the stack's own address inside the LAN (curl --resolve host:port:ip), so a request does not have to leave through the
 # router and come back, and does not depend on the provider. If that address does not answer, the request is repeated the ordinary way. Set
 # BRIDGE_RESOLVE= (empty) to turn it off, or to another host:port:ip.
@@ -70,6 +83,29 @@ bridge() {
   bridge_request "$timeout" "$method" "$path" "$body"
 }
 
+# The worker containers on this board — JSON [{name, image, running}] for bridge, which shows «Обновить worker» only where there are some.
+list_worker_containers() { # names, one per line
+  command -v docker >/dev/null 2>&1 || return 0
+  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "$WORKER_NAME_RE" || true
+}
+
+collect_workers() {
+  local name rows=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    rows="$rows$(docker inspect -f '{{.Name}}|{{.Config.Image}}|{{.State.Running}}' "$name" 2>/dev/null)"$'\n'
+  done < <(list_worker_containers)
+  ROWS="$rows" python3 -c '
+import json, os
+out = []
+for line in os.environ.get("ROWS", "").splitlines():
+    parts = line.split("|")
+    if len(parts) == 3 and parts[0].startswith("/"):
+        out.append({"name": parts[0][1:], "image": parts[1][:200], "running": parts[2] == "true"})
+print(json.dumps(out[:8]))
+'
+}
+
 # What the board can say about itself besides its scripts: the root disk (the first thing that quietly kills a Pi), and the SSH door —
 # whether passwords still work and how many keys are authorized — so a board nobody can log in to, or one that anyone with a password
 # can, shows on the page before it matters. Every field is optional: a probe that fails is left out, never guessed.
@@ -83,7 +119,9 @@ collect_health() {
     [ -r "$f" ] && keys=$((keys + $(grep -cEv '^[[:space:]]*(#|$)' "$f" 2>/dev/null || true)))
   done
   systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null || active=false
-  DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
+  local workers
+  workers="$(collect_workers 2>/dev/null)" || workers="[]"
+  WORKERS_JSON="${workers:-[]}" DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
 import json, os
 def num(name):
     v = os.environ.get(name, "")
@@ -96,6 +134,12 @@ health = {
     "sshAuthorizedKeys": num("SSH_KEYS"),
     "sshdActive": os.environ.get("SSHD_ACTIVE") == "true",
 }
+try:
+    workers = json.loads(os.environ.get("WORKERS_JSON") or "[]")
+except ValueError:
+    workers = []
+if workers:
+    health["workers"] = workers
 print(json.dumps({k: v for k, v in health.items() if v is not None}))
 '
 }
@@ -290,11 +334,130 @@ print(json.dumps(data))
   return 0
 }
 
+# ---- «update the worker» ------------------------------------------------------------------------------------------------------------
+
+# Reads one container's settings and prints the `docker run` arguments that reproduce them (NUL-separated), or a reason it will not do it
+# (exit 3). Only what it can reproduce exactly is accepted — see the header.
+worker_run_args() { # inspect-json image-env-json
+  INSPECT="$1" IMAGE_ENV="$2" python3 -c '
+import json, os, sys
+c = json.loads(os.environ["INSPECT"])[0]
+image_env = set(json.loads(os.environ.get("IMAGE_ENV") or "[]"))
+hc, cfg = c.get("HostConfig") or {}, c.get("Config") or {}
+def refuse(why):
+    sys.stdout.write(why); sys.exit(3)
+if hc.get("Privileged"): refuse("the container is privileged")
+if hc.get("Devices"): refuse("the container has devices")
+if hc.get("CapAdd"): refuse("the container adds capabilities")
+if hc.get("PortBindings"): refuse("the container publishes ports")
+if hc.get("NetworkMode") not in ("default", "bridge"): refuse("the container uses the network " + str(hc.get("NetworkMode")))
+if hc.get("PidMode") or hc.get("IpcMode") not in ("", None, "private", "shareable"): refuse("the container shares a namespace")
+if hc.get("Tmpfs"): refuse("the container has tmpfs mounts")
+for m in c.get("Mounts") or []:
+    if m.get("Type") != "volume": refuse("the container has a " + str(m.get("Type")) + " mount")
+args = []
+policy = (hc.get("RestartPolicy") or {}).get("Name") or ""
+if policy and policy != "no": args += ["--restart", policy]
+timeout = cfg.get("StopTimeout")
+if isinstance(timeout, int) and timeout > 0: args += ["--stop-timeout", str(timeout)]
+if hc.get("NanoCpus"): args += ["--cpus", ("%.3f" % (hc["NanoCpus"] / 1e9)).rstrip("0").rstrip(".")]
+if hc.get("Memory"): args += ["--memory", str(hc["Memory"])]
+if hc.get("CpuShares"): args += ["--cpu-shares", str(hc["CpuShares"])]
+for m in c.get("Mounts") or []:
+    args += ["-v", m["Name"] + ":" + m["Destination"] + ("" if m.get("RW", True) else ":ro")]
+for e in cfg.get("Env") or []:
+    if e not in image_env: args += ["-e", e]
+sys.stdout.write("\0".join(args) + ("\0" if args else ""))
+'
+}
+
+# One container: replace it with the new image, or put everything back. Prints a one-line account; returns 0 for «done or already current».
+update_one_worker() { # name new-image-id work-dir
+  local name="$1" new_id="$2" work="$3" repo_of_image inspect old_id old_env stop_t rc a
+  inspect="$(docker inspect "$name" 2>/dev/null)" || { echo "$name: cannot be inspected"; return 1; }
+  repo_of_image="$(docker inspect -f '{{.Config.Image}}' "$name" 2>/dev/null)"
+  repo_of_image="${repo_of_image%@*}"; repo_of_image="${repo_of_image%:*}"
+  [ "$repo_of_image" = "${WORKER_IMAGE%:*}" ] || { echo "$name: refused — it runs $repo_of_image, not ${WORKER_IMAGE%:*}"; return 1; }
+  old_id="$(docker inspect -f '{{.Image}}' "$name" 2>/dev/null)"
+  if [ "$old_id" = "$new_id" ]; then echo "$name: already on the current image"; return 0; fi
+  old_env="$(docker image inspect -f '{{json .Config.Env}}' "$old_id" 2>/dev/null || echo '[]')"
+  worker_run_args "$inspect" "$old_env" > "$work/args-$name"; rc=$?
+  if [ "$rc" -ne 0 ]; then echo "$name: refused — $(head -c 300 "$work/args-$name")"; return 1; fi
+  local args=()
+  while IFS= read -r -d '' a; do args+=("$a"); done < "$work/args-$name"
+  stop_t="$(docker inspect -f '{{.Config.StopTimeout}}' "$name" 2>/dev/null)"
+  case "$stop_t" in ''|*[!0-9]*|0) stop_t=30 ;; esac
+
+  log "stopping $name (up to ${stop_t}s for its current job)"
+  docker stop -t "$stop_t" "$name" >/dev/null 2>&1 || { echo "$name: could not be stopped"; docker start "$name" >/dev/null 2>&1; return 1; }
+  docker rename "$name" "old-$name" >/dev/null 2>&1 || { echo "$name: could not be renamed"; docker start "$name" >/dev/null 2>&1; return 1; }
+  docker tag "$old_id" "pipe-worker-rollback:$name" >/dev/null 2>&1 || true
+
+  local out waited=0 ok=0 state
+  if out="$(docker run -d --name "$name" "${args[@]}" "$WORKER_IMAGE" 2>&1)"; then
+    # It must stay up, not merely start: a worker that crashes on a bad image dies within seconds.
+    while [ "$waited" -lt "$WORKER_STAY_UP_SEC" ]; do
+      sleep "${WORKER_POLL_SEC:-3}"; waited=$((waited + ${WORKER_POLL_SEC:-3}))
+      state="$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' "$name" 2>/dev/null)"
+      [ "$state" = "true 0" ] || { ok=0; break; }
+      ok=1
+    done
+    [ "$WORKER_STAY_UP_SEC" -gt 0 ] || ok=1
+  fi
+  if [ "$ok" -ne 1 ]; then
+    local why; why="$(docker logs --tail 5 "$name" 2>&1 | tr '\n' ' ' | head -c 300)"
+    docker rm -f "$name" >/dev/null 2>&1
+    docker rename "old-$name" "$name" >/dev/null 2>&1 && docker start "$name" >/dev/null 2>&1
+    echo "$name: the new container did not stay up (${why:-$out}) — the old one is back"
+    return 1
+  fi
+  docker rm "old-$name" >/dev/null 2>&1 || true
+  echo "$name: updated (${old_id#sha256:} → ${new_id#sha256:})" | sed -E 's/([0-9a-f]{12})[0-9a-f]+/\1/g'
+  return 0
+}
+
+apply_worker_update() { # decision id
+  UPDATE_ID="$1"
+  printf '%s' "$UPDATE_ID" | grep -qE '^[0-9]+$' || { log "bad worker decision id — nothing done"; return 0; }
+  command -v docker >/dev/null 2>&1 || { finish false "docker is not available on this board"; return 0; }
+  local names; names="$(list_worker_containers)"
+  [ -n "$names" ] || { finish false "no worker container (pipe-worker-pi-…) on this board"; return 0; }
+
+  log "worker decision $UPDATE_ID: $(printf '%s\n' "$names" | grep -c .) container(s)"
+  local pulled new_id
+  pulled="$(docker pull "$WORKER_IMAGE" 2>&1)" || { finish false "could not pull $WORKER_IMAGE: $(printf '%s' "$pulled" | tail -c 300)"; return 0; }
+  new_id="$(docker image inspect -f '{{.Id}}' "$WORKER_IMAGE" 2>/dev/null)"
+  [ -n "$new_id" ] || { finish false "pulled $WORKER_IMAGE but cannot read its id"; return 0; }
+
+  local work name line results="" failed=0
+  work="$(mktemp -d)"
+  # One board at a time is the rule of the owner; several containers on one board go one after another, stopping at the first that fails.
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if line="$(update_one_worker "$name" "$new_id" "$work")"; then results="$results$line; "; else results="$results$line"; failed=1; break; fi
+  done <<< "$names"
+
+  rm -rf "$work"
+  results="${results%; }"
+  if [ "$failed" -eq 0 ]; then finish true "$results"; else finish false "$results"; fi
+  log "worker decision $UPDATE_ID: ${results:0:300}"
+  do_report || true
+  return 0
+}
+
 do_apply() {
   local pending
   do_metrics || true
   pending="$(bridge GET "/api/v1/boards/agent/pending?host=$HOST")" || { log "bridge unreachable — nothing done"; return 0; }
   verify_self_update
+  # A decision to update the worker comes first (it is rare and long); a scripts decision waiting beside it is taken by the next run.
+  local worker_id
+  worker_id="$(printf '%s' "$pending" | python3 -c '
+import json, sys
+update = (json.load(sys.stdin) or {}).get("workerUpdate")
+print(update["id"] if update else "")
+' 2>/dev/null)" || worker_id=""
+  if [ -n "$worker_id" ]; then apply_worker_update "$worker_id"; return 0; fi
   # id, sha, then one repo path per line; nothing at all when there is no decision
   local parsed
   parsed="$(printf '%s' "$pending" | python3 -c '

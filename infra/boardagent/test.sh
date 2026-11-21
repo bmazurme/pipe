@@ -112,7 +112,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "2"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "3"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -298,6 +298,180 @@ fresh; : > "$T/argv"; FAKE_METRICS_FAIL=1 BRIDGE_RESOLVE=api.bridge.ntlstl.dev:4
 [ "$(grep -c 'agent/metrics' "$T/argv")" = 1 ]; check "resolve: an answer of 4xx/5xx is not a reason to send the request a second time" $?
 fresh; : > "$T/argv"; BRIDGE_RESOLVE= agent report
 ! grep -qx -- '--resolve' "$T/argv"; check "resolve: BRIDGE_RESOLVE= (empty) turns the pinning off" $?
+
+# ---- «update the worker»: a fake docker that keeps its containers in $FD/state.json and writes every command to $FD/log
+FD="$T/docker"; mkdir -p "$FD"
+cat > "$T/bin/docker" <<'PY'
+#!/usr/bin/env python3
+import json, os, sys
+fd = os.environ["FAKE_DOCKER"]
+state_path = os.path.join(fd, "state.json")
+state = json.load(open(state_path)) if os.path.exists(state_path) else {"containers": {}, "images": {}, "pull_id": "sha256:new", "worker_image": "ghcr.io/bmazurme/pipe-worker:stable"}
+def save(): json.dump(state, open(state_path, "w"))
+with open(os.path.join(fd, "log"), "a") as log: log.write(" ".join(sys.argv[1:]) + "\n")
+a = sys.argv[1:]
+def fmt(template, c):
+    r = template
+    for k, v in {"{{.Name}}": c["inspect"]["Name"], "{{.Config.Image}}": c["inspect"]["Config"]["Image"],
+                 "{{.State.Running}}": str(c["running"]).lower(), "{{.Image}}": c["inspect"]["Image"],
+                 "{{.Config.StopTimeout}}": str(c["inspect"]["Config"].get("StopTimeout", "<nil>")),
+                 "{{.RestartCount}}": "0"}.items():
+        r = r.replace(k, v)
+    return r
+if a[:1] == ["ps"]:
+    print("\n".join(state["containers"])); sys.exit(0)
+if a[:1] == ["inspect"]:
+    rest = a[1:]; f = None
+    if rest[:1] == ["-f"]: f, rest = rest[1], rest[2:]
+    c = state["containers"].get(rest[0])
+    if c is None: sys.exit(1)
+    print(fmt(f, c) if f else json.dumps([c["inspect"]])); sys.exit(0)
+if a[:2] == ["image", "inspect"]:
+    ref = a[-1]
+    if "{{.Id}}" in a: print(state["pull_id"]); sys.exit(0)
+    print(json.dumps(state["images"].get(ref, {}).get("env", []))); sys.exit(0)
+if a[:1] == ["pull"]:
+    if state.get("pull_fail"): print("pull access denied", file=sys.stderr); sys.exit(1)
+    print("pulled"); sys.exit(0)
+if a[:1] == ["stop"]:
+    state["containers"][a[-1]]["running"] = False; save(); sys.exit(0)
+if a[:1] == ["start"]:
+    state["containers"][a[-1]]["running"] = True; save(); sys.exit(0)
+if a[:1] == ["rename"]:
+    c = state["containers"].pop(a[1]); c["inspect"]["Name"] = "/" + a[2]; state["containers"][a[2]] = c; save(); sys.exit(0)
+if a[:1] == ["rm"]:
+    state["containers"].pop(a[-1], None); save(); sys.exit(0)
+if a[:1] == ["tag"]: sys.exit(0)
+if a[:1] == ["logs"]: print("boom: cannot start"); sys.exit(0)
+if a[:1] == ["run"]:
+    if state.get("run_fails"): print("docker: error", file=sys.stderr); sys.exit(125)
+    name = a[a.index("--name") + 1]
+    template = json.loads(json.dumps(state["template"]))
+    template["Name"] = "/" + name; template["Image"] = state["pull_id"]
+    state["containers"][name] = {"inspect": template, "running": not state.get("run_crashes")}
+    save(); print("newid"); sys.exit(0)
+sys.exit(0)
+PY
+chmod +x "$T/bin/docker"
+export FAKE_DOCKER="$FD"
+
+worker_inspect() { # name image-in-config bind-mount(0|1) → the inspect JSON of a worker container
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, sys
+name, image, bind = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+print(json.dumps({"Name": "/" + name, "Image": "sha256:old",
+  "Config": {"Image": image, "StopTimeout": 900, "Env": ["PATH=/usr/bin", "NODE_VERSION=22", "BRIDGE_API_URL=https://api.bridge.ntlstl.dev", "WORKER_SHUTDOWN_GRACE_SEC=840"]},
+  "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"}, "NanoCpus": 2000000000, "Memory": 4294967296, "CpuShares": 512, "NetworkMode": "bridge"},
+  "Mounts": [{"Type": "bind", "Source": "/etc", "Destination": "/etc"} if bind else {"Type": "volume", "Name": name + "-state", "Destination": "/app/.worker-state", "RW": True}]}))
+PY
+}
+docker_world() { # name [image] [bind] [extra state key=value…]  — one worker container on the board
+  local name="$1" image="${2:-ghcr.io/bmazurme/pipe-worker:stable}" bind="${3:-0}"
+  rm -rf "$FD"; mkdir -p "$FD"
+  python3 - "$FD/state.json" "$name" "$(worker_inspect "$name" "$image" "$bind")" <<'PY'
+import json, sys
+path, name, inspect = sys.argv[1:]
+inspect = json.loads(inspect)
+json.dump({"containers": {name: {"inspect": inspect, "running": True}} if name else {},
+           "images": {"sha256:old": {"env": ["PATH=/usr/bin", "NODE_VERSION=22"]}},
+           "pull_id": "sha256:new", "worker_image": "ghcr.io/bmazurme/pipe-worker:stable", "template": inspect}, open(path, "w"))
+PY
+}
+docker_state() { python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["containers"]))' "$FD/state.json"; }
+docker_set() { python3 - "$FD/state.json" "$1" "$2" <<'PY'
+import json, sys
+path, key, value = sys.argv[1:]
+s = json.load(open(path)); s[key] = value == "true"; json.dump(s, open(path, "w"))
+PY
+}
+worker_decision() { printf '{"update": null, "workerUpdate": {"id": %s}}' "$1" > "$T/pending.json"; }
+export WORKER_STAY_UP_SEC=2 WORKER_POLL_SEC=1
+
+echo "# the worker containers on a board are reported, so bridge knows where «Обновить worker» applies"
+fresh; docker_world pipe-worker-pi-red; echo '{"update": null}' > "$T/pending.json"; agent report
+python3 - "$T/calls/1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+sys.exit(0 if body["health"].get("workers") == [{"name": "pipe-worker-pi-red", "image": "ghcr.io/bmazurme/pipe-worker:stable", "running": True}] else 1)
+PY
+check "report: lists the board's worker containers with their image and state" $?
+fresh; rm -rf "$FD"; mkdir -p "$FD"; agent report
+python3 - "$T/calls/1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+sys.exit(0 if "workers" not in body["health"] else 1)
+PY
+check "report: a board with no worker container reports none" $?
+fresh; docker_world "old-pipe-worker-pi-red"; agent report
+python3 - "$T/calls/1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+sys.exit(0 if "workers" not in body["health"] else 1)
+PY
+check "report: the container an update sets aside (old-pipe-worker-pi-…) is not taken for a worker" $?
+
+echo "# update the worker: the happy path"
+fresh; docker_world pipe-worker-pi-red; worker_decision 21; agent apply
+grep -q '"ok": true' <<< "$(last_result)" && grep -q 'updated' <<< "$(last_result)"; check "worker: pulls the image, recreates the container and tells bridge it worked" $?
+run="$(grep '^run ' "$FD/log")"
+grep -q -- '--name pipe-worker-pi-red' <<< "$run" && grep -q -- '--restart unless-stopped' <<< "$run" && grep -q -- '--stop-timeout 900' <<< "$run" \
+  && grep -q -- '--cpus 2 ' <<< "$run" && grep -q -- '--memory 4294967296' <<< "$run" && grep -q -- '--cpu-shares 512' <<< "$run" \
+  && grep -q -- '-v pipe-worker-pi-red-state:/app/.worker-state' <<< "$run" && grep -q -- '-e BRIDGE_API_URL=https://api.bridge.ntlstl.dev' <<< "$run" \
+  && grep -q -- '-e WORKER_SHUTDOWN_GRACE_SEC=840' <<< "$run" && grep -q 'ghcr.io/bmazurme/pipe-worker:stable$' <<< "$run"; check "worker: the new container gets the same settings, read back from the old one" $?
+! grep -q 'NODE_VERSION\|PATH=' <<< "$run"; check "worker: what the image itself sets is not copied over" $?
+grep -q '^stop -t 900 pipe-worker-pi-red' "$FD/log"; check "worker: the old one is stopped gracefully, with its own timeout" $?
+python3 - "$FD/state.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))["containers"]
+sys.exit(0 if list(c) == ["pipe-worker-pi-red"] and c["pipe-worker-pi-red"]["running"] and c["pipe-worker-pi-red"]["inspect"]["Image"] == "sha256:new" else 1)
+PY
+check "worker: only the new container is left, running" $?
+grep -q 'POST /api/v1/boards/agent/report' "$T"/calls/*; check "worker: the new state is reported at once" $?
+! grep -q 'updates/.*/result' "$T"/calls/* || grep -q 'agent/updates/21/result' "$T"/calls/*; check "worker: the result goes to the decision that asked for it" $?
+
+echo "# update the worker: when it is not needed or not safe"
+fresh; docker_world pipe-worker-pi-red; python3 - "$FD/state.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1])); s["pull_id"] = "sha256:old"; json.dump(s, open(sys.argv[1], "w"))
+PY
+worker_decision 22; agent apply
+grep -q '"ok": true' <<< "$(last_result)" && grep -q 'already on the current image' <<< "$(last_result)" && ! grep -q '^stop \|^run ' "$FD/log"; check "worker: already on the current image — nothing is stopped or started" $?
+
+fresh; docker_world pipe-worker-pi-red; docker_set run_crashes true; worker_decision 23; agent apply
+python3 - "$FD/state.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))["containers"]
+ok = list(c) == ["pipe-worker-pi-red"] and c["pipe-worker-pi-red"]["running"] and c["pipe-worker-pi-red"]["inspect"]["Image"] == "sha256:old"
+sys.exit(0 if ok else 1)
+PY
+check "worker: a new container that does not stay up is thrown away and the old one is back, running" $?
+grep -q '"ok": false' <<< "$(last_result)" && grep -q 'did not stay up' <<< "$(last_result)"; check "worker: …and bridge is told it failed, with why" $?
+
+fresh; docker_world pipe-worker-pi-red; docker_set run_fails true; worker_decision 24; agent apply
+python3 - "$FD/state.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))["containers"]
+sys.exit(0 if list(c) == ["pipe-worker-pi-red"] and c["pipe-worker-pi-red"]["running"] else 1)
+PY
+check "worker: when docker run itself fails the old container is restored" $?
+
+fresh; docker_world pipe-worker-pi-red "nginx:latest"; worker_decision 25; agent apply
+grep -q '"ok": false' <<< "$(last_result)" && grep -q 'refused' <<< "$(last_result)" && ! grep -q '^stop ' "$FD/log"; check "worker: a container on some other image is refused, not touched" $?
+
+fresh; docker_world pipe-worker-pi-red "ghcr.io/bmazurme/pipe-worker:stable" 1; worker_decision 26; agent apply
+grep -q '"ok": false' <<< "$(last_result)" && grep -q 'bind mount' <<< "$(last_result)" && ! grep -q '^stop ' "$FD/log"; check "worker: a container with a bind mount is refused (it will not guess), and not stopped" $?
+
+fresh; docker_world ""; worker_decision 27; agent apply
+grep -q '"ok": false' <<< "$(last_result)" && grep -q 'no worker container' <<< "$(last_result)"; check "worker: a board with no worker container says so" $?
+
+fresh; docker_world pipe-worker-pi-red; docker_set pull_fail true; worker_decision 28; agent apply
+grep -q '"ok": false' <<< "$(last_result)" && grep -q 'could not pull' <<< "$(last_result)" && ! grep -q '^stop ' "$FD/log"; check "worker: an image that cannot be pulled leaves the running worker alone" $?
+
+fresh; docker_world pipe-worker-pi-red; echo '{"update": null, "workerUpdate": null}' > "$T/pending.json"; agent apply
+[ "$(calls)" = 0 ] && ! grep -q '^pull \|^stop \|^run ' "$FD/log" 2>/dev/null; check "worker: no decision, no docker commands" $?
+fresh; docker_world pipe-worker-pi-red; printf '{"update": null, "workerUpdate": {"id": "1; rm -rf /"}}' > "$T/pending.json"; agent apply
+! grep -q '^pull \|^stop \|^run ' "$FD/log" 2>/dev/null; check "worker: a decision id that is not a number is not acted on" $?
+
 
 echo
 echo "passed $PASS, failed $FAILED"
