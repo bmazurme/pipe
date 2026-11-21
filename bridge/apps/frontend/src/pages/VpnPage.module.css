@@ -97,3 +97,25 @@
 .renameRow input {
   min-width: 160px;
 }
+
+.tunnelCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--ntlstl-card-padding);
+}
+
+.tunnelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tunnelChecks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

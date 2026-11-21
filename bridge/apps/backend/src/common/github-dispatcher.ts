@@ -1,5 +1,7 @@
 import { ProxyAgent, type Dispatcher } from 'undici';
 
+import { preferTunnel } from './tunnel-proxy';
+
 // api.github.com is slow or unreachable from the production host at times (every request then ends in "The operation was aborted due to
 // timeout": Improve runs, CI checks of pull requests, Lab). When GITHUB_PROXY_URL is set, the calls to GitHub go through that HTTP proxy —
 // the stack's own vpn-client (http://vpn-client:1080), which Telegram already uses. Unset (the default) = direct, as before.
@@ -17,9 +19,12 @@ export function setGithubProxyChoice(
 }
 
 export function githubProxyUrl(): string | undefined {
-  if (chosen) return chosen.enabled && chosen.url ? chosen.url : undefined;
+  // Through the bridge's own tunnel (the VPN page's active connection) while it works, when the proxy is just the stack's static client.
+  if (chosen) {
+    return chosen.enabled && chosen.url ? preferTunnel(chosen.url) : undefined;
+  }
 
-  return process.env.GITHUB_PROXY_URL?.trim() || undefined;
+  return preferTunnel(process.env.GITHUB_PROXY_URL?.trim() || undefined);
 }
 
 export function githubDispatcher(): Dispatcher | undefined {

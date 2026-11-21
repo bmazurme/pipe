@@ -36,5 +36,9 @@ COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 # as dist/main.js itself, not from /app — class-validator nests one level in.
 RUN cd apps/backend && node -e "require('class-validator'); require('class-transformer'); require('validator'); console.log('deps ok')"
 
+# bridge's own VPN tunnel (tunnel/): an Xray client built from the active connection of the VPN page, so Telegram and GitHub follow it.
+# One static binary from the official image (pinned like the worker's; multi-arch). Without it the tunnel is simply off.
+COPY --from=ghcr.io/xtls/xray-core:26.3.27 /usr/local/bin/xray /usr/local/bin/xray
+
 EXPOSE 3000
 CMD ["node", "apps/backend/dist/main"]

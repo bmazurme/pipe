@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProxyAgent, type Dispatcher } from 'undici';
 
+import { preferTunnel } from '../common/tunnel-proxy';
 import { AppLogService } from '../logs/app-log.service';
 
 const TELEGRAM_TIMEOUT_MS = 10_000;
@@ -19,7 +20,8 @@ const TELEGRAM_MAX_TEXT = 4000;
 // The bot's side of the Telegram integration: one bot, one owner chat. Every
 // call is best-effort — a Telegram outage must never fail the handler that
 // triggered a notification. All traffic can be routed through an HTTP proxy
-// (TELEGRAM_PROXY_URL, the stack's vpn-client): the production host cannot
+// (TELEGRAM_PROXY_URL, the stack's vpn-client — replaced by the bridge's own tunnel
+// on the active VPN connection while that works, tunnel/bridge-tunnel.service.ts): the production host cannot
 // reach api.telegram.org directly.
 @Injectable()
 export class TelegramService {
@@ -188,7 +190,10 @@ export class TelegramService {
 
   // Built once per proxy URL — ProxyAgent keeps its own connection pool.
   private dispatcher(): Dispatcher | undefined {
-    const url = this.configService.get<string>('TELEGRAM_PROXY_URL');
+    // The bridge's own tunnel (the VPN page's active connection) while it works, unless the owner set a proxy of their own here.
+    const url = preferTunnel(
+      this.configService.get<string>('TELEGRAM_PROXY_URL'),
+    );
 
     if (!url) {
       return undefined;

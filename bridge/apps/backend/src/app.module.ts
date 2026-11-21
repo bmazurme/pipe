@@ -30,6 +30,7 @@ import { TimeModule } from './time/time.module';
 import { UsageModule } from './usage/usage.module';
 import { UsersModule } from './users/users.module';
 import { RouterModule } from './router/router.module';
+import { TunnelModule } from './tunnel/tunnel.module';
 import { VpnModule } from './vpn/vpn.module';
 import { WorkerModule } from './worker/worker.module';
 
@@ -75,6 +76,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     TimeModule,
     UsersModule,
     VpnModule,
+    TunnelModule,
     RouterModule,
     WorkerModule,
   ],
