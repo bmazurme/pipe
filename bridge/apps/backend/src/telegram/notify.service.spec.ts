@@ -234,4 +234,63 @@ describe('NotifyService urgent and weekends', () => {
     expect(telegram.send).not.toHaveBeenCalled();
     expect(save).toHaveBeenCalledTimes(1);
   });
+
+  describe('NotifyService: the other way out', () => {
+    afterEach(() => jest.useRealTimers());
+
+    function withFallback(sent: boolean) {
+      jest.useFakeTimers().setSystemTime(MSK_DAY);
+      const telegram = {
+        isConfigured: jest.fn().mockReturnValue(true),
+        send: jest.fn().mockResolvedValue(sent),
+        sendWithButtons: jest.fn().mockResolvedValue(sent),
+      };
+      const fallback = { mirror: jest.fn() };
+      const settings = new NotificationSettingsService(
+        { findOne: jest.fn().mockResolvedValue(null) } as never,
+        { get: () => undefined } as never,
+      );
+      const service = new NotifyService(
+        telegram as never,
+        settings as never,
+        {} as never,
+        fallback as never,
+      );
+
+      return { service, fallback };
+    }
+
+    it('hands an urgent notification that Telegram did not carry to the other channel', async () => {
+      const { service, fallback } = withFallback(false);
+
+      await expect(service.send('VPN down', { urgent: true })).resolves.toBe(
+        false,
+      );
+
+      expect(fallback.mirror).toHaveBeenCalledWith('VPN down');
+    });
+
+    it('does the same for an urgent notification with buttons', async () => {
+      const { service, fallback } = withFallback(false);
+
+      await service.sendWithButtons(
+        'Deploy failed',
+        [[{ text: 'Retry', callback_data: 'x' }]],
+        { urgent: true },
+      );
+
+      expect(fallback.mirror).toHaveBeenCalledWith('Deploy failed');
+    });
+
+    it('leaves an ordinary notification alone, and an urgent one Telegram did carry', async () => {
+      const down = withFallback(false);
+      const up = withFallback(true);
+
+      await down.service.send('CI finished');
+      await up.service.send('VPN down', { urgent: true });
+
+      expect(down.fallback.mirror).not.toHaveBeenCalled();
+      expect(up.fallback.mirror).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -88,4 +88,39 @@ describe('BridgeTunnelCard', () => {
 
     expect(container.textContent).toBe('');
   });
+
+  it('says when Telegram is down and whether another channel will carry the alerts', async () => {
+    answer = {
+      mode: 'on',
+      reason: null,
+      links: 1,
+      inUse: false,
+      since: null,
+      checks: [],
+      telegram: { down: true, since: iso(-300_000), error: 'HTTP 504' },
+      fallback: { configured: false, channels: [] },
+    };
+    const first = renderCard();
+
+    expect(await screen.findByText(/^Telegram недоступен с/)).toBeTruthy();
+    expect(screen.getByText(/HTTP 504/)).toBeTruthy();
+    expect(screen.getByText(/Запасной канал не настроен/)).toBeTruthy();
+    first.unmount();
+
+    store.dispatch(vpnApi.util.resetApiState());
+    answer = {
+      mode: 'on',
+      reason: null,
+      links: 1,
+      inUse: true,
+      since: null,
+      checks: [],
+      telegram: { down: false, since: null, error: null },
+      fallback: { configured: true, channels: [{ name: 'webhook', target: 'ntfy.sh' }, { name: 'email', target: 'me@example.org' }] },
+    };
+    renderCard();
+
+    expect(await screen.findByText(/Запасной канал для срочных алертов: webhook \(ntfy\.sh\), почта \(me@example\.org\)/)).toBeTruthy();
+    expect(screen.queryByText(/^Telegram недоступен с/)).toBeNull();
+  });
 });

@@ -172,6 +172,27 @@ worker stays isolated. Updates arrive by long polling — only one consumer per 
 Chat id: after you have written "hi" to the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser with
 your VPN on — `"chat":{"id":123456789,…}`. (The page shows the token in the URL: do it on your own machine only.)
 
+### When Telegram cannot be reached: a second channel
+
+Every alert goes through Telegram, so the failure that matters most is the one that silences them all. Set up a second way out and bridge
+says so through it: after 3 minutes of failed calls it sends «🔴 Telegram недоступен с …» (again every hour while it lasts), mirrors the
+**urgent** notices (VPN status, link status, deploy failures) while Telegram is down, and sends «✅ Telegram снова доступен» when it is back.
+Either or both, no Telegram and no VPN involved:
+
+```bash
+# ntfy (the app on the phone subscribes to the topic; a topic name is the secret, so make it long) — or your own ntfy server
+./secrets.sh set ALERT_WEBHOOK_URL      # https://ntfy.sh/<long-random-topic>
+./secrets.sh set ALERT_WEBHOOK_TOKEN    # only for a server that needs a token
+# e-mail (SMTP over TLS; an app password, not the account one)
+./secrets.sh set ALERT_SMTP_URL         # smtps://user:app-password@smtp.yandex.ru:465
+./secrets.sh set ALERT_EMAIL_TO         # you@example.org
+./secrets.sh set ALERT_EMAIL_FROM       # optional, the SMTP user by default
+./deploy.sh
+```
+
+The VPN page shows whether a second channel is set up and whether Telegram is reachable. With none set up, an outage is only written to the
+app log (`telegram.down` / `telegram.up`).
+
 ## GitHub: Improve and the repo webhook
 
 Improve (issue → worker → PR, CI repairs) and the repo webhook need a token and a shared secret; unset, Improve answers

@@ -34,6 +34,10 @@ export interface BridgeTunnelStatus {
   inUse: boolean;
   checks: BridgeTunnelCheck[];
   since: string | null;
+  /** Whether Telegram can be reached at all, and since when it cannot. */
+  telegram: { down: boolean; since: string | null; error: string | null } | null;
+  /** The other way out for urgent alerts when Telegram is down. */
+  fallback: { configured: boolean; channels: { name: 'webhook' | 'email'; target: string }[] } | null;
 }
 
 export interface ProvisionVpnServerBody {

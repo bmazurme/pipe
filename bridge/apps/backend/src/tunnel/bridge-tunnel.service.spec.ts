@@ -189,4 +189,42 @@ describe('BridgeTunnelService', () => {
     expect(tunnelProxyUrl()).toBeUndefined();
     expect(process.stop).toHaveBeenCalled();
   });
+
+  it('reports whether Telegram is reachable and whether another channel is set up', async () => {
+    const telegram = {
+      health: () => ({
+        down: true,
+        failingSince: new Date('2026-11-21T09:00:00Z'),
+        lastError: 'timeout',
+      }),
+    };
+    const fallback = {
+      isConfigured: () => true,
+      channels: () => [{ name: 'webhook', target: 'ntfy.sh' }],
+    };
+    const service = new BridgeTunnelService(
+      { get: () => undefined } as unknown as ConfigService,
+      { resolveMany: jest.fn() } as unknown as VpnLinkResolver,
+      undefined,
+      {
+        apply: jest.fn(),
+        stop: jest.fn(),
+        proxyUrl: PROXY,
+        isMissing: false,
+        linkCount: 0,
+      } as unknown as TunnelProcess,
+      telegram as never,
+      fallback as never,
+    );
+
+    expect(service.status().telegram).toEqual({
+      down: true,
+      since: '2026-11-21T09:00:00.000Z',
+      error: 'timeout',
+    });
+    expect(service.status().fallback).toEqual({
+      configured: true,
+      channels: [{ name: 'webhook', target: 'ntfy.sh' }],
+    });
+  });
 });
