@@ -64,6 +64,38 @@ export function parseVless(raw: string): VlessParams {
   };
 }
 
+// What a link IS, for telling whether the pool changed: the server and credentials, not the spelling — a subscription may hand the same
+// links back in another order or with another #remark, and that must not restart a running tunnel (every restart is ~10 s without Telegram).
+export function linkKey(raw: string): string {
+  try {
+    const p = parseVless(raw);
+
+    return JSON.stringify([
+      p.host,
+      p.port,
+      p.uuid,
+      p.flow ?? '',
+      p.encryption,
+      p.serverName,
+      p.fingerprint,
+      p.publicKey,
+      p.shortId,
+      p.spiderX,
+    ]);
+  } catch {
+    return raw.trim();
+  }
+}
+
+export function poolKey(pool: string[], standby: string[]): string {
+  const keys = (list: string[]) => [...new Set(list.map(linkKey))].sort();
+
+  return [
+    ...keys(pool),
+    ...(standby.length > 0 ? ['--standby--', ...keys(standby)] : []),
+  ].join('\n');
+}
+
 // On the network these boards sit on the `chrome` TLS fingerprint was throttled (about 80% of connections hung) while `firefox` passed
 // 48 of 48 — the worker and infra/bridge-pi/vless-to-xray.sh override it the same way. `link` keeps the link's own.
 export const DEFAULT_FINGERPRINT = 'firefox';

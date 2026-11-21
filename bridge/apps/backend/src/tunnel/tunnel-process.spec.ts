@@ -66,6 +66,29 @@ describe('TunnelProcess', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('does not restart for the same links in another order or with another #remark — only for a real change', async () => {
+    const { tunnel, children, dir } = setup();
+
+    await tunnel.apply(
+      [link('a.example'), link('b.example')],
+      [link('s.example'), link('t.example')],
+    );
+    await tunnel.apply(
+      [`${link('b.example')}#renamed`, link('a.example')],
+      [link('t.example'), `${link('s.example')}#again`],
+    );
+    expect(children).toHaveLength(1);
+
+    await tunnel.apply(
+      [link('a.example'), link('b.example')],
+      [link('s.example')],
+    );
+    expect(children).toHaveLength(2);
+
+    tunnel.stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('restarts for another pool and stops for none', async () => {
     const { tunnel, children } = setup();
 

@@ -1,9 +1,15 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
-import { buildXrayConfig, parseVless, type VlessParams } from './xray-config';
+import {
+  buildXrayConfig,
+  parseVless,
+  poolKey,
+  type VlessParams,
+} from './xray-config';
 
 export interface TunnelLog {
   info: (message: string) => void;
@@ -27,6 +33,18 @@ export interface TunnelProcessOptions {
 const READY_TIMEOUT_MS = 8000;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 5 * 60_000;
+
+// 6 hex characters per line of a pool key: enough to see which links differ between two keys, not enough to recover anything.
+function fingerprints(key: string): string {
+  return key
+    .split('\n')
+    .map((line) =>
+      line === '--standby--'
+        ? '|'
+        : createHash('sha1').update(line).digest('hex').slice(0, 6),
+    )
+    .join(' ');
+}
 
 export function isPortOpen(port: number, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
@@ -126,13 +144,7 @@ export class TunnelProcess {
       pool.length > 0
         ? standbyLinks.map((entry) => entry.trim()).filter(Boolean)
         : [];
-    const wanted =
-      pool.length > 0
-        ? [
-            ...pool,
-            ...(standby.length > 0 ? ['--standby--', ...standby] : []),
-          ].join('\n')
-        : null;
+    const wanted = pool.length > 0 ? poolKey(pool, standby) : null;
 
     if (!wanted) {
       this.resetBackoff();
@@ -143,6 +155,13 @@ export class TunnelProcess {
 
     if (this.missing) return null;
     if (this.alive() && wanted === this.current) return this.proxyUrl;
+
+    if (this.alive() && this.current !== null) {
+      // A running tunnel is being replaced: say why, with short fingerprints (no secrets) so a pool that flaps can be told from a real change.
+      this.options.log?.info(
+        `the pool changed, restarting the tunnel: [${fingerprints(this.current)}] -> [${fingerprints(wanted)}]`,
+      );
+    }
 
     if (this.failed !== wanted) this.resetBackoff();
     else if (this.now() < this.retryAt) {

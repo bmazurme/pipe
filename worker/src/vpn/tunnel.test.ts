@@ -279,12 +279,21 @@ describe('VpnTunnel: a pool of links', () => {
     await tunnel.apply([LINK, OTHER]);
     assert.equal(spawned.length, 1);
 
-    await tunnel.apply([OTHER, LINK]);
+    await tunnel.apply([LINK]);
     assert.equal(spawned.length, 2);
     assert.equal(spawned[0].child.signals.length, 1);
 
-    await tunnel.apply([LINK]);
+    await tunnel.apply([LINK, OTHER]);
     assert.equal(spawned.length, 3);
+  });
+
+  it('does not restart for the same links in another order or with another #remark — only for a real change', async () => {
+    const { tunnel, spawned } = setup();
+
+    await tunnel.apply([LINK, OTHER], [OTHER]);
+    await tunnel.apply([OTHER, `${LINK}#renamed`], [`${OTHER}#again`]);
+    await tunnel.apply([`${LINK}#x`, OTHER], [OTHER]);
+    assert.equal(spawned.length, 1);
   });
 
   it('treats a single link as a pool of one, and a list of one the same as the bare link', async () => {
