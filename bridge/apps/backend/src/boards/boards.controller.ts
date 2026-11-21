@@ -124,14 +124,19 @@ export class BoardsAgentController {
     @Query('host') host: string,
     @CurrentUser() user: { id: number },
   ) {
-    if (!HOST_PATTERN.test(host ?? '')) return { update: null };
+    if (!HOST_PATTERN.test(host ?? '')) {
+      return { update: null, workerUpdate: null };
+    }
 
     const update = await this.boards.pendingFor(user.id, host);
+    const workerUpdate = await this.boards.workerPendingFor(user.id, host);
 
     return {
       update: update
         ? { id: update.id, sha: update.sha, repoPaths: update.repoPaths }
         : null,
+      // Update the worker container(s) on this board; the agent works out the rest itself.
+      workerUpdate: workerUpdate ? { id: workerUpdate.id } : null,
     };
   }
 
@@ -170,6 +175,25 @@ export class BoardsController {
       repoPaths: update.repoPaths,
       status: update.status,
     };
+  }
+
+  // «Обновить worker»: the agent on the board pulls the worker image and recreates its worker container(s).
+  @Post(':host/worker-update')
+  async workerUpdate(
+    @Param('host') host: string,
+    @CurrentUser() user: { id: number },
+  ) {
+    const update = await this.boards.requestWorkerUpdate(user.id, host, 'ui');
+
+    return { id: update.id, status: update.status };
+  }
+
+  @Post(':host/worker-update/cancel')
+  async cancelWorkerUpdate(
+    @Param('host') host: string,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.boards.cancelPending(user.id, host, 'worker');
   }
 
   @Post(':host/updates/cancel')

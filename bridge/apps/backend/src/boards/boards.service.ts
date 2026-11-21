@@ -16,8 +16,13 @@ import {
   BoardHealth,
   BoardReport,
   BoardScript,
+  BoardWorker,
 } from './entities/board-report.entity';
-import { ScriptUpdate, ScriptUpdateVia } from './entities/script-update.entity';
+import {
+  ScriptUpdate,
+  ScriptUpdateKind,
+  ScriptUpdateVia,
+} from './entities/script-update.entity';
 
 // A board that has not reported for this long is shown as offline, and its report is too old to act on.
 export const ONLINE_WITHIN_MS = 3 * 60 * 60 * 1000;
@@ -56,6 +61,16 @@ export interface BoardView {
     id: number;
     status: string;
     sha: string;
+    result: string | null;
+    finishedAt: Date | null;
+    createdAt: Date;
+  } | null;
+  // The worker containers the agent found here, and the owner's decision to update them (same shape as the scripts' pending/last).
+  workers: BoardWorker[];
+  workerPending: { id: number; via: string; createdAt: Date } | null;
+  workerLast: {
+    id: number;
+    status: string;
     result: string | null;
     finishedAt: Date | null;
     createdAt: Date;
@@ -154,7 +169,7 @@ export class BoardsService {
         ?.announcedKey ?? null;
 
     if (next && next !== previous) {
-      if (await this.pendingRow(userId, dto.host)) return;
+      if (await this.pendingRow(userId, dto.host, 'scripts')) return;
       if (!(await this.claim(userId, dto.host, next))) return;
 
       // The claim is released when Telegram did not take the message, so the next report retries.
@@ -294,9 +309,14 @@ export class BoardsService {
     });
     const pendingByHost = new Map<string, ScriptUpdate>();
     const lastByHost = new Map<string, ScriptUpdate>();
+    const workerPendingByHost = new Map<string, ScriptUpdate>();
+    const workerLastByHost = new Map<string, ScriptUpdate>();
 
     for (const row of rows) {
-      const byHost = row.status === 'pending' ? pendingByHost : lastByHost;
+      const worker = row.kind === 'worker';
+      const pendingMap = worker ? workerPendingByHost : pendingByHost;
+      const lastMap = worker ? workerLastByHost : lastByHost;
+      const byHost = row.status === 'pending' ? pendingMap : lastMap;
 
       if (!byHost.has(row.host)) byHost.set(row.host, row);
     }
@@ -312,6 +332,15 @@ export class BoardsService {
         else pending = found;
       }
 
+      const workerFound = workerPendingByHost.get(report.host);
+      let workerPending: ScriptUpdate | null = null;
+
+      if (workerFound) {
+        if (this.isExpired(workerFound, now)) expiredIds.push(workerFound.id);
+        else workerPending = workerFound;
+      }
+
+      const workerLast = workerLastByHost.get(report.host);
       const last = lastByHost.get(report.host);
       const outdated = report.scripts.filter((s) => s.status === 'outdated');
 
@@ -342,6 +371,23 @@ export class BoardsService {
               result: last.result,
               finishedAt: last.finishedAt,
               createdAt: last.createdAt,
+            }
+          : null,
+        workers: report.health?.workers ?? [],
+        workerPending: workerPending
+          ? {
+              id: workerPending.id,
+              via: workerPending.via,
+              createdAt: workerPending.createdAt,
+            }
+          : null,
+        workerLast: workerLast
+          ? {
+              id: workerLast.id,
+              status: workerLast.status,
+              result: workerLast.result,
+              finishedAt: workerLast.finishedAt,
+              createdAt: workerLast.createdAt,
             }
           : null,
       });
@@ -389,7 +435,7 @@ export class BoardsService {
 
     // One decision at a time per board.
     await this.updates.update(
-      { userId, host, status: 'pending' },
+      { userId, host, status: 'pending', kind: 'scripts' },
       { status: 'cancelled', finishedAt: new Date() },
     );
 
@@ -401,6 +447,48 @@ export class BoardsService {
         repoPaths,
         status: 'pending',
         via,
+        kind: 'scripts',
+        result: null,
+        finishedAt: null,
+      }),
+    );
+  }
+
+  // The owner's decision: update the worker container(s) on this board — pull the worker image and recreate them. The agent on the board
+  // decides what that means (only its own pipe-worker-pi-… containers, only the project's image) and reports how it went.
+  async requestWorkerUpdate(
+    userId: number,
+    host: string,
+    via: ScriptUpdateVia,
+  ): Promise<ScriptUpdate> {
+    const report = await this.reports.findOne({ where: { userId, host } });
+
+    if (!report) throw new NotFoundException('Плата не отчитывалась');
+    if (Date.now() - report.reportedAt.getTime() > REPORT_FRESH_MS) {
+      throw new ConflictException(
+        'Плата давно не отчитывалась — дождитесь свежего отчёта',
+      );
+    }
+    if (!report.health?.workers?.length) {
+      throw new BadRequestException(
+        'Агент не нашёл на плате worker-контейнеров (pipe-worker-pi-…) — возможно, он ещё не обновлён',
+      );
+    }
+
+    await this.updates.update(
+      { userId, host, status: 'pending', kind: 'worker' },
+      { status: 'cancelled', finishedAt: new Date() },
+    );
+
+    return this.updates.save(
+      this.updates.create({
+        userId,
+        host,
+        sha: report.mainSha,
+        repoPaths: [],
+        status: 'pending',
+        via,
+        kind: 'worker',
         result: null,
         finishedAt: null,
       }),
@@ -408,8 +496,12 @@ export class BoardsService {
   }
 
   // The owner takes a decision back before the board collects it.
-  async cancelPending(userId: number, host: string): Promise<void> {
-    const row = await this.pendingRow(userId, host);
+  async cancelPending(
+    userId: number,
+    host: string,
+    kind: ScriptUpdateKind = 'scripts',
+  ): Promise<void> {
+    const row = await this.pendingRow(userId, host, kind);
 
     if (!row) throw new NotFoundException('Нет ожидающего обновления');
 
@@ -417,7 +509,11 @@ export class BoardsService {
       status: 'cancelled',
       finishedAt: new Date(),
     });
-    await this.notifier.send(`Обновление ${host} отменено`);
+    await this.notifier.send(
+      kind === 'worker'
+        ? `Обновление worker на ${host} отменено`
+        : `Обновление ${host} отменено`,
+    );
   }
 
   // A press on the Telegram button: only the owner's chat reaches this (see TelegramCommandsService). The board is found by name.
@@ -447,7 +543,15 @@ export class BoardsService {
 
   // The decision waiting for this board, if any (and not older than an hour).
   async pendingFor(userId: number, host: string): Promise<ScriptUpdate | null> {
-    return this.pendingRow(userId, host);
+    return this.pendingRow(userId, host, 'scripts');
+  }
+
+  // The decision to update this board's worker container(s), if any.
+  async workerPendingFor(
+    userId: number,
+    host: string,
+  ): Promise<ScriptUpdate | null> {
+    return this.pendingRow(userId, host, 'worker');
   }
 
   private isExpired(row: ScriptUpdate, now: number): boolean {
@@ -457,9 +561,10 @@ export class BoardsService {
   private async pendingRow(
     userId: number,
     host: string,
+    kind: ScriptUpdateKind,
   ): Promise<ScriptUpdate | null> {
     const row = await this.updates.findOne({
-      where: { userId, host, status: 'pending' },
+      where: { userId, host, status: 'pending', kind },
       order: { id: 'DESC' },
     });
 
@@ -496,11 +601,24 @@ export class BoardsService {
     await this.updates.save(update);
 
     // Re-announce is decided by the next report; forget the old key so a failed update is announced again.
-    if (!ok) {
+    if (!ok && update.kind !== 'worker') {
       await this.reports.update(
         { userId, host: update.host },
         { announcedKey: null },
       );
+    }
+
+    if (update.kind === 'worker') {
+      await this.notifier.send(
+        ok
+          ? `✅ Worker на ${update.host} обновлён${message ? `\n${message.slice(0, 500)}` : ''}`
+          : `🔴 Обновление worker на ${update.host} не удалось: ${(message ?? '').slice(0, 500)}`,
+      );
+      this.logger.log(
+        `Board ${update.host}: worker update ${update.id} ${ok ? 'applied' : 'failed'}`,
+      );
+
+      return;
     }
 
     await this.notifier.send(

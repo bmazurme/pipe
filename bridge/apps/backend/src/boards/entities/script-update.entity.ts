@@ -7,6 +7,9 @@ export type ScriptUpdateStatus =
 
 export type ScriptUpdateVia = 'telegram' | 'ui';
 
+// 'scripts': install the board's scripts from `main`. 'worker': pull the worker image and recreate the board's worker container(s).
+export type ScriptUpdateKind = 'scripts' | 'worker';
+
 // The owner's decision to bring a board's scripts up to `main` at one commit. The board's agent picks it up, installs those
 // scripts (only ones it already knows, from that commit, only if the commit is on `main`) and reports how it went.
 @Entity({ name: 'script_updates' })
@@ -31,6 +34,10 @@ export class ScriptUpdate extends BaseEntity {
 
   @Column({ type: 'varchar', length: 16 })
   via: ScriptUpdateVia;
+
+  // What the decision is for; a worker decision has no repoPaths and its sha is only the commit the owner saw.
+  @Column({ type: 'varchar', length: 16, default: 'scripts' })
+  kind: ScriptUpdateKind;
 
   // What the agent said when it was done.
   @Column({ type: 'text', nullable: true })

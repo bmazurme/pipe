@@ -319,7 +319,7 @@ describe('BoardsService.requestUpdate', () => {
     expect(updateRows).toHaveLength(1);
     // an earlier waiting decision is withdrawn
     expect(updates.update).toHaveBeenCalledWith(
-      { userId: 7, host: 'ubuntu-red', status: 'pending' },
+      { userId: 7, host: 'ubuntu-red', status: 'pending', kind: 'scripts' },
       expect.objectContaining({ status: 'cancelled' }),
     );
   });
@@ -379,6 +379,175 @@ describe('BoardsService.requestUpdate', () => {
     expect(
       await setup(null).service.approveFromTelegram('ghost', 'c823ea5'),
     ).toContain('не отчитывалась');
+  });
+});
+
+describe('BoardsService.requestWorkerUpdate', () => {
+  const workers = [
+    {
+      name: 'pipe-worker-pi-red',
+      image: 'ghcr.io/bmazurme/pipe-worker:stable',
+      running: true,
+    },
+  ];
+
+  it('records the owner’s decision to update the worker, withdrawing an earlier one of the same kind only', async () => {
+    const { service, updateRows, updates } = setup(
+      fresh({ health: { workers } }),
+    );
+
+    const update = await service.requestWorkerUpdate(7, 'ubuntu-red', 'ui');
+
+    expect(update).toMatchObject({
+      host: 'ubuntu-red',
+      kind: 'worker',
+      repoPaths: [],
+      status: 'pending',
+      via: 'ui',
+    });
+    expect(updateRows).toHaveLength(1);
+    expect(updates.update).toHaveBeenCalledWith(
+      { userId: 7, host: 'ubuntu-red', status: 'pending', kind: 'worker' },
+      expect.objectContaining({ status: 'cancelled' }),
+    );
+  });
+
+  it('refuses an unknown board, an old report, and a board with no worker container reported', async () => {
+    await expect(
+      setup(null).service.requestWorkerUpdate(7, 'ubuntu-red', 'ui'),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      setup(
+        fresh({
+          health: { workers },
+          reportedAt: new Date(Date.now() - 49 * 3600_000),
+        }),
+      ).service.requestWorkerUpdate(7, 'ubuntu-red', 'ui'),
+    ).rejects.toThrow(ConflictException);
+    await expect(
+      setup(fresh()).service.requestWorkerUpdate(7, 'ubuntu-red', 'ui'),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      setup(fresh({ health: { workers: [] } })).service.requestWorkerUpdate(
+        7,
+        'ubuntu-red',
+        'ui',
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('is found by its own pending lookup, and the scripts lookup does not see it', async () => {
+    const { service, updates } = setup(fresh({ health: { workers } }));
+
+    await service.workerPendingFor(7, 'ubuntu-red');
+    await service.pendingFor(7, 'ubuntu-red');
+
+    expect(updates.findOne).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: {
+          userId: 7,
+          host: 'ubuntu-red',
+          status: 'pending',
+          kind: 'worker',
+        },
+      }),
+    );
+    expect(updates.findOne).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          userId: 7,
+          host: 'ubuntu-red',
+          status: 'pending',
+          kind: 'scripts',
+        },
+      }),
+    );
+  });
+
+  it('tells the owner how a worker update went, and does not reset the scripts announcement when it fails', async () => {
+    const { service, reports, updates, notifier } = setup(
+      fresh({ health: { workers } }),
+    );
+    const row: Partial<ScriptUpdate> = {
+      id: 5,
+      userId: 7,
+      host: 'ubuntu-red',
+      kind: 'worker',
+      status: 'pending',
+      sha: SHA,
+      repoPaths: [],
+      createdAt: new Date(),
+    };
+
+    updates.findOne.mockResolvedValue({ ...row });
+    await service.recordResult(7, 5, true, 'pipe-worker-pi-red: обновлён');
+    expect(notifier.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('Worker на ubuntu-red обновлён'),
+    );
+
+    updates.findOne.mockResolvedValue({ ...row });
+    await service.recordResult(7, 5, false, 'новый контейнер не стартовал');
+    expect(notifier.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('Обновление worker на ubuntu-red не удалось'),
+    );
+    expect(reports.update).not.toHaveBeenCalled();
+  });
+
+  it('shows the workers a board reported and the state of its worker decisions in the list', async () => {
+    const { service, updates } = setup(fresh({ health: { workers } }));
+
+    updates.find.mockResolvedValue([
+      {
+        id: 8,
+        host: 'ubuntu-red',
+        kind: 'worker',
+        status: 'pending',
+        via: 'ui',
+        createdAt: new Date(),
+        sha: SHA,
+        repoPaths: [],
+        result: null,
+        finishedAt: null,
+      },
+      {
+        id: 7,
+        host: 'ubuntu-red',
+        kind: 'worker',
+        status: 'applied',
+        via: 'ui',
+        createdAt: new Date(),
+        sha: SHA,
+        repoPaths: [],
+        result: 'ok',
+        finishedAt: new Date(),
+      },
+      {
+        id: 6,
+        host: 'ubuntu-red',
+        kind: 'scripts',
+        status: 'applied',
+        via: 'ui',
+        createdAt: new Date(),
+        sha: SHA,
+        repoPaths: ['x'],
+        result: 'scripts ok',
+        finishedAt: new Date(),
+      },
+    ] as never);
+
+    const [view] = await service.list(7);
+
+    expect(view.workers).toEqual(workers);
+    expect(view.workerPending).toMatchObject({ id: 8, via: 'ui' });
+    expect(view.workerLast).toMatchObject({
+      id: 7,
+      status: 'applied',
+      result: 'ok',
+    });
+    expect(view.pending).toBeNull();
+    expect(view.lastUpdate).toMatchObject({ id: 6, result: 'scripts ok' });
   });
 });
 
@@ -509,7 +678,7 @@ describe('BoardsService: the board’s side', () => {
       const { service, updates } = setup(fresh());
 
       updates.find.mockResolvedValue([
-        row(4, 'ubuntu-red', 'pending', new Date(Date.now() - 3 * 3600_000)),
+        row(4, 'ubuntu-red', 'pending', new Date(Date.now() - 49 * 3600_000)),
       ]);
       const [view] = await service.list(7);
 

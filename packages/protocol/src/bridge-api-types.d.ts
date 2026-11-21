@@ -1666,6 +1666,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/boards/{host}/worker-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsController_workerUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/boards/{host}/worker-update/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsController_cancelWorkerUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boards/{host}/updates/cancel": {
         parameters: {
             query?: never;
@@ -3991,6 +4023,11 @@ export interface components {
             installedHash?: string | null;
             mainHash?: string | null;
         };
+        BoardWorkerDto: {
+            name: string;
+            image: string;
+            running: boolean;
+        };
         BoardHealthDto: {
             diskUsedPct?: number;
             diskFreeMb?: number;
@@ -3998,6 +4035,7 @@ export interface components {
             sshPasswordAuth?: boolean;
             sshAuthorizedKeys?: number;
             sshdActive?: boolean;
+            workers?: components["schemas"]["BoardWorkerDto"][];
         };
         BoardReportDto: {
             host: string;
@@ -7118,6 +7156,44 @@ export interface operations {
         };
     };
     BoardsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                host: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsController_workerUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                host: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BoardsController_cancelWorkerUpdate: {
         parameters: {
             query?: never;
             header?: never;

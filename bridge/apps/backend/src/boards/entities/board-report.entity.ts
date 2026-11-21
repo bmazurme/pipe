@@ -13,6 +13,13 @@ export interface BoardScript {
   mainHash: string | null;
 }
 
+// A worker container the board's agent found on it (named pipe-worker-pi-…), with the image it runs and whether it is up.
+export interface BoardWorker {
+  name: string;
+  image: string;
+  running: boolean;
+}
+
 // What the board reported about its disk and SSH; every field optional (see BoardHealthDto).
 export interface BoardHealth {
   diskUsedPct?: number;
@@ -21,6 +28,7 @@ export interface BoardHealth {
   sshPasswordAuth?: boolean;
   sshAuthorizedKeys?: number;
   sshdActive?: boolean;
+  workers?: BoardWorker[];
 }
 
 // What a board last told bridge about the scripts installed on it. One row per (account, board): the board's own agent posts it

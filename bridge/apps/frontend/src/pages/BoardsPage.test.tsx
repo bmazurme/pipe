@@ -29,6 +29,9 @@ const board = (over: Record<string, unknown> = {}) => ({
   updatable: 1,
   pending: null,
   lastUpdate: null,
+  workers: [],
+  workerPending: null,
+  workerLast: null,
   ...over,
 });
 
@@ -211,5 +214,71 @@ describe('BoardsPage', () => {
 
     await user.click(within(card).getByRole('button', { name: /close|закрыть/i }));
     await waitFor(() => expect(screen.queryByText('Кнопка устарела: main изменился')).toBeNull());
+  });
+  describe('updating the worker', () => {
+    const workers = [{ name: 'pipe-worker-pi-red', image: 'ghcr.io/bmazurme/pipe-worker:stable', running: true }];
+
+    it('offers nothing on a board that has no worker container', async () => {
+      renderPage();
+      await screen.findByText('ubuntu-red');
+
+      expect(screen.queryByLabelText('Обновить worker на ubuntu-red')).toBeNull();
+    });
+
+    it('needs a second, confirming click, then asks the board to update its worker', async () => {
+      const user = userEvent.setup();
+      boards = [board({ workers })];
+      renderPage();
+      await screen.findByText('red · работает');
+
+      await user.click(screen.getByLabelText('Обновить worker на ubuntu-red'));
+
+      expect(sent).toEqual([]);
+
+      await user.click(screen.getByLabelText('Подтвердить обновление worker на ubuntu-red'));
+
+      await waitFor(() => expect(sent).toEqual([{ method: 'POST', path: 'boards/ubuntu-red/worker-update' }]));
+    });
+
+    it('shows a waiting decision with a way to take it back, and no second request', async () => {
+      const user = userEvent.setup();
+      boards = [board({ workers, workerPending: { id: 4, via: 'ui', createdAt: new Date().toISOString() } })];
+      renderPage();
+      await screen.findByText('ждёт плату: обновление');
+
+      expect(screen.queryByLabelText('Обновить worker на ubuntu-red')).toBeNull();
+
+      await user.click(screen.getByLabelText('Отменить обновление worker на ubuntu-red'));
+
+      await waitFor(() => expect(sent).toEqual([{ method: 'POST', path: 'boards/ubuntu-red/worker-update/cancel' }]));
+    });
+
+    it('disables the button while the board is not reporting', async () => {
+      boards = [board({ workers, online: false })];
+      renderPage();
+      await screen.findByText('red · работает');
+
+      expect((screen.getByLabelText('Обновить worker на ubuntu-red') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('says what the board answered the last time, and why when it failed', async () => {
+      boards = [board({ workers, workerLast: { id: 3, status: 'failed', result: 'новый контейнер не стартовал', finishedAt: new Date().toISOString(), createdAt: new Date().toISOString() } })];
+      renderPage();
+
+      expect(await screen.findByText(/Обновление worker: ошибка.*новый контейнер не стартовал/)).toBeTruthy();
+    });
+
+    it('tells the owner when bridge refuses the request', async () => {
+      const user = userEvent.setup();
+      failUpdate = 'Плата давно не отчитывалась';
+      boards = [board({ workers })];
+      renderPage();
+      await screen.findByText('red · работает');
+
+      await user.click(screen.getByLabelText('Обновить worker на ubuntu-red'));
+      await user.click(screen.getByLabelText('Подтвердить обновление worker на ubuntu-red'));
+
+      expect(await screen.findByText('Плата давно не отчитывалась')).toBeTruthy();
+    });
   });
 });

@@ -11,6 +11,7 @@ describe('BoardsAgentController', () => {
   let service: {
     recordReport: jest.Mock;
     pendingFor: jest.Mock;
+    workerPendingFor: jest.Mock;
     recordResult: jest.Mock;
   };
   let controller: BoardsAgentController;
@@ -19,6 +20,7 @@ describe('BoardsAgentController', () => {
     service = {
       recordReport: jest.fn().mockResolvedValue(undefined),
       pendingFor: jest.fn().mockResolvedValue(null),
+      workerPendingFor: jest.fn().mockResolvedValue(null),
       recordResult: jest.fn().mockResolvedValue(undefined),
     };
     controller = new BoardsAgentController(
@@ -33,20 +35,21 @@ describe('BoardsAgentController', () => {
 
   describe('pending', () => {
     it.each([undefined, '', 'bad host!', '-leading-dash', 'a'.repeat(100)])(
-      'answers { update: null } for host %p without asking the service',
+      'answers nothing for host %p without asking the service',
       async (host) => {
         const res = await controller.pending(host as string, user);
 
-        expect(res).toEqual({ update: null });
+        expect(res).toEqual({ update: null, workerUpdate: null });
         expect(service.pendingFor).not.toHaveBeenCalled();
+        expect(service.workerPendingFor).not.toHaveBeenCalled();
       },
     );
 
-    it('answers { update: null } when nothing is pending', async () => {
+    it('answers nothing when nothing is pending', async () => {
       const res = await controller.pending('pi-1', user);
 
       expect(service.pendingFor).toHaveBeenCalledWith(7, 'pi-1');
-      expect(res).toEqual({ update: null });
+      expect(res).toEqual({ update: null, workerUpdate: null });
     });
 
     it('hands the board only id, sha and repoPaths of the pending decision', async () => {
@@ -66,7 +69,25 @@ describe('BoardsAgentController', () => {
 
       expect(res).toEqual({
         update: { id: 3, sha: 'a'.repeat(40), repoPaths: ['infra/x.sh'] },
+        workerUpdate: null,
       });
+    });
+
+    it('hands the board only the id of a decision to update its worker', async () => {
+      service.workerPendingFor.mockResolvedValue({
+        id: 9,
+        kind: 'worker',
+        userId: 7,
+        host: 'pi-1',
+        sha: 'a'.repeat(40),
+        message: 'secret',
+      });
+
+      expect(await controller.pending('pi-1', user)).toEqual({
+        update: null,
+        workerUpdate: { id: 9 },
+      });
+      expect(service.workerPendingFor).toHaveBeenCalledWith(7, 'pi-1');
     });
   });
 
