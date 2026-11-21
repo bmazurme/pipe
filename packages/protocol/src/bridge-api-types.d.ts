@@ -3786,6 +3786,7 @@ export interface components {
             serverAddress: string;
             kind: Record<string, never>;
             isActive: boolean;
+            inPool: boolean;
             /** Format: date-time */
             createdAt: string;
         };
@@ -3796,7 +3797,9 @@ export interface components {
             panelApiToken?: string;
             serverAddress?: string;
         };
-        UpdateVpnConnectionDto: Record<string, never>;
+        UpdateVpnConnectionDto: {
+            inPool?: boolean;
+        };
         VpnProfileResponseDto: {
             id: number;
             label: string;
