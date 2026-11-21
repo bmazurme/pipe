@@ -58,6 +58,22 @@ export function BridgeTunnelCard() {
           Состояние с {formatRelativeTime(data.since)}
         </Text>
       )}
+      {data.telegram?.down && (
+        <Text variant="body-1" color="danger">
+          Telegram недоступен{data.telegram.since ? ` с ${formatRelativeTime(data.telegram.since)}` : ''}
+          {data.telegram.error ? `: ${data.telegram.error}` : ''}
+        </Text>
+      )}
+      {data.fallback &&
+        (data.fallback.configured ? (
+          <Text variant="caption-2" color="secondary">
+            Запасной канал для срочных алертов: {data.fallback.channels.map((channel) => `${channel.name === 'email' ? 'почта' : 'webhook'} (${channel.target})`).join(', ')}.
+          </Text>
+        ) : (
+          <Text variant="caption-2" color="warning">
+            Запасной канал не настроен: если Telegram недоступен, алерты не дойдут (ALERT_WEBHOOK_URL или ALERT_SMTP_URL + ALERT_EMAIL_TO).
+          </Text>
+        ))}
     </Card>
   );
 }

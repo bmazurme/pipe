@@ -14,6 +14,11 @@ import { ProxyAgent, request, type Dispatcher } from 'undici';
 
 import { setTunnelProxy } from '../common/tunnel-proxy';
 import { AppLogService } from '../logs/app-log.service';
+import {
+  AlertFallbackService,
+  type FallbackChannel,
+} from '../telegram/alert-fallback.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { VpnLinkResolver } from '../vpn/vpn-link-resolver.service';
 import { TunnelProcess } from './tunnel-process';
 
@@ -55,6 +60,14 @@ export interface BridgeTunnelStatus {
   checks: TunnelCheck[];
   // When the state last changed (in use / not in use).
   since: string | null;
+  // Whether Telegram can be reached at all (as the bot's own calls show it) and since when it cannot.
+  telegram: {
+    down: boolean;
+    since: string | null;
+    error: string | null;
+  } | null;
+  // The other way out for urgent alerts when Telegram is down: what is set up (nothing secret in it).
+  fallback: { configured: boolean; channels: FallbackChannel[] } | null;
 }
 
 export type ProbeFn = (
@@ -128,6 +141,8 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
     private readonly resolver: VpnLinkResolver,
     @Optional() private readonly appLogs?: AppLogService,
     @Optional() tunnel?: TunnelProcess,
+    @Optional() private readonly telegram?: TelegramService,
+    @Optional() private readonly fallback?: AlertFallbackService,
   ) {
     const port = Number(this.config.get('BRIDGE_TUNNEL_PORT')) || DEFAULT_PORT;
 
@@ -181,6 +196,23 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
       inUse: this.inUse,
       checks: this.checks,
       since: this.since,
+      telegram: this.telegram ? this.telegramHealth() : null,
+      fallback: this.fallback
+        ? {
+            configured: this.fallback.isConfigured(),
+            channels: this.fallback.channels(),
+          }
+        : null,
+    };
+  }
+
+  private telegramHealth(): NonNullable<BridgeTunnelStatus['telegram']> {
+    const health = (this.telegram as TelegramService).health();
+
+    return {
+      down: health.down,
+      since: health.failingSince?.toISOString() ?? null,
+      error: health.lastError,
     };
   }
 

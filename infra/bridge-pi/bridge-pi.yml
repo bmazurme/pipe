@@ -107,6 +107,14 @@ services:
       GITHUB_PROXY_URL: ${GITHUB_PROXY_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # The other way out for urgent alerts when Telegram cannot be reached (it is the thing that carries every other alert): an
+      # ntfy-compatible webhook and/or e-mail. All empty = none, and a Telegram outage is only written to the app log.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      ALERT_WEBHOOK_FORMAT: ${ALERT_WEBHOOK_FORMAT:-}
+      ALERT_SMTP_URL: ${ALERT_SMTP_URL:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
       # Improve (analysis, issue runs, nightly schedules) and the loop's merge button talk to this repository.
       # Empty LOOP_GITHUB_TOKEN = Improve answers "GitHub не настроен". Fine-grained token, THIS repo only:
       # Issues RW, Pull requests RW, Contents RW, Checks R.

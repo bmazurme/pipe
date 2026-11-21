@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AlertFallbackService } from './alert-fallback.service';
 import { TelegramOutbox } from './entities/telegram-outbox.entity';
 import { NotificationSettingsService } from './notification-settings.service';
 import { buildDigests, isQuietNow } from './quiet-hours';
@@ -33,6 +34,7 @@ export class NotifyService {
     private readonly settings: NotificationSettingsService,
     @InjectRepository(TelegramOutbox)
     private readonly outbox: Repository<TelegramOutbox>,
+    @Optional() private readonly fallback?: AlertFallbackService,
   ) {}
 
   async send(text: string, options: NotifyOptions = {}): Promise<boolean> {
@@ -40,7 +42,19 @@ export class NotifyService {
       return this.enqueue(text, null);
     }
 
-    return this.telegram.send(text);
+    return this.deliver(await this.telegram.send(text), text, options);
+  }
+
+  // What Telegram did not carry and cannot wait is also handed to the other way out (a webhook, e-mail), when one is set up: the point
+  // of an urgent notification is that the owner learns of it, whatever is wrong with Telegram.
+  private deliver(
+    sent: boolean,
+    text: string,
+    options: NotifyOptions,
+  ): boolean {
+    if (!sent && options.urgent) this.fallback?.mirror(text);
+
+    return sent;
   }
 
   async sendWithButtons(
@@ -52,7 +66,11 @@ export class NotifyService {
       return this.enqueue(text, buttons);
     }
 
-    return this.telegram.sendWithButtons(text, buttons);
+    return this.deliver(
+      await this.telegram.sendWithButtons(text, buttons),
+      text,
+      options,
+    );
   }
 
   @Interval(FLUSH_EVERY_MS)
