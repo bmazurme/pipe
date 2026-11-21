@@ -209,7 +209,16 @@ export class VpnService {
         );
       }
 
-      body = (await response.json()) as typeof body;
+      try {
+        body = (await response.json()) as typeof body;
+      } catch (parseError) {
+        // A timeout while reading the body is still a timeout, handled below.
+        if (isTimeoutError(parseError)) throw parseError;
+
+        throw new BadGatewayException(
+          `VPN panel "${connection.name}" returned a non-JSON reply (${path})`,
+        );
+      }
     } catch (error) {
       if (isTimeoutError(error)) {
         throw new BadGatewayException(
