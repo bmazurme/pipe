@@ -53,6 +53,8 @@ export interface VpnConnection {
   /** 'panel' (an x-ui panel) or 'subscription' (an https link that answers with vless:// links). */
   kind: 'panel' | 'subscription';
   isActive: boolean;
+  /** Its links join the active connection's in the tunnel, so a dead link is replaced by a live one by itself. */
+  inPool: boolean;
   createdAt: string;
 }
 
@@ -105,6 +107,8 @@ export interface UpdateVpnConnectionBody {
   serverAddress?: string;
   /** Only for a subscription connection; the server follows the new link. */
   subscriptionUrl?: string;
+  /** Join (or leave) the pool of the active connection. */
+  inPool?: boolean;
 }
 
 const vpnApiEndpoints = vpnApi.injectEndpoints({

@@ -1,7 +1,10 @@
 import { LINK_TTL_MS, VpnLinkResolver } from './vpn-link-resolver.service';
 
 function build() {
-  const connections = { getActive: jest.fn().mockResolvedValue({ id: 8 }) };
+  const connections = {
+    getActive: jest.fn().mockResolvedValue({ id: 8 }),
+    findPooled: jest.fn().mockResolvedValue([]),
+  };
   const vpn = {
     getConnectionLinks: jest.fn().mockResolvedValue(['vless://a']),
   };
@@ -193,5 +196,98 @@ describe('VpnLinkResolver: the pool', () => {
     await expect(
       resolver.resolveSubscription('https://p.example/sub/a'),
     ).resolves.toBe('vless://n0');
+  });
+});
+
+describe('VpnLinkResolver: connections in the pool', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const linksByConnection =
+    (map: Record<number, string[] | Error>) => (id: number) => {
+      const links = map[id];
+
+      return links instanceof Error
+        ? Promise.reject(links)
+        : Promise.resolve(links ?? []);
+    };
+
+  it("hands the active connection's links first, then those of the pooled ones", async () => {
+    const { resolver, connections, vpn } = build();
+
+    connections.findPooled.mockResolvedValue([{ id: 9, name: 'gru' }]);
+    vpn.getConnectionLinks.mockImplementation(
+      linksByConnection({ 8: ['vless://paper'], 9: ['vless://gru'] }),
+    );
+
+    await expect(resolver.resolveMany('active')).resolves.toEqual([
+      'vless://paper',
+      'vless://gru',
+    ]);
+    await expect(resolver.resolve('active')).resolves.toBe('vless://paper');
+  });
+
+  it('does not repeat a link two connections share, and stops at the pool limit', async () => {
+    const { resolver, connections, vpn } = build();
+    const many = (prefix: string) =>
+      Array.from({ length: 5 }, (_, i) => `vless://${prefix}${i}`);
+
+    connections.findPooled.mockResolvedValue([{ id: 9, name: 'b' }]);
+    vpn.getConnectionLinks.mockImplementation(
+      linksByConnection({
+        8: ['vless://same', ...many('a')],
+        9: ['vless://same', ...many('b')],
+      }),
+    );
+
+    const links = await resolver.resolveMany('active');
+
+    expect(links).toHaveLength(6);
+    expect(new Set(links).size).toBe(6);
+    expect(links[0]).toBe('vless://same');
+  });
+
+  it('skips a pooled connection that cannot be read — a spare must not break the main path — and says so once', async () => {
+    const { resolver, connections, vpn } = build();
+    const warn = jest
+      .spyOn(resolver['logger'], 'warn')
+      .mockImplementation(() => undefined);
+
+    connections.findPooled.mockResolvedValue([{ id: 9, name: 'gru' }]);
+    vpn.getConnectionLinks.mockImplementation(
+      linksByConnection({ 8: ['vless://paper'], 9: new Error('panel down') }),
+    );
+
+    await expect(resolver.resolveMany('active')).resolves.toEqual([
+      'vless://paper',
+    ]);
+    await expect(resolver.resolveMany('active')).resolves.toEqual([
+      'vless://paper',
+    ]);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('gru');
+  });
+
+  it('still fails when the ACTIVE connection cannot be read', async () => {
+    const { resolver, connections, vpn } = build();
+
+    connections.findPooled.mockResolvedValue([{ id: 9, name: 'gru' }]);
+    vpn.getConnectionLinks.mockImplementation(
+      linksByConnection({ 8: new Error('active down'), 9: ['vless://gru'] }),
+    );
+
+    await expect(resolver.resolveMany('active')).rejects.toThrow('active down');
+  });
+
+  it('a connection asked for by id is only itself, pool or not', async () => {
+    const { resolver, connections, vpn } = build();
+
+    connections.findPooled.mockResolvedValue([{ id: 9, name: 'gru' }]);
+    vpn.getConnectionLinks.mockImplementation(
+      linksByConnection({ 7: ['vless://seven'], 9: ['vless://gru'] }),
+    );
+
+    await expect(resolver.resolveMany(7)).resolves.toEqual(['vless://seven']);
+    expect(connections.findPooled).not.toHaveBeenCalled();
   });
 });

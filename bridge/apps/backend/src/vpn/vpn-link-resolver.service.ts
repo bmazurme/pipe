@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { MAX_POOL_LINKS, SubscriptionService } from './subscription.service';
 import { VpnConnectionsService } from './vpn-connections.service';
@@ -7,6 +7,8 @@ import { VpnService } from './vpn.service';
 // Workers fetch their settings before every poll (every few seconds), so the link built from a panel is reused for a
 // minute rather than asking the panel each time.
 export const LINK_TTL_MS = 60_000;
+// A pooled connection that keeps failing is mentioned in the log this often, not on every settings fetch.
+const SKIPPED_WARN_EVERY_MS = 10 * 60_000;
 
 interface CachedLinks {
   links: string[];
@@ -18,6 +20,8 @@ interface CachedLinks {
 // itself is usually fine), and only a link nobody ever built is an error.
 @Injectable()
 export class VpnLinkResolver {
+  private readonly logger = new Logger(VpnLinkResolver.name);
+  private readonly skippedWarnedAt = new Map<number, number>();
   private readonly cache = new Map<number, CachedLinks>();
   private readonly subscriptionCache = new Map<string, CachedLinks>();
   private readonly failedAt = new Map<number, { at: number; error: unknown }>();
@@ -34,10 +38,41 @@ export class VpnLinkResolver {
     return (await this.resolveMany(target))[0];
   }
 
-  // 'active' follows the VPN page's active connection; a number is that connection. All the links a tunnel can balance over.
+  // 'active' follows the VPN page's active connection AND the connections marked «in the pool» — its links first, then theirs, so a
+  // tunnel that balances over them keeps working when the active one dies; a number is just that connection. A pooled connection that
+  // cannot be read is skipped (the active one failing is still an error): the pool is a spare, it must never break the main path.
   async resolveMany(target: number | 'active'): Promise<string[]> {
-    const id =
-      target === 'active' ? (await this.connections.getActive()).id : target;
+    if (target !== 'active') return this.linksOf(target);
+
+    const active = await this.connections.getActive();
+    const links = await this.linksOf(active.id);
+    const pooled = await this.pooledLinks();
+
+    return [...new Set([...links, ...pooled])].slice(0, MAX_POOL_LINKS);
+  }
+
+  private async pooledLinks(): Promise<string[]> {
+    const links: string[] = [];
+
+    for (const connection of await this.connections.findPooled()) {
+      try {
+        links.push(...(await this.linksOf(connection.id)));
+      } catch (error) {
+        const last = this.skippedWarnedAt.get(connection.id) ?? 0;
+
+        if (Date.now() - last >= SKIPPED_WARN_EVERY_MS) {
+          this.skippedWarnedAt.set(connection.id, Date.now());
+          this.logger.warn(
+            `VPN «${connection.name}» is in the pool but its links could not be read, skipped: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
+
+    return links;
+  }
+
+  private async linksOf(id: number): Promise<string[]> {
     const cached = this.cache.get(id);
 
     if (cached && Date.now() - cached.at < LINK_TTL_MS) return cached.links;

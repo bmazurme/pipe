@@ -8444,6 +8444,9 @@
           "isActive": {
             "type": "boolean"
           },
+          "inPool": {
+            "type": "boolean"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -8455,6 +8458,7 @@
           "serverAddress",
           "kind",
           "isActive",
+          "inPool",
           "createdAt"
         ]
       },
@@ -8489,7 +8493,11 @@
       },
       "UpdateVpnConnectionDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "inPool": {
+            "type": "boolean"
+          }
+        }
       },
       "VpnProfileResponseDto": {
         "type": "object",

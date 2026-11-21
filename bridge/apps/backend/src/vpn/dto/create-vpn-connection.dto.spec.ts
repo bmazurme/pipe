@@ -151,4 +151,16 @@ describe('UpdateVpnConnectionDto', () => {
       }),
     ).toContain('subscriptionUrl');
   });
+
+  it('takes inPool as a boolean and nothing else', async () => {
+    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: true })).toEqual(
+      [],
+    );
+    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: false })).toEqual(
+      [],
+    );
+    expect(await errorsOf(UpdateVpnConnectionDto, { inPool: 'yes' })).toContain(
+      'inPool',
+    );
+  });
 });

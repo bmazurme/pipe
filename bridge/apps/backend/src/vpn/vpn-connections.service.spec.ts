@@ -244,6 +244,36 @@ describe('VpnConnectionsService', () => {
     });
   });
 
+  describe('the pool', () => {
+    it('puts a connection into the pool and takes it out, leaving the rest as it was', async () => {
+      const connection = { id: 2, name: 'gru', inPool: false, isActive: false };
+      repository.findOneBy!.mockResolvedValue(connection);
+      repository.save!.mockImplementation((entity) => Promise.resolve(entity));
+
+      expect(await service.update(2, { inPool: true })).toMatchObject({
+        name: 'gru',
+        inPool: true,
+      });
+      expect(await service.update(2, { inPool: false })).toMatchObject({
+        name: 'gru',
+        inPool: false,
+      });
+      expect(await service.update(2, { name: 'gru2' })).toMatchObject({
+        inPool: false,
+      });
+    });
+
+    it('lists the pooled connections without the active one', async () => {
+      repository.find!.mockResolvedValue([{ id: 2 }]);
+
+      expect(await service.findPooled()).toEqual([{ id: 2 }]);
+      expect(repository.find).toHaveBeenCalledWith({
+        where: { inPool: true, isActive: false },
+        order: { id: 'ASC' },
+      });
+    });
+  });
+
   describe('update', () => {
     it('throws NotFoundException for an unknown id', async () => {
       repository.findOneBy!.mockResolvedValue(null);

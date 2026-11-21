@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check, Pencil, TrashBin, Xmark } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Label, Skeleton, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Label, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 
 import {
   describeApiError,
@@ -77,6 +77,16 @@ export function VpnConnectionRow({
       await activateVpnConnection(connection.id).unwrap();
     } catch {
       setActionError('Не удалось сделать подключение активным');
+    }
+  };
+
+  const handlePool = async (inPool: boolean) => {
+    setActionError(null);
+
+    try {
+      await updateVpnConnection({ id: connection.id, inPool }).unwrap();
+    } catch {
+      setActionError('Не удалось изменить участие в пуле');
     }
   };
 
@@ -196,6 +206,11 @@ export function VpnConnectionRow({
               Активно
             </Label>
           )}
+          {!connection.isActive && connection.inPool && (
+            <Label theme="info" size="xs" title="Ссылки этого подключения идут в туннель вместе с активным">
+              в пуле
+            </Label>
+          )}
           {isSubscription && (
             <Label theme="info" size="xs" title="Подключение по ссылке подписки">
               подписка · {connection.serverAddress}
@@ -205,6 +220,15 @@ export function VpnConnectionRow({
         <div className={styles.connectionActions}>
           {!connection.isActive && (
             <>
+              <Switch
+                size="m"
+                checked={connection.inPool}
+                disabled={isSaving}
+                onUpdate={(checked) => void handlePool(checked)}
+                title="Ссылки этого подключения попадают в туннель вместе со ссылками активного: если активное упадёт, трафик пойдёт через это само"
+              >
+                В пуле
+              </Switch>
               <Button
                 view="normal"
                 size="s"

@@ -40,6 +40,11 @@ export class VpnConnection extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   isActive: boolean;
 
+  // Its links join the active connection's in the tunnel (bridge's own and the workers that follow the active connection), so a dead
+  // link is replaced by a live one by itself. Meaningless on the active connection, which is always in.
+  @Column({ type: 'boolean', default: false })
+  inPool: boolean;
+
   // Set when a Telegram alert was sent for this connection being unreachable,
   // cleared on the next successful status check — so a down panel pages the
   // owner once, not on every poll, and the next outage pages again rather
