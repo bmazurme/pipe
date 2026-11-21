@@ -59,6 +59,13 @@ export class VpnProfilesController {
   async revoke(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.profiles.revoke(id);
   }
+
+  // Takes an already REVOKED entry off the list (a live one is refused — revoke it first).
+  @Delete(':id/entry')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.profiles.remove(id);
+  }
 }
 
 // What a device's VPN client fetches. No session and no key: the token in the address is the credential, as with any subscription

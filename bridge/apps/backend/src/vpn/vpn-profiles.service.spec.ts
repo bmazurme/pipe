@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 
 import {
@@ -32,6 +36,11 @@ function build(rows: Array<Record<string, unknown>> = []) {
         ) ?? null,
     ),
     update: jest.fn(async () => undefined),
+    delete: jest.fn(async (where: { id: number }) => {
+      const index = store.findIndex((row) => row.id === where.id);
+
+      if (index >= 0) store.splice(index, 1);
+    }),
   };
   const connections = {
     findAll: jest.fn(
@@ -128,6 +137,21 @@ describe('VpnProfilesService: tokens', () => {
     expect(store[0].revokedAt).toBe(first);
     expect(tokens.save).toHaveBeenCalledTimes(1);
     await expect(service.revoke(99)).rejects.toThrow(NotFoundException);
+  });
+
+  it('removes a revoked entry from the list, refuses a live one, and says so for one that does not exist', async () => {
+    const { service, store, tokens } = build([
+      { id: 1, label: 'Mac', revokedAt: new Date() },
+      { id: 2, label: 'Phone', revokedAt: null },
+    ]);
+
+    await service.remove(1);
+
+    expect(tokens.delete).toHaveBeenCalledWith({ id: 1 });
+    expect(store.map((row) => row.id)).toEqual([2]);
+    await expect(service.remove(2)).rejects.toThrow(ConflictException);
+    expect(store.map((row) => row.id)).toEqual([2]);
+    await expect(service.remove(99)).rejects.toThrow(NotFoundException);
   });
 
   describe('authenticate', () => {

@@ -1314,6 +1314,22 @@ export interface paths {
         patch: operations["VpnProfilesController_rename"];
         trace?: never;
     };
+    "/api/v1/vpn/profiles/{id}/entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["VpnProfilesController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vpn/profile/{token}": {
         parameters: {
             query?: never;
@@ -6702,6 +6718,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VpnProfileResponseDto"];
                 };
+            };
+        };
+    };
+    VpnProfilesController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
