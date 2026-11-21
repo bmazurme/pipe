@@ -38,6 +38,35 @@ describe('what a probe sends', () => {
     }
   });
 
+  it('sends every target its own Host — a header object shared between requests gets the first target\'s host written into it by the ProxyAgent', { timeout: 15_000 }, async () => {
+    const hosts: (string | undefined)[] = [];
+    const proxy = createServer((req, res) => {
+      hosts.push(req.headers.host);
+      res.statusCode = 200;
+      res.end('{}');
+    });
+
+    proxy.on('connect', (_req, socket) => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      proxy.emit('connection', socket);
+    });
+
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
+
+      for (const host of ['first.example.test', 'second.example.test', 'third.example.test']) {
+        assert.equal((await probeTarget({ key: 'e2e:x', url: `http://${host}/` }, proxyUrl)).result, 'ok');
+      }
+
+      assert.deepEqual(hosts, ['first.example.test', 'second.example.test', 'third.example.test']);
+    } finally {
+      proxy.closeAllConnections();
+      proxy.close();
+    }
+  });
+
   it('asks GitHub for /rate_limit, which does not use up the anonymous limit of the exit address', () => {
     assert.equal(E2E_TARGETS.find((target) => target.key === 'e2e:github')?.url, 'https://api.github.com/rate_limit');
   });

@@ -70,7 +70,9 @@ export type RequestFn = (url: string, proxyUrl: string, timeoutMs: number) => Pr
 const defaultRequest: RequestFn = async (url, proxyUrl, timeoutMs) => {
   const response = await request(url, {
     method: 'GET',
-    headers: PROBE_HEADERS,
+    // A copy per request: undici's ProxyAgent writes the target's Host into the headers object it is given, so the shared constant
+    // would carry the first target's host (api.anthropic.com) into every later request — and a TLS name mismatch on all of them.
+    headers: { ...PROBE_HEADERS },
     dispatcher: resolveDispatcher(proxyUrl),
     signal: AbortSignal.timeout(timeoutMs),
     headersTimeout: timeoutMs,
