@@ -88,8 +88,9 @@ export class Worker extends BaseEntity {
   @Column({ type: 'text', nullable: true, transformer: encryptedColumn })
   vpnLink: string | null;
 
-  // Where the tunnel's link comes from (capabilities.ts): this worker's own vpnLink, a connection of the VPN page, or the active one.
-  @Column({ type: 'varchar', length: 16, default: 'link' })
+  // Where the tunnel's link comes from (capabilities.ts): the VPN page's active connection (the default), this worker's own vpnLink, a
+  // chosen connection, or none.
+  @Column({ type: 'varchar', length: 16, default: 'active' })
   vpnSource: WorkerVpnSource;
 
   // The VPN page connection for vpnSource 'connection'; ON DELETE SET NULL in the migration, which leaves the worker without a tunnel.

@@ -13,10 +13,16 @@ export function isWorkerCapability(value: unknown): value is WorkerCapability {
   return WORKER_CAPABILITIES.includes(value as WorkerCapability);
 }
 
-// Where a worker's VPN tunnel comes from:
-//  - link: the vless:// link pasted into the worker's own settings (what every worker did before; empty link = no VPN);
+// Where a worker's VPN tunnel comes from. Unless the owner says otherwise a worker follows the ACTIVE connection of the VPN page:
+//  - active (the default): whichever connection is active on the VPN page, so switching it there switches this worker too;
+//  - link: the vless:// link pasted into the worker's own settings (empty link = no VPN, how workers were before 'active' was the default);
 //  - connection: a specific connection of the VPN page (its link is built from the panel on demand);
-//  - active: whichever connection is active on the VPN page, so switching it there switches this worker too.
-export const WORKER_VPN_SOURCES = ['link', 'connection', 'active'] as const;
+//  - none: no tunnel on purpose (a machine that must not be routed through the VPN).
+export const WORKER_VPN_SOURCES = [
+  'active',
+  'link',
+  'connection',
+  'none',
+] as const;
 
 export type WorkerVpnSource = (typeof WORKER_VPN_SOURCES)[number];

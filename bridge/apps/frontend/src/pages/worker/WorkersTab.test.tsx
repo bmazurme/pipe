@@ -153,7 +153,8 @@ describe('WorkersTab — adding a worker', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Создать и получить код' }));
 
     expect(await within(dialog).findByText('brn_ONE-TIME-CODE')).toBeTruthy();
-    expect(sent('POST', '/workers')[0].body).toEqual({ name: 'laptop' });
+    // nothing said about the VPN: the worker follows the active connection of the VPN page
+    expect(sent('POST', '/workers')[0].body).toEqual({ name: 'laptop', vpnSource: 'active', vpnConnectionId: null });
 
     const command = within(dialog).getByLabelText('Команда подключения');
 
@@ -191,6 +192,8 @@ describe('WorkersTab — adding a worker', () => {
     await user.type(within(dialog).getByPlaceholderText(/Например, green/), 'green');
     await user.click(within(dialog).getByText('Первый из списка токенов'));
     await user.click(await screen.findByText('personal'));
+    await user.click(within(dialog).getByText('Активное подключение со страницы VPN (по умолчанию)'));
+    await user.click(await screen.findByText('Своя ссылка (vless:// или подписка)'));
     await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), 'vless://u@vpn.example.com:443?security=reality&pbk=k&sni=s');
     await user.click(within(dialog).getByRole('button', { name: 'Создать и получить код' }));
     await within(dialog).findByText('brn_Y');
@@ -218,6 +221,8 @@ describe('WorkersTab — adding a worker', () => {
     const dialog = await screen.findByRole('dialog');
 
     await user.type(within(dialog).getByPlaceholderText(/Например, green/), 'green');
+    await user.click(within(dialog).getByText('Активное подключение со страницы VPN (по умолчанию)'));
+    await user.click(await screen.findByText('Своя ссылка (vless:// или подписка)'));
     await user.type(within(dialog).getByLabelText("VPN-ссылка worker'а"), 'http://not-a-vpn');
 
     expect(within(dialog).getByText('Нужна ссылка vless://… (Reality) или https://… (подписка)')).toBeTruthy();
@@ -617,7 +622,7 @@ describe('WorkersTab — settings', () => {
       const dialog = await screen.findByRole('dialog');
 
       await user.click(within(dialog).getByText('Своя ссылка (vless:// или подписка)'));
-      await user.click(await screen.findByText('Подключение со страницы VPN'));
+      await user.click(await screen.findByText('Другое подключение со страницы VPN'));
 
       expect(within(dialog).queryByLabelText("VPN-ссылка worker'а")).toBeNull();
 
@@ -631,6 +636,33 @@ describe('WorkersTab — settings', () => {
       expect(sent('PATCH', '/workers/1')[0].body).not.toHaveProperty('vpnLink');
     });
 
+    it('warns on the card when a worker follows the active connection but the VPN page has none', async () => {
+      workers = [fleetWorker({ id: 1, vpnHost: null, vpnSource: 'active' })];
+      renderTab();
+
+      expect(await screen.findByText(/нет активного подключения — worker без туннеля/)).toBeTruthy();
+    });
+
+    it('can switch the VPN off for one worker on purpose', async () => {
+      const user = userEvent.setup();
+
+      workers = [fleetWorker({ id: 1, vpnHost: null, vpnSource: 'active' })];
+      renderTab();
+
+      await user.click(await screen.findByRole('button', { name: /Настройки/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      await user.click(within(dialog).getByText('Активное подключение со страницы VPN (по умолчанию)'));
+      await user.click(await screen.findByText('Без VPN'));
+
+      expect(within(dialog).queryByLabelText("VPN-ссылка worker'а")).toBeNull();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+
+      await waitFor(() => expect(sent('PATCH', '/workers/1')).toHaveLength(1));
+      expect(sent('PATCH', '/workers/1')[0].body).toMatchObject({ vpnSource: 'none', vpnConnectionId: null });
+    });
+
     it('follows the active connection of the VPN page', async () => {
       const user = userEvent.setup();
 
@@ -641,7 +673,7 @@ describe('WorkersTab — settings', () => {
       const dialog = await screen.findByRole('dialog');
 
       await user.click(within(dialog).getByText('Своя ссылка (vless:// или подписка)'));
-      await user.click(await screen.findByText('Активное подключение со страницы VPN'));
+      await user.click(await screen.findByText('Активное подключение со страницы VPN (по умолчанию)'));
 
       expect(await within(dialog).findByText(/Сейчас активно: DE · de.example.com/)).toBeTruthy();
 

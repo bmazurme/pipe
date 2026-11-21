@@ -21,7 +21,7 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
   const [error, setError] = useState<string | null>(null);
   const [tokenId, setTokenId] = useState(DEFAULT_TOKEN);
   const [vpnLink, setVpnLink] = useState<string | null | undefined>(undefined);
-  const [vpnSource, setVpnSource] = useState<VpnSource>('link');
+  const [vpnSource, setVpnSource] = useState<VpnSource>('active');
   const [vpnConnectionId, setVpnConnectionId] = useState<number | null>(null);
   const [createWorker, { isLoading }] = useCreateWorkerMutation();
   const shown = created ?? existing;
@@ -30,7 +30,7 @@ export function AddWorkerDialog({ open, onClose, existing }: AddWorkerDialogProp
     setName('');
     setTokenId(DEFAULT_TOKEN);
     setVpnLink(undefined);
-    setVpnSource('link');
+    setVpnSource('active');
     setVpnConnectionId(null);
     setCreated(undefined);
     setError(null);

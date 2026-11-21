@@ -134,12 +134,13 @@ export function VpnLinkField({ currentHost, onChange }: VpnLinkFieldProps) {
   );
 }
 
-export type VpnSource = 'link' | 'connection' | 'active';
+export type VpnSource = 'active' | 'link' | 'connection' | 'none';
 
 const VPN_SOURCE_OPTIONS: { value: VpnSource; content: string }[] = [
+  { value: 'active', content: 'Активное подключение со страницы VPN (по умолчанию)' },
+  { value: 'connection', content: 'Другое подключение со страницы VPN' },
   { value: 'link', content: 'Своя ссылка (vless:// или подписка)' },
-  { value: 'connection', content: 'Подключение со страницы VPN' },
-  { value: 'active', content: 'Активное подключение со страницы VPN' },
+  { value: 'none', content: 'Без VPN' },
 ];
 
 interface VpnSourceFieldProps {
@@ -163,7 +164,7 @@ export function VpnSourceField({ source, connectionId, onChange }: VpnSourceFiel
       <Select
         value={[source]}
         onUpdate={(next) => {
-          const value = (next[0] ?? 'link') as VpnSource;
+          const value = (next[0] ?? 'active') as VpnSource;
 
           onChange(value, value === 'connection' ? (connectionId ?? list[0]?.id ?? null) : null);
         }}
@@ -193,7 +194,13 @@ export function VpnSourceField({ source, connectionId, onChange }: VpnSourceFiel
         </Text>
       )}
 
-      {source !== 'link' && (
+      {source === 'none' && (
+        <Text variant="caption-2" color="secondary">
+          Worker будет выходить в сеть напрямую или через прокси из своего окружения. Нужно только машине, которой VPN не нужен.
+        </Text>
+      )}
+
+      {(source === 'connection' || source === 'active') && (
         <Text variant="caption-2" color="secondary">
           Ссылку bridge собирает из панели этого подключения и отдаёт только этому worker&apos;у; если панель недоступна, worker продолжает с последней
           рабочей ссылкой. Подключения добавляются на странице VPN.

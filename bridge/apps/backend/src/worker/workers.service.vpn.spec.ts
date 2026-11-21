@@ -45,6 +45,9 @@ function build(row: Worker) {
   ];
   const workersRepo = {
     findOneBy: jest.fn().mockResolvedValue(row),
+    create: jest
+      .fn()
+      .mockImplementation((data: Partial<Worker>) => ({ id: 9, ...data })),
     save: jest.fn().mockImplementation((saved: Worker) => saved),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
@@ -65,6 +68,10 @@ function build(row: Worker) {
     resolveSubscriptionMany: jest.fn().mockResolvedValue([LINK]),
     checkSubscription: jest.fn().mockResolvedValue(undefined),
   };
+  workersRepo.findOneBy.mockImplementation(
+    (where: { userId?: number; name?: string; id?: number }) =>
+      Promise.resolve(where.name !== undefined ? null : row),
+  );
   const service = new WorkersService(
     workersRepo as never,
     jobsRepo as never,
@@ -278,5 +285,49 @@ describe('WorkersService: a pool of links', () => {
 
     expect(config.vpnLinks).toEqual([]);
     expect(config.vpnLink).toBeNull();
+  });
+
+  it("gives no tunnel to a 'none' worker and never asks the VPN page", async () => {
+    const { service, vpnLinks } = build(
+      worker({ vpnSource: 'none', vpnLink: OWN_LINK }),
+    );
+
+    const config = await service.configFor(1);
+
+    expect(config.vpnLinks).toEqual([]);
+    expect(config.vpnLink).toBeNull();
+    expect(vpnLinks.resolveMany).not.toHaveBeenCalled();
+  });
+
+  it('a new worker follows the active connection unless its owner says otherwise', async () => {
+    const plain = await build(worker()).service.create(42, { name: 'new' });
+    const withLink = await build(worker()).service.create(42, {
+      name: 'mine',
+      vpnLink: OWN_LINK,
+    });
+    const chosen = await build(worker()).service.create(42, {
+      name: 'off',
+      vpnSource: 'none',
+    });
+
+    expect(plain.worker.vpnSource).toBe('active');
+    expect(withLink.worker.vpnSource).toBe('link');
+    expect(chosen.worker.vpnSource).toBe('none');
+  });
+
+  it("a link pasted for an 'active' worker is a statement of its own: the worker then runs that link", async () => {
+    const { service } = build(worker({ vpnSource: 'active', vpnLink: null }));
+
+    const result = await service.update(1, 42, { vpnLink: OWN_LINK });
+
+    expect(result.vpnSource).toBe('link');
+  });
+
+  it("clearing the link of an 'active' worker leaves it following the active connection", async () => {
+    const { service } = build(worker({ vpnSource: 'active', vpnLink: null }));
+
+    const result = await service.update(1, 42, { vpnLink: null });
+
+    expect(result.vpnSource).toBe('active');
   });
 });
