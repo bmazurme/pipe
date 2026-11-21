@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
-import { buildXrayConfig, parseVless, type VlessParams } from './vless.js';
+import { buildXrayConfig, parseVless, poolKey, type VlessParams } from './vless.js';
 
 export interface TunnelLog {
   info: (obj: object, msg: string) => void;
@@ -110,7 +110,7 @@ export class VpnTunnel {
     const pool = clean(Array.isArray(links) ? links : [links]);
     // The cold standby (see buildXrayConfig): links that only carry traffic when every pool link is dead. Without a pool there is nothing to back up.
     const standby = pool.length > 0 ? clean(standbyLinks ?? []) : [];
-    const wanted = pool.length > 0 ? [...pool, ...(standby.length > 0 ? ['--standby--', ...standby] : [])].join('\n') : null;
+    const wanted = pool.length > 0 ? poolKey(pool, standby) : null;
 
     if (!wanted) {
       this.resetBackoff();
