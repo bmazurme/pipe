@@ -108,10 +108,75 @@ function vlessOutbound(
   };
 }
 
+export const STANDBY_TAG_PREFIX = 'standby-';
+const STANDBY_INBOUND_TAG = 'standby-in';
+// With a cold standby the primary links are probed more often: the standby takes over only when the observatory has marked EVERY primary
+// link dead, so the probe interval is how long a dead pool keeps failing before the standby is used.
+const STANDBY_PROBE_INTERVAL = '30s';
+
+// A COLD standby: its links are outbounds that nothing is routed to and nothing probes while any primary link is alive. When the observatory
+// marks every primary link dead, the pool balancer's fallback sends the traffic through a loopback outbound back into the routing as the
+// virtual inbound `standby-in`, where a second balancer picks one of the standby links at random (no probing — probing would make them warm).
+// Checked with a real Xray: primary alive → every request through it and none through the standby; primary dead → through the standby.
+function withStandby(
+  base: object,
+  pool: VlessParams[],
+  standby: VlessParams[],
+  fingerprint: string,
+): object {
+  return {
+    ...base,
+    outbounds: [
+      ...pool.map((params, index) =>
+        vlessOutbound(params, `${POOL_TAG_PREFIX}${index + 1}`, fingerprint),
+      ),
+      ...standby.map((params, index) =>
+        vlessOutbound(params, `${STANDBY_TAG_PREFIX}${index + 1}`, fingerprint),
+      ),
+      {
+        tag: 'to-standby',
+        protocol: 'loopback',
+        settings: { inboundTag: STANDBY_INBOUND_TAG },
+      },
+    ],
+    observatory: {
+      subjectSelector: [POOL_TAG_PREFIX],
+      probeUrl: PROBE_URL,
+      probeInterval: STANDBY_PROBE_INTERVAL,
+      enableConcurrency: true,
+    },
+    routing: {
+      domainStrategy: 'AsIs',
+      balancers: [
+        {
+          tag: 'pool',
+          selector: [POOL_TAG_PREFIX],
+          strategy: { type: 'leastPing' },
+          fallbackTag: 'to-standby',
+        },
+        {
+          tag: 'standby',
+          selector: [STANDBY_TAG_PREFIX],
+          strategy: { type: 'random' },
+        },
+      ],
+      rules: [
+        {
+          type: 'field',
+          inboundTag: [STANDBY_INBOUND_TAG],
+          balancerTag: 'standby',
+        },
+        { type: 'field', inboundTag: [INBOUND_TAG], balancerTag: 'pool' },
+      ],
+    },
+  };
+}
+
 export function buildXrayConfig(
   links: VlessParams | VlessParams[],
   listenPort: number,
   fingerprint: string = DEFAULT_FINGERPRINT,
+  standby: VlessParams[] = [],
 ): object {
   const pool = Array.isArray(links) ? links : [links];
   const base = {
@@ -126,6 +191,8 @@ export function buildXrayConfig(
       },
     ],
   };
+
+  if (standby.length > 0) return withStandby(base, pool, standby, fingerprint);
 
   if (pool.length === 1) {
     return {

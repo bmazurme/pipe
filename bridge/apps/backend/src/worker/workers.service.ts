@@ -606,6 +606,10 @@ export class WorkersService implements OnModuleInit {
     }
 
     const vpnLinks = await this.vpnLinksOf(worker);
+    const vpnStandbyLinks =
+      worker.vpnSource === 'active' && vpnLinks.length > 0
+        ? await this.vpnLinks.resolveStandby(vpnLinks).catch(() => [])
+        : [];
 
     return {
       id: worker.id,
@@ -619,6 +623,7 @@ export class WorkersService implements OnModuleInit {
       // The first link stays in vpnLink for a worker that predates the pool; a newer one balances over vpnLinks.
       vpnLink: vpnLinks[0] ?? null,
       vpnLinks,
+      vpnStandbyLinks,
       limitsRefreshMin: worker.limitsRefreshMin ?? 0,
       limitsRefreshRequestedAt: worker.limitsRefreshRequestedAt ?? null,
       limitProbe: null,

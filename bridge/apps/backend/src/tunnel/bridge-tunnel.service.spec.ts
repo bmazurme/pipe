@@ -9,10 +9,14 @@ import type { TunnelProcess } from './tunnel-process';
 const PROXY = 'http://127.0.0.1:18081';
 
 function setup(
-  options: { env?: Record<string, string>; links?: string[] | Error } = {},
+  options: {
+    env?: Record<string, string>;
+    links?: string[] | Error;
+    standby?: string[];
+  } = {},
 ) {
-  const apply = jest.fn(async (links: string[]) =>
-    links.length ? PROXY : null,
+  const apply = jest.fn<Promise<string | null>, [string[], string[]]>(
+    async (links) => (links.length ? PROXY : null),
   );
   const process = {
     apply,
@@ -20,18 +24,20 @@ function setup(
     proxyUrl: PROXY,
     isMissing: false,
     linkCount: 0,
+    standbyCount: 0,
   };
   const resolveMany = jest.fn(async () => {
     if (options.links instanceof Error) throw options.links;
 
     return options.links ?? ['vless://a'];
   });
+  const resolveStandby = jest.fn(async () => options.standby ?? []);
   const record = jest.fn<Promise<void>, [{ event: string }]>(
     async () => undefined,
   );
   const service = new BridgeTunnelService(
     { get: (key: string) => options.env?.[key] } as unknown as ConfigService,
-    { resolveMany } as unknown as VpnLinkResolver,
+    { resolveMany, resolveStandby } as unknown as VpnLinkResolver,
     { record } as never,
     process as unknown as TunnelProcess,
   );
@@ -53,6 +59,15 @@ const answer =
 describe('BridgeTunnelService', () => {
   afterEach(() => setTunnelProxy(null));
 
+  it('hands the tunnel the cold standby links next to the active ones, asked for after them', async () => {
+    const { service, apply } = setup({ standby: ['vless://spare'] });
+
+    service.probe = answer({});
+    await service.check();
+
+    expect(apply).toHaveBeenCalledWith(['vless://a'], ['vless://spare']);
+  });
+
   it('uses the tunnel once Telegram answers through it, and says so once', async () => {
     const { service, apply, record } = setup();
 
@@ -60,7 +75,7 @@ describe('BridgeTunnelService', () => {
     await service.check();
     await service.check();
 
-    expect(apply).toHaveBeenCalledWith(['vless://a']);
+    expect(apply).toHaveBeenCalledWith(['vless://a'], []);
     expect(tunnelProxyUrl()).toBe(PROXY);
     expect(service.status()).toMatchObject({ mode: 'on', inUse: true });
     expect(service.status().checks.map((c) => [c.key, c.ok])).toEqual([
@@ -141,7 +156,7 @@ describe('BridgeTunnelService', () => {
     service.probe = answer({});
     await service.check();
 
-    expect(apply).toHaveBeenCalledWith([]);
+    expect(apply).toHaveBeenCalledWith([], []);
     expect(service.status().inUse).toBe(false);
     expect(tunnelProxyUrl()).toBeUndefined();
   });

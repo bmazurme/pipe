@@ -108,6 +108,26 @@ describe('VpnTunnel', () => {
     tunnel.stop();
   });
 
+  it('takes a cold standby: restarts when it changes, ignores it without a main pool, leaves out one it cannot parse', async () => {
+    const { tunnel, spawned, logs } = setup();
+
+    assert.equal(await tunnel.apply(null, [OTHER]), null);
+    assert.equal(spawned.length, 0);
+
+    await tunnel.apply(LINK, [OTHER]);
+    await tunnel.apply(LINK, [OTHER]);
+    assert.equal(spawned.length, 1);
+    assert.ok(logs.includes('info:vpn tunnel is up'));
+
+    await tunnel.apply(LINK, [OTHER, 'garbage']);
+    assert.equal(spawned.length, 2);
+    assert.ok(logs.includes('warn:a standby vpn link cannot be used — left out'));
+
+    await tunnel.apply(LINK);
+    assert.equal(spawned.length, 3);
+    tunnel.stop();
+  });
+
   it('stops when the link is removed', async () => {
     const { tunnel, spawned } = setup();
 

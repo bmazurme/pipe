@@ -18,7 +18,7 @@ export interface WiringInput {
   unavailableCapabilities?: LoopDeps['unavailableCapabilities'];
   log: LoopDeps['log'];
   /** The worker's own VPN tunnel; absent when this image has none. */
-  vpn?: { apply: (links: string | string[] | null | undefined) => Promise<string | null> };
+  vpn?: { apply: (links: string | string[] | null | undefined, standby?: string[] | null) => Promise<string | null> };
   /** With a VPN configured and its tunnel down, take no jobs (default true). WORKER_VPN_REQUIRED=0 restores the old "go out directly". */
   vpnRequired?: boolean;
   /** Refreshes the Claude plan limits when the settings say a probe is due; absent when this image does not probe. */
@@ -45,7 +45,7 @@ export function buildLoopDeps(input: WiringInput): LoopDeps {
       const remote = await fetchRemoteConfig(baseConfig.bridgeApiUrl, key);
       // The VPN set on the page wins over a proxy address; no working tunnel leaves the proxy settings as they were.
       const pool = remote.vpnLinks?.length ? remote.vpnLinks : remote.vpnLink;
-      const tunnelProxy = input.vpn ? await input.vpn.apply(pool) : null;
+      const tunnelProxy = input.vpn ? await input.vpn.apply(pool, remote.vpnStandbyLinks) : null;
       const configured = Boolean(remote.vpnLinks?.length || remote.vpnLink?.trim());
       const vpnDown = Boolean(input.vpn) && (input.vpnRequired ?? true) && configured && !tunnelProxy;
 

@@ -328,6 +328,9 @@ export class WorkerConfigResponseDto {
   vpnLink: string | null;
   // The whole pool the tunnel balances over (vpnLink is its first); empty = no VPN.
   vpnLinks: string[];
+  // The links of the connections kept as a COLD standby behind the pool: a tunnel uses them only while every link of the pool is dead. Only a
+  // worker that follows the active connection gets any; an older worker ignores the field.
+  vpnStandbyLinks: string[];
   // Probing the plan limits: the interval (0 = only on request), the last request, and — only while a probe is due — the token
   // to probe with (this worker's own, resolved like for a job). Absent/null when there is nothing to do.
   limitsRefreshMin: number;

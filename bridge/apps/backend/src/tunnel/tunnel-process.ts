@@ -56,6 +56,8 @@ export function isPortOpen(port: number, timeoutMs: number): Promise<boolean> {
 export class TunnelProcess {
   private child: ChildProcess | null = null;
   private current: string | null = null;
+  private currentLinks = 0;
+  private currentStandby = 0;
   private failed: string | null = null;
   private failures = 0;
   private retryAt = 0;
@@ -105,13 +107,32 @@ export class TunnelProcess {
 
   /** How many links the running tunnel was built from (0 when none runs). */
   get linkCount(): number {
-    return this.alive() && this.current ? this.current.split('\n').length : 0;
+    return this.alive() && this.current ? this.currentLinks : 0;
+  }
+
+  /** How many of its links are the cold standby (see buildXrayConfig). */
+  get standbyCount(): number {
+    return this.alive() && this.current ? this.currentStandby : 0;
   }
 
   /** The proxy URL to route through, or null when there is no working tunnel. */
-  async apply(links: string[]): Promise<string | null> {
+  async apply(
+    links: string[],
+    standbyLinks: string[] = [],
+  ): Promise<string | null> {
     const pool = links.map((entry) => entry.trim()).filter(Boolean);
-    const wanted = pool.length > 0 ? pool.join('\n') : null;
+    // Without a pool there is nothing to back up.
+    const standby =
+      pool.length > 0
+        ? standbyLinks.map((entry) => entry.trim()).filter(Boolean)
+        : [];
+    const wanted =
+      pool.length > 0
+        ? [
+            ...pool,
+            ...(standby.length > 0 ? ['--standby--', ...standby] : []),
+          ].join('\n')
+        : null;
 
     if (!wanted) {
       this.resetBackoff();
@@ -152,10 +173,23 @@ export class TunnelProcess {
 
       if (usable.length === 0) throw new Error('none of the links can be used');
 
+      const usableStandby: VlessParams[] = [];
+
+      for (const entry of standby) {
+        try {
+          usableStandby.push(parseVless(entry));
+        } catch (error) {
+          this.options.log?.warn(
+            `a standby link cannot be used and is left out: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
       const config = buildXrayConfig(
         usable,
         this.options.port,
         this.options.fingerprint?.trim() || undefined,
+        usableStandby,
       );
 
       mkdirSync(this.options.dir, { recursive: true });
@@ -169,6 +203,8 @@ export class TunnelProcess {
 
       this.child = child;
       this.current = wanted;
+      this.currentLinks = usable.length;
+      this.currentStandby = usableStandby.length;
       child.stderr?.on('data', (chunk: Buffer) =>
         this.options.log?.warn(`xray: ${chunk.toString('utf-8').trim()}`),
       );
@@ -211,7 +247,9 @@ export class TunnelProcess {
       }
 
       this.resetBackoff();
-      this.options.log?.info(`the tunnel is up (${usable.length} link(s))`);
+      this.options.log?.info(
+        `the tunnel is up (${usable.length} link(s)${usableStandby.length > 0 ? `, ${usableStandby.length} in cold standby` : ''})`,
+      );
 
       return this.proxyUrl;
     } catch (error) {

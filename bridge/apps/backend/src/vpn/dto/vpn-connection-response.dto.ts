@@ -11,7 +11,7 @@ export class VpnConnectionResponseDto {
   serverAddress: string;
   kind: VpnConnectionKind;
   isActive: boolean;
-  inPool: boolean;
+  standby: boolean;
   createdAt: Date;
 
   static fromEntity(connection: VpnConnection): VpnConnectionResponseDto {
@@ -21,7 +21,7 @@ export class VpnConnectionResponseDto {
       serverAddress: connection.serverAddress,
       kind: connection.kind ?? 'panel',
       isActive: connection.isActive,
-      inPool: connection.inPool ?? false,
+      standby: connection.standby ?? false,
       createdAt: connection.createdAt,
     };
   }
