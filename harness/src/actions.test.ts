@@ -62,6 +62,35 @@ function makeDeps(overrides: Partial<ActionDeps> = {}): ActionDeps {
   return Object.assign(deps, { calls });
 }
 
+describe('runAction recall', () => {
+  it('runs sync-cli recall --yes with no project resolution', async () => {
+    const deps = makeDeps({ loadSyncConfig: () => ({ projects: [] }) }) as ActionDeps & { calls: { runSyncCli: [string[], string][] } };
+    const result = await runAction('recall', '402:6', { yes: true, dryRun: false }, deps);
+
+    assert.equal(result.code, 0);
+    assert.deepEqual(deps.calls.runSyncCli[0][0], ['recall', '--yes', '--', '402', '6']);
+  });
+
+  it('dry-run describes and spawns nothing', async () => {
+    const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };
+    const result = await runAction('recall', '402:6', { yes: false, dryRun: true }, deps);
+
+    assert.equal(result.code, 0);
+    assert.match(result.output, /^Would run "sync-cli recall 402 6"/);
+    assert.equal(deps.calls.runSyncCli.length, 0);
+  });
+
+  it('refuses without yes in a non-interactive session, and rejects a malformed key', async () => {
+    const deps = makeDeps({ isInteractive: false }) as ActionDeps & { calls: { runSyncCli: unknown[] } };
+    const refused = await runAction('recall', '402:6', { yes: false, dryRun: false }, deps);
+    const bad = await runAction('recall', '402:6;rm', { yes: true, dryRun: false }, deps);
+
+    assert.equal(refused.code, 1);
+    assert.equal(bad.code, 1);
+    assert.equal(deps.calls.runSyncCli.length, 0);
+  });
+});
+
 describe('runAction', () => {
   it('rejects a malformed task key without touching any dependency', async () => {
     const deps = makeDeps() as ActionDeps & { calls: { runSyncCli: unknown[] } };

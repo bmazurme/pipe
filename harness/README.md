@@ -348,6 +348,9 @@ re-validated beyond what they already enforce themselves:
   (a fresh parcel for agent-runner to pick up again — `push-issue` has no
   dedup/hash-skip guard, so re-running it for the same task is already safe
   and idempotent; no separate "retry" endpoint needed).
+- `--recall <projectId:iid>` — undoes a retry: runs `sync-cli recall --yes -- <projectId> <iid>`,
+  deleting the outbound issue parcel still waiting in bridge (never a result).
+  Needs no project alias. `--yes` goes to sync because harness already confirmed.
 - `--publish <projectId:iid>` — calls reports' own
   `POST /api/subscription/issues/:projectId/:iid/publish` directly (no CLI
   entry point exists for this one — HTTP is the only way in, and that route
@@ -513,6 +516,8 @@ claude mcp add pipe-mcp -- node /absolute/path/to/pipe/harness/dist/mcp.js
   `pipe-status --brief` (see "Morning brief"). Read-only; always checks
   bridge and GitLab and prints the "unavailable" line when one fails.
 - **`task_log`** — `{ key }`, same output as `pipe-status --log <key>`.
+- **`recall`** — `{ key, yes, dryRun? }`, same as `--recall`: deletes only a parcel nobody
+  has taken yet. `destructiveHint: true`; `yes` is required.
 - **`pull`**/**`retry`**/**`publish`** — the same three actions as
   `--pull`/`--retry`/`--publish` (see "Running actions" above for what each
   one actually does and why no new bridge/reports endpoint was needed for
