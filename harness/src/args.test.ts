@@ -99,6 +99,14 @@ describe('parseArgs', () => {
     assert.equal(options.reportsUrl, 'http://x');
   });
 
+  it('parses --recall as a recall action', () => {
+    assert.deepEqual(parseArgs(['--recall', '402:6']).action, { kind: 'recall', key: '402:6' });
+  });
+
+  it('rejects combining --recall with --retry, naming --recall', () => {
+    assert.throws(() => parseArgs(['--recall', '402:6', '--retry', '402:7']), /only one of .*--recall/);
+  });
+
   it('rejects combining two action flags in the same invocation', () => {
     assert.throws(() => parseArgs(['--pull', '402:6', '--retry', '402:7']), /only one of --pull\/--retry\/--publish/);
   });

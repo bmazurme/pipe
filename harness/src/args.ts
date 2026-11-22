@@ -1,7 +1,7 @@
 import type { StatusPaths } from './collect.js';
 import { DEFAULT_STALE_HOURS } from './deriveStatus.js';
 
-export type ActionKind = 'pull' | 'retry' | 'publish';
+export type ActionKind = 'pull' | 'retry' | 'publish' | 'recall';
 
 export const DEFAULT_RECENT_HOURS = 24;
 
@@ -87,6 +87,8 @@ Options:
                               then exit
   --publish <projectId:iid>  call reports' publish endpoint for this task,
                               then exit
+  --recall <projectId:iid>   undo a retry: delete the issue parcel still
+                              waiting in bridge (sync-cli recall), then exit
   --log-time <projectId:iid> propose and log actual time spent (GitLab's
                               own time tracking, from the last completed
                               push→pull cycle in reports' own
@@ -143,6 +145,7 @@ export function parseArgs(argv: string[]): CliOptions {
     '--pull': 'pull',
     '--retry': 'retry',
     '--publish': 'publish',
+    '--recall': 'recall',
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -194,7 +197,7 @@ export function parseArgs(argv: string[]): CliOptions {
     if (actionKind) {
       const value = argv[i + 1];
       if (value === undefined) throw new Error(`${arg} expects a task key (projectId:iid)`);
-      if (action) throw new Error('only one of --pull/--retry/--publish can be given at a time');
+      if (action) throw new Error('only one of --pull/--retry/--publish/--recall can be given at a time');
       action = { kind: actionKind, key: value };
       i++;
       continue;

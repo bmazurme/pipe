@@ -178,6 +178,7 @@ export const DEFAULT_ACTION_DEPS: ActionDeps = {
 };
 
 function describeAction(kind: ActionKind, projectId: string, iid: string, name: string | undefined, reportsBaseUrl: string): string {
+  if (kind === 'recall') return `run "sync-cli recall ${projectId} ${iid}" (deletes the waiting outbound issue parcel; never a result)`;
   if (kind === 'publish') return `publish ${projectId}:${iid} (POST ${reportsBaseUrl}/api/subscription/issues/${encodeURIComponent(projectId)}/${encodeURIComponent(iid)}/publish)`;
   const command = kind === 'pull' ? 'pull-issue' : 'push-issue';
   return `run "sync-cli ${command} ${name} ${projectId} ${iid}"`;
@@ -223,7 +224,7 @@ export async function runAction(
   }
 
   let name: string | undefined;
-  if (kind !== 'publish') {
+  if (kind !== 'publish' && kind !== 'recall') {
     const config = deps.loadSyncConfig(options.syncConfigPath ?? DEFAULT_SYNC_CONFIG_PATH);
     try {
       name = resolveProjectName(config, projectId, options.project);
@@ -258,6 +259,10 @@ export async function runAction(
   }
 
   const cliPath = options.syncCliPath ?? DEFAULT_SYNC_CLI_PATH;
+  if (kind === 'recall') {
+    // --yes: confirmation already happened above; sync's own prompt refuses without a TTY.
+    return deps.runSyncCli(['recall', '--yes', '--', projectId, iid], cliPath);
+  }
   const command = kind === 'pull' ? 'pull-issue' : 'push-issue';
   // `--` so no positional value can ever be parsed as an option by commander.
   return deps.runSyncCli([command, '--', name!, projectId, iid], cliPath);
