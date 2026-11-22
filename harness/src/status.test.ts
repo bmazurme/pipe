@@ -235,6 +235,57 @@ describe('collectReportData + JSON shape', () => {
   });
 });
 
+describe('collectReportData with malformed or missing state files', () => {
+  function withFixture(fn: (paths: StatusPaths) => void): void {
+    const dir = mkdtempSync(path.join(tmpdir(), 'harness-status-'));
+    try {
+      fn(makeFixturePaths(dir));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('reports a non-JSON state file inline, keeps other files\' tasks, and exits 1', () => {
+    withFixture((paths) => {
+      writeFileSync(paths.reportsState, '{not json');
+      writeFileSync(paths.syncAgentState, JSON.stringify({ '402:7': { lastOwnOutputHash: 'abc123' } }));
+
+      const data = collectReportData(paths);
+
+      assert.equal(data.errors.length, 1);
+      assert.ok(data.errors[0].startsWith(`state file at ${paths.reportsState} is malformed`));
+      assert.deepEqual(data.tasks.map((t) => t.key), ['402:7']);
+      assert.equal(data.tasks[0].syncAgent?.lastOwnOutputHash, 'abc123');
+      assert.equal(exitCodeFor({ ...data, tasks: annotateTasks(data.tasks, 24, NOW) }), 1);
+    });
+  });
+
+  it('reports a schema-invalid state file as an error and drops its subscription', () => {
+    withFixture((paths) => {
+      writeFileSync(paths.reportsState, JSON.stringify({ '402:6': { step: 42 } }));
+      writeFileSync(paths.syncAgentState, JSON.stringify({ '402:6': { lastOwnOutputHash: 'abc123' } }));
+
+      const data = collectReportData(paths);
+
+      assert.equal(data.errors.length, 1);
+      assert.ok(data.errors[0].startsWith(`state file at ${paths.reportsState} is malformed`));
+      assert.equal(data.tasks.length, 1);
+      assert.equal(data.tasks[0].subscription, undefined);
+      assert.equal(data.tasks[0].syncAgent?.lastOwnOutputHash, 'abc123');
+    });
+  });
+
+  it('treats missing state files as no errors and no tasks, exiting 0', () => {
+    withFixture((paths) => {
+      const data = collectReportData(paths);
+
+      assert.deepEqual(data.errors, []);
+      assert.deepEqual(data.tasks, []);
+      assert.equal(exitCodeFor({ ...data, tasks: annotateTasks(data.tasks, 24, NOW) }), 0);
+    });
+  });
+});
+
 describe('deriveStatus', () => {
   const key = '402:6';
 
