@@ -81,12 +81,12 @@ describe('pipe-mcp', () => {
     assert.equal(result.content[0].text, expected);
   });
 
-  it('lists all nine tools', async () => {
+  it('lists all ten tools', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['brief', 'log_time', 'next', 'publish', 'pull', 'pull_ready', 'retry', 'status', 'task_log'],
+      ['brief', 'log_time', 'next', 'publish', 'pull', 'pull_ready', 'recall', 'retry', 'status', 'task_log'],
     );
   });
 
@@ -159,6 +159,40 @@ describe('pipe-mcp', () => {
 
     assert.equal(result.isError, false);
     assert.deepEqual(calls[0][0], ['push-issue', '--', 'bff', '402', '6']);
+  });
+
+  it('recall with yes:true calls runSyncCli with recall --yes, and is listed as destructive', async () => {
+    const calls: unknown[][] = [];
+    const actionDeps = makeFakeActionDeps({
+      runSyncCli: async (...args) => {
+        calls.push(args);
+        return { code: 0, output: '' };
+      },
+    });
+
+    const c = await connect({ actionDeps });
+    const result = await c.callTool({ name: 'recall', arguments: { key: '402:6', yes: true } });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(calls[0][0], ['recall', '--yes', '--', '402', '6']);
+    const tool = (await c.listTools()).tools.find((t) => t.name === 'recall');
+    assert.equal(tool?.annotations?.destructiveHint, true);
+  });
+
+  it('recall refuses with yes:false without calling runSyncCli', async () => {
+    const calls: unknown[][] = [];
+    const actionDeps = makeFakeActionDeps({
+      runSyncCli: async (...args) => {
+        calls.push(args);
+        return { code: 0, output: '' };
+      },
+    });
+
+    const c = await connect({ actionDeps });
+    const result = await c.callTool({ name: 'recall', arguments: { key: '402:6', yes: false } });
+
+    assert.equal(result.isError, true);
+    assert.equal(calls.length, 0);
   });
 
   it('publish surfaces a failure as isError, with the real message as the tool text', async () => {

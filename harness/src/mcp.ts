@@ -275,6 +275,22 @@ export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServ
   );
 
   server.registerTool(
+    'recall',
+    {
+      description:
+        'Undo a retry: run sync-cli recall for this task, deleting the outbound issue parcel still waiting in bridge. ' +
+        'Deletes only a parcel nobody has taken yet — never a result. A write action — see the yes input.',
+      inputSchema: {
+        key: z.string().regex(/^\d+:\d+$/, 'Expected "projectId:iid" with numeric parts').describe('Task key, "projectId:iid" (e.g. "402:6")'),
+        yes: z.boolean().describe('Must be true to actually delete the parcel — false (or omitted) always refuses, same as pipe-status without --yes'),
+        dryRun: z.boolean().optional().describe('Describe what would be deleted instead of deleting it'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    (args) => runWriteAction('recall', args, actionDeps),
+  );
+
+  server.registerTool(
     'publish',
     {
       description: 'Call reports\' publish endpoint for this task. A write action — see the yes input. Never touches a GitLab merge request.',
