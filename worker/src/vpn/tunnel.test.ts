@@ -108,7 +108,7 @@ describe('VpnTunnel', () => {
     tunnel.stop();
   });
 
-  it('takes a cold standby: restarts when it changes, ignores it without a main pool, leaves out one it cannot parse', async () => {
+  it('takes a cold standby: restarts when it appears or goes (not when its links are re-picked), ignores it without a main pool, leaves out one it cannot parse', async () => {
     const { tunnel, spawned, logs } = setup();
 
     assert.equal(await tunnel.apply(null, [OTHER]), null);
@@ -120,11 +120,14 @@ describe('VpnTunnel', () => {
     assert.ok(logs.includes('info:vpn tunnel is up'));
 
     await tunnel.apply(LINK, [OTHER, 'garbage']);
-    assert.equal(spawned.length, 2);
-    assert.ok(logs.includes('warn:a standby vpn link cannot be used — left out'));
+    assert.equal(spawned.length, 1);
 
     await tunnel.apply(LINK);
+    assert.equal(spawned.length, 2);
+
+    await tunnel.apply(LINK, [OTHER, 'garbage']);
     assert.equal(spawned.length, 3);
+    assert.ok(logs.includes('warn:a standby vpn link cannot be used — left out'));
     tunnel.stop();
   });
 
@@ -287,7 +290,7 @@ describe('VpnTunnel: a pool of links', () => {
     assert.equal(spawned.length, 3);
   });
 
-  it('does not restart for the same links in another order or with another #remark — only for a real change', async () => {
+  it('does not restart for the same links in another order, with another #remark or with another standby subset — only for a real change', async () => {
     const { tunnel, spawned } = setup();
 
     await tunnel.apply([LINK, OTHER], [OTHER]);

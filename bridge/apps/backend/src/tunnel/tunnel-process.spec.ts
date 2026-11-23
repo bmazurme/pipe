@@ -66,7 +66,7 @@ describe('TunnelProcess', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('does not restart for the same links in another order or with another #remark — only for a real change', async () => {
+  it('does not restart for the same links in another order, with another #remark or with another standby subset — only for a real change', async () => {
     const { tunnel, children, dir } = setup();
 
     await tunnel.apply(
@@ -79,8 +79,15 @@ describe('TunnelProcess', () => {
     );
     expect(children).toHaveLength(1);
 
+    // Other links of the standby only: still the same tunnel. A real change of the main pool: a restart.
     await tunnel.apply(
       [link('a.example'), link('b.example')],
+      [link('x.example')],
+    );
+    expect(children).toHaveLength(1);
+
+    await tunnel.apply(
+      [link('a.example'), link('c.example')],
       [link('s.example')],
     );
     expect(children).toHaveLength(2);
@@ -104,7 +111,7 @@ describe('TunnelProcess', () => {
     expect(tunnel.linkCount).toBe(0);
   });
 
-  it('takes a cold standby: it restarts when the standby changes, counts it apart, and says so', async () => {
+  it('takes a cold standby: it restarts when the standby appears or goes, not when its links are re-picked, counts it apart, and says so', async () => {
     const { tunnel, children, logs } = setup();
 
     expect(
@@ -121,12 +128,20 @@ describe('TunnelProcess', () => {
       [link('a.example')],
       [link('s1.example'), link('s2.example')],
     );
-    expect(children).toHaveLength(2);
-    expect(tunnel.standbyCount).toBe(2);
+    // Other links of the standby are not a reason to restart: it carries no traffic, and a subscription may re-pick its subset every time.
+    expect(children).toHaveLength(1);
+    expect(tunnel.standbyCount).toBe(1);
 
     await tunnel.apply([link('a.example')]);
-    expect(children).toHaveLength(3);
+    expect(children).toHaveLength(2);
     expect(tunnel.standbyCount).toBe(0);
+
+    await tunnel.apply(
+      [link('a.example')],
+      [link('s3.example'), link('s4.example')],
+    );
+    expect(children).toHaveLength(3);
+    expect(tunnel.standbyCount).toBe(2);
   });
 
   it('has nothing to back up without a main pool, and leaves out a standby link it cannot use', async () => {
