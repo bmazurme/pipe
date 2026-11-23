@@ -87,13 +87,13 @@ export function linkKey(raw: string): string {
   }
 }
 
+// The cold standby is in the key only as present or absent. A subscription may hand out a different subset of its servers on every refresh,
+// and a standby that carries no traffic is not worth restarting the tunnel (~10 s without Telegram) to re-pick — it is re-read whenever the
+// tunnel starts anyway.
 export function poolKey(pool: string[], standby: string[]): string {
-  const keys = (list: string[]) => [...new Set(list.map(linkKey))].sort();
+  const keys = [...new Set(pool.map(linkKey))].sort();
 
-  return [
-    ...keys(pool),
-    ...(standby.length > 0 ? ['--standby--', ...keys(standby)] : []),
-  ].join('\n');
+  return [...keys, ...(standby.length > 0 ? ['--standby--'] : [])].join('\n');
 }
 
 // On the network these boards sit on the `chrome` TLS fingerprint was throttled (about 80% of connections hung) while `firefox` passed
