@@ -96,6 +96,7 @@ export function SecretListCard() {
               onStartEdit={() => editing.handleStartEdit(secret)}
               onDeleteClick={() => editing.handleDeleteClick(secret.id)}
               onToggleReveal={() => void editing.handleToggleReveal(secret.id)}
+              onFetchValue={() => editing.fetchValueForCopy(secret.id)}
             />
           ))}
         </ul>
