@@ -226,7 +226,6 @@ describe('SecretsPage revealed value handling', () => {
 
     renderPage();
     await screen.findByText('github-token');
-    expect(screen.queryByLabelText('Скопировать значение github-token')).toBeNull();
 
     await user.click(screen.getByLabelText('Показать значение github-token'));
     await screen.findByText('ghp_realtoken');
@@ -234,6 +233,36 @@ describe('SecretsPage revealed value handling', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('ghp_realtoken'));
     expect(screen.queryByText('Не удалось скопировать')).toBeNull();
+  });
+
+  it('copies a masked secret without showing it', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+
+    renderPage();
+    await screen.findByText('github-token');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('ghp_realtoken'));
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
+    expect(screen.getByLabelText('Показать значение github-token')).toBeTruthy();
+  });
+
+  it('says so when a masked secret cannot be copied because the clipboard refuses', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await screen.findByText('Не удалось скопировать');
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
   });
 
   it('shows an error and keeps the value visible when the clipboard write is rejected', async () => {

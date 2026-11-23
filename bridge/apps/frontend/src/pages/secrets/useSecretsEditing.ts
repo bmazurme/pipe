@@ -95,6 +95,14 @@ export function useSecretsEditing() {
     }
   };
 
+  // The value for a copy that never shows it: the one already revealed, otherwise a fresh read that is handed straight to the clipboard
+  // and kept nowhere (not in state, not in the cache) — the row stays masked.
+  const fetchValueForCopy = async (id: number): Promise<string> => {
+    if (id in revealedValues) return revealedValues[id];
+
+    return (await revealSecretTrigger(id).unwrap()).value;
+  };
+
   const handleDeleteSecret = async (id: number) => {
     setDeleteError(null);
     if (editingId === id) setEditingId(null);
@@ -190,5 +198,6 @@ export function useSecretsEditing() {
     handleEditKeyDown,
     handleDeleteClick,
     handleToggleReveal,
+    fetchValueForCopy,
   };
 }

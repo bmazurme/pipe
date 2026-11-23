@@ -6,6 +6,20 @@ import { Secret } from '../../store/api';
 import { describeSecretExpiry } from './secretExpiry';
 import styles from '../SecretsPage.module.css';
 
+// Safari only allows a clipboard write inside the click itself, and here the value may first have to be fetched: ClipboardItem takes the
+// promise, so the write starts at once and finishes when the value arrives. Browsers without it get a plain write after the wait.
+async function writeToClipboard(value: Promise<string>): Promise<void> {
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'text/plain': value.then((text) => new Blob([text], { type: 'text/plain' })) }),
+    ]);
+
+    return;
+  }
+
+  await navigator.clipboard.writeText(await value);
+}
+
 interface SecretRowProps {
   secret: Secret;
   isEditing: boolean;
@@ -28,6 +42,8 @@ interface SecretRowProps {
   onStartEdit: () => void;
   onDeleteClick: () => void;
   onToggleReveal: () => void;
+  // The value to copy when the row is masked: read, handed to the clipboard, shown nowhere.
+  onFetchValue: () => Promise<string>;
 }
 
 export function SecretRow({
@@ -52,9 +68,11 @@ export function SecretRow({
   onStartEdit,
   onDeleteClick,
   onToggleReveal,
+  onFetchValue,
 }: SecretRowProps) {
   const isRevealed = revealedValue !== undefined;
   const [copied, setCopied] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const copiedTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,16 +83,18 @@ export function SecretRow({
   }, []);
 
   const handleCopy = async () => {
-    if (revealedValue === undefined) return;
     setCopyError(null);
+    setIsCopying(true);
     try {
-      await navigator.clipboard.writeText(revealedValue);
+      await writeToClipboard(revealedValue !== undefined ? Promise.resolve(revealedValue) : onFetchValue());
       setCopied(true);
       if (copiedTimeout.current) clearTimeout(copiedTimeout.current);
       copiedTimeout.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
       setCopyError('Не удалось скопировать');
+    } finally {
+      setIsCopying(false);
     }
   };
   const expiryBadge = describeSecretExpiry(secret.expiresOn);
@@ -168,18 +188,23 @@ export function SecretRow({
         <Text color="secondary" variant="code-1" className={styles.valuePreview}>
           {isRevealed ? revealedValue : '••••••••'}
         </Text>
-        {isRevealed && copyError && (
+        {copyError && (
           <Text color="danger" variant="caption-2">
             {copyError}
           </Text>
         )}
       </div>
       <div className={styles.rowActions}>
-        {isRevealed && (
-          <Button view="flat" size="s" title={copyLabel} aria-label={copyLabel} onClick={() => void handleCopy()}>
-            <Icon data={copied ? Check : Copy} size={16} />
-          </Button>
-        )}
+        <Button
+          view="flat"
+          size="s"
+          title={copyLabel}
+          aria-label={copyLabel}
+          loading={isCopying}
+          onClick={() => void handleCopy()}
+        >
+          <Icon data={copied ? Check : Copy} size={16} />
+        </Button>
         <Button view="flat" size="s" title={revealLabel} aria-label={revealLabel} loading={isRevealing} onClick={onToggleReveal}>
           <Icon data={isRevealed ? EyeSlash : Eye} size={16} />
         </Button>
