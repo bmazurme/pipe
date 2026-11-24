@@ -314,6 +314,15 @@ const workerApiEndpoints = workerApi.injectEndpoints({
         return message ?? 'Не удалось продлить задачу';
       },
     }),
+    // Brings a delayed queued job forward (clears its notBefore).
+    startJobNow: builder.mutation<WorkerJob, number>({
+      query: (id) => ({ url: `worker/jobs/${id}/start-now`, method: 'POST' }),
+      invalidatesTags: ['WorkerJob'],
+      transformErrorResponse: (response) => {
+        const message = (response.data as { message?: string } | undefined)?.message;
+        return message ?? 'Не удалось запустить задачу';
+      },
+    }),
     // Queues a new job over a failed/stopped job's parcel, model and credential.
     retryJob: builder.mutation<
       WorkerJob,
@@ -555,6 +564,7 @@ export const {
   useCreateJobMutation,
   useCancelJobMutation,
   useExtendJobMutation,
+  useStartJobNowMutation,
   useGetJobHistoryPreviewQuery,
   useGetFailureSummaryQuery,
   useRetryJobMutation,

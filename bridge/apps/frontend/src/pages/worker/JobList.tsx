@@ -9,6 +9,7 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from '../WorkerPage.module.css';
 import { CancelJobButton } from './CancelJobButton';
+import { StartNowButton } from './StartNowButton';
 import { ClearFinishedJobsButton } from './ClearFinishedJobsButton';
 import { RetryJobButton } from './RetryJobButton';
 import {
@@ -252,6 +253,7 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers, 
                   <span />
                 )}
                 <span className={styles.jobActions}>
+                  <StartNowButton job={job} compact />
                   <CancelJobButton job={job} compact />
                   <RetryJobButton job={job} compact />
                 </span>

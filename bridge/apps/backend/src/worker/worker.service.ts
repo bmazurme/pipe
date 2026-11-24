@@ -807,6 +807,25 @@ export class WorkerService implements OnModuleInit {
     return rows[0];
   }
 
+  // Brings a delayed queued job forward: clears notBefore so the next claim can take it. It keeps its
+  // createdAt place in the FIFO order. One conditional UPDATE so a job claimed meanwhile is never touched.
+  async startNow(id: number, userId: number): Promise<Job> {
+    const [rows]: [Job[], number] = await this.jobRepository.query(
+      `UPDATE jobs SET "notBefore" = NULL, logs = COALESCE(logs, '') || $3,
+         "updatedAt" = now()
+       WHERE id = $1 AND "userId" = $2 AND status = $4 AND "notBefore" > now()
+       RETURNING *`,
+      [id, userId, '\n[запущена раньше срока]\n', JobStatus.Queued],
+    );
+
+    if (rows.length > 0) {
+      return rows[0];
+    }
+
+    await this.findOwned(id, userId);
+    throw new BadRequestException('Задача уже не ждёт запуска');
+  }
+
   async remove(id: number, userId: number): Promise<void> {
     const job = await this.findOwned(id, userId);
 

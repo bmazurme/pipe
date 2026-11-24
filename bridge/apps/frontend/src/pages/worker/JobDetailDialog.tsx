@@ -20,6 +20,7 @@ import { describeUsage } from './claudeLimits';
 import { CancelJobButton } from './CancelJobButton';
 import { DiscussInChatButton } from './DiscussInChatButton';
 import { ExtendJobButton } from './ExtendJobButton';
+import { StartNowButton } from './StartNowButton';
 import { JobLogs } from './JobLogs';
 import { describeOutcome, describeStage } from './jobStage';
 import { FailureDiagnosisCard } from './FailureDiagnosisCard';
@@ -232,6 +233,7 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
         onClickButtonCancel={onClose}
       >
         <div className={styles.footerActions}>
+          <StartNowButton job={job} />
           <ExtendJobButton job={job} />
           <CancelJobButton job={job} />
           <RetryJobButton job={job} />
