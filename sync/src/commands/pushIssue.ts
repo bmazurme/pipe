@@ -37,6 +37,26 @@ export interface PushedIssueParcel {
   storedId: number;
   storedSize: number;
   encrypted: boolean;
+  // Set when `run` was requested: the worker job queued for this parcel.
+  job?: { id: number; status: string; model: string };
+}
+
+export const RUN_MODELS = ['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen'] as const;
+
+// Fails before anything is uploaded: unknown model, --dry-run, or an encrypting project (worker holds no private key).
+export function assertRunOptions(project: ProjectConfig, options: { run?: string; dryRun?: boolean }): void {
+  if (options.run === undefined) return;
+  if (!(RUN_MODELS as readonly string[]).includes(options.run)) {
+    throw new Error(`--run: unknown model "${options.run}" — expected one of ${RUN_MODELS.join('|')}.`);
+  }
+  if (options.dryRun) {
+    throw new Error('--run cannot be combined with --dry-run: a dry run uploads nothing to run.');
+  }
+  if (project.publicKeyPath) {
+    throw new Error(
+      `--run: project "${project.name}" encrypts parcels (publicKeyPath is set) and the worker cannot open them.`,
+    );
+  }
 }
 
 // The reusable core of push-issue: anonymize, scan for leaks, pack, encrypt
@@ -52,8 +72,9 @@ export async function buildAndUploadIssueParcel(
   issue: GitlabIssue,
   branch: string,
   gitlabToken: string,
-  options: { strict?: boolean; dryRun?: boolean; note?: string } = {},
+  options: { strict?: boolean; dryRun?: boolean; note?: string; run?: string } = {},
 ): Promise<PushedIssueParcel | null> {
+  assertRunOptions(project, options);
   const dictionary = loadOptionalDictionary(project.dictionary);
 
   const relPaths = await walkProjectFiles(project.path, projectInclude(project), projectExclude(project));
@@ -171,12 +192,15 @@ export async function buildAndUploadIssueParcel(
     direction: 'outbound',
   });
 
+  const job = options.run ? { ...(await client.createJob(stored.id, options.run)), model: options.run } : undefined;
+
   return {
     filename,
     fileCount: files.length,
     storedId: stored.id,
     storedSize: stored.size,
     encrypted: shouldEncrypt,
+    ...(job ? { job } : {}),
   };
 }
 
@@ -184,10 +208,11 @@ export async function pushIssueCommand(
   name: string,
   projectId: string,
   iid: string,
-  options: { strict?: boolean; dryRun?: boolean; note?: string } = {},
+  options: { strict?: boolean; dryRun?: boolean; note?: string; run?: string } = {},
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
+  assertRunOptions(project, options);
 
   if (!config.gitlab?.apiUrl) {
     throw new Error(
@@ -211,4 +236,10 @@ export async function pushIssueCommand(
       `${result.storedSize} bytes, storage id ${result.storedId}, branch "${branch}"` +
       `${result.encrypted ? ', encrypted' : ''}).`,
   );
+  if (result.job) {
+    log.info(
+      `Queued worker job #${result.job.id} (${result.job.model}) — pull the result with: ` +
+        `sync-cli pull-issue ${name} ${projectId} ${iid}`,
+    );
+  }
 }
