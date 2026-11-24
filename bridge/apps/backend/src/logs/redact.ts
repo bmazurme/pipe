@@ -3,6 +3,20 @@
 // have been seen to echo credentials back. Better to lose a few characters of
 // diagnostic text than to store a token.
 
+import { API_KEY_PREFIX } from '../auth/api-keys.service';
+import { EMERGENCY_KEY_PREFIX } from '../auth/emergency-keys.service';
+import {
+  ENROLL_CODE_PREFIX,
+  WORKER_KEY_PREFIX,
+} from '../auth/worker-keys.service';
+
+const BRIDGE_KEY_PREFIXES = [
+  API_KEY_PREFIX,
+  WORKER_KEY_PREFIX,
+  ENROLL_CODE_PREFIX,
+  EMERGENCY_KEY_PREFIX,
+];
+
 const PATTERNS: Array<[RegExp, string]> = [
   [/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted]'],
   [/\b(sk-ant-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9_-]{16,})\b/g, '[redacted-key]'],
@@ -12,6 +26,18 @@ const PATTERNS: Array<[RegExp, string]> = [
   [
     /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g,
     '[redacted-private-key]',
+  ],
+  // Bridge's own credentials: brk_/brw_/brn_/bre_ keys and bare JWTs.
+  [
+    new RegExp(
+      `\\b(?:${BRIDGE_KEY_PREFIXES.join('|')})[A-Za-z0-9_-]{16,}\\b`,
+      'g',
+    ),
+    '[redacted-bridge-key]',
+  ],
+  [
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+    '[redacted-jwt]',
   ],
   // key=value / "key":"value" for obviously secret-named fields.
   [
