@@ -13,12 +13,32 @@ describe('redact', () => {
     ['password=hunter2hunter2 in config', 'password=[redacted]'],
     ['{"api_key":"abcd1234efgh"}', '"api_key":"[redacted]'],
     ['GET https://user:s3cret@example.com/x', 'https://[redacted]@example.com'],
+    [
+      'worker key brw_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6 rejected',
+      '[redacted-bridge-key]',
+    ],
+    [
+      'api key brk_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6 rejected',
+      '[redacted-bridge-key]',
+    ],
+    [
+      'code brn_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6 rejected',
+      '[redacted-bridge-key]',
+    ],
+    [
+      'login bre_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6 rejected',
+      '[redacted-bridge-key]',
+    ],
+    [
+      'upstream said eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijkl1234 bad',
+      '[redacted-jwt]',
+    ],
   ])('masks %s', (input, expected) => {
     const out = redact(input);
 
     expect(out).toContain(expected);
     expect(out).not.toMatch(
-      /hunter2hunter2|s3cret|abcd1234efgh|AAEhBP0av28ZQ|abcdefghijklmnop1234/,
+      /hunter2hunter2|s3cret|A1b2C3d4E5f6|eyJzdWIi|abcd1234efgh|AAEhBP0av28ZQ|abcdefghijklmnop1234/,
     );
   });
 
@@ -29,6 +49,13 @@ describe('redact', () => {
 
     expect(out).toBe('x [redacted-private-key] y');
   });
+
+  it.each(['brk_', 'brw_abc', 'version eyJ.1.2'])(
+    'leaves %s untouched',
+    (input) => {
+      expect(redact(input)).toBe(input);
+    },
+  );
 
   it('leaves ordinary text alone', () => {
     expect(redact('Job 5 failed after 12s: model returned no message')).toBe(
