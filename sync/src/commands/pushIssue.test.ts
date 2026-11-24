@@ -410,3 +410,49 @@ describe('buildAndUploadIssueParcel — operator note', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('buildAndUploadIssueParcel — --run', () => {
+  function setup(): { projectPath: string; calls: { url: string; body?: unknown }[] } {
+    const projectPath = mkdtempSync(path.join(tmpdir(), 'sync-cli-push-issue-test-run-'));
+    writeFileSync(path.join(projectPath, 'a.ts'), 'export const a = 1;');
+    const calls: { url: string; body?: unknown }[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/v1/worker/jobs')) {
+        calls.push({ url, body: JSON.parse(String(init?.body)) });
+        return Response.json({ id: 42, status: 'queued' }, { status: 201 });
+      }
+      calls.push({ url });
+      return Response.json({ id: 7, originalName: 'x.zip', mimeType: 'application/zip', size: 1, createdAt: '2026-01-01' });
+    }) as typeof fetch;
+    return { projectPath, calls };
+  }
+
+  it('queues a job for the uploaded file', async () => {
+    const { projectPath, calls } = setup();
+    const result = await buildAndUploadIssueParcel(
+      makeProject(projectPath, { include: ['**/*.ts'] }),
+      config,
+      issue,
+      'task/173-628',
+      'gitlab-token',
+      { run: 'sonnet' },
+    );
+    const jobCalls = calls.filter((c) => c.url.endsWith('/worker/jobs'));
+    assert.equal(jobCalls.length, 1);
+    assert.deepEqual(jobCalls[0].body, { sourceFileId: 7, model: 'sonnet' });
+    assert.deepEqual(result?.job, { id: 42, status: 'queued', model: 'sonnet' });
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+
+  it('rejects an unknown model, --dry-run and encrypting projects before uploading', async () => {
+    const { projectPath, calls } = setup();
+    const base = makeProject(projectPath, { include: ['**/*.ts'] });
+    const run = (p: ProjectConfig, o: { run?: string; dryRun?: boolean }) =>
+      buildAndUploadIssueParcel(p, config, issue, 'b', 't', o);
+    await assert.rejects(run(base, { run: 'foo' }), /unknown model/);
+    await assert.rejects(run(base, { run: 'sonnet', dryRun: true }), /--dry-run/);
+    await assert.rejects(run({ ...base, publicKeyPath: 'k.pem' }, { run: 'sonnet' }), /encrypts/);
+    assert.equal(calls.length, 0);
+    rmSync(projectPath, { recursive: true, force: true });
+  });
+});

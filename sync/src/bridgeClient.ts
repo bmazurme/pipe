@@ -151,6 +151,25 @@ export class BridgeClient {
     return (await response.json()) as StoredFileResponse;
   }
 
+  // Queues a worker job for an already-uploaded parcel; the result comes back to Storage under the same taskKey.
+  async createJob(sourceFileId: number, model: string): Promise<{ id: number; status: string }> {
+    const response = await this.request(
+      `${this.apiUrl}/api/v1/worker/jobs`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFileId, model }),
+      },
+      API_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Creating worker job failed (${response.status}): ${await response.text()}`);
+    }
+
+    return (await response.json()) as { id: number; status: string };
+  }
+
   // Note: bridge deletes the stored file server-side once this download
   // succeeds (mailbox semantics — see storage.controller.ts) so this can
   // only be consumed once.

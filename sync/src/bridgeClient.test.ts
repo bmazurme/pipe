@@ -81,3 +81,25 @@ describe('BridgeClient.listFiles', () => {
     assert.equal(files[0]?.direction, 'result');
   });
 });
+
+describe('BridgeClient.createJob', () => {
+  it('POSTs { sourceFileId, model } as JSON and returns the job', async () => {
+    let seen: { url: string; init?: RequestInit } | undefined;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      seen = { url, init };
+      return Response.json({ id: 5, status: 'queued' }, { status: 201 });
+    }) as typeof fetch;
+
+    const job = await new BridgeClient('https://bridge.example.com').createJob(9, 'opus');
+
+    assert.equal(seen?.url, 'https://bridge.example.com/api/v1/worker/jobs');
+    assert.equal(seen?.init?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(seen?.init?.body)), { sourceFileId: 9, model: 'opus' });
+    assert.deepEqual(job, { id: 5, status: 'queued' });
+  });
+
+  it('throws with the status and body on a non-2xx reply', async () => {
+    globalThis.fetch = (async () => new Response('bad model', { status: 400 })) as typeof fetch;
+    await assert.rejects(new BridgeClient('https://bridge.example.com').createJob(9, 'x'), /400.*bad model/);
+  });
+});
