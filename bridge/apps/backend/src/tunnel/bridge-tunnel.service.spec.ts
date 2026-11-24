@@ -118,7 +118,7 @@ describe('BridgeTunnelService', () => {
     expect(tunnelProxyUrl()).toBe(PROXY);
 
     service.probe = answer({ 'api.telegram.org': new Error('timeout') });
-    await service.check();
+    for (let i = 0; i < 3; i++) await service.check();
     expect(tunnelProxyUrl()).toBeUndefined();
 
     service.probe = answer({});
@@ -130,6 +130,44 @@ describe('BridgeTunnelService', () => {
       'tunnel.down',
       'tunnel.up',
     ]);
+  });
+
+  it('keeps the tunnel through 2 failed probes and drops it on the 3rd', async () => {
+    const { service, record } = setup();
+
+    service.probe = answer({});
+    await service.check();
+    service.probe = answer({ 'api.telegram.org': new Error('timeout') });
+    await service.check();
+    await service.check();
+
+    expect(service.status()).toMatchObject({ inUse: true, failures: 2 });
+    expect(tunnelProxyUrl()).toBe(PROXY);
+    expect(record.mock.calls.map((c) => c[0].event)).toEqual(['tunnel.up']);
+
+    await service.check();
+
+    expect(service.status().inUse).toBe(false);
+    expect(record.mock.calls.map((c) => c[0].event)).toEqual([
+      'tunnel.up',
+      'tunnel.down',
+    ]);
+  });
+
+  it('resets the failure streak on a successful probe', async () => {
+    const { service, record } = setup();
+    const fail = answer({ 'api.telegram.org': new Error('timeout') });
+
+    service.probe = answer({});
+    await service.check();
+
+    for (const probe of [fail, fail, answer({}), fail, fail]) {
+      service.probe = probe;
+      await service.check();
+    }
+
+    expect(service.status()).toMatchObject({ inUse: true, failures: 2 });
+    expect(record.mock.calls.map((c) => c[0].event)).toEqual(['tunnel.up']);
   });
 
   it('counts a 5xx as a failure, and any other answer as a path', async () => {
