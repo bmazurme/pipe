@@ -24,6 +24,8 @@ import { TunnelProcess } from './tunnel-process';
 
 const CHECK_EVERY_MS = 20_000;
 const PROBE_TIMEOUT_MS = 8_000;
+// A tunnel in use is withdrawn only after this many failed Telegram probes in a row, so one timeout or reset does not flap it.
+const DOWN_AFTER_FAILURES = 3;
 const DEFAULT_PORT = 18081;
 
 // What bridge needs to reach through the tunnel. Telegram is what decides whether the tunnel is used (alerts, the bot, the channel);
@@ -59,6 +61,8 @@ export interface BridgeTunnelStatus {
   standby: number;
   // Whether Telegram traffic goes through it right now (it is up and Telegram answers through it).
   inUse: boolean;
+  // The current streak of failed Telegram probes (reset by a success).
+  failures: number;
   checks: TunnelCheck[];
   // When the state last changed (in use / not in use).
   since: string | null;
@@ -134,6 +138,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
   private disabledReason: string | null = null;
   private checks: TunnelCheck[] = [];
   private inUse = false;
+  private consecutiveFailures = 0;
   private since: string | null = null;
   // The probe is replaceable so a test does not need a network.
   probe: ProbeFn = defaultProbe;
@@ -197,6 +202,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
       links: this.tunnel.linkCount,
       standby: this.tunnel.standbyCount,
       inUse: this.inUse,
+      failures: this.consecutiveFailures,
       checks: this.checks,
       since: this.since,
       telegram: this.telegram ? this.telegramHealth() : null,
@@ -256,6 +262,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
 
       if (!proxy) {
         this.checks = [];
+        this.consecutiveFailures = 0;
         this.publish(
           false,
           wanted?.links.length === 0
@@ -272,11 +279,19 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
 
       const telegram = this.checks.find((entry) => entry.key === 'telegram');
 
+      if (telegram?.ok === true) {
+        this.consecutiveFailures = 0;
+        this.publish(true, null);
+
+        return;
+      }
+
+      this.consecutiveFailures += 1;
+
+      // A tunnel in use survives isolated failures; one that is not in use stays off.
       this.publish(
-        telegram?.ok === true,
-        telegram?.ok
-          ? null
-          : `Telegram через туннель не отвечает: ${telegram?.error ?? '—'}`,
+        this.inUse && this.consecutiveFailures < DOWN_AFTER_FAILURES,
+        `Telegram через туннель не отвечает: ${telegram?.error ?? '—'}`,
       );
     } finally {
       this.running = false;
