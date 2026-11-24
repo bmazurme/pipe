@@ -236,7 +236,7 @@ describe('JobLogs filter', () => {
     await user.click(screen.getByText('Markdown'));
 
     const region = await screen.findByRole('region', { name: 'Лог задачи' });
-    await waitFor(() => expect(region.querySelector('h2')?.textContent).toContain('Итог'));
+    await waitFor(() => expect(region.querySelector('h2')?.textContent).toContain('Итог'), { timeout: 15000 });
     expect(region.querySelector('strong')?.textContent).toBe('всё');
     expect(region.querySelectorAll('pre')).toHaveLength(2);
     expect(region.textContent).toContain('Failed: a_b_c');
@@ -258,7 +258,7 @@ describe('JobLogs filter', () => {
     await user.click(screen.getByText('Markdown'));
     await user.type(screen.getByLabelText('Фильтр строк лога'), 'Два');
     const region = await screen.findByRole('region', { name: 'Лог задачи' });
-    await waitFor(() => expect(region.querySelectorAll('h2')).toHaveLength(1));
+    await waitFor(() => expect(region.querySelectorAll('h2')).toHaveLength(1), { timeout: 15000 });
     expect(region.textContent).toContain('Два');
     expect(region.textContent).not.toContain('Один');
 

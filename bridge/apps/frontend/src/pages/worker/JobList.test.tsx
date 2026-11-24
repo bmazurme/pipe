@@ -5,6 +5,7 @@ import { renderWithTheme } from '../../test/render';
 import { WorkerJob } from '../../store/api';
 import { JobList } from './JobList';
 
+vi.mock('./StartNowButton', () => ({ StartNowButton: () => null }));
 vi.mock('./CancelJobButton', () => ({ CancelJobButton: () => null }));
 vi.mock('./ClearFinishedJobsButton', () => ({ ClearFinishedJobsButton: () => null }));
 vi.mock('./RetryJobButton', () => ({ RetryJobButton: () => null }));

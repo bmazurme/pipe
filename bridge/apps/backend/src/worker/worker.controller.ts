@@ -413,6 +413,17 @@ export class WorkerController {
     return JobResponseDto.fromEntity(job);
   }
 
+  // Brings a delayed queued job forward — see WorkerService.startNow.
+  @Post(':id/start-now')
+  async startNow(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<JobResponseDto> {
+    const job = await this.workerService.startNow(id, currentUser.id);
+
+    return JobResponseDto.fromEntity(job);
+  }
+
   // Runs a failed or stopped job again as a new job (see WorkerService.retry).
   @Post(':id/retry')
   async retry(

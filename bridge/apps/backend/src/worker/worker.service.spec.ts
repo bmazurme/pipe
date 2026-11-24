@@ -1004,6 +1004,43 @@ describe('WorkerService', () => {
     });
   });
 
+  describe('startNow', () => {
+    it('clears notBefore with one conditional UPDATE', async () => {
+      repository.query!.mockResolvedValue([
+        [{ id: 5, notBefore: null, createdAt: new Date(0) }],
+        1,
+      ]);
+
+      const result = await service.startNow(5, 7);
+
+      expect(result.notBefore).toBeNull();
+      expect(result.createdAt).toEqual(new Date(0));
+      const [sql, params] = repository.query!.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('"notBefore" = NULL');
+      expect(sql).toContain('"notBefore" > now()');
+      expect(sql).not.toContain('"createdAt" =');
+      expect(params[0]).toBe(5);
+      expect(params[1]).toBe(7);
+    });
+
+    it('refuses a job that is not a delayed queued one', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+      repository.findOne!.mockResolvedValue({ id: 5 } as Job);
+
+      await expect(service.startNow(5, 7)).rejects.toThrow(BadRequestException);
+    });
+
+    it('is not found for a foreign job', async () => {
+      repository.query!.mockResolvedValue([[], 0]);
+      repository.findOne!.mockResolvedValue(null);
+
+      await expect(service.startNow(5, 7)).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('cancel', () => {
     it('cancels a queued job outright with one conditional UPDATE', async () => {
       repository.findOne!.mockResolvedValue({

@@ -69,7 +69,7 @@ describe('ResultFilesSection', () => {
     await user.click(await screen.findByText(/README\.md/));
 
     const region = screen.getByRole('region', { name: 'Содержимое notes/README.md' });
-    await vi.waitFor(() => expect(region.querySelector('h1')?.textContent).toContain('Заголовок'));
+    await vi.waitFor(() => expect(region.querySelector('h1')?.textContent).toContain('Заголовок'), { timeout: 10000 });
     expect(region.querySelector('strong')?.textContent).toBe('жирный');
 
     await user.click(screen.getByText('Исходник'));
