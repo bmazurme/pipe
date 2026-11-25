@@ -107,6 +107,32 @@ class BridgeLiveClient {
     return (await response.json()) as T;
   }
 
+  // POST /api/v1/worker/jobs/:id/retry — bridge reruns a finished job from its
+  // stored source parcel as a NEW job. Its own error text (e.g. 409 "The
+  // source parcel was already consumed") is passed through in the thrown message.
+  async retryJob(id: number): Promise<{ id: number }> {
+    const response = await fetch(`${this.config.apiUrl}/api/v1/worker/jobs/${id}/retry`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try {
+        const parsed = JSON.parse(text) as { message?: string | string[] };
+        if (parsed.message) message = Array.isArray(parsed.message) ? parsed.message.join('; ') : parsed.message;
+      } catch {
+        // not JSON — keep the raw text
+      }
+      throw new Error(`bridge refused (${response.status}): ${message || 'no details'}`);
+    }
+
+    return (await response.json()) as { id: number };
+  }
+
   getWorkerStatus(): Promise<WorkerStatusWire> {
     return this.getJson('/api/v1/worker/status');
   }
@@ -262,4 +288,17 @@ export async function fetchLiveStatus(
   } catch (error) {
     return { available: false, reason: `bridge live check failed: ${(error as Error).message}` };
   }
+}
+
+// Re-runs a finished worker job from its stored parcel. Throws with bridge's
+// own message on failure; the caller (actions.ts) turns that into output.
+export async function retryWorkerJob(
+  id: number,
+  paths: BridgeLiveConfigPaths = DEFAULT_BRIDGE_LIVE_CONFIG_PATHS,
+): Promise<{ id: number }> {
+  const config = loadBridgeLiveConfig(paths);
+  if (!config) {
+    throw new Error('no bridge API key configured for sync-cli — run "sync-cli login-api-key <key>" once (see sync/README.md)');
+  }
+  return new BridgeLiveClient(config).retryJob(id);
 }

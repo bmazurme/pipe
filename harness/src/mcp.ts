@@ -275,6 +275,18 @@ export function createPipeMcpServer(options: PipeMcpServerOptions = {}): McpServ
   );
 
   server.registerTool(
+    'rerun_job',
+    {
+      description:
+        "Re-run this task's latest failed/cancelled/succeeded worker job from its stored parcel via bridge (like pipe-status --rerun). " +
+        'Refused if the task has no job or it is still queued/running. A write action — see the yes input.',
+      inputSchema: writeActionInputShape,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    (args) => runWriteAction('rerun', args, actionDeps),
+  );
+
+  server.registerTool(
     'recall',
     {
       description:
