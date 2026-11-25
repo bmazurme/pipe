@@ -1,0 +1,301 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@gravity-ui/uikit';
+
+import { ImprovePage } from './ImprovePage';
+import { store } from '../../store';
+import { improveApi } from '../../store/api';
+
+const STATUS = { configured: true, repo: 'o/r', baseBranch: 'main', label: 'loop', models: ['sonnet'] };
+type Sent = { method: string; path: string; body: unknown };
+let sent: Sent[];
+let requested: string[];
+
+const ANALYSIS_RUN = {
+  id: 20,
+  userId: 1,
+  kind: 'analysis',
+  issueNumber: null,
+  issueTitle: 'Анализ: Безопасность',
+  model: 'sonnet',
+  trigger: 'manual',
+  scheduleId: null,
+  status: 'analyzed',
+  jobId: 5,
+  branch: null,
+  prNumber: null,
+  prUrl: null,
+  note: '1 предложений ждут проверки',
+  error: null,
+  result: JSON.stringify({ categories: ['security'], autoCreate: false, items: [{ category: 'security', title: 'Add rate limit', risk: 'low', body: 'x' }] }),
+  createdAt: '2026-10-08T00:00:00Z',
+  finishedAt: null,
+};
+
+const ISSUES = [12, 13, 14].map((number) => ({
+  number,
+  title: `Task ${number}`,
+  body: '',
+  htmlUrl: 'u',
+  createdAt: `2026-10-0${number - 11}T00:00:00Z`,
+  labels: ['loop'],
+  run: null,
+}));
+
+// The list leaves `result` out; the run by id has it.
+const LISTED_RUN = { ...ANALYSIS_RUN, result: undefined };
+
+function json(body: unknown) {
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
+function renderPage(path: string) {
+  return render(
+    <Provider store={store}>
+      <ThemeProvider theme="light">
+        <MemoryRouter initialEntries={[path]}>
+          <ImprovePage />
+        </MemoryRouter>
+      </ThemeProvider>
+    </Provider>,
+  );
+}
+
+beforeEach(() => {
+  sent = [];
+  requested = [];
+  store.dispatch(improveApi.util.resetApiState());
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (request: Request) => {
+      const path = new URL(request.url).pathname.replace('/api/v1/', '');
+      const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+
+      if (request.method !== 'GET') sent.push({ method: request.method, path, body });
+      if (path === 'improve/status') return json(STATUS);
+      if (path === 'improve/issues') {
+        requested.push(new URL(request.url).search);
+
+        return json(ISSUES);
+      }
+      if (path === 'improve/runs' && request.method === 'GET') return json([{ ...LISTED_RUN, hasResult: true }]);
+      if (path === 'improve/schedules' && request.method === 'GET') return json([]);
+      if (path === 'improve/settings' && request.method === 'GET') return json({ autoStartModel: null, autoRepairCi: true, minValue: 4, maxOpenPerCategory: 2, dailyIssueCap: 6 });
+
+      return json(ANALYSIS_RUN);
+    }),
+  );
+});
+
+describe('ImprovePage start issues', () => {
+  it('starts the selected issues in one request', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await user.click(await screen.findByLabelText('Выбрать #12'));
+    await user.click(screen.getByLabelText('Выбрать #14'));
+    await user.click(screen.getByRole('button', { name: 'Запустить выбранные (2)' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [12, 14], model: 'sonnet' } }),
+    );
+  });
+
+  it('starts the oldest issues', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await user.click(await screen.findByRole('button', { name: 'Запустить 3 старых' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [12, 13, 14], model: 'sonnet' } }),
+    );
+  });
+
+  it('takes analysis proposals into work', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+    await user.click(await screen.findByRole('button', { name: 'В работу (1)' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/start-items', body: { model: 'sonnet', indices: [0] } }));
+  });
+
+  it('can start an analysis that takes its issues straight into work', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=analysis');
+
+    await user.click(await screen.findByText('И сразу взять в работу'));
+    await user.click(screen.getByRole('button', { name: 'Запустить анализ' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({
+        method: 'POST',
+        path: 'improve/analysis',
+        body: expect.objectContaining({ autoCreate: true, autoStart: true }),
+      }),
+    );
+  });
+
+  it('can list every open issue, not just the labelled ones', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve');
+
+    await screen.findByLabelText('Выбрать #12');
+    expect(requested).toEqual(['']);
+
+    await user.click(screen.getByText('Все открытые issues'));
+
+    await waitFor(() => expect(requested).toContain('?all=1'));
+  });
+});
+
+describe('ImprovePage analysis directions', () => {
+  it('offers the architecture direction as a checkbox, ticked by default', async () => {
+    renderPage('/improve?tab=analysis');
+
+    const box = (await screen.findByLabelText('Архитектура')) as HTMLInputElement;
+
+    expect(box.checked).toBe(true);
+  });
+});
+
+describe('ImprovePage filing limits', () => {
+  it('shows the stored limits and saves a changed one on its own', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    expect(await screen.findByText('Лимиты на новые задачи')).toBeTruthy();
+    // the stored values are what the three selects show
+    await waitFor(() => expect(screen.getByText('4')).toBeTruthy());
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('6')).toBeTruthy();
+
+    await user.click(screen.getByText('4'));
+    await user.click(await screen.findByRole('option', { name: '5' }));
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { minValue: 5 } }));
+  });
+});
+
+describe('ImprovePage conflict redo setting', () => {
+  it('is off by default and switches on with a request that leaves the other settings alone', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    const toggle = await screen.findByRole('switch', { name: 'При конфликте с main закрывать PR и переделывать задачу' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { autoRedoConflicts: true } }));
+  });
+});
+
+describe('ImprovePage CI auto-repair setting', () => {
+  it('is on by default and switches off with a request that leaves the auto-start model alone', async () => {
+    const user = userEvent.setup();
+    renderPage('/improve?tab=schedules');
+
+    const toggle = await screen.findByRole('switch', { name: 'Чинить CI автоматически' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { autoRepairCi: false } }));
+  });
+});
+
+describe('ImprovePage batch selection', () => {
+  const OTHER = { ...ISSUES[0], number: 20, title: 'Task 20' };
+
+  it('drops an issue started on its own from the batch count and request', async () => {
+    const user = userEvent.setup();
+    let started = false;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const path = new URL(request.url).pathname.replace('/api/v1/', '');
+        const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+
+        if (request.method !== 'GET') sent.push({ method: request.method, path, body });
+        if (path === 'improve/status') return json(STATUS);
+        if (path === 'improve/issues') {
+          return json(ISSUES.map((issue) => (started && issue.number === 12 ? { ...issue, run: { ...ANALYSIS_RUN, kind: 'issue', status: 'pr_open' } } : issue)));
+        }
+        if (path === 'improve/runs' && request.method === 'POST') started = true;
+        if (request.method === 'GET') return json(path === 'improve/settings' ? { autoStartModel: null, autoRepairCi: true } : []);
+
+        return json(ANALYSIS_RUN);
+      }),
+    );
+    renderPage('/improve');
+
+    await user.click(await screen.findByLabelText('Выбрать #12'));
+    await user.click(screen.getByLabelText('Выбрать #13'));
+    await user.click(screen.getByRole('button', { name: 'Запустить #12' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Запустить выбранные (1)' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [13], model: 'sonnet' } }),
+    );
+  });
+
+  it('does not send issues that are no longer shown after switching the list', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = new URL(request.url);
+        const path = url.pathname.replace('/api/v1/', '');
+        const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+
+        if (request.method !== 'GET') sent.push({ method: request.method, path, body });
+        if (path === 'improve/status') return json(STATUS);
+        if (path === 'improve/issues') return json(url.search ? [OTHER] : ISSUES);
+        if (request.method === 'GET') return json(path === 'improve/settings' ? { autoStartModel: null, autoRepairCi: true } : []);
+
+        return json(ANALYSIS_RUN);
+      }),
+    );
+    renderPage('/improve');
+
+    await user.click(await screen.findByLabelText('Выбрать #12'));
+    await user.click(screen.getByText('Все открытые issues'));
+    await user.click(await screen.findByLabelText('Выбрать #20'));
+
+    await user.click(screen.getByRole('button', { name: 'Запустить выбранные (1)' }));
+
+    await waitFor(() =>
+      expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/batch', body: { issueNumbers: [20], model: 'sonnet' } }),
+    );
+  });
+
+  it('hides the oldest-issues button when nothing can be started', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const path = new URL(request.url).pathname.replace('/api/v1/', '');
+
+        if (path === 'improve/status') return json(STATUS);
+        if (path === 'improve/issues') return json([{ ...ISSUES[0], run: { ...ANALYSIS_RUN, status: 'pr_open' } }]);
+        if (request.method === 'GET') return json(path === 'improve/settings' ? { autoStartModel: null, autoRepairCi: true } : []);
+
+        return json(ANALYSIS_RUN);
+      }),
+    );
+    renderPage('/improve');
+
+    await screen.findByLabelText('Выбрать #12');
+    expect(screen.queryByRole('button', { name: /старых/ })).toBeNull();
+  });
+});

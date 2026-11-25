@@ -1,0 +1,1 @@
+export { PurgePage } from './PurgePage';
