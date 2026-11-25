@@ -17,6 +17,11 @@
 #                                                #  --legacy goes back to the environment-key worker)
 #   infra/bridge-pi/enroll-worker.sh <code>      # from your workstation, with the code the Worker page showed
 #
+# No worker of its own on this stack (the boards' own workers are standalone containers, and the UI is where workers are added):
+#   ./deploy-worker.sh --none [ghcr [tag]]       # keeps the vpn-client (backend's Telegram/GitHub proxy lives there), scales the worker to 0
+#                                                # (remembered in ~/.pipe/worker-mode as `none`: autodeploy's later runs keep it at 0 instead of
+#                                                #  bringing an unenrolled worker back with every release; --managed / --legacy undo it)
+#
 # A second worker on another board: set WORKER_STACK (anything but the default `bridgew`) and WORKER_NODE_HOSTNAME
 # (the new board's hostname) before any of the commands above — each is then scoped to that stack: its own
 # worker-mode/xray-client files here, its own placement constraint in the stack file, its own `worker_state`
@@ -47,11 +52,20 @@ export TELEGRAM_PROXY_ALIAS="${TELEGRAM_PROXY_ALIAS:-vpn-client$SUFFIX}"
 # script with no flag) redeploys the SAME kind instead of silently putting the environment-key worker back:
 #   --managed → a worker added in the UI · --legacy → the older worker with a bridge API key in the environment.
 MANAGED=0
-if [ "$(cat "$MODE_FILE" 2>/dev/null || true)" = managed ]; then MANAGED=1; fi
-case "${1:-}" in
-  --managed) MANAGED=1; shift ;;
-  --legacy) MANAGED=0; shift ;;
+NONE=0
+case "$(cat "$MODE_FILE" 2>/dev/null || true)" in
+  managed) MANAGED=1 ;;
+  # No worker here: the managed stack file needs no worker secrets, so nothing has to be set for it.
+  none) MANAGED=1; NONE=1 ;;
 esac
+case "${1:-}" in
+  --managed) MANAGED=1; NONE=0; shift ;;
+  --legacy) MANAGED=0; NONE=0; shift ;;
+  --none) MANAGED=1; NONE=1; shift ;;
+esac
+# The worker service's replica count in the stack file (see `deploy: replicas:` there).
+export WORKER_REPLICAS=1
+[ "$NONE" = 0 ] || WORKER_REPLICAS=0
 
 if [ "${1:-}" = status ]; then
   docker stack services "$STACK"
@@ -115,9 +129,10 @@ fi
 docker network inspect telegram-proxy-net >/dev/null 2>&1 || docker network create -d overlay --attachable telegram-proxy-net >/dev/null
 
 mkdir -p "$(dirname "$MODE_FILE")"
-[ "$MANAGED" = 1 ] && echo managed > "$MODE_FILE" || echo legacy > "$MODE_FILE"
+if [ "$NONE" = 1 ]; then echo none > "$MODE_FILE"; elif [ "$MANAGED" = 1 ]; then echo managed > "$MODE_FILE"; else echo legacy > "$MODE_FILE"; fi
 
 cd "$HERE"
 docker stack deploy --resolve-image "$RESOLVE" -c "$STACK_FILE" "$STACK"
 echo "deployed worker tag $WORKER_IMAGE_TAG ($STACK_FILE); watch with: ./deploy-worker.sh status"
-[ "$MANAGED" = 0 ] || echo "next: Worker page → Worker'ы → Добавить, then from your workstation: infra/bridge-pi/enroll-worker.sh <code>"
+[ "$NONE" = 0 ] || echo "no worker on this stack (worker-mode: none) — the vpn-client keeps running; --managed / --legacy bring a worker back"
+[ "$MANAGED" = 0 ] || [ "$NONE" = 1 ] || echo "next: Worker page → Worker'ы → Добавить, then from your workstation: infra/bridge-pi/enroll-worker.sh <code>"

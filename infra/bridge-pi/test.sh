@@ -67,5 +67,27 @@ while IFS='=' read -r _ v; do [ -n "$v" ] && case "$out" in *"$v"*) leak=1;; esa
 run bogus
 [ "$(cat "$T/code")" = 2 ]; check "an unknown command: usage, exit 2" $?
 
+# deploy-worker.sh with a fake docker: what it asks `docker stack deploy` for, and the mode it remembers in worker-mode
+printf '#!/usr/bin/env bash\ncase "$1 $2" in\n  "stack deploy") echo "replicas=$WORKER_REPLICAS file=$*" >> "$DEPLOY_LOG" ;;\n  "network inspect") exit 0 ;;\nesac\nexit 0\n' > "$T/bin/docker"
+chmod +x "$T/bin/docker"
+command -v sha256sum > /dev/null 2>&1 || { printf '#!/bin/sh\nshasum -a 256 "$@"\n' > "$T/bin/sha256sum"; chmod +x "$T/bin/sha256sum"; }
+export DEPLOY_LOG="$T/deploy.log"
+printf '{}' > "$HOME/.pipe/xray-client.json"
+[ -f "$FILE" ] || : > "$FILE"
+dw() { : > "$DEPLOY_LOG"; bash "$HERE/deploy-worker.sh" "$@" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"; }
+mfile="$HOME/.pipe/worker-mode"
+
+dw --none ghcr stable
+[ "$(cat "$T/code")" = 0 ] && grep -q '^replicas=0 file=stack deploy .* -c worker-managed-pi.yml bridgew' "$DEPLOY_LOG"; check "deploy-worker --none: deploys the stack with the worker at 0 replicas" $?
+[ "$(cat "$mfile")" = none ]; check "deploy-worker --none: remembers it (autodeploy's later runs stay at 0)" $?
+dw ghcr stable
+grep -q '^replicas=0 ' "$DEPLOY_LOG" && [ "$(cat "$mfile")" = none ]; check "deploy-worker with no flag after --none: still 0 replicas, still none" $?
+dw --managed ghcr stable
+grep -q '^replicas=1 ' "$DEPLOY_LOG" && [ "$(cat "$mfile")" = managed ]; check "deploy-worker --managed brings the worker back (1 replica)" $?
+dw ghcr stable
+grep -q '^replicas=1 ' "$DEPLOY_LOG" && [ "$(cat "$mfile")" = managed ]; check "deploy-worker with no flag after --managed: managed, 1 replica" $?
+grep -q 'replicas: ${WORKER_REPLICAS:-1}' worker-managed-pi.yml 2> /dev/null || grep -q 'replicas: ${WORKER_REPLICAS:-1}' "$HERE/worker-managed-pi.yml"; check "both stack files take the worker's replica count from WORKER_REPLICAS" $?
+[ "$(grep -c 'replicas: ${WORKER_REPLICAS:-1}' "$HERE/worker-pi.yml")" = 1 ]; check "worker-pi.yml too" $?
+
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
