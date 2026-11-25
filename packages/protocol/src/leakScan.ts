@@ -8,7 +8,7 @@
 // finding as "double-check this before it leaves the machine", not as proof
 // of a leak.
 
-export type LeakKind = 'email' | 'ip' | 'hostname' | 'token';
+export type LeakKind = 'email' | 'ip' | 'hostname' | 'token' | 'secret';
 
 export interface LeakFinding {
   source: string;
@@ -76,6 +76,26 @@ function looksLikeCodeIdentifier(value: string): boolean {
 const TOKEN_RE = /[A-Za-z0-9+/_=-]{24,}/g;
 const TOKEN_ENTROPY_THRESHOLD = 4.0;
 
+// `<key containing a secret word> = / : <value>`. The key part is bounded so
+// scanning stays linear on long runs of word characters. The finding reports
+// only the key and a masked value, never the secret itself.
+const SECRET_ASSIGNMENT_RE =
+  /([\w.-]{0,40}(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key)[\w-]{0,20})["']?[ \t]*[=:][ \t]*["']?([^\s"'`,;]{4,})/gi;
+
+// scheme://user:password@host — the password is anything up to '@'.
+const URL_CREDENTIALS_RE = /\b[a-z][a-z0-9+.-]{0,20}:\/\/([^\s:@/]{1,100}):([^\s@/]{1,200})@[^\s/]{1,255}/gi;
+
+const NON_SECRET_VALUES = new Set(['string', 'number', 'boolean', 'undefined', 'null', 'true', 'false', 'none']);
+
+function isPlaceholderValue(value: string): boolean {
+  const lower = value.toLowerCase();
+  if (value.startsWith('${') || value.startsWith('$(') || value.startsWith('{{') || value.startsWith('[[')) return true;
+  if (value.startsWith('<') || value.startsWith('%(')) return true;
+  if (lower.startsWith('process.env') || lower.startsWith('os.environ') || lower.startsWith('env.')) return true;
+  if (lower === 'changeme' || NON_SECRET_VALUES.has(lower)) return true;
+  return /^x{3,}$/i.test(value) || /^\*{3,}$/.test(value);
+}
+
 function shannonEntropy(value: string): number {
   const counts = new Map<string, number>();
   for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
@@ -111,9 +131,28 @@ function scanOne({ source, content }: LeakScanTarget): LeakFinding[] {
   const findings: LeakFinding[] = [];
   const newlines = newlineOffsets(content);
   const emailSpans: Array<[number, number]> = [];
+  const urlSpans: Array<[number, number]> = [];
+
+  for (const match of content.matchAll(URL_CREDENTIALS_RE)) {
+    if (isPlaceholderValue(match[2])) continue;
+    const index = match.index ?? 0;
+    urlSpans.push([index, index + match[0].length]);
+    findings.push({ source, line: lineAt(newlines, index), kind: 'secret', match: `${match[1]}:${match[2][0]}***@…` });
+  }
+
+  for (const match of content.matchAll(SECRET_ASSIGNMENT_RE)) {
+    if (isPlaceholderValue(match[2])) continue;
+    findings.push({
+      source,
+      line: lineAt(newlines, match.index ?? 0),
+      kind: 'secret',
+      match: `${match[1]}=${match[2][0]}***`,
+    });
+  }
 
   for (const match of content.matchAll(EMAIL_RE)) {
     const index = match.index ?? 0;
+    if (urlSpans.some(([from, to]) => index >= from && index < to)) continue;
     emailSpans.push([index, index + match[0].length]);
     findings.push({ source, line: lineAt(newlines, index), kind: 'email', match: match[0] });
   }
@@ -124,7 +163,9 @@ function scanOne({ source, content }: LeakScanTarget): LeakFinding[] {
   }
 
   // Hostname matches arrive in index order, so a single advancing pointer
-  // into the (also ordered) email spans is enough.
+  // into the (sorted) email + URL-credential spans is enough.
+  emailSpans.push(...urlSpans);
+  emailSpans.sort((a, b) => a[0] - b[0]);
   let spanIdx = 0;
   for (const match of content.matchAll(HOSTNAME_RE)) {
     const index = match.index ?? 0;
