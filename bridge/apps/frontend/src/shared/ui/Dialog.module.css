@@ -1,0 +1,37 @@
+/* On a phone a dialog is as wide as the screen leaves room for, never wider. Gravity centres it in an inline-flex "aligner" that is only as
+   wide as its content, so a percentage width has nothing to resolve against: a dialog with wide rows (a log's controls, a row of buttons)
+   simply came out wider than the viewport and was cut off at the right edge. The width is therefore taken from the viewport itself
+   (Gravity's own side margin is 20px). */
+@media (max-width: 767px) {
+  .fit.fit {
+    width: calc(100vw - 40px);
+    min-width: 0;
+    max-width: calc(100vw - 40px);
+  }
+
+  /* Gravity's footer is one row: the extra actions, then Cancel / Apply with a 128px minimum each. On a phone that row is wider than the
+     dialog and, right-aligned, spilled off its left edge. Stack it: the actions on top (they wrap), the two main buttons under them. */
+  .fit :global(.g-dialog-footer) {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 10px;
+    padding-block: 16px;
+  }
+
+  .fit :global(.g-dialog-footer__children) {
+    flex-grow: 0;
+    height: auto;
+    min-width: 0;
+  }
+
+  .fit :global(.g-dialog-footer__bts-wrapper) {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .fit :global(.g-dialog-footer__button) {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+}

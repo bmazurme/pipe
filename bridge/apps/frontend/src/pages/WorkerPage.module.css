@@ -30,6 +30,15 @@
   gap: 8px;
 }
 
+.failureRow {
+  align-items: baseline;
+}
+
+.failureMessage {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .statusSkeleton {
   width: 90px;
   height: 20px;
@@ -685,4 +694,102 @@
   font-size: 14px;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* ---- phones: the job window and the status cards must fit the screen width ----
+   Several rows here were one non-wrapping flex line (the log's controls, a failure group, the summary rows), so on a ~400px screen they
+   either squeezed their text to a column of single words or ran past the right edge of the card / dialog. */
+@media (max-width: 767px) {
+  .statusStrip {
+    gap: 10px 16px;
+    padding: 12px 14px;
+  }
+
+  .statusRow {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* A failure group: «N×» and the message share the first line (the message takes the rest), the tags and the button sit under it. */
+  .failureRow > .failureMessage {
+    flex: 1 1 calc(100% - 48px);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .failureRow > :nth-child(n + 3) {
+    margin-left: 0;
+  }
+
+  /* The dialog never gets wider than the screen: nothing in it may force a minimum width. */
+  .detailBody {
+    min-height: 320px;
+    height: min(78vh, 640px);
+    overflow-x: hidden;
+  }
+
+  .detailSummary,
+  .logsSection,
+  .logsWrap {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .detailFields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .detailMeta {
+    gap: 6px 10px;
+  }
+
+  .detailElapsed {
+    margin-left: 0;
+  }
+
+  /* Title on its own line, the controls under it, wrapping instead of overflowing. */
+  .logsHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .logsActions {
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .logsFilter {
+    flex: 1 1 120px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .logsMarkdown {
+    overflow-wrap: anywhere;
+  }
+
+  .logsMarkdown pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .encryptRow {
+    flex-wrap: wrap;
+  }
+
+  .encryptRow > * {
+    flex: 1 1 100%;
+  }
+
+  /* Buttons of the footer share the width instead of pushing the last one off the screen. */
+  .footerActions > * {
+    flex: 1 1 auto;
+  }
 }

@@ -1,9 +1,11 @@
 import { Dialog as GravityDialog, type DialogProps } from '@gravity-ui/uikit';
 
+import styles from './Dialog.module.css';
+
 // Gravity's Dialog closes on a click anywhere outside it, so a slip of the mouse while filling in a form threw the typed text away.
 // Here that click does nothing; the dialog still closes with Escape, the cross and its Cancel button. Everything else is Gravity's.
 function DialogRoot(props: DialogProps) {
-  return <GravityDialog disableOutsideClick {...props} />;
+  return <GravityDialog disableOutsideClick {...props} className={props.className ? `${styles.fit} ${props.className}` : styles.fit} />;
 }
 
 export const Dialog = Object.assign(DialogRoot, {
