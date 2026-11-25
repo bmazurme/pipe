@@ -335,6 +335,99 @@ describe('StorageService', () => {
     });
   });
 
+  describe('pruneReportsParcels', () => {
+    const original = process.env.STORAGE_REPORTS_PARCEL_DAYS;
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+
+      if (original === undefined) {
+        delete process.env.STORAGE_REPORTS_PARCEL_DAYS;
+      } else {
+        process.env.STORAGE_REPORTS_PARCEL_DAYS = original;
+      }
+    });
+
+    it("drops reports parcels older than 3 days by default, selecting only outbound issue parcels with reports' name", async () => {
+      delete process.env.STORAGE_REPORTS_PARCEL_DAYS;
+      repository
+        .find!.mockResolvedValueOnce([{ id: 1, storedName: 'a.zip' }])
+        .mockResolvedValueOnce([]);
+      repository.delete!.mockResolvedValue({ affected: 1 });
+
+      const before = Date.now();
+      await expect(service.pruneReportsParcels()).resolves.toBe(1);
+
+      const where = (
+        repository.find!.mock.calls[0] as [
+          {
+            where: Array<{
+              createdAt: { value: Date };
+              channel: string;
+              direction: string;
+              originalName: { value: string };
+              id: unknown;
+            }>;
+          },
+        ]
+      )[0].where;
+
+      // Both the plain and the encrypted spelling, nothing else: no manual upload (no channel), no result parcel.
+      expect(where.map((w) => w.originalName.value)).toEqual([
+        '%.subscription.zip',
+        '%.subscription.zip.enc',
+      ]);
+      for (const w of where) {
+        expect(w.channel).toBe('issue');
+        expect(w.direction).toBe(StoredFileDirection.Outbound);
+        expect(w.createdAt.value.getTime()).toBeLessThanOrEqual(
+          before - 3 * 86_400_000 + 1000,
+        );
+        expect(w.createdAt.value.getTime()).toBeGreaterThan(
+          before - 3 * 86_400_000 - 5000,
+        );
+      }
+      expect(repository.delete).toHaveBeenCalledWith(1);
+      expect(store.remove).toHaveBeenCalledWith('a.zip');
+    });
+
+    it('takes the age from STORAGE_REPORTS_PARCEL_DAYS and is switched off by 0', async () => {
+      process.env.STORAGE_REPORTS_PARCEL_DAYS = '0';
+      await expect(service.pruneReportsParcels()).resolves.toBe(0);
+      expect(repository.find).not.toHaveBeenCalled();
+
+      process.env.STORAGE_REPORTS_PARCEL_DAYS = '1';
+      repository.find!.mockResolvedValueOnce([]);
+      const before = Date.now();
+      await service.pruneReportsParcels();
+
+      const where = (
+        repository.find!.mock.calls[0] as [
+          { where: Array<{ createdAt: { value: Date } }> },
+        ]
+      )[0].where;
+      expect(where[0].createdAt.value.getTime()).toBeLessThanOrEqual(
+        before - 86_400_000 + 1000,
+      );
+    });
+
+    it('keeps going when one delete fails and does not throw', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      repository
+        .find!.mockResolvedValueOnce([
+          { id: 1, storedName: 'a.zip' },
+          { id: 2, storedName: 'b.zip' },
+        ])
+        .mockResolvedValueOnce([]);
+      repository
+        .delete!.mockRejectedValueOnce(new Error('db down'))
+        .mockResolvedValueOnce({ affected: 1 });
+
+      await expect(service.pruneReportsParcels()).resolves.toBe(1);
+      expect(store.remove).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('findAllByUser', () => {
     it('queries by userId alone when no filter is given', async () => {
       repository.find!.mockResolvedValue([]);

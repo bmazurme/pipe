@@ -4,17 +4,27 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { LessThan, MoreThan, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  LessThan,
+  Like,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 
 import { UPLOAD_DIR } from './config/multer.config';
 import { ListFilesQueryDto } from './dto/list-files-query.dto';
 import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
-import { StoredFile } from './entities/stored-file.entity';
+import { StoredFile, StoredFileDirection } from './entities/stored-file.entity';
 import { FILE_STORE, type FileStore } from './file-store/file-store';
 import { type SendDone, sendStoredFile } from './file-store/send-stored-file';
 
 const PRUNE_BATCH_SIZE = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// How long a parcel that reports sent (outbound, named `<project>-<iid>.subscription.zip[.enc]` — see reports' push.ts) may wait in storage
+// before it is dropped; STORAGE_REPORTS_PARCEL_DAYS overrides it, 0 switches it off. Files uploaded by hand (no channel) are never touched.
+export const REPORTS_PARCEL_TTL_DAYS = 3;
 
 @Injectable()
 export class StorageService {
@@ -165,13 +175,62 @@ export class StorageService {
     }
 
     const cutoff = new Date(Date.now() - days * DAY_MS);
+
+    return this.pruneMatching(
+      () => ({ createdAt: LessThan(cutoff) }),
+      `older than ${days}d`,
+    );
+  }
+
+  // A parcel sent through reports that nobody picked up within REPORTS_PARCEL_TTL_DAYS is dropped: the task it carries is stale by then, and
+  // it holds the whole (anonymized) project context. Only what reports uploads as an outbound issue parcel qualifies — channel 'issue',
+  // direction 'outbound', the `.subscription.zip` name; a file put in by hand on the Storage page has no channel and stays as it is.
+  @Cron(CronExpression.EVERY_HOUR)
+  async pruneReportsParcels(): Promise<number> {
+    const raw = process.env.STORAGE_REPORTS_PARCEL_DAYS;
+    const days =
+      raw === undefined || raw.trim() === ''
+        ? REPORTS_PARCEL_TTL_DAYS
+        : Number(raw);
+
+    if (!Number.isFinite(days) || days <= 0) {
+      return 0;
+    }
+
+    const cutoff = new Date(Date.now() - days * DAY_MS);
+    const base = {
+      createdAt: LessThan(cutoff),
+      channel: 'issue',
+      direction: StoredFileDirection.Outbound,
+    };
+
+    return this.pruneMatching(
+      () => [
+        { ...base, originalName: Like('%.subscription.zip') },
+        { ...base, originalName: Like('%.subscription.zip.enc') },
+      ],
+      `of reports parcels older than ${days}d`,
+    );
+  }
+
+  // Deletes (row and stored file) everything `conditions` selects, in id order and in batches, so a row whose delete keeps failing cannot
+  // stall the batches after it. Never throws.
+  private async pruneMatching(
+    conditions: () =>
+      FindOptionsWhere<StoredFile> | FindOptionsWhere<StoredFile>[],
+    description: string,
+  ): Promise<number> {
     let lastId = 0;
     let pruned = 0;
 
     try {
       for (;;) {
+        const selected = conditions();
+        const where = Array.isArray(selected)
+          ? selected.map((entry) => ({ ...entry, id: MoreThan(lastId) }))
+          : { ...selected, id: MoreThan(lastId) };
         const batch = await this.storedFileRepository.find({
-          where: { createdAt: LessThan(cutoff), id: MoreThan(lastId) },
+          where,
           order: { id: 'ASC' },
           take: PRUNE_BATCH_SIZE,
         });
@@ -200,7 +259,7 @@ export class StorageService {
     }
 
     if (pruned > 0) {
-      this.logger.log(`Pruned ${pruned} stored files older than ${days}d`);
+      this.logger.log(`Pruned ${pruned} stored files ${description}`);
     }
 
     return pruned;
