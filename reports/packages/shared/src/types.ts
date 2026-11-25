@@ -297,7 +297,7 @@ export type SubscriptionPublishPayload = {
 export type LeakFindingType = {
   source: string;
   line: number;
-  kind: 'email' | 'ip' | 'hostname' | 'token';
+  kind: 'email' | 'ip' | 'hostname' | 'token' | 'secret';
   match: string;
 };
 
