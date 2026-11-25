@@ -1,0 +1,21 @@
+/* Gravity's Dialog.Body does not space its children, so the fields touched each other. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* One right-aligned row of equal-height buttons: Gravity's own footer stretches «Отмена» to the width of a column. */
+.actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Select, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
+import styles from './NewIssueDialog.module.css';
 
 import { describeApiError } from '../../store/api/describeApiError';
 import { useCreateImproveIssueMutation } from '../../store/api';
@@ -64,51 +65,55 @@ export function NewIssueDialog({
     <Dialog open={open} onClose={close} maxWidth="m" aria-labelledby="new-issue-title">
       <Dialog.Header caption="Новая задача" id="new-issue-title" />
       <Dialog.Body>
-        <TextInput
-          size="m"
-          placeholder="Что нужно сделать — коротко"
-          value={title}
-          autoFocus
-          controlProps={{ 'aria-label': 'Заголовок', maxLength: 200 }}
-          onUpdate={setTitle}
-        />
-        <TextArea
-          minRows={5}
-          placeholder="Описание: контекст, ожидаемый результат, ограничения"
-          value={body}
-          controlProps={{ 'aria-label': 'Описание', maxLength: 8000 }}
-          onUpdate={setBody}
-        />
-        <Select
-          size="m"
-          width="max"
-          label="Модель:"
-          value={[model]}
-          onUpdate={([value]) => onModelChange(value)}
-          options={modelOptions}
-          filterable={modelOptions.length > 8}
-          disabled={Boolean(warning)}
-        />
-        <Text variant="caption-2" color="secondary">
-          Модель выполнит задачу при запуске. «Создать» только заводит issue — запустить её можно позже на вкладке «Задачи».
-        </Text>
-        {warning && <Alert theme="warning" view="filled" message={warning} />}
-        {error && <Alert theme="danger" view="filled" message={error} />}
+        <div className={styles.form}>
+          <TextInput
+            size="l"
+            placeholder="Что нужно сделать — коротко"
+            value={title}
+            autoFocus
+            controlProps={{ 'aria-label': 'Заголовок', maxLength: 200 }}
+            onUpdate={setTitle}
+          />
+          <TextArea
+            minRows={5}
+            placeholder="Описание: контекст, ожидаемый результат, ограничения"
+            value={body}
+            controlProps={{ 'aria-label': 'Описание', maxLength: 8000 }}
+            onUpdate={setBody}
+          />
+          <div className={styles.field}>
+            <Select
+              size="l"
+              width="max"
+              label="Модель:"
+              value={[model]}
+              onUpdate={([value]) => onModelChange(value)}
+              options={modelOptions}
+              filterable={modelOptions.length > 8}
+              disabled={Boolean(warning)}
+            />
+            <Text variant="caption-2" color="secondary">
+              Модель выполнит задачу при запуске. «Создать» только заводит issue — запустить её можно позже на вкладке «Задачи».
+            </Text>
+          </div>
+          {warning && <Alert theme="warning" view="filled" message={warning} />}
+          {error && <Alert theme="danger" view="filled" message={error} />}
+        </div>
       </Dialog.Body>
       <Dialog.Footer
-        renderButtons={(_apply, cancel) => (
-          <>
-            {cancel}
+        renderButtons={() => (
+          <div className={styles.actions}>
+            <Button view="flat" size="l" disabled={isLoading} onClick={close}>
+              {warning ? 'Закрыть' : 'Отмена'}
+            </Button>
             <Button view="outlined" size="l" disabled={blocked} loading={pending === 'create'} onClick={() => void handleSubmit(false)}>
               Создать
             </Button>
             <Button view="action" size="l" disabled={blocked} loading={pending === 'start'} onClick={() => void handleSubmit(true)}>
               Создать и запустить
             </Button>
-          </>
+          </div>
         )}
-        textButtonCancel={warning ? 'Закрыть' : 'Отмена'}
-        onClickButtonCancel={close}
       />
     </Dialog>
   );
