@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -62,15 +62,41 @@ describe('NewIssueDialog', () => {
     await waitFor(() => expect(screen.queryByLabelText('Заголовок')).toBeNull());
   });
 
-  it('sends start and model when the switch is on', async () => {
+  it('shows the model picker up front and creates without starting', async () => {
     const user = await openDialog();
 
-    await user.click(screen.getByText('Сразу запустить'));
+    expect(within(screen.getByRole('dialog')).getByText('Модель:')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Создать' }));
 
     await waitFor(() => expect(created).toHaveLength(1));
-    expect(created[0]).toMatchObject({ start: true });
-    expect(created[0].model).toBeTruthy();
+    expect(created[0]).toMatchObject({ start: false });
+    expect(created[0].model).toBeUndefined();
+  });
+
+  it('«Создать и запустить» sends start together with the chosen model', async () => {
+    const user = await openDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Создать и запустить' }));
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]).toMatchObject({ start: true, model: 'sonnet' });
+  });
+
+  it('keeps both buttons off until there is a title', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <IssuesTab configured />
+        </ThemeProvider>
+      </Provider>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Новая задача' }));
+    await screen.findByLabelText('Заголовок');
+
+    expect(screen.getByRole('button', { name: 'Создать' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Создать и запустить' })).toBeDisabled();
   });
 
   it('keeps the dialog open with the error on failure', async () => {

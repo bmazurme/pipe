@@ -115,7 +115,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         )}
       </div>
 
-      <NewIssueDialog open={newIssueOpen} onClose={() => setNewIssueOpen(false)} defaultModel={model} />
+      <NewIssueDialog open={newIssueOpen} onClose={() => setNewIssueOpen(false)} model={model} onModelChange={handleModel} />
 
       {startError && <Alert theme="danger" view="filled" message={startError} />}
       {isError && <Alert theme="danger" view="filled" message={getErrorMessage(error, 'Не удалось загрузить задачи')} />}

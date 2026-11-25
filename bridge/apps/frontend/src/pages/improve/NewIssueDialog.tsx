@@ -1,18 +1,29 @@
 import { useState } from 'react';
-import { Alert, Select, Switch, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Select, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import { describeApiError } from '../../store/api/describeApiError';
 import { useCreateImproveIssueMutation } from '../../store/api';
 import { useModelOptions } from '../worker/useModelOptions';
 
-export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean; onClose: () => void; defaultModel: string }) {
+// `model` / `onModelChange` are the Issues tab's own model picker, so the dialog and the toolbar never disagree about which model runs.
+export function NewIssueDialog({
+  open,
+  onClose,
+  model,
+  onModelChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  model: string;
+  onModelChange: (value: string) => void;
+}) {
   const { options: modelOptions } = useModelOptions(true);
   const [create, { isLoading }] = useCreateImproveIssueMutation();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [start, setStart] = useState(false);
-  const [model, setModel] = useState(defaultModel);
+  // Which of the two buttons was pressed, so only that one spins.
+  const [pending, setPending] = useState<'create' | 'start' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
@@ -22,16 +33,16 @@ export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean;
     onClose();
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (start: boolean) => {
     setError(null);
     setWarning(null);
+    setPending(start ? 'start' : 'create');
 
     try {
       const result = await create({ title: title.trim(), body, start, model: start ? model : undefined }).unwrap();
 
       setTitle('');
       setBody('');
-      setStart(false);
 
       if (result.missingLabels.includes('loop')) {
         setWarning(`Задача #${result.number} создана без метки loop — проверьте права токена (Issues: write) и добавьте метку вручную.`);
@@ -42,8 +53,12 @@ export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean;
       close();
     } catch (err) {
       setError(describeApiError(err));
+    } finally {
+      setPending(null);
     }
   };
+
+  const blocked = title.trim().length === 0 || Boolean(warning) || isLoading;
 
   return (
     <Dialog open={open} onClose={close} maxWidth="m" aria-labelledby="new-issue-title">
@@ -51,29 +66,49 @@ export function NewIssueDialog({ open, onClose, defaultModel }: { open: boolean;
       <Dialog.Body>
         <TextInput
           size="m"
-          placeholder="Заголовок"
+          placeholder="Что нужно сделать — коротко"
           value={title}
+          autoFocus
           controlProps={{ 'aria-label': 'Заголовок', maxLength: 200 }}
           onUpdate={setTitle}
         />
         <TextArea
           minRows={5}
-          placeholder="Описание"
+          placeholder="Описание: контекст, ожидаемый результат, ограничения"
           value={body}
           controlProps={{ 'aria-label': 'Описание', maxLength: 8000 }}
           onUpdate={setBody}
         />
-        <Switch checked={start} onUpdate={setStart} content="Сразу запустить" />
-        {start && <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => setModel(value)} options={modelOptions} />}
+        <Select
+          size="m"
+          width="max"
+          label="Модель:"
+          value={[model]}
+          onUpdate={([value]) => onModelChange(value)}
+          options={modelOptions}
+          filterable={modelOptions.length > 8}
+          disabled={Boolean(warning)}
+        />
+        <Text variant="caption-2" color="secondary">
+          Модель выполнит задачу при запуске. «Создать» только заводит issue — запустить её можно позже на вкладке «Задачи».
+        </Text>
         {warning && <Alert theme="warning" view="filled" message={warning} />}
         {error && <Alert theme="danger" view="filled" message={error} />}
       </Dialog.Body>
       <Dialog.Footer
+        renderButtons={(_apply, cancel) => (
+          <>
+            {cancel}
+            <Button view="outlined" size="l" disabled={blocked} loading={pending === 'create'} onClick={() => void handleSubmit(false)}>
+              Создать
+            </Button>
+            <Button view="action" size="l" disabled={blocked} loading={pending === 'start'} onClick={() => void handleSubmit(true)}>
+              Создать и запустить
+            </Button>
+          </>
+        )}
         textButtonCancel={warning ? 'Закрыть' : 'Отмена'}
-        textButtonApply="Создать"
-        propsButtonApply={{ view: 'action', loading: isLoading, disabled: title.trim().length === 0 || Boolean(warning) }}
         onClickButtonCancel={close}
-        onClickButtonApply={() => void handleSubmit()}
       />
     </Dialog>
   );
