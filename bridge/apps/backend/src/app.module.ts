@@ -25,6 +25,7 @@ import { PurgeModule } from './purge/purge.module';
 import { ReportsReleaseModule } from './reports-release/reports-release.module';
 import { ReportsSettingsModule } from './reports-settings/reports-settings.module';
 import { SecretsModule } from './secrets/secrets.module';
+import { TasksModule } from './tasks/tasks.module';
 import { StorageModule } from './storage/storage.module';
 import { TimeModule } from './time/time.module';
 import { UsageModule } from './usage/usage.module';
@@ -72,6 +73,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     ReportsReleaseModule,
     ReportsSettingsModule,
     SecretsModule,
+    TasksModule,
     StorageModule,
     TimeModule,
     UsersModule,
