@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
@@ -20,6 +21,7 @@ import { readZipball } from '../common/zip';
 import { launchIssueJob } from '../improve/issue-job';
 import { SharedAsyncCache } from '../common/shared-async-cache';
 import { ContextService } from '../context/context.service';
+import { ChannelFactsService } from '../channels/channel-facts.service';
 import { StorageService } from '../storage/storage.service';
 import { WORKER_CAPABILITY_LABEL } from '../worker/capabilities';
 import { JobStatus } from '../worker/entities/job.entity';
@@ -116,6 +118,7 @@ export class LabRunsService {
     private readonly contexts: ContextService,
     private readonly publisher: LabPublishService,
     private readonly router: RouterService,
+    @Optional() private readonly channelFacts?: ChannelFactsService,
   ) {}
 
   list(userId: number, limit = 50, projectId?: number): Promise<LabRun[]> {
@@ -316,6 +319,9 @@ export class LabRunsService {
         run.routing = routing;
       }
 
+      // What the task's public channels (YouTube, Instagram) show right now — the worker cannot read those sites itself.
+      const channels = await this.channelFacts?.describeFor(userId, input.task);
+
       const { job } = await launchIssueJob(
         { storage: this.storage, workers: this.workers },
         {
@@ -324,7 +330,7 @@ export class LabRunsService {
           task: {
             number: 'lab',
             title,
-            body: `${taskWithSkipped(input.task, snapshot.skipped)}\n\n${labEnvironment(project.repo, baseBranch)}`,
+            body: `${taskWithSkipped(input.task, snapshot.skipped)}\n\n${channels ? `${channels}\n\n` : ''}${labEnvironment(project.repo, baseBranch)}`,
             repo: project.repo,
             baseBranch,
           },

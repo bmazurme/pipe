@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ContextModule } from '../context/context.module';
 import { LoopModule } from '../loop/loop.module';
 import { RouterModule } from '../router/router.module';
+import { ChannelsModule } from '../channels/channels.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { WorkerModule } from '../worker/worker.module';
@@ -44,6 +45,7 @@ import { LabSchedulesService } from './lab-schedules.service';
     AuthModule,
     LoopModule,
     RouterModule,
+    ChannelsModule,
   ],
   controllers: [LabController, LabDigestController],
   providers: [

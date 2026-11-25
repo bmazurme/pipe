@@ -34,6 +34,14 @@ export class SecretsService {
     });
   }
 
+  // The value of the owner's secret with this name, for server-side use (a token another feature needs); null when there is none.
+  // Never returned by any route.
+  async findValueByName(userId: number, name: string): Promise<string | null> {
+    const secret = await this.repository.findOne({ where: { userId, name } });
+
+    return secret?.value ?? null;
+  }
+
   async create(userId: number, dto: CreateSecretDto): Promise<Secret> {
     const existing = await this.repository.findOne({
       where: { userId, name: dto.name },

@@ -9,5 +9,6 @@ import { SecretsService } from './secrets.service';
   imports: [TypeOrmModule.forFeature([Secret])],
   controllers: [SecretsController],
   providers: [SecretsService],
+  exports: [SecretsService],
 })
 export class SecretsModule {}
