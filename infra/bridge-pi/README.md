@@ -147,6 +147,8 @@ If the worker's replies hang, check the tunnel first: `FINGERPRINT=firefox ./vle
 in series; direct connects to the VPN server were fine) and `firefox` passed 48 of 48. `vpn-client` also uses
 `endpoint_mode: dnsrr` — the Swarm virtual IP added no value for a single task.
 
+**No worker on this stack.** The boards' own workers are standalone containers added in the UI, so the stack's own worker is usually an unenrolled leftover that autodeploy brings back with every release. `./deploy-worker.sh --none [ghcr [tag]]` keeps only the `vpn-client` (backend's Telegram/GitHub proxy lives there) and scales the worker to 0; the choice is remembered in `~/.pipe/worker-mode` (`none`), so autodeploy's later runs keep it at 0. `--managed` or `--legacy` brings a worker back.
+
 **Worker added in the UI (no secrets in the stack).** `./deploy-worker.sh --managed [ghcr [tag]]` deploys `worker-managed-pi.yml` instead:
 no bridge API key and no Claude token among the secrets — the worker keeps its own key in the `worker_state` volume, and its settings,
 Claude tokens and provider API keys come from bridge (Worker page → Worker'ы / Ключи). Add the worker on that page, then, from your workstation,
