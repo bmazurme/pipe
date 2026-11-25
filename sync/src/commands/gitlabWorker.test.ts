@@ -228,3 +228,59 @@ describe('runGitlabWorkerOnce back-off', () => {
     assert.equal(backoff.size, 0);
   });
 });
+
+describe('runGitlabWorkerOnce --run', () => {
+  function mock(jobStatus: number, jobs: unknown[], uploaded: string[], fetched: string[] = []): void {
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      fetched.push(url);
+      if (url.includes('/issues?scope=assigned_to_me')) {
+        return new Response(JSON.stringify([{ id: 1, iid: 1, project_id: 173, title: 't', description: null }]), { status: 200 });
+      }
+      if (url.includes('/api/v1/worker/jobs')) {
+        jobs.push(JSON.parse(String(init?.body)));
+        return jobStatus === 201
+          ? Response.json({ id: 7, status: 'queued' }, { status: 201 })
+          : new Response('boom', { status: jobStatus });
+      }
+      if (url.includes('/api/v1/storage')) {
+        const body = init?.body as unknown as { get(name: string): { name: string } };
+        const filename = (body.get('file') as unknown as { name: string }).name;
+        uploaded.push(filename);
+        return new Response(
+          JSON.stringify({ id: 42, originalName: filename, mimeType: 'application/zip', size: 10, createdAt: new Date().toISOString() }),
+          { status: 201 },
+        );
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch;
+  }
+
+  it('queues a job with the uploaded storage id and the model', async () => {
+    rmSync(GITLAB_WORKER_STATE_PATH, { force: true });
+    const jobs: unknown[] = [];
+    const uploaded: string[] = [];
+    mock(201, jobs, uploaded);
+    await runGitlabWorkerOnce('demo', { run: 'opus' });
+    assert.deepEqual(jobs, [{ sourceFileId: 42, model: 'opus' }]);
+    assert.equal(uploaded.length, 1);
+  });
+
+  it('keeps the issue recorded and does not retry when createJob fails', async () => {
+    rmSync(GITLAB_WORKER_STATE_PATH, { force: true });
+    const jobs: unknown[] = [];
+    const uploaded: string[] = [];
+    mock(500, jobs, uploaded);
+    await runGitlabWorkerOnce('demo', { run: 'opus' });
+    assert.ok(loadGitlabWorkerState()[issueKey(173, 1)]);
+    await runGitlabWorkerOnce('demo', { run: 'opus' });
+    assert.equal(uploaded.length, 1);
+    assert.equal(jobs.length, 1);
+  });
+
+  it('rejects an unknown model before any request', async () => {
+    const fetched: string[] = [];
+    mock(201, [], [], fetched);
+    await assert.rejects(runGitlabWorkerOnce('demo', { run: 'foo' }), /unknown model/);
+    assert.deepEqual(fetched, []);
+  });
+});

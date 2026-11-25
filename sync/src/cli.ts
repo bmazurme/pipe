@@ -122,6 +122,7 @@ program
   .option('-w, --watch <seconds>', 'keep polling every <seconds> instead of a single pass')
   .option('--strict', 'skip (instead of just warning on) an issue whose leak scan finds something')
   .option('--label <name>', 'only push assigned issues that carry this GitLab label')
+  .option('--run <model>', 'queue a worker job on bridge for each pushed issue (sonnet|opus|haiku|gpt|deepseek|qwen)')
   .action((name, options) => gitlabWorkerCommand(name, options));
 
 program

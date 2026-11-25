@@ -5,7 +5,8 @@ import { loadCredentialsOrEmpty } from '../credentials.js';
 import { issueKey, loadGitlabWorkerState, recordPushed } from '../gitlabWorkerState.js';
 import { listAssignedOpenIssues, type GitlabIssue } from '../gitlabClient.js';
 import type { ProjectConfig, SyncConfig } from '../types.js';
-import { buildAndUploadIssueParcel } from './pushIssue.js';
+import { BridgeClient } from '../bridgeClient.js';
+import { assertRunOptions, buildAndUploadIssueParcel } from './pushIssue.js';
 import { log } from '../log.js';
 
 // No git branch/worktree operation happens here on purpose: agent-runner
@@ -33,12 +34,14 @@ async function processIssue(
   project: ProjectConfig,
   config: SyncConfig,
   gitlabToken: string,
-  options: { strict?: boolean },
+  options: { strict?: boolean; run?: string },
 ): Promise<void> {
   const key = issueKey(issue.project_id, issue.iid);
   const branch = syntheticBranchName(issue);
 
-  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken, options);
+  const result = await buildAndUploadIssueParcel(project, config, issue, branch, gitlabToken, {
+    strict: options.strict,
+  });
   if (!result) return;
 
   recordPushed(key, result.filename);
@@ -47,6 +50,20 @@ async function processIssue(
       `(${result.fileCount} files, branch "${branch}"${result.encrypted ? ', encrypted' : ''}).`,
   );
   notify('Task pushed', `#${issue.iid}: ${issue.title} — sent to bridge for agent-runner`);
+
+  if (!options.run) return;
+  // The issue is already recorded as pushed: a failed job must not re-upload the parcel on the next tick.
+  try {
+    const job = await new BridgeClient(config.bridge.apiUrl).createJob(result.storedId, options.run);
+    log.info(`Job #${job.id} queued (${options.run}) for issue #${issue.iid}.`);
+    notify('Worker job queued', `#${issue.iid}: Job #${job.id} queued (${options.run})`);
+  } catch (error) {
+    log.warn(
+      `Issue #${issue.iid} was pushed (storage id ${result.storedId}) but queuing the ${options.run} job failed — ` +
+        'launch it from the Worker page:',
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 const MAX_BACKOFF_MS = 60 * 60 * 1000;
@@ -56,12 +73,13 @@ export type PushBackoff = Map<string, { failures: number; nextAttemptAt: number 
 // `backoff` is only passed by --watch; without it every tick retries as before.
 export async function runGitlabWorkerOnce(
   name: string,
-  options: { strict?: boolean; label?: string } = {},
+  options: { strict?: boolean; label?: string; run?: string } = {},
   backoff?: PushBackoff,
   { intervalMs = 0, now = Date.now }: { intervalMs?: number; now?: () => number } = {},
 ): Promise<void> {
   const config = loadConfig();
   const project = findProject(config, name);
+  assertRunOptions(project, { run: options.run });
 
   if (!config.gitlab?.apiUrl) {
     throw new Error(
@@ -123,8 +141,10 @@ function sleep(ms: number): Promise<void> {
 
 export async function gitlabWorkerCommand(
   name: string,
-  options: { watch?: string; strict?: boolean; label?: string },
+  options: { watch?: string; strict?: boolean; label?: string; run?: string },
 ): Promise<void> {
+  // Fail fast, also in --watch mode, where per-tick errors are only logged.
+  assertRunOptions(findProject(loadConfig(), name), { run: options.run });
   if (!options.watch) {
     await runGitlabWorkerOnce(name, options);
     return;
