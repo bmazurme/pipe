@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Select, Text, TextArea, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Flex, Select, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
 import { describeApiError } from '../../store/api/describeApiError';
@@ -64,6 +64,7 @@ export function NewIssueDialog({
     <Dialog open={open} onClose={close} maxWidth="m" aria-labelledby="new-issue-title">
       <Dialog.Header caption="Новая задача" id="new-issue-title" />
       <Dialog.Body>
+        <Flex direction="column" gap={3}>
         <TextInput
           size="m"
           placeholder="Что нужно сделать — коротко"
@@ -94,6 +95,7 @@ export function NewIssueDialog({
         </Text>
         {warning && <Alert theme="warning" view="filled" message={warning} />}
         {error && <Alert theme="danger" view="filled" message={error} />}
+        </Flex>
       </Dialog.Body>
       <Dialog.Footer
         renderButtons={(_apply, cancel) => (
