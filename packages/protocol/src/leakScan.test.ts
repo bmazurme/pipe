@@ -151,6 +151,35 @@ describe('scanForLeaks — secret assignments and URL credentials', () => {
     assert.ok(!findings.some((f) => f.match.includes('S3cret')));
   });
 
+  it('ignores every kind of placeholder value, in assignments and in URL credentials', () => {
+    for (const content of [
+      'password: $(cat /run/secrets/db)',
+      'password: {{ db_password }}',
+      'password: [[vault]]',
+      'password: %(db_password)s',
+      'password = os.environ["DB_PASSWORD"]',
+      'secret: env.SECRET',
+      'password: changeme',
+      'password: string',
+      'token: undefined',
+      'password: xxxxxx',
+      'password: ******',
+      'https://deploy:${CI_JOB_TOKEN}@github.com/x.git',
+      'https://deploy:<PASSWORD>@github.com/x.git',
+    ]) {
+      assert.equal(scan(content).filter((f) => f.kind === 'secret').length, 0, content);
+    }
+  });
+
+  it('reports a URL credential and a plain assignment on the same line separately, each with a masked value', () => {
+    const findings = scan('PROXY=http://u:Tr0ub4dor@proxy.example.com DB_PASSWORD=Winter2024! owner=ops@corp-mail.test');
+    const secrets = findings.filter((f) => f.kind === 'secret');
+    assert.equal(secrets.length, 2);
+    assert.equal(findings.filter((f) => f.kind === 'email').length, 1);
+    assert.ok(!findings.some((f) => f.kind === 'hostname' && f.match.includes('proxy.example.com')));
+    assert.ok(secrets.every((f) => !f.match.includes('Tr0ub4dor') && !f.match.includes('Winter2024')));
+  });
+
   it('ignores placeholders and identifiers', () => {
     for (const content of [
       'password: ${DB_PASSWORD}',
