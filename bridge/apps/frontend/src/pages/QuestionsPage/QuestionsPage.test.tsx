@@ -83,6 +83,48 @@ describe('QuestionsPage', () => {
     await waitFor(() => expect(sent.filter((s) => s.method === 'PATCH')).toEqual([{ method: 'PATCH', path: 'questions/1', body: { resolved: true } }]));
   });
 
+  it('deletes a question only on the second click', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText('Какую ветку брать за основу?');
+
+    await user.click(screen.getByLabelText('Удалить вопрос: Какую ветку брать за основу?'));
+    expect(sent.filter((entry) => entry.method === 'DELETE')).toHaveLength(0);
+
+    await user.click(screen.getByLabelText('Подтвердить удаление вопроса: Какую ветку брать за основу?'));
+    await waitFor(() => expect(sent.filter((entry) => entry.method === 'DELETE').map((entry) => entry.path)).toEqual(['questions/1']));
+  });
+
+  it('deletes the whole card on the second click', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText('Какую ветку брать за основу?');
+
+    await user.click(screen.getByRole('button', { name: 'Удалить карточку 173:628' }));
+    expect(sent.filter((entry) => entry.method === 'DELETE')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Подтвердить удаление карточки 173:628' }));
+    await waitFor(() => expect(sent.filter((entry) => entry.method === 'DELETE').map((entry) => entry.path)).toEqual(['questions/cards/173%3A628']));
+  });
+
+  it('shows an error and keeps the card when a delete fails', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText('Какую ветку брать за основу?');
+    const ok = fetch as unknown as ReturnType<typeof vi.fn>;
+    const original = ok.getMockImplementation() as (request: Request) => Promise<Response>;
+
+    ok.mockImplementation(async (request: Request) => (request.method === 'DELETE' ? json({ message: 'boom' }, 500) : original(request)));
+    await user.click(screen.getByRole('button', { name: 'Удалить карточку 173:628' }));
+    await user.click(screen.getByRole('button', { name: 'Подтвердить удаление карточки 173:628' }));
+
+    expect(await screen.findByText(/boom|Не удалось удалить карточку/)).toBeTruthy();
+    expect(screen.getByText('Какую ветку брать за основу?')).toBeTruthy();
+  });
+
   it('sends an answer for an open question and saves the answers as a Context', async () => {
     const user = userEvent.setup();
     renderPage();

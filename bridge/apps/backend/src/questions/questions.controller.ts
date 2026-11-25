@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Patch,
@@ -45,6 +48,25 @@ export class QuestionsController {
     );
 
     return QuestionItemDto.fromEntity(question);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.questionsService.remove(id, currentUser.id);
+  }
+
+  // The whole card: every question of the task.
+  @Delete('cards/:taskKey')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeCard(
+    @Param('taskKey') taskKey: string,
+    @CurrentUser() currentUser: { id: number },
+  ): Promise<void> {
+    await this.questionsService.removeCard(currentUser.id, taskKey);
   }
 
   @Post('cards/:taskKey/context')

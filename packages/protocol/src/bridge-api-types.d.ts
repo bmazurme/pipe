@@ -1132,10 +1132,26 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["QuestionsController_remove"];
         options?: never;
         head?: never;
         patch: operations["QuestionsController_resolve"];
+        trace?: never;
+    };
+    "/api/v1/questions/cards/{taskKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["QuestionsController_removeCard"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/questions/cards/{taskKey}/context": {
@@ -6554,6 +6570,25 @@ export interface operations {
             };
         };
     };
+    QuestionsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     QuestionsController_resolve: {
         parameters: {
             query?: never;
@@ -6576,6 +6611,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["QuestionItemDto"];
                 };
+            };
+        };
+    };
+    QuestionsController_removeCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

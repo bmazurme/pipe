@@ -177,6 +177,20 @@ export class QuestionsService {
     return this.questionRepository.save(question);
   }
 
+  // Deletes one question. Not the caller's (or already gone) is a 404, the same as for resolving it.
+  async remove(id: number, userId: number): Promise<void> {
+    const result = await this.questionRepository.delete({ id, userId });
+
+    if (!result.affected) throw new NotFoundException('Question not found');
+  }
+
+  // Deletes a whole card: every question of the task. A Context saved from its answers is a separate record and stays.
+  async removeCard(userId: number, taskKey: string): Promise<void> {
+    const result = await this.questionRepository.delete({ userId, taskKey });
+
+    if (!result.affected) throw new NotFoundException('Card not found');
+  }
+
   // The answered questions as "Вопрос / Ответ" text.
   buildContextText(questions: Pick<TaskQuestion, 'text' | 'answer'>[]): string {
     return questions
