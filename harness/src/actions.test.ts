@@ -286,3 +286,84 @@ describe('runAction — untrusted project and reports URL', () => {
     });
   }
 });
+
+describe('runAction rerun', () => {
+  const failedJob = { id: 77, status: 'failed', model: 'claude', errorMessage: 'Worker was restarted', createdAt: '2026-01-01T00:00:00Z', finishedAt: null };
+
+  function rerunDeps(job: typeof failedJob | undefined, retryJob?: ActionDeps['retryJob']) {
+    const retried: number[] = [];
+    const deps = makeDeps({
+      fetchLatestJob: async () => job,
+      retryJob: retryJob ?? (async (id) => {
+        retried.push(id);
+        return { id: 99 };
+      }),
+    });
+    return { deps, retried };
+  }
+
+  it('dry-run describes the job and makes no POST', async () => {
+    const { deps, retried } = rerunDeps(failedJob);
+    const result = await runAction('rerun', '173:628', { yes: false, dryRun: true }, deps);
+    assert.equal(result.code, 0);
+    assert.match(result.output, /#77/);
+    assert.match(result.output, /claude/);
+    assert.match(result.output, /Worker was restarted/);
+    assert.deepEqual(retried, []);
+  });
+
+  it('with yes, retries the latest job once and prints the new id', async () => {
+    const { deps, retried } = rerunDeps(failedJob);
+    const result = await runAction('rerun', '173:628', { yes: true, dryRun: false }, deps);
+    assert.equal(result.code, 0);
+    assert.deepEqual(retried, [77]);
+    assert.match(result.output, /new job #99/);
+  });
+
+  it('refuses without yes in a non-interactive session', async () => {
+    const { deps, retried } = rerunDeps(failedJob);
+    deps.isInteractive = false;
+    const result = await runAction('rerun', '173:628', { yes: false, dryRun: false }, deps);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /--yes/);
+    assert.deepEqual(retried, []);
+  });
+
+  it('refuses a task with no job', async () => {
+    const { deps, retried } = rerunDeps(undefined);
+    const result = await runAction('rerun', '173:628', { yes: true, dryRun: false }, deps);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /No worker job/);
+    assert.deepEqual(retried, []);
+  });
+
+  it('refuses a queued or running job', async () => {
+    for (const status of ['queued', 'running']) {
+      const { deps, retried } = rerunDeps({ ...failedJob, status });
+      const result = await runAction('rerun', '173:628', { yes: true, dryRun: false }, deps);
+      assert.equal(result.code, 1);
+      assert.match(result.output, new RegExp(`still ${status}`));
+      assert.deepEqual(retried, []);
+    }
+  });
+
+  it("passes bridge's 409 message through with exit code 1", async () => {
+    const { deps } = rerunDeps(failedJob, async () => {
+      throw new Error('bridge refused (409): The source parcel was already consumed');
+    });
+    const result = await runAction('rerun', '173:628', { yes: true, dryRun: false }, deps);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /source parcel was already consumed/);
+  });
+
+  it('reports a failed bridge lookup without retrying', async () => {
+    const deps = makeDeps({
+      fetchLatestJob: async () => {
+        throw new Error('bridge unreachable');
+      },
+    });
+    const result = await runAction('rerun', '173:628', { yes: true, dryRun: false }, deps);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /bridge unreachable/);
+  });
+});

@@ -86,7 +86,7 @@ describe('pipe-mcp', () => {
     const { tools } = await c.listTools();
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['brief', 'log_time', 'next', 'publish', 'pull', 'pull_ready', 'recall', 'retry', 'status', 'task_log'],
+      ['brief', 'log_time', 'next', 'publish', 'pull', 'pull_ready', 'recall', 'rerun_job', 'retry', 'status', 'task_log'],
     );
   });
 

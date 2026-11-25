@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import type { ActionKind } from './args.js';
+import { DEFAULT_BRIDGE_LIVE_CONFIG_PATHS, fetchLiveStatus, retryWorkerJob, type LiveJobInfo } from './bridgeLive.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYNC_ROOT = path.resolve(__dirname, '..', '..', 'sync');
@@ -118,6 +119,16 @@ export interface ActionDeps {
   callPublish: (baseUrl: string, projectId: string, iid: string) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   isInteractive: boolean;
+  // Optional so existing fakes keep compiling; only `rerun` uses them.
+  // fetchLatestJob: undefined job = the task has none; throws if bridge is unreachable.
+  fetchLatestJob?: (key: string) => Promise<LiveJobInfo | undefined>;
+  retryJob?: (id: number) => Promise<{ id: number }>;
+}
+
+async function defaultFetchLatestJob(key: string): Promise<LiveJobInfo | undefined> {
+  const live = await fetchLiveStatus(DEFAULT_BRIDGE_LIVE_CONFIG_PATHS);
+  if (!live.available) throw new Error(live.reason);
+  return live.data.tasks.get(key)?.job;
 }
 
 // Inherits stdio so a terminal user sees sync-cli's own output live
@@ -175,6 +186,8 @@ export const DEFAULT_ACTION_DEPS: ActionDeps = {
   callPublish: defaultCallPublish,
   confirm: defaultConfirm,
   isInteractive: Boolean(process.stdin.isTTY),
+  fetchLatestJob: defaultFetchLatestJob,
+  retryJob: (id) => retryWorkerJob(id),
 };
 
 function describeAction(kind: ActionKind, projectId: string, iid: string, name: string | undefined, reportsBaseUrl: string): string {
@@ -224,7 +237,7 @@ export async function runAction(
   }
 
   let name: string | undefined;
-  if (kind !== 'publish' && kind !== 'recall') {
+  if (kind !== 'publish' && kind !== 'recall' && kind !== 'rerun') {
     const config = deps.loadSyncConfig(options.syncConfigPath ?? DEFAULT_SYNC_CONFIG_PATH);
     try {
       name = resolveProjectName(config, projectId, options.project);
@@ -233,7 +246,24 @@ export async function runAction(
     }
   }
 
-  const description = describeAction(kind, projectId, iid, name, reportsBaseUrl);
+  let description: string;
+  let rerunJob: LiveJobInfo | undefined;
+  if (kind === 'rerun') {
+    const fetchLatestJob = deps.fetchLatestJob ?? defaultFetchLatestJob;
+    try {
+      rerunJob = await fetchLatestJob(key);
+    } catch (error) {
+      return { code: 1, output: `Can't look up the worker job for ${key}: ${(error as Error).message}` };
+    }
+    if (!rerunJob) return { code: 1, output: `No worker job found for ${key} — nothing to re-run.` };
+    if (rerunJob.status === 'queued' || rerunJob.status === 'running') {
+      return { code: 1, output: `Worker job #${rerunJob.id} for ${key} is still ${rerunJob.status} — wait for it to finish before re-running.` };
+    }
+    const detail = rerunJob.errorMessage ? `${rerunJob.status}: ${rerunJob.errorMessage}` : rerunJob.status;
+    description = `re-run worker job #${rerunJob.id} (${rerunJob.model}, ${detail}) from its stored parcel`;
+  } else {
+    description = describeAction(kind, projectId, iid, name, reportsBaseUrl);
+  }
 
   if (options.dryRun) {
     return { code: 0, output: `Would ${description}.` };
@@ -246,6 +276,15 @@ export async function runAction(
     const proceed = await deps.confirm(`About to ${description}. Proceed?`);
     if (!proceed) {
       return { code: 1, output: 'Aborted.' };
+    }
+  }
+
+  if (kind === 'rerun') {
+    try {
+      const created = await (deps.retryJob ?? ((id: number) => retryWorkerJob(id)))(rerunJob!.id);
+      return { code: 0, output: `Re-ran worker job #${rerunJob!.id} as new job #${created.id}.` };
+    } catch (error) {
+      return { code: 1, output: (error as Error).message };
     }
   }
 

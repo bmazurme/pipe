@@ -351,6 +351,10 @@ re-validated beyond what they already enforce themselves:
 - `--recall <projectId:iid>` — undoes a retry: runs `sync-cli recall --yes -- <projectId> <iid>`,
   deleting the outbound issue parcel still waiting in bridge (never a result).
   Needs no project alias. `--yes` goes to sync because harness already confirmed.
+- `--rerun <projectId:iid>` — re-runs the task's latest worker job (failed, cancelled or
+  succeeded) from its stored parcel via bridge's `POST /api/v1/worker/jobs/:id/retry`; always
+  checks bridge, refuses when there is no job or it is still queued/running, and passes
+  bridge's 409 text (e.g. the parcel was already consumed) through. Prints the new job id.
 - `--publish <projectId:iid>` — calls reports' own
   `POST /api/subscription/issues/:projectId/:iid/publish` directly (no CLI
   entry point exists for this one — HTTP is the only way in, and that route
@@ -518,6 +522,7 @@ claude mcp add pipe-mcp -- node /absolute/path/to/pipe/harness/dist/mcp.js
 - **`task_log`** — `{ key }`, same output as `pipe-status --log <key>`.
 - **`recall`** — `{ key, yes, dryRun? }`, same as `--recall`: deletes only a parcel nobody
   has taken yet. `destructiveHint: true`; `yes` is required.
+- **`rerun_job`** — `{ key, yes, dryRun? }`, same as `--rerun`.
 - **`pull`**/**`retry`**/**`publish`** — the same three actions as
   `--pull`/`--retry`/`--publish` (see "Running actions" above for what each
   one actually does and why no new bridge/reports endpoint was needed for

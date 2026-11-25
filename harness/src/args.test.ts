@@ -141,3 +141,17 @@ describe('--pull-ready', () => {
     assert.match(HELP_TEXT, /--pull-ready/);
   });
 });
+
+describe('parseArgs --rerun', () => {
+  it('parses --rerun as a rerun action', () => {
+    assert.deepEqual(parseArgs(['--rerun', '173:628']).action, { kind: 'rerun', key: '173:628' });
+  });
+
+  it('rejects combining --rerun with --retry, naming --rerun', () => {
+    assert.throws(() => parseArgs(['--rerun', '173:628', '--retry', '173:629']), /only one of .*--rerun/);
+  });
+
+  it('requires a task key', () => {
+    assert.throws(() => parseArgs(['--rerun']), /--rerun expects a task key/);
+  });
+});
