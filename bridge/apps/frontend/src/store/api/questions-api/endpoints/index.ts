@@ -36,8 +36,23 @@ const questionsApiEndpoints = questionsApi.injectEndpoints({
       query: ({ id, ...body }) => ({ url: `questions/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['Questions'],
     }),
+    // One question, or (below) the whole card; the card leaves both lists when its last question goes.
+    deleteQuestion: builder.mutation<void, number>({
+      query: (id) => ({ url: `questions/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Questions'],
+    }),
+    deleteQuestionCard: builder.mutation<void, { taskKey: string }>({
+      query: ({ taskKey }) => ({ url: `questions/cards/${encodeURIComponent(taskKey)}`, method: 'DELETE' }),
+      invalidatesTags: ['Questions'],
+    }),
   }),
 });
 
-export const { useListQuestionCardsQuery, useSetQuestionResolvedMutation, useSaveQuestionsAsContextMutation } = questionsApiEndpoints;
+export const {
+  useListQuestionCardsQuery,
+  useSetQuestionResolvedMutation,
+  useSaveQuestionsAsContextMutation,
+  useDeleteQuestionMutation,
+  useDeleteQuestionCardMutation,
+} = questionsApiEndpoints;
 export { questionsApiEndpoints };

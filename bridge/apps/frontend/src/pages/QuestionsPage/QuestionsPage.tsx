@@ -1,9 +1,17 @@
-import { useMemo, useState } from 'react';
-import { CircleQuestion } from '@gravity-ui/icons';
-import { Alert, Button, Card, Checkbox, Label, Loader, SegmentedRadioGroup, Select, Text, TextInput } from '@gravity-ui/uikit';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CircleQuestion, TrashBin } from '@gravity-ui/icons';
+import { Alert, Button, Card, Checkbox, Icon, Label, Loader, SegmentedRadioGroup, Select, Text, TextInput } from '@gravity-ui/uikit';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
-import { getErrorMessage, type QuestionCard, useListQuestionCardsQuery, useSaveQuestionsAsContextMutation, useSetQuestionResolvedMutation } from '../../store/api';
+import {
+  getErrorMessage,
+  type QuestionCard,
+  useDeleteQuestionCardMutation,
+  useDeleteQuestionMutation,
+  useListQuestionCardsQuery,
+  useSaveQuestionsAsContextMutation,
+  useSetQuestionResolvedMutation,
+} from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { JobDetailDialog } from '../WorkerPage/JobDetailDialog';
 import { PageHeader } from '../../widgets/PageHeader';
@@ -11,6 +19,8 @@ import styles from './QuestionsPage.module.css';
 
 const POLL_INTERVAL_MS = 30_000;
 const MAX_ANSWER_LENGTH = 2000;
+// A delete is two clicks: the first arms the button, the second deletes; an armed button disarms itself after this long.
+const ARM_MS = 3000;
 
 type View = 'open' | 'archive';
 
@@ -24,13 +34,40 @@ interface CardViewProps {
   onAnswer: (id: number, answer: string) => void;
   onSaveContext: (taskKey: string) => void;
   onOpenJob: (jobId: number) => void;
+  onDeleteQuestion: (id: number) => void;
+  onDeleteCard: (taskKey: string) => void;
   disabled: boolean;
   contextSaved: boolean;
   contextUpdated: boolean;
 }
 
-function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled, contextSaved, contextUpdated }: CardViewProps) {
+function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, onDeleteQuestion, onDeleteCard, disabled, contextSaved, contextUpdated }: CardViewProps) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  // What is waiting for its second click: 'card' or `q:<id>`.
+  const [armed, setArmed] = useState<string | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (armTimer.current) clearTimeout(armTimer.current);
+    },
+    [],
+  );
+
+  const confirm = (key: string, action: () => void) => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+
+    if (armed === key) {
+      setArmed(null);
+      action();
+
+      return;
+    }
+
+    setArmed(key);
+    armTimer.current = setTimeout(() => setArmed(null), ARM_MS);
+  };
+
   const hasAnswers = card.questions.some((question) => question.answer);
 
   const submitAnswer = (id: number) => {
@@ -71,6 +108,17 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
                 Запуск #{question.jobId}
               </Button>
             )}
+            <Button
+              size="xs"
+              view={armed === `q:${question.id}` ? 'flat-danger' : 'flat-secondary'}
+              disabled={disabled}
+              title={armed === `q:${question.id}` ? 'Нажмите ещё раз — удалить вопрос' : 'Удалить вопрос'}
+              aria-label={armed === `q:${question.id}` ? `Подтвердить удаление вопроса: ${question.text}` : `Удалить вопрос: ${question.text}`}
+              onClick={() => confirm(`q:${question.id}`, () => onDeleteQuestion(question.id))}
+            >
+              <Icon data={TrashBin} size={14} />
+              {armed === `q:${question.id}` ? 'Удалить?' : null}
+            </Button>
             {question.answer && <Text className={styles.answerText}>{question.answer}</Text>}
             {!question.resolved && (
               <form
@@ -99,17 +147,27 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, disabled
           </li>
         ))}
       </ul>
-      {hasAnswers && (
-        <div>
+      <div className={styles.cardActions}>
+        {hasAnswers && (
           <Button size="s" view="outlined" disabled={disabled} onClick={() => onSaveContext(card.taskKey)}>
             Сохранить ответы как Context
           </Button>
-          {contextSaved && (
-            <Text variant="caption-2" color="secondary" className={styles.answerText}>
-              Context «Ответы: {card.taskKey}» {contextUpdated ? 'обновлён' : 'создан'} — выберите его при запуске следующего Worker job.
-            </Text>
-          )}
-        </div>
+        )}
+        <Button
+          size="s"
+          view={armed === 'card' ? 'outlined-danger' : 'flat-secondary'}
+          disabled={disabled}
+          aria-label={armed === 'card' ? `Подтвердить удаление карточки ${card.taskKey}` : `Удалить карточку ${card.taskKey}`}
+          onClick={() => confirm('card', () => onDeleteCard(card.taskKey))}
+        >
+          <Icon data={TrashBin} size={14} />
+          {armed === 'card' ? 'Нажмите ещё раз — удалить карточку' : 'Удалить карточку'}
+        </Button>
+      </div>
+      {hasAnswers && contextSaved && (
+        <Text variant="caption-2" color="secondary" className={styles.answerText}>
+          Context «Ответы: {card.taskKey}» {contextUpdated ? 'обновлён' : 'создан'} — выберите его при запуске следующего Worker job.
+        </Text>
       )}
     </Card>
   );
@@ -123,6 +181,8 @@ export function QuestionsPage() {
   );
   const [setResolved, { isLoading: isSaving }] = useSetQuestionResolvedMutation();
   const [saveContext, { isLoading: isSavingContext }] = useSaveQuestionsAsContextMutation();
+  const [deleteQuestion, { isLoading: isDeletingQuestion }] = useDeleteQuestionMutation();
+  const [deleteCard, { isLoading: isDeletingCard }] = useDeleteQuestionCardMutation();
   const [savedContexts, setSavedContexts] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
@@ -161,6 +221,26 @@ export function QuestionsPage() {
       await setResolved({ id, answer }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось сохранить ответ'));
+    }
+  };
+
+  const handleDeleteQuestion = async (id: number) => {
+    setError(null);
+
+    try {
+      await deleteQuestion(id).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось удалить вопрос'));
+    }
+  };
+
+  const handleDeleteCard = async (taskKey: string) => {
+    setError(null);
+
+    try {
+      await deleteCard({ taskKey }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось удалить карточку'));
     }
   };
 
@@ -229,13 +309,15 @@ export function QuestionsPage() {
             <li key={card.taskKey}>
               <CardView
                 card={card}
-                disabled={isSaving || isSavingContext}
+                disabled={isSaving || isSavingContext || isDeletingQuestion || isDeletingCard}
                 contextSaved={card.taskKey in savedContexts}
                 contextUpdated={savedContexts[card.taskKey] === true}
                 onToggle={(id, resolved) => void handleToggle(id, resolved)}
                 onAnswer={(id, answer) => void handleAnswer(id, answer)}
                 onSaveContext={(taskKey) => void handleSaveContext(taskKey)}
                 onOpenJob={setOpenJobId}
+                onDeleteQuestion={(id) => void handleDeleteQuestion(id)}
+                onDeleteCard={(taskKey) => void handleDeleteCard(taskKey)}
               />
             </li>
           ))}

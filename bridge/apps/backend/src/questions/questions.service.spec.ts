@@ -76,6 +76,19 @@ describe('QuestionsService', () => {
                   : rows,
               );
             },
+            delete: ({ id, taskKey }: { id?: number; taskKey?: string }) => {
+              const before = stored.length;
+
+              stored = stored.filter(
+                (q) =>
+                  !(
+                    (id === undefined || q.id === id) &&
+                    (taskKey === undefined || q.taskKey === taskKey)
+                  ),
+              );
+
+              return Promise.resolve({ affected: before - stored.length });
+            },
             findOne: ({ where }: { where: { id: number } }) =>
               Promise.resolve(stored.find((q) => q.id === where.id) ?? null),
             createQueryBuilder: () => {
@@ -279,6 +292,38 @@ describe('QuestionsService', () => {
 
     it('404s for a question that is not the caller’s', async () => {
       await expect(service.setResolved(99, 7, true)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes one question and leaves the rest of its card', async () => {
+      stored = [
+        { id: 3, taskKey: '1:1', text: 'a', resolvedAt: null },
+        { id: 4, taskKey: '1:1', text: 'b', resolvedAt: null },
+      ];
+
+      await service.remove(3, 7);
+
+      expect(stored.map((q) => q.id)).toEqual([4]);
+    });
+
+    it('404s for a question that is gone', async () => {
+      await expect(service.remove(99, 7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('deletes every question of a card, and only that card', async () => {
+      stored = [
+        { id: 3, taskKey: '1:1', text: 'a', resolvedAt: null },
+        { id: 4, taskKey: '1:1', text: 'b', resolvedAt: new Date() },
+        { id: 5, taskKey: '2:2', text: 'c', resolvedAt: null },
+      ];
+
+      await service.removeCard(7, '1:1');
+
+      expect(stored.map((q) => q.id)).toEqual([5]);
+      await expect(service.removeCard(7, '1:1')).rejects.toThrow(
         NotFoundException,
       );
     });
