@@ -30,9 +30,11 @@ export function FailureBreakdown({ onOpenJob }: FailureBreakdownProps) {
         </Text>
       </div>
       {data.groups.map((group) => (
-        <div key={group.message} className={styles.statusRow}>
+        <div key={group.message} className={`${styles.statusRow} ${styles.failureRow}`}>
           <Text variant="body-2">{group.count}×</Text>
-          <Text variant="body-2">{group.message}</Text>
+          <Text variant="body-2" className={styles.failureMessage} title={group.message}>
+            {group.message}
+          </Text>
           {group.infra && <Label theme="info">инфраструктура</Label>}
           <Button view="flat" size="s" onClick={() => onOpenJob(group.lastJobId)}>
             Открыть последнюю
