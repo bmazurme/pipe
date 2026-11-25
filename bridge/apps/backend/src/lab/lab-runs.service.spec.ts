@@ -7,6 +7,7 @@ import {
 } from './entities/lab-run.entity';
 import * as labGithub from './lab-github';
 import { downloadRepoZip, githubFor, isValidRepo } from './lab-github';
+import * as issueJob from '../improve/issue-job';
 import { LabRunsService, isBlocked, titleOf } from './lab-runs.service';
 import { LabProjectsService, toView } from './lab-projects.service';
 import { LabProject } from './entities/lab-project.entity';
@@ -940,5 +941,95 @@ describe('LabRunsService.list', () => {
       order: { id: 'DESC' },
       take: 50,
     });
+  });
+});
+
+describe('LabRunsService channel facts', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function build(describeFor: jest.Mock) {
+    const runs = {
+      count: jest.fn(async () => 0),
+      create: jest.fn((row: Record<string, unknown>) => ({ ...row })),
+      save: jest.fn(async (row: Record<string, unknown>) => row),
+      update: jest.fn(),
+    };
+    const service = new LabRunsService(
+      runs as never,
+      {
+        findOwned: jest.fn(async () => ({
+          id: 7,
+          repo: 'o/r',
+          token: 't',
+          baseBranch: 'main',
+          canWrite: true,
+        })),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      passThroughRouter,
+      { describeFor } as never,
+    );
+    const launch = jest
+      .spyOn(issueJob, 'launchIssueJob')
+      .mockResolvedValue({ job: { id: 99 } } as never);
+
+    jest.spyOn(labGithub, 'githubFor').mockReturnValue({
+      getBranchSha: async () => 'sha',
+    } as never);
+    (service as unknown as { snapshotFor: unknown }).snapshotFor =
+      async () => ({
+        files: [],
+        binaries: [],
+        skipped: [],
+        baseline: {},
+      });
+
+    return { service, launch };
+  }
+
+  it("hands the run what the task's public channels show, before the environment note", async () => {
+    const describeFor = jest.fn(async () => 'FACTS: YouTube — подписчиков: 4');
+    const { service, launch } = build(describeFor);
+    const { prepared } = await service.launch(1, {
+      projectId: 7,
+      task: 'Опиши https://www.youtube.com/@Ntlstl',
+      model: 'sonnet',
+    });
+
+    await prepared;
+
+    expect(describeFor).toHaveBeenCalledWith(
+      1,
+      'Опиши https://www.youtube.com/@Ntlstl',
+    );
+
+    const body = (launch.mock.calls[0][1] as { task: { body: string } }).task
+      .body;
+
+    expect(body).toContain('FACTS: YouTube — подписчиков: 4');
+    expect(body.indexOf('FACTS')).toBeLessThan(
+      body.indexOf('About where you work (Lab)'),
+    );
+  });
+
+  it('adds nothing when the task names no channel', async () => {
+    const { service, launch } = build(jest.fn(async () => ''));
+    const { prepared } = await service.launch(1, {
+      projectId: 7,
+      task: 'просто задача',
+      model: 'sonnet',
+    });
+
+    await prepared;
+
+    const body = (launch.mock.calls[0][1] as { task: { body: string } }).task
+      .body;
+
+    expect(body).toBe(
+      `просто задача\n\n${body.slice(body.indexOf('About where you work (Lab)'))}`,
+    );
   });
 });
