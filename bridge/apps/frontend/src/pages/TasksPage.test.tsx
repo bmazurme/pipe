@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@gravity-ui/uikit';
@@ -81,5 +81,34 @@ describe('TasksPage', () => {
 
       expect(patch?.url).toContain('/tasks/cards/10');
     });
+  });
+
+  it('keeps the column highlighted while a dragged card moves over its own children, and drops it once the pointer is outside', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(BOARD)));
+    renderPage();
+    await screen.findByText('Write docs');
+
+    const card = screen.getByTestId('task-card-10');
+    const column = screen.getByLabelText('Колонка Done');
+    const highlighted = () => /columnOver/.test(column.className);
+
+    column.getBoundingClientRect = () => ({ left: 100, right: 380, top: 50, bottom: 400, width: 280, height: 350, x: 100, y: 50, toJSON: () => ({}) });
+    fireEvent.dragStart(card, { dataTransfer: { setData: () => undefined, effectAllowed: '' } });
+    fireEvent.dragOver(column);
+    expect(highlighted()).toBe(true);
+
+    // The pointer goes from the column onto a child of it: dragleave fires with the pointer still inside the column.
+    fireEvent(column, Object.assign(createEvent.dragLeave(column), { clientX: 200, clientY: 200 }));
+    expect(highlighted()).toBe(true);
+
+    // Really leaving ends it.
+    fireEvent(column, Object.assign(createEvent.dragLeave(column), { clientX: 500, clientY: 200 }));
+    expect(highlighted()).toBe(false);
+
+    // A cancelled drag (no drop, no dragleave on this column) must not leave it lit.
+    fireEvent.dragOver(column);
+    expect(highlighted()).toBe(true);
+    fireEvent.dragEnd(card);
+    await waitFor(() => expect(highlighted()).toBe(false));
   });
 });

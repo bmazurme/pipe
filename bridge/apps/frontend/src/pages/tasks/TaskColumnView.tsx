@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 
 import type { TaskColumn } from '../../store/api';
@@ -35,6 +35,12 @@ export function TaskColumnView({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
+  // The drop highlight must not outlive the drag: a card dropped elsewhere or a drag cancelled with Escape never reaches this column's
+  // onDrop / onDragLeave.
+  useEffect(() => {
+    if (draggedId === null) setOver(false);
+  }, [draggedId]);
+
   const add = () => {
     if (!title.trim()) return;
     onAddCard(column.id, title.trim(), description);
@@ -58,7 +64,15 @@ export function TaskColumnView({
         event.preventDefault();
         setOver(true);
       }}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={(event) => {
+        // dragleave also fires when the pointer moves from the column onto one of ITS OWN children (a card, the header, a button) —
+        // that used to switch the highlight off, and the next dragover switched it back on: a flickering, broken border. Only a
+        // pointer that is really outside the column ends it.
+        const box = event.currentTarget.getBoundingClientRect();
+        const inside = event.clientX > box.left && event.clientX < box.right && event.clientY > box.top && event.clientY < box.bottom;
+
+        if (!inside) setOver(false);
+      }}
       onDrop={(event) => {
         event.preventDefault();
         setOver(false);

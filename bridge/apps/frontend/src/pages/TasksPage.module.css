@@ -24,12 +24,16 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
+  /* The drop highlight is this border, not an outline: an outline is drawn outside the box, and the board scrolls (overflow-x: auto makes
+     the other axis clip too), so it was cut off on the first column's left side and along the top. A transparent border of the same width
+     keeps the layout from shifting when it appears. */
+  border: 2px solid transparent;
   border-radius: var(--g-border-radius-m);
   background: var(--g-color-base-generic);
 }
 
 .columnOver {
-  outline: 2px dashed var(--g-color-line-brand);
+  border: 2px dashed var(--g-color-line-brand);
 }
 
 .columnHeader {
