@@ -6146,6 +6146,234 @@
         }
       }
     },
+    "/api/v1/tasks/board": {
+      "get": {
+        "operationId": "TasksController_board",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBoardResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/archive": {
+      "get": {
+        "operationId": "TasksController_archive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskCardResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/columns": {
+      "post": {
+        "operationId": "TasksController_createColumn",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateColumnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/columns/{id}": {
+      "patch": {
+        "operationId": "TasksController_renameColumn",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateColumnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "operationId": "TasksController_deleteColumn",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/cards": {
+      "post": {
+        "operationId": "TasksController_createCard",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCardDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCardResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/cards/{id}": {
+      "patch": {
+        "operationId": "TasksController_updateCard",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCardDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCardResponseDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "TasksController_deleteCard",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/cards/{id}/move": {
+      "post": {
+        "operationId": "TasksController_moveCard",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveCardDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBoardResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/time/day-offs": {
       "get": {
         "operationId": "TimeController_list",
@@ -11312,6 +11540,168 @@
       "UpdateSecretDto": {
         "type": "object",
         "properties": {}
+      },
+      "TaskCardResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "columnId": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          },
+          "archivedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "columnId",
+          "title",
+          "description",
+          "position",
+          "archivedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "TaskColumnResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskCardResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "position",
+          "cards"
+        ]
+      },
+      "TaskBoardResponseDto": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskColumnResponseDto"
+            }
+          }
+        },
+        "required": [
+          "columns"
+        ]
+      },
+      "CreateColumnDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "UpdateColumnDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "CreateCardDto": {
+        "type": "object",
+        "properties": {
+          "columnId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "columnId",
+          "title"
+        ]
+      },
+      "UpdateCardDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MoveCardDto": {
+        "type": "object",
+        "properties": {
+          "columnId": {
+            "type": "number",
+            "minimum": 1
+          },
+          "position": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "columnId",
+          "position"
+        ]
       },
       "DayOffResponseDto": {
         "type": "object",

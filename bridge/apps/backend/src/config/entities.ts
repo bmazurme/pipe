@@ -33,6 +33,8 @@ import { TaskQuestion } from '../questions/entities/task-question.entity';
 import { PurgeEntry } from '../purge/entities/purge-entry.entity';
 import { ReportsSettingsBackup } from '../reports-settings/entities/reports-settings-backup.entity';
 import { Secret } from '../secrets/entities/secret.entity';
+import { TaskCard } from '../tasks/entities/task-card.entity';
+import { TaskColumn } from '../tasks/entities/task-column.entity';
 import { NotificationSettings } from '../telegram/entities/notification-settings.entity';
 import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
@@ -98,6 +100,8 @@ export const ENTITIES = [
   WorkerHeartbeat,
   LimitAlertState,
   Secret,
+  TaskColumn,
+  TaskCard,
   ReportsSettingsBackup,
   LoopControl,
   DeployRecord,

@@ -1,0 +1,86 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ntlstl-page-gap);
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.board {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.column {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-generic);
+}
+
+.columnOver {
+  outline: 2px dashed var(--g-color-line-brand);
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: var(--g-border-radius-m);
+  background: var(--g-color-base-background);
+  cursor: grab;
+  min-width: 0;
+}
+
+.cardDragging {
+  opacity: 0.4;
+}
+
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}
+
+.addColumn {
+  flex: 0 0 280px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -8,6 +8,7 @@ import {
   FileZipper,
   Flask,
   House,
+  LayoutColumns3,
   ListCheck,
   Key,
   Lock,
@@ -183,6 +184,14 @@ export const SERVICES: ServiceLink[] = [
     icon: Key,
     path: '/secrets',
     group: 'data',
+  },
+  {
+    id: 'tasks',
+    title: 'Tasks',
+    description: 'Список задач в стиле Trello: колонки, карточки с заголовком и описанием, перетаскивание и архив.',
+    icon: LayoutColumns3,
+    path: '/tasks',
+    group: 'work',
   },
   {
     id: 'reports',
