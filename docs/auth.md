@@ -6,7 +6,7 @@ file for the full index.
 bridge supports personal, revocable API keys alongside its existing
 browser OAuth flow — additive, nothing about existing sessions changed.
 Mint one from bridge's Profile page ("API-ключи" card,
-[ApiKeysSection.tsx](../bridge/apps/frontend/src/pages/profile/ApiKeysSection.tsx));
+[ApiKeysSection.tsx](../bridge/apps/frontend/src/pages/ProfilePage/ApiKeysSection.tsx));
 it's shown once at creation and only its SHA-256 hash is stored
 ([api-keys.service.ts](../bridge/apps/backend/src/auth/api-keys.service.ts),
 migration

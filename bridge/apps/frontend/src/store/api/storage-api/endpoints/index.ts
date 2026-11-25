@@ -24,7 +24,7 @@ const storageApiEndpoints = storageApi.injectEndpoints({
     }),
     // Uploads deliberately don't live here: fetchBaseQuery can't report
     // upload progress, and at a 200 MB limit that progress isn't optional.
-    // See pages/storage/uploadWithProgress.ts — it posts to this same
+    // See pages/StoragePage/uploadWithProgress.ts — it posts to this same
     // endpoint over XHR and invalidates the Storage tag itself.
 
     // Non-destructive raw-bytes read (the backend's /peek, not /download —

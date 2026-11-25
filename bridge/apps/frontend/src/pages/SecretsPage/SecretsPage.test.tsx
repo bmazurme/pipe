@@ -1,0 +1,446 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Provider } from 'react-redux';
+import { ThemeProvider } from '@gravity-ui/uikit';
+
+import { SecretsPage } from './SecretsPage';
+import { store } from '../../store';
+import { secretsApi } from '../../store/api';
+
+const SECRETS = [
+  { id: 1, name: 'github-token', description: 'CI access', createdAt: '2026-09-30T07:00:00.000Z', updatedAt: '2026-09-30T07:00:00.000Z' },
+  { id: 2, name: 'api-key', description: null, createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z' },
+];
+
+function renderPage() {
+  return render(
+    <Provider store={store}>
+      <ThemeProvider theme="light">
+        <SecretsPage />
+      </ThemeProvider>
+    </Provider>,
+  );
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+beforeEach(() => {
+  store.dispatch(secretsApi.util.resetApiState());
+});
+
+function dayFromNow(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+describe('SecretsPage', () => {
+  it('lists existing secrets with their description, values masked by default', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+
+    await screen.findByText('github-token');
+    expect(screen.getByText('CI access')).toBeTruthy();
+    expect(screen.getByText('api-key')).toBeTruthy();
+    expect(screen.getAllByText('••••••••')).toHaveLength(2);
+  });
+
+  it('shows the empty state when there are no secrets yet', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
+
+    renderPage();
+
+    await screen.findByText('Секретов пока нет');
+  });
+
+  it('creates a new secret', async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets') && request.method === 'POST') {
+          createdBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ id: 3, name: 'new-secret', description: null, createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' });
+        }
+        if (url.endsWith('/secrets')) return jsonResponse([]);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Секретов пока нет');
+
+    await user.type(screen.getByLabelText('Имя секрета'), 'new-secret');
+    await user.type(screen.getByLabelText('Значение секрета'), 'super-secret-value');
+    await user.click(screen.getByText('Добавить'));
+
+    await waitFor(() =>
+      expect(createdBody).toEqual({ name: 'new-secret', value: 'super-secret-value' }),
+    );
+  });
+
+  it('reveals a secret value on click and hides it again on a second click', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        if (url.endsWith('/secrets/1/value')) return jsonResponse({ value: 'ghp_realtoken' });
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+
+    await user.click(screen.getByLabelText('Скрыть значение github-token'));
+    await waitFor(() => expect(screen.queryByText('ghp_realtoken')).toBeNull());
+  });
+
+  it('deletes a secret after a second confirming click', async () => {
+    const user = userEvent.setup();
+    let deletedId: number | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets') && request.method !== 'DELETE') return jsonResponse(SECRETS);
+        if (url.includes('/secrets/') && request.method === 'DELETE') {
+          deletedId = Number(url.split('/').pop());
+          return new Response(null, { status: 204 });
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    const deleteButton = screen.getByLabelText('Удалить github-token');
+    await user.click(deleteButton);
+    await user.click(screen.getByLabelText('Подтвердить удаление github-token'));
+
+    await waitFor(() => expect(deletedId).toBe(1));
+  });
+
+  it('edits a secret’s name without sending a new value when the value field is left blank', async () => {
+    const user = userEvent.setup();
+    let updatedBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets') && request.method !== 'PATCH') return jsonResponse(SECRETS);
+        if (url.includes('/secrets/2') && request.method === 'PATCH') {
+          updatedBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ id: 2, name: 'renamed-key', description: null, createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' });
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('api-key');
+
+    await user.click(screen.getByLabelText('Изменить api-key'));
+    const nameInput = screen.getByLabelText('Имя секрета api-key');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'renamed-key');
+    await user.click(screen.getByLabelText('Сохранить'));
+
+    await waitFor(() =>
+      expect(updatedBody).toEqual({ name: 'renamed-key', description: '', expiresOn: null }),
+    );
+  });
+
+  it('keeps the "leave empty" hint visible while typing a new value', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('api-key');
+
+    await user.click(screen.getByLabelText('Изменить api-key'));
+    await user.type(screen.getByLabelText('Новое значение для api-key'), 'abc');
+
+    expect(screen.getByText('Оставьте пустым, чтобы не менять')).toBeTruthy();
+  });
+});
+
+describe('SecretsPage revealed value handling', () => {
+  function stubRevealFetch(onPatch?: () => void) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const url = request.url;
+        if (url.endsWith('/secrets/1/value')) return jsonResponse({ value: 'ghp_realtoken' });
+        if (url.includes('/secrets/1') && request.method === 'PATCH') {
+          onPatch?.();
+          return jsonResponse({ ...SECRETS[0], updatedAt: '2026-10-06T00:00:00.000Z' });
+        }
+        if (url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+  }
+
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  }
+
+  it('copies a revealed value to the clipboard and confirms', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('ghp_realtoken'));
+    expect(screen.queryByText('Не удалось скопировать')).toBeNull();
+  });
+
+  it('copies a masked secret without showing it', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+
+    renderPage();
+    await screen.findByText('github-token');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('ghp_realtoken'));
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
+    expect(screen.getByLabelText('Показать значение github-token')).toBeTruthy();
+  });
+
+  it('says so when a masked secret cannot be copied because the clipboard refuses', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await screen.findByText('Не удалось скопировать');
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
+  });
+
+  it('shows an error and keeps the value visible when the clipboard write is rejected', async () => {
+    const user = userEvent.setup();
+    stubRevealFetch();
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+    await user.click(screen.getByLabelText('Скопировать значение github-token'));
+
+    await screen.findByText('Не удалось скопировать');
+    expect(screen.getByText('ghp_realtoken')).toBeTruthy();
+  });
+
+  it('masks a revealed value again after 30 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      stubRevealFetch();
+
+      renderPage();
+      await screen.findByText('github-token');
+
+      await user.click(screen.getByLabelText('Показать значение github-token'));
+      await screen.findByText('ghp_realtoken');
+
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      await waitFor(() => expect(screen.queryByText('ghp_realtoken')).toBeNull());
+      expect(screen.getAllByText('••••••••')).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('masks the row after the value is edited, not showing the old value', async () => {
+    const user = userEvent.setup();
+    let patched = false;
+    stubRevealFetch(() => {
+      patched = true;
+    });
+
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.click(screen.getByLabelText('Показать значение github-token'));
+    await screen.findByText('ghp_realtoken');
+
+    await user.click(screen.getByLabelText('Изменить github-token'));
+    await user.type(screen.getByLabelText('Новое значение для github-token'), 'ghp_newtoken');
+    await user.click(screen.getByLabelText('Сохранить'));
+
+    await waitFor(() => expect(patched).toBe(true));
+    await waitFor(() => expect(screen.queryByLabelText('Сохранить')).toBeNull());
+    expect(screen.queryByText('ghp_realtoken')).toBeNull();
+    expect(screen.getAllByText('••••••••')).toHaveLength(2);
+  });
+});
+
+describe('SecretsPage search', () => {
+  function stubList() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) return jsonResponse(SECRETS);
+        return jsonResponse([]);
+      }),
+    );
+  }
+
+  it('filters by name, case-insensitively, and restores the list when cleared', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    const input = screen.getByLabelText('Поиск по секретам');
+    await user.type(input, 'API-K');
+    expect(screen.queryByText('github-token')).toBeNull();
+    expect(screen.getByText('api-key')).toBeTruthy();
+
+    await user.clear(input);
+    expect(screen.getByText('github-token')).toBeTruthy();
+    expect(screen.getByText('api-key')).toBeTruthy();
+  });
+
+  it('filters by description', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.type(screen.getByLabelText('Поиск по секретам'), 'ci acc');
+    expect(screen.getByText('github-token')).toBeTruthy();
+    expect(screen.queryByText('api-key')).toBeNull();
+  });
+
+  it('shows "nothing found" rather than the empty-vault state when nothing matches', async () => {
+    const user = userEvent.setup();
+    stubList();
+    renderPage();
+    await screen.findByText('github-token');
+
+    await user.type(screen.getByLabelText('Поиск по секретам'), 'zzz');
+    expect(screen.getByText('Ничего не найдено')).toBeTruthy();
+    expect(screen.queryByText('Секретов пока нет')).toBeNull();
+  });
+
+  it('does not show the search input when there are no secrets', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
+    renderPage();
+    await screen.findByText('Секретов пока нет');
+    expect(screen.queryByLabelText('Поиск по секретам')).toBeNull();
+  });
+});
+
+describe('SecretsPage expiry', () => {
+  const stubSecrets = (expiresOn: string | null) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets')) {
+          return jsonResponse([{ ...SECRETS[1], expiresOn }]);
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+  it('warns about a secret expiring in 3 days', async () => {
+    stubSecrets(dayFromNow(3));
+    renderPage();
+    await screen.findByText('истекает через 3 дн.');
+  });
+
+  it('marks a past date as expired', async () => {
+    stubSecrets('2020-01-01');
+    renderPage();
+    await screen.findByText('истёк');
+  });
+
+  it('shows no badge without a date', async () => {
+    stubSecrets(null);
+    renderPage();
+    await screen.findByText('api-key');
+    expect(screen.queryByText(/истекает|истёк/)).toBeNull();
+  });
+
+  it('sends the date entered in the add form', async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        if (request.url.endsWith('/secrets') && request.method === 'POST') {
+          createdBody = JSON.parse(await request.clone().text());
+          return jsonResponse({ ...SECRETS[1], id: 3 });
+        }
+        return jsonResponse([]);
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Секретов пока нет');
+
+    await user.type(screen.getByLabelText('Имя секрета'), 'n');
+    await user.type(screen.getByLabelText('Значение секрета'), 'v');
+    await user.type(screen.getByLabelText('Действует до'), '2026-12-01');
+    await user.click(screen.getByText('Добавить'));
+
+    await waitFor(() => expect(createdBody).toEqual({ name: 'n', value: 'v', expiresOn: '2026-12-01' }));
+  });
+});

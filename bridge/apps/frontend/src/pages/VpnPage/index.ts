@@ -1,0 +1,1 @@
+export { VpnPage } from './VpnPage';

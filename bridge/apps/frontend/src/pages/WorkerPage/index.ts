@@ -1,0 +1,1 @@
+export { WorkerPage } from './WorkerPage';
