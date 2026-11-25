@@ -88,7 +88,8 @@ export class BridgeClient {
     const send = async () =>
       fetch(url, {
         ...init,
-        headers: await this.authHeader(),
+        // Merge, don't replace: auth wins, but a caller's Content-Type survives.
+        headers: { ...(init.headers as Record<string, string> | undefined), ...(await this.authHeader()) },
         signal: AbortSignal.timeout(timeoutMs),
       });
 

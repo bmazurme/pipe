@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 import { CREDENTIALS_PATH } from './paths.js';
-import { saveApiKey } from './credentials.js';
+import { saveApiKey, saveCredentials } from './credentials.js';
 import { BridgeClient } from './bridgeClient.js';
 
 // Shares CREDENTIALS_PATH with pushIssue.test.ts/gitlabWorker.test.ts — same
@@ -96,10 +96,55 @@ describe('BridgeClient.createJob', () => {
     assert.equal(seen?.init?.method, 'POST');
     assert.deepEqual(JSON.parse(String(seen?.init?.body)), { sourceFileId: 9, model: 'opus' });
     assert.deepEqual(job, { id: 5, status: 'queued' });
+    const headers = seen?.init?.headers as Record<string, string>;
+    assert.equal(headers.Authorization, 'Bearer brk_test-key');
+    assert.equal(headers['Content-Type'], 'application/json');
+  });
+
+  it('keeps Content-Type on the retry after a 401 with refresh-token login', async () => {
+    saveCredentials({ refreshToken: 'rt', gitlabToken: '' });
+    try {
+      const jobHeaders: Record<string, string>[] = [];
+      let tokens = 0;
+      globalThis.fetch = (async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/api/v1/auth/refresh')) {
+          return Response.json({ accessToken: `at${++tokens}` });
+        }
+        jobHeaders.push(init?.headers as Record<string, string>);
+        return jobHeaders.length === 1
+          ? new Response('expired', { status: 401 })
+          : Response.json({ id: 5, status: 'queued' }, { status: 201 });
+      }) as typeof fetch;
+
+      await new BridgeClient('https://bridge.example.com').createJob(9, 'opus');
+
+      assert.equal(jobHeaders.length, 2);
+      assert.equal(jobHeaders[1].Authorization, 'Bearer at2');
+      assert.equal(jobHeaders[1]['Content-Type'], 'application/json');
+    } finally {
+      saveApiKey('brk_test-key');
+    }
   });
 
   it('throws with the status and body on a non-2xx reply', async () => {
     globalThis.fetch = (async () => new Response('bad model', { status: 400 })) as typeof fetch;
     await assert.rejects(new BridgeClient('https://bridge.example.com').createJob(9, 'x'), /400.*bad model/);
+  });
+});
+
+describe('BridgeClient.upload', () => {
+  it('does not force a Content-Type, so fetch sets the multipart boundary', async () => {
+    let init: RequestInit | undefined;
+    globalThis.fetch = (async (_url: string, i?: RequestInit) => {
+      init = i;
+      return Response.json({ id: 1 });
+    }) as typeof fetch;
+
+    await new BridgeClient('https://bridge.example.com').upload('a.zip', Buffer.from('x'));
+
+    const headers = init?.headers as Record<string, string>;
+    assert.equal(headers.Authorization, 'Bearer brk_test-key');
+    assert.equal(Object.keys(headers).some((k) => k.toLowerCase() === 'content-type'), false);
+    assert.ok(init?.body instanceof FormData);
   });
 });
