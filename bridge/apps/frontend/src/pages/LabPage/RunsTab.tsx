@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRightFromSquare, Plus, Rocket, Stop } from '@gravity-ui/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Icon, Label, Select, Skeleton, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 
@@ -58,11 +59,29 @@ export function RunsTab() {
   const { data: issues, error: issuesError } = useListLabProjectIssuesQuery(issuesProjectId ?? 0, { skip: issuesProjectId === null });
   const [openJobId, setOpenJobId] = useState<number | null>(null);
   const branchOf = (projectId: number | string | null) => projects?.find((project) => String(project.id) === String(projectId))?.baseBranch ?? '';
+  const location = useLocation();
+  const navigate = useNavigate();
+  const labTask = (location.state as { labTask?: unknown } | null)?.labTask;
   const hasActive = Boolean(runs?.some((run) => ACTIVE.includes(run.status)));
 
   useEffect(() => {
     setPollingInterval(hasActive ? FAST_POLL_MS : SLOW_POLL_MS);
   }, [hasActive]);
+
+  // A task handed over from the Tasks board: open the form once projects are known, then drop the state so a reload does not reopen it.
+  useEffect(() => {
+    if (typeof labTask !== 'string' || !projects) return;
+    const project = projects.find((item) => item.canWrite);
+
+    if (project) {
+      setError(null);
+      setForm({ projectId: String(project.id), task: labTask, model: 'sonnet', contextId: '', baseBranch: project.baseBranch ?? '', executor: 'any' });
+    } else {
+      setError('Нет проекта с правом записи — добавьте его во вкладке «Проекты»');
+    }
+
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [labTask, projects, navigate, location.pathname, location.search]);
 
   const handleStart = async () => {
     if (!form) return;
