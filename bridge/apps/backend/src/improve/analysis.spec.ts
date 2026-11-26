@@ -172,6 +172,17 @@ describe('buildProposalDigest', () => {
     );
   });
 
+  it('tells the analysis why the owner declined a proposal, in words it can act on', () => {
+    const digest = (reason: string) =>
+      buildProposalDigest([pastItem({ declined: { reason } })], ['tests']);
+
+    expect(digest('too-small')).toContain('declined by the owner: too small');
+    expect(digest('wrong')).toContain('do not propose this again');
+    expect(digest('already-done')).toContain('already done');
+    // a declined proposal is not described as merely «shown»
+    expect(digest('not-now')).not.toContain('shown to the owner');
+  });
+
   it('caps how many items it includes', () => {
     const items = Array.from({ length: 40 }, (_, i) =>
       pastItem({ title: `Item ${i}` }),

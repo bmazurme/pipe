@@ -223,3 +223,77 @@ describe('ImproveIssueFilingService.createManualIssue', () => {
     });
   });
 });
+
+describe('ImproveIssueFilingService.setDeclined', () => {
+  const run = (items: object[]) => ({
+    id: 1,
+    kind: 'analysis',
+    result: JSON.stringify({ categories: ['tests'], autoCreate: false, items }),
+  });
+  const item = (over: object = {}) => ({
+    category: 'tests',
+    title: 'Add a test',
+    risk: 'low',
+    body: 'x',
+    ...over,
+  });
+
+  it('records the reason and a time, and takes the decision back with null', async () => {
+    const { service, runs } = setup();
+
+    runs.findOne.mockResolvedValue(run([item()]));
+    const declined = await service.setDeclined(1, 0, 'too-small');
+    const stored = JSON.parse(declined.result as string).items[0];
+
+    expect(stored.declined).toMatchObject({ reason: 'too-small' });
+    expect(typeof stored.declined.at).toBe('string');
+
+    runs.findOne.mockResolvedValue(declined);
+    const restored = await service.setDeclined(1, 0, null);
+
+    expect(
+      JSON.parse(restored.result as string).items[0].declined,
+    ).toBeUndefined();
+  });
+
+  it('404s for an unknown run or proposal, and refuses a proposal that was already filed, started or found a duplicate', async () => {
+    const { service, runs } = setup();
+
+    runs.findOne.mockResolvedValue(null);
+    await expect(service.setDeclined(9, 0, 'wrong')).rejects.toThrow(
+      'Analysis run not found',
+    );
+
+    runs.findOne.mockResolvedValue(run([item()]));
+    await expect(service.setDeclined(1, 5, 'wrong')).rejects.toThrow(
+      'Proposal not found',
+    );
+
+    for (const over of [
+      { issueNumber: 3 },
+      { started: true },
+      { duplicateOf: 2 },
+    ]) {
+      runs.findOne.mockResolvedValue(run([item(over)]));
+      await expect(service.setDeclined(1, 0, 'wrong')).rejects.toThrow(
+        /нельзя/,
+      );
+    }
+  });
+
+  it('never files a declined proposal, even when the owner ticked it', async () => {
+    const { service, runs, github } = setup();
+    const declined = run([
+      item({ declined: { reason: 'not-now', at: 'x' } }),
+      item({ title: 'Another test' }),
+    ]);
+
+    await service.fileProposals(declined as never, [0, 1]);
+
+    expect(github.createIssue).toHaveBeenCalledTimes(1);
+    expect(github.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Another test' }),
+    );
+    expect(runs.findOne).not.toHaveBeenCalled();
+  });
+});

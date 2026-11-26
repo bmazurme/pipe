@@ -53,7 +53,11 @@ export interface AnalysisItem {
   effort?: 's' | 'm' | 'l';
   /** Why the filing brake held this proposal back. */
   skipped?: string;
+  /** The owner turned it down; it is never filed while this is set, and the next analysis is told why. */
+  declined?: { reason: DeclineReason; at: string };
 }
+
+export type DeclineReason = 'too-small' | 'wrong' | 'duplicate' | 'not-now' | 'already-done';
 
 export interface ImproveRun {
   id: number;
@@ -234,6 +238,17 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось создать задачи'),
     }),
+    // A proposal turned down with a reason (the next analysis is told why), or the decision taken back.
+    declineImproveItem: builder.mutation<ImproveRun, { id: number; index: number; reason: DeclineReason }>({
+      query: ({ id, index, reason }) => ({ url: `improve/runs/${id}/items/${index}/decline`, method: 'POST', body: { reason } }),
+      invalidatesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось отклонить предложение'),
+    }),
+    restoreImproveItem: builder.mutation<ImproveRun, { id: number; index: number }>({
+      query: ({ id, index }) => ({ url: `improve/runs/${id}/items/${index}/decline`, method: 'DELETE' }),
+      invalidatesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось вернуть предложение'),
+    }),
     listImproveSchedules: builder.query<ImproveSchedule[], void>({
       query: () => 'improve/schedules',
       providesTags: ['ImproveSchedules'],
@@ -283,6 +298,8 @@ export const {
   useStartImproveManyMutation,
   useStartImproveItemsMutation,
   useCreateImproveIssuesMutation,
+  useDeclineImproveItemMutation,
+  useRestoreImproveItemMutation,
   useListImproveSchedulesQuery,
   useSaveImproveScheduleMutation,
   useDeleteImproveScheduleMutation,

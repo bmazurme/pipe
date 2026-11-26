@@ -3582,6 +3582,84 @@
         }
       }
     },
+    "/api/v1/improve/runs/{id}/items/{index}/decline": {
+      "post": {
+        "operationId": "ImproveController_declineItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "index",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ImproveController_restoreItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "index",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs/{id}/create-issues": {
       "post": {
         "operationId": "ImproveController_createIssues",
@@ -10136,6 +10214,24 @@
         },
         "required": [
           "model"
+        ]
+      },
+      "DeclineItemDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "too-small",
+              "wrong",
+              "duplicate",
+              "not-now",
+              "already-done"
+            ]
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "CreateIssuesDto": {
