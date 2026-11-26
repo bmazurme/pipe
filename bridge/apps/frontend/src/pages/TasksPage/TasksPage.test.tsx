@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@gravity-ui/uikit';
 
 import { TasksPage } from './TasksPage';
@@ -27,7 +28,9 @@ function renderPage() {
   return render(
     <Provider store={store}>
       <ThemeProvider theme="light">
-        <TasksPage />
+        <MemoryRouter>
+          <TasksPage />
+        </MemoryRouter>
       </ThemeProvider>
     </Provider>,
   );
@@ -110,5 +113,34 @@ describe('TasksPage', () => {
     expect(highlighted()).toBe(true);
     fireEvent.dragEnd(card);
     await waitFor(() => expect(highlighted()).toBe(false));
+  });
+});
+
+describe('TasksPage hand-off to Lab', () => {
+  it('navigates to Lab runs with the card text as state', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(BOARD)));
+    let seen: { pathname: string; search: string; state: unknown } | null = null;
+    const Probe = () => {
+      const location = useLocation();
+
+      seen = { pathname: location.pathname, search: location.search, state: location.state };
+
+      return null;
+    };
+
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <MemoryRouter>
+            <TasksPage />
+            <Probe />
+          </MemoryRouter>
+        </ThemeProvider>
+      </Provider>,
+    );
+    await screen.findByText('Write docs');
+    await userEvent.click(screen.getByRole('button', { name: 'В Lab' }));
+
+    expect(seen).toMatchObject({ pathname: '/lab', search: '?tab=runs', state: { labTask: 'Write docs\n\nShort text' } });
   });
 });
