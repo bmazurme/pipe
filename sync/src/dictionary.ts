@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 
-import { compileDictionary } from '@pipe/protocol';
+import { compileDictionary, dictionaryFromEntries } from '@pipe/protocol';
 
 import { resolveDictionaryPath } from './paths.js';
 
@@ -62,6 +62,10 @@ export function loadOptionalDictionary(dictionaryRef: string | undefined): Dicti
   return dictionaryRef ? loadDictionary(dictionaryRef) : {};
 }
 
+function entriesOf(dictionary: Dictionary): { key: string; value: string }[] {
+  return Object.entries(dictionary).map(([key, value]) => ({ key, value }));
+}
+
 // push direction: real value (key) -> placeholder (value), before it leaves this machine.
 // Matches Purge's own convention — you type the real term as "key" and it
 // suggests a same-length random "value" as the placeholder. The actual
@@ -75,7 +79,7 @@ export function remoteTransform(
   dictionary: Dictionary,
   compile: CompileDictionary = compileDictionary,
 ): (text: string) => string {
-  const apply = compile(new Map(Object.entries(dictionary)));
+  const apply = compile(dictionaryFromEntries(entriesOf(dictionary), 'keyToValue'));
   return (text) => apply(text).result;
 }
 
@@ -84,7 +88,7 @@ export function localTransform(
   dictionary: Dictionary,
   compile: CompileDictionary = compileDictionary,
 ): (text: string) => string {
-  const apply = compile(new Map(Object.entries(dictionary).map(([key, value]) => [value, key])));
+  const apply = compile(dictionaryFromEntries(entriesOf(dictionary), 'valueToKey'));
   return (text) => apply(text).result;
 }
 

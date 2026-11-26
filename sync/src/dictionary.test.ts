@@ -107,4 +107,10 @@ describe('compiled transforms', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('restores the first term when two keys share a placeholder (matches reports and Purge)', () => {
+    const dictionary = { Acme: 'Zzzz', Globex: 'Zzzz' };
+    assert.equal(localTransform(dictionary)('Zzzz'), 'Acme');
+    assert.equal(toLocal(dictionary, 'Zzzz'), 'Acme');
+  });
 });

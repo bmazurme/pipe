@@ -8,6 +8,28 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export type DictionaryDirection = 'keyToValue' | 'valueToKey';
+
+// The one place Purge-style { key, value } entries become a substitution Map.
+// keyToValue anonymizes (real key -> placeholder value), valueToKey restores.
+// An empty `from` is skipped; on a duplicate `from` the first entry wins.
+export function dictionaryFromEntries(
+  entries: Iterable<{ key: string; value: string }>,
+  direction: DictionaryDirection,
+): Map<string, string> {
+  const map = new Map<string, string>();
+
+  for (const entry of entries) {
+    const [from, to] = direction === 'keyToValue' ? [entry.key, entry.value] : [entry.value, entry.key];
+
+    if (from && !map.has(from)) {
+      map.set(from, to);
+    }
+  }
+
+  return map;
+}
+
 export interface DictionaryResult {
   result: string;
   count: number;

@@ -1,20 +1,10 @@
 import type { DictionaryEntryType } from '@reports/shared';
-import { applyDictionary as applySubstitution } from '@pipe/protocol';
+import { applyDictionary as applySubstitution, dictionaryFromEntries } from '@pipe/protocol';
 
 export type Direction = 'toRemote' | 'toLocal';
 
 function buildMap(entries: DictionaryEntryType[], direction: Direction): Map<string, string> {
-  const map = new Map<string, string>();
-
-  for (const entry of entries) {
-    const [from, to] = direction === 'toRemote' ? [entry.key, entry.value] : [entry.value, entry.key];
-
-    if (from && !map.has(from)) {
-      map.set(from, to);
-    }
-  }
-
-  return map;
+  return dictionaryFromEntries(entries, direction === 'toRemote' ? 'keyToValue' : 'valueToKey');
 }
 
 /**
