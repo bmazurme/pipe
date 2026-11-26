@@ -264,3 +264,22 @@ describe('lab RunsTab source issue of a run', () => {
     expect(screen.queryByRole('link', { name: /Из issue/ })).not.toBeInTheDocument();
   });
 });
+
+describe('lab RunsTab hand-off from Tasks', () => {
+  it('opens the new-run dialog prefilled from location state', async () => {
+    render(
+      <Provider store={store}>
+        <ThemeProvider theme="light">
+          <MemoryRouter initialEntries={[{ pathname: '/lab', search: '?tab=runs', state: { labTask: 'Заголовок\n\nОписание' } }]}>
+            <RunsTab />
+          </MemoryRouter>
+        </ThemeProvider>
+      </Provider>,
+    );
+
+    const task = (await screen.findByDisplayValue(/Заголовок/)) as HTMLTextAreaElement;
+
+    expect(task.value).toBe('Заголовок\n\nОписание');
+    expect(calls).toEqual([]);
+  });
+});

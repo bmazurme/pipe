@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Text, TextArea, TextInput } from '@gravity-ui/uikit';
 
 import type { TaskCard } from '../../store/api';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function TaskCardView({ card, dragging, onDragStart, onDragEnd, onDropBefore, onSave, onArchive }: Props) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
@@ -73,6 +75,13 @@ export function TaskCardView({ card, dragging, onDragStart, onDragEnd, onDropBef
           <div className={styles.actions}>
             <Button size="xs" view="flat" onClick={startEdit}>
               Изменить
+            </Button>
+            <Button
+              size="xs"
+              view="flat"
+              onClick={() => navigate('/lab?tab=runs', { state: { labTask: card.title + (card.description ? '\n\n' + card.description : '') } })}
+            >
+              В Lab
             </Button>
             <Button size="xs" view="flat" onClick={() => onArchive(card.id)}>
               В архив
