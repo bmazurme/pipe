@@ -2,9 +2,11 @@
 #
 # Deploys the Pi stack. Run on white (the node labelled bridge-primary), from this directory:
 #
-#   ./deploy.sh              # uses ~/.pipe/bridge.env and the image tag build-images.sh left in ~/.pipe/image-tag
-#   ./deploy.sh ghcr [tag]   # pulls the images from GHCR instead (tag: a commit sha or `latest`, default latest)
+#   ./deploy.sh ghcr [tag]   # pulls the images from GHCR (tag: a commit sha, `stable` — what autodeploy runs — or `latest`, default latest)
+#   ./deploy.sh local        # the images build-images.sh left on this node (the tag in ~/.pipe/image-tag): the fallback when GitHub is
+#                            # unreachable. Deliberately NOT the default: a bare run once put a months-old local tag over a newer release.
 #   ./deploy.sh status       # services, replicas, health
+# Anything else (including no argument) prints this and does nothing.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -16,6 +18,16 @@ if [ "${1:-}" = status ]; then
   docker stack ps "$STACK" --no-trunc --format '{{.Name}}\t{{.CurrentState}}\t{{.Error}}' | head -20
   exit 0
 fi
+
+# The source of the images must be named: a bare `./deploy.sh` used to mean "whatever tag build-images.sh left here", and did put an old
+# local build over the running release (2026-11-21: about twenty minutes of a rolled-back bridge).
+case "${1:-}" in
+  ghcr|local) ;;
+  *)
+    sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+esac
 
 # A failover to ANOTHER board is active (infra/failover labels it `failover=active`): this board must not redeploy the
 # stack — that would bring the old primary and its diverged database back next to the promoted one.
@@ -46,6 +58,7 @@ if [ "${1:-}" = ghcr ]; then
 else
   IMAGE_TAG="${IMAGE_TAG:-$(cat "$HOME/.pipe/image-tag" 2>/dev/null || true)}"
   [ -n "$IMAGE_TAG" ] || { echo "no image tag — run build-images.sh from your workstation" >&2; exit 1; }
+  echo "deploying the LOCAL images tagged $IMAGE_TAG (not a GHCR release)" >&2
   for img in bridge-backend bridge-frontend; do
     docker image inspect "localhost/pipe/$img:$IMAGE_TAG" >/dev/null 2>&1 || { echo "image localhost/pipe/$img:$IMAGE_TAG is not on this node" >&2; exit 1; }
   done

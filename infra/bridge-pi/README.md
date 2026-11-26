@@ -25,7 +25,7 @@ cd ~/bridge-pi
 ./secrets.sh set EMAILS           # sign-in allowlist, comma-separated Yandex addresses — REQUIRED: without it anyone could register
 ./secrets.sh set YANDEX_ID        # the existing app at oauth.yandex.ru (callback https://api.bridge.ntlstl.dev/api/v1/oauth/yandex/redirect)
 ./secrets.sh set YANDEX_SECRET
-./deploy.sh && ./deploy.sh status
+./deploy.sh local && ./deploy.sh status
 ```
 
 ## Going public (only when you decide to)
@@ -168,7 +168,7 @@ worker stays isolated. Updates arrive by long polling — only one consumer per 
 # 1. create a bot in Telegram with @BotFather → its token; write to the bot once, then find your chat id (below)
 ./secrets.sh set TELEGRAM_BOT_TOKEN
 ./secrets.sh set TELEGRAM_CHAT_ID       # the ONLY chat the bot talks to and accepts commands from
-./deploy.sh
+./deploy.sh ghcr stable
 ```
 
 Chat id: after you have written "hi" to the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser with
@@ -189,7 +189,7 @@ Either or both, no Telegram and no VPN involved:
 ./secrets.sh set ALERT_SMTP_URL         # smtps://user:app-password@smtp.yandex.ru:465
 ./secrets.sh set ALERT_EMAIL_TO         # you@example.org
 ./secrets.sh set ALERT_EMAIL_FROM       # optional, the SMTP user by default
-./deploy.sh
+./deploy.sh ghcr stable
 ```
 
 The VPN page shows whether a second channel is set up and whether Telegram is reachable. With none set up, an outage is only written to the
@@ -213,8 +213,8 @@ Then GitHub → the repo → Settings → Webhooks → Add webhook:
 - Secret: the same value as `GITHUB_WEBHOOK_SECRET`
 - Events: *Let me select individual events* → **Pull requests** and **Workflow runs**
 
-Run `./deploy.sh`, then open the webhook's «Recent deliveries» (redeliver an old one if none is new): it should show **200**.
-**503** = `GITHUB_WEBHOOK_SECRET` is not set in the backend (`./secrets.sh check`, then `./deploy.sh`); **401** = the secret on GitHub
+Run `./deploy.sh ghcr stable`, then open the webhook's «Recent deliveries» (redeliver an old one if none is new): it should show **200**.
+**503** = `GITHUB_WEBHOOK_SECRET` is not set in the backend (`./secrets.sh check`, then `./deploy.sh ghcr stable`); **401** = the secret on GitHub
 differs from the stored one. `GITHUB_BASE_BRANCH` (default `main`) is optional.
 
 ## Dashboard page
@@ -228,7 +228,7 @@ sudo cat /etc/garage/keys/bridge-backups.env        # S3_ENDPOINT, S3_BUCKET, S3
 ./secrets.sh set BACKUP_S3_ENDPOINT                 # same S3_ENDPOINT value as above
 ./secrets.sh set BACKUP_S3_ACCESS_KEY_ID
 ./secrets.sh set BACKUP_S3_SECRET_ACCESS_KEY
-./deploy.sh
+./deploy.sh ghcr stable
 ```
 
 (`BACKUP_S3_REGION`/`BACKUP_S3_BUCKET` default to `garage`/`bridge-backups` already — only set them with `./secrets.sh set`
@@ -249,7 +249,7 @@ at runtime; `VITE_API_URL` in the frontend is a public address). Then the boards
 ```
 
 A sha tag is reproducible (and what to roll back to); `latest` follows the newest publication. The local-image path
-(`build-images.sh`, `./deploy.sh` without arguments) keeps working as the fallback when GitHub is unreachable.
+(`build-images.sh`, then `./deploy.sh local`) keeps working as the fallback when GitHub is unreachable; a bare `./deploy.sh` does nothing but print the usage — it used to deploy the local tag, and once rolled a newer release back.
 
 ## Operations
 
@@ -260,7 +260,7 @@ docker service update --force bridge_backend        # restart
 docker service scale bridge_caddy=0                 # take the public entry down
 ```
 
-- Update: `build-images.sh` (new tag) then `./deploy.sh` — the backend and frontend updates are start-first: the new task boots next to the old one and the old one stops only after the new one is healthy (a failing release is rolled back with the old one still serving), and Caddy holds requests for up to a minute (`lb_try_duration`) instead of answering 502 during the switch. Migrations therefore must stay additive: for those seconds the old backend runs on the migrated schema. Caddy itself is the one piece that still restarts (host-mode ports 80/443 cannot overlap) — only when the Caddyfile changes, for a couple of seconds.
+- Update: `build-images.sh` (new tag) then `./deploy.sh local` — the backend and frontend updates are start-first: the new task boots next to the old one and the old one stops only after the new one is healthy (a failing release is rolled back with the old one still serving), and Caddy holds requests for up to a minute (`lb_try_duration`) instead of answering 502 during the switch. Migrations therefore must stay additive: for those seconds the old backend runs on the migrated schema. Caddy itself is the one piece that still restarts (host-mode ports 80/443 cannot overlap) — only when the Caddyfile changes, for a couple of seconds.
 - Backups: `infra/backup` (PR #223) with `DATABASE_URL=postgres://bridge:<password>@postgres:5432/ntlstl-db` and
   `PG_DUMP="docker run --rm --network bridge_internal postgres:16-alpine pg_dump"` — the `internal` network is
   attachable for exactly this. Until that timer is enabled there is **no backup of this database**.
