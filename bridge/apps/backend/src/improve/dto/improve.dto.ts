@@ -28,6 +28,13 @@ export class StartRunDto {
 
   @IsString()
   model: string;
+
+  // A saved Context (the Context page) to hand to this run's worker, like a schedule's; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class CreateImproveIssueDto {
@@ -51,6 +58,13 @@ export class CreateImproveIssueDto {
   @IsOptional()
   @IsBoolean()
   start?: boolean;
+
+  // A saved Context (the Context page) to hand to this run's worker, like a schedule's; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class StartPrFixDto {
@@ -173,6 +187,13 @@ export class StartAnalysisDto {
   @IsOptional()
   @IsBoolean()
   autoStart?: boolean;
+
+  // A saved Context (the Context page) to hand to this run's worker, like a schedule's; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class StartManyDto {
@@ -185,6 +206,13 @@ export class StartManyDto {
 
   @IsString()
   model: string;
+
+  // A saved Context (the Context page) to hand to this run's worker, like a schedule's; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class StartItemsDto {
@@ -198,6 +226,13 @@ export class StartItemsDto {
   @IsInt({ each: true })
   @Min(0, { each: true })
   indices?: number[];
+
+  // A saved Context (the Context page) to hand to this run's worker, like a schedule's; null/absent = none.
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  contextId?: number | null;
 }
 
 export class CreateIssuesDto {

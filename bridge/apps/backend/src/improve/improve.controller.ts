@@ -33,6 +33,7 @@ import {
   StartPrMergeDto,
   StartRunDto,
 } from './dto/improve.dto';
+import { ContextService } from '../context/context.service';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -49,7 +50,20 @@ export class ImproveController {
     private readonly scheduleService: ImproveScheduleService,
     private readonly autoStart: ImproveAutoStartService,
     private readonly issueFiling: ImproveIssueFilingService,
+    private readonly contexts: ContextService,
   ) {}
+
+  // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
+  private async ownContext(
+    userId: number,
+    contextId: number | null | undefined,
+  ): Promise<number | null> {
+    if (contextId === undefined || contextId === null) return null;
+
+    await this.contexts.findOwned(contextId, userId);
+
+    return contextId;
+  }
 
   @Get('status')
   status() {
@@ -74,7 +88,7 @@ export class ImproveController {
 
   // Files a hand-written issue labelled for Improve, optionally starting a run on it.
   @Post('issues')
-  createIssue(
+  async createIssue(
     @Body() dto: CreateImproveIssueDto,
     @CurrentUser() user: { id: number },
   ) {
@@ -84,10 +98,23 @@ export class ImproveController {
       throw new BadRequestException('Для запуска выберите модель');
     }
 
+    // Checked before the issue is filed: a bad context must not leave an issue behind.
+    const contextId = dto.start
+      ? await this.ownContext(user.id, dto.contextId)
+      : null;
+
     return this.issueFiling.createManualIssue(
       dto,
       dto.start && model
-        ? (number) => this.improve.startRun(user.id, number, model)
+        ? (number) =>
+            this.improve.startRun(
+              user.id,
+              number,
+              model,
+              'manual',
+              null,
+              contextId,
+            )
         : undefined,
     );
   }
@@ -103,8 +130,18 @@ export class ImproveController {
   }
 
   @Post('runs')
-  startRun(@Body() dto: StartRunDto, @CurrentUser() user: { id: number }) {
-    return this.improve.startRun(user.id, dto.issueNumber, dto.model);
+  async startRun(
+    @Body() dto: StartRunDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.improve.startRun(
+      user.id,
+      dto.issueNumber,
+      dto.model,
+      'manual',
+      null,
+      await this.ownContext(user.id, dto.contextId),
+    );
   }
 
   // The chat's "fix this PR" card, after the person confirmed it.
@@ -153,30 +190,47 @@ export class ImproveController {
       throw new BadRequestException('Неизвестное направление анализа');
     }
 
-    return this.improve.startAnalysis(
-      user.id,
-      dto.model,
-      categories as AnalysisCategory[],
-      dto.autoCreate === true || dto.autoStart === true,
-      'manual',
-      null,
-      dto.autoStart === true,
+    return this.ownContext(user.id, dto.contextId).then((contextId) =>
+      this.improve.startAnalysis(
+        user.id,
+        dto.model,
+        categories as AnalysisCategory[],
+        dto.autoCreate === true || dto.autoStart === true,
+        'manual',
+        null,
+        dto.autoStart === true,
+        contextId,
+      ),
     );
   }
 
   // Several issues into work at once: each is started independently.
   @Post('runs/batch')
-  startMany(@Body() dto: StartManyDto, @CurrentUser() user: { id: number }) {
-    return this.improve.startMany(user.id, dto.issueNumbers, dto.model);
+  async startMany(
+    @Body() dto: StartManyDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.improve.startMany(
+      user.id,
+      dto.issueNumbers,
+      dto.model,
+      await this.ownContext(user.id, dto.contextId),
+    );
   }
 
   // Files the chosen proposals of a finished analysis and starts a run for each.
   @Post('runs/:id/start-items')
-  startItems(
+  async startItems(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: StartItemsDto,
+    @CurrentUser() user: { id: number },
   ) {
-    return this.improve.startItems(id, dto.model, dto.indices);
+    return this.improve.startItems(
+      id,
+      dto.model,
+      dto.indices,
+      await this.ownContext(user.id, dto.contextId),
+    );
   }
 
   // Files the chosen proposals of a finished analysis as GitHub issues.
