@@ -2,7 +2,7 @@
 // pulls in the isomorphic dictionary module, not @pipe/protocol's Node-only
 // pieces (encryption.ts uses node:crypto, pack.ts/walk.ts use adm-zip/fs) —
 // importing the root barrel here broke `vite build` for exactly that reason.
-import { applyDictionary } from '@pipe/protocol/dictionary';
+import { applyDictionary, dictionaryFromEntries } from '@pipe/protocol/dictionary';
 
 import { PurgeEntry } from '../../store/api';
 
@@ -43,20 +43,7 @@ export function buildDictionary(
   entries: PurgeEntry[],
   direction: Direction,
 ): Map<string, string> {
-  const map = new Map<string, string>();
-
-  for (const entry of entries) {
-    const [from, to] =
-      direction === 'keyToValue'
-        ? [entry.key, entry.value]
-        : [entry.value, entry.key];
-
-    if (from && !map.has(from)) {
-      map.set(from, to);
-    }
-  }
-
-  return map;
+  return dictionaryFromEntries(entries, direction);
 }
 
 export interface ImportedEntry {

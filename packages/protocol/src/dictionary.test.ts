@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDictionary, compileDictionary } from './dictionary.js';
+import { applyDictionary, compileDictionary, dictionaryFromEntries } from './dictionary.js';
 
 describe('applyDictionary', () => {
   const toRemote = new Map([
@@ -120,5 +120,33 @@ describe('compileDictionary', () => {
   it('returns the text unchanged with count 0 for an empty dictionary', () => {
     assert.deepEqual(compileDictionary(new Map())('db'), { result: 'db', count: 0 });
     assert.deepEqual(compileDictionary(new Map([['', 'x']]))('db'), { result: 'db', count: 0 });
+  });
+});
+
+describe('dictionaryFromEntries', () => {
+  const entries = [
+    { key: 'Acme', value: 'Zzzz' },
+    { key: 'Globex', value: 'Yyyy' },
+  ];
+
+  it('builds both directions', () => {
+    assert.deepEqual([...dictionaryFromEntries(entries, 'keyToValue')], [['Acme', 'Zzzz'], ['Globex', 'Yyyy']]);
+    assert.deepEqual([...dictionaryFromEntries(entries, 'valueToKey')], [['Zzzz', 'Acme'], ['Yyyy', 'Globex']]);
+  });
+
+  it('skips empty keys/values on the source side', () => {
+    const e = [{ key: '', value: 'x' }, { key: 'a', value: '' }];
+    assert.deepEqual([...dictionaryFromEntries(e, 'keyToValue')], [['a', '']]);
+    assert.deepEqual([...dictionaryFromEntries(e, 'valueToKey')], [['x', '']]);
+  });
+
+  it('first wins on duplicate keys', () => {
+    const e = [{ key: 'a', value: '1' }, { key: 'a', value: '2' }];
+    assert.equal(dictionaryFromEntries(e, 'keyToValue').get('a'), '1');
+  });
+
+  it('first wins on duplicate placeholders when restoring', () => {
+    const e = [{ key: 'Acme', value: 'Zzzz' }, { key: 'Globex', value: 'Zzzz' }];
+    assert.equal(dictionaryFromEntries(e, 'valueToKey').get('Zzzz'), 'Acme');
   });
 });
