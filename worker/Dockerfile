@@ -89,6 +89,10 @@ RUN mkdir -p /app/.worker-work /app/.worker-state \
  && chmod 0700 /app/.worker-state \
  && chmod 2770 /app/.worker-work
 ENV WORKER_STATE_DIR=/app/.worker-state
+# Job code (claude --dangerously-skip-permissions: arbitrary code driven by task text) runs as pipe-runner, which cannot read the worker's key or VPN
+# config in .worker-state. On by default; the worker refuses to start if the sudo rule above does not work, so a broken image fails loudly. To run
+# jobs as the worker's own user anyway (not advised), start the container with -e WORKER_RUN_AS= (empty).
+ENV WORKER_RUN_AS=pipe-runner
 USER pipe-worker
 
 CMD ["node", "dist/index.js"]
