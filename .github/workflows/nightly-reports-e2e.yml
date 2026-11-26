@@ -88,7 +88,7 @@ jobs:
           exit 1
 
       - name: Run Cypress against the real dev server pair
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           working-directory: reports/packages/client
           # This action runs its own npm ci + has its own separate
@@ -109,7 +109,7 @@ jobs:
       # guessing from the text assertion alone.
       - name: Upload Cypress screenshots/videos on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cypress-failure-artifacts
           path: |
@@ -119,7 +119,7 @@ jobs:
 
       - name: Upload server/client logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports-dev-server-logs
           path: |
