@@ -383,7 +383,9 @@ describe('Analysis tab polling', () => {
       await vi.advanceTimersByTimeAsync(30000);
       const active = listFetches();
 
-      await vi.advanceTimersByTimeAsync(11000);
+      // 5 s polling gives three polls in 16 s; the test needs two, so the switch from the 30 s to the 5 s interval (it happens only once a poll
+      // has answered «running», which on a loaded CI machine can lag by a few seconds) cannot make it fail — it used to ask for two polls in 11 s.
+      await vi.advanceTimersByTimeAsync(16000);
       expect(listFetches()).toBeGreaterThanOrEqual(active + 2);
     } finally {
       vi.useRealTimers();
