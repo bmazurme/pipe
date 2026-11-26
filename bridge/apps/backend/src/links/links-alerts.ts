@@ -37,10 +37,12 @@ export function desiredAlerts(view: ChannelsView): DesiredAlert[] {
     });
   }
 
-  // Per channel only while the pool as a whole still works: with nothing reachable one message already says it.
+  // Per channel only while the pool as a whole still works: with nothing reachable one message already says it. Only a channel that
+  // reaches NOBODY is worth a message: «blocked from some points» (state 'partial') is what the home provider's throttling of a standby
+  // or a far server looks like all day long — it flickers on and off, never changes what works, and is on the Каналы связи tile anyway.
   if (!nothingReaches) {
     for (const channel of view.channels) {
-      if (channel.state === 'down' || channel.state === 'partial') {
+      if (channel.state === 'down') {
         alerts.push({
           key: `channel:${channel.key}`,
           text: `🔌 VPN-канал ${channel.name} (${channel.key}): ${channel.reason ?? 'не доходит'}`,

@@ -1,8 +1,12 @@
 import { desiredAlerts } from './links-alerts';
 import {
+  ANNOUNCE_HITS,
   CONFIRM_ANNOUNCE,
   CONFIRM_RECOVER,
   LinksAlertsService,
+  RECOVER_CLEAN,
+  REANNOUNCE_COOLDOWN_MS,
+  WINDOW,
 } from './links-alerts.service';
 import { ChannelsView, ChannelState } from './links';
 
@@ -78,15 +82,16 @@ describe('desiredAlerts', () => {
     });
   });
 
-  it('names a channel that is blocked from some points only', () => {
-    const alerts = desiredAlerts(
-      view([
-        channel('a', 'partial', 'не доходит из: bridge — нет ответа'),
-        channel('b', 'ok'),
-      ]),
-    );
-
-    expect(alerts.map((a) => a.key)).toEqual(['channel:a:443']);
+  it('stays silent about a channel that is blocked from some points only (the home provider throttling a far server is the normal state)', () => {
+    expect(
+      desiredAlerts(
+        view([
+          channel('a', 'partial', 'не доходит из: bridge — нет ответа'),
+          channel('b', 'ok'),
+          channel('c', 'ok'),
+        ]),
+      ),
+    ).toEqual([]);
   });
 
   it("is not a single-channel pool's fault to have one channel", () => {
@@ -154,7 +159,16 @@ describe('LinksAlertsService', () => {
 
   afterEach(() => delete process.env.LINK_ALERTS);
 
-  it(`announces a condition only after it held ${CONFIRM_ANNOUNCE} checks in a row — urgent when the whole pool is gone`, async () => {
+  const run = async (
+    service: LinksAlertsService,
+    v: ChannelsView,
+    times: number,
+    at = NOW,
+  ) => {
+    for (let i = 0; i < times; i += 1) await service.evaluate(v, at);
+  };
+
+  it(`announces an urgent condition after ${CONFIRM_ANNOUNCE} checks in a row — the whole pool is gone`, async () => {
     const { service, notifier, alerts } = build();
 
     await service.evaluate(bad, NOW);
@@ -176,32 +190,57 @@ describe('LinksAlertsService', () => {
   it('says nothing more while the condition lasts', async () => {
     const { service, notifier } = build();
 
-    for (let i = 0; i < 6; i += 1) await service.evaluate(bad, NOW);
+    await run(service, bad, 20);
 
     expect(notifier.send).toHaveBeenCalledTimes(1);
   });
 
-  it('does not announce a condition that came and went (a flap) before it was confirmed', async () => {
+  it(`announces an ordinary condition only after it held in ${ANNOUNCE_HITS} of the last ${WINDOW} checks`, async () => {
     const { service, notifier } = build();
 
+    await run(service, oneDown, ANNOUNCE_HITS - 1);
+    expect(notifier.send).not.toHaveBeenCalled();
+
     await service.evaluate(oneDown, NOW);
-    await service.evaluate(good, NOW);
-    await service.evaluate(oneDown, NOW);
-    await service.evaluate(good, NOW);
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(notifier.send).toHaveBeenCalledWith(
+      '🔌 VPN-канал b (b:443): не доходит ни из одной точки: тишина',
+      { urgent: false },
+    );
+  });
+
+  it('does not announce a condition that comes and goes (a flap), however long it goes on', async () => {
+    const { service, notifier } = build();
+
+    for (let i = 0; i < 40; i += 1) {
+      await service.evaluate(i % 2 === 0 ? oneDown : good, NOW);
+    }
+    for (let i = 0; i < 40; i += 1) {
+      // up three minutes, down two: still short of 8 in 10
+      await service.evaluate(i % 5 < 3 ? good : oneDown, NOW);
+    }
 
     expect(notifier.send).not.toHaveBeenCalled();
   });
 
-  it(`announces it as over after ${CONFIRM_RECOVER} clean checks, once, with the words saved when it began`, async () => {
+  it('tolerates a single lucky probe inside a real outage', async () => {
+    const { service, notifier } = build();
+
+    await run(service, oneDown, 4);
+    await service.evaluate(good, NOW);
+    await run(service, oneDown, 4);
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it(`announces it as over only after ${RECOVER_CLEAN} clean checks, once, with the words saved when it began`, async () => {
     const { service, notifier, rows } = build();
 
-    await service.evaluate(oneDown, NOW);
-    await service.evaluate(oneDown, NOW);
+    await run(service, oneDown, ANNOUNCE_HITS);
     expect(rows.map((r) => r.key)).toEqual(['channel:b:443']);
     notifier.send.mockClear();
 
-    await service.evaluate(good, NOW);
-    await service.evaluate(good, NOW);
+    await run(service, good, RECOVER_CLEAN - 1);
     expect(notifier.send).not.toHaveBeenCalled();
 
     await service.evaluate(good, NOW);
@@ -213,18 +252,97 @@ describe('LinksAlertsService', () => {
     expect(notifier.send).toHaveBeenCalledTimes(1);
   });
 
-  it('does not say "over" for a condition that came back before it was confirmed over', async () => {
+  it(`says an urgent condition is over after ${CONFIRM_RECOVER} clean checks`, async () => {
+    const { service, notifier } = build();
+
+    await run(service, bad, CONFIRM_ANNOUNCE);
+    notifier.send.mockClear();
+
+    await run(service, good, CONFIRM_RECOVER - 1);
+    expect(notifier.send).not.toHaveBeenCalled();
+
+    await service.evaluate(good, NOW);
+    expect(notifier.send).toHaveBeenCalledWith('✅ VPN-каналы снова доходят');
+  });
+
+  it('does not say "over" for a condition that came back before the window was clean', async () => {
     const { service, notifier } = build([
       { key: 'channel:b:443', since: NOW, recovered: '✅ b' },
     ]);
 
-    await service.evaluate(good, NOW);
-    await service.evaluate(good, NOW);
+    await run(service, good, RECOVER_CLEAN - 2);
     await service.evaluate(oneDown, NOW);
-    await service.evaluate(good, NOW);
-    await service.evaluate(good, NOW);
+    await run(service, good, RECOVER_CLEAN - 2);
 
     expect(notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps the same condition quiet for an hour after it was said to be over, then announces it if it is still there', async () => {
+    const { service, notifier } = build();
+
+    await run(service, oneDown, ANNOUNCE_HITS);
+    await run(service, good, RECOVER_CLEAN);
+    notifier.send.mockClear();
+
+    // back within the hour: held, not announced
+    await run(
+      service,
+      oneDown,
+      WINDOW * 2,
+      new Date(NOW.getTime() + 10 * 60_000),
+    );
+    expect(notifier.send).not.toHaveBeenCalled();
+
+    // still there after the hour: announced
+    await service.evaluate(
+      oneDown,
+      new Date(NOW.getTime() + REANNOUNCE_COOLDOWN_MS + 60_000),
+    );
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('never holds an urgent condition back for the cooldown', async () => {
+    const { service, notifier } = build();
+
+    await run(service, bad, CONFIRM_ANNOUNCE);
+    await run(service, good, CONFIRM_RECOVER);
+    notifier.send.mockClear();
+
+    await run(service, bad, CONFIRM_ANNOUNCE, new Date(NOW.getTime() + 60_000));
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the conditions confirmed in the same check into one message, and so the ones that ended together', async () => {
+    const { service, notifier } = build();
+    const two = view([
+      channel('a', 'down', 'x'),
+      channel('b', 'down', 'y'),
+      channel('c', 'ok'),
+      channel('d', 'ok'),
+    ]);
+    const healed = view([
+      channel('a', 'ok'),
+      channel('b', 'ok'),
+      channel('c', 'ok'),
+      channel('d', 'ok'),
+    ]);
+
+    await run(service, two, ANNOUNCE_HITS);
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringMatching(/a \(a:443\): x\n.*b \(b:443\): y/),
+      { urgent: false },
+    );
+    notifier.send.mockClear();
+
+    await run(service, healed, RECOVER_CLEAN);
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(notifier.send).toHaveBeenCalledWith(
+      '✅ VPN-канал a снова доступен\n✅ VPN-канал b снова доступен',
+    );
   });
 
   it('does not repeat a condition after a restart: what was announced is in the database', async () => {
@@ -232,8 +350,7 @@ describe('LinksAlertsService', () => {
       { key: 'channel:b:443', since: NOW, recovered: '✅ b' },
     ]);
 
-    await service.evaluate(oneDown, NOW);
-    await service.evaluate(oneDown, NOW);
+    await run(service, oneDown, WINDOW);
 
     expect(notifier.send).not.toHaveBeenCalled();
   });
@@ -248,28 +365,23 @@ describe('LinksAlertsService', () => {
       channel('c', 'ok'),
     ]);
 
-    await service.evaluate(worse, NOW);
-    await service.evaluate(worse, NOW);
+    await run(service, worse, ANNOUNCE_HITS);
 
-    expect(notifier.send).toHaveBeenCalledTimes(2);
-    expect(
-      (notifier.send.mock.calls as unknown as string[][])
-        .map(([text]) => text)
-        .sort(),
-    ).toEqual(
-      [
-        '⚠️ Остался один живой VPN-канал: c (c:443). Остальные не доходят — пора добавлять запасные.',
-        '🔌 VPN-канал a (a:443): x',
-      ].sort(),
-    );
+    // b was announced already; the pool is down to one channel (c) and a is new
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+
+    const text = (notifier.send.mock.calls as unknown as string[][])[0][0];
+
+    expect(text).toContain('Остался один живой VPN-канал: c (c:443)');
+    expect(text).toContain('VPN-канал a (a:443): x');
+    expect(text).not.toContain('VPN-канал b');
   });
 
   it('does nothing when switched off', async () => {
     process.env.LINK_ALERTS = 'off';
     const { service, notifier, alerts } = build();
 
-    await service.evaluate(bad, NOW);
-    await service.evaluate(bad, NOW);
+    await run(service, bad, 10);
 
     expect(alerts.find).not.toHaveBeenCalled();
     expect(notifier.send).not.toHaveBeenCalled();
