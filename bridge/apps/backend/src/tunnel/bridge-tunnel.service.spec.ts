@@ -115,6 +115,7 @@ describe('BridgeTunnelService', () => {
 
     service.probe = answer({});
     await service.check();
+    await service.check();
     expect(tunnelProxyUrl()).toBe(PROXY);
 
     service.probe = answer({ 'api.telegram.org': new Error('timeout') });
@@ -122,6 +123,8 @@ describe('BridgeTunnelService', () => {
     expect(tunnelProxyUrl()).toBeUndefined();
 
     service.probe = answer({});
+    await service.check();
+    expect(tunnelProxyUrl()).toBeUndefined();
     await service.check();
     expect(tunnelProxyUrl()).toBe(PROXY);
 
@@ -132,10 +135,36 @@ describe('BridgeTunnelService', () => {
     ]);
   });
 
+  it('does not re-adopt a dropped tunnel on alternating good and bad probes', async () => {
+    const { service, record } = setup();
+    const good = answer({});
+    const bad = answer({ 'api.telegram.org': new Error('timeout') });
+
+    for (const probe of [good, good, bad, bad, bad]) {
+      service.probe = probe;
+      await service.check();
+    }
+
+    expect(service.status().inUse).toBe(false);
+
+    for (const probe of [good, bad, good, bad, good, bad]) {
+      service.probe = probe;
+      await service.check();
+    }
+
+    expect(service.status().inUse).toBe(false);
+    expect(tunnelProxyUrl()).toBeUndefined();
+    expect(record.mock.calls.map((c) => c[0].event)).toEqual([
+      'tunnel.up',
+      'tunnel.down',
+    ]);
+  });
+
   it('keeps the tunnel through 2 failed probes and drops it on the 3rd', async () => {
     const { service, record } = setup();
 
     service.probe = answer({});
+    await service.check();
     await service.check();
     service.probe = answer({ 'api.telegram.org': new Error('timeout') });
     await service.check();
@@ -159,6 +188,7 @@ describe('BridgeTunnelService', () => {
     const fail = answer({ 'api.telegram.org': new Error('timeout') });
 
     service.probe = answer({});
+    await service.check();
     await service.check();
 
     for (const probe of [fail, fail, answer({}), fail, fail]) {
@@ -204,6 +234,7 @@ describe('BridgeTunnelService', () => {
 
     service.probe = answer({});
     await service.check();
+    await service.check();
     expect(service.status().inUse).toBe(true);
 
     process.linkCount = 1;
@@ -236,6 +267,7 @@ describe('BridgeTunnelService', () => {
     const { service, process } = setup();
 
     service.probe = answer({});
+    await service.check();
     await service.check();
     service.onModuleDestroy();
 

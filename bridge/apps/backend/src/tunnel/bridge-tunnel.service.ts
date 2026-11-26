@@ -26,6 +26,8 @@ const CHECK_EVERY_MS = 20_000;
 const PROBE_TIMEOUT_MS = 8_000;
 // A tunnel in use is withdrawn only after this many failed Telegram probes in a row, so one timeout or reset does not flap it.
 const DOWN_AFTER_FAILURES = 3;
+// A tunnel not in use is adopted only after this many good Telegram probes in a row, so a marginal link is not re-adopted on a lucky one.
+const UP_AFTER_SUCCESSES = 2;
 const DEFAULT_PORT = 18081;
 
 // What bridge needs to reach through the tunnel. Telegram is what decides whether the tunnel is used (alerts, the bot, the channel);
@@ -139,6 +141,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
   private checks: TunnelCheck[] = [];
   private inUse = false;
   private consecutiveFailures = 0;
+  private consecutiveSuccesses = 0;
   private since: string | null = null;
   // The probe is replaceable so a test does not need a network.
   probe: ProbeFn = defaultProbe;
@@ -263,6 +266,7 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
       if (!proxy) {
         this.checks = [];
         this.consecutiveFailures = 0;
+        this.consecutiveSuccesses = 0;
         this.publish(
           false,
           wanted?.links.length === 0
@@ -281,12 +285,17 @@ export class BridgeTunnelService implements OnModuleInit, OnModuleDestroy {
 
       if (telegram?.ok === true) {
         this.consecutiveFailures = 0;
-        this.publish(true, null);
+        this.consecutiveSuccesses += 1;
+        this.publish(
+          this.inUse || this.consecutiveSuccesses >= UP_AFTER_SUCCESSES,
+          null,
+        );
 
         return;
       }
 
       this.consecutiveFailures += 1;
+      this.consecutiveSuccesses = 0;
 
       // A tunnel in use survives isolated failures; one that is not in use stays off.
       this.publish(
