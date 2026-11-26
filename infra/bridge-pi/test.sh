@@ -68,7 +68,7 @@ run bogus
 [ "$(cat "$T/code")" = 2 ]; check "an unknown command: usage, exit 2" $?
 
 # deploy-worker.sh with a fake docker: what it asks `docker stack deploy` for, and the mode it remembers in worker-mode
-printf '#!/usr/bin/env bash\ncase "$1 $2" in\n  "stack deploy") echo "replicas=$WORKER_REPLICAS file=$*" >> "$DEPLOY_LOG" ;;\n  "network inspect") exit 0 ;;\nesac\nexit 0\n' > "$T/bin/docker"
+printf '#!/usr/bin/env bash\ncase "$1 $2" in\n  "stack deploy") echo "replicas=$WORKER_REPLICAS tag=${IMAGE_TAG:-} file=$*" >> "$DEPLOY_LOG" ;;\n  "network inspect") exit 0 ;;\nesac\nexit 0\n' > "$T/bin/docker"
 chmod +x "$T/bin/docker"
 command -v sha256sum > /dev/null 2>&1 || { printf '#!/bin/sh\nshasum -a 256 "$@"\n' > "$T/bin/sha256sum"; chmod +x "$T/bin/sha256sum"; }
 export DEPLOY_LOG="$T/deploy.log"
@@ -78,7 +78,7 @@ dw() { : > "$DEPLOY_LOG"; bash "$HERE/deploy-worker.sh" "$@" > "$T/stdout" 2> "$
 mfile="$HOME/.pipe/worker-mode"
 
 dw --none ghcr stable
-[ "$(cat "$T/code")" = 0 ] && grep -q '^replicas=0 file=stack deploy .* -c worker-managed-pi.yml bridgew' "$DEPLOY_LOG"; check "deploy-worker --none: deploys the stack with the worker at 0 replicas" $?
+[ "$(cat "$T/code")" = 0 ] && grep -q '^replicas=0 tag=[^ ]* file=stack deploy .* -c worker-managed-pi.yml bridgew' "$DEPLOY_LOG"; check "deploy-worker --none: deploys the stack with the worker at 0 replicas" $?
 [ "$(cat "$mfile")" = none ]; check "deploy-worker --none: remembers it (autodeploy's later runs stay at 0)" $?
 dw ghcr stable
 grep -q '^replicas=0 ' "$DEPLOY_LOG" && [ "$(cat "$mfile")" = none ]; check "deploy-worker with no flag after --none: still 0 replicas, still none" $?
@@ -88,6 +88,22 @@ dw ghcr stable
 grep -q '^replicas=1 ' "$DEPLOY_LOG" && [ "$(cat "$mfile")" = managed ]; check "deploy-worker with no flag after --managed: managed, 1 replica" $?
 grep -q 'replicas: ${WORKER_REPLICAS:-1}' worker-managed-pi.yml 2> /dev/null || grep -q 'replicas: ${WORKER_REPLICAS:-1}' "$HERE/worker-managed-pi.yml"; check "both stack files take the worker's replica count from WORKER_REPLICAS" $?
 [ "$(grep -c 'replicas: ${WORKER_REPLICAS:-1}' "$HERE/worker-pi.yml")" = 1 ]; check "worker-pi.yml too" $?
+
+# deploy.sh: the image source must be named (a bare run once deployed an old local tag over a newer release)
+for k in POSTGRES_PASSWORD JWT_SECRET REFRESH_JWT_SECRET CREDENTIALS_ENC_KEY EMAILS; do printf '%s=x\n' "$k" >> "$HOME/.pipe/bridge.env"; done
+printf 'oldtag\n' > "$HOME/.pipe/image-tag"
+dd_() { : > "$DEPLOY_LOG"; bash "$HERE/deploy.sh" "$@" > "$T/stdout" 2> "$T/stderr"; echo $? > "$T/code"; }
+
+dd_
+[ "$(cat "$T/code")" = 2 ] && [ ! -s "$DEPLOY_LOG" ] && grep -q 'ghcr' "$T/stderr"; check "deploy.sh with no argument: usage, exit 2, nothing deployed" $?
+dd_ latest
+[ "$(cat "$T/code")" = 2 ] && [ ! -s "$DEPLOY_LOG" ]; check "deploy.sh with an unknown word: refused, nothing deployed" $?
+dd_ ghcr stable
+[ "$(cat "$T/code")" = 0 ] && grep -q 'tag=stable ' "$DEPLOY_LOG"; check "deploy.sh ghcr stable: deploys that tag" $?
+dd_ local
+[ "$(cat "$T/code")" = 0 ] && grep -q 'tag=oldtag ' "$DEPLOY_LOG" && grep -q 'LOCAL images tagged oldtag' "$T/stderr"; check "deploy.sh local: deploys the local tag and says so" $?
+dd_ status
+[ "$(cat "$T/code")" = 0 ] && [ ! -s "$DEPLOY_LOG" ]; check "deploy.sh status still works without deploying" $?
 
 echo; echo "passed $PASS, failed $FAILED"
 [ "$FAILED" -eq 0 ]
