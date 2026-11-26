@@ -69,11 +69,14 @@ export function makeRunDir(parent: string, prefix: string, runAs: string | undef
   return dir;
 }
 
-// Startup check for WORKER_RUN_AS: throws when the worker may not run commands as that user.
-export function verifyRunAs(runAs: string): void {
-  const result = spawnSync('sudo', ['-n', '-u', runAs, 'true'], { stdio: 'ignore' });
+// Startup check for WORKER_RUN_AS: throws when the worker may not run the CLI as that user. It runs the very command a job runs
+// (`sudo -n -E -u <user> claude --version`), because the image's sudoers rule allows exactly that and nothing else: the previous check, `sudo -n -u
+// <user> true`, was refused by the rule itself, so the worker refused to start whenever WORKER_RUN_AS was set and the isolation had never been on.
+export function verifyRunAs(runAs: string, run: typeof spawnSync = spawnSync): void {
+  const cmd = claudeCommand(['--version'], runAs);
+  const result = run(cmd.command, cmd.args, { stdio: 'ignore' });
   if (result.error || result.status !== 0) {
-    throw new Error(`WORKER_RUN_AS=${runAs} is set but "sudo -n -u ${runAs} true" failed — check the sudoers rule (see worker/README.md)`);
+    throw new Error(`WORKER_RUN_AS=${runAs} is set but "${cmd.command} ${cmd.args.join(' ')}" failed — check the sudoers rule and that ${runAs} can run claude (see worker/README.md)`);
   }
 }
 

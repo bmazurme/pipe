@@ -109,7 +109,7 @@ Worker добавляется на странице **Worker → Worker'ы → �
 |---|---|---|
 | `BRIDGE_API_URL` | да | URL bridge backend, например `https://bridge.example.com` |
 | `WORKER_STATE_DIR` | нет (по умолчанию `./.worker-state`, в Docker `/app/.worker-state`) | где подключённый worker хранит свой ключ. Должен переживать перезапуск (том) |
-| `WORKER_RUN_AS` | в образе Docker — `pipe-runner` (включено); пустое значение выключает; вне Docker — нет | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет `sudo -n -u … true` и не стартует, если не получилось. См. «Два пользователя ОС» |
+| `WORKER_RUN_AS` | в образе Docker — `pipe-runner` (включено); пустое значение выключает; вне Docker — нет | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет ту же команду, что запускает задача, — `sudo -n -E -u … claude --version` (правило sudoers разрешает только её) — и не стартует, если не получилось. См. «Два пользователя ОС» |
 | `WORKER_ENROLL_CODE` | нет | одноразовый код со страницы Worker: при старте, если ключа ещё нет, обменивается на ключ. Допускает `WORKER_ENROLL_CODE_FILE` |
 | `BRIDGE_API_KEY` | нет (устарело) | персональный API-ключ bridge (`brk_...`) — прежний способ; пока задан, он главнее подключения кодом |
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
