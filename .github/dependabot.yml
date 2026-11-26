@@ -1,0 +1,46 @@
+# Version updates (security updates for known advisories are switched on in the repository settings and need no file).
+# One grouped weekly pull request per ecosystem and install root keeps this reviewable: minor and patch bumps travel together, a major is its own PR.
+# The three npm roots are separate installs (see CLAUDE.md: root workspaces / bridge / reports), so each is named.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      root-minor-patch: { update-types: [minor, patch] }
+    commit-message: { prefix: "deps(root)" }
+
+  - package-ecosystem: npm
+    directory: /bridge
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      bridge-minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # NestJS 10 -> 11 failed once on a duplicated @nestjs/* resolution (IMPROVEMENTS_TECH.md 3.8): a planned job (DEVELOPMENT-PLAN.md S4), not a drive-by PR.
+      - dependency-name: "@nestjs/*"
+        update-types: [version-update:semver-major]
+    commit-message: { prefix: "deps(bridge)" }
+
+  - package-ecosystem: npm
+    directory: /reports
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      reports-minor-patch: { update-types: [minor, patch] }
+    commit-message: { prefix: "deps(reports)" }
+
+  - package-ecosystem: docker
+    directories: [/bridge/apps/backend, /bridge/apps/frontend, /worker]
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: "deps(docker)" }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      actions: { patterns: ["*"] }
+    commit-message: { prefix: "deps(actions)" }
