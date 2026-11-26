@@ -172,7 +172,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
     }),
     createImproveIssue: builder.mutation<
       { number: number; htmlUrl: string; missingLabels: string[]; run?: ImproveRun },
-      { title: string; body?: string; model?: string; start?: boolean }
+      { title: string; body?: string; model?: string; start?: boolean; contextId?: number | null }
     >({
       query: (body) => ({ url: 'improve/issues', method: 'POST', body }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
@@ -185,7 +185,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       query: (id) => `improve/runs/${id}`,
       providesTags: (_result, _error, id) => [{ type: 'ImproveRuns', id }],
     }),
-    startImproveRun: builder.mutation<ImproveRun, { issueNumber: number; model: string }>({
+    startImproveRun: builder.mutation<ImproveRun, { issueNumber: number; model: string; contextId?: number | null }>({
       query: (body) => ({ url: 'improve/runs', method: 'POST', body }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить'),
@@ -214,17 +214,17 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось повторить публикацию'),
     }),
-    startImproveAnalysis: builder.mutation<ImproveRun, { model: string; categories: string[]; autoCreate: boolean; autoStart?: boolean }>({
+    startImproveAnalysis: builder.mutation<ImproveRun, { model: string; categories: string[]; autoCreate: boolean; autoStart?: boolean; contextId?: number | null }>({
       query: (body) => ({ url: 'improve/analysis', method: 'POST', body }),
       invalidatesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить анализ'),
     }),
-    startImproveMany: builder.mutation<{ started: number[]; skipped: string[] }, { issueNumbers: number[]; model: string }>({
+    startImproveMany: builder.mutation<{ started: number[]; skipped: string[] }, { issueNumbers: number[]; model: string; contextId?: number | null }>({
       query: (body) => ({ url: 'improve/runs/batch', method: 'POST', body }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить'),
     }),
-    startImproveItems: builder.mutation<ImproveRun, { id: number; model: string; indices?: number[] }>({
+    startImproveItems: builder.mutation<ImproveRun, { id: number; model: string; indices?: number[]; contextId?: number | null }>({
       query: ({ id, ...body }) => ({ url: `improve/runs/${id}/start-items`, method: 'POST', body }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось взять в работу'),

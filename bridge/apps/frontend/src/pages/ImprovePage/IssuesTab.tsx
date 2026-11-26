@@ -5,6 +5,7 @@ import { Alert, Button, Checkbox, Icon, Label, Select, Skeleton, Switch, Text } 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { getErrorMessage, ImproveIssue, useLazyListImproveIssuesQuery, useListImproveIssuesQuery, useStartImproveManyMutation, useStartImproveRunMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
+import { ContextSelect } from './ContextSelect';
 import { NewIssueDialog } from './NewIssueDialog';
 import { useModelOptions } from '../WorkerPage/useModelOptions';
 import styles from './ImprovePage.module.css';
@@ -21,6 +22,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
   const [startMany, { isLoading: isStartingMany }] = useStartImproveManyMutation();
   const [selected, setSelected] = useState<number[]>([]);
   const [model, setModel] = useState(() => readStoredModel(true));
+  const [contextId, setContextId] = useState<number | null>(null);
   const [batchKind, setBatchKind] = useState<'selected' | 'oldest' | null>(null);
   const [launching, setLaunching] = useState<number[]>([]);
   const [newIssueOpen, setNewIssueOpen] = useState(false);
@@ -34,7 +36,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
     lock([issue.number]);
 
     try {
-      await start({ issueNumber: issue.number, model }).unwrap();
+      await start({ issueNumber: issue.number, model, contextId: contextId ?? undefined }).unwrap();
     } catch (err) {
       setStartError(getErrorMessage(err, 'Не удалось запустить'));
     } finally {
@@ -52,7 +54,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
     lock(numbers);
 
     try {
-      const result = await startMany({ issueNumbers: numbers, model }).unwrap();
+      const result = await startMany({ issueNumbers: numbers, model, contextId: contextId ?? undefined }).unwrap();
 
       setSelected([]);
       if (result.skipped.length) setStartError(`Запущено ${result.started.length}; не запущено: ${result.skipped.join('; ')}`);
@@ -81,6 +83,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
           onUpdate={([value]) => handleModel(value)}
           options={modelOptions}
         />
+        <ContextSelect value={contextId} onChange={setContextId} />
         <Switch checked={showAll} onUpdate={setShowAll} content="Все открытые issues" />
         <Button
           view="action"
@@ -115,7 +118,7 @@ export function IssuesTab({ configured }: { configured: boolean }) {
         )}
       </div>
 
-      <NewIssueDialog open={newIssueOpen} onClose={() => setNewIssueOpen(false)} model={model} onModelChange={handleModel} />
+      <NewIssueDialog open={newIssueOpen} onClose={() => setNewIssueOpen(false)} model={model} onModelChange={handleModel} contextId={contextId} onContextChange={setContextId} />
 
       {startError && <Alert theme="danger" view="filled" message={startError} />}
       {isError && <Alert theme="danger" view="filled" message={getErrorMessage(error, 'Не удалось загрузить задачи')} />}

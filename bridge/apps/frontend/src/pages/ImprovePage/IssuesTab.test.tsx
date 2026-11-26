@@ -43,6 +43,7 @@ beforeEach(() => {
       const path = new URL(request.url).pathname.replace('/api/v1/', '');
 
       if (path === 'improve/issues') return json([makeIssue(1), makeIssue(2), makeIssue(3)]);
+      if (path === 'contexts') return json([{ id: 3, name: 'Договорённости', contentLength: 10, createdAt: 'x', updatedAt: 'x', schedules: [] }]);
       if (path === 'improve/runs/batch') {
         batchBody = await request.clone().json().catch(() => undefined);
         await new Promise<void>((resolve) => {
@@ -76,6 +77,29 @@ describe("IssuesTab with the router's 'Авто'", () => {
     await waitFor(() => expect(batchBody).toMatchObject({ issueNumbers: [1], model: 'auto' }));
     releaseBatch();
     expect(localStorage.getItem('improve.model')).toBe('auto');
+  });
+});
+
+describe('IssuesTab with a Context', () => {
+  it('sends the chosen context with a batch, and none when none is chosen', async () => {
+    const user = userEvent.setup();
+
+    renderTab();
+    await user.click(await screen.findByRole('checkbox', { name: 'Выбрать #1' }));
+    await user.click(screen.getByRole('button', { name: /Запустить выбранные/ }));
+    await waitFor(() => expect(batchBody).toMatchObject({ issueNumbers: [1] }));
+    expect((batchBody as { contextId?: number | null }).contextId ?? null).toBeNull();
+    releaseBatch();
+
+    // the batch finished: the selection is cleared, so tick the issue again with a context chosen
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Выбрать #1' })).not.toBeChecked());
+    await user.click(await screen.findByText('Без контекста'));
+    await user.click(await screen.findByText('Договорённости'));
+    await user.click(screen.getByRole('checkbox', { name: 'Выбрать #1' }));
+    await user.click(screen.getByRole('button', { name: /Запустить выбранные/ }));
+
+    await waitFor(() => expect(batchBody).toMatchObject({ issueNumbers: [1], contextId: 3 }));
+    releaseBatch();
   });
 });
 

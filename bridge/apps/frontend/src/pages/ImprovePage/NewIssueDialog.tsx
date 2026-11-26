@@ -5,6 +5,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { describeApiError } from '../../store/api/describeApiError';
 import { useCreateImproveIssueMutation } from '../../store/api';
 import { useModelOptions } from '../WorkerPage/useModelOptions';
+import { ContextSelect } from './ContextSelect';
 
 // `model` / `onModelChange` are the Issues tab's own model picker, so the dialog and the toolbar never disagree about which model runs.
 export function NewIssueDialog({
@@ -12,11 +13,15 @@ export function NewIssueDialog({
   onClose,
   model,
   onModelChange,
+  contextId,
+  onContextChange,
 }: {
   open: boolean;
   onClose: () => void;
   model: string;
   onModelChange: (value: string) => void;
+  contextId: number | null;
+  onContextChange: (contextId: number | null) => void;
 }) {
   const { options: modelOptions } = useModelOptions(true);
   const [create, { isLoading }] = useCreateImproveIssueMutation();
@@ -39,7 +44,7 @@ export function NewIssueDialog({
     setPending(start ? 'start' : 'create');
 
     try {
-      const result = await create({ title: title.trim(), body, start, model: start ? model : undefined }).unwrap();
+      const result = await create({ title: title.trim(), body, start, model: start ? model : undefined, contextId: start ? (contextId ?? undefined) : undefined }).unwrap();
 
       setTitle('');
       setBody('');
@@ -90,8 +95,9 @@ export function NewIssueDialog({
           filterable={modelOptions.length > 8}
           disabled={Boolean(warning)}
         />
+        <ContextSelect value={contextId} onChange={onContextChange} width="max" />
         <Text variant="caption-2" color="secondary">
-          Модель выполнит задачу при запуске. «Создать» только заводит issue — запустить её можно позже на вкладке «Задачи».
+          Модель и контекст применятся при запуске. «Создать» только заводит issue — запустить её можно позже на вкладке «Задачи».
         </Text>
         {warning && <Alert theme="warning" view="filled" message={warning} />}
         {error && <Alert theme="danger" view="filled" message={error} />}

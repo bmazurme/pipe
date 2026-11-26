@@ -14,6 +14,7 @@ import {
 } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { useModelOptions } from '../WorkerPage/useModelOptions';
+import { ContextSelect } from './ContextSelect';
 import styles from './ImprovePage.module.css';
 import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
@@ -22,7 +23,7 @@ function priorityText(item: { value?: number; effort?: string }): string {
   return item.value ? ` · польза: ${item.value}/5 · объём: ${item.effort ?? 'm'}` : '';
 }
 
-function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
+function AnalysisRun({ run, model, contextId }: { run: ImproveRun; model: string; contextId: number | null }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
   const [startItems, { isLoading: isStarting }] = useStartImproveItemsMutation();
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +66,7 @@ function AnalysisRun({ run, model }: { run: ImproveRun; model: string }) {
     setError(null);
 
     try {
-      await startItems({ id: run.id, model, indices: tickedIndices }).unwrap();
+      await startItems({ id: run.id, model, indices: tickedIndices, contextId: contextId ?? undefined }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось взять в работу'));
     }
@@ -146,6 +147,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
   }, [hasActive]);
   const [start, { isLoading }] = useStartImproveAnalysisMutation();
   const [model, setModel] = useState(readStoredModel);
+  const [contextId, setContextId] = useState<number | null>(null);
   const [categories, setCategories] = useState<AnalysisCategory[]>(DEFAULT_CATEGORIES);
   const [autoCreate, setAutoCreate] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
@@ -166,7 +168,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
     setError(null);
 
     try {
-      await start({ model, categories, autoCreate: autoCreate || autoStart, autoStart }).unwrap();
+      await start({ model, categories, autoCreate: autoCreate || autoStart, autoStart, contextId: contextId ?? undefined }).unwrap();
     } catch (err) {
       setError(getErrorMessage(err, 'Не удалось запустить анализ'));
     }
@@ -193,6 +195,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
       </Text>
       <div className={styles.toolbar}>
         <Select size="m" label="Модель:" value={[model]} onUpdate={([value]) => handleModel(value)} options={modelOptions} />
+        <ContextSelect value={contextId} onChange={setContextId} />
         <Switch checked={autoCreate || autoStart} disabled={autoStart} onUpdate={setAutoCreate} content="Сразу создать issues" />
         <Switch checked={autoStart} onUpdate={setAutoStart} content="И сразу взять в работу" />
         <Button view="action" size="m" loading={isLoading} disabled={!configured || !runs || busy || categories.length === 0} onClick={() => void handleStart()}>
@@ -228,7 +231,7 @@ export function AnalysisTab({ configured }: { configured: boolean }) {
         <EmptyState icon={Magnifier} title="Анализов ещё не было" description="Запустите анализ вручную или добавьте расписание." />
       )}
       {analyses.map((run) => (
-        <AnalysisRun key={run.id} run={run} model={model} />
+        <AnalysisRun key={run.id} run={run} model={model} contextId={contextId} />
       ))}
     </div>
   );

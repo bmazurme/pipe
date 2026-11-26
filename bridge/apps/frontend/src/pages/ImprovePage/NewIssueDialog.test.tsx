@@ -29,6 +29,7 @@ beforeEach(() => {
         return createResponse();
       }
       if (path === 'improve/issues') return json([]);
+      if (path === 'contexts') return json([{ id: 3, name: 'Договорённости', contentLength: 10, createdAt: 'x', updatedAt: 'x', schedules: [] }]);
 
       return json({});
     }),
@@ -80,6 +81,31 @@ describe('NewIssueDialog', () => {
 
     await waitFor(() => expect(created).toHaveLength(1));
     expect(created[0]).toMatchObject({ start: true, model: 'sonnet' });
+  });
+
+  it('«Создать и запустить» sends the chosen context, and «Создать» sends none', async () => {
+    const user = await openDialog();
+    const dialog = screen.getByRole('dialog');
+
+    await user.click(within(dialog).getByText('Без контекста'));
+    await user.click(await screen.findByText('Договорённости'));
+    await user.click(screen.getByRole('button', { name: 'Создать и запустить' }));
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]).toMatchObject({ start: true, contextId: 3 });
+  });
+
+  it('does not send a context with a plain «Создать» (nothing is started)', async () => {
+    const user = await openDialog();
+    const dialog = screen.getByRole('dialog');
+
+    await user.click(within(dialog).getByText('Без контекста'));
+    await user.click(await screen.findByText('Договорённости'));
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]).toMatchObject({ start: false });
+    expect(created[0].contextId).toBeUndefined();
   });
 
   it('keeps both buttons off until there is a title', async () => {

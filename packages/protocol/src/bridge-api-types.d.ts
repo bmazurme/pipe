@@ -4210,6 +4210,7 @@ export interface components {
             message?: string;
         };
         CreateImproveIssueDto: {
+            contextId?: number | null;
             title: string;
             body?: string;
             model?: string;
@@ -4248,6 +4249,7 @@ export interface components {
             updatedAt: string;
         };
         StartRunDto: {
+            contextId?: number | null;
             issueNumber: number;
             model: string;
         };
@@ -4260,16 +4262,19 @@ export interface components {
             prNumber: number;
         };
         StartAnalysisDto: {
+            contextId?: number | null;
             model: string;
             categories?: string[];
             autoCreate?: boolean;
             autoStart?: boolean;
         };
         StartManyDto: {
+            contextId?: number | null;
             issueNumbers: number[];
             model: string;
         };
         StartItemsDto: {
+            contextId?: number | null;
             model: string;
             indices?: number[];
         };

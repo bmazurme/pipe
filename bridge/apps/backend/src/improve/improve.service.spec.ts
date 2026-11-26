@@ -1283,6 +1283,25 @@ describe('ImproveService.startMany concurrency', () => {
   });
 });
 
+describe('ImproveService.startMany with a Context', () => {
+  it('hands the same context to every run it starts, and none when none is named', async () => {
+    const { service } = setup();
+    const start = jest
+      .spyOn(service, 'startRun')
+      .mockResolvedValue({} as never);
+
+    await service.startMany(3, [5, 2], 'sonnet', 11);
+    await service.startMany(3, [7], 'sonnet');
+
+    // (userId, issue, model, trigger, scheduleId, contextId, …)
+    expect(start.mock.calls.map((call) => [call[1], call[5]])).toEqual([
+      [5, 11],
+      [2, 11],
+      [7, null],
+    ]);
+  });
+});
+
 describe('ImproveService.startMany lookups', () => {
   const issue = (number: number) => ({
     number,

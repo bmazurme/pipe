@@ -1324,6 +1324,7 @@ export class ImproveService {
     run: ImproveRun,
     only?: number[],
     model = run.model,
+    contextId: number | null = null,
   ): Promise<string> {
     const stored = JSON.parse(run.result ?? '{}') as AnalysisResult;
     let started = 0;
@@ -1337,6 +1338,7 @@ export class ImproveService {
       run.userId,
       todo.map((item) => item.issueNumber as number),
       model,
+      contextId,
     );
 
     todo.forEach((item, i) => {
@@ -1361,6 +1363,7 @@ export class ImproveService {
     id: number,
     model: string,
     indices?: number[],
+    contextId: number | null = null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireIssueModel(model);
@@ -1375,7 +1378,7 @@ export class ImproveService {
     const filed = await this.issueFiling.fileProposals(run, indices);
 
     // Use the model the user picked now, not the one the analysis ran with.
-    run.note = `${filed}; ${await this.startFiled(run, indices, model)}`;
+    run.note = `${filed}; ${await this.startFiled(run, indices, model, contextId)}`;
 
     return this.runs.save(run);
   }
@@ -1386,6 +1389,7 @@ export class ImproveService {
     userId: number,
     numbers: number[],
     model: string,
+    contextId: number | null = null,
   ): Promise<
     (
       | { ok: true; number: number }
@@ -1425,7 +1429,7 @@ export class ImproveService {
       const issue = cached.get(number);
 
       try {
-        await this.startRun(userId, number, model, 'manual', null, null, {
+        await this.startRun(userId, number, model, 'manual', null, contextId, {
           issue: issue && { ...issue, isPull: false },
         });
 
@@ -1441,11 +1445,17 @@ export class ImproveService {
     userId: number,
     issueNumbers: number[],
     model: string,
+    contextId: number | null = null,
   ): Promise<{ started: number[]; skipped: string[] }> {
     this.requireConfigured();
     this.requireIssueModel(model);
 
-    const outcomes = await this.startEach(userId, issueNumbers, model);
+    const outcomes = await this.startEach(
+      userId,
+      issueNumbers,
+      model,
+      contextId,
+    );
     const started: number[] = [];
     const skipped: string[] = [];
 

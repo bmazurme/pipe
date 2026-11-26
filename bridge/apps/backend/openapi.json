@@ -9843,6 +9843,11 @@
       "CreateImproveIssueDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "title": {
             "type": "string",
             "minLength": 1,
@@ -10006,6 +10011,11 @@
       "StartRunDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "issueNumber": {
             "type": "number",
             "minimum": 1
@@ -10056,6 +10066,11 @@
       "StartAnalysisDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "model": {
             "type": "string"
           },
@@ -10079,6 +10094,11 @@
       "StartManyDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "issueNumbers": {
             "type": "array",
             "items": {
@@ -10098,6 +10118,11 @@
       "StartItemsDto": {
         "type": "object",
         "properties": {
+          "contextId": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
           "model": {
             "type": "string"
           },
