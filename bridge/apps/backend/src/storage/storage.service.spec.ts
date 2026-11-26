@@ -1,5 +1,11 @@
+import { existsSync, mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
-import { Logger, NotFoundException } from '@nestjs/common';
+import {
+  Logger,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
@@ -31,6 +37,7 @@ function createMockRepository(): MockRepository {
     find: jest.fn(),
     findOne: jest.fn(),
     delete: jest.fn(),
+    sum: jest.fn().mockResolvedValue(0),
   };
 }
 
@@ -96,6 +103,88 @@ describe('StorageService', () => {
           direction: StoredFileDirection.Outbound,
         }),
       );
+    });
+  });
+
+  describe('storage quota', () => {
+    const MB = 1024 * 1024;
+    let saved: string | undefined;
+
+    beforeEach(() => {
+      saved = process.env.STORAGE_QUOTA_MB;
+      repository.save!.mockImplementation((entity) =>
+        Promise.resolve({ id: 1, ...entity }),
+      );
+    });
+
+    afterEach(() => {
+      if (saved === undefined) {
+        delete process.env.STORAGE_QUOTA_MB;
+      } else {
+        process.env.STORAGE_QUOTA_MB = saved;
+      }
+    });
+
+    function staged(size: number) {
+      const path = join(mkdtempSync(join(tmpdir(), 'quota-')), 'f.zip');
+
+      writeFileSync(path, 'x');
+
+      return {
+        file: {
+          originalname: 'f.zip',
+          filename: 'f.zip',
+          mimetype: 'application/zip',
+          size,
+          path,
+        } as Express.Multer.File,
+        path,
+      };
+    }
+
+    it('refuses with 413 and removes the staged file when over the quota', async () => {
+      process.env.STORAGE_QUOTA_MB = '10';
+      repository.sum!.mockResolvedValue(9 * MB);
+      const { file, path } = staged(2 * MB);
+
+      await expect(service.create(7, file)).rejects.toBeInstanceOf(
+        PayloadTooLargeException,
+      );
+      expect(existsSync(path)).toBe(false);
+      expect(store.adopt).not.toHaveBeenCalled();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('stores a file that fits under the quota', async () => {
+      process.env.STORAGE_QUOTA_MB = '10';
+      repository.sum!.mockResolvedValue(5 * MB);
+      const { file, path } = staged(2 * MB);
+
+      await service.create(7, file);
+
+      expect(store.adopt).toHaveBeenCalledWith('f.zip', path);
+      expect(repository.save).toHaveBeenCalled();
+    });
+
+    it('does not check anything when STORAGE_QUOTA_MB=0', async () => {
+      process.env.STORAGE_QUOTA_MB = '0';
+      repository.sum!.mockResolvedValue(999 * MB);
+      const { file } = staged(2 * MB);
+
+      await service.create(7, file);
+
+      expect(repository.sum).not.toHaveBeenCalled();
+      expect(store.adopt).toHaveBeenCalled();
+    });
+
+    it('does not apply to createFromBuffer', async () => {
+      process.env.STORAGE_QUOTA_MB = '1';
+      repository.sum!.mockResolvedValue(999 * MB);
+
+      await service.createFromBuffer(7, Buffer.alloc(2 * MB), 'p.zip');
+
+      expect(repository.sum).not.toHaveBeenCalled();
+      expect(store.put).toHaveBeenCalled();
     });
   });
 
