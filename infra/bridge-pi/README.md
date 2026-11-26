@@ -96,7 +96,7 @@ infra/bridge-pi/build-worker-image.sh          # on the Mac: arm64 image → gre
 ./deploy-worker.sh && ./deploy-worker.sh status
 ```
 
-**Job code isolation (`WORKER_RUN_AS`).** The shipped stack does not set `WORKER_RUN_AS`, so it is off by default: `claude --dangerously-skip-permissions` runs as the worker's own user (`pipe-worker`) and can read the worker key (`credentials.json`) and the VPN config (`xray-tunnel.json`) in `/app/.worker-state`. To isolate it, pass `WORKER_RUN_AS=pipe-runner` to the worker service; see worker/README «Два пользователя ОС» (it also has the verification command).
+**Job code isolation (`WORKER_RUN_AS`).** The worker image sets `WORKER_RUN_AS=pipe-runner` itself, so `claude --dangerously-skip-permissions` runs as a second OS user that cannot read the worker key (`credentials.json`) or the VPN config (`xray-tunnel.json`) in `/app/.worker-state` (before the image set it, the boards' containers ran job code as the worker's own user). An image from before that change needs a worker update to get it; see worker/README «Два пользователя ОС» (it also has the verification command).
 
 The link comes from your VPN panel, from the VPN page in bridge (copy the connection link — note a fresh database has no
 saved connections yet) or from a VPN app on your phone. It contains the server address, your client UUID and the Reality keys,

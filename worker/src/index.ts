@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadConfig } from './config.js';
 import { verifyRunAs } from './modelRunners/claudeRunner.js';
+import { restrictStateDir } from './stateDirMode.js';
 import { processChatTurn } from './chatTurn.js';
 import { withHeartbeat } from './heartbeat.js';
 import { processJob } from './jobRunner.js';
@@ -28,7 +29,13 @@ async function main(): Promise<void> {
   resolveFileSecrets(process.env, SECRET_ENV_KEYS);
   const baseConfig = loadConfig();
   // Fail loudly rather than silently run job code as the worker's own user.
-  if (baseConfig.runAs) verifyRunAs(baseConfig.runAs);
+  if (baseConfig.runAs) {
+    verifyRunAs(baseConfig.runAs);
+    // The runner must not get into the state directory (key, VPN config), whatever mode an older volume left on it.
+    const mode = restrictStateDir(baseConfig.stateDir);
+
+    if (mode === 'tightened') logger.info({ stateDir: baseConfig.stateDir }, 'state directory restricted to its owner');
+  }
 
   logger.info(
     { bridgeApiUrl: baseConfig.bridgeApiUrl, stateDir: baseConfig.stateDir, mode: baseConfig.bridgeApiKey ? 'api-key (legacy)' : 'enrolment' },
