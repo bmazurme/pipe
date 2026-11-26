@@ -1,6 +1,13 @@
+import { rm } from 'fs/promises';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -12,7 +19,7 @@ import {
   Repository,
 } from 'typeorm';
 
-import { UPLOAD_DIR } from './config/multer.config';
+import { storageQuotaBytes, UPLOAD_DIR } from './config/multer.config';
 import { ListFilesQueryDto } from './dto/list-files-query.dto';
 import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
 import { StoredFile, StoredFileDirection } from './entities/stored-file.entity';
@@ -43,12 +50,47 @@ export class StorageService {
     file: Express.Multer.File,
     meta: UploadFileMetaDto = {},
   ): Promise<StoredFile> {
-    await this.store.adopt(
-      file.filename,
-      file.path ?? join(UPLOAD_DIR, file.filename),
-    );
+    const stagedPath = file.path ?? join(UPLOAD_DIR, file.filename);
+
+    await this.assertWithinQuota(userId, file, stagedPath);
+    await this.store.adopt(file.filename, stagedPath);
 
     return this.record(userId, file, meta);
+  }
+
+  // STORAGE_QUOTA_MB caps what one account keeps. Over it: the staged file is removed and the upload is refused with 413.
+  private async assertWithinQuota(
+    userId: number,
+    file: Express.Multer.File,
+    stagedPath: string,
+  ): Promise<void> {
+    const quota = storageQuotaBytes();
+
+    if (quota === 0) {
+      return;
+    }
+
+    const used = Number(
+      (await this.storedFileRepository.sum('size', { userId })) ?? 0,
+    );
+
+    if (used + file.size <= quota) {
+      return;
+    }
+
+    try {
+      await rm(stagedPath, { force: true });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to remove rejected upload ${stagedPath}: ${error}`,
+      );
+    }
+
+    const gb = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
+
+    throw new PayloadTooLargeException(
+      `Хранилище заполнено: ${gb(used)} из ${gb(quota)} ГБ — скачайте или удалите посылки`,
+    );
   }
 
   // The row for a file that is already stored. If it cannot be saved, the file must not be left orphaned.
