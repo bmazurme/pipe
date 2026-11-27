@@ -134,6 +134,9 @@ npm test    # tsc -b && node --test 'dist/**/*.test.js'
 npm run lint    # flat-config ESLint, shared base in the repo root's eslint.config.base.mjs
 ```
 
+### Protecting `main` (S3)
+`infra/github/protect-main.sh` shows (default) or sets (`apply`) the protection of `main`: the eight CI jobs become required status checks (not «up to date», not enforced for administrators, no required review — the owner authors the assistant's PRs and cannot approve their own), no force pushes, no deleting; it refuses a check name that is not a job of `ci.yml` (`infra/github/test.sh` guards that in CI). A PR whose head a workflow pushed with `GITHUB_TOKEN` (the `regen` job) gets no CI run from that push: run the CI workflow on its branch by hand. `.github/CODEOWNERS` names the owner of the sensitive paths (a review request, not a gate). Every PR the assistant opens carries `risk:low|medium|high` (`improve/pr-risk.ts`), and the boards' autodeploy holds a `loop` + `risk:medium|high` release back for 30 minutes after its merge (`infra/autodeploy/README.md`, «The soak»).
+
 ### verify-changed (one command for what you touched and what depends on it)
 ```bash
 # from the repo root

@@ -18,11 +18,18 @@
 #      the stack files go back too, and this release is remembered as failed so it is not retried every five
 #      minutes — the next release (or `status` + a manual deploy) is
 #
+# The soak (S3): a release that carries a RISKY change made by the bot waits before it goes live — SOAK_MINUTES (30) after the merge of the newest such
+# pull request — so a bad one has half an hour in which somebody can notice it and revert (the revert becomes the next release, which replaces the
+# waiting one). «Risky» = the pull request has the label `loop` (made by bridge's Improve) and `risk:medium` or `risk:high` (bridge labels every
+# pull request it opens by the paths it touches, improve/pr-risk.ts); docs, tests and interface styling are `risk:low` and go at once, and so does
+# everything a person merged. The decision is made once per release and kept (STATE_DIR/soak.txt). GitHub not answering never holds a release back:
+# the soak is a safety margin, not a gate that could lock a release out. `autodeploy.sh now` skips it for that pass; SOAK_MINUTES=0 turns it off.
+#
 # Database migrations run forward with the new backend and are NOT rolled back: keep them additive (a new column is
 # harmless to the old code; a dropped one is not).
 #
 # Settings (/etc/pipe-autodeploy.env, read by the unit): OWNER, REPO, API_URL, BRIDGE_DIR, STATE_DIR,
-# MAX_WAIT_SECONDS, NOTIFY_CMD (run with the message as $1: deployed / rolled back), BRIDGE_API_KEY (optional: the owner's boards-only key,
+# MAX_WAIT_SECONDS, SOAK_MINUTES, NOTIFY_CMD (run with the message as $1: deployed / rolled back), BRIDGE_API_KEY (optional: the owner's boards-only key,
 # the same one the board agent uses - with it every release's outcome is reported to bridge, which stops the automation when a release is
 # rolled back and tells the owner which pull requests were in it; without it nothing is reported).
 #
@@ -35,6 +42,7 @@ API_URL="${API_URL:-https://api.bridge.ntlstl.dev}"
 BRIDGE_DIR="${BRIDGE_DIR:-$HOME/bridge-pi}"
 STATE_DIR="${STATE_DIR:-$HOME/.pipe/autodeploy}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-420}"
+SOAK_MINUTES="${SOAK_MINUTES:-30}"
 IMAGES=(pipe-bridge-backend pipe-bridge-frontend pipe-worker)
 SERVICES_FILE_GLOB=(bridge-pi.yml worker-pi.yml worker-managed-pi.yml Caddyfile)
 
@@ -97,6 +105,37 @@ release_sha() {
     | python3 -c 'import sys,json; r=json.load(sys.stdin)["workflow_runs"]; print(r[0]["head_sha"] if r else "")'
 }
 
+# ---- the soak (S3): see the header. Prints "<epoch the release may go live, 0 = now> <the pull requests that hold it back>". Never fails.
+soak_decision() { # sha previous-sha
+  local sha="$1" previous="$2" base="https://api.github.com/repos/$OWNER/$REPO" commits lines ready=0 held="" n merged labels hold
+  if [ -n "$previous" ]; then
+    commits="$(curl -fsS --max-time 20 "$base/compare/$previous...$sha?per_page=100")" || { echo "0 -"; return; }
+  else
+    commits="$(curl -fsS --max-time 20 "$base/commits/$sha")" || { echo "0 -"; return; }
+  fi
+  # "<pr number> <epoch of the merge>" for every squash commit of the release ("... (#123)"); the commit's own date is the merge time
+  lines="$(printf '%s' "$commits" | python3 -c '
+import json, re, sys
+from datetime import datetime
+data = json.load(sys.stdin)
+for c in (data.get("commits") if isinstance(data, dict) and "commits" in data else [data]):
+    m = re.search(r"\(#(\d+)\)\s*$", (c["commit"]["message"].split("\n")[0]))
+    if m:
+        print(m.group(1), int(datetime.fromisoformat(c["commit"]["committer"]["date"].replace("Z", "+00:00")).timestamp()))
+' 2>/dev/null)" || { echo "0 -"; return; }
+  while read -r n merged; do
+    [ -n "$n" ] || continue
+    labels="$(curl -fsS --max-time 20 "$base/issues/$n" | python3 -c 'import sys,json; print(" ".join(l["name"] for l in json.load(sys.stdin)["labels"]))' 2>/dev/null)" || continue
+    case " $labels " in *" loop "*) ;; *) continue;; esac
+    hold=""
+    case " $labels " in *" risk:high "*) hold="#$n(risk:high)";; *" risk:medium "*) hold="#$n(risk:medium)";; esac
+    [ -n "$hold" ] || continue
+    held="$held $hold"
+    [ $((merged + SOAK_MINUTES * 60)) -gt "$ready" ] && ready=$((merged + SOAK_MINUTES * 60))
+  done <<<"$lines"
+  echo "$ready ${held# }"
+}
+
 services_snapshot() { # "<name> <version index>" for every service of both stacks
   for stack in bridge bridgew; do
     docker stack services "$stack" --format '{{.Name}}' 2>/dev/null | while read -r name; do
@@ -142,9 +181,17 @@ if [ "${1:-}" = status ]; then
   echo "deployed:  $(cat "$STATE_DIR/deployed.txt" 2>/dev/null || echo '<nothing recorded>')"
   echo "failed:    $(cat "$STATE_DIR/failed.txt" 2>/dev/null || echo '<none>')"
   echo "published: $(release_sha 2>/dev/null || echo '<unreachable>')"
+  if [ -s "$STATE_DIR/soak.txt" ]; then
+    read -r soak_id soak_ready _ soak_prs < "$STATE_DIR/soak.txt"
+    if [ "${soak_ready:-0}" -gt "$(date +%s)" ]; then echo "soak:      release $soak_id waits $(( (soak_ready - $(date +%s) + 59) / 60 )) more min (${soak_prs:--})"; else echo "soak:      none pending (last decision for release $soak_id)"; fi
+  fi
   docker service ls --format '  {{.Name}} {{.Replicas}} {{.Image}}' | sed -E 's/@sha256:[a-f0-9]+//' | grep -E '  (bridge|bridgew)_' | sort || true
   exit 0
 fi
+
+# `now`: this pass does not wait for the soak.
+[ "${1:-}" != now ] || SOAK_MINUTES=0
+case "$SOAK_MINUTES" in ''|*[!0-9]*) log "SOAK_MINUTES must be a number of minutes — using 30"; SOAK_MINUTES=30;; esac
 
 exec 9>"$STATE_DIR/lock"
 flock -n 9 || { log "another pass is running"; exit 0; }
@@ -176,6 +223,24 @@ fi
 if [ "$release_id" = "$(cut -d' ' -f1 "$STATE_DIR/failed.txt" 2>/dev/null || true)" ]; then
   log "release $release_id (${sha:0:8}) already failed here — waiting for a newer one"
   exit 0
+fi
+
+# --- the soak: a risky change made by the bot goes live only after SOAK_MINUTES (decided once per release, kept)
+if [ "$SOAK_MINUTES" -gt 0 ]; then
+  soak_file="$STATE_DIR/soak.txt"
+  if [ "$(cut -d' ' -f1 "$soak_file" 2>/dev/null || true)" != "$release_id" ]; then
+    decision="$(soak_decision "$sha" "$previous_sha")"
+    echo "$release_id ${decision%% *} 0 ${decision#* }" > "$soak_file"
+  fi
+  read -r _ soak_ready soak_told soak_prs < "$soak_file"
+  now_epoch="$(date +%s)"
+  if [ "${soak_ready:-0}" -gt "$now_epoch" ]; then
+    if [ "${soak_told:-0}" = 0 ]; then
+      notify "⏳ Pi: версия ${sha:0:8} ждёт выдержки ещё ~$(( (soak_ready - now_epoch + 59) / 60 )) мин — в ней рискованные PR бота: ${soak_prs}. Если что-то не так — откатите (откат станет следующим релизом и заменит этот); сразу: /usr/local/lib/pipe-autodeploy/autodeploy.sh now"
+      echo "$release_id $soak_ready 1 $soak_prs" > "$soak_file"
+    fi
+    exit 0
+  fi
 fi
 
 log "new release $release_id (commit ${sha:0:8})"

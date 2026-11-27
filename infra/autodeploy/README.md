@@ -37,6 +37,20 @@ merge to main
 - registry/GitHub unreachable, a missing `stable` tag, an empty or wrong stack file → nothing happens (quietly or with a message);
 - database migrations run forward with the new backend and are **not** rolled back: keep them additive.
 
+## The soak (S3): a risky change made by the bot waits
+
+A release that carries a **risky change made by the assistant** is not deployed at once: it waits `SOAK_MINUTES` (30) after the merge of the newest such pull request.
+Half an hour in which somebody can notice it and revert — the revert becomes the next release and replaces the waiting one.
+
+- «Risky» = the PR has the label `loop` (bridge's Improve opened it) **and** `risk:medium` or `risk:high`. Bridge labels every PR it opens by the paths it touches
+  (`bridge/apps/backend/src/improve/pr-risk.ts`): docs, tests and interface styling are `risk:low`; code and dependencies `risk:medium`; infrastructure, the worker,
+  migrations, auth/secrets/VPN/boards, encryption, build and deploy `risk:high`; a path nobody knows is medium, never low.
+- **Not held back:** `risk:low`, everything a person merged (no `loop` label), a commit with no pull request, the first release ever on a board.
+- The decision is made **once per release** (from the commits between the deployed one and the new one: their `(#N)` numbers, the PRs' labels, the commits' dates)
+  and kept in `STATE_DIR/soak.txt`, so the waiting does not ask GitHub every five minutes. You are told once: «версия … ждёт выдержки ещё ~N мин — рискованные PR: …».
+- **GitHub not answering never holds a release back** (the soak is a safety margin, not a gate that could lock a release out).
+- `autodeploy.sh now` — this pass does not wait. `SOAK_MINUTES=0` in `/etc/pipe-autodeploy.env` turns it off. `autodeploy.sh status` shows what is waiting.
+
 ## Install / use
 
 ```bash

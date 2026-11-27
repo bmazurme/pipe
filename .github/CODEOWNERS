@@ -1,0 +1,28 @@
+# S3 — who answers for the parts of the repository that, if wrong, take the system or its data down. Sensitive paths are listed first for the
+# reader; the LAST matching line wins, so the general line is first and the sensitive ones after it.
+#
+# What this does and does not do: GitHub asks the owner for a review of a pull request that touches these paths. It is NOT a gate — the owner
+# is also the author of the pull requests the assistant opens (it uses the owner's token) and cannot approve their own, so «require review from
+# code owners» is deliberately off; the gate is the required CI checks (infra/github/protect-main.sh) and, for what the assistant changes, the risk
+# label + the soak before a release (bridge/apps/backend/src/improve/pr-risk.ts, infra/autodeploy). The paths below are the ones pr-risk.ts calls
+# `risk:high`; keep the two lists in step.
+*                                                  @bmazurme
+
+/.github/                                          @bmazurme
+/infra/                                            @bmazurme
+/worker/                                           @bmazurme
+/scripts/                                          @bmazurme
+/bridge/deploy/                                    @bmazurme
+**/migrations/                                     @bmazurme
+/bridge/apps/backend/src/auth/                     @bmazurme
+/bridge/apps/backend/src/oauth/                    @bmazurme
+/bridge/apps/backend/src/secrets/                  @bmazurme
+/bridge/apps/backend/src/crypto/                   @bmazurme
+/bridge/apps/backend/src/users/                    @bmazurme
+/bridge/apps/backend/src/vpn/                      @bmazurme
+/bridge/apps/backend/src/tunnel/                   @bmazurme
+/bridge/apps/backend/src/boards/                   @bmazurme
+/bridge/apps/backend/src/telegram/                 @bmazurme
+/bridge/apps/backend/src/loop/                     @bmazurme
+/packages/protocol/src/encryption*.ts              @bmazurme
+/packages/protocol/src/leakScan.ts                 @bmazurme

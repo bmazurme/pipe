@@ -11,6 +11,7 @@ import { withDefinitionOfDone } from './definition-of-done';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveHandoffService } from './improve-handoff.service';
 import { buildResultTree, message, PR_LABEL } from './improve-shared';
+import { assessRisk, describeRisk, RISK_LABELS } from './pr-risk';
 import {
   applyChanges,
   Change,
@@ -200,7 +201,7 @@ export class ImprovePublishService {
       });
       await this.storage.delete(file).catch(() => undefined);
       await this.notifier.send(
-        `🔀 Задача #${run.issueNumber} → PR #${pr.number} (${describeChanges(allowed)})\n${pr.url}`,
+        `🔀 Задача #${run.issueNumber} → PR #${pr.number} (${describeChanges(allowed)}) · ${describeRisk(pr.risk)}\n${pr.url}`,
       );
     } catch (error) {
       const reason = describePublishError(error);
@@ -306,6 +307,7 @@ export class ImprovePublishService {
     verificationText: string | null = null,
   ) {
     const baseSha = run.baseSha as string;
+    const risk = assessRisk(changes.map((change) => change.path));
     const commit = await this.github.createCommit(
       `Pull issue #${run.issueNumber}: ${run.issueTitle}\n\nAutomated by bridge Improve (run ${run.id}, ${run.model}).`,
       await this.createTreeFor(baseSha, changes),
@@ -326,6 +328,8 @@ export class ImprovePublishService {
           `Closes #${run.issueNumber}`,
           '',
           `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
+          '',
+          describeRisk(risk),
           ...(note ? ['', `⚠️ ${note}`] : []),
           ...(verificationText ? ['', verificationText] : []),
           '',
@@ -345,16 +349,17 @@ export class ImprovePublishService {
       throw error;
     }
 
-    // The loop picks the PR up by this label (see LoopService's adoption).
+    // The loop picks the PR up by this label (see LoopService's adoption); the risk label (S3) is what the board's autodeploy reads to hold a risky
+    // change back for a while before it goes live.
     await this.github
-      .addLabels(pull.number, [PR_LABEL])
+      .addLabels(pull.number, [PR_LABEL, RISK_LABELS[risk.risk]])
       .catch((error) =>
         this.logger.warn(
           `Could not label PR #${pull.number}: ${message(error)}`,
         ),
       );
 
-    return { branch, number: pull.number, url: pull.htmlUrl };
+    return { branch, number: pull.number, url: pull.htmlUrl, risk };
   }
 
   async finish(
