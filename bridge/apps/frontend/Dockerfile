@@ -4,7 +4,7 @@
 # the monorepo root and is outside a context scoped to bridge/ alone. Built
 # with:
 #   docker build -f bridge/apps/frontend/Dockerfile -t bridge-frontend .
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
