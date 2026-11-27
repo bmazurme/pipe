@@ -3,7 +3,7 @@
 # through the root's single package-lock.json rather than a "file:"
 # dependency. Built with:
 #   docker build -f worker/Dockerfile -t pipe-worker .
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN npm install -g npm@11
 
@@ -33,7 +33,7 @@ RUN npm run build --workspace=worker
 # dist/ above — stripped before the runtime image copies node_modules out.
 RUN npm prune --omit=dev
 
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app
 
 # Per claudeRunner.ts's own warning: --dangerously-skip-permissions runs
