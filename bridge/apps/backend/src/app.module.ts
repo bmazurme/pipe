@@ -43,8 +43,6 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    // NotifyService, for the heartbeat's own «it does not get through» message.
-    TelegramModule,
     // Global default — generous enough for legitimate polling: a single
     // browser with Worker+Chat+Storage all open at once peaks around 70-80
     // req/min, a single worker process's job+chat claim loop around 12/min.
@@ -85,6 +83,9 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     TunnelModule,
     RouterModule,
     WorkerModule,
+    // NotifyService, for the heartbeat's own «it does not get through» message. Last on purpose: where a module is first imported decides the
+    // order of the routes in the generated OpenAPI file.
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [

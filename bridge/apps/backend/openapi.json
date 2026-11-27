@@ -37,36 +37,6 @@
         }
       }
     },
-    "/api/v1/notification-settings": {
-      "get": {
-        "operationId": "NotificationSettingsController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      },
-      "put": {
-        "operationId": "NotificationSettingsController_update",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
     "/api/v1/auth/check": {
       "get": {
         "operationId": "AuthController_checkAuth",
@@ -369,6 +339,36 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/notification-settings": {
+      "get": {
+        "operationId": "NotificationSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "operationId": "NotificationSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -6835,29 +6835,6 @@
       }
     },
     "schemas": {
-      "UpdateNotificationSettingsDto": {
-        "type": "object",
-        "properties": {
-          "quietHours": {
-            "type": "string",
-            "pattern": "/^(off|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})$/i"
-          },
-          "timezone": {
-            "type": "string",
-            "maxLength": 64
-          },
-          "quietWeekends": {
-            "type": "boolean"
-          },
-          "allowUrgent": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "quietHours",
-          "timezone"
-        ]
-      },
       "CheckAuthResponseDto": {
         "type": "object",
         "properties": {
@@ -7074,6 +7051,29 @@
         },
         "required": [
           "key"
+        ]
+      },
+      "UpdateNotificationSettingsDto": {
+        "type": "object",
+        "properties": {
+          "quietHours": {
+            "type": "string",
+            "pattern": "/^(off|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})$/i"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "quietWeekends": {
+            "type": "boolean"
+          },
+          "allowUrgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "quietHours",
+          "timezone"
         ]
       },
       "MeResponseDto": {
