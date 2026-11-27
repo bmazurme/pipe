@@ -52,6 +52,11 @@ export function WorkerUpdateRow({ board }: { board: Board }) {
             {worker.name.replace('pipe-worker-pi-', '')} · {worker.running ? 'работает' : 'остановлен'}
           </Label>
         ))}
+        {(board.imageBehind ?? []).length > 0 && (
+          <Label theme="warning" size="xs" title="Образ контейнера — не тот релиз, на который сейчас указывает stable">
+            образ не последний: {(board.imageBehind ?? []).map((name) => name.replace('pipe-worker-pi-', '')).join(', ')}
+          </Label>
+        )}
         {board.workerPending ? (
           <>
             <Label theme="info">ждёт плату: обновление</Label>

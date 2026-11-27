@@ -23,6 +23,8 @@ export interface BoardWorker {
   restartCount?: number;
   startedAt?: string;
   oomKilled?: boolean;
+  // The release the container runs: the manifest-list digest it was pulled as (agent version 6+); absent when the agent does not know.
+  digest?: string;
 }
 
 // What the board reported about its disk and SSH; every field optional (see BoardHealthDto).
@@ -36,6 +38,8 @@ export interface BoardHealth {
   workers?: BoardWorker[];
   // S1(3): whether the filter that keeps worker containers off the home network is in place; said only by a board that has workers.
   workerEgress?: boolean;
+  // The digest `stable` of the worker image has in the registry right now, as the agent saw it (R2); absent when the registry did not answer.
+  workerImageLatest?: string;
 }
 
 // What a board last told bridge about the scripts installed on it. One row per (account, board): the board's own agent posts it

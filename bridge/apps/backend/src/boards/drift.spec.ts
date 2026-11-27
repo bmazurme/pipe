@@ -185,6 +185,42 @@ describe('assessDrift', () => {
     ).toEqual([]);
   });
 
+  it('says a worker runs an older release of the image than stable, unless an update is already on its way (R2)', () => {
+    const behind = ['pipe-worker-pi-red'];
+
+    expect(
+      assessDrift(
+        [board({ workers: [container()], imageBehind: behind })],
+        [],
+        NOW,
+      ).items.map((i) => i.id),
+    ).toEqual(['ubuntu-red:worker-behind']);
+    expect(
+      assessDrift(
+        [board({ workers: [container()], imageBehind: behind })],
+        [],
+        NOW,
+      ).items[0].text,
+    ).toMatch(/автообновление/);
+    expect(
+      assessDrift(
+        [
+          board({
+            workers: [container()],
+            imageBehind: behind,
+            updatePending: true,
+          }),
+        ],
+        [],
+        NOW,
+      ).items,
+    ).toEqual([]);
+    expect(
+      assessDrift([board({ workers: [container()], imageBehind: [] })], [], NOW)
+        .items,
+    ).toEqual([]);
+  });
+
   it('flags scripts behind main', () => {
     const view = assessDrift([board({ outdatedScripts: 2 })], [], NOW);
 

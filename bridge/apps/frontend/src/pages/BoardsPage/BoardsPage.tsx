@@ -6,6 +6,7 @@ import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { type Board, type BoardScript, getErrorMessage, useCancelBoardUpdateMutation, useListBoardsQuery, useRequestBoardUpdateMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { PageHeader } from '../../widgets/PageHeader';
+import { AutoUpdateCard } from './AutoUpdateCard';
 import { WorkerUpdateRow } from './WorkerUpdateRow';
 import styles from './BoardsPage.module.css';
 
@@ -170,6 +171,8 @@ export function BoardsPage() {
         title="Платы"
         description="Скрипты, установленные на платах, против main. Кнопка «Обновить» разрешает плате поставить именно этот коммит: она проверяет, что он влит в main, и отчитывается о результате. «Обновить worker» разрешает плате скачать свежий образ worker и пересоздать его контейнер с теми же настройками."
       />
+
+      <AutoUpdateCard />
 
       {isLoading && <Skeleton style={{ height: 120 }} />}
       {isError && <Alert theme="danger" view="filled" message={typeof error === 'string' ? error : getErrorMessage(error, 'Не удалось загрузить платы')} />}

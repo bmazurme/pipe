@@ -2,6 +2,7 @@ import { ApiKey } from '../auth/entities/api-key.entity';
 import { AuthIdentity } from '../auth/entities/auth-identity.entity';
 import { EmergencyKey } from '../auth/entities/emergency-key.entity';
 import { Session } from '../auth/entities/session.entity';
+import { BoardAutoUpdateSettings } from '../boards/entities/board-auto-update-settings.entity';
 import { BoardReport } from '../boards/entities/board-report.entity';
 import { BoardMetric } from '../boards/entities/board-metric.entity';
 import { CloudReport } from '../boards/entities/cloud-report.entity';
@@ -72,6 +73,7 @@ export const ENTITIES = [
   SystemSettings,
   TaskQuestion,
   BoardReport,
+  BoardAutoUpdateSettings,
   NasReport,
   CloudReport,
   UpsReport,

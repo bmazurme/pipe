@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { NotifyService } from '../telegram/notify.service';
+import { workersBehind } from './worker-auto-update';
 import { BoardReportDto } from './dto/boards.dto';
 import {
   BoardHealth,
@@ -67,6 +68,8 @@ export interface BoardView {
   } | null;
   // The worker containers the agent found here, and the owner's decision to update them (same shape as the scripts' pending/last).
   workers: BoardWorker[];
+  // R2: the worker containers that run a release other than the current `stable` (empty when up to date, or when the agent does not say).
+  imageBehind: string[];
   workerPending: { id: number; via: string; createdAt: Date } | null;
   workerLast: {
     id: number;
@@ -374,6 +377,10 @@ export class BoardsService {
             }
           : null,
         workers: report.health?.workers ?? [],
+        imageBehind: workersBehind(
+          report.health?.workers ?? [],
+          report.health?.workerImageLatest,
+        ).map((worker) => worker.name),
         workerPending: workerPending
           ? {
               id: workerPending.id,
@@ -460,6 +467,8 @@ export class BoardsService {
     userId: number,
     host: string,
     via: ScriptUpdateVia,
+    // R2: the release (digest of `stable`) the decision is made for.
+    targetDigest: string | null = null,
   ): Promise<ScriptUpdate> {
     const report = await this.reports.findOne({ where: { userId, host } });
 
@@ -489,6 +498,7 @@ export class BoardsService {
         status: 'pending',
         via,
         kind: 'worker',
+        targetDigest,
         result: null,
         finishedAt: null,
       }),
@@ -611,8 +621,8 @@ export class BoardsService {
     if (update.kind === 'worker') {
       await this.notifier.send(
         ok
-          ? `✅ Worker на ${update.host} обновлён${message ? `\n${message.slice(0, 500)}` : ''}`
-          : `🔴 Обновление worker на ${update.host} не удалось: ${(message ?? '').slice(0, 500)}`,
+          ? `✅ Worker на ${update.host} обновлён${update.via === 'auto' ? ' автоматически' : ''}${message ? `\n${message.slice(0, 500)}` : ''}`
+          : `🔴 ${update.via === 'auto' ? 'Автообновление' : 'Обновление'} worker на ${update.host} не удалось: ${(message ?? '').slice(0, 500)}${update.via === 'auto' ? '\nЭтот релиз на этой плате автоматически повторяться не будет — кнопка «Обновить worker» или следующий релиз.' : ''}`,
       );
       this.logger.log(
         `Board ${update.host}: worker update ${update.id} ${ok ? 'applied' : 'failed'}`,

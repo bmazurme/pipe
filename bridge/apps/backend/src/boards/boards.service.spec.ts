@@ -412,6 +412,85 @@ describe('BoardsService.requestWorkerUpdate', () => {
     );
   });
 
+  it('records which release an automatic decision was made for (R2), so a release that failed is not tried again by itself', async () => {
+    const digest = `sha256:${'2'.repeat(64)}`;
+    const { service } = setup(fresh({ health: { workers } }));
+
+    await expect(
+      service.requestWorkerUpdate(7, 'ubuntu-red', 'auto', digest),
+    ).resolves.toMatchObject({
+      via: 'auto',
+      kind: 'worker',
+      targetDigest: digest,
+    });
+    await expect(
+      service.requestWorkerUpdate(7, 'ubuntu-red', 'ui'),
+    ).resolves.toMatchObject({ via: 'ui', targetDigest: null });
+  });
+
+  it('says in the message that an update was made by itself, and what it means when it failed', async () => {
+    const { service, updates, notifier } = setup(
+      fresh({ health: { workers } }),
+    );
+    const row: Partial<ScriptUpdate> = {
+      id: 5,
+      userId: 7,
+      host: 'ubuntu-red',
+      kind: 'worker',
+      status: 'pending',
+      via: 'auto',
+      sha: SHA,
+      repoPaths: [],
+      createdAt: new Date(),
+    };
+
+    updates.findOne.mockResolvedValue({ ...row });
+    await service.recordResult(7, 5, true, 'pipe-worker-pi-red: обновлён');
+    expect(notifier.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('обновлён автоматически'),
+    );
+
+    updates.findOne.mockResolvedValue({ ...row });
+    await service.recordResult(7, 5, false, 'новый контейнер не стартовал');
+    expect(notifier.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('Автообновление worker на ubuntu-red не удалось'),
+    );
+    expect(notifier.send).toHaveBeenLastCalledWith(
+      expect.stringContaining('автоматически повторяться не будет'),
+    );
+  });
+
+  it('shows in the list which worker containers run a release other than the current stable', async () => {
+    const latest = `sha256:${'2'.repeat(64)}`;
+    const old = `sha256:${'1'.repeat(64)}`;
+    const { service } = setup(
+      fresh({
+        health: {
+          workers: [
+            {
+              name: 'pipe-worker-pi-red',
+              image: 'i',
+              running: true,
+              digest: old,
+            },
+            {
+              name: 'pipe-worker-pi-blue',
+              image: 'i',
+              running: true,
+              digest: latest,
+            },
+            { name: 'pipe-worker-pi-green', image: 'i', running: true },
+          ],
+          workerImageLatest: latest,
+        },
+      }),
+    );
+
+    const [board] = await service.list(7);
+
+    expect(board.imageBehind).toEqual(['pipe-worker-pi-red']);
+  });
+
   it('refuses an unknown board, an old report, and a board with no worker container reported', async () => {
     await expect(
       setup(null).service.requestWorkerUpdate(7, 'ubuntu-red', 'ui'),

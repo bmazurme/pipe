@@ -5,7 +5,8 @@ import { BaseEntity } from '../../base.entity';
 export type ScriptUpdateStatus =
   'pending' | 'applied' | 'failed' | 'cancelled' | 'expired';
 
-export type ScriptUpdateVia = 'telegram' | 'ui';
+// 'auto': bridge made the decision itself (R2), in the window the owner chose.
+export type ScriptUpdateVia = 'telegram' | 'ui' | 'auto';
 
 // 'scripts': install the board's scripts from `main`. 'worker': pull the worker image and recreate the board's worker container(s).
 export type ScriptUpdateKind = 'scripts' | 'worker';
@@ -38,6 +39,10 @@ export class ScriptUpdate extends BaseEntity {
   // What the decision is for; a worker decision has no repoPaths and its sha is only the commit the owner saw.
   @Column({ type: 'varchar', length: 16, default: 'scripts' })
   kind: ScriptUpdateKind;
+
+  // A worker decision: the release (manifest-list digest of `stable`) it was made for — so a release that failed on a board is not tried again by itself.
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  targetDigest: string | null;
 
   // What the agent said when it was done.
   @Column({ type: 'text', nullable: true })

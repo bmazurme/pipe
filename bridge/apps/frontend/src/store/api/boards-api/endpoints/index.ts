@@ -20,6 +20,8 @@ export interface BoardHealth {
   workers?: BoardWorker[];
   /** Whether the filter that keeps worker containers off the home network is in place (agent v5+, boards with workers only). */
   workerEgress?: boolean;
+  /** What `stable` of the worker image is in the registry now, as the agent saw it. */
+  workerImageLatest?: string;
 }
 
 /** A worker container (pipe-worker-pi-…) the board's agent found, with the image it runs. */
@@ -30,6 +32,8 @@ export interface BoardWorker {
   restartCount?: number;
   startedAt?: string;
   oomKilled?: boolean;
+  /** The release the container runs (manifest-list digest); absent when the agent does not say. */
+  digest?: string;
 }
 
 export type DriftLevel = 'bad' | 'warn';
@@ -68,9 +72,20 @@ export interface Board {
   lastUpdate: { id: number; status: string; sha: string; result: string | null; finishedAt: string | null; createdAt: string } | null;
   /** The worker containers on this board; «Обновить worker» is offered only where there are some. */
   workers: BoardWorker[];
+  /** R2: the worker containers that run a release other than the current `stable`. */
+  imageBehind: string[];
   /** The owner's decision to update the worker(s), waiting for the board to pick it up. */
   workerPending: { id: number; via: string; createdAt: string } | null;
   workerLast: { id: number; status: string; result: string | null; finishedAt: string | null; createdAt: string } | null;
+}
+
+/** R2: whether bridge updates the workers by itself, and the daily window it may. */
+export interface AutoUpdate {
+  enabled: boolean;
+  window: string;
+  timezone: string;
+  inWindowNow: boolean;
+  last: { host: string; status: string; at: string | null; result: string | null } | null;
 }
 
 function errorMessage(fallback: string) {
@@ -88,6 +103,16 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
       query: () => 'boards/drift',
       providesTags: ['Boards'],
       transformErrorResponse: errorMessage('Не удалось получить дрейф'),
+    }),
+    getAutoUpdate: builder.query<AutoUpdate, void>({
+      query: () => 'boards/auto-update',
+      providesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось загрузить настройку автообновления'),
+    }),
+    saveAutoUpdate: builder.mutation<AutoUpdate, { enabled: boolean; window: string; timezone: string }>({
+      query: (body) => ({ url: 'boards/auto-update', method: 'PUT', body }),
+      invalidatesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось сохранить автообновление'),
     }),
     requestBoardUpdate: builder.mutation<{ id: number; sha: string; repoPaths: string[]; status: string }, string>({
       query: (host) => ({ url: `boards/${encodeURIComponent(host)}/updates`, method: 'POST' }),
@@ -115,6 +140,8 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
 export const {
   useListBoardsQuery,
   useGetDriftQuery,
+  useGetAutoUpdateQuery,
+  useSaveAutoUpdateMutation,
   useRequestBoardUpdateMutation,
   useCancelBoardUpdateMutation,
   useRequestWorkerUpdateMutation,

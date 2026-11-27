@@ -46,6 +46,8 @@ export class ReportedScriptDto {
   mainHash?: string | null;
 }
 
+export const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
+
 export const WORKER_CONTAINER_PATTERN =
   /^pipe-worker-pi-[a-z0-9][a-z0-9-]{0,40}$/;
 
@@ -75,6 +77,11 @@ export class BoardWorkerDto {
   @IsOptional()
   @IsBoolean()
   oomKilled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Matches(DIGEST_PATTERN)
+  digest?: string;
 }
 
 // What a board can say about itself besides its scripts (infra/boardagent `collect_health`): the root disk and the SSH door. Every field
@@ -123,6 +130,12 @@ export class BoardHealthDto {
   @IsOptional()
   @IsBoolean()
   workerEgress?: boolean;
+
+  // What `stable` of the worker image is in the registry now (agent version 6+).
+  @IsOptional()
+  @IsString()
+  @Matches(DIGEST_PATTERN)
+  workerImageLatest?: string;
 }
 
 // What a board's agent posts about itself.
@@ -160,4 +173,18 @@ export class UpdateResultDto {
   @IsString()
   @MaxLength(4000)
   message?: string;
+}
+
+// R2: the owner's switch for updating the workers by itself, and the window in which it may.
+export class SaveAutoUpdateDto {
+  @IsBoolean()
+  enabled: boolean;
+
+  @IsString()
+  @MaxLength(16)
+  window: string;
+
+  @IsString()
+  @MaxLength(64)
+  timezone: string;
 }

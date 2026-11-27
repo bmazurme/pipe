@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -20,6 +22,7 @@ import { BoardsService } from './boards.service';
 import {
   BoardReportDto,
   HOST_PATTERN,
+  SaveAutoUpdateDto,
   UpdateResultDto,
 } from './dto/boards.dto';
 import { BoardMetricsDto } from './dto/board-metrics.dto';
@@ -33,6 +36,7 @@ import { CloudService } from './cloud.service';
 import { UpsService } from './ups.service';
 import { RouterService } from './router.service';
 import { DriftService } from './drift.service';
+import { WorkerAutoUpdateService } from './worker-auto-update.service';
 import type { DriftView } from './drift';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
@@ -160,6 +164,7 @@ export class BoardsController {
   constructor(
     private readonly boards: BoardsService,
     private readonly drift: DriftService,
+    private readonly autoUpdate: WorkerAutoUpdateService,
   ) {}
 
   @Get()
@@ -172,6 +177,24 @@ export class BoardsController {
   @Get('drift')
   driftView(@CurrentUser() user: { id: number }): Promise<DriftView> {
     return this.drift.view(user.id);
+  }
+
+  // R2: whether bridge updates the workers on the boards by itself (off until the owner switches it on) and the daily window it may.
+  @Get('auto-update')
+  autoUpdateView(@CurrentUser() user: { id: number }) {
+    return this.autoUpdate.view(user.id);
+  }
+
+  @Put('auto-update')
+  async saveAutoUpdate(
+    @Body() dto: SaveAutoUpdateDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const problem = await this.autoUpdate.save(user.id, dto);
+
+    if (problem) throw new BadRequestException(problem);
+
+    return this.autoUpdate.view(user.id);
   }
 
   @Post(':host/updates')

@@ -1730,6 +1730,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/boards/auto-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["BoardsController_autoUpdateView"];
+        put: operations["BoardsController_saveAutoUpdate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boards/{host}/updates": {
         parameters: {
             query?: never;
@@ -4272,6 +4288,7 @@ export interface components {
             restartCount?: number;
             startedAt?: string;
             oomKilled?: boolean;
+            digest?: string;
         };
         BoardHealthDto: {
             diskUsedPct?: number;
@@ -4282,6 +4299,7 @@ export interface components {
             sshdActive?: boolean;
             workers?: components["schemas"]["BoardWorkerDto"][];
             workerEgress?: boolean;
+            workerImageLatest?: string;
         };
         BoardReportDto: {
             host: string;
@@ -4293,6 +4311,11 @@ export interface components {
         UpdateResultDto: {
             ok: boolean;
             message?: string;
+        };
+        SaveAutoUpdateDto: {
+            enabled: boolean;
+            window: string;
+            timezone: string;
         };
         CreateImproveIssueDto: {
             contextId?: number | null;
@@ -7558,6 +7581,48 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    BoardsController_autoUpdateView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    BoardsController_saveAutoUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAutoUpdateDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
