@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -58,6 +59,15 @@ import {
   requireImproveModel,
 } from './improve-shared';
 import { withDefinitionOfDone } from './definition-of-done';
+import {
+  allAnswered,
+  CLARIFY_MODEL,
+  clarificationsSection,
+  clarifyPrompt,
+  shouldClarify,
+} from './clarify';
+import { ImproveSettings } from './entities/improve-settings.entity';
+import { QuestionsService } from '../questions/questions.service';
 import { MAX_REPAIRS_PER_PR, prFixBody, repairBody } from './repair';
 import { readResultParcel, utf8Text } from './parcel';
 
@@ -108,6 +118,11 @@ export class ImproveService {
     private readonly issueFiling: ImproveIssueFilingService,
     private readonly publisher: ImprovePublishService,
     private readonly handoff: ImproveHandoffService,
+    // A6 (optional so that what builds this service without them still works): the account's settings, and the questions a reading job reports.
+    @Optional()
+    @InjectRepository(ImproveSettings)
+    private readonly settingsRepo?: Repository<ImproveSettings>,
+    @Optional() private readonly questions?: QuestionsService,
   ) {
     // Issues filed by bridge itself change the list: the next read goes to GitHub.
     if (this.issueFiling)
@@ -291,6 +306,7 @@ export class ImproveService {
         scheduleId,
         status: ImproveRunStatus.Preparing,
         jobId: null,
+        contextId,
       }),
     );
 
@@ -305,6 +321,7 @@ export class ImproveService {
 
   // The slow part of a start: the snapshot download and the parcel. Its outcome lands on the run
   // row (Queued with the job, or Failed with the reason); it never rejects.
+  // A6: when the owner asked for it, a cheap model reads the task first (a job of its own); the real job is handed over when that is done.
   private async prepareRun(
     run: ImproveRun,
     issue: { number: number; title: string; body: string },
@@ -312,70 +329,349 @@ export class ImproveService {
   ): Promise<void> {
     try {
       const prepared = await this.handoff.prepareSnapshot();
-      const { job, baseSha, baseline, fileCount, model, routing } =
-        await this.handoff.handToWorker(
-          run.userId,
-          run.model,
-          {
-            number: issue.number,
-            title: issue.title,
-            body: withDefinitionOfDone(issue.body),
-          },
-          `improve:${issue.number}`,
-          `improve-${issue.number}.subscription.zip`,
-          undefined,
-          prepared,
-          contextId,
-        );
 
-      // Guarded by status: a run that was failed as lost in the meantime stays so.
+      if (await this.wantsClarification(run)) {
+        if (await this.startClarification(run, issue, contextId, prepared)) {
+          return;
+        }
+      }
+
+      await this.launchRun(run, issue, contextId, prepared, '');
+    } catch (error) {
+      await this.failPreparing(run, issue.number, error);
+    }
+  }
+
+  private async failPreparing(
+    run: ImproveRun,
+    issueNumber: number,
+    error: unknown,
+  ): Promise<void> {
+    await this.runs.update(
+      {
+        id: run.id,
+        status: In([
+          ImproveRunStatus.Preparing,
+          ImproveRunStatus.Clarifying,
+          ImproveRunStatus.AwaitingAnswer,
+        ]),
+      },
+      {
+        status: ImproveRunStatus.Failed,
+        error: message(error),
+        finishedAt: new Date(),
+      },
+    );
+    this.log(
+      'warn',
+      'improve.run_prepare_failed',
+      `Run ${run.id}: issue #${issueNumber} could not be prepared: ${message(error)}`,
+      { runId: run.id },
+    );
+  }
+
+  // The job that does the work: the snapshot, the task (with the definition of done, and the owner's answers when there are any), a worker.
+  private async launchRun(
+    run: ImproveRun,
+    issue: { number: number; title: string; body: string },
+    contextId: number | null,
+    prepared:
+      Awaited<ReturnType<ImproveHandoffService['prepareSnapshot']>> | undefined,
+    clarifications: string,
+  ): Promise<void> {
+    const snapshot = prepared ?? (await this.handoff.prepareSnapshot());
+    const { job, baseSha, baseline, fileCount, model, routing } =
+      await this.handoff.handToWorker(
+        run.userId,
+        run.model,
+        {
+          number: issue.number,
+          title: issue.title,
+          body: withDefinitionOfDone(`${issue.body}${clarifications}`),
+        },
+        `improve:${issue.number}`,
+        `improve-${issue.number}.subscription.zip`,
+        undefined,
+        snapshot,
+        contextId,
+      );
+
+    // Guarded by status: a run that was failed as lost in the meantime stays so.
+    const res = await this.runs.update(
+      {
+        id: run.id,
+        status: In([
+          ImproveRunStatus.Preparing,
+          ImproveRunStatus.Clarifying,
+          ImproveRunStatus.AwaitingAnswer,
+        ]),
+      },
+      {
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        baseSha,
+        baseline: JSON.stringify(baseline),
+        note: clarifications
+          ? 'Запуск после уточнения: ответы владельца в задаче'
+          : null,
+        // 'auto': the run now says which model it really runs on, and why
+        ...(routing ? { model, routing } : {}),
+      },
+    );
+
+    if (res.affected !== 1) {
+      await this.workers.cancel(job.id, run.userId).catch(() => undefined);
+
+      return;
+    }
+
+    run.status = ImproveRunStatus.Queued;
+    run.jobId = job.id;
+    run.baseSha = baseSha;
+    if (routing) {
+      run.model = model;
+      run.routing = routing;
+    }
+    this.log(
+      'info',
+      'improve.run_started',
+      `Run ${run.id}: issue #${issue.number} → job ${job.id} (${run.model}, ${run.trigger})`,
+      { runId: run.id, jobId: job.id, files: fileCount },
+    );
+  }
+
+  // ------------------------------------------------ A6: read the task before the run
+
+  private async wantsClarification(run: ImproveRun): Promise<boolean> {
+    if (!this.settingsRepo || !this.questions) return false;
+
+    const settings = await this.settingsRepo.findOne({
+      where: { userId: run.userId },
+    });
+
+    return shouldClarify(settings?.clarifyBeforeRun, run.model, run.trigger);
+  }
+
+  // Hands a cheap model the task to READ (not to do). Returns true when the reading started; false (advisory: nothing is lost) lets the run go on as it
+  // would have without it.
+  private async startClarification(
+    run: ImproveRun,
+    issue: { number: number; title: string; body: string },
+    contextId: number | null,
+    prepared: Awaited<ReturnType<ImproveHandoffService['prepareSnapshot']>>,
+  ): Promise<boolean> {
+    try {
+      const { job } = await this.handoff.handToWorker(
+        run.userId,
+        CLARIFY_MODEL,
+        {
+          number: issue.number,
+          title: issue.title,
+          body: clarifyPrompt(issue),
+        },
+        `improve:${issue.number}`,
+        `improve-clarify-${issue.number}.subscription.zip`,
+        undefined,
+        prepared,
+        contextId,
+        false,
+      );
       const res = await this.runs.update(
         { id: run.id, status: ImproveRunStatus.Preparing },
         {
-          status: ImproveRunStatus.Queued,
+          status: ImproveRunStatus.Clarifying,
           jobId: job.id,
-          baseSha,
-          baseline: JSON.stringify(baseline),
-          // 'auto': the run now says which model it really runs on, and why
-          ...(routing ? { model, routing } : {}),
+          note: 'Перед запуском задачу читает Haiku: не осталось ли неясного',
         },
       );
 
       if (res.affected !== 1) {
         await this.workers.cancel(job.id, run.userId).catch(() => undefined);
 
+        return true;
+      }
+
+      run.status = ImproveRunStatus.Clarifying;
+      run.jobId = job.id;
+      this.log(
+        'info',
+        'improve.clarify_started',
+        `Run ${run.id}: issue #${issue.number} is read first (job ${job.id})`,
+        { runId: run.id, jobId: job.id },
+      );
+
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Run ${run.id}: the reading before the run could not be started, going on without it: ${message(error)}`,
+      );
+
+      return false;
+    }
+  }
+
+  // The reading job is over: nothing blocking → the real run; questions → wait for the owner. A reading that failed is not a reason to stop: it is
+  // advisory, the run goes on as it would have without it.
+  private async advanceClarifying(
+    run: ImproveRun,
+    job: JobStatusRow | undefined,
+  ): Promise<void> {
+    if (!job) return;
+
+    if (job.status === JobStatus.Cancelled) {
+      await this.publisher.finish(run, ImproveRunStatus.Cancelled, {
+        note: 'Чтение задачи остановлено',
+      });
+
+      return;
+    }
+
+    if (job.status !== JobStatus.Succeeded && job.status !== JobStatus.Failed) {
+      if (run.status !== ImproveRunStatus.Clarifying) return;
+
+      return;
+    }
+
+    // Claimed once even if two ticks overlap.
+    const claim = await this.runs.update(
+      { id: run.id, status: ImproveRunStatus.Clarifying },
+      { status: ImproveRunStatus.Preparing },
+    );
+
+    if (claim.affected !== 1) return;
+
+    run.status = ImproveRunStatus.Preparing;
+
+    // What the reading changed (nothing, if it behaved) is not wanted: the result parcel is dropped.
+    if (job.resultFileId) {
+      await this.storage
+        .findOwned(job.resultFileId, run.userId)
+        .then((file) => this.storage.delete(file))
+        .catch(() => undefined);
+    }
+
+    try {
+      const found =
+        job.status === JobStatus.Succeeded && this.questions
+          ? await this.questions.forJob(run.userId, job.id)
+          : [];
+      const open = found.filter((question) => question.resolvedAt === null);
+
+      if (open.length === 0) {
+        await this.launchFromRun(run, '');
+
         return;
       }
 
-      run.status = ImproveRunStatus.Queued;
-      run.jobId = job.id;
-      run.baseSha = baseSha;
-      if (routing) {
-        run.model = model;
-        run.routing = routing;
-      }
-      this.log(
-        'info',
-        'improve.run_started',
-        `Run ${run.id}: issue #${issue.number} → job ${job.id} (${run.model}, ${run.trigger})`,
-        { runId: run.id, jobId: job.id, files: fileCount },
-      );
-    } catch (error) {
       await this.runs.update(
         { id: run.id, status: ImproveRunStatus.Preparing },
         {
-          status: ImproveRunStatus.Failed,
-          error: message(error),
-          finishedAt: new Date(),
+          status: ImproveRunStatus.AwaitingAnswer,
+          note: `Ждёт ответов: ${open.length} — страница «Вопросы», карточка improve:${run.issueNumber}`,
         },
       );
+      run.status = ImproveRunStatus.AwaitingAnswer;
       this.log(
-        'warn',
-        'improve.run_prepare_failed',
-        `Run ${run.id}: issue #${issue.number} could not be prepared: ${message(error)}`,
-        { runId: run.id },
+        'info',
+        'improve.awaiting_answer',
+        `Run ${run.id}: issue #${run.issueNumber} waits for ${open.length} answer(s)`,
+        { runId: run.id, jobId: job.id },
+      );
+      await this.notifier.send(
+        `❓ Задача #${run.issueNumber} «${run.issueTitle.slice(0, 80)}»: перед запуском нужны ответы (${open.length}) — страница «Вопросы», карточка improve:${run.issueNumber}. Запуск стартует сам, когда ответите на все; сразу — «Запустить без ответов» на странице Improve.`,
+      );
+    } catch (error) {
+      await this.failPreparing(run, run.issueNumber as number, error);
+    }
+  }
+
+  // The real run of a run that was waiting or being read: the issue as it is now, plus the answers.
+  private async launchFromRun(
+    run: ImproveRun,
+    clarifications: string,
+  ): Promise<void> {
+    const issue = await this.github.getIssue(run.issueNumber as number);
+
+    if (issue.isPull || issue.state !== 'open') {
+      await this.publisher.finish(run, ImproveRunStatus.Cancelled, {
+        note: `#${run.issueNumber} уже не открытая задача — запуск отменён`,
+      });
+
+      return;
+    }
+
+    await this.launchRun(
+      run,
+      issue,
+      run.contextId ?? null,
+      undefined,
+      clarifications,
+    );
+  }
+
+  // Runs whose questions have all been answered start by themselves.
+  private async resumeAnswered(): Promise<void> {
+    if (!this.questions) return;
+
+    const waiting = await this.runs.find({
+      where: { status: ImproveRunStatus.AwaitingAnswer },
+      order: { id: 'ASC' },
+    });
+
+    for (const run of waiting) {
+      if (!run.jobId) continue;
+
+      const asked = await this.questions.forJob(run.userId, run.jobId);
+
+      if (!allAnswered(asked)) continue;
+
+      await this.resume(run, asked).catch((error) =>
+        this.logger.warn(
+          `Run ${run.id} could not be resumed: ${message(error)}`,
+        ),
       );
     }
+  }
+
+  private async resume(
+    run: ImproveRun,
+    asked: Array<{ text: string; answer: string | null }>,
+  ): Promise<void> {
+    const claim = await this.runs.update(
+      { id: run.id, status: ImproveRunStatus.AwaitingAnswer },
+      { status: ImproveRunStatus.Preparing },
+    );
+
+    if (claim.affected !== 1) return;
+
+    run.status = ImproveRunStatus.Preparing;
+
+    try {
+      await this.launchFromRun(run, clarificationsSection(asked));
+    } catch (error) {
+      await this.failPreparing(run, run.issueNumber as number, error);
+    }
+  }
+
+  // The owner does not want to wait for the answers (or does not know them): the run starts now, with the answers there are, and what was left
+  // open says so in its task.
+  async continueRun(id: number, userId: number): Promise<ImproveRun> {
+    const run = await this.runs.findOne({ where: { id } });
+
+    if (!run) throw new NotFoundException('Run not found');
+    if (run.status !== ImproveRunStatus.AwaitingAnswer || !run.jobId) {
+      throw new ConflictException('Запуск не ждёт ответов');
+    }
+
+    const asked = this.questions
+      ? await this.questions.forJob(run.userId ?? userId, run.jobId)
+      : [];
+
+    await this.resume(run, asked);
+    // What stayed open is settled, so the card does not stay as an open task.
+    await this.questions?.resolveForJob(run.userId ?? userId, run.jobId);
+
+    return (await this.runs.findOne({ where: { id } })) ?? run;
   }
 
   // CI went red on an open Improve PR: a worker gets the PR's branch as it is now, with the failing
@@ -726,7 +1022,12 @@ export class ImproveService {
     const res = await this.runs.update(
       {
         id,
-        status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
+        status: In([
+          ImproveRunStatus.Queued,
+          ImproveRunStatus.Running,
+          ImproveRunStatus.Clarifying,
+          ImproveRunStatus.AwaitingAnswer,
+        ]),
       },
       { status: ImproveRunStatus.Cancelled, finishedAt: new Date() },
     );
@@ -814,7 +1115,11 @@ export class ImproveService {
 
       const active = await this.runs.find({
         where: {
-          status: In([ImproveRunStatus.Queued, ImproveRunStatus.Running]),
+          status: In([
+            ImproveRunStatus.Queued,
+            ImproveRunStatus.Running,
+            ImproveRunStatus.Clarifying,
+          ]),
         },
         order: { id: 'ASC' },
       });
@@ -834,6 +1139,12 @@ export class ImproveService {
           ),
         );
       }
+
+      await this.resumeAnswered().catch((error) =>
+        this.logger.warn(
+          `Waiting runs could not be resumed: ${message(error)}`,
+        ),
+      );
     } finally {
       this.advancing = false;
     }
@@ -938,6 +1249,10 @@ export class ImproveService {
 
     if (!job || job.userId !== run.userId)
       throw new NotFoundException('Job not found');
+
+    if (run.status === ImproveRunStatus.Clarifying) {
+      return this.advanceClarifying(run, job);
+    }
 
     if (job.status === JobStatus.Succeeded) {
       // Claimed exactly once even if two ticks overlap.

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ContextModule } from '../context/context.module';
 import { LoopModule } from '../loop/loop.module';
+import { QuestionsModule } from '../questions/questions.module';
 import { RouterModule } from '../router/router.module';
 import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -41,6 +42,7 @@ import { ImproveService } from './improve.service';
     AuthModule,
     ContextModule,
     RouterModule,
+    QuestionsModule,
   ],
   controllers: [ImproveController],
   providers: [

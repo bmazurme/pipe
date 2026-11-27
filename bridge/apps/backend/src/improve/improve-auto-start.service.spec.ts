@@ -80,6 +80,7 @@ describe('auto-start of pushed parcels', () => {
       autoStartSince: null,
       autoRepairCi: true,
       autoRedoConflicts: false,
+      clarifyBeforeRun: 'off',
     });
     await expect(service.saveSettings(3, 'nope')).rejects.toThrow(
       /Неизвестная модель/,

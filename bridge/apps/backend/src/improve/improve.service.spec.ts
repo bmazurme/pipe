@@ -4,6 +4,7 @@ import { join } from 'path';
 
 import { ConflictException } from '@nestjs/common';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { In } from 'typeorm';
 
 import { ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveCiService } from './improve-ci.service';
@@ -256,7 +257,11 @@ describe('ImproveService.startRun', () => {
 
     const [where, patch] = runs.update.mock.calls[0];
 
-    expect(where).toEqual({ id: run.id, status: 'preparing' });
+    // The guard also lets a run that was being read or was waiting for answers (A6) through; a run failed in the meantime stays failed.
+    expect(where).toEqual({
+      id: run.id,
+      status: In(['preparing', 'clarifying', 'awaiting_answer']),
+    });
     expect(patch).toMatchObject({
       jobId: 321,
       baseSha: 'base-sha',
@@ -295,7 +300,10 @@ describe('ImproveService.startRun', () => {
 
     await settle();
     expect(broken.runs.update).toHaveBeenCalledWith(
-      { id: run.id, status: 'preparing' },
+      {
+        id: run.id,
+        status: In(['preparing', 'clarifying', 'awaiting_answer']),
+      },
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('github is down'),

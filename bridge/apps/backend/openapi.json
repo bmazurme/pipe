@@ -3567,6 +3567,33 @@
         }
       }
     },
+    "/api/v1/improve/runs/{id}/continue": {
+      "post": {
+        "operationId": "ImproveController_continueRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImproveRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs/{id}/cancel": {
       "post": {
         "operationId": "ImproveController_cancelRun",
@@ -10161,7 +10188,9 @@
               "failed",
               "cancelled",
               "analyzed",
-              "pr_updated"
+              "pr_updated",
+              "clarifying",
+              "awaiting_answer"
             ],
             "type": "string"
           },
@@ -10217,6 +10246,10 @@
               }
             }
           },
+          "contextId": {
+            "type": "number",
+            "nullable": true
+          },
           "gateRetries": {
             "type": "number"
           },
@@ -10257,6 +10290,7 @@
           "note",
           "error",
           "ciHandled",
+          "contextId",
           "gateRetries",
           "finishedAt",
           "id",
@@ -10626,6 +10660,14 @@
           },
           "autoRedoConflicts": {
             "type": "boolean"
+          },
+          "clarifyBeforeRun": {
+            "type": "string",
+            "enum": [
+              "off",
+              "costly",
+              "always"
+            ]
           },
           "minValue": {
             "type": "number",

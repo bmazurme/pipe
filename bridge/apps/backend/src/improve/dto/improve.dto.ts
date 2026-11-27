@@ -263,6 +263,12 @@ export class SaveSettingsDto {
   @IsBoolean()
   autoRedoConflicts?: boolean;
 
+  // A6: read the task with a cheap model before the run and wait for the owner's answers to what is blocking: off, costly (a model chosen by
+  // name that is not Haiku), always.
+  @IsOptional()
+  @IsIn(['off', 'costly', 'always'])
+  clarifyBeforeRun?: 'off' | 'costly' | 'always';
+
   // The brake on automatic issue filing (improve-throttle.ts). A missing field keeps what is stored.
   @IsOptional()
   @IsInt()

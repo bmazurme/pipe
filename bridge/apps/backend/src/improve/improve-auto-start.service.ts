@@ -7,6 +7,7 @@ import { IsNull, Not, Repository } from 'typeorm';
 
 import { AppLogService } from '../logs/app-log.service';
 import { WorkerService } from '../worker/worker.service';
+import { ClarifyMode } from './clarify';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import { FilingLimits, limitsFromSettings } from './improve-throttle';
 import { ADVANCE_EVERY_MS, AUTOSTART_MIN_AGE_SECONDS } from './improve.service';
@@ -36,6 +37,7 @@ export class ImproveAutoStartService {
     autoStartModel: string | null,
     autoRepairCi?: boolean,
     autoRedoConflicts?: boolean,
+    clarifyBeforeRun?: ClarifyMode,
   ): Promise<ImproveSettings> {
     if (autoStartModel) requireImproveModel(autoStartModel);
 
@@ -49,6 +51,7 @@ export class ImproveAutoStartService {
       autoRepairCi: autoRepairCi ?? existing?.autoRepairCi ?? true,
       autoRedoConflicts:
         autoRedoConflicts ?? existing?.autoRedoConflicts ?? false,
+      clarifyBeforeRun: clarifyBeforeRun ?? existing?.clarifyBeforeRun ?? 'off',
       autoStartSince: autoStartModel
         ? enabling
           ? new Date()

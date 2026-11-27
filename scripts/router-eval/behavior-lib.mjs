@@ -10,6 +10,7 @@ export const BEHAVIOR_FILES = [
   'bridge/apps/backend/src/improve/definition-of-done.ts', // the checklist appended to every task
   'bridge/apps/backend/src/improve/verification.ts', // what the worker is told when its result failed its check
   'bridge/apps/backend/src/improve/analysis.ts', // the analysis prompts (what is proposed)
+  'bridge/apps/backend/src/improve/clarify.ts', // the reading before a run: what is asked, and how the answers reach the task
   'bridge/apps/backend/src/router/router-policy.ts', // which model a task goes to
   'bridge/apps/backend/src/router/router-classifier.service.ts', // how the size of a task is judged
   'worker/src/taskQuestions.ts', // the instruction to ask open questions

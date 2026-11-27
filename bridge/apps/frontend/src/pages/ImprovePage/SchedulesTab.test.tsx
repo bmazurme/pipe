@@ -84,7 +84,7 @@ beforeEach(() => {
       if (path === 'improve/schedules' && request.method === 'GET') {
         return listFails ? json({ message: 'boom' }, 500) : json(schedules);
       }
-      if (path === 'improve/settings') return json({ autoStartModel: null, autoRepairCi: true });
+      if (path === 'improve/settings') return json({ autoStartModel: null, autoRepairCi: true, clarifyBeforeRun: 'off' });
       if (request.method === 'PUT' && saveFails) return json({ message: 'nope' }, 500);
       if (request.method === 'DELETE') return deleteFails ? json({ message: 'nope' }, 500) : new Response(null, { status: 200 });
       if (path.endsWith('/run')) {
@@ -314,4 +314,30 @@ describe('only on new commits', () => {
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
     expect(sent.find((call) => call.method === 'PUT')?.body).toMatchObject({ onlyOnNewCommits: true });
   });
+
+  describe('questions before a run (A6)', () => {
+    it('explains what it does and starts off', async () => {
+      renderTab();
+
+      expect(await screen.findByText('Вопросы до запуска')).toBeInTheDocument();
+      expect(screen.getByText(/Запуск стоит минут и токенов/)).toBeInTheDocument();
+      expect(screen.getByText(/auto» не читается/)).toBeInTheDocument();
+    });
+
+    it('saves the mode that was chosen, and shows the current one', async () => {
+      const user = userEvent.setup();
+
+      renderTab();
+      await screen.findByText('Вопросы до запуска');
+
+      // The control is disabled until the settings have loaded: on a busy machine that is later than the card appears.
+      await waitFor(() => expect(screen.getByRole('radio', { name: 'Sonnet/Opus' })).toBeEnabled());
+      expect(screen.getByRole('radio', { name: 'Выключено' })).toBeChecked();
+
+      await user.click(screen.getByRole('radio', { name: 'Sonnet/Opus' }));
+
+      await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { clarifyBeforeRun: 'costly' } }));
+    });
+  });
 });
+

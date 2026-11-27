@@ -60,6 +60,7 @@ beforeEach(() => {
       if (request.method !== 'GET') calls.push(`${request.method} ${path}`);
       if (path === 'improve/runs' && request.method === 'GET') return json(runs);
       if (path === 'worker/jobs/1') return json({ id: 1, model: 'sonnet', status: 'running', logs: '', createdAt: new Date().toISOString() });
+      if (path === 'improve/runs/7/continue') return json({ ...RUN, status: 'queued' });
       if (path === 'improve/runs/7/cancel') return cancelFails ? json({ message: 'conflict' }, 409) : json({ ...RUN, status: 'cancelled' });
 
       return json([]);
@@ -129,3 +130,43 @@ describe('improve RunsTab job dialog', () => {
     expect(screen.queryByRole('button', { name: /^Запуск #/ })).not.toBeInTheDocument();
   });
 });
+
+// A6: a run that waits for the owner's answers to what a cheap model found unclear.
+describe('improve RunsTab: a run that waits for answers', () => {
+  it('says it waits, offers to answer on the Questions page and to start without answers, and can be stopped', async () => {
+    runs = [{ ...RUN, status: 'awaiting_answer', note: 'Ждёт ответов: 2 — страница «Вопросы», карточка improve:5' }];
+    renderTab();
+
+    expect(await screen.findByText('Ждёт ответов')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ответить' })).toHaveAttribute('href', '/questions');
+    expect(screen.getByRole('button', { name: 'Запустить без ответов запуск #7' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Остановить запуск #7' })).toBeInTheDocument();
+  });
+
+  it('starts the run now when «Запустить без ответов» is pressed', async () => {
+    const user = userEvent.setup();
+
+    runs = [{ ...RUN, status: 'awaiting_answer' }];
+    renderTab();
+    await user.click(await screen.findByRole('button', { name: 'Запустить без ответов запуск #7' }));
+
+    await waitFor(() => expect(calls).toContain('POST improve/runs/7/continue'));
+  });
+
+  it('shows a run being read as active, and offers neither answers nor a start', async () => {
+    runs = [{ ...RUN, status: 'clarifying' }];
+    renderTab();
+
+    expect(await screen.findByText('Читаем задачу')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Запустить без ответов/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Остановить запуск #7' })).toBeInTheDocument();
+  });
+
+  it('offers nothing for a run that is not waiting', async () => {
+    renderTab();
+    await screen.findByText('Выполняется');
+
+    expect(screen.queryByRole('link', { name: 'Ответить' })).not.toBeInTheDocument();
+  });
+});
+

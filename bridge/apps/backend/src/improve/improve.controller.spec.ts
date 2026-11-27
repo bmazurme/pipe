@@ -217,6 +217,7 @@ describe('ImproveController', () => {
         autoStartModel: null,
         autoRepairCi: true,
         autoRedoConflicts: false,
+        clarifyBeforeRun: 'off',
         ...LIMITS,
       });
     });
@@ -235,6 +236,7 @@ describe('ImproveController', () => {
         7,
         'opus',
         false,
+        undefined,
         undefined,
       );
     });
@@ -261,6 +263,7 @@ describe('ImproveController', () => {
       expect(autoStart.saveSettings).toHaveBeenCalledWith(
         7,
         null,
+        undefined,
         undefined,
         undefined,
       );

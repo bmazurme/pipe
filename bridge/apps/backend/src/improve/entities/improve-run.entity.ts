@@ -20,6 +20,10 @@ export enum ImproveRunStatus {
   Analyzed = 'analyzed',
   // A CI repair run that finished: its fix is a new commit on the existing PR's branch.
   PrUpdated = 'pr_updated',
+  // A6: a cheap model is reading the task before the real run, to list what is unclear (a worker job of its own)…
+  Clarifying = 'clarifying',
+  // …and found something only the owner can decide: the run waits for the answers (page «Вопросы»), then starts by itself.
+  AwaitingAnswer = 'awaiting_answer',
 }
 
 export const ACTIVE_RUN_STATUSES = [
@@ -27,6 +31,8 @@ export const ACTIVE_RUN_STATUSES = [
   ImproveRunStatus.Queued,
   ImproveRunStatus.Running,
   ImproveRunStatus.Publishing,
+  ImproveRunStatus.Clarifying,
+  ImproveRunStatus.AwaitingAnswer,
 ];
 
 // 'ci' = started by bridge itself because CI went red on one of its pull requests.
@@ -106,6 +112,10 @@ export class ImproveRun extends BaseEntity {
   // CI watcher only: the head commit it last acted on and what it already did there (re-run, exhausted, conflict…), so a restart repeats nothing.
   @Column({ type: 'jsonb', nullable: true })
   ciHandled: { sha: string; actions: string[] } | null;
+
+  // The saved Context the run was started with: kept so that a run that waited for answers still hands it to its worker (A6).
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  contextId: number | null;
 
   // How many times the check before the pull request failed and the worker was sent back to fix it (A3, verification.ts).
   @Column({ type: 'smallint', default: 0 })

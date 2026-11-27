@@ -1938,6 +1938,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/runs/{id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_continueRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/runs/{id}/cancel": {
         parameters: {
             query?: never;
@@ -4334,7 +4350,7 @@ export interface components {
             trigger: Record<string, never>;
             scheduleId: number | null;
             /** @enum {string} */
-            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled" | "analyzed" | "pr_updated";
+            status: "preparing" | "queued" | "running" | "publishing" | "pr_open" | "no_changes" | "failed" | "cancelled" | "analyzed" | "pr_updated" | "clarifying" | "awaiting_answer";
             jobId: number | null;
             baseSha: string | null;
             baseline: string | null;
@@ -4348,6 +4364,7 @@ export interface components {
                 sha?: string;
                 actions?: string[];
             };
+            contextId: number | null;
             gateRetries: number;
             /** Format: date-time */
             finishedAt: string | null;
@@ -4443,6 +4460,8 @@ export interface components {
             autoStartModel?: string | null;
             autoRepairCi?: boolean;
             autoRedoConflicts?: boolean;
+            /** @enum {string} */
+            clarifyBeforeRun?: "off" | "costly" | "always";
             minValue?: number;
             maxOpenPerCategory?: number;
             dailyIssueCap?: number;
@@ -7915,6 +7934,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    ImproveController_continueRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
             };
         };
     };
