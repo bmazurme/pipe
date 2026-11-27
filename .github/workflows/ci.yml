@@ -161,6 +161,7 @@ jobs:
       - run: bash infra/router/test.sh
       - run: bash infra/autodeploy/test.sh
       - run: bash infra/github/test.sh
+      - run: bash infra/watchdog/test.sh
       - run: bash infra/worker-egress/test.sh
       - run: node --test scripts/verify-changed.test.mjs
 
