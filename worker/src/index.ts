@@ -31,6 +31,9 @@ async function main(): Promise<void> {
   // Fail loudly rather than silently run job code as the worker's own user.
   if (baseConfig.runAs) {
     verifyRunAs(baseConfig.runAs);
+    // What this process creates (the unpacked parcel, the result files it reads back) is shared with the group of the other user, and what the other
+    // user creates the worker must be able to delete: group-writable by default (sudoers sets the same umask for the runner, see the Dockerfile).
+    process.umask(0o002);
     // The runner must not get into the state directory (key, VPN config), whatever mode an older volume left on it.
     const mode = restrictStateDir(baseConfig.stateDir);
 

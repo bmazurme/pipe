@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
@@ -67,6 +67,28 @@ export function makeRunDir(parent: string, prefix: string, runAs: string | undef
   const dir = mkdtempSync(path.join(parent, prefix));
   if (runAs) chmodSync(dir, 0o2770);
   return dir;
+}
+
+// What the worker wrote into a run directory (the unpacked parcel) is the worker's own: with the default umask its directories are 755 and its files
+// 644, so the other user — in the same group, but only able to READ — could not change a single file, and every job that had to write failed with
+// «no write permission» (the isolation, switched on by default, made this show; a job that only reads never noticed). The whole tree is opened to the
+// group: directories rwx + setgid (what the runner creates there stays in the group and the worker can collect it), files rw. Symlinks are left alone.
+export function shareRunDir(dir: string, runAs: string | undefined = process.env.WORKER_RUN_AS?.trim() || undefined): void {
+  if (!runAs) return;
+  const walk = (current: string): void => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        chmodSync(full, (statSync(full).mode & 0o7777) | 0o2770);
+        walk(full);
+      } else if (entry.isFile()) {
+        chmodSync(full, (statSync(full).mode & 0o7777) | 0o660);
+      }
+    }
+  };
+  chmodSync(dir, 0o2770);
+  walk(dir);
 }
 
 // Startup check for WORKER_RUN_AS: throws when the worker may not run the CLI as that user. It runs the very command a job runs

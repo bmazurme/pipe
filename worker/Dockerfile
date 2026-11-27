@@ -52,6 +52,9 @@ RUN addgroup -S pipe-jobs && adduser -S -h /home/pipe-runner -G pipe-jobs pipe-r
  && apk add --no-cache sudo \
  && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude' > /etc/sudoers.d/pipe-worker \
  && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/pipe-verify' >> /etc/sudoers.d/pipe-worker \
+ # What the runner creates must be deletable (and readable) by the worker: sudo's default umask 022 would make every directory it creates 755, and the worker
+ # could not clean the job directory up. umask_override makes sudo use exactly this one.
+ && printf '%s\n' 'Defaults:pipe-worker umask=0002' 'Defaults:pipe-worker umask_override' >> /etc/sudoers.d/pipe-worker \
  && chmod 0440 /etc/sudoers.d/pipe-worker
 
 # A3: the check the worker runs on a result before it leaves (scripts/verify-changed.mjs of the job's own repository). It executes the code the model

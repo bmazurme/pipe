@@ -429,6 +429,13 @@ The `docker run` command the Add-worker dialog generates caps the container: `--
 
 **Cold standby.** A worker that follows the active connection also gets `vpnStandbyLinks`: the links of the connections marked «Резерв» on the VPN page. They are outbounds in its Xray config that nothing routes to and nothing probes while a link of the main pool is alive; when every main link is dead the traffic goes through a standby link. A worker without a main pool ignores them. A different subset of standby links alone does not restart a running tunnel (subscriptions re-pick their servers on every refresh); only the standby appearing or going does.
 
+### Права на каталог задачи (исправлено 2026-11-27)
+
+Воркер распаковывает посылку сам, а модель правит её от имени `pipe-runner` (та же группа `pipe-jobs`). С umask 022 каталоги получались `755`, файлы `644`: runner мог создавать новые файлы
+в корне, но **не мог изменить ни один файл посылки** («права на запись отсутствуют») — любая задача, которой нужно писать, падала; задача «только прочитай» этого не замечала. Теперь:
+`shareRunDir` открывает всё распакованное для группы (каталоги `rwx` + setgid, файлы `rw`, символические ссылки не трогаются); процесс воркера работает с umask `0002`; sudo запускает runner'а
+с umask `0002` (`Defaults:pipe-worker umask=0002` + `umask_override` в образе), чтобы то, что создаёт модель, воркер мог собрать и удалить.
+
 ### Проверка результата перед PR (A3)
 
 Модель в Definition of done просят запустить `node scripts/verify-changed.mjs`, но она может забыть или соврать. Поэтому worker запускает эту проверку **сам**, после модели:

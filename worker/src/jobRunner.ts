@@ -9,7 +9,7 @@ import type { WorkerConfig } from './config.js';
 import { buildExitFailureMessage, describeFailure, isNetworkFailure } from './failureMessage.js';
 import { prepareFusionJob } from './fusion/job.js';
 import type { ClaudeReport } from './modelRunners/claudeUsage.js';
-import { ClaudeRunError, makeRunDir, runClaude, type RunDeadline } from './modelRunners/claudeRunner.js';
+import { ClaudeRunError, makeRunDir, runClaude, shareRunDir, type RunDeadline } from './modelRunners/claudeRunner.js';
 import { runOpenAiCompatible } from './modelRunners/openAiCompatibleRunner.js';
 import { HEARTBEAT_INTERVAL_MS } from './heartbeat.js';
 import { changedFiles, collectResult, describeChangedFiles, writeParcelToDir } from './jobFiles.js';
@@ -236,6 +236,8 @@ export async function processJob(
     downloadedParcel = parcel;
 
     writeParcelToDir(jobDir, parcel);
+    // With WORKER_RUN_AS the model runs as the other user: what was just unpacked must be writable by it.
+    shareRunDir(jobDir, config.runAs);
 
     let prompt = withContext(describeTask(parcel), job.context, job.history);
     // The key stored in bridge for this account wins; the environment is the fallback for a worker not moved yet.
