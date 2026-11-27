@@ -3744,6 +3744,7 @@ export interface components {
             cancelRequestedAt: string | null;
             /** Format: date-time */
             notBefore: string | null;
+            autoRetryOfId: number | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

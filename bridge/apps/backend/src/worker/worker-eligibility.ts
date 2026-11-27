@@ -1,4 +1,5 @@
 import type { WorkerCapability } from './capabilities';
+import { AVOID_WORKER_MS } from './infra-failure';
 import type { JobModel } from './entities/job.entity';
 import type { Worker } from './entities/worker.entity';
 
@@ -97,7 +98,8 @@ export function claimEligibilitySql(
     return ` AND "targetWorkerId" IS NULL AND "requiredCapability" IS NULL AND model::text <> 'custom'`;
   }
 
-  let eligibility = ' AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5)';
+  // R4: an automatic retry stays off the worker that just failed it for a while (see AVOID_WORKER_MS); then any worker may take it.
+  let eligibility = ` AND ("targetWorkerId" IS NULL OR "targetWorkerId" = $5) AND ("avoidWorkerId" IS NULL OR "avoidWorkerId" <> $5 OR "createdAt" < now() - interval '${AVOID_WORKER_MS / 60000} minutes')`;
 
   if (worker.models !== null) {
     params.push(worker.models);

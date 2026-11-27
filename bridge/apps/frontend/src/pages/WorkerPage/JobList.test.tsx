@@ -243,4 +243,12 @@ describe('JobList load more', () => {
     renderWithTheme(<JobList jobs={[job]} isLoading={false} onOpenJob={() => {}} />);
     expect(screen.queryByText('Загрузить ещё')).not.toBeInTheDocument();
   });
+
+  it('says a job was started over by bridge itself, and after which one', () => {
+    renderList({ jobs: [{ ...job, id: 9, status: 'queued', autoRetryOfId: 5 } as unknown as WorkerJob, { ...job, id: 8, autoRetryOfId: null } as unknown as WorkerJob] });
+
+    expect(screen.getByText(/авто-повтор после #5/)).toBeInTheDocument();
+    expect(screen.getAllByText(/авто-повтор/)).toHaveLength(1);
+  });
 });
+

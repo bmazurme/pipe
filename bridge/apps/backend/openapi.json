@@ -7699,6 +7699,10 @@
             "type": "string",
             "nullable": true
           },
+          "autoRetryOfId": {
+            "type": "number",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -7734,6 +7738,7 @@
           "finishedAt",
           "cancelRequestedAt",
           "notBefore",
+          "autoRetryOfId",
           "createdAt",
           "updatedAt"
         ]

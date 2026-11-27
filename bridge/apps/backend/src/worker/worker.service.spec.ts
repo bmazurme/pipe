@@ -70,6 +70,7 @@ describe('WorkerService', () => {
   let contextService: { findOwned: jest.Mock };
   let workerRepository: {
     findOneBy: jest.Mock;
+    find: jest.Mock;
     update: jest.Mock;
   };
   let providerCredentials: {
@@ -109,6 +110,7 @@ describe('WorkerService', () => {
     contextService = { findOwned: jest.fn() };
     workerRepository = {
       findOneBy: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue(undefined),
     };
     providerCredentials = {
@@ -1711,6 +1713,159 @@ describe('WorkerService', () => {
 
       expect(retried).toBeNull();
       expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    describe('R4: marked, delayed when the cause may go on, and kept off the worker that failed', () => {
+      const API_ERROR =
+        'Model run exited with code 1: API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}';
+
+      beforeEach(() => {
+        repository.update = jest.fn().mockResolvedValue({ affected: 1 });
+      });
+
+      it('marks the retry as the automatic one of the failed job', async () => {
+        const retried = await service.retryAfterInfraFailure(lost());
+
+        expect(repository.update).toHaveBeenCalledWith(6, {
+          autoRetryOfId: 5,
+          avoidWorkerId: null,
+        });
+        expect(retried).toMatchObject({ autoRetryOfId: 5 });
+      });
+
+      it("retries a provider's bad moment (API Error 5xx, overloaded) — after a minute, not at once", async () => {
+        const before = Date.now();
+        const retried = await service.retryAfterInfraFailure(
+          lost({ errorMessage: API_ERROR }),
+        );
+        const saved = repository.save!.mock.calls[0][0] as { notBefore: Date };
+
+        expect(retried).not.toBeNull();
+        expect(saved.notBefore.getTime()).toBeGreaterThanOrEqual(
+          before + 59_000,
+        );
+        expect(saved.notBefore.getTime()).toBeLessThan(before + 70_000);
+      });
+
+      it('does not make the job of a lost worker wait: only a cause that may still be going on is waited out', async () => {
+        await service.retryAfterInfraFailure(lost());
+
+        expect(
+          (repository.save!.mock.calls[0][0] as { notBefore?: Date })
+            .notBefore ?? null,
+        ).toBeNull();
+      });
+
+      it.each([
+        'Model run exited with code 1: API Error: 403 Request not allowed',
+        'Model run exited with code 1: API Error: 529 … Your usage limit was reached',
+        'Model run exited with code 1: API Error: 500 … organization has disabled Claude subscription access',
+        'claude timed out after 1800s and was killed',
+        'Model run exited with code 1: 3 tests failed: ECONNRESET in the fixture',
+        'Model run exited with code 1: the task is about handling API Errors in 4xx cases',
+      ])('does NOT retry a real failure: %s', async (errorMessage) => {
+        expect(
+          await service.retryAfterInfraFailure(lost({ errorMessage })),
+        ).toBeNull();
+        expect(repository.save).not.toHaveBeenCalled();
+      });
+
+      it('does not retry twice: an earlier automatic retry of the same parcel stops it', async () => {
+        repository.count!.mockResolvedValue(1);
+
+        expect(
+          await service.retryAfterInfraFailure(
+            lost({ errorMessage: API_ERROR }),
+          ),
+        ).toBeNull();
+        expect(repository.count).toHaveBeenCalledWith({
+          where: expect.arrayContaining([
+            expect.objectContaining({
+              sourceFileId: 11,
+              autoRetryOfId: expect.anything(),
+            }),
+          ]),
+        });
+      });
+
+      const other = (over = {}) => ({
+        id: 2,
+        name: 'pi-blue',
+        enabled: true,
+        models: null,
+        capabilities: [],
+        version: '0.2.0',
+        lastSeenAt: new Date(),
+        ...over,
+      });
+
+      it('keeps the retry off the worker that failed it when another one is there to take it', async () => {
+        workerRepository.find.mockResolvedValue([other()]);
+
+        await service.retryAfterInfraFailure(lost({ workerId: 1 }));
+
+        expect(repository.update).toHaveBeenCalledWith(6, {
+          autoRetryOfId: 5,
+          avoidWorkerId: 1,
+        });
+      });
+
+      it.each([
+        ['nobody else is there', []],
+        [
+          'the other worker has not polled for a long time',
+          [other({ lastSeenAt: new Date(Date.now() - 3_600_000) })],
+        ],
+        ['the other worker never polled', [other({ lastSeenAt: null })]],
+        [
+          'the other worker is not set up for this model',
+          [other({ models: ['haiku'] })],
+        ],
+      ])(
+        'does not avoid anyone when %s (the retry would only wait for nothing)',
+        async (_why, others) => {
+          workerRepository.find.mockResolvedValue(others);
+
+          await service.retryAfterInfraFailure(lost({ workerId: 1 }));
+
+          expect(repository.update).toHaveBeenCalledWith(6, {
+            autoRetryOfId: 5,
+            avoidWorkerId: null,
+          });
+        },
+      );
+
+      it('leaves a job pinned to a worker with that worker', async () => {
+        workerRepository.find.mockResolvedValue([other()]);
+
+        await service.retryAfterInfraFailure(
+          lost({ workerId: 1, targetWorkerId: 1 }),
+        );
+
+        expect(workerRepository.find).not.toHaveBeenCalled();
+        expect(repository.update).toHaveBeenCalledWith(6, {
+          autoRetryOfId: 5,
+          avoidWorkerId: null,
+        });
+      });
+
+      it('says in the log which worker it avoided and why', async () => {
+        workerRepository.find.mockResolvedValue([other()]);
+
+        await service.retryAfterInfraFailure(
+          lost({ workerId: 1, errorMessage: API_ERROR }),
+        );
+
+        expect(appLogs.record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: 'job.auto_retried',
+            meta: expect.objectContaining({
+              reason: 'transient',
+              avoidWorkerId: 1,
+            }),
+          }),
+        );
+      });
     });
 
     it('skips quietly when the parcel is gone', async () => {

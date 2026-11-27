@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   In,
+  IsNull,
   LessThan,
   MoreThan,
   MoreThanOrEqual,
@@ -43,7 +44,13 @@ import {
   JobStatus,
 } from './entities/job.entity';
 import { FailureSummary, groupFailures } from './failure-summary';
-import { infraFailureWhere, isInfraFailure } from './infra-failure';
+import {
+  infraFailureWhere,
+  isInfraFailure,
+  isRetryableFailure,
+  TRANSIENT_RETRY_DELAY_MS,
+  WORKER_RECENT_MS,
+} from './infra-failure';
 import { JobFinishNotifier } from './job-finish-notifier';
 import { logJobOutcome } from './job-outcome-log';
 import { assertRunnableParcel } from './parcel-check';
@@ -120,40 +127,59 @@ export class WorkerService implements OnModuleInit {
     });
   }
 
-  // A job lost to a worker stop/restart says nothing about the task, so it is queued
-  // once more automatically — but only once per parcel (an earlier infrastructure
-  // failure on the same parcel means this already was the retry), so a crash-looping
-  // worker cannot requeue forever. Never throws; returns the new job, if any.
+  // A job that failed for a reason that says nothing about the task — the worker stopped or was lost, the network failed, or the provider had a
+  // bad moment (R4: isRetryableFailure) — is queued once more automatically. Once per parcel (an earlier automatic retry, or an earlier
+  // infrastructure failure, on the same parcel means this already was the retry), so a crash-looping worker cannot requeue forever; a real
+  // error (a failed check, a refusal, a limit) is never retried. The retry is marked (`autoRetryOfId`), waits a minute when the cause may still
+  // be going on, and is kept off the worker that failed it while another one could take it. Never throws; returns the new job, if any.
   async retryAfterInfraFailure(job: Job): Promise<Job | null> {
     if (
       job.status !== JobStatus.Failed ||
       job.sourceFileId === null ||
-      !isInfraFailure(job)
+      !isRetryableFailure(job)
     ) {
       return null;
     }
 
     try {
       const earlier = await this.jobRepository.count({
-        where: infraFailureWhere({
-          sourceFileId: job.sourceFileId,
-          id: Not(job.id),
-        }),
+        where: [
+          ...infraFailureWhere({
+            sourceFileId: job.sourceFileId,
+            id: Not(job.id),
+          }),
+          { sourceFileId: job.sourceFileId, autoRetryOfId: Not(IsNull()) },
+        ],
       });
 
       if (earlier > 0) return null;
 
-      const retried = await this.retry(job.id, job.userId);
+      // The cause may still be going on (the provider's bad moment, a network blip): wait a little. A worker that went away is not waited for.
+      const waits = job.failureKind === 'network' || !isInfraFailure(job);
+      const notBefore = waits
+        ? new Date(Date.now() + TRANSIENT_RETRY_DELAY_MS)
+        : undefined;
+      const avoid = await this.workerToAvoid(job);
+      const retried = await this.retry(job.id, job.userId, notBefore);
+
+      await this.jobRepository.update(retried.id, {
+        autoRetryOfId: job.id,
+        avoidWorkerId: avoid,
+      });
+      retried.autoRetryOfId = job.id;
+      retried.avoidWorkerId = avoid;
 
       void this.appLogs?.record({
         level: 'info',
         source: 'job',
         event: 'job.auto_retried',
-        message: `Job ${job.id} was lost to a worker stop and re-queued as job ${retried.id}`,
+        message: `Job ${job.id} failed for a reason that is not the task's (${job.failureKind ?? 'provider error'}) and was re-queued as job ${retried.id}${avoid !== null ? ' (not on the same worker)' : ''}`,
         meta: {
           jobId: job.id,
           retryJobId: retried.id,
           model: job.model,
+          reason: job.failureKind ?? 'transient',
+          ...(avoid !== null ? { avoidWorkerId: avoid } : {}),
         },
       });
 
@@ -165,6 +191,30 @@ export class WorkerService implements OnModuleInit {
 
       return null;
     }
+  }
+
+  // The worker that failed a job, when ANOTHER worker could take the retry right now (switched on, polled lately, allowed to run the model) — then
+  // the retry is kept off the first one. With no other worker to go to, nothing is avoided: the retry would only wait for nothing. A job pinned to
+  // a worker stays with it.
+  private async workerToAvoid(job: Job): Promise<number | null> {
+    if (job.workerId == null || job.targetWorkerId != null) return null;
+
+    const requiredCapability = isWorkerCapability(job.requiredCapability)
+      ? job.requiredCapability
+      : null;
+    const others = await this.workerRepository.find({
+      where: { userId: job.userId, enabled: true, id: Not(job.workerId) },
+    });
+    const now = Date.now();
+    const another = others.some(
+      (worker) =>
+        worker.lastSeenAt !== null &&
+        now - worker.lastSeenAt.getTime() < WORKER_RECENT_MS &&
+        whyWorkerCannotRun(worker, { model: job.model, requiredCapability }) ===
+          null,
+    );
+
+    return another ? job.workerId : null;
   }
 
   // Outbound "issue" parcels of one account that no job has picked up yet: unencrypted
