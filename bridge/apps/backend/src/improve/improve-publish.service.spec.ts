@@ -156,7 +156,7 @@ describe('ImprovePublishService.publish', () => {
         body: expect.stringContaining('Closes #7'),
       }),
     );
-    expect(github.addLabels).toHaveBeenCalledWith(55, ['loop']);
+    expect(github.addLabels).toHaveBeenCalledWith(55, ['loop', 'risk:medium']);
     expect(r).toMatchObject({
       status: ImproveRunStatus.PrOpen,
       prNumber: 55,
@@ -293,6 +293,76 @@ describe('ImprovePublishService.publish', () => {
     });
     expect(refused.notifier.send).toHaveBeenCalledWith(
       expect.stringContaining('не удалось открыть PR'),
+    );
+  });
+});
+
+// S3: the pull request says how risky it is, from the paths it touches.
+describe('ImprovePublishService: the risk of a new pull request', () => {
+  const run = () => ({
+    id: 4,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'sonnet',
+    trigger: 'manual',
+    jobId: 321,
+    status: ImproveRunStatus.Publishing,
+    baseSha: 'base-sha',
+    baseline: baselineOf({ 'docs/a.md': 'one', 'infra/x.sh': 'two' }),
+  });
+
+  function resultOf(files: Record<string, string>) {
+    const ctx = setup();
+    const file = join(ctx.dir, 'result.zip');
+
+    writeFileSync(
+      file,
+      zipSync({
+        ...Object.fromEntries(
+          Object.entries(files).map(([p, t]) => [p, strToU8(t)]),
+        ),
+        [MANIFEST_ENTRY]: strToU8('{}'),
+      }),
+    );
+    ctx.storage.findOwned.mockResolvedValue({ id: 5 });
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
+
+    return ctx;
+  }
+
+  it('labels a docs-only change risk:low, so its release is not held back', async () => {
+    const { service, github, notifier } = resultOf({
+      'docs/a.md': 'CHANGED',
+      'infra/x.sh': 'two',
+    });
+
+    await service.publish(run() as never, 5);
+
+    expect(github.addLabels).toHaveBeenCalledWith(55, ['loop', 'risk:low']);
+    expect(
+      (github.createPull.mock.calls[0][0] as { body: string }).body,
+    ).toContain('Риск: низкий (документация)');
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringContaining('Риск: низкий'),
+    );
+  });
+
+  it('labels a change to infrastructure risk:high and says why in the description and the message', async () => {
+    const { service, github, notifier } = resultOf({
+      'docs/a.md': 'one',
+      'infra/x.sh': 'CHANGED',
+    });
+
+    await service.publish(run() as never, 5);
+
+    expect(github.addLabels).toHaveBeenCalledWith(55, ['loop', 'risk:high']);
+    expect(
+      (github.createPull.mock.calls[0][0] as { body: string }).body,
+    ).toContain('Риск: высокий (инфраструктура)');
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.stringContaining('Риск: высокий (инфраструктура)'),
     );
   });
 });

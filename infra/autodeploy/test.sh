@@ -10,7 +10,7 @@ trap 'rm -rf "$T"' EXIT
 PASS=0; FAILED=0
 FIX="$T/fix"; BIN="$T/bin"; BRIDGE="$T/bridge-pi"; STATE="$T/state"
 mkdir -p "$FIX/files" "$BIN" "$BRIDGE" "$STATE"
-export PATH="$BIN:$PATH" FIX BRIDGE_DIR="$BRIDGE" STATE_DIR="$STATE" MAX_WAIT_SECONDS=1 API_URL=http://api.test NOTIFY_CMD="$T/notify"
+export PATH="$BIN:$PATH" FIX BRIDGE_DIR="$BRIDGE" STATE_DIR="$STATE" MAX_WAIT_SECONDS=1 SOAK_MINUTES=30 API_URL=http://api.test NOTIFY_CMD="$T/notify"
 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$BIN/sleep"
 cat > "$T/notify" <<'SH'
@@ -41,7 +41,10 @@ case "$url" in
     img="$(echo "$url" | sed -E 's#.*/v2/[^/]+/([^/]+)/manifests.*#\1#')"
     [ -f "$FIX/digest-$img" ] || exit 22
     printf 'HTTP/2 200\r\ndocker-content-digest: %s\r\n\r\n' "$(cat "$FIX/digest-$img")";;
-  https://api.github.com/*) printf '{"workflow_runs":[{"head_sha":"%s"}]}' "$(cat "$FIX/sha")";;
+  https://api.github.com/repos/*/actions/*) printf '{"workflow_runs":[{"head_sha":"%s"}]}' "$(cat "$FIX/sha")";;
+  https://api.github.com/repos/*/compare/*) [ -f "$FIX/compare.json" ] && cat "$FIX/compare.json" || exit 22;;
+  https://api.github.com/repos/*/commits/*) [ -f "$FIX/commit.json" ] && cat "$FIX/commit.json" || exit 22;;
+  https://api.github.com/repos/*/issues/*) n="${url##*/}"; [ -f "$FIX/issue-$n.json" ] && cat "$FIX/issue-$n.json" || exit 22;;
   https://raw.githubusercontent.com/*)
     name="${url##*/}"; [ -f "$FIX/files/$name" ] || exit 22
     if [ -n "$out" ]; then cp "$FIX/files/$name" "$out"; else cat "$FIX/files/$name"; fi;;
@@ -179,6 +182,103 @@ grep -q 'bad-stack-files' "$STATE/failed.txt"; check "…and remembered, so it i
 echo "# status"
 run status; check "status runs" $?
 grep -q 'deployed:' "$T/out" && grep -q 'published: 22222222bbbb' "$T/out"; check "status shows the deployed and the published release" $?
+
+echo "# the soak: a risky change made by the bot waits; everything else goes at once"
+# a release made of the given squash commits: "<pr> <minutes ago>" pairs; labels per PR in issue-<n>.json
+commits_of() { # "n:minutes_ago" ...
+  python3 - "$@" > "$FIX/compare.json" <<PY
+import json, sys, time
+commits = []
+for arg in sys.argv[1:]:
+    n, ago = arg.split(":")
+    t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - int(ago) * 60))
+    commits.append({"sha": "c" + n, "commit": {"message": "Some change (#%s)\n\nbody" % n, "committer": {"date": t}}})
+print(json.dumps({"commits": commits}))
+PY
+}
+labels() { # n label...
+  n="$1"; shift
+  python3 -c 'import json,sys; print(json.dumps({"labels":[{"name":l} for l in sys.argv[1:]]}))' "$@" > "$FIX/issue-$n.json"
+}
+soak_reset() { fresh_swarm; rm -f "$STATE/failed.txt" "$STATE/soak.txt" "$FIX/compare.json" "$FIX/commit.json" "$FIX"/issue-*.json; echo "oldoldid oldold1 $(date -u +%FT%TZ)" > "$STATE/deployed.txt"; }
+
+soak_reset; set_published 1010101010aa s1 sf1 sw1; files s1
+commits_of 501:5; labels 501 loop risk:high
+run; check "risk:high bot PR merged 5 min ago: exit 0" $?
+[ -z "$(calls)" ]; check "risk:high bot PR merged 5 min ago: NOT deployed yet" $?
+grep -q '⏳ Pi: версия 10101010 ждёт выдержки ещё ~25 мин' "$FIX/notified" && grep -q '#501(risk:high)' "$FIX/notified"; check "...the owner is told how long and which pull request" $?
+rm -f "$FIX/notified"; run
+[ -z "$(calls)" ] && [ ! -e "$FIX/notified" ]; check "...the next pass still waits, and does not say it again" $?
+awk '{print ($2>0 && $3==1) ? "ok" : "bad"}' "$STATE/soak.txt" | grep -q ok; check "...the decision is kept (not asked from GitHub every five minutes)" $?
+run status; grep -q 'soak:      release .* waits' "$T/out"; check "...status says it is waiting" $?
+rm -f "$FIX/compare.json"; run
+[ -z "$(calls)" ]; check "...a kept decision does not need GitHub again" $?
+
+# time passes: the soak is over
+python3 - "$STATE/soak.txt" <<'PY'
+import sys
+p = sys.argv[1]; f = open(p).read().split()
+f[1] = "1"  # long ago
+open(p, "w").write(" ".join(f) + "\n")
+PY
+run
+[ "$(calls)" = "deploy.sh ghcr stable;deploy-worker.sh ghcr stable;" ]; check "...after the soak the release goes live" $?
+
+soak_reset; set_published 2020202020bb s2 sf2 sw2; files s2
+commits_of 502:5; labels 502 loop risk:medium
+run; [ -z "$(calls)" ]; check "risk:medium bot PR: waits too" $?
+
+soak_reset; set_published 3030303030cc s3 sf3 sw3; files s3
+commits_of 503:5; labels 503 loop risk:low
+run; [ -n "$(calls)" ]; check "risk:low bot PR (docs, tests, styling): deployed at once" $?
+
+soak_reset; set_published 4040404040dd s4 sf4 sw4; files s4
+commits_of 504:5; labels 504 risk:high
+run; [ -n "$(calls)" ]; check "a risky change a PERSON merged (no bot label): deployed at once" $?
+
+soak_reset; set_published 5050505050ee s5 sf5 sw5; files s5
+commits_of 505:90; labels 505 loop risk:high
+run; [ -n "$(calls)" ]; check "a risky bot PR merged 90 minutes ago: soak is over, deployed" $?
+
+soak_reset; set_published 6060606060ff s6 sf6 sw6; files s6
+commits_of 506:5 507:100; labels 506 loop risk:low; labels 507 loop risk:high
+run; [ -n "$(calls)" ]; check "a release of several PRs: only the risky one counts, by ITS merge time (old one: no wait)" $?
+
+soak_reset; set_published 7070707070aa s7 sf7 sw7; files s7
+commits_of 508:100 509:10; labels 508 loop risk:high; labels 509 loop risk:medium
+run; [ -z "$(calls)" ]; check "a release of several risky PRs waits for the NEWEST one" $?
+grep -q '#508(risk:high) #509(risk:medium)' "$FIX/notified"; check "...and names all of them" $?
+
+soak_reset; set_published 8080808080bb s8 sf8 sw8; files s8
+rm -f "$STATE/deployed.txt"
+python3 - > "$FIX/commit.json" <<'PY'
+import json, time
+t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 300))
+print(json.dumps({"sha": "x", "commit": {"message": "First one (#510)", "committer": {"date": t}}}))
+PY
+labels 510 loop risk:high
+run; [ -z "$(calls)" ]; check "the first release ever (nothing deployed before): looks at that one commit" $?
+
+soak_reset; set_published 9090909090cc s9 sf9 sw9; files s9
+commits_of 511:5; labels 511 loop risk:high
+SOAK_MINUTES=0 run; [ -n "$(calls)" ]; check "SOAK_MINUTES=0 turns the soak off" $?
+
+soak_reset; set_published a0a0a0a0a0dd sa sfa swa; files sa
+commits_of 512:5; labels 512 loop risk:high
+run now; [ -n "$(calls)" ]; check "autodeploy.sh now: goes at once" $?
+SOAK_MINUTES=lots run; check "a SOAK_MINUTES that is not a number falls back to 30, and says so" $?
+
+soak_reset; set_published b0b0b0b0b0ee sb sfb swb; files sb
+# no compare.json / issue files: GitHub does not answer
+run; [ -n "$(calls)" ]; check "GitHub not answering never holds a release back (the soak is a margin, not a gate)" $?
+
+soak_reset; set_published c0c0c0c0c0ff sc sfc swc; files sc
+commits_of 513:5; rm -f "$FIX/issue-513.json"
+run; [ -n "$(calls)" ]; check "a pull request whose labels cannot be read does not hold the release back" $?
+
+soak_reset; set_published d0d0d0d0d0aa sd sfd swd; files sd
+python3 -c 'import json,time; print(json.dumps({"commits":[{"sha":"x","commit":{"message":"Direct push, no PR","committer":{"date":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}}]}))' > "$FIX/compare.json"
+run; [ -n "$(calls)" ]; check "a commit without a pull request number does not wait" $?
 
 echo "# a failover to another board is active"
 fresh_swarm; rm -f "$STATE/failed.txt"; set_published 33333333cccc b9 f9 w9; files v9
