@@ -1,0 +1,1230 @@
+{
+  "version": 1,
+  "repo": "bmazurme/pipe",
+  "createdAt": "2026-11-27",
+  "tiers": {
+    "1": 8,
+    "2": 12,
+    "3": 10,
+    "4": 0
+  },
+  "tasks": [
+    {
+      "pr": 882,
+      "issue": 876,
+      "title": "Cache the GitHub open-issue list behind GET /improve/issues so run starts and cancels stop re-querying GitHub",
+      "body": "> Направление: **Производительность** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe log digest shows this route is slow and failing: `WARN ×22 http.slow: GET /api/vN/improve/issues → N in Nms` and `ERROR ×5 http.error: GET /api/vN/improve/issues → N in Nms`.\n\n`ImproveService.listIssues` (`bridge/apps/backend/src/improve/improve.service.ts:117-149`) calls `this.github.listOpenIssues(...)` on every request. That is a live GitHub round trip with a 20 s timeout (`loop/github-api.service.ts:6, 197-203`). Only the run lookup that follows is local DB work. The frontend refetches this list after almost every Improve mutation, because `bridge/apps/frontend/src/store/api/improve-api/endpoints/index.ts:125, 137, 156, 161, 171, 176, 199` all invalidate `'ImproveIssues'`. So starting, batch-starting or cancelling a run (which changes only an `improve_runs` row) reloads the whole GitHub issue list each time. A slow or failing GitHub then turns into a slow or failing Issues tab.\n\n## Proposed change\n- In `ImproveService`, keep the GitHub part of `listIssues` in a `SharedAsyncCache<IssueInfo[]>` (`common/shared-async-cache.ts`, already used by `ImproveHandoffService`), keyed by the label (or `''` for `all`), with a ~60 s TTL. Concurrent requests share one in-flight fetch, and a failed fetch is not cached (that is already the helper's behaviour). Keep the latest-run query uncached so run status stays live.\n- Clear the cache where bridge itself changes the issue list: after `createIssue` (`improve.controller.ts:64`) and after filing in `improve-issue-filing.service.ts:57, 125`.\n- Accept `?fresh=1` on `GET /improve/issues` to bypass the cache, and have the Issues tab's manual refresh (`pages/improve/IssuesTab.tsx:15`, `refetch`) use it.\n\n## Acceptance criteria\n- Two `listIssues` calls within the TTL make one `listOpenIssues` call, and run data still reflects a run started between them (spec).\n- Creating or filing an issue, or passing `fresh=1`, forces a new GitHub fetch (spec).\n- A rejected GitHub fetch is retried on the next call, not served from cache (spec).\n- `npm test -w backend` and `npm test -w frontend` pass.",
+      "mergeCommit": "742345b61317b17bc32b870377a907b15545d11a",
+      "files": [
+        {
+          "path": "bridge/apps/backend/openapi.json",
+          "additions": 8,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/common/shared-async-cache.ts",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve-issue-filing.service.ts",
+          "additions": 5,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve-list-runs.spec.ts",
+          "additions": 86,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve.controller.ts",
+          "additions": 10,
+          "deletions": 2
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve.service.ts",
+          "additions": 23,
+          "deletions": 4
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/improve/IssuesTab.tsx",
+          "additions": 4,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/frontend/src/store/api/improve-api/endpoints/index.ts",
+          "additions": 9,
+          "deletions": 2
+        },
+        {
+          "path": "packages/protocol/src/bridge-api-types.d.ts",
+          "additions": 1,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 7,
+        "lines": 160,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": true,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 883,
+      "issue": 873,
+      "title": "Purge: add 'Отменить' to restore the text from before the last substitution",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\nIn Purge's Apply tab, `handleApply` (`bridge/apps/frontend/src/pages/purge/PurgeApplyTab.tsx`, ~lines 83-98) does `dispatch(draftTextChanged(result))`, overwriting the user's pasted text in the single draft field, and `handleCopy` (~100-113) clears it after copying. Today, if the user picks the wrong direction («Ключ → значение» vs «Значение → ключ») or finds a missing entry and adds it through the leak-warning button, the original text is gone: they must re-paste it from its source, or rely on the reverse substitution being lossless (it is not when several words collapse into one). Purge exists for a safe manual anonymization round trip, so an irreversible overwrite is a real gap.\n\n## Proposed change\nKeep the pre-substitution text in component state (`previousText: string | null`) set in `handleApply` when the text actually changed. Show an «Отменить» flat button next to «Сохранить» (disabled when `previousText` is null) that dispatches `draftTextChanged(previousText)`, clears `previousText`, shows the notice «Текст возвращён» and clears the leak warning. Clear `previousText` after a successful copy and when the user edits the textarea by hand. State is in-memory only, so nothing new is persisted. Code stays in `PurgeApplyTab.tsx` plus new cases in `PurgeApplyTab.test.tsx`.\n\n## Acceptance criteria\n- After «Сохранить» changes the text, «Отменить» is enabled and restores the exact previous text.\n- «Отменить» is disabled before any substitution, after a restore, after a successful copy and after the user types in the field.\n- A substitution with zero matches does not arm undo.\n- Vitest cases cover apply→undo, the disabled states and copy-clears-undo; `npm test -w frontend -- PurgeApplyTab` passes.\n- Change is under ~120 lines.",
+      "mergeCommit": "bc36ff22d7e9f050487e8084de3fd2652c8c6e76",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/purge/PurgeApplyTab.test.tsx",
+          "additions": 59,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/purge/PurgeApplyTab.tsx",
+          "additions": 24,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 2,
+        "lines": 83,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 899,
+      "issue": 897,
+      "title": "Worker job list: add a text search over task, model and error message next to the status filter",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe Worker page's job list (`bridge/apps/frontend/src/pages/worker/JobList.tsx`) can only be narrowed by a status segment (`all`/`active`/`failed`, lines 31-40, 105-120) or by one exact task via `taskFilter` (line 75). To find the run that failed with a given message, such as «OAuth token revoked» (9 failures in the last-7-days digest) or «claude timed out» (10 failures), the owner scrolls a list that shows only `INITIAL_VISIBLE_JOBS` rows and expands it by hand. `FailureBreakdown` groups errors but its 'Открыть последнюю' opens only the latest job in each group. Chat and Secrets already have search boxes, and the Worker page, which gets the most traffic, does not.\n\n## Proposed change\nIn `JobList.tsx` add a `TextInput` with `hasClear` and `aria-label=\"Поиск по запускам\"` beside the filter row. Hold a `query` state and extend the `filtered` predicate (line 76) with a case-insensitive match on `taskKey`, `model`, `errorMessage` and `#id`. It works on the jobs already in memory, with no backend change. When the search matches nothing, show the existing empty text with 'Ничего не найдено по запросу'. Add cases to `JobList.test.tsx`.\n\n## Acceptance criteria\n- Typing in the search box narrows the list by task key, model, error message or job id, and combines with the status and task filters.\n- Clearing the box restores the list.\n- A query with no matches shows an explicit empty message, not a blank list.\n- Tests cover matching on an error message, matching on an id, combination with the 'failed' filter, and no match.\n- The change is about 80 lines in the frontend only.",
+      "mergeCommit": "e948aea92e754c0a89f00d79dd505a4607465296",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/worker/JobList.test.tsx",
+          "additions": 56,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/worker/JobList.tsx",
+          "additions": 32,
+          "deletions": 3
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 2,
+        "lines": 94,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 916,
+      "issue": 907,
+      "title": "Storage page: show each parcel's task and direction, and filter the list by direction and task",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\nStorage is the mailbox every parcel goes through: sync, reports' Subscription and worker results all upload to it with addressing metadata. `UploadFileMetaDto` (`bridge/apps/backend/src/storage/dto/upload-file-meta.dto.ts`) has `channel`, `taskKey` and `direction`, and `GET /storage` already filters on them (`storage/storage.service.ts`, `findAllByUser(userId, filter)`). The frontend type already carries the fields too (`frontend/src/store/api/storage-api/endpoints/index.ts:14-16`).\n\nThe page throws all of that away:\n- `listFiles` takes no arguments (`endpoints/index.ts:21-22`).\n- Each row of `pages/storage/StorageFileList.tsx:101-115` shows only `originalName`, size and age.\n- The list cannot be filtered at all, while the sibling Purge list has a search box (`pages/purge/EntryListCard.tsx:27-39`).\n\nWith several tasks in flight, the owner cannot tell an outgoing task parcel from a worker's result, or find the parcels of one `projectId:iid`, except by guessing from the file names. Picking the wrong one matters, because 'Скачать' deletes the file from bridge.\n\n## Proposed change\n- In `StorageFileList`, add the task and direction to each row's caption line: `→ задача` for `outbound`, `← результат` for `result`, then the `taskKey` when it is set.\n- Above the list, add a `SegmentedRadioGroup` (Все / Задачи / Результаты) and a `TextInput` search over `originalName` and `taskKey`, filtered client-side with `useMemo` like Purge's `EntryListCard`.\n- Show a «Ничего не найдено» empty state when filters hide every file, separate from the existing «Файлов пока нет».\n- Backend unchanged. This is frontend only, in `pages/storage/StorageFileList.tsx` plus a small test.\n\n## Acceptance criteria\n- [ ] A row for a file with `direction: 'result', taskKey: '42:7'` shows «← результат · 42:7». A file with no metadata shows only size and age, as today.\n- [ ] Selecting «Результаты» hides outbound files, and typing `42:7` keeps only matching rows (a vitest spec for `StorageFileList`).\n- [ ] When filters hide every file, «Ничего не найдено» is shown, not «Файлов пока нет».\n- [ ] `npm test -w frontend` and `npm run lint` in `bridge/` pass.",
+      "mergeCommit": "6bbf6e41f1cf5906d0ecdce63252eebbf17b8dc1",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/StoragePage.module.css",
+          "additions": 7,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/storage/StorageFileList.test.tsx",
+          "additions": 64,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/storage/StorageFileList.tsx",
+          "additions": 75,
+          "deletions": 4
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 3,
+        "lines": 150,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 928,
+      "issue": 924,
+      "title": "Keep the 'which worker may run this job' rule in one worker-eligibility.ts instead of three copies in WorkerService",
+      "body": "> Направление: **Архитектура** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe rule for which managed worker may take a job (enabled, model allowed by `worker.models`, required capability present, pin respected) is written out three separate times in `bridge/apps/backend/src/worker/worker.service.ts`:\n- `create()` (`:243-270`) validates a pinned `targetWorkerId`: enabled, `models` includes the model, `capabilities` includes `requiredCapability`. Each failure throws its own message.\n- `retry()` (`:336-352`) re-derives the same predicate as `pinUsable`, from scratch, to decide whether to keep the pin.\n- `claim()` (`:858-872`) builds the same rule a third time as hand-concatenated SQL (`model::text = ANY($n)`, `\"requiredCapability\" IS NULL OR … = ANY($n)`, `\"targetWorkerId\" IS NULL OR = $5`).\n- `hasEnabledWorkerWith()` (`:784-795`) holds a fourth, partial version (capability only, filtered in JS after loading every worker row).\n\n`capabilities.ts` only holds the list of capabilities, not the rule. If the rule changes (say, a second capability, or a model alias), all three copies must be found and kept in step. A drift between `create()` and `claim()` produces exactly the failure the `create()` comment warns about: a job that is accepted but \"would sit in the queue for ever\".\n\n## Proposed change\n- Add `worker/worker-eligibility.ts` with two pure functions:\n  - `whyWorkerCannotRun(worker, { model, requiredCapability }): string | null`, returning the Russian/English reason or null.\n  - `claimEligibilitySql(worker | null, params: unknown[]): string`, which builds the clause and pushes its parameters (moved verbatim out of `claim()`).\n- `create()` throws `BadRequestException(reason)` from the first function.\n- `retry()` computes `pinUsable = pinned !== null && whyWorkerCannotRun(pinned, …) === null`.\n- `claim()` calls `claimEligibilitySql`.\n- `hasEnabledWorkerWith()` reuses the capability part.\n- Behaviour and messages stay identical.\n\n## Acceptance criteria\n- [ ] `worker-eligibility.spec.ts` covers:\n  - a paused worker;\n  - a model not in `models`;\n  - `models = null` (any model);\n  - a missing capability;\n  - the SQL builder for a legacy worker (`null`), a worker with `models`, and one without.\n- [ ] `worker.service.ts` no longer contains its own `models.includes` / `capabilities.includes` checks.\n- [ ] The existing `worker.service.spec.ts`, `workers.service.*.spec.ts` and e2e claim tests pass unchanged.",
+      "mergeCommit": "bbe60d51e3d767b0e0dfae5aff9d1bc64c632b72",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/worker/worker-eligibility.spec.ts",
+          "additions": 102,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/worker/worker-eligibility.ts",
+          "additions": 68,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/worker/worker.service.ts",
+          "additions": 15,
+          "deletions": 35
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 3,
+        "lines": 220,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 933,
+      "issue": 930,
+      "title": "GitHub connection card: stop the Switch saving an unsaved proxy URL; make the check result dismissible by button",
+      "body": "> Направление: **UI/UX** · риск: low · предложено автоматическим анализом\n\n## Problem\n`bridge/apps/frontend/src/pages/dashboard/GithubConnectionCard.tsx`:\n- The \"Через прокси\" Switch (≈ lines 66-71) calls `save({ enabled, url: url.trim() || undefined })`, i.e. it silently persists whatever is currently typed in the \"Адрес прокси\" field, while the explicit \"Сохранить адрес\" button (shown only when `urlChanged`) is bypassed. A half-typed address is stored and the card shows \"через прокси\" without the owner ever pressing save.\n- The check result block (line 92) is a `<div onClick={() => reset()}>`: clicking anywhere on the verdict, including to select text, wipes it. It is undiscoverable, not keyboard reachable (no role/tabIndex) and loses the numbers the owner is comparing before they choose a setting.\nContext: the log digest shows many \"fetch failed\" / timeout failures against GitHub-dependent flows, so owners will use this card exactly when it matters.\n\n## Proposed change\n- Switch toggles only `enabled` using the saved `data.url` (`save({ enabled, url: data.url ?? undefined })`); disable it while `urlChanged` is true, with a caption \"Сначала сохраните адрес\".\n- Remove the `onClick` from the result `div`; add an explicit \"Скрыть\" flat button that calls `reset()`.\n- Extend the card's existing tests (or add `GithubConnectionCard.test.tsx`) for both behaviours.\n\n## Acceptance criteria\n- [ ] Toggling the Switch with an edited, unsaved URL sends the previously saved URL (or is disabled) and never the draft.\n- [ ] Clicking the result text does not clear it; the \"Скрыть\" button does and is keyboard-focusable.\n- [ ] Tests cover both cases; no other files changed.",
+      "mergeCommit": "8c9c19546864321d8435502c1a7f549fcc5af2f7",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/dashboard/GithubConnectionCard.test.tsx",
+          "additions": 45,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/dashboard/GithubConnectionCard.tsx",
+          "additions": 11,
+          "deletions": 3
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 59,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 938,
+      "issue": 937,
+      "title": "Logs: click a top failure or slow route to filter the event list to those events",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\n- Profile → Logs (`bridge/apps/frontend/src/pages/profile/LogsSection.tsx`, blocks «Частые причины сбоев» and «Самые медленные запросы», ~lines 151-175) lists aggregated problems such as `Job N failed: fetch failed ×10` or `GET /api/vN/vpn/status → N in Nms ×14`, but the rows are static text. To see the actual events (timestamps, job ids, which route instance) the owner must retype something into the search box at ~line 188 by hand.\n- The summary messages are normalized by `normalizeError` (`bridge/apps/backend/src/logs/summary.ts:36-42`: every number becomes `N`), so pasting the summary text into the server-side search (`q`, substring match) finds nothing — the drill-down is not even possible by copy/paste.\n- Today the user reads the digest, then scrolls the 30-row list hoping the failure appears; with 2310 events/week and 104 errors (see digest) that is slow.\n\n## Proposed change\n- Add a pure helper `searchTermFromNormalized(message)` to `pages/profile/logFormat.ts` that splits the normalized message on the `N` placeholders and returns the longest literal fragment, trimmed (e.g. `Job N failed: fetch failed` → `failed: fetch failed`; `GET /api/vN/vpn/status → N in Nms` → `/vpn/status`). Return `''` if nothing useful remains.\n- Render each top-error and slowest-route row as a `<button>`-style (keyboard-focusable) row; on click set `search` to the term, set `onlyProblems` to true for errors, and scroll the list into view. A second click on the active row (or the existing clear button) resets it.\n- Frontend-only; reuses the existing `q` param of `useListLogsQuery`. About 80 changed lines plus tests. No backend or protected-path change.\n\n## Acceptance criteria\n- [ ] Clicking «Job N failed: fetch failed ×10» sets the search box to a fragment of it and the list reloads with `q` set to that fragment.\n- [ ] Rows are reachable and activatable by keyboard (Enter/Space) and have an accessible name.\n- [ ] `searchTermFromNormalized` unit tests in `logFormat.test.ts` cover: multiple `N` placeholders, a message that is only `N`, and a 160-char truncated message.\n- [ ] `LogsSection.test.tsx` covers click → list query called with the expected `q`.\n- [ ] `npm test -w frontend -- LogsSection logFormat` and lint pass.",
+      "mergeCommit": "8bc9bfaa606bddc9030117cfd42f86df03256bc5",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/ProfilePage.module.css",
+          "additions": 21,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/profile/LogsSection.test.tsx",
+          "additions": 28,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/profile/LogsSection.tsx",
+          "additions": 47,
+          "deletions": 7
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/profile/logFormat.test.ts",
+          "additions": 21,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/profile/logFormat.ts",
+          "additions": 12,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 5,
+        "lines": 137,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 961,
+      "issue": 958,
+      "title": "Move three copies of formatBytes/formatSize into shared/lib/formatBytes.ts",
+      "body": "> Направление: **Архитектура** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe frontend has three near-identical byte formatters in unrelated places:\n- `bridge/apps/frontend/src/pages/vpn/formatBytes.ts:1-6` (Б/КБ/МБ/ГБ),\n- `pages/storage/formatters.ts:1-5` (`formatSize`, no ГБ),\n- `pages/chat/chatAttachments.ts:15-20` (`formatSize`, KB rounded to an integer).\n\n`DashboardPage.tsx:20` imports its formatter from `./vpn/formatBytes`, so one page depends on another page's folder. The other shared formatters (`formatDuration`, `formatRelativeTime`, `plural`) already live in `src/shared/lib/`. The copies already differ (ГБ, rounding), so the same size can print differently on different pages.\n\n## Proposed change\nAdd `src/shared/lib/formatBytes.ts` with one `formatBytes` (Б/КБ/МБ/ГБ, one decimal, matching the vpn version), plus a unit test beside it, like `formatDuration.test.ts`. Delete `pages/vpn/formatBytes.ts` and `pages/storage/formatters.ts`, and replace `formatSize` in `chatAttachments.ts` with the shared function. Update the imports in DashboardPage, VpnConnectionStatusGrid, StorageProjectUpload and StorageFileList. Adjust any chat test that asserts an integer «КБ» string. Pure move, under 100 lines.\n\n## Acceptance criteria\n- Exactly one byte-formatting function exists in `apps/frontend/src`, in `shared/lib/formatBytes.ts`.\n- No page imports a formatter from another page's directory.\n- A unit test covers 0, 1023, 1024, a value in MB and a value in GB.\n- `npm test -w frontend` and `npm run lint -w frontend` pass.",
+      "mergeCommit": "63a09a06200d2d31efe330a555ecdd4c939c9104",
+      "files": [
+        {
+          "path": "bridge/apps/frontend/src/pages/DashboardPage.tsx",
+          "additions": 1,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/chat/chatAttachments.ts",
+          "additions": 0,
+          "deletions": 7
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/storage/StorageFileList.tsx",
+          "additions": 3,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/storage/StorageProjectUpload.tsx",
+          "additions": 2,
+          "deletions": 2
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/storage/formatters.ts",
+          "additions": 0,
+          "deletions": 5
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/vpn/VpnConnectionStatusGrid.tsx",
+          "additions": 1,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/frontend/src/shared/lib/formatBytes.test.ts",
+          "additions": 16,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/shared/lib/formatBytes.ts",
+          "additions": 0,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 8,
+        "lines": 42,
+        "areas": [
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 977,
+      "issue": 974,
+      "title": "Lab 'Новый запуск': fill the task from an open GitHub issue of the project instead of retyping it",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\nLab is Improve for the owner's own GitHub repositories (CLAUDE.md, `lab` paragraph), but its only input is free text. Improve can start a run from a repository issue. Lab cannot, even though it already talks to the same repository with the project's own token. Today the owner opens the issue on GitHub, copies its title and body, and pastes them into the dialog's single «Задача» field (`bridge/apps/frontend/src/pages/lab/RunsTab.tsx:211-226`; the form state at `RunsTab.tsx:50` has only `task` text, and «Новый запуск» resets it to `''` at `RunsTab.tsx:96`). The backend has no issue read at all. `lab.controller.ts:42-152` exposes projects, schedules and runs only, and `lab-github.ts` has `repoRequest` (`lab-github.ts:89-106`) and `checkRepo`, but no issue listing. The token can already create issues: a run's `.lab/issue.json` makes `lab-publish.service.ts:124-129` open one, and `lab-run.entity.ts:102-108` records `issueNumber`/`issueUrl`. The project just cannot read its issues back as tasks.\n\n## Proposed change\nFirst slice, with no new entity columns or migration:\n- `lab-github.ts`: add `listOpenIssues(repo, token, limit = 30)`. It calls `repoRequest(repo, token, '/issues?state=open&sort=updated&per_page=30')`, drops entries that have `pull_request`, and returns `{ number, title, body, htmlUrl }[]`, with `body` cut to the 8000-character task limit of `StartLabRunDto` (`dto/lab.dto.ts:89-94`). A 403/404 becomes a Russian error such as «Токен не может читать issues». The function stays in `lab-github.ts` and does not touch `src/loop`.\n- `LabProjectsService` + `lab.controller.ts`: add `GET /lab/projects/:id/issues`. It runs `findOwned` and then `listOpenIssues` with the stored token, which never leaves bridge. Then regenerate `openapi.json` and `bridge-api-types.d.ts` as CLAUDE.md describes.\n- `RunsTab.tsx`: add an optional «Из issue» Select above «Задача». It is loaded lazily for the chosen project and hidden while `followUpOf` is set. Picking an issue fills `task` with `#N Title\\n\\nbody\\n\\n<htmlUrl>`, which the owner can still edit before «Запустить». Picking nothing works exactly as today.\n\n## Acceptance criteria\n- `GET /lab/projects/:id/issues` returns the project's open issues without pull requests. Another user's project id gets 404, and the response never contains the token.\n- A GitHub 403 or a timeout comes back as a readable error, and the dialog shows it inline. Starting a free-text run still works.\n- Choosing an issue in the dialog prefills «Задача» with its number, title, body and link. The started run's `task` is that text.\n- Specs: `lab-github.spec.ts` covers PR filtering, body truncation and the 403 mapping. `RunsTab.test.tsx` covers the prefill and covers the Select being hidden for «Доработать».\n- `openapi:check` and the protocol types drift check pass. `npm test -w backend` and `npm test -w frontend` pass.",
+      "mergeCommit": "4e44e3849dc27f4524b6ba9377aef54c08b2c23e",
+      "files": [
+        {
+          "path": "bridge/apps/backend/openapi.json",
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/lab/lab-github.spec.ts",
+          "additions": 32,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/lab/lab-github.ts",
+          "additions": 53,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/lab/lab-projects.service.ts",
+          "additions": 20,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/lab/lab.controller.ts",
+          "additions": 8,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/lab/RunsTab.test.tsx",
+          "additions": 52,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/lab/RunsTab.tsx",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/store/api/lab-api/endpoints/index.ts",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "path": "packages/protocol/src/bridge-api-types.d.ts",
+          "additions": 37,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 7,
+        "lines": 198,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": true,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 988,
+      "issue": 981,
+      "title": "Answer Improve schedule 'run now' without waiting on Telegram, as Lab's schedules already do",
+      "body": "> Направление: **Производительность** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe log digest shows: `Slow route /api/v1/improve/schedules/:id/run: 4 slow/failed requests, worst 30865 ms`, and in the same window `WARN ×4 telegram.api_failed: Telegram sendMessage failed: The operation was aborted due to timeout` (`TELEGRAM_TIMEOUT_MS = 10_000`, `bridge/apps/backend/src/telegram/telegram.service.ts:7`).\n\n`ImproveScheduleService.runScheduleNow` (`bridge/apps/backend/src/improve/improve-schedule.service.ts:133-141`) returns `this.fire(schedule)`. `fire` (`:184-258`) **awaits** the Telegram summary before it returns, in both branches: `await this.notifier.send(...)` at `:223` (analysis) and `:252` (issues). So the owner's click waits on Telegram, up to 10 s per attempt when Telegram is slow, which is exactly what the digest shows. The issues branch also runs `startRun` sequentially per issue (`:228-244`), and each one re-fetches the issue with `github.getIssue` (`improve.service.ts:252`), although `listOpenIssues` has just returned it.\n\nLab already solved the Telegram part. `LabSchedulesService.fire` returns as soon as the run is recorded and reports in the background through a `report()` helper that catches its own errors (`bridge/apps/backend/src/lab/lab-schedules.service.ts:206-262`).\n\n## Proposed change\n- In `improve-schedule.service.ts`, move the `lastRunAt`/`lastResult` update and the `notifier.send` into a private `report(schedule, text)` like Lab's: update the row, then send, with its own try/catch and logger warning. Call it with `void` from `fire()`, so `runScheduleNow` and the nightly tick return once the runs are recorded.\n- Optional, in the same PR if it stays small: let `startRun` take the already-listed issue (`{ number, title, body, isPull, state }`) so the schedule path skips the per-issue `getIssue` round trip.\n\n## Acceptance criteria\n- [ ] With `notifier.send` mocked to a never-resolving promise, `runScheduleNow` still resolves with `{ started, skipped }` (new case in `improve-schedule.service.spec.ts`).\n- [ ] A rejecting `notifier.send` no longer fails `runScheduleNow` or the tick; it is logged as a warning.\n- [ ] `lastResult` is still written for both the analysis and the issues kind (existing spec at `improve-schedule.service.spec.ts:154-190` keeps passing, adjusted to await the background report).\n- [ ] `npm test -w backend` passes.",
+      "mergeCommit": "e784313dac42d424ef1a3197590fc5dee7f0e3d3",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/improve/improve-schedule.service.spec.ts",
+          "additions": 27,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve-schedule.service.ts",
+          "additions": 26,
+          "deletions": 11
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 2,
+        "lines": 65,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 990,
+      "issue": 985,
+      "title": "Replace worker's hand-rolled atomic credentials write with @pipe/protocol's writeJsonFileSync",
+      "body": "> Направление: **Рефакторинг** · риск: low · предложено автоматическим анализом\n\n## Problem\n`worker/src/credentials.ts:50-59` (`saveCredentials`) has its own copy of the temp-file-and-rename write:\n```ts\nconst temporary = `${file}.${process.pid}.tmp`;\nwriteFileSync(temporary, `${JSON.stringify(credentials, null, 2)}\\n`, { mode: 0o600 });\nchmodSync(temporary, 0o600);\nrenameSync(temporary, file);\n```\n`packages/protocol/src/atomicWrite.ts:33-44` (`writeJsonFileSync(path, data, { mode })`) already does this for every other state file in the repo: sync's own credentials (`sync/src/credentials.ts:55`, with `{ mode: 0o600 }`), sync and harness state, and reports' settings (`reports/packages/server/src/settings/props.ts:31`). It produces the same JSON formatting (two-space indent plus a trailing newline) and the same owner-only mode. worker already depends on `@pipe/protocol` and imports its subpaths (`worker/src/jobFiles.ts:8`). The copy is the one exception to the pattern and leaves two implementations of the \"a crash never leaves half a key behind\" guarantee to keep in step.\n\n## Proposed change\n- In `saveCredentials`, keep `mkdirSync(stateDir, { recursive: true, mode: 0o700 })` (the directory mode is worker-specific) and replace the four lines with `writeJsonFileSync(credentialsPath(stateDir), credentials, { mode: 0o600 })`, imported from `@pipe/protocol/atomicWrite`.\n- Drop the now-unused `chmodSync`, `renameSync` and `writeFileSync` imports.\n- No behaviour change: same file contents, mode 0600, atomic replace.\n\n## Acceptance criteria\n- [ ] `worker/src/credentials.test.ts` passes unchanged: round trip (`:28`), mode `0o600` (`:36`), overwrite (`:45`, `:64`).\n- [ ] Add one assertion that no `*.tmp*` file remains in the state dir after `saveCredentials`.\n- [ ] `worker/src/credentials.ts` no longer calls `renameSync` or `writeFileSync`.\n- [ ] `npm test` and `npm run lint` in `worker` pass.",
+      "mergeCommit": "519123ce787082188ae5fabcd586a160f962d707",
+      "files": [
+        {
+          "path": "worker/src/credentials.test.ts",
+          "additions": 10,
+          "deletions": 0
+        },
+        {
+          "path": "worker/src/credentials.ts",
+          "additions": 5,
+          "deletions": 9
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 24,
+        "areas": [
+          "worker"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1009,
+      "issue": 1001,
+      "title": "Report a worker job's network failure with its cause chain, not a bare 'fetch failed'",
+      "body": "> Направление: **Общий анализ** · риск: low · предложено автоматическим анализом\n\n## Problem\nThe log digest shows `Top failure ×10: Job N failed: fetch failed`. That text is all the Worker page and the owner get: `worker/src/jobRunner.ts:325` builds the job's error message from `error.message` only, and undici puts the real reason (`getaddrinfo ENOTFOUND api.openai.com`, `connect ECONNREFUSED 10.0.0.2:443`, a proxy's `407`, `UND_ERR_CONNECT_TIMEOUT`, `ECONNRESET`) in `error.cause`, possibly nested. So a DNS failure, a dead VPN tunnel and a provider outage all look the same, and nobody can tell which host was unreachable. sync already solved this for its own CLI: `sync/src/cli.ts:148-160` (`describeError`) walks the `.cause` chain and joins it with `caused by:`. reports does the same for its own messages (`reports/packages/server/src/utils/describe-fetch-error.ts:1-22`). worker's `failureMessage.ts` has `isNetworkFailure` (lines 6-10) but nothing that describes the failure.\n\n## Proposed change\n- Add `describeFailure(error: unknown): string` to `worker/src/failureMessage.ts`: the error's message followed by each `cause` in the chain (message, plus `code` when present), e.g. `fetch failed (caused by: getaddrinfo ENOTFOUND api.openai.com)`, depth-limited (say 4) and capped at `MAX_FAILURE_OUTPUT_CHARS`.\n- Use it at `worker/src/jobRunner.ts:325` (still passed through `redact`, so a token in a URL inside the cause is masked). The `isNetworkFailure(error)` check at line 330 keeps looking at the original error, so the `'network'` failure kind and bridge's re-queue are unchanged.\n- Unit tests in `worker/src/failureMessage.test.ts`: a plain Error, a `TypeError('fetch failed', { cause: Object.assign(new Error('getaddrinfo ENOTFOUND x'), { code: 'ENOTFOUND' }) })`, a nested two-level cause, a cycle-safe/ depth cap, and the length cap.\n\n## Acceptance criteria\n- A job that fails on an unreachable host reports e.g. `fetch failed (caused by: getaddrinfo ENOTFOUND api.openai.com)` as its error message.\n- The failure kind sent to `updateStatus` is still `'network'` for such errors.\n- The message is still redacted and never longer than the existing cap.\n- New tests pass; `npm test` and `npm run lint` in `worker` pass.",
+      "mergeCommit": "2c74596c34c06722d1c332a2a364a4865368c9c7",
+      "files": [
+        {
+          "path": "worker/src/failureMessage.test.ts",
+          "additions": 48,
+          "deletions": 1
+        },
+        {
+          "path": "worker/src/failureMessage.ts",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "path": "worker/src/jobRunner.ts",
+          "additions": 2,
+          "deletions": 2
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 3,
+        "lines": 80,
+        "areas": [
+          "worker"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1015,
+      "issue": 1008,
+      "title": "pipe-mcp: add a read-only 'brief' tool returning what pipe-status --brief prints",
+      "body": "> Направление: **Новые фичи** · риск: low · предложено автоматическим анализом\n\n## Problem\npipe-mcp exists so Claude Code can see task state without a human running `pipe-status` and pasting output (`harness/README.md:482-489`, CLAUDE.md's harness section). It exposes `status`, `next`, `task_log`, `pull`, `retry`, `publish` (`harness/src/mcp.ts:148-226`; the tool list is asserted in `mcp.test.ts:68-71`), but not the digest the CLI's `--brief` produces — incoming GitLab issues, tasks ready to review, stale tasks, what moved in the last N hours and the worker's heartbeat (`harness/src/brief.ts:42-59` `buildBrief`, `formatBrief` below it; README \"Morning brief\", lines 284-330). Today, asking the agent \"what's on my plate this morning\" means it calls `status` and `next` and still misses incoming issues and recent transitions, or the user runs `pipe-status --brief` in a terminal and pastes it in.\n\n## Proposed change\n- Register a `brief` tool in `createPipeMcpServer` (`harness/src/mcp.ts`): input `{ recentHours?: number (positive, default DEFAULT_RECENT_HOURS), staleHours?: number }`, annotations `readOnlyHint: true, idempotentHint: true, openWorldHint: true`; handler `textResult(formatBrief(await buildBrief({ recentHours, staleHours, paths: options.paths, eventsPaths: options.eventsPaths }), recentHours))`. No notification (that stays a CLI `--notify` concern).\n- Mention it in the README's Tools list next to `status`/`next`.\n\n## Acceptance criteria\n- `listTools` returns `brief` alongside the six existing tools (update `mcp.test.ts`).\n- Calling `brief` against fixture state files returns the same text `formatBrief` produces for the same inputs, including the \"bridge/GitLab unavailable\" lines when live checks fail.\n- Nothing is written to stdout outside the JSON-RPC response.\n- `npm test` and `npm run lint` in `harness` pass.",
+      "mergeCommit": "fcec1deb5c0cdf5e318ee2a6ff07bf6506c591cd",
+      "files": [
+        {
+          "path": "harness/README.md",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "harness/src/mcp.test.ts",
+          "additions": 17,
+          "deletions": 2
+        },
+        {
+          "path": "harness/src/mcp.ts",
+          "additions": 23,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 3,
+        "lines": 45,
+        "areas": [
+          "harness"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1024,
+      "issue": 1017,
+      "title": "Pin the AES-GCM auth tag to 16 bytes and the IV to 12 when decrypting encrypted columns",
+      "body": "> Направление: **Безопасность** · риск: low · предложено автоматическим анализом\n\n## Problem\n`bridge/apps/backend/src/crypto/encrypted-column.transformer.ts:93-108` decrypts every encrypted column (Claude tokens, provider API keys, VPN panel tokens, Secrets, reports' settings backup, Lab tokens) with `createDecipheriv(ALGORITHM, key, iv)` (line 103) and then `setAuthTag(authTag)` (line 104) on whatever the stored string says, with no `authTagLength` and no length check on the IV or the tag. Without `authTagLength`, Node accepts a GCM tag as short as 4 bytes. On Node 22 (the version CI pins):\n\n```js\nconst d = createDecipheriv('aes-256-gcm', key, iv);\nd.setAuthTag(tag.subarray(0, 4)); // accepted, the plaintext decrypts\n// with { authTagLength: 16 }: \"Invalid authentication tag length: 4\"\n```\n\nSo a 4-byte tag counts as integrity. Someone with write access to a row (the same \"pgadmin access\" the entity comments in `secrets/entities/secret.entity.ts` say this encryption guards against) only needs about 2^32 forgery attempts instead of 2^128. Node 23+ also warns at runtime about this pattern (DEP0182). The writer (`to()`, lines 65-84) always makes a 12-byte IV and a 16-byte tag, so a stricter reader rejects nothing legitimate.\n\n## Proposed change\n- In `from()`, pass `{ authTagLength: 16 }` to `createDecipheriv`, and use the same option in `to()` for symmetry.\n- Before decrypting, check that the decoded IV is exactly 12 bytes and the tag exactly 16. Otherwise go down the existing `catch` path (`warnUndecryptable`, then return the raw value), so the fail-safe read behaviour stays the same.\n- Name the constants (`IV_BYTES = 12`, `TAG_BYTES = 16`) next to `ALGORITHM`.\n- Add cases to `crypto/encrypted-column.transformer.spec.ts`.\n\nAbout 30 changed lines. No data migration, because every value already stored has the full-length tag.\n\n## Acceptance criteria\n- [ ] A stored value whose tag is truncated to 4 bytes (made from a real ciphertext in the spec) does not return the plaintext; it returns the raw stored value and logs one warning.\n- [ ] A stored value with an IV that is not 12 bytes is treated the same way.\n- [ ] The existing round-trip, legacy-plaintext, wrong-key and missing-key specs still pass unchanged.\n- [ ] `npm test -w backend` passes.",
+      "mergeCommit": "0f78d77a1efae10d5c4ff09d54b0ee2f38e24fdf",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/crypto/encrypted-column.transformer.spec.ts",
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/crypto/encrypted-column.transformer.ts",
+          "additions": 19,
+          "deletions": 3
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 52,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1026,
+      "issue": 1020,
+      "title": "Secrets: 'Скачать .env' exports all secrets as a .env file, the inverse of 'Импорт .env'",
+      "body": "> Направление: **Новые фичи** · риск: medium · предложено автоматическим анализом\n\n## Problem\nThe Secrets vault (`bridge/apps/backend/src/secrets/`, page `bridge/apps/frontend/src/pages/SecretsPage.tsx`) is described in `secrets/entities/secret.entity.ts` as the place for \"anything they'd otherwise park in a local .env\". Getting values in is already handled: `pages/secrets/ImportEnvButton.tsx` and `parseEnvFile.ts` import a whole `.env`. Getting them back out for a new machine or a local project is not: the only read path is `GET /api/v1/secrets/:id/value` (`secrets.controller.ts:69-79`), one secret at a time, and `SecretRow.tsx` reveals one value per click. Today the user clicks \"reveal\" on each row and copies every value by hand into a `.env`.\n\n## Proposed change\n- Backend: add `GET /api/v1/secrets/export` to `SecretsController` (class-level `JwtGuard`, browser-only like the rest; declared before `:id` routes). Add a strict `@Throttle({ default: { limit: 5, ttl: 60_000 } })` and a `logger.warn` audit line naming the user, the same pattern as `vpn/vpn.controller.ts:47-56`. `SecretsService.exportEnv(userId)` returns `KEY=value` lines sorted by name, quoting values that contain whitespace, `#` or quotes, so that `parseEnvFile` reads them back unchanged. A secret's `description` goes out as a `# comment` line above it.\n- Frontend: add an `exportSecrets` query (lazy, never auto-fired) in `store/api/secrets-api/endpoints`, and a `Скачать .env` button next to `<ImportEnvButton />` in `SecretsPage.tsx` that downloads `secrets.env` through a Blob. Disable the button when the list is empty.\n- Regenerate `openapi.json` and `bridge-api-types.d.ts` (CLAUDE.md \"OpenAPI spec\").\n- Tests: a service spec for formatting and quoting, a round-trip test (`parseEnvFile(exportEnv(x))` equals `x`), and a frontend test that the button triggers one request and a download.\n\n## Acceptance criteria\n- [ ] With three secrets stored, \"Скачать .env\" downloads a file that \"Импорт .env\" on a fresh account imports back to the same names and values.\n- [ ] Values with spaces, `=`, `#` or quotes survive the round trip.\n- [ ] The route rejects a personal API key (JwtGuard only), is rate-limited, and logs only the user id, never names or values.\n- [ ] Loading the Secrets page does not call the export route.\n- [ ] Backend and frontend tests pass, and the OpenAPI drift checks pass.",
+      "mergeCommit": "b18ed9b24e95a1c12fde8cece4c612a8ea4c0d1b",
+      "files": [
+        {
+          "path": "bridge/apps/backend/openapi.json",
+          "additions": 18,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/secrets.controller.ts",
+          "additions": 16,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/secrets.service.spec.ts",
+          "additions": 50,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/secrets.service.ts",
+          "additions": 28,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/SecretsPage.tsx",
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/secrets/ExportEnvButton.test.tsx",
+          "additions": 77,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/secrets/ExportEnvButton.tsx",
+          "additions": 41,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/store/api/secrets-api/endpoints/index.ts",
+          "additions": 7,
+          "deletions": 0
+        },
+        {
+          "path": "packages/protocol/src/bridge-api-types.d.ts",
+          "additions": 35,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 7,
+        "lines": 221,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": true,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1072,
+      "issue": 1068,
+      "title": "Serve the last good GitHub issue list when GitHub fails instead of failing GET /improve/issues",
+      "body": "> Направление: **Надёжность** · риск: low · польза: 3/5 · объём: m · предложено автоматическим анализом\n\n## Problem\nThe log digest shows the Issues tab failing repeatedly: `Top failure ×6: GET /api/vN/improve/issues → N in Nms`. `ImproveService.listIssues` (`bridge/apps/backend/src/improve/improve.service.ts:130-139`) gets the open issues through `SharedAsyncCache` with a 60 s TTL (`improve.service.ts:80,110-113`). That cache stores only successes and drops a value once it expires (`common/shared-async-cache.ts:18-27`, \"a failed build is retried on the next call\"). So after one minute, any GitHub timeout or 5xx turns into an error for the whole route, even though bridge had a perfectly usable list seconds earlier. The page then shows only «Не удалось загрузить задачи» (`frontend/src/pages/improve/IssuesTab.tsx:118`), and no run can be started from it. `?fresh=1` makes this worse: it calls `this.openIssues.clear()` (`improve.service.ts:134`, `shared-async-cache.ts:58-62`), which throws away the last good value before the GitHub call that may fail.\n\n## Proposed change\n- Give `SharedAsyncCache` an opt-in `staleOnErrorMs` option. Expired values move to a separate \"last good\" map instead of being dropped, `clear()` only expires them, and a rejected build within `staleOnErrorMs` of the last success resolves with that value instead of rejecting. Other users of the class keep today's behaviour.\n- Use it for `openIssues` with 30 minutes. When a stale value is served, log `improve.issues_stale` once per failure and return the time it dates from: `listIssues` sets an `X-Issues-Stale-Since` header via the controller (`improve.controller.ts:57-67`).\n- In `IssuesTab.tsx`, when that header is present, show a warning above the list: «GitHub недоступен — список задач от HH:MM».\n- Specs: `shared-async-cache` unit tests (stale served within the window, rejection after it, `clear()` keeps the fallback) and an `improve.service.spec.ts` case.\n\n## Acceptance criteria\n- With a cached list less than 30 min old and `github.listOpenIssues` rejecting, `GET /improve/issues` (also with `fresh=1`) returns 200 with that list and the stale header.\n- With no successful list in the last 30 min, the route still fails as today.\n- Other `SharedAsyncCache` users are unaffected (their existing specs pass unchanged). `npm test -w backend` and `npm test -w frontend -- IssuesTab` pass.",
+      "mergeCommit": "1b103970fcaa6d22f5f3582be8559061a1e43219",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/common/shared-async-cache.spec.ts",
+          "additions": 62,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/common/shared-async-cache.ts",
+          "additions": 67,
+          "deletions": 12
+        },
+        {
+          "path": "bridge/apps/backend/src/config/cors.config.ts",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve-list-runs.spec.ts",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve.controller.ts",
+          "additions": 5,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/improve.service.ts",
+          "additions": 21,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/improve/IssuesTab.test.tsx",
+          "additions": 16,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/improve/IssuesTab.tsx",
+          "additions": 11,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/frontend/src/store/api/improve-api/endpoints/index.ts",
+          "additions": 6,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 9,
+        "lines": 226,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1075,
+      "issue": 1074,
+      "title": "pipe-mcp: add a 'log_time' tool so Claude Code can log a pulled task's time to GitLab, like --log-time",
+      "body": "> Направление: **Новые фичи** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n`pipe-status --log-time <projectId:iid>` (`harness/src/cli.ts:157-158`, `harness/src/timeTracking.ts:95-141`) takes a finished push→pull cycle from reports' `subscription-state.json`, works out how long it took and logs that to GitLab as spent time. That time then shows up in reports' monthly report. `pipe-mcp` registers `status`, `next`, `brief`, `task_log`, `pull`, `retry` and `publish` (`harness/src/mcp.ts:149-247`; the tools list is in `harness/README.md:482-520`), but it has no tool for logging time. `logTime` was written for this: its own comment says it returns `{ code, output }` and takes injectable `LogTimeDeps` so it can become \"a candidate for a future MCP tool too\" (`harness/src/timeTracking.ts:89-94`). Today, after Claude Code pulls a task with `pipe-mcp`'s `pull` tool, the owner has to switch to a terminal and run `pipe-status --log-time 402:6` by hand, or the time never reaches GitLab or the monthly report. Two more gaps: the tool would need its own `LogTimeDeps` with `isInteractive: false`, because the default one reads `process.stdin.isTTY` and stdin is the JSON-RPC channel (`timeTracking.ts:82-87`, compare `MCP_ACTION_DEPS` at `mcp.ts:81-92`). And `logTime` only splits the key on `:` (`timeTracking.ts:96-99`) without checking that both parts are numeric, which matters once the key comes from a model.\n\n## Proposed change\n- In `harness/src/mcp.ts`, register a `log_time` write tool with `{ key, yes, dryRun? }` inputs. Like `writeActionInputShape`, `yes` is required and not defaulted. Validate `key` with zod as `/^\\d+:\\d+$/`. The handler calls `logTime(key, { yes, dryRun: dryRun ?? false, paths: options.paths }, logTimeDeps)` and returns `textResult(output, code !== 0)`.\n- `logTimeDeps` defaults to `{ ...DEFAULT_LOG_TIME_DEPS, isInteractive: false }`, so `yes: false` always refuses and never waits for a prompt. Add an optional `logTimeDeps` to `PipeMcpServerOptions` so tests can inject fakes, the same way `actionDeps` works.\n- Annotations: `readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true`. The tool is not idempotent: GitLab adds the spent time again on every call. Say this in the description so the model does not call it twice.\n- `harness/src/mcp.test.ts`: update \"lists all seven tools\" to eight, and add cases for (a) refusing without `yes`, with `addSpentTime` never called, (b) `dryRun` describing the duration from a fixture `subscription-state.json`, (c) `yes: true` calling the fake `addSpentTime` with the projectId, iid and duration, (d) a malformed key such as `\"402:6/../x\"` being rejected by schema validation.\n- `harness/README.md` pipe-mcp \"Tools\": add a `log_time` bullet.\n\n## Acceptance criteria\n- [ ] The MCP tool listing includes `log_time` with a required boolean `yes` and a `key` matching `^\\d+:\\d+$`.\n- [ ] `log_time` with `yes: false` returns `isError: true` with the \"Refusing … without confirmation\" text and never calls `addSpentTime`.\n- [ ] `dryRun: true` returns \"Would log <duration> spent on <key> …\" for a fixture task that has `pushedAt` and `pulledAt`.\n- [ ] A task with no finished push→pull cycle returns the existing \"nothing to propose\" message as `isError`.\n- [ ] `pipe-status --log-time` CLI behaviour is unchanged. `cd harness && npm test && npm run lint` passes.",
+      "mergeCommit": "e583fd5b5f4e812596e0519585728270b7dea162",
+      "files": [
+        {
+          "path": "harness/README.md",
+          "additions": 6,
+          "deletions": 1
+        },
+        {
+          "path": "harness/src/mcp.test.ts",
+          "additions": 97,
+          "deletions": 2
+        },
+        {
+          "path": "harness/src/mcp.ts",
+          "additions": 26,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 3,
+        "lines": 132,
+        "areas": [
+          "harness"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1103,
+      "issue": 1101,
+      "title": "Serve the cached worker VPN link while refreshing it in the background, so a down panel cannot stall settings fetches",
+      "body": "> Направление: **Производительность** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nEvery managed worker fetches `GET /worker/workers/me/config` before every poll (`bridge/apps/backend/src/worker/workers.controller.ts:73-95`). For a worker with `vpnSource` 'active' or 'connection', `WorkersService.vpnLinkOf` (`worker/workers.service.ts:530-552`) calls `VpnLinkResolver.resolve` (`vpn/vpn-link-resolver.service.ts:29-45`). After `LINK_TTL_MS` (60 s, line 8) the resolver *awaits* `VpnService.getConnectionLink`, a request to the 3x-ui panel bounded by `OUTBOUND_FETCH_TIMEOUT_MS` = 10 s (`vpn/outbound.ts`). Only after that request fails does it fall back to the cached link (line 43).\n\nA failed refresh never updates `cached.at`. So while the panel is down, *every* settings fetch from every worker waits for a fresh panel timeout, up to 10 s per poll. That eats most of the worker's own 15 s `API_TIMEOUT_MS` (`worker/src/bridgeHttp.ts:5`) and keeps hitting a panel that is already struggling. The log digest shows the panel is flaky: `Top failure ×13: GET /api/vN/vpn/status → N in Nms`.\n\n## Proposed change\nIn `VpnLinkResolver.resolve`:\n- When a cached link exists but is stale, return it at once and start `refresh(id)` in the background (reusing the existing `inFlight` dedupe), updating the cache on success. This is stale-while-revalidate.\n- Remember a failed refresh (`failedAt`), and do not ask the panel again for that connection until `LINK_TTL_MS` has passed since the failure. A link that was never built still throws, as today.\n\n## Acceptance criteria\n- With a cached link and `getConnectionLink` hanging or rejecting, `resolve` returns the cached link without awaiting the panel (spec using a never-resolving promise).\n- Within one TTL after a failed refresh, further `resolve` calls make no new panel request.\n- The existing three cases in `vpn-link-resolver.service.spec.ts` still pass; `npm test -w backend` passes.",
+      "mergeCommit": "ec44117fab79b437efcbbbb7c39f2442c92655e5",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/vpn/vpn-link-resolver.service.spec.ts",
+          "additions": 33,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/vpn/vpn-link-resolver.service.ts",
+          "additions": 19,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 53,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1115,
+      "issue": 1111,
+      "title": "Cache the router's Haiku size classification per task text so nightly Lab runs and re-runs skip the chat turn",
+      "body": "> Направление: **Производительность** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nEvery `auto` run that no keyword rule matches calls `RouterClassifierService.classify` again (`bridge/apps/backend/src/router/router.service.ts:49-51`). Each call:\n- creates, renames and deletes a chat;\n- spends one Haiku turn on the account's plan;\n- occupies a worker's poll for that turn;\n- polls `chats.listMessages` once a second for up to `CLASSIFY_TIMEOUT_MS = 60_000` (`router/router-classifier.service.ts:14`, `:53-67`).\n\nMuch of this work repeats on the same input:\n- A Lab schedule re-sends the same `schedule.task` with `schedule.model` (which may be `auto`, see `requireLabModel` in `improve/improve-shared.ts:138-140`) every night (`lab/lab-schedules.service.ts:222-223`).\n- An Improve issue re-run after a failure classifies the same issue body again (`improve/improve-handoff.service.ts:116-123`).\n- The Router tab's \"preview\" (`router/router.controller.ts:34-44`) classifies a task that the run started next will classify once more.\n\nOn a single worker that is already busy with a job, the worker claims jobs before chat turns (`worker/src/loop.ts:85-122`). The repeat question then waits out the full 60 s and falls back to Sonnet (`router-policy.ts` `FALLBACK_MODEL`), even though the same task was sized the night before.\n\n## Proposed change\nIn `RouterService`, keep a small in-memory map from `sha256(userId, title, task)` to `{ classification, at }`, with a 7-day TTL and at most 500 entries (evict the oldest). `decide` checks it before calling `classifier.classify` and stores only non-null answers, so a timeout is never cached. Rules still run first and are never cached, so editing rules takes effect at once. No schema change.\n\n## Acceptance criteria\n- `router.service.spec.ts`: two `decide` calls with the same user and task call `classifier.classify` once. A different task, a different user, or an entry past the TTL calls it again.\n- A `null` classification is not cached: the next call asks again.\n- A task matched by a rule never calls the classifier, as before.\n- `npm test -w backend` passes.",
+      "mergeCommit": "f19b5ac45dcab709e1b350c739c62060d5be28b5",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/router/router.service.spec.ts",
+          "additions": 52,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/router/router.service.ts",
+          "additions": 46,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 2,
+        "lines": 100,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1137,
+      "issue": 1133,
+      "title": "Secrets: allow only env-identifier names and single-line values, and quote $/backticks in the .env export",
+      "body": "> Направление: **Безопасность** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n`GET /api/v1/secrets/export` (`bridge/apps/backend/src/secrets/secrets.controller.ts:47-55`) builds a `.env` file in `SecretsService.exportEnv` (`bridge/apps/backend/src/secrets/secrets.service.ts:117-140`):\n```ts\nconst value = /[\\s#\"']/.test(secret.value) ? `\"${secret.value}\"` : secret.value;\nlines.push(`${secret.name}=${value}`);\n```\nNeither the name nor the value is restricted. `CreateSecretDto` (`secrets/dto/create-secret.dto.ts:10-17`) checks `name` only with `@MaxLength(255)`, and `value` only with `@IsString() @IsNotEmpty()`. `UpdateSecretDto` inherits the same rules. Three things follow:\n- A value containing a line break, e.g. a token pasted from a dashboard with a trailing `\\nLD_PRELOAD=/tmp/x.so`, comes out as an extra `KEY=value` line. dotenv, `docker --env-file` and `set -a; . ./.env` then read it as a separate variable.\n- A value with `$(...)` or a backtick but no space, `#` or quote is written bare (`KEY=$(curl…|sh)`). Running `. ./.env` in a shell executes it, and double quotes would not stop that either.\n- A name such as `A B` or one containing a newline writes broken or extra lines.\n\nThe exported file is meant to be sourced on a developer machine, so a value that came from an untrusted source turns into command execution there. The round trip with the page's own importer (`bridge/apps/frontend/src/pages/secrets/parseEnvFile.ts`, which strips one pair of outer `'` or `\"`) would survive single quoting.\n\n## Proposed change\n- `create-secret.dto.ts`: add `@Matches(/^[A-Za-z_][A-Za-z0-9_]*$/)` on `name`, and `@Matches(/^[^\\r\\n]*$/)` plus `@MaxLength(64000)` on `value`. The update DTO inherits these.\n- `secrets.service.ts` `exportEnv`:\n  - Write a stored row whose name is not an identifier, or whose value contains a line break, as `# skipped: <JSON name>: cannot be written to .env`. Older rows can still be like that.\n  - Leave values matching `^[A-Za-z0-9_./:@+=,-]*$` bare.\n  - Put any other value without `'` in single quotes, so nothing in it is expanded.\n  - Otherwise keep the current double quotes.\n- Update the existing expectation at `secrets.service.spec.ts:268-280`, since `A=\"a b\"` becomes `A='a b'`.\n\n## Acceptance criteria\n- Creating or updating a secret named `A B`, or with a value containing `\\n`, returns 400.\n- On export, a stored value `$(id)` or `` `id` `` comes out single-quoted, and a stored value with a newline comes out as one `# skipped` comment and no `KEY=` line.\n- Every exported file re-imports through `parseEnvFile` to the same name/value pairs. Covered by `secrets.service.spec.ts` and a `parseEnvFile.test.ts` case.\n- `npm test -w backend` and `npm test -w frontend` pass.",
+      "mergeCommit": "f9cd2b533ab4570c9e54ca1ff53ff22ad5c7af6f",
+      "files": [
+        {
+          "path": "bridge/apps/backend/openapi.json",
+          "additions": 5,
+          "deletions": 2
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/dto/create-secret.dto.ts",
+          "additions": 4,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/secrets.service.spec.ts",
+          "additions": 16,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/secrets/secrets.service.ts",
+          "additions": 18,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/backend/test/secrets.e2e-spec.ts",
+          "additions": 7,
+          "deletions": 7
+        },
+        {
+          "path": "bridge/apps/backend/uploads/chat/0.05350602899991763.png",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/uploads/chat/0.18087889684807124.png",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/uploads/chat/0.3129349294469497.png",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/secrets/parseEnvFile.test.ts",
+          "additions": 15,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 8,
+        "lines": 74,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": true,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1167,
+      "issue": 1165,
+      "title": "Stop the Improve Definition of Done from telling workers to run npm ci when the snapshot has no lockfile",
+      "body": "> Направление: **Документация** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n`bridge/apps/backend/src/improve/definition-of-done.ts:10` is the setup step every Improve worker is given: \"run `npm ci` first, once, from the folder the commands below name\". The snapshot a worker receives never contains a lockfile: `bridge/apps/backend/src/improve/parcel.ts:41-44` puts `package-lock.json`, `yarn.lock` and `pnpm-lock.yaml` in `EXCLUDED_FILES`, and `selectParcelFiles` (`parcel.ts`, the `isExcludedPath` check) drops them before the model sees the repository. `npm ci` refuses to run without a lockfile, so the instruction is wrong for every package the checklist names.\n\nThe 7-day log digest shows a worker running into this and improvising. One of the top failure lines is `Job N failed: Model run exited with code N: No root lockfile in the snapshot, so I'll use \\`npm install\\` (and remove the generated lockfile afterwards). You've h...` (the digest truncates it, and the tail may be a usage-limit message, so this run's failure is not proven to be the lockfile alone). The sentence still shows the model hitting the missing lockfile on a path the checklist sends it down.\n\nThe spec pins the wrong command as well: `bridge/apps/backend/src/improve/definition-of-done.spec.ts:33-36` asserts `expect(DEFINITION_OF_DONE).toContain('npm ci')`.\n\n## Proposed change\nChange the setup sentence in `definition-of-done.ts` to `npm install` from the same folders, and say why in one clause: the snapshot has no lockfile, so install resolves from each `package.json`. Nothing needs removing afterwards: any lockfile the install writes is excluded from the result by `isExcludedPath` (the lockfile case is already covered by `parcel.spec.ts`, \"ignores build output and lockfiles a worker leaves behind\"). Update the spec's assertion and its comment to match. The rest of the checklist stays as it is.\n\n## Acceptance criteria\n- `DEFINITION_OF_DONE` tells the worker to run `npm install`, not `npm ci`, from the same folders, and states that the snapshot has no lockfile.\n- `definition-of-done.spec.ts` asserts `npm install` (not `npm ci`) and its comment explains why.\n- The existing \"only mentions commands and paths that exist in this repository\" test still passes.\n- Lockfiles remain excluded from the snapshot: the `parcel.spec.ts` lockfile tests are unchanged and pass.\n- `npx jest src/improve/definition-of-done` in `bridge/apps/backend` passes.",
+      "mergeCommit": "f208ccdc5afa54147f11a22bc7a652ef90a479cf",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/improve/definition-of-done.spec.ts",
+          "additions": 6,
+          "deletions": 3
+        },
+        {
+          "path": "bridge/apps/backend/src/improve/definition-of-done.ts",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 11,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1168,
+      "issue": 1164,
+      "title": "Mark a Claude token rejected on 'organization has disabled Claude subscription access', and test AUTH_FAILURE_PATTERN",
+      "body": "> Направление: **Тесты** · риск: low · польза: 4/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nThe most frequent job failure in the last 7 days is a token Anthropic refuses outright:\n\n`Job N failed: Model run exited with code N: Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead…` (×2 job.failed, plus two `improve.failed` with the same text).\n\n`WorkerService` only marks a Claude token as rejected (`markAuthFailed`, so fallback runs skip it) when the error matches `AUTH_FAILURE_PATTERN = /Failed to authenticate|\\b401\\b|\\b403\\b.*Request not allowed/i` (`bridge/apps/backend/src/worker/worker.service.ts:83-85`, used at ~1121-1130). The \"organization has disabled\" text matches none of these alternatives, so that token is never flagged and the next run keeps picking it. The pattern is only exercised indirectly by one spec case with the \"Request not allowed\" text (`worker.service.spec.ts:720`); there is no table of messages it must and must not match.\n\n## Proposed change\n- Export `AUTH_FAILURE_PATTERN` (or a small `isAuthFailureMessage()`) and add `|has disabled Claude subscription access` to it.\n- Add a table spec (new `auth-failure.spec.ts` next to worker.service.ts, or a case in `worker.service.spec.ts`): matches \"Failed to authenticate. API Error: 403 Request not allowed\", \"API Error: 401\", and the \"organization has disabled Claude subscription access\" text; does NOT match a timeout (\"claude timed out after Ns and was killed\"), the Fusion add-in error, \"No recognized manifest\", and a message that merely contains a number like \"1401\".\n- One spec case in `worker.service.spec.ts` next to line 720: a failed job with the new text calls `markAuthFailed` for its `usedClaudeCredentialId`.\n\n## Acceptance criteria\n- A job failing with the \"organization has disabled Claude subscription access\" message marks its token rejected.\n- The table spec pins both matching and non-matching messages (timeout, Fusion, manifest errors are not auth failures).\n- `npm test -w backend` passes; no other behaviour changes.",
+      "mergeCommit": "49405e767aff32a1bdfee616afc6018a09d58787",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/worker/auth-failure.spec.ts",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/worker/worker.service.spec.ts",
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/worker/worker.service.ts",
+          "additions": 3,
+          "deletions": 2
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 3,
+        "lines": 38,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1170,
+      "issue": 1169,
+      "title": "sync-cli pull-issue --checkout: write the result onto the task's own branch, like reports' Subscription pull",
+      "body": "> Направление: **Новые фичи** · риск: low · польза: 3/5 · объём: m · предложено автоматическим анализом\n\n## Problem\n`sync-cli pull-issue` writes a task's result into whatever branch `project.path` has checked out. `tryPullOnce` (`sync/src/commands/pullIssue.ts:50-104`) checks only that the tree is clean (`:58-63`), then calls `writeParcelFiles(project.path, …)` (`:103`). It never looks at `manifest.branch`, except to print it (`:118`) and to fill `{{branch}}` in `--comment` (`:129`). So a user who pulls while on `main`, or on another task's branch, gets this task's changes mixed into that branch. They have to know to run `git checkout task/<projectId>-<iid>` (the name `gitlab-worker` gives the task, `sync/src/commands/gitlabWorker.ts:17-19`, and the branch agent-runner pushes, `sync/src/commands/agentRunner.ts:128-160`) before every pull.\n\nreports' Subscription pull already solves this for its own side. `pullSubscriptionIssue` calls `checkoutTaskBranch(workTree.path, state.branch, baseBranch)` before writing anything (`reports/packages/server/src/subscription/pull.ts:115-128`). That function checks the branch name, refuses a dirty tree, checks the branch out and fast-forwards it from origin (`reports/packages/server/src/subscription/git.ts:136-160`). sync has the same branch-name check, `assertSafeTaskBranch` (`sync/src/gitWorktree.ts:103-123`), and `project.baseBranch` (`sync/src/types.ts:25`). Nothing in pull-issue uses either of them.\n\n## Proposed change\n- Add a `--checkout` option to `pull-issue` in `sync/src/cli.ts:98-110`.\n- With the option set, `tryPullOnce` does the following after `extractIssueArchive` and before the first write:\n  1. Takes `localTransform(dictionary)(manifest.branch)`. A legacy manifest or an empty branch is an error, and the parcel stays on bridge.\n  2. Runs `assertSafeTaskBranch(branch, project.baseBranch ?? 'main')`.\n  3. Checks out the branch: `git fetch --quiet origin <branch>` (tolerating failure), then `git checkout <branch>` if the branch exists locally, or `git checkout -b <branch> --track origin/<branch>`, and `git merge --ff-only origin/<branch>` when the remote exists. If origin has no such branch, it falls back to `git checkout -b <branch>` from HEAD.\n- Put the git helper next to `addTaskWorktree` in `sync/src/gitWorktree.ts` as `checkoutTaskBranch(repoPath, branch, baseBranch)`.\n- Any failure throws before `writeParcelFiles` and before `client.delete`, so the parcel stays pullable. This matches the existing peek-then-delete guarantee (`pullIssue.ts:83-85`).\n- Log `Checked out <branch>`. `--comment` and `--watch` work unchanged together with `--checkout`.\n- Without `--checkout`, the behaviour is unchanged.\n- Add one row to the flags list in `sync/README.md`.\n\n## Acceptance criteria\n- `pull-issue <name> <pid> <iid> --checkout` on a temp git repo that is on `main` writes the files onto `task/<pid>-<iid>`, and `main` stays untouched (`git status` on `main` is clean after switching back).\n- When the branch already exists locally, it is reused, not recreated.\n- A parcel whose branch is `main`, the project's `baseBranch`, or contains `..` is refused. Nothing is written, and no `DELETE /storage/:id` is sent.\n- A legacy-manifest parcel with `--checkout` fails, and the parcel stays on bridge.\n- Without `--checkout`, the existing `sync/src/commands/pullIssue.test.ts` tests pass unchanged.\n- New tests in `pullIssue.test.ts` and `gitWorktree.test.ts` cover the cases above. `npm test` and `npm run lint` in `sync` pass.",
+      "mergeCommit": "b62a2fe7dc818345eb952aae3abd1e953292ec84",
+      "files": [
+        {
+          "path": "sync/README.md",
+          "additions": 6,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/cli.ts",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/pullIssue.test.ts",
+          "additions": 132,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/pullIssue.ts",
+          "additions": 17,
+          "deletions": 2
+        },
+        {
+          "path": "sync/src/gitWorktree.test.ts",
+          "additions": 102,
+          "deletions": 1
+        },
+        {
+          "path": "sync/src/gitWorktree.ts",
+          "additions": 41,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 6,
+        "lines": 302,
+        "areas": [
+          "sync"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1227,
+      "issue": 1226,
+      "title": "sync-cli push-issue --note: send a private instruction to the agent with the parcel, not as a GitLab comment",
+      "body": "> Направление: **Новые фичи** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nToday the only task text that reaches the agent from `sync-cli push-issue` is what lives on GitLab: the issue title/description and its comments (`sync/src/commands/pushIssue.ts:67-84`, packed into the manifest at `:133-146`). The CLI has no way to add a private instruction for this one run — `push-issue` only takes `--strict` and `--dry-run` (`sync/src/cli.ts:88-97`, `sync/README.md:159,167-175`). So when the owner wants to steer the agent (\"only touch src/parser, don't bump deps\", \"the failing test is X\"), they either post a public GitLab comment the whole team sees, edit the issue itself, or run `agent-runner --review` on the other machine to edit the text by hand (`sync/src/commands/agentRunner.ts:181-185`) — which can't be combined with `--watch` (`:297-298`), so it doesn't work for the unattended runner.\n\nThe parcel format already has a slot that both consumers render: `issueComments` (`packages/protocol/src/issueParcel.ts:22`). worker's `describeTask` puts them into the prompt as \"Comments on the issue … they may clarify or change the task\" (`worker/src/parcel.ts:85-95`), and sync's agent-runner writes them into `ISSUE.md` (`sync/src/issuePack.ts:33-47`). No protocol or worker change is needed.\n\n## Proposed change\nAdd `--note <text>` to `push-issue` (`sync/src/cli.ts`), passed through `pushIssueCommand` → `buildAndUploadIssueParcel` options (`sync/src/commands/pushIssue.ts:55,172`):\n- When non-empty, append it as the **last** `issueComments` entry: `{ author: 'operator note (sync-cli)', createdAt: now, body: transform(note) }` — so it goes through the same dictionary anonymization as the description and comes after the GitLab comments (newest wins).\n- Include it in the existing `scanForLeaks` input (`source: 'operator note'`), so `--strict` covers it too.\n- `--dry-run` prints `Note: yes (N chars)` next to the Comments/Images lines (`:124-128`).\n- Nothing is posted to GitLab; the note lives only in the parcel. `gitlab-worker` is unchanged (it's unattended; it calls the same function without a note).\n- One line in `sync/README.md`'s option list.\n\nRoughly 40 lines of code plus ~40 lines of tests in `sync/src/commands/pushIssue.test.ts`, which already exercises `buildAndUploadIssueParcel` with `dryRun`/`strict` (`:143,162`).\n\n## Acceptance criteria\n- [ ] `sync-cli push-issue <name> <projectId> <iid> --note \"only change src/parser\"` uploads a parcel whose manifest `issueComments` ends with an entry authored `operator note (sync-cli)` carrying that text; without `--note` the manifest is byte-for-byte the same shape as today.\n- [ ] A dictionary value inside the note is replaced by its key in the parcel (test with a non-empty dictionary).\n- [ ] A secret-looking value in the note is reported by the leak scan, and with `--strict` the push aborts (test).\n- [ ] `--dry-run --note …` reports the note and uploads nothing.\n- [ ] Worker's prompt (`describeTask`) and agent-runner's `ISSUE.md` show the note with no changes to `worker/` or `packages/protocol/`.\n- [ ] `cd sync && npm test`, `npm run lint` and `npm run coverage:check` pass.",
+      "mergeCommit": "32c136052679c72b653358d57cea9b057959ebd4",
+      "files": [
+        {
+          "path": "sync/README.md",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/cli.ts",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/pushIssue.test.ts",
+          "additions": 109,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/pushIssue.ts",
+          "additions": 19,
+          "deletions": 4
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 4,
+        "lines": 134,
+        "areas": [
+          "sync"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1236,
+      "issue": 1232,
+      "title": "Worker: «Запустить снова» on a succeeded job whose parcel is still in Storage, e.g. to compare another model",
+      "body": "> Направление: **Новые фичи** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nAfter a Worker job succeeds there is no way to run it again. Running the same task on another model to compare (Sonnet vs Opus vs deepseek), or with another saved Context, means opening the new-job form and picking the parcel, model, token, context and time limit again by hand.\n\n- `bridge/apps/backend/src/worker/worker.service.ts:345-363`: `retry()` throws `ConflictException('Only a failed or stopped job can be retried — this one is …')` for any status other than `failed`/`cancelled`.\n- `bridge/apps/frontend/src/pages/worker/RetryJobButton.tsx:46`: `if (job.status !== 'failed' && job.status !== 'cancelled') return null;`, so neither the job row (`JobList.tsx:256`) nor `JobDetailDialog.tsx:237` offers anything for a succeeded job.\n- Re-running a succeeded job is still possible in many cases. `setResult` (`worker.service.ts` around lines 1255-1275) only consumes a **pipeline** parcel, one with a `taskKey`, and sets its `sourceFileId` to null. A parcel the owner uploaded by hand \"is left alone — they may well run it again\", in that code's own comment. So a succeeded job built on such a parcel keeps a non-null `sourceFileId` (exposed in `job-response.dto.ts:8,52`).\n- `retry()` already builds a new job from the old one's model, credential, pin, context and time limit, with per-field overrides (`model`, `claudeCredentialId`, `providerCredentialId`, `contextId`, `withoutContext`, `timeoutSec`). `RetryJobButton`'s «другой моделью» dialog already has the UI for those overrides. Only the status gate is missing.\n\n## Proposed change\nSmallest slice: let the existing retry flow re-run a succeeded job whose source parcel is still in Storage.\n1. `worker.service.ts` `retry()`: also accept `JobStatus.Succeeded`. The existing `sourceFileId === null` check stays and covers consumed pipeline parcels, with the message 'The source parcel was already consumed'. Update the error text to \"Only a finished job can be run again\".\n2. `RetryJobButton.tsx`: render for `succeeded` too, but only when `job.sourceFileId !== null`. For a succeeded job, label the main action «Запустить снова» instead of the retry label, and keep the «другой моделью / контекстом» dialog as is. Update the header comment.\n3. Tests:\n   - `worker.service.spec.ts`: retry of a succeeded job with a kept source queues a new job, and the original stays succeeded. A succeeded job with `sourceFileId: null` is refused with 409. A running job is still refused.\n   - A new `RetryJobButtonSucceeded.test.tsx`, next to the existing `RetryJobButton*.test.tsx` files: the button shows for a succeeded job with a source, is hidden when `sourceFileId` is null, and posts `worker/jobs/:id/retry` with the chosen model.\n\nNo API shape change, so the OpenAPI spec and protocol types do not need regenerating: `RetryJobDto` and `JobResponseDto` stay the same.\n\n## Acceptance criteria\n- `POST /api/v1/worker/jobs/:id/retry` on a succeeded job whose source parcel still exists returns a new queued job. The original job, its result and its log are unchanged.\n- The same call on a succeeded pipeline job (source consumed, `sourceFileId` null) returns 409 'The source parcel was already consumed'.\n- Queued and running jobs are still refused.\n- On the Worker page, a succeeded job with a kept source shows «Запустить снова» in its row and detail dialog, including the «другой моделью» override. A succeeded job without a source shows nothing new.\n- `npm test -w backend` and `npm test -w frontend` pass in `bridge/`.",
+      "mergeCommit": "e5750038ad9797912a0488deeb82857e36a65f79",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/worker/worker.service.spec.ts",
+          "additions": 39,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/worker/worker.service.ts",
+          "additions": 6,
+          "deletions": 2
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/worker/RetryJobButton.test.tsx",
+          "additions": 1,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/worker/RetryJobButton.tsx",
+          "additions": 8,
+          "deletions": 5
+        },
+        {
+          "path": "bridge/apps/frontend/src/pages/worker/RetryJobButtonSucceeded.test.tsx",
+          "additions": 67,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 5,
+        "lines": 130,
+        "areas": [
+          "bridge/apps/backend",
+          "bridge/apps/frontend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1247,
+      "issue": 1246,
+      "title": "Pin runClaude's delivery of a 200 KB prompt and move it off argv (spawn E2BIG)",
+      "body": "> Направление: **Тесты** · риск: medium · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n- The whole prompt is passed as one argv element: `worker/src/modelRunners/claudeRunner.ts:122` (`['-p', prompt, ...]`), spawned at `:134`. Linux rejects any single argument longer than 128 KiB with E2BIG.\n- Nothing bounds that prompt. `worker/src/jobRunner.ts:239-264` builds it from `describeTask(parcel)` (`worker/src/parcel.ts:80-96`), which copies the GitLab issue description and every comment verbatim. The sync side does not truncate either: `sync/src/commands/pushIssue.ts:68-90`, `packages/protocol/src/issueParcel.ts:20-22`. Context is capped at 20 000 chars (`bridge/apps/backend/src/context/context.limits.ts`) and history at 8 000 (`bridge/apps/backend/src/worker/run-history.ts:13`); the issue text is not capped.\n- The error path has no mapping: `claudeRunner.ts:209-212` rejects with the raw spawn error for anything except ENOENT.\n- The logs digest shows `Top failure ×1: Job N failed: spawn ENBIG` in the 7-day window (1 of 3 failed jobs). It is most likely a mangled E2BIG; the digest alone does not confirm it.\n- No test covers prompt size: `worker/src/modelRunners/claudeRunner.test.ts:137-148` uses the prompt `'do the thing'`, and the fake `claude` (lines 17-40) only echoes its argv.\n\n## Proposed change\nAdd a test in `claudeRunner.test.ts` that runs `runClaude` with a 200 000-character prompt through the fake CLI and asserts the CLI received all of it. To make it pass, send the prompt on stdin instead of argv: `stdio: ['pipe', 'pipe', 'pipe']`, write the prompt, then end stdin, and drop the positional prompt after `-p`. The fake CLI reads stdin and echoes its length and a checksum. Update the existing argv assertions at lines 137-148 (model and flag assertions stay). Confirm by hand against the real `claude` CLI that `-p` with no positional argument reads stdin, since CI does not have the binary.\n\n## Acceptance criteria\n- A new test sends a prompt of at least 200 000 characters through `runClaude` and asserts the fake CLI received it intact (length and content).\n- That test fails on the current code with a spawn E2BIG error and passes after the change.\n- The existing 'passes the prompt and model as CLI args' test is updated, not deleted; its model and flag assertions remain.\n- The prompt text no longer appears in argv.\n- `npm test` in `worker` passes; the PR notes a manual run against the real `claude` CLI with a large prompt.",
+      "mergeCommit": "d2e01d4ee62cb346a7ea4817a31971d4fe1e0d2d",
+      "files": [
+        {
+          "path": "worker/src/modelRunners/claudeRunner.test.ts",
+          "additions": 19,
+          "deletions": 1
+        },
+        {
+          "path": "worker/src/modelRunners/claudeRunner.ts",
+          "additions": 6,
+          "deletions": 2
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 28,
+        "areas": [
+          "worker"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1278,
+      "issue": 1274,
+      "title": "Redact bridge's own brk_/brw_/brn_/bre_ keys and JWTs before a message is stored in app_logs",
+      "body": "> Направление: **Безопасность** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nEvery app log message and meta value passes through `redact()` (`bridge/apps/backend/src/logs/redact.ts:6-23`, applied in `app-log.service.ts:97` and `sanitizeMeta`). The file's own header says why: log text \"can come from model output, upstream error bodies and exception messages — all of which have been seen to echo credentials back\". The pattern list covers Anthropic/OpenAI, GitHub, GitLab and Telegram tokens, PEM blocks and `key=value` pairs. It does not cover the credentials bridge issues itself:\n\n- personal API keys `brk_…` (`auth/api-keys.service.ts:11`),\n- worker keys `brw_…` and one-time enrolment codes `brn_…` (`auth/worker-keys.service.ts:7-8`),\n- emergency login keys `bre_…` (`auth/emergency-keys.service.ts:11`),\n- bare JWTs (`eyJ….eyJ….sig`), i.e. bridge's own access tokens, when they appear without a `Bearer ` prefix.\n\nA worker job's `errorMessage` or a model's reply that quotes `BRIDGE_API_KEY=brk_…` is caught by the `api_key=` rule. But `worker key brw_Ab12… rejected`, a pasted `curl -H \"X-Api-Key: brk_…\"` once the quote has been split off, or a JWT echoed in an upstream error is stored verbatim. The digest shows such messages are recorded: \"Job N failed: Worker was restarted or lost…\" ×2, and 45 errors in 7 days. `redact.spec.ts:4-23` pins only the third-party formats.\n\n## Proposed change\n- In `logs/redact.ts`, add two patterns before the generic `key=value` rule:\n  - `/\\bbr[kwne]_[A-Za-z0-9_-]{16,}\\b/g` → `[redacted-bridge-key]`. To keep one source of truth for the prefixes, import `API_KEY_PREFIX`, `WORKER_KEY_PREFIX`, `ENROLL_CODE_PREFIX` and `EMERGENCY_KEY_PREFIX` from the auth services and build the RegExp from them.\n  - `/\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b/g` → `[redacted-jwt]`.\n- Extend `redact.spec.ts`'s `it.each` with one positive case per prefix and one bare JWT. Add negative cases: `brk_` alone, a short `brw_abc`, and a dotted version string `eyJ.1.2` stay untouched.\n\n## Acceptance criteria\n- `redact('worker key brw_<32 random base64url chars> rejected')` contains `[redacted-bridge-key]` and not the key, and the same holds for `brk_`, `brn_` and `bre_`.\n- A bare three-part JWT is replaced by `[redacted-jwt]`.\n- The existing \"leaves ordinary text alone\" case and the new negative cases still pass unchanged.\n- `npm test -w backend -- redact` passes; no other file outside `src/logs/` changes.",
+      "mergeCommit": "889f5343e5fdc9dc265994fa7fa708df6b414097",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/logs/redact.spec.ts",
+          "additions": 28,
+          "deletions": 1
+        },
+        {
+          "path": "bridge/apps/backend/src/logs/redact.ts",
+          "additions": 26,
+          "deletions": 0
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 55,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1285,
+      "issue": 1283,
+      "title": "leakScan: flag password=/token=/secret= assignments and URL passwords even when the value is short",
+      "body": "> Направление: **Безопасность** · риск: low · польза: 3/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n`packages/protocol/src/leakScan.ts` is the only check that runs on a parcel's content after dictionary substitution and before it leaves the machine: sync `push`/`push-issue`, reports' Subscription `push.ts`, bridge's Storage and Purge pages. It knows four kinds only, `email | ip | hostname | token` (`leakScan.ts:11`). The only secret detector is `TOKEN_RE` (`leakScan.ts:75-76`): a run of 24+ characters that contains a digit and has Shannon entropy ≥ 4.0 (`leakScan.ts:141-146`). Ordinary human-chosen secrets never match that shape:\n- `DB_PASSWORD=Winter2024!`, `password: \"hunter2\"`, `\"apiSecret\": \"letmein-prod\"` in a config file, a `docker-compose.yml` or a `.env.example` produce no finding (too short, low entropy, punctuation breaks the run);\n- `https://deploy:S3cret@github.com/org/repo.git` is suppressed as a hostname because `github.com` is in `KNOWN_PUBLIC_HOSTS` (`leakScan.ts:48-55`). At best the userinfo is reported as an *email* `S3cret@github.com`, by `EMAIL_RE` (`leakScan.ts:25`), and a password with `!`/`#`/`$` in it isn't even reported that way.\n\n`leakScan.test.ts:81-93` only covers the high-entropy token and the camelCase non-token cases, so a dictionary that forgot a password ships it with no warning, even with `--strict` / `leakScanStrict`.\n\n## Proposed change\nIn `leakScan.ts`, add a `'secret'` kind to `LeakKind`. Detect it in `scanOne` with two extra regexes, keeping the scan advisory:\n1. `SECRET_ASSIGNMENT_RE`: a key whose name contains `password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key`, case-insensitive, then `=` or `:`, then an optional quote and a value of at least 4 characters. Skip placeholder values: empty, `${...}`, `<...>`, `process.env...`, `changeme`, `xxx…`, `***`, and anything that already looks like a dictionary placeholder. Report only the key and a masked value (e.g. `DB_PASSWORD=W***`), so the finding itself does not reprint the secret into logs.\n2. `URL_CREDENTIALS_RE`: `scheme://user:password@host`. Report it as `secret` whatever the host is, and record its span the way `emailSpans` already does, so the same text isn't also reported as an email.\n\nNo consumer switches on `kind` (all of them only call `formatLeakFindings`), so nothing outside `packages/protocol` changes. Run `npm run build` in `packages/protocol` afterwards.\n\n## Acceptance criteria\n- `DB_PASSWORD=Winter2024!`, `password: \"hunter2\"` and `\"apiSecret\": \"letmein-prod\"` each produce exactly one `secret` finding, with the right line and a masked match.\n- `https://deploy:S3cret@github.com/x.git` produces one `secret` finding and no `email` finding.\n- `password: ${DB_PASSWORD}`, `token: <TOKEN_1>`, `apiKey = process.env.API_KEY`, `password=` and the identifier `passwordInput` produce no finding.\n- The existing `leakScan.test.ts` cases, including the bounded-time large-input test, still pass. `npm test` and `npm run coverage:check` pass in `packages/protocol`.",
+      "mergeCommit": "835b2d4566258c095f5413cca3c0ff87ce520f73",
+      "files": [
+        {
+          "path": "packages/protocol/src/leakScan.test.ts",
+          "additions": 65,
+          "deletions": 0
+        },
+        {
+          "path": "packages/protocol/src/leakScan.ts",
+          "additions": 43,
+          "deletions": 2
+        },
+        {
+          "path": "reports/packages/shared/src/types.ts",
+          "additions": 1,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 3,
+        "files": 3,
+        "lines": 112,
+        "areas": [
+          "packages/protocol",
+          "reports/packages/shared"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": false
+      }
+    },
+    {
+      "pr": 1286,
+      "issue": 1282,
+      "title": "sync-cli gitlab-worker --run <model>: queue a worker job for each newly pushed assigned issue",
+      "body": "> Направление: **Новые фичи** · риск: medium · польза: 4/5 · объём: s · предложено автоматическим анализом\n\n## Problem\n`push-issue --run <model>` (issue #1275) closes the loop GitLab issue → parcel → worker job for **one** issue typed by hand (`sync/src/cli.ts:90-99`, `commands/pushIssue.ts:46-60, 195`). `gitlab-worker`, the command meant to remove that typing, has no such option (`cli.ts:117-125`: only `--watch`, `--strict` and `--label`). Its `processIssue` passes only `{ strict }` into `buildAndUploadIssueParcel` (`commands/gitlabWorker.ts:30-41`). So today, when an issue gets assigned, `gitlab-worker --watch` uploads the parcel. The owner then still has to open bridge's Worker page and launch a job on it, or run a local `agent-runner`. For a worker-only setup, the parcel just sits in Storage until someone notices it.\n\n## Proposed change\n- Add `.option('--run <model>', …)` to `gitlab-worker` in `cli.ts`, and thread `run` through `gitlabWorkerCommand` and `runGitlabWorkerOnce` options.\n- Validate once, before the first GitLab call, with the existing `assertRunOptions(project, { run })`. That check rejects an unknown model and an encrypting project, whose parcels the worker can't open.\n- In `processIssue`, upload **without** `run`, call `recordPushed` first, and only then call `client.createJob(stored.id, run)`. If creating the job fails, log a warning naming the storage id, so it can be launched from the Worker page. Don't rethrow, so the issue is not re-uploaded on the next `--watch` tick. On success, log and notify `Job #<id> queued (<model>)`.\n- Add a line to `sync/README.md`'s command table.\n\nEnd to end, this relies on `createJob` actually sending JSON (see this analysis's reliability item). The code change here is independent of that fix.\n\n## Acceptance criteria\n- `gitlab-worker <name> --run opus` queues one job per newly pushed issue. A `gitlabWorker.test.ts` case asserts `createJob` was called with the uploaded storage id and the model.\n- `--run foo`, and `--run` on a project with `publicKeyPath`, fail before any GitLab or bridge request.\n- If `createJob` fails, the issue is still recorded as pushed, and a second pass neither re-uploads it nor retries the job. A test covers this.\n- Without `--run`, behaviour and output are unchanged. `npm test` and `npm run coverage:check` pass in `sync`.",
+      "mergeCommit": "bf6fea3de302b0aaa863bf31b417ec5293706db7",
+      "files": [
+        {
+          "path": "sync/README.md",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/cli.ts",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/gitlabWorker.test.ts",
+          "additions": 56,
+          "deletions": 0
+        },
+        {
+          "path": "sync/src/commands/gitlabWorker.ts",
+          "additions": 25,
+          "deletions": 5
+        }
+      ],
+      "truth": {
+        "tier": 2,
+        "files": 4,
+        "lines": 88,
+        "areas": [
+          "sync"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    },
+    {
+      "pr": 1310,
+      "issue": 1301,
+      "title": "Re-adopt a dropped bridge tunnel only after 2 good Telegram probes in a row, not the first one",
+      "body": "> Направление: **Надёжность** · риск: low · польза: 4/5 · объём: s · предложено автоматическим анализом\n\n## Problem\nThe logs show the bridge tunnel flapping: **`WARN ×105 tunnel.down: Туннель bridge не используется: Telegram через туннель не отвечает: UND_ERR_CONNECT_TIMEOUT — Telegram идёт через прокси из окружения`** plus `×25` of the same with `ECONNRESET`, all within the latest 300 warn/error events. Each `tunnel.down` is a transition (`publish` logs only when `usable !== this.inUse`, `bridge/apps/backend/src/tunnel/bridge-tunnel.service.ts:336-361`), so the tunnel came back up roughly as often as it went down. Next to those, `WARN ×81 telegram.api_failed: Telegram getUpdates failed: fetch failed`.\n\nThe way down already has hysteresis: `DOWN_AFTER_FAILURES = 3` (`bridge-tunnel.service.ts:27-28`, `:288-295`). The way up has none. In `check()`, a single `telegram?.ok === true` resets `consecutiveFailures` and immediately calls `publish(true, null)` (`bridge-tunnel.service.ts:279-285`). That switches Telegram and GitHub callers back onto the tunnel via `setTunnelProxy`. A marginal link that answers one probe in four is therefore re-adopted on every lucky probe, dropped again three probes (60 s, `CHECK_EVERY_MS = 20_000`) later, and Telegram calls fail during each of those windows.\n\n## Proposed change\n- Add `UP_AFTER_SUCCESSES = 2` and a `consecutiveSuccesses` counter beside `consecutiveFailures` (`bridge-tunnel.service.ts:141`).\n- A tunnel **in use** stays in use on any success, as today.\n- A tunnel **not in use** is published as usable only once `consecutiveSuccesses >= UP_AFTER_SUCCESSES`. A failure resets the success streak, and a success resets the failure streak.\n- The first adoption after start-up follows the same rule. The env proxy carries Telegram until then, as it already does.\n\n## Acceptance criteria\n- [ ] A dropped tunnel with alternating success/failure probes stays dropped: no `tunnel.up`/`tunnel.down` pair per cycle.\n- [ ] A dropped tunnel with 2 successes in a row is used again and logs `tunnel.up` once.\n- [ ] A tunnel in use still survives 2 failed probes and is dropped on the 3rd (existing spec at `bridge-tunnel.service.spec.ts:135`).\n- [ ] The spec at `bridge-tunnel.service.spec.ts:113` (\"starts again when it recovers\") is updated to need two good probes, and a new case covers alternating results; `npm test -w backend` passes.",
+      "mergeCommit": "560f944e43e2e9121bff8849f1744db1a14ddb59",
+      "files": [
+        {
+          "path": "bridge/apps/backend/src/tunnel/bridge-tunnel.service.spec.ts",
+          "additions": 32,
+          "deletions": 0
+        },
+        {
+          "path": "bridge/apps/backend/src/tunnel/bridge-tunnel.service.ts",
+          "additions": 10,
+          "deletions": 1
+        }
+      ],
+      "truth": {
+        "tier": 1,
+        "files": 2,
+        "lines": 43,
+        "areas": [
+          "bridge/apps/backend"
+        ],
+        "migration": false,
+        "generated": false,
+        "localOk": true
+      }
+    }
+  ]
+}
