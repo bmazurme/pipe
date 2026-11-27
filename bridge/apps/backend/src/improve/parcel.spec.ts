@@ -4,6 +4,7 @@ import { join } from 'path';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import {
+  BASELINE_ENTRY,
   buildIssueParcel,
   diffResult,
   MANIFEST_ENTRY,
@@ -67,6 +68,25 @@ describe('buildIssueParcel / readResultParcel / diffResult', () => {
     expect(read.has(MANIFEST_ENTRY)).toBe(false);
     expect(baseline['a.ts']).toBe(sha256(strToU8('one')));
     expect(Object.keys(baseline)).toHaveLength(3);
+  });
+
+  it('puts the baseline into the parcel only when asked, and a result carrying it back never counts it as a change (A2)', async () => {
+    const without = await buildIssueParcel(files, issue);
+    const withIt = await buildIssueParcel(files, issue, new Date(), undefined, {
+      includeBaseline: true,
+    });
+
+    expect(unzipSync(without.buffer)[BASELINE_ENTRY]).toBeUndefined();
+    expect(
+      JSON.parse(strFromU8(unzipSync(withIt.buffer)[BASELINE_ENTRY])),
+    ).toEqual(withIt.baseline);
+    // The worker's result is every file left on disk, the baseline included: it must not become a 'added' file of the pull request.
+    const read = await readResultParcel(withIt.buffer);
+
+    expect(read.has(BASELINE_ENTRY)).toBe(false);
+    expect(
+      diffResult(withIt.baseline, read).map((change) => change.path),
+    ).toEqual([]);
   });
 
   it('stamps the manifest with the current schemaVersion', async () => {

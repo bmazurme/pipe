@@ -38,10 +38,14 @@ const EXCLUDED_DIRS = new Set([
   '.cache',
   '__pycache__',
 ]);
+// What the worker is given besides the repository (A2): path → sha256 of every file, so `scripts/verify-changed.mjs` can tell in a snapshot
+// with no .git what the worker changed. It is never a change itself.
+export const BASELINE_ENTRY = '.pipe-baseline.json';
 const EXCLUDED_FILES = new Set([
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
+  BASELINE_ENTRY,
 ]);
 
 // Generated or vendored output (build info too: a committed .tsbuildinfo makes `tsc -b` skip emitting in CI) and lockfiles is never part of the snapshot, so it can never be part of a change
@@ -131,6 +135,7 @@ export async function buildIssueParcel(
   issue: IssueRef,
   now = new Date(),
   baseline: Record<string, string> = snapshotBaseline(files),
+  options: { includeBaseline?: boolean } = {},
 ): Promise<BuiltParcel> {
   const entries: Zippable = {};
 
@@ -140,6 +145,10 @@ export async function buildIssueParcel(
     entries[file.path] = file.path.startsWith(ASSET_PREFIX)
       ? [file.bytes, { level: 0 }]
       : file.bytes;
+  }
+
+  if (options.includeBaseline) {
+    entries[BASELINE_ENTRY] = strToU8(JSON.stringify(baseline));
   }
 
   entries[MANIFEST_ENTRY] = strToU8(

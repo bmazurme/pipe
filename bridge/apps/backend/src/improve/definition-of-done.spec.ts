@@ -43,6 +43,13 @@ describe('withDefinitionOfDone', () => {
     );
   });
 
+  it('points the worker at the one command that checks what it touched and what depends on it', () => {
+    expect(DEFINITION_OF_DONE).toContain('node scripts/verify-changed.mjs');
+    expect(DEFINITION_OF_DONE).toContain('.pipe-baseline.json');
+    expect(DEFINITION_OF_DONE).toContain('every package that depends on it');
+    expect(DEFINITION_OF_DONE).toContain('could **not** verify');
+  });
+
   it('only mentions commands and paths that exist in this repository', () => {
     // A checklist that points at a missing script would send the worker chasing it.
     const fs = jest.requireActual<typeof import('fs')>('fs');
@@ -51,6 +58,7 @@ describe('withDefinitionOfDone', () => {
 
     for (const file of [
       'CLAUDE.md',
+      'scripts/verify-changed.mjs',
       'bridge/apps/backend/openapi.json',
       'packages/protocol/src/bridge-api-types.d.ts',
       'bridge/apps/backend/src/migrations',
