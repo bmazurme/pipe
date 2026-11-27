@@ -27,22 +27,36 @@ describe('verifyRunAs', () => {
     assert.throws(() => verifyRunAs('pipe-runner', (() => ({ status: null, error: new Error('ENOENT') })) as unknown as Spawn), /failed/);
   });
 
-  // The regression this file exists for: the check and the image's sudoers rule disagreed (the rule allowed claude only, the check ran `true`),
-  // so the worker refused to start with WORKER_RUN_AS set and the isolation was never switched on.
-  it('is allowed by the sudoers rule the image installs', () => {
+  // The regression this file exists for: the check and what the image lets the worker run disagreed (the rule allowed claude only, the check ran `true`), so
+  // the worker refused to start with WORKER_RUN_AS set and the isolation was never switched on. In the image the user switch is `setpriv` (S1): the check
+  // must be the very command a job runs, and the image must contain both programs it names.
+  it('is the command a job runs, and the image has the programs it names', () => {
     const dockerfile = readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf-8');
-    const rule = /pipe-worker ALL=\(([^)\s]+)\) NOPASSWD:SETENV: ([^\s']+)/.exec(dockerfile);
+    const before = process.env.WORKER_RUN_AS_VIA;
 
-    assert.ok(rule, 'the Dockerfile has no sudoers rule for the runner');
+    process.env.WORKER_RUN_AS_VIA = 'setpriv';
 
-    const [, user, allowed] = rule;
-    const cmd = claudeCommand(['--version'], user);
-    // sudo resolves the program name the way the rule's path does: the rule must name the same program the check (and every job) runs.
-    const program = cmd.args[cmd.args.indexOf('-u') + 2];
+    try {
+      const check = claudeCommand(['--version'], 'pipe-runner');
+      const job = claudeCommand(['-p', '--model', 'haiku'], 'pipe-runner');
+
+      assert.equal(check.command, 'setpriv');
+      assert.deepEqual(check.args.slice(0, check.args.indexOf('claude')), job.args.slice(0, job.args.indexOf('claude')));
+      assert.equal(check.args[check.args.indexOf('claude') + 1], '--version');
+      assert.ok(dockerfile.includes('apk add --no-cache setpriv'));
+      assert.ok(dockerfile.includes('npm install -g @anthropic-ai/claude-code'));
+      assert.ok(dockerfile.includes('ENV WORKER_RUN_AS_VIA=setpriv'));
+    } finally {
+      if (before === undefined) delete process.env.WORKER_RUN_AS_VIA;
+      else process.env.WORKER_RUN_AS_VIA = before;
+    }
+  });
+
+  it('on a bare-metal install it is still the sudo form the sudoers rule allows', () => {
+    const cmd = claudeCommand(['--version'], 'pipe-runner', );
 
     assert.equal(cmd.command, 'sudo');
-    assert.equal(allowed.split('/').pop(), program);
-    assert.ok(cmd.args.includes('-E'), 'the rule allows SETENV, which -E needs');
+    assert.deepEqual(cmd.args, ['-n', '-E', '-u', 'pipe-runner', 'claude', '--version']);
   });
 });
 
@@ -115,10 +129,11 @@ describe('shareRunDir', () => {
 
 describe('the image makes what the runner creates deletable by the worker', () => {
   const dockerfile = readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf-8');
+  const entry = readFileSync(new URL('../../src/index.ts', import.meta.url), 'utf-8');
 
-  it('gives sudo a group-writable umask for the worker, and makes it the one used (umask_override)', () => {
-    assert.ok(dockerfile.includes("'Defaults:pipe-worker umask=0002'"));
-    assert.ok(dockerfile.includes("'Defaults:pipe-worker umask_override'"));
+  // sudo used to reset the umask for the runner (umask_override). setpriv changes nothing about it, so the runner inherits the worker's own: group-writable.
+  it('lets the runner inherit the worker\'s group-writable umask (setpriv does not reset it)', () => {
+    assert.ok(entry.includes('process.umask(0o002)'));
+    assert.ok(!/umask\s+[0-7]{3,4}/.test(dockerfile.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n')));
   });
 });
-

@@ -189,9 +189,10 @@ describe('verifyJob', () => {
 describe('the image', () => {
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf-8');
 
-  it('allows exactly the wrapper the worker runs, as the same user', () => {
+  it('installs exactly the wrapper the worker runs, at the path it runs it from', () => {
     // A plain substring, not a pattern built from a path (its dots would be wildcards, and escaping them by hand is how that goes wrong).
-    assert.ok(dockerfile.includes(`pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: ${VERIFY_WRAPPER}`));
+    assert.ok(dockerfile.includes(`> ${VERIFY_WRAPPER} `));
+    assert.ok(dockerfile.includes(`chmod 0755 ${VERIFY_WRAPPER}`));
   });
 
   it('installs the wrapper root-owned, so the model cannot rewrite what runs with its rights', () => {

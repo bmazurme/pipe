@@ -12,6 +12,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { buildClaudeEnv } from './modelRunners/claudeRunner.js';
+import { applyRunnerIdentity, asUser } from './runAs.js';
 
 export const BASELINE_FILE = '.pipe-baseline.json';
 export const VERIFY_SCRIPT = 'scripts/verify-changed.mjs';
@@ -92,7 +93,7 @@ export function parseNotVerified(output: string): string[] {
 function command(jobDir: string, runAs: string | undefined, probe = false): { command: string; args: string[] } {
   if (!runAs) return probe ? { command: 'node', args: ['--version'] } : { command: 'node', args: [VERIFY_SCRIPT] };
 
-  return { command: 'sudo', args: ['-n', '-E', '-u', runAs, VERIFY_WRAPPER, probe ? '--probe' : jobDir] };
+  return asUser(runAs, [VERIFY_WRAPPER, probe ? '--probe' : jobDir]);
 }
 
 function run(
@@ -190,17 +191,14 @@ export async function verifyJob(jobDir: string, options: VerifyOptions = {}): Pr
   // The script runs the model's code: with the other user's rights, never the worker's.
   const env = buildClaudeEnv(process.env, options.proxyUrl);
 
-  if (options.runAs) {
-    delete env.HOME;
-    delete env.USER;
-  }
+  if (options.runAs) applyRunnerIdentity(env, options.runAs);
 
   // The image may predate the wrapper (a worker not updated yet): say that, instead of calling a sudo refusal «the checks failed».
   if (options.runAs) {
     const probe = await run(command(jobDir, options.runAs, true), { cwd: jobDir, env, timeoutMs: 20_000, spawn });
 
     if (probe.error || probe.code !== 0) {
-      return done('unverified', `this worker's image has no ${VERIFY_WRAPPER} (or sudo refuses it) — update the worker image to get the checks before the pull request`);
+      return done('unverified', `this worker's image has no ${VERIFY_WRAPPER} (or the user switch is refused) — update the worker image to get the checks before the pull request`);
     }
   }
 

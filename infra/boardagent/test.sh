@@ -114,7 +114,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "6"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "7"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -362,14 +362,18 @@ PY
 chmod +x "$T/bin/docker"
 export FAKE_DOCKER="$FD"
 
+# EXTRA_HOSTCONFIG / EXTRA_MOUNTS (JSON) add to the container's HostConfig and Mounts — for the hardening cases.
 worker_inspect() { # name image-in-config bind-mount(0|1) → the inspect JSON of a worker container
   python3 - "$1" "$2" "$3" <<'PY'
-import json, sys
+import json, os, sys
 name, image, bind = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+host = {"RestartPolicy": {"Name": "unless-stopped"}, "NanoCpus": 2000000000, "Memory": 4294967296, "CpuShares": 512, "NetworkMode": "bridge"}
+host.update(json.loads(os.environ.get("EXTRA_HOSTCONFIG") or "{}"))
+mounts = [{"Type": "bind", "Source": "/etc", "Destination": "/etc"} if bind else {"Type": "volume", "Name": name + "-state", "Destination": "/app/.worker-state", "RW": True}]
+mounts += json.loads(os.environ.get("EXTRA_MOUNTS") or "[]")
 print(json.dumps({"Name": "/" + name, "Image": "sha256:old",
   "Config": {"Image": image, "StopTimeout": 900, "Env": ["PATH=/usr/bin", "NODE_VERSION=22", "BRIDGE_API_URL=https://api.bridge.ntlstl.dev", "WORKER_SHUTDOWN_GRACE_SEC=840"]},
-  "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"}, "NanoCpus": 2000000000, "Memory": 4294967296, "CpuShares": 512, "NetworkMode": "bridge"},
-  "Mounts": [{"Type": "bind", "Source": "/etc", "Destination": "/etc"} if bind else {"Type": "volume", "Name": name + "-state", "Destination": "/app/.worker-state", "RW": True}]}))
+  "HostConfig": host, "Mounts": mounts}))
 PY
 }
 docker_world() { # name [image] [bind] [extra state key=value…]  — one worker container on the board
@@ -536,6 +540,60 @@ fresh; docker_world pipe-worker-pi-red; echo '{"update": null, "workerUpdate": n
 [ "$(calls)" = 0 ] && ! grep -q '^pull \|^stop \|^run ' "$FD/log" 2>/dev/null; check "worker: no decision, no docker commands" $?
 fresh; docker_world pipe-worker-pi-red; printf '{"update": null, "workerUpdate": {"id": "1; rm -rf /"}}' > "$T/pending.json"; agent apply
 ! grep -q '^pull \|^stop \|^run ' "$FD/log" 2>/dev/null; check "worker: a decision id that is not a number is not acted on" $?
+
+
+echo "# update the worker: container hardening (S1)"
+HARD_HC='{"CapDrop":["ALL"],"CapAdd":["SETUID","SETGID","SETPCAP"],"SecurityOpt":["no-new-privileges"],"ReadonlyRootfs":true,"Tmpfs":{"/tmp":"rw,nosuid,nodev,size=128m","/home/pipe-runner":"rw,nosuid,nodev,uid=101,gid=102,mode=0700,size=384m"}}'
+HARD_MOUNTS='[{"Type":"volume","Name":"pipe-worker-pi-red-work","Destination":"/app/.worker-work","RW":true},{"Type":"tmpfs","Destination":"/tmp"},{"Type":"tmpfs","Destination":"/home/pipe-runner"}]'
+count() { grep -o -e "$1" <<< "$run" | wc -l | tr -d ' '; }
+
+fresh; EXTRA_HOSTCONFIG="$HARD_HC" EXTRA_MOUNTS="$HARD_MOUNTS" docker_world pipe-worker-pi-red; worker_decision 30; agent apply
+run="$(grep '^run ' "$FD/log")"
+grep -q '"ok": true' <<< "$(last_result)"; check "hardening: an already hardened container is recreated, not refused" $?
+grep -q -- '--cap-drop ALL' <<< "$run" && grep -q -- '--cap-add SETUID' <<< "$run" && grep -q -- '--cap-add SETGID' <<< "$run" && grep -q -- '--cap-add SETPCAP' <<< "$run" \
+  && grep -q -- '--security-opt no-new-privileges' <<< "$run" && grep -q -- '--read-only' <<< "$run" \
+  && grep -q -- '--tmpfs /tmp:rw,nosuid,nodev,size=128m' <<< "$run" && grep -q -- '--tmpfs /home/pipe-runner:rw,nosuid,nodev,uid=101,gid=102,mode=0700,size=384m' <<< "$run" \
+  && grep -q -- '-v pipe-worker-pi-red-work:/app/.worker-work' <<< "$run"; check "hardening: every flag, tmpfs and volume of the old container is carried over" $?
+grep -q 'hardened' <<< "$(last_result)"; check "hardening: the result says the worker is hardened" $?
+
+fresh; docker_world pipe-worker-pi-red; worker_decision 31; agent apply
+run="$(grep '^run ' "$FD/log")"
+! grep -q -- '--read-only\|--cap-drop\|--tmpfs\|no-new-privileges' <<< "$run" && ! grep -q 'hardened' <<< "$(last_result)"; check "hardening: off by default — a plain container stays plain" $?
+
+fresh; docker_world pipe-worker-pi-red; worker_decision 32; WORKER_HARDEN=1 agent apply
+run="$(grep '^run ' "$FD/log")"
+grep -q -- '--cap-drop ALL' <<< "$run" && grep -q -- '--cap-add SETUID' <<< "$run" && grep -q -- '--cap-add SETGID' <<< "$run" && grep -q -- '--cap-add SETPCAP' <<< "$run" \
+  && grep -q -- '--security-opt no-new-privileges' <<< "$run" && grep -q -- '--read-only' <<< "$run" \
+  && grep -q -- '--tmpfs /tmp:rw,nosuid,nodev,size=128m' <<< "$run" && grep -q -- '--tmpfs /home/pipe-runner:rw,nosuid,nodev,uid=101,gid=102,mode=0700,size=384m' <<< "$run"; check "hardening: WORKER_HARDEN=1 adds the whole set to a plain container" $?
+grep -q -- '-v pipe-worker-pi-red-work:/app/.worker-work' <<< "$run" && grep -q -- '-v pipe-worker-pi-red-state:/app/.worker-state' <<< "$run"; check "hardening: …and a volume for the work directory, next to the state one" $?
+grep -q 'hardened' <<< "$(last_result)"; check "hardening: …and says so" $?
+
+fresh; EXTRA_HOSTCONFIG="$HARD_HC" EXTRA_MOUNTS="$HARD_MOUNTS" docker_world pipe-worker-pi-red; worker_decision 33; WORKER_HARDEN=1 agent apply
+run="$(grep '^run ' "$FD/log")"
+[ "$(count '--read-only')" = 1 ] && [ "$(count '--cap-add SETUID')" = 1 ] && [ "$(count '--cap-drop ALL')" = 1 ] && [ "$(count '--tmpfs /tmp')" = 1 ] \
+  && [ "$(count 'app/.worker-work')" = 1 ]; check "hardening: on a container that already has it, nothing is doubled" $?
+
+fresh; WORKER_HARDEN=1 EXTRA_HOSTCONFIG='{"WORKER":0}' docker_world pipe-worker-pi-red; worker_decision 34; WORKER_HARDEN=1 WORKER_HARDEN_TMP_SIZE=64m WORKER_HARDEN_HOME_SIZE=200m agent apply
+run="$(grep '^run ' "$FD/log")"
+grep -q -- '--tmpfs /tmp:rw,nosuid,nodev,size=64m' <<< "$run" && grep -q 'size=200m' <<< "$run"; check "hardening: the tmpfs sizes can be set for the board" $?
+
+echo "# update the worker: what it still refuses"
+for case in \
+  'CapAdd SYS_ADMIN|{"CapAdd":["SYS_ADMIN"]}|adds capabilities' \
+  'CapAdd NET_ADMIN beside the allowed ones|{"CapAdd":["SETUID","NET_ADMIN"]}|adds capabilities' \
+  'a custom seccomp profile|{"SecurityOpt":["seccomp=unconfined"]}|security option' \
+  'apparmor unconfined|{"SecurityOpt":["apparmor=unconfined"]}|security option' \
+  'a tmpfs at /data|{"Tmpfs":{"/data":"rw"}}|tmpfs at /data' \
+  'a tmpfs with exec tricks in its options|{"Tmpfs":{"/tmp":"rw;rm -rf /"}}|options it will not copy' \
+  'a privileged container|{"Privileged":true}|privileged'; do
+  desc="${case%%|*}"; rest="${case#*|}"; hc="${rest%%|*}"; why="${rest#*|}"
+  fresh; EXTRA_HOSTCONFIG="$hc" docker_world pipe-worker-pi-red; worker_decision 40; agent apply
+  grep -q '"ok": false' <<< "$(last_result)" && grep -q "$why" <<< "$(last_result)" && ! grep -q '^stop ' "$FD/log"; check "hardening: $desc is refused, and the worker is left running" $?
+done
+
+fresh; EXTRA_HOSTCONFIG='{"CapAdd":["CAP_SETUID"],"SecurityOpt":["no-new-privileges:true"]}' docker_world pipe-worker-pi-red; worker_decision 41; agent apply
+run="$(grep '^run ' "$FD/log")"
+grep -q '"ok": true' <<< "$(last_result)" && grep -q -- '--cap-add SETUID' <<< "$run" && grep -q -- '--security-opt no-new-privileges' <<< "$run"; check "hardening: the CAP_ prefix and no-new-privileges:true are understood" $?
 
 
 echo
