@@ -53,6 +53,7 @@ manifest() {
 /usr/local/lib/pipe-boardagent/board-agent.sh|infra/boardagent/board-agent.sh
 /usr/local/lib/pipe-boardagent/manifest.txt|infra/boardagent/manifest.txt
 /usr/local/lib/pipe-boardagent/rollback.sh|infra/boardagent/rollback.sh
+/usr/local/lib/pipe-worker-egress/worker-egress.sh|infra/worker-egress/worker-egress.sh
 @BRIDGE_PI@/deploy.sh|infra/bridge-pi/deploy.sh
 @BRIDGE_PI@/deploy-worker.sh|infra/bridge-pi/deploy-worker.sh
 @BRIDGE_PI@/enroll-worker.sh|infra/bridge-pi/enroll-worker.sh

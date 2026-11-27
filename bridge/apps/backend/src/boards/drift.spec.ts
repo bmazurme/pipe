@@ -167,6 +167,24 @@ describe('assessDrift', () => {
     ).toEqual([]);
   });
 
+  it('flags a board whose workers run without the home-network filter, and only when the agent says so', () => {
+    const run = [container()];
+
+    expect(
+      assessDrift([board({ workers: run, workerEgress: false })], [], NOW)
+        .items[0].text,
+    ).toContain('фильтр домашней сети');
+    expect(
+      assessDrift([board({ workers: run, workerEgress: true })], [], NOW).items,
+    ).toEqual([]);
+    // An agent older than version 5 says nothing: not a finding.
+    expect(assessDrift([board({ workers: run })], [], NOW).items).toEqual([]);
+    // No worker on the board: nothing to filter.
+    expect(
+      assessDrift([board({ workerEgress: false })], [], NOW).items,
+    ).toEqual([]);
+  });
+
   it('flags scripts behind main', () => {
     const view = assessDrift([board({ outdatedScripts: 2 })], [], NOW);
 

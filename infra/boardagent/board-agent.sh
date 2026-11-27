@@ -45,10 +45,12 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=4
+AGENT_VERSION=5
 # The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
 METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
 # The worker update: the only image it will pull and the only container names it will touch (see the header). Tests change the image.
+# S1(3): the worker egress filter (infra/worker-egress) — the agent only asks it whether it is in place.
+EGRESS_SCRIPT="${EGRESS_SCRIPT:-/usr/local/lib/pipe-worker-egress/worker-egress.sh}"
 WORKER_IMAGE="${WORKER_IMAGE:-ghcr.io/bmazurme/pipe-worker:stable}"
 WORKER_NAME_RE='^pipe-worker-pi-[a-z0-9][a-z0-9-]{0,40}$'
 # How long a new worker container must stay up before the old one is thrown away.
@@ -128,7 +130,12 @@ collect_health() {
   systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null || active=false
   local workers
   workers="$(collect_workers 2>/dev/null)" || workers="[]"
-  WORKERS_JSON="${workers:-[]}" DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
+  # Only a board that runs workers has a filter to be missing: true = in place, false = not installed or no longer applied.
+  local egress=""
+  if [ -n "$workers" ] && [ "$workers" != "[]" ]; then
+    if [ -x "$EGRESS_SCRIPT" ] && "$EGRESS_SCRIPT" check >/dev/null 2>&1; then egress=true; else egress=false; fi
+  fi
+  WORKERS_JSON="${workers:-[]}" EGRESS="$egress" DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
 import json, os
 def num(name):
     v = os.environ.get(name, "")
@@ -147,6 +154,7 @@ except ValueError:
     workers = []
 if workers:
     health["workers"] = workers
+    health["workerEgress"] = {"true": True, "false": False}.get(os.environ.get("EGRESS", ""))
 print(json.dumps({k: v for k, v in health.items() if v is not None}))
 '
 }

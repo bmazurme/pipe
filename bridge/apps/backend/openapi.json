@@ -9899,6 +9899,9 @@
             "items": {
               "$ref": "#/components/schemas/BoardWorkerDto"
             }
+          },
+          "workerEgress": {
+            "type": "boolean"
           }
         }
       },

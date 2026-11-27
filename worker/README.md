@@ -426,3 +426,12 @@ The `docker run` command the Add-worker dialog generates caps the container: `--
 пользователю `pipe-runner` `umask 007`. Без `WORKER_RUN_AS` поведение прежнее (CLI от пользователя worker'а).
 
 **Cold standby.** A worker that follows the active connection also gets `vpnStandbyLinks`: the links of the connections marked «Резерв» on the VPN page. They are outbounds in its Xray config that nothing routes to and nothing probes while a link of the main pool is alive; when every main link is dead the traffic goes through a standby link. A worker without a main pool ignores them. A different subset of standby links alone does not restart a running tunnel (subscriptions re-pick their servers on every refresh); only the standby appearing or going does.
+
+### Домашняя сеть недоступна контейнеру (`infra/worker-egress`)
+
+Пользователь `pipe-runner` не даёт задаче читать ключ worker'а, но сеть у контейнера обычная: пока ничего не стоит, задача может открыть админку роутера, NAS,
+Postgres на white или `sshd` самой платы (проверено на red 2026-11-27: с `docker0` открывался `192.168.50.12:22`). На платах с worker'ами ставится
+`infra/worker-egress`: контейнер выходит в интернет и не видит ни одного частного адреса. Установка, проверка (`worker-egress.sh verify`) и откат — в
+`infra/worker-egress/README.md`; без фильтра плитка «Дрейф» на Дашборде показывает предупреждение. Worker'у в LAN ничего не нужно: bridge — по публичному адресу,
+VPN, AI-провайдеры и git — публичные.
+

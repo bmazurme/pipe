@@ -4232,6 +4232,7 @@ export interface components {
             sshAuthorizedKeys?: number;
             sshdActive?: boolean;
             workers?: components["schemas"]["BoardWorkerDto"][];
+            workerEgress?: boolean;
         };
         BoardReportDto: {
             host: string;

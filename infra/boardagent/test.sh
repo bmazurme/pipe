@@ -112,7 +112,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "4"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "5"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -397,6 +397,32 @@ body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 sys.exit(0 if body["health"].get("workers") == [{"name": "pipe-worker-pi-red", "image": "ghcr.io/bmazurme/pipe-worker:stable", "running": True, "oomKilled": False, "restartCount": 0, "startedAt": "2026-11-27T01:00:00.123456789Z"}] else 1)
 PY
 check "report: lists the board's worker containers with their image and state" $?
+
+echo "# S1(3): the agent says whether the worker egress filter is in place (so a missing or flushed one shows on the «Дрейф» tile)"
+egress_reported() { python3 - "$T/calls/1" "$1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+want = {"true": True, "false": False, "absent": None}[sys.argv[2]]
+sys.exit(0 if body["health"].get("workerEgress", None) is want else 1)
+PY
+}
+cat > "$T/egress-ok" <<'SH'
+#!/usr/bin/env bash
+[ "$1" = check ] && exit 0
+SH
+cat > "$T/egress-no" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+chmod +x "$T/egress-ok" "$T/egress-no"
+fresh; docker_world pipe-worker-pi-red; echo '{"update": null}' > "$T/pending.json"; EGRESS_SCRIPT="$T/egress-ok" agent report
+egress_reported true; check "egress: reported as in place when the script's check says so" $?
+fresh; docker_world pipe-worker-pi-red; echo '{"update": null}' > "$T/pending.json"; EGRESS_SCRIPT="$T/egress-no" agent report
+egress_reported false; check "egress: reported as NOT in place when the check fails" $?
+fresh; docker_world pipe-worker-pi-red; echo '{"update": null}' > "$T/pending.json"; EGRESS_SCRIPT="$T/nonexistent" agent report
+egress_reported false; check "egress: reported as NOT in place when the filter is not installed at all" $?
+fresh; rm -rf "$FD"; mkdir -p "$FD"; EGRESS_SCRIPT="$T/egress-no" agent report
+egress_reported absent; check "egress: nothing said on a board with no worker container (it has no filter to miss)" $?
 fresh; rm -rf "$FD"; mkdir -p "$FD"; agent report
 python3 - "$T/calls/1" <<'PY'
 import json, sys
