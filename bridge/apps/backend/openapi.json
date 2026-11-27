@@ -10121,6 +10121,9 @@
               }
             }
           },
+          "gateRetries": {
+            "type": "number"
+          },
           "finishedAt": {
             "format": "date-time",
             "type": "string",
@@ -10158,6 +10161,7 @@
           "note",
           "error",
           "ciHandled",
+          "gateRetries",
           "finishedAt",
           "id",
           "createdAt",

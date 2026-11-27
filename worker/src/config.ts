@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import path from 'node:path';
 
 import { parseChatToolsMode, type ChatToolsMode } from './chatTools.js';
+import { DEFAULT_VERIFY_TIMEOUT_SEC } from './verification.js';
 
 export interface WorkerConfig {
   bridgeApiUrl: string;
@@ -32,6 +33,10 @@ export interface WorkerConfig {
   chatTools: ChatToolsMode;
   // OS user the claude CLI runs as (via sudo), so job code cannot read the worker's own key; absent: the worker's user.
   runAs?: string;
+  // The check run after the model and before the result leaves the worker (verification.ts); on by default, WORKER_VERIFY=off turns it off.
+  verify?: boolean;
+  // Seconds it may take (install + lint + typecheck + tests of the packages the change touches).
+  verifyTimeoutSec?: number;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -73,6 +78,19 @@ function parseShutdownGraceSec(raw: string | undefined): number {
   return value;
 }
 
+function parseVerify(raw: string | undefined): boolean {
+  return !['off', '0', 'false', 'no'].includes((raw ?? '').trim().toLowerCase());
+}
+
+function parseVerifyTimeoutSec(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return DEFAULT_VERIFY_TIMEOUT_SEC;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`WORKER_VERIFY_TIMEOUT_SEC must be a positive number of seconds, got "${raw}"`);
+  }
+  return value;
+}
+
 function pollInterval(env: NodeJS.ProcessEnv): number {
   const value = Number(env.POLL_INTERVAL_SEC ?? '10');
   if (!Number.isFinite(value) || value <= 0) {
@@ -99,5 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     shutdownGraceSec: parseShutdownGraceSec(env.WORKER_SHUTDOWN_GRACE_SEC),
     chatTools: parseChatToolsMode(env.WORKER_CHAT_TOOLS),
     runAs: env.WORKER_RUN_AS?.trim() || undefined,
+    verify: parseVerify(env.WORKER_VERIFY),
+    verifyTimeoutSec: parseVerifyTimeoutSec(env.WORKER_VERIFY_TIMEOUT_SEC),
   };
 }

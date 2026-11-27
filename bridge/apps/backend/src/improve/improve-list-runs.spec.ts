@@ -145,6 +145,7 @@ describe('ImproveService list queries leave out baseline', () => {
       {} as never,
       { send: jest.fn() } as never,
       {} as never,
+      {} as never,
     );
     const run = { id: 1, userId: 1 } as never;
 

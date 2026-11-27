@@ -63,6 +63,7 @@ function setup(runOverrides: Record<string, unknown> = {}) {
     storage as never,
     { send: jest.fn() } as never,
     appLogs as never,
+    {} as never,
   );
   const service = new ImproveService(
     runs as never,

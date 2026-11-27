@@ -71,15 +71,26 @@ function setup() {
   };
   const notifier = { send: jest.fn().mockResolvedValue(true) };
   const appLogs = { record: jest.fn() };
+  const handoff = {
+    snapshotAt: jest.fn().mockResolvedValue({
+      files: Object.entries(BASE).map(([path, text]) => ({
+        path,
+        bytes: strToU8(text),
+      })),
+    }),
+    handToWorker: jest.fn().mockResolvedValue({ job: { id: 900 } }),
+  };
+  runs.update = jest.fn().mockResolvedValue({ affected: 1 });
   const service = new ImprovePublishService(
     runs as never,
     github as never,
     storage as never,
     notifier as never,
     appLogs as never,
+    handoff as never,
   );
 
-  return { service, runs, github, storage, notifier, dir };
+  return { service, runs, github, storage, notifier, dir, handoff };
 }
 
 describe('ImprovePublishService.publish', () => {
@@ -486,5 +497,246 @@ describe('ImprovePublishService: publishing a repair', () => {
 
     expect(github.updateBranch).not.toHaveBeenCalled();
     expect(r.status).toBe(ImproveRunStatus.NoChanges);
+  });
+});
+
+// A3: the worker checked its own result; a red check is given one more go before a pull request exists.
+describe('ImprovePublishService: the gate before a pull request', () => {
+  const run = (over = {}) => ({
+    id: 4,
+    userId: 3,
+    kind: 'issue',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    model: 'sonnet',
+    trigger: 'manual',
+    jobId: 321,
+    status: ImproveRunStatus.Publishing,
+    baseSha: 'base-sha',
+    baseline: baselineOf(BASE),
+    gateRetries: 0,
+    ...over,
+  });
+  const verdict = (over = {}) => ({
+    status: 'failed',
+    summary: 'a check failed',
+    output: 'FAILED: bridge-backend: typecheck\nsrc/x.ts(3,1): error TS2322',
+    durationSec: 42,
+    notVerified: [],
+    ...over,
+  });
+
+  function withVerified(verification: unknown) {
+    const ctx = setup();
+    const entries: Record<string, Uint8Array> = {
+      'a.ts': strToU8('one'),
+      'b.ts': strToU8('TWO'),
+      [MANIFEST_ENTRY]: strToU8('{}'),
+    };
+
+    if (verification !== undefined) {
+      entries['.pipe-verify.json'] = strToU8(
+        typeof verification === 'string'
+          ? verification
+          : JSON.stringify(verification),
+      );
+    }
+
+    const file = join(ctx.dir, 'result.zip');
+
+    writeFileSync(file, zipSync(entries));
+    ctx.storage.findOwned.mockResolvedValue({ id: 5 });
+    ctx.storage.readBytes.mockResolvedValue(readFileSync(file));
+
+    return ctx;
+  }
+
+  const prBody = (github: { createPull: jest.Mock }) =>
+    (github.createPull.mock.calls[0][0] as { body: string }).body;
+
+  it('opens the pull request when the result carries no verdict (an older worker, or a job the gate does not apply to)', async () => {
+    const { service, github } = withVerified(undefined);
+
+    await service.publish(run() as never, 5);
+
+    expect(github.createPull).toHaveBeenCalledTimes(1);
+    expect(prBody(github)).not.toContain('Проверка перед PR');
+  });
+
+  it('opens it with the verdict in the description when the checks passed, and says what was not verified', async () => {
+    const { service, github, handoff } = withVerified(
+      verdict({
+        status: 'passed',
+        summary: 'the checks passed',
+        notVerified: ['bridge-backend: regenerate openapi'],
+      }),
+    );
+
+    await service.publish(run() as never, 5);
+
+    expect(github.createPull).toHaveBeenCalledTimes(1);
+    expect(prBody(github)).toContain('пройдена');
+    expect(prBody(github)).toContain(
+      'Не проверено: bridge-backend: regenerate openapi',
+    );
+    expect(handoff.handToWorker).not.toHaveBeenCalled();
+  });
+
+  it('opens it when the check could not run, saying so — CI is the judge', async () => {
+    const { service, github } = withVerified(
+      verdict({ status: 'unverified', summary: 'timed out' }),
+    );
+
+    await service.publish(run() as never, 5);
+
+    expect(github.createPull).toHaveBeenCalledTimes(1);
+    expect(prBody(github)).toContain('не выполнена — timed out');
+  });
+
+  it('ignores a verdict file that is not one (a model had its hands on that folder)', async () => {
+    const { service, github } = withVerified('{"status":"great","output":1}');
+
+    await service.publish(run() as never, 5);
+
+    expect(github.createPull).toHaveBeenCalledTimes(1);
+  });
+
+  it('never publishes the verdict file as a change of the pull request', async () => {
+    const { service, github } = withVerified(verdict({ status: 'passed' }));
+
+    await service.publish(run() as never, 5);
+
+    const tree = github.createTree.mock.calls[0][1] as Array<{ path: string }>;
+
+    expect(tree.map((entry) => entry.path)).toEqual(['b.ts']);
+  });
+
+  describe('a failed check', () => {
+    it('sends the worker back ONCE before any pull request exists, with the output and with its own changes already in the snapshot', async () => {
+      const { service, github, handoff, runs, storage, notifier } =
+        withVerified(verdict());
+      const r = run();
+
+      await service.publish(r as never, 5);
+
+      expect(github.createPull).not.toHaveBeenCalled();
+      expect(github.createBranch).not.toHaveBeenCalled();
+
+      const [userId, model, task, taskKey, , , prepared] =
+        handoff.handToWorker.mock.calls[0];
+
+      expect(userId).toBe(3);
+      expect(model).toBe('sonnet');
+      expect(taskKey).toBe('improve:7');
+      expect(task.body).toContain('Your previous attempt failed its check');
+      expect(task.body).toContain('error TS2322');
+      // The snapshot is the base with the worker's change on it; the baseline is still the ORIGINAL one.
+      const byPath = Object.fromEntries(
+        prepared.files.map((f: { path: string; bytes: Uint8Array }) => [
+          f.path,
+          Buffer.from(f.bytes).toString(),
+        ]),
+      );
+
+      expect(byPath['b.ts']).toBe('TWO');
+      expect(byPath['a.ts']).toBe('one');
+      expect(prepared.baseline).toEqual(JSON.parse(baselineOf(BASE)));
+      expect(prepared.baseSha).toBe('base-sha');
+      // The same run moves on to the new job, and counts the go.
+      expect(runs.update).toHaveBeenCalledWith(
+        { id: 4, status: ImproveRunStatus.Publishing },
+        expect.objectContaining({
+          status: ImproveRunStatus.Queued,
+          jobId: 900,
+          gateRetries: 1,
+        }),
+      );
+      expect(r.gateRetries).toBe(1);
+      expect(storage.delete).toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('вторая попытка'),
+      );
+    });
+
+    it('does not open a pull request for a result that still fails after the second go, and keeps the result for «publish anyway»', async () => {
+      const { service, github, handoff, runs, storage, notifier } =
+        withVerified(verdict());
+      const r = run({ gateRetries: 1 });
+
+      await service.publish(r as never, 5);
+
+      expect(github.createPull).not.toHaveBeenCalled();
+      expect(handoff.handToWorker).not.toHaveBeenCalled();
+      expect(runs.save).toHaveBeenCalled();
+      expect(r.status).toBe(ImproveRunStatus.Failed);
+      expect((r as { error?: string }).error).toContain('после исправления');
+      expect((r as { error?: string }).error).toContain('Повторить публикацию');
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('PR не открыт'),
+      );
+    });
+
+    it('publishes it anyway when the owner says so, with the failure in the description', async () => {
+      const { service, github, handoff } = withVerified(verdict());
+
+      await service.publish(run({ gateRetries: 1 }) as never, 5, {
+        skipGate: true,
+      });
+
+      expect(github.createPull).toHaveBeenCalledTimes(1);
+      expect(handoff.handToWorker).not.toHaveBeenCalled();
+      expect(prBody(github)).toContain('НЕ пройдена');
+      expect(prBody(github)).toContain('error TS2322');
+      expect(prBody(github)).toContain(
+        'после одного автоматического исправления',
+      );
+    });
+
+    it('does not lose the work when the second go cannot be started: the pull request is opened and says why', async () => {
+      const { service, github, handoff, notifier } = withVerified(verdict());
+
+      handoff.handToWorker.mockRejectedValue(new Error('no worker'));
+
+      await service.publish(run() as never, 5);
+
+      expect(github.createPull).toHaveBeenCalledTimes(1);
+      expect(prBody(github)).toContain(
+        'повторный запуск worker не удалось начать',
+      );
+      expect(prBody(github)).toContain('НЕ пройдена');
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('PR #55'),
+      );
+    });
+
+    it('does not start a second go when the run already moved on (a concurrent publish)', async () => {
+      const { service, github, runs } = withVerified(verdict());
+
+      runs.update.mockResolvedValue({ affected: 0 });
+
+      await service.publish(run() as never, 5);
+
+      // Treated as «could not retry»: nothing is lost, the pull request is opened.
+      expect(github.createPull).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not applied to a repair: that is a commit on a pull request that exists, and CI judges it', async () => {
+      const { service, handoff } = withVerified(verdict());
+
+      await service
+        .publish(
+          run({
+            kind: 'repair',
+            prNumber: 12,
+            branch: 'improve/x',
+            prUrl: 'u',
+          }) as never,
+          5,
+        )
+        .catch(() => undefined);
+
+      expect(handoff.handToWorker).not.toHaveBeenCalled();
+    });
   });
 });

@@ -107,6 +107,10 @@ export class ImproveRun extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   ciHandled: { sha: string; actions: string[] } | null;
 
+  // How many times the check before the pull request failed and the worker was sent back to fix it (A3, verification.ts).
+  @Column({ type: 'smallint', default: 0 })
+  gateRetries: number;
+
   @Column({ type: 'timestamp', nullable: true })
   finishedAt: Date | null;
 }

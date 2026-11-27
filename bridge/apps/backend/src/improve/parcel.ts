@@ -41,11 +41,14 @@ const EXCLUDED_DIRS = new Set([
 // What the worker is given besides the repository (A2): path → sha256 of every file, so `scripts/verify-changed.mjs` can tell in a snapshot
 // with no .git what the worker changed. It is never a change itself.
 export const BASELINE_ENTRY = '.pipe-baseline.json';
+// The worker's own check of its result (A3, verification.ts): it travels in the result parcel and is never a change either.
+export const VERIFY_RESULT_ENTRY = '.pipe-verify.json';
 const EXCLUDED_FILES = new Set([
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
   BASELINE_ENTRY,
+  VERIFY_RESULT_ENTRY,
 ]);
 
 // Generated or vendored output (build info too: a committed .tsbuildinfo makes `tsc -b` skip emitting in CI) and lockfiles is never part of the snapshot, so it can never be part of a change
@@ -210,6 +213,34 @@ export async function readResultParcel(
   }
 
   return result;
+}
+
+// What the worker's result says about its own check (null when it carries none, or an unreadable one).
+export async function readResultVerification(
+  data: Uint8Array,
+  limits: UnzipLimits = RESULT_UNZIP_LIMITS,
+): Promise<string | null> {
+  const entry = (await unzipBounded(data, limits))[VERIFY_RESULT_ENTRY];
+
+  return entry ? strFromU8(entry) : null;
+}
+
+// A snapshot with a worker's changes on it — what a second go at the task starts from (the baseline stays the ORIGINAL one, so the final diff is
+// still against what the pull request will be made on).
+export function applyChanges(
+  files: SnapshotFile[],
+  changes: Change[],
+): SnapshotFile[] {
+  const byPath = new Map(files.map((file) => [file.path, file]));
+
+  for (const change of changes) {
+    if (change.kind === 'deleted') byPath.delete(change.path);
+    else if (change.bytes) {
+      byPath.set(change.path, { path: change.path, bytes: change.bytes });
+    }
+  }
+
+  return [...byPath.values()];
 }
 
 export interface Change {

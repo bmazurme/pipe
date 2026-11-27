@@ -51,7 +51,14 @@ RUN addgroup -S pipe-jobs && adduser -S -h /home/pipe-runner -G pipe-jobs pipe-r
  && addgroup pipe-worker pipe-jobs && addgroup pipe-runner pipe-jobs \
  && apk add --no-cache sudo \
  && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude' > /etc/sudoers.d/pipe-worker \
+ && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/pipe-verify' >> /etc/sudoers.d/pipe-worker \
  && chmod 0440 /etc/sudoers.d/pipe-worker
+
+# A3: the check the worker runs on a result before it leaves (scripts/verify-changed.mjs of the job's own repository). It executes the code the model
+# just wrote, so it too runs as pipe-runner — through this one root-owned wrapper, the only other command sudo allows. `--probe` lets the worker tell
+# «the image has no wrapper» from «a check failed».
+RUN printf '%s\n' '#!/bin/sh' 'set -eu' '[ "${1:-}" = "--probe" ] && exit 0' 'cd "$1"' 'exec /usr/local/bin/node scripts/verify-changed.mjs' > /usr/local/bin/pipe-verify \
+ && chmod 0755 /usr/local/bin/pipe-verify && chown root:root /usr/local/bin/pipe-verify
 
 # The claude CLI — same package Worker jobs and chat sonnet/opus turns spawn
 # on a bare-metal install. Needs a real npm registry install, not file-copied

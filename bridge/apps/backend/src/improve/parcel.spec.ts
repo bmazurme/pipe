@@ -4,8 +4,11 @@ import { join } from 'path';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import {
+  applyChanges,
   BASELINE_ENTRY,
   buildIssueParcel,
+  readResultVerification,
+  VERIFY_RESULT_ENTRY,
   diffResult,
   MANIFEST_ENTRY,
   PARCEL_SCHEMA_VERSION,
@@ -255,5 +258,50 @@ describe('buildIssueParcel: the binaries of a parcel are stored, not deflated', 
       Buffer.from(out['__issue_assets__/refs/a.png']).equals(Buffer.from(png)),
     ).toBe(true);
     expect(strFromU8(out['README.md'])).toBe('hello '.repeat(500));
+  });
+});
+
+describe("the worker's verdict in the result parcel (A3)", () => {
+  it('is read from the result, and is not part of what a pull request is made of', async () => {
+    const zip = zipSync({
+      'a.ts': strToU8('one'),
+      [VERIFY_RESULT_ENTRY]: strToU8('{"status":"failed"}'),
+    });
+
+    expect(await readResultVerification(zip)).toBe('{"status":"failed"}');
+    expect([...(await readResultParcel(zip)).keys()]).toEqual(['a.ts']);
+  });
+
+  it('is null when the result carries none', async () => {
+    expect(
+      await readResultVerification(zipSync({ 'a.ts': strToU8('one') })),
+    ).toBeNull();
+  });
+});
+
+describe('applyChanges', () => {
+  const base = [
+    { path: 'a.ts', bytes: strToU8('one') },
+    { path: 'b.ts', bytes: strToU8('two') },
+    { path: 'c.ts', bytes: strToU8('three') },
+  ];
+
+  it('puts modified, added and deleted files on a snapshot, leaving the rest and not touching the input', () => {
+    const out = applyChanges(base, [
+      { path: 'b.ts', kind: 'modified', bytes: strToU8('TWO') },
+      { path: 'new.ts', kind: 'added', bytes: strToU8('n') },
+      { path: 'c.ts', kind: 'deleted' },
+    ]);
+    const text = Object.fromEntries(
+      out.map((f) => [f.path, strFromU8(f.bytes)]),
+    );
+
+    expect(text).toEqual({ 'a.ts': 'one', 'b.ts': 'TWO', 'new.ts': 'n' });
+    expect(base).toHaveLength(3);
+    expect(strFromU8(base[1].bytes)).toBe('two');
+  });
+
+  it('is the same snapshot for no changes', () => {
+    expect(applyChanges(base, [])).toEqual(base);
   });
 });
