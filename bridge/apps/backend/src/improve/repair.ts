@@ -58,7 +58,9 @@ export function repairBody(input: {
     '',
     'The repository you were given is exactly the head of that branch. Fix what makes CI fail and nothing else: the smallest change that turns the failing checks green. Do not redo the feature, do not reformat or refactor unrelated files, and never delete a test just to make it pass — when the failure is a test that describes the old behaviour, update that test.',
     '',
-    `## Failing checks (repair attempt ${input.attempt} of ${MAX_REPAIRS_PER_PR})`,
+    input.attempt > MAX_REPAIRS_PER_PR
+      ? `## Failing checks (repair attempt ${input.attempt} — the earlier ${MAX_REPAIRS_PER_PR} did not turn CI green; you are a stronger model, read what they changed first: \`git log\`)`
+      : `## Failing checks (repair attempt ${input.attempt} of ${MAX_REPAIRS_PER_PR})`,
     '',
     input.failures.trim() ||
       '(GitHub reported no details — reproduce the failures yourself by running the checks below.)',

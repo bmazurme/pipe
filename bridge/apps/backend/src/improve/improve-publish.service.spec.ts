@@ -741,6 +741,8 @@ describe('ImprovePublishService: the gate before a pull request', () => {
       expect(r.status).toBe(ImproveRunStatus.Failed);
       expect((r as { error?: string }).error).toContain('после исправления');
       expect((r as { error?: string }).error).toContain('Повторить публикацию');
+      // the model's own work did not pass the check twice: the escalation sweep may try a stronger one (A9)
+      expect((r as { failureCause?: string }).failureCause).toBe('task');
       expect(storage.delete).not.toHaveBeenCalled();
       expect(notifier.send).toHaveBeenCalledWith(
         expect.stringContaining('PR не открыт'),

@@ -24,6 +24,7 @@ import { GithubApiService, IssueInfo } from '../loop/github-api.service';
 import { MergeService } from '../loop/merge.service';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
+import { isTaskFailure } from './escalation';
 import { JobStatus } from '../worker/entities/job.entity';
 import { JobStatusRow, WorkerService } from '../worker/worker.service';
 import {
@@ -245,6 +246,8 @@ export class ImproveService {
     scheduleId: number | null = null,
     contextId: number | null = null,
     prechecked?: PrecheckedIssue,
+    // A9: the run this one is the one more attempt after.
+    escalatedFromRunId: number | null = null,
   ): Promise<ImproveRun> {
     return this.withReserved(
       `issue:${issueNumber}`,
@@ -258,6 +261,7 @@ export class ImproveService {
           scheduleId,
           contextId,
           prechecked,
+          escalatedFromRunId,
         ),
     );
   }
@@ -271,6 +275,7 @@ export class ImproveService {
     scheduleId: number | null,
     contextId: number | null,
     prechecked?: PrecheckedIssue,
+    escalatedFromRunId: number | null = null,
   ): Promise<ImproveRun> {
     this.requireConfigured();
     this.requireIssueModel(model);
@@ -307,6 +312,7 @@ export class ImproveService {
         status: ImproveRunStatus.Preparing,
         jobId: null,
         contextId,
+        escalatedFromRunId,
       }),
     );
 
@@ -681,11 +687,13 @@ export class ImproveService {
     parent: ImproveRun,
     pull: { number: number; headSha: string; branch: string },
     failures: string,
+    // A9: the attempt on a stronger model after the automatic ones did not turn CI green.
+    escalation?: { model: string; fromRunId: number; note: string },
   ): Promise<ImproveRun> {
     return this.withReserved(
       `pr:${pull.number}`,
       `PR #${pull.number} уже исправляется`,
-      () => this.startRepairReserved(parent, pull, failures),
+      () => this.startRepairReserved(parent, pull, failures, escalation),
     );
   }
 
@@ -693,9 +701,11 @@ export class ImproveService {
     parent: ImproveRun,
     pull: { number: number; headSha: string; branch: string },
     failures: string,
+    escalation?: { model: string; fromRunId: number; note: string },
   ): Promise<ImproveRun> {
     this.requireConfigured();
 
+    const model = escalation?.model ?? parent.model;
     const attempt =
       (await this.runs.count({
         where: { kind: 'repair', prNumber: pull.number, trigger: 'ci' },
@@ -703,7 +713,7 @@ export class ImproveService {
     const { job, baseSha, baseline, fileCount } =
       await this.handoff.handToWorker(
         parent.userId,
-        parent.model,
+        model,
         {
           number: parent.issueNumber as number,
           title: `Fix CI on PR #${pull.number}: ${parent.issueTitle}`,
@@ -728,8 +738,9 @@ export class ImproveService {
         kind: 'repair',
         issueNumber: parent.issueNumber,
         issueTitle: parent.issueTitle,
-        model: parent.model,
+        model,
         trigger: 'ci',
+        escalatedFromRunId: escalation?.fromRunId ?? null,
         status: ImproveRunStatus.Queued,
         jobId: job.id,
         baseSha,
@@ -737,14 +748,16 @@ export class ImproveService {
         branch: pull.branch,
         prNumber: pull.number,
         prUrl: parent.prUrl,
-        note: `Автоисправление CI, попытка ${attempt} из ${MAX_REPAIRS_PER_PR}`,
+        note:
+          escalation?.note ??
+          `Автоисправление CI, попытка ${attempt} из ${MAX_REPAIRS_PER_PR}`,
       }),
     );
 
     this.log(
       'info',
       'improve.repair_started',
-      `Run ${run.id}: CI repair ${attempt}/${MAX_REPAIRS_PER_PR} for PR #${pull.number} → job ${job.id} (${parent.model})`,
+      `Run ${run.id}: CI repair ${attempt}/${MAX_REPAIRS_PER_PR} for PR #${pull.number} → job ${job.id} (${model})`,
       { runId: run.id, jobId: job.id, prNumber: pull.number, files: fileCount },
     );
 
@@ -1304,6 +1317,8 @@ export class ImproveService {
 
       await this.publisher.finish(run, ImproveRunStatus.Failed, {
         error: job.errorMessage ?? 'Задача worker завершилась ошибкой',
+        // A worker that went away or a provider that had a bad moment says nothing about the model; anything else is the task not done (A9).
+        failureCause: isTaskFailure(job) ? 'task' : null,
       });
     } else if (job.status === JobStatus.Cancelled) {
       await this.publisher.finish(run, ImproveRunStatus.Cancelled, {

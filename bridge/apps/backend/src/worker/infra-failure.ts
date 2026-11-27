@@ -46,7 +46,7 @@ export function infraFailureWhere(
 const TRANSIENT_API_ERROR =
   /API Error:\s*(?:5\d\d\b|Connection error|Request timed out|ECONNRESET|ETIMEDOUT|socket hang up|fetch failed)|"type"\s*:\s*"overloaded_error"/i;
 // What a retry cannot help (it would only spend the account's quota or hit the same refusal): authentication, a disabled organization, a limit.
-const NOT_WORTH_RETRYING =
+export const NOT_WORTH_RETRYING =
   /Failed to authenticate|\b401\b|\b403\b|has disabled Claude subscription access|usage limit|rate limit|limit reached|credit balance|quota|invalid x-api-key/i;
 
 export function isTransientFailure(job: Pick<Job, 'errorMessage'>): boolean {

@@ -11,6 +11,7 @@ import { ClarifyMode } from './clarify';
 import { ImproveSettings } from './entities/improve-settings.entity';
 import { FilingLimits, limitsFromSettings } from './improve-throttle';
 import { ADVANCE_EVERY_MS, AUTOSTART_MIN_AGE_SECONDS } from './improve.service';
+import { escalationFromSettings, type EscalationSettings } from './escalation';
 import { jobModelOf, message, requireImproveModel } from './improve-shared';
 
 // Reports pushes → worker at once: the per-account Improve settings and the poller that
@@ -58,6 +59,32 @@ export class ImproveAutoStartService {
           : (existing?.autoStartSince ?? new Date())
         : null,
     });
+  }
+
+  // A9: only the fields given are changed (the Settings page saves one card at a time).
+  async saveEscalation(
+    userId: number,
+    changes: Partial<{
+      enabled: boolean;
+      capTaskUsd: number;
+      capDayUsd: number;
+    }>,
+  ): Promise<EscalationSettings> {
+    const next = {
+      ...escalationFromSettings(await this.getSettings(userId)),
+      ...Object.fromEntries(
+        Object.entries(changes).filter(([, value]) => value !== undefined),
+      ),
+    };
+
+    await this.settings.save({
+      userId,
+      escalateOnFailure: next.enabled,
+      escalationCapTaskUsd: next.capTaskUsd,
+      escalationCapDayUsd: next.capDayUsd,
+    });
+
+    return next;
   }
 
   // The brake on automatic issue filing; the defaults when the account never saved settings.

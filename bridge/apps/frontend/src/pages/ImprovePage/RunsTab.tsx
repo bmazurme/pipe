@@ -19,6 +19,14 @@ const INITIAL_VISIBLE_RUNS = 8;
 
 type RunFilter = 'all' | 'active' | 'failed';
 
+// A9: a run that is the one more attempt a step up says so; the rest keep the two labels they always had.
+function triggerLabel(trigger: ImproveRun['trigger']): string {
+  if (trigger === 'schedule') return 'по расписанию';
+  if (trigger === 'escalation') return 'эскалация на ступень выше';
+
+  return 'вручную';
+}
+
 function matches(run: ImproveRun, filter: RunFilter): boolean {
   if (filter === 'active') return isActiveRun(run);
   if (filter === 'failed') return run.status === 'failed';
@@ -106,7 +114,7 @@ export function RunsTab() {
               {run.issueNumber ? `#${run.issueNumber} ` : ''}{run.issueTitle}
             </Text>
             <Text variant="caption-2" color="secondary">
-              {modelLabel(run.model)} · {run.trigger === 'schedule' ? 'по расписанию' : 'вручную'} · {formatRelativeTime(run.createdAt)}
+              {modelLabel(run.model)} · {triggerLabel(run.trigger)} · {formatRelativeTime(run.createdAt)}
               {run.note && ` · ${run.note}`}
             </Text>
             {run.routing && (

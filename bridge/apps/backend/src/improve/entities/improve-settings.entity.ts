@@ -38,6 +38,19 @@ export class ImproveSettings {
   @Column({ type: 'varchar', length: 8, default: 'off' })
   clarifyBeforeRun: 'off' | 'costly' | 'always';
 
+  // A9: when a run on a cheap model fails, or CI stays red after the automatic repairs, try once more on the model a step up (haiku → sonnet → opus). Off by
+  // default: it spends the plan on its own.
+  @Column({ type: 'boolean', default: false })
+  escalateOnFailure: boolean;
+
+  // A9: no step up is started for a task that has already cost this much (USD, the Claude CLI's API-price figure, all its runs)…
+  @Column({ type: 'double precision', default: 5 })
+  escalationCapTaskUsd: number;
+
+  // …nor while the Improve runs of the last 24 hours have cost this much in all.
+  @Column({ type: 'double precision', default: 20 })
+  escalationCapDayUsd: number;
+
   // The brake on automatic issue filing (see improve-throttle.ts): proposals below this value (1–5) are not filed.
   @Column({ type: 'smallint', default: 3 })
   minValue: number;

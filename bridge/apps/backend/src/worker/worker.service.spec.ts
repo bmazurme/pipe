@@ -233,6 +233,7 @@ describe('WorkerService', () => {
         'status',
         'resultFileId',
         'errorMessage',
+        'failureKind',
       ]);
       expect(options.select).not.toContain('logs');
     });

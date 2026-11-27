@@ -36,7 +36,13 @@ export const ACTIVE_RUN_STATUSES = [
 ];
 
 // 'ci' = started by bridge itself because CI went red on one of its pull requests.
-export type ImproveTrigger = 'manual' | 'schedule' | 'ci' | 'chat' | 'conflict';
+// 'escalation' = A9: one more attempt on the model a step up, after a cheap one did not manage.
+export type ImproveTrigger =
+  'manual' | 'schedule' | 'ci' | 'chat' | 'conflict' | 'escalation';
+// Why a run failed, when it is known to be the TASK (the model's work), not the plumbing: a stronger model might do better (A9). Null for every
+// other failure — a publish that could not reach GitHub, a worker that went away.
+// 'task-handled' once the A9 sweep has decided about it (escalated, or why not), so it is decided once.
+export type ImproveFailureCause = 'task' | 'task-handled';
 // 'repair' fixes a red CI on an open PR of an earlier 'issue' run.
 export type ImproveRunKind = 'issue' | 'analysis' | 'repair';
 
@@ -120,6 +126,14 @@ export class ImproveRun extends BaseEntity {
   // How many times the check before the pull request failed and the worker was sent back to fix it (A3, verification.ts).
   @Column({ type: 'smallint', default: 0 })
   gateRetries: number;
+
+  // A9: set on a run that is the one more attempt after another run (a failed one, or the last CI repair): that run's id. A run is escalated at most once.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  escalatedFromRunId: number | null;
+
+  // A9: see ImproveFailureCause. The sweep that escalates reads it.
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  failureCause: ImproveFailureCause | null;
 
   @Column({ type: 'timestamp', nullable: true })
   finishedAt: Date | null;

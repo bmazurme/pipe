@@ -84,7 +84,17 @@ beforeEach(() => {
       if (path === 'improve/schedules' && request.method === 'GET') {
         return listFails ? json({ message: 'boom' }, 500) : json(schedules);
       }
-      if (path === 'improve/settings') return json({ autoStartModel: null, autoRepairCi: true, clarifyBeforeRun: 'off' });
+      if (path === 'improve/settings') {
+        return json({
+          autoStartModel: null,
+          autoRepairCi: true,
+          clarifyBeforeRun: 'off',
+          escalateOnFailure: false,
+          escalationCapTaskUsd: 5,
+          escalationCapDayUsd: 20,
+          escalationSpentDayUsd: 1.234,
+        });
+      }
       if (request.method === 'PUT' && saveFails) return json({ message: 'nope' }, 500);
       if (request.method === 'DELETE') return deleteFails ? json({ message: 'nope' }, 500) : new Response(null, { status: 200 });
       if (path.endsWith('/run')) {
@@ -339,5 +349,52 @@ describe('only on new commits', () => {
       await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { clarifyBeforeRun: 'costly' } }));
     });
   });
-});
 
+  describe('the ladder of models (A9)', () => {
+    it('explains what it does, starts off, and shows what the last day cost', async () => {
+      renderTab();
+
+      expect(await screen.findByText('Лестница моделей')).toBeInTheDocument();
+      expect(screen.getByText(/Haiku → Sonnet → Opus/)).toBeInTheDocument();
+      expect(await screen.findByText(/потратил около \$1\.23/)).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /Поднимать на ступень выше/ })).not.toBeChecked();
+    });
+
+    it('saves the switch on its own', async () => {
+      const user = userEvent.setup();
+
+      renderTab();
+      await screen.findByText('Лестница моделей');
+      await waitFor(() => expect(screen.getByRole('switch', { name: /Поднимать на ступень выше/ })).toBeEnabled());
+      await user.click(screen.getByRole('switch', { name: /Поднимать на ступень выше/ }));
+
+      await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { escalateOnFailure: true } }));
+    });
+
+    it('saves a limit when the field is left, and ignores nonsense', async () => {
+      const user = userEvent.setup();
+
+      renderTab();
+
+      await screen.findByText('Лимит на сутки:');
+
+      const field = document.querySelector('input[aria-label="Лимит на сутки:"]') as HTMLInputElement;
+
+      await waitFor(() => expect(field).toBeEnabled());
+      await user.clear(field);
+      await user.type(field, '12,5');
+      await user.tab();
+
+      await waitFor(() => expect(sent).toContainEqual({ method: 'PUT', path: 'improve/settings', body: { escalationCapDayUsd: 12.5 } }));
+
+      sent.length = 0;
+      // the fields are off while a save is on its way
+      await waitFor(() => expect(field).toBeEnabled());
+      await user.clear(field);
+      await user.type(field, 'abc');
+      await user.tab();
+
+      expect(sent.filter((call) => call.method === 'PUT')).toEqual([]);
+    });
+  });
+});

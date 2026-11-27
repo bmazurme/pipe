@@ -147,6 +147,60 @@ function ClarifyCard() {
   );
 }
 
+// A9: the money limit is typed in dollars; an empty or negative value is not saved.
+function UsdField({ label, value, disabled, onSave }: { label: string; value: number | undefined; disabled: boolean; onSave: (usd: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = text ?? (value === undefined ? '' : String(value));
+  const commit = () => {
+    const parsed = Number(shown.replace(',', '.'));
+
+    setText(null);
+
+    if (shown.trim() !== '' && Number.isFinite(parsed) && parsed >= 0 && parsed !== value) onSave(Math.round(parsed * 100) / 100);
+  };
+
+  return (
+    <label className={styles.usdField}>
+      <Text variant="body-2">{label}</Text>
+      <TextInput size="m" className={styles.usdInput} disabled={disabled} value={shown} onUpdate={setText} onBlur={commit} controlProps={{ inputMode: 'decimal', 'aria-label': label }} endContent={<Text color="secondary">$</Text>} />
+    </label>
+  );
+}
+
+// A9: the ladder of models.
+function EscalationCard() {
+  const { data } = useGetImproveSettingsQuery();
+  const [save, { isLoading }] = useSaveImproveSettingsMutation();
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Лестница моделей" />
+      <Text color="secondary" variant="body-2">
+        Если запуск на Haiku не удался (сам, не из-за сбоя worker и не из-за отказа аккаунта), или CI остаётся красным после двух автоисправлений, bridge один раз пробует ещё раз на модели ступенью выше:
+        Haiku → Sonnet → Opus. Запуск помечается «эскалация», в «Качестве» видно, сколько таких было и дешевле ли они прямого запуска на сильной модели. Выше Opus и с моделей не из лестницы (gpt, deepseek…) не поднимается.
+        Выключено по умолчанию: это тратит тариф без вашего нажатия, поэтому есть лимиты — когда задача или сутки уже обошлись дороже, ступень не запускается, а в Telegram приходит причина.
+      </Text>
+      <div className={styles.toolbar}>
+        <Switch
+          checked={data?.escalateOnFailure ?? false}
+          disabled={isLoading || !data}
+          onUpdate={(escalateOnFailure) => void save({ escalateOnFailure })}
+          content="Поднимать на ступень выше после неудачи"
+        />
+      </div>
+      <div className={styles.toolbar}>
+        <UsdField label="Лимит на задачу:" value={data?.escalationCapTaskUsd} disabled={isLoading || !data} onSave={(escalationCapTaskUsd) => void save({ escalationCapTaskUsd })} />
+        <UsdField label="Лимит на сутки:" value={data?.escalationCapDayUsd} disabled={isLoading || !data} onSave={(escalationCapDayUsd) => void save({ escalationCapDayUsd })} />
+      </div>
+      {data && (
+        <Text color="secondary" variant="caption-2">
+          За последние 24 часа Improve потратил около ${(data.escalationSpentDayUsd ?? 0).toFixed(2)} (цифра Claude CLI, эквивалент цены API; запуски без сообщённой стоимости не считаются, так что это нижняя оценка).
+        </Text>
+      )}
+    </Card>
+  );
+}
+
 const LIMIT_OPTIONS = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => ({ value: String(from + i), content: String(from + i) }));
 
@@ -343,6 +397,7 @@ export function SchedulesTab() {
       <AutoRepairCard />
 
       <ClarifyCard />
+      <EscalationCard />
       <FilingLimitsCard />
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} maxWidth="s" aria-labelledby="schedule-delete-title">

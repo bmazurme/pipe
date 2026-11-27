@@ -54,6 +54,11 @@ export class ImproveOutcome extends BaseEntity {
   @Column({ type: 'timestamp', nullable: true })
   closedAt: Date | null;
 
+  // A9: the model this work started on when it needed one more attempt a step up (the pull request, or its CI repairs, ended on a stronger one);
+  // null when it never escalated.
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  escalatedFrom: string | null;
+
   // A later pull request reverted this one.
   @Column({ type: 'boolean', default: false })
   reverted: boolean;

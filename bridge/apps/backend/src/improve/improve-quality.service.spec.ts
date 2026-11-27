@@ -24,10 +24,12 @@ function make(
     ci?: string;
     titles?: Array<{ number: number; title: string }>;
     configured?: boolean;
+    origin?: object | null;
   } = {},
 ) {
   const runs = {
     find: jest.fn().mockResolvedValue(options.runs ?? [run()]),
+    findOne: jest.fn().mockResolvedValue(options.origin ?? null),
     createQueryBuilder: jest.fn(),
   };
   const upserts: object[] = [];
@@ -66,6 +68,87 @@ function make(
 
   return { service, upserts, github, outcomes };
 }
+
+describe('ImproveQualityService.sync — A9 escalation', () => {
+  it('knows a pull request that came from a step up after a failed run, and counts what the failed run cost', async () => {
+    const { service, upserts } = make({
+      runs: [run({ id: 5, model: 'sonnet', jobId: 21, escalatedFromRunId: 4 })],
+      origin: {
+        id: 4,
+        model: 'haiku',
+        jobId: 20,
+        kind: 'issue',
+        prNumber: null,
+      },
+      jobs: [
+        { id: 21, usage: { costUsd: 0.8 } },
+        { id: 20, usage: { costUsd: 0.3 } },
+      ],
+    });
+
+    await service.sync(1, NOW);
+
+    expect(upserts[0]).toMatchObject({
+      model: 'sonnet',
+      escalatedFrom: 'haiku',
+    });
+    expect((upserts[0] as { costUsd: number }).costUsd).toBeCloseTo(1.1);
+  });
+
+  it('knows a step-up CI repair, and does not count it as one more automatic repair', async () => {
+    const { service, upserts } = make({
+      runs: [
+        run({ id: 1, escalatedFromRunId: null }),
+        run({
+          id: 2,
+          kind: 'repair',
+          trigger: 'ci',
+          jobId: 12,
+          escalatedFromRunId: null,
+        }),
+        run({
+          id: 3,
+          kind: 'repair',
+          trigger: 'ci',
+          jobId: 13,
+          escalatedFromRunId: null,
+        }),
+        run({
+          id: 4,
+          kind: 'repair',
+          trigger: 'ci',
+          jobId: 14,
+          model: 'sonnet',
+          escalatedFromRunId: 3,
+        }),
+      ],
+      jobs: [
+        { id: 11, usage: { costUsd: 0.1 } },
+        { id: 12, usage: { costUsd: 0.1 } },
+        { id: 13, usage: { costUsd: 0.1 } },
+        { id: 14, usage: { costUsd: 0.5 } },
+      ],
+    });
+
+    await service.sync(1, NOW);
+
+    expect(upserts[0]).toMatchObject({
+      model: 'haiku',
+      ciRepairs: 2,
+      escalatedFrom: 'haiku',
+      runId: 1,
+    });
+    expect((upserts[0] as { costUsd: number }).costUsd).toBeCloseTo(0.8);
+  });
+
+  it('leaves escalatedFrom empty for work that never escalated', async () => {
+    const { service, upserts } = make();
+
+    await service.sync(1, NOW);
+
+    expect(upserts[0]).toMatchObject({ escalatedFrom: null });
+  });
+});
 
 describe('ImproveQualityService.sync', () => {
   it('records a merged pull request with its first CI, cost, model and tier', async () => {

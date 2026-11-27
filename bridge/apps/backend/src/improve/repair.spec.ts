@@ -106,3 +106,27 @@ describe('repairBody', () => {
     expect(empty).toContain('repair attempt 2 of 2');
   });
 });
+
+describe('repairBody on a step up (A9)', () => {
+  const input = {
+    prNumber: 5,
+    branch: 'improve/x',
+    issueNumber: 7,
+    issueTitle: 'Fix it',
+    failures: 'lint failed',
+  };
+
+  it('says which attempt it is, of how many, for the automatic ones', () => {
+    expect(repairBody({ ...input, attempt: 2 })).toContain(
+      'repair attempt 2 of 2',
+    );
+  });
+
+  it('does not say "3 of 2" for the attempt after the automatic ones; it says what is different', () => {
+    const text = repairBody({ ...input, attempt: 3 });
+
+    expect(text).not.toContain('3 of 2');
+    expect(text).toContain('repair attempt 3');
+    expect(text).toContain('stronger model');
+  });
+});
