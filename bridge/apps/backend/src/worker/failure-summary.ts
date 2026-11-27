@@ -1,6 +1,6 @@
 import { normalizeError } from '../logs/summary';
 import { Job } from './entities/job.entity';
-import { isInfraFailure } from './infra-failure';
+import { isRetryableFailure } from './infra-failure';
 
 export interface FailureGroup {
   message: string;
@@ -34,7 +34,7 @@ export function groupFailures(
     const message = normalizeError(row.errorMessage ?? '') || 'Без сообщения';
     const at = row.updatedAt.getTime();
     const group = groups.get(message);
-    const infra = isInfraFailure({
+    const infra = isRetryableFailure({
       failureKind: row.failureKind ?? null,
       errorMessage: row.errorMessage,
     });

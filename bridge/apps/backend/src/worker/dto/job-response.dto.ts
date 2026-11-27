@@ -43,6 +43,8 @@ export class JobResponseDto {
   cancelRequestedAt: Date | null;
   // Queued job: not handed to a worker before this moment; null = right away.
   notBefore: Date | null;
+  // The failed job this one automatically started over (R4), or null.
+  autoRetryOfId: number | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -74,6 +76,7 @@ export class JobResponseDto {
       finishedAt: job.finishedAt,
       cancelRequestedAt: job.cancelRequestedAt,
       notBefore: job.notBefore ?? null,
+      autoRetryOfId: job.autoRetryOfId ?? null,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

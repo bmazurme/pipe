@@ -196,7 +196,9 @@ export function JobList({ jobs, isLoading, isError = false, onOpenJob, workers, 
           {visibleJobs.map((job: WorkerJob) => {
             const duration = jobDuration(job, now);
             const delayed = job.status === 'queued' && job.notBefore && new Date(job.notBefore).getTime() > Date.now() ? delayedLine(job.notBefore) : null;
-            const who = [whoLine(job, workers), delayed].filter(Boolean).join(' · ') || null;
+            // R4: a job bridge started over by itself (the worker was lost, the network failed, the provider had a bad moment).
+            const autoRetry = job.autoRetryOfId != null ? `авто-повтор после #${job.autoRetryOfId}` : null;
+            const who = [whoLine(job, workers), autoRetry, delayed].filter(Boolean).join(' · ') || null;
 
             return (
               <li key={job.id} className={styles.jobItem}>

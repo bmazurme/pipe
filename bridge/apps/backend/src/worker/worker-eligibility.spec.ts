@@ -92,6 +92,16 @@ describe('claimEligibilitySql', () => {
     expect(params.slice(5)).toEqual([['haiku'], ['fusion']]);
   });
 
+  it('keeps an automatic retry off the worker that failed it, for a while only (R4)', () => {
+    const sql = claimEligibilitySql(worker(), [1, 2, 3, 4, 5]);
+
+    expect(sql).toContain(
+      `("avoidWorkerId" IS NULL OR "avoidWorkerId" <> $5 OR "createdAt" < now() - interval '10 minutes')`,
+    );
+    // A legacy worker has no id to avoid.
+    expect(claimEligibilitySql(null, [])).not.toContain('avoidWorkerId');
+  });
+
   it('does not offer a capability the worker reports as unavailable', () => {
     const params: unknown[] = [1, 2, 3, 4, 5];
 

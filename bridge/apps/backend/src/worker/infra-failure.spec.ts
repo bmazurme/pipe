@@ -5,6 +5,8 @@ import {
   SHUTDOWN_FAILURE_MESSAGE,
   infraFailureWhere,
   isInfraFailure,
+  isRetryableFailure,
+  isTransientFailure,
 } from './infra-failure';
 
 describe('infra-failure', () => {
@@ -87,6 +89,52 @@ describe('infra-failure', () => {
       const base = { userId: 1 };
       infraFailureWhere(base);
       expect(base).toEqual({ userId: 1 });
+    });
+  });
+
+  describe("R4: a provider's bad moment is not the task's fault", () => {
+    it.each([
+      'Model run exited with code 1: API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}',
+      'Model run exited with code 1: API Error: 500 Internal server error',
+      'Model run exited with code 1: API Error: 503 Service Unavailable',
+      'Model run exited with code 1: API Error: Connection error.',
+      'Model run exited with code 1: API Error: Request timed out.',
+      'Model run exited with code 1: API Error: ECONNRESET',
+      'Model run exited with code 1: ... "type": "overloaded_error" ...',
+    ])('is transient: %s', (errorMessage) => {
+      expect(isTransientFailure({ errorMessage })).toBe(true);
+      expect(isRetryableFailure({ failureKind: null, errorMessage })).toBe(
+        true,
+      );
+    });
+
+    it.each([
+      null,
+      '',
+      'Model run exited with code 1: 2 tests failed',
+      // refusals and limits: a retry only spends quota or meets the same refusal
+      'Model run exited with code 1: API Error: 403 Request not allowed',
+      'Model run exited with code 1: API Error: 401',
+      'Model run exited with code 1: Failed to authenticate. API Error: 500',
+      'Model run exited with code 1: API Error: 529 Claude usage limit reached',
+      'Model run exited with code 1: API Error: 500 rate limit exceeded',
+      // not after `API Error:`: the model\'s own output may mention these when the task is about network code
+      'Model run exited with code 1: ECONNRESET in the fixture, 3 tests failed',
+      'claude timed out after 1800s and was killed',
+    ])('is not transient: %s', (errorMessage) => {
+      expect(isTransientFailure({ errorMessage })).toBe(false);
+      expect(isRetryableFailure({ failureKind: null, errorMessage })).toBe(
+        false,
+      );
+    });
+
+    it('keeps everything that was already infrastructure retryable', () => {
+      expect(
+        isRetryableFailure({ failureKind: 'lost', errorMessage: null }),
+      ).toBe(true);
+      expect(
+        isRetryableFailure({ failureKind: null, errorMessage: LOST_MESSAGE }),
+      ).toBe(true);
     });
   });
 });

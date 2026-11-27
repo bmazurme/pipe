@@ -166,6 +166,15 @@ export class Job extends BaseEntity {
   @Column({ type: 'varchar', length: 16, nullable: true })
   failureKind: 'shutdown' | 'network' | 'lost' | null;
 
+  // The failed job this one is the automatic retry of (R4: lost/stopped worker, network, a provider's bad moment); null for every other job.
+  // At most one automatic retry per parcel.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  autoRetryOfId: number | null;
+
+  // The worker that just failed the job this one retries: kept off it for AVOID_WORKER_MS while another worker could take it.
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  avoidWorkerId: number | null;
+
   // Self-reported hostname of whichever worker process claimed this job —
   // purely informational, helps distinguish jobs if more than one worker
   // instance is running against the same account.
