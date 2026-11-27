@@ -30,6 +30,21 @@ jobs:
 
       - run: npm ci
 
+      # A4 — the assistant's benchmark: its pure parts (selection, summary, comparison, the behaviour fingerprint) are tested here; running it needs a model
+      # and the owner's plan, so it is run by hand (scripts/router-eval/README.md, «A4»).
+      - name: Benchmark tests (A4)
+        run: node --test scripts/router-eval/*.test.mjs
+
+      # A warning, never a failure: a pull request that changes what defines the assistant (a prompt, the routing, the worker's instructions) and does
+      # not touch eval/baseline.json has not said whether it is better or worse.
+      - name: Assistant behaviour check (A4)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE"
+          node scripts/router-eval/run.mjs check-behavior --against "origin/$BASE"
+
       - name: Lint
         working-directory: packages/protocol
         run: npm run lint

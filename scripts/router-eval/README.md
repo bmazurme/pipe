@@ -74,3 +74,34 @@ It runs `claude -p` from the checkout of each task (so the project's own CLAUDE.
 this machine, so it spends your plan. Unlike a worker, which may run any command, the shell here is narrowed to what checking a change needs
 (tests, type checks, `node`, `git status/diff`; no installs, no deletion, no network tools), because it runs on your own machine. The real
 `node_modules` are linked into the checkout, so tests can run there.
+
+## A4 — the assistant's benchmark: is a change of the prompt, the model or the router better or worse?
+
+Without a measure, every «improvement of the assistant» is a guess. The benchmark is a **frozen set of 30 past tasks** (`eval/benchmark.json`, committed: 8 of tier 1, 12 of
+tier 2, 10 of tier 3, spread over the period, every one with a test of the real pull request that the grader can run). A run gives the model the task as the worker would, on the
+project as it was just before that pull request, and then runs **the tests the accepted pull request came with** on what the model wrote.
+
+```bash
+# the whole measure, on the frozen set: replay → grade → summary → comparison with the accepted baseline
+node scripts/router-eval/run.mjs eval --by claude --model haiku --label "what you changed"          # all 30; --limit 8 for a try
+node scripts/router-eval/run.mjs eval --by claude --model sonnet --label "dod v2" --max-tier 2      # a cheaper slice
+node scripts/router-eval/run.mjs accept --summary eval/results/<the kept file>.json                # this result becomes the baseline
+node scripts/router-eval/run.mjs compare --cand eval/results/<a>.json [--base eval/results/<b>.json]
+```
+
+**What it spends.** The `claude` CLI logged in on THIS machine, i.e. your plan. Measured on 2 tier-1 tasks with Haiku (2026-11-27): 100 s and $0.03 a task, both passed. Expect minutes per
+task (tier 3 up to a quarter of an hour), so all 30 is roughly an hour of wall-clock for Haiku, and several times the cost for Sonnet/Opus. Costs are the CLI's own figure (API-price equivalent).
+
+**What the result says** (`summary.json`, `summary.md`, kept as `eval/results/<date>-<label>.json`): the share of tasks whose real tests **pass** (the headline, over the tasks that could be tested),
+what a **correct change costs** (everything spent ÷ what passed — a cheap wrong answer is not cheap), the share of added lines the model has in common with the accepted change, time.
+
+**The comparison** says one of: 🟢 *better*, ⚪ *same*, 🔴 *regression*, 🟡 *inconclusive*. It looks only at tasks both runs have a verdict on; one task flipping is luck (the same model run twice does not
+always pass the same ones), so a *change* needs at least two tasks more lost than gained **and** a tenth of the pass rate; fewer than 8 comparable tasks is *inconclusive* — a run of `--limit 4` cannot
+prove anything and says so. It also says when a correct change got much costlier or cheaper, and when two runs are the same behaviour and the same model (then the difference is noise).
+
+**Tied to the behaviour it measured.** `eval/baseline.json` holds a fingerprint of the files that define what the assistant does (`behavior-lib.mjs`: `CLAUDE.md`, the definition of done, the
+verification retry text, the analysis prompts, the router policy and classifier, the worker's instructions, `claudeRunner.ts`, `verify-changed.mjs`) and the accepted result. CI (**a warning, never a failure**)
+says when a pull request changes one of those files and does not touch `eval/baseline.json`: measure first, `accept` if it is not worse. `check-behavior` (no flag) asks the same of the working tree.
+
+Freezing again (`benchmark`) changes what «the same tasks» means: do it rarely, and re-measure the baseline after. The pure parts are tested by `node --test scripts/router-eval/*.test.mjs` (in CI).
+

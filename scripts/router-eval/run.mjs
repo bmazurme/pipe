@@ -16,18 +16,30 @@
 //                                             run the real pull request's tests against the model's change (needs node_modules installed
 //                                             and the packages built in --repo-dir; any machine with the project, no model needed)
 //
+//   node scripts/router-eval/run.mjs benchmark [--limit 160]       freeze eval/benchmark.json from the merged tasks (collects first when --out has none)
+//   node scripts/router-eval/run.mjs eval     --by claude --model sonnet --label "what changed" [--limit 10]
+//                                             the whole measure on the FROZEN set: replay → grade → summary → comparison with the accepted baseline
+//   node scripts/router-eval/run.mjs summarize --dir <replay-… folder> --label …     one comparable record (summary.json) from a replay + its grade
+//   node scripts/router-eval/run.mjs compare  --base <summary.json> --cand <summary.json>        better, same, regression or too few tasks to say
+//   node scripts/router-eval/run.mjs accept   [--summary <summary.json>]             make this behaviour (and result) the baseline: eval/baseline.json
+//   node scripts/router-eval/run.mjs check-behavior [--against origin/main]   whether the files that define the assistant still match what the baseline was measured on
+//                                             (exit 1 when not); with --against: what this pull request does to them (a CI warning, never a failure)
+//
 // `collect` (and `replay`, for the commits) needs the gh CLI logged in; `replay` also needs the worker built (npm run build) and runs in
 // a clone of the project, on the machine where the model is. `claude` runs `claude -p` (a few hundred tokens a task); `openai` talks to any
 // OpenAI-compatible server, e.g. Ollama on mac-fusion.
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { classifierPrompt, compare, heuristicClassify, parseClassification, policies, renderReport, truthOf } from './lib.mjs';
 import { runClaudeAgent } from './claude-agent.mjs';
 import { filesInDiff, gradeTask, linkNodeModules, renderGrades } from './grade-lib.mjs';
 import { renderReplay, replayTask, selectTasks } from './replay-lib.mjs';
+import { BENCHMARK_VERSION, freezeBenchmark, validateBenchmark } from './benchmark-lib.mjs';
+import { checkBehavior, checkPullRequest, fingerprint } from './behavior-lib.mjs';
+import { buildSummary, compareSummaries, diffSimilarity, renderComparison, renderSummary } from './summary-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = Object.fromEntries(
@@ -38,6 +50,24 @@ const repo = flags.repo ?? 'bmazurme/pipe';
 
 const gh = (...args) => JSON.parse(execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
 const read = (name) => JSON.parse(readFileSync(join(out, name), 'utf8'));
+const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const BENCHMARK_PATH = join(REPO_ROOT, 'eval', 'benchmark.json');
+const BASELINE_PATH = join(REPO_ROOT, 'eval', 'baseline.json');
+const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+const today = () => new Date().toISOString().slice(0, 10);
+
+// The tasks a run works on: the FROZEN set (eval/benchmark.json) with --benchmark, otherwise whatever `collect` found.
+function loadTasks() {
+  if (flags.benchmark !== 'true') return read('tasks.json');
+
+  const manifest = readJson(BENCHMARK_PATH);
+  const problems = validateBenchmark(manifest);
+
+  if (problems.length > 0) throw new Error(`eval/benchmark.json is not usable: ${problems.join('; ')}`);
+
+  return manifest.tasks;
+}
+
 const write = (name, value) => {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, name), `${JSON.stringify(value, null, 2)}\n`);
@@ -156,7 +186,7 @@ function report() {
   console.log(sections.join('\n'));
 }
 
-if (!existsSync(out) && command !== 'collect' && command !== 'grade') {
+if (!existsSync(out) && !['collect', 'grade', 'benchmark', 'summarize', 'compare', 'accept', 'check-behavior', 'eval'].includes(command) && flags.benchmark !== 'true') {
   console.error(`no ${out}/ — run "collect" first`);
   process.exit(1);
 }
@@ -196,6 +226,11 @@ async function requireModel(options) {
   }
 }
 
+// Where a replay of this model writes (and where `grade` and `summarize` read from).
+function replayDest() {
+  return join(out, `replay-${flags.by === 'claude' ? 'claude-' : ''}${String(flags.model).replace(/[^\w.-]/g, '_')}`);
+}
+
 async function replay() {
   const byClaude = flags.by === 'claude';
 
@@ -217,8 +252,8 @@ async function replay() {
   const repoDir = flags['repo-dir'] ?? process.cwd();
   const only = flags.only ? new Set(flags.only.split(',').map(Number)) : null;
   const picked = (only
-    ? withMergeCommits(read('tasks.json')).filter((task) => only.has(task.pr))
-    : selectTasks(withMergeCommits(read('tasks.json')), {
+    ? withMergeCommits(loadTasks()).filter((task) => only.has(task.pr))
+    : selectTasks(withMergeCommits(loadTasks()), {
         minTier: Number(flags['min-tier'] ?? 1),
         maxTier: Number(flags['max-tier'] ?? 1),
         limit: Number(flags.limit ?? 8),
@@ -226,7 +261,7 @@ async function replay() {
         onlyLocalOk: !byClaude || flags['only-file-tasks'] === 'true',
       })
   ).filter((task) => task.mergeCommit);
-  const dest = join(out, `replay-${byClaude ? 'claude-' : ''}${flags.model.replace(/[^\w.-]/g, '_')}`);
+  const dest = replayDest();
   const workRoot = mkdtempSync(join(tmpdir(), 'router-replay-'));
   const options = { baseUrl: (flags.url ?? '').replace(/\/+$/, ''), apiKey: flags.key ?? '', model: flags.model, authScheme: flags.auth === 'bearer' ? 'bearer' : 'none', route: 'direct' };
   const timeoutMs = Number(flags.timeout ?? 900) * 1000;
@@ -309,7 +344,7 @@ function grade() {
   if (!flags.dir) throw new Error('grade needs --dir <the replay-… folder with the pr-N.model.diff files>');
 
   const repoDir = flags['repo-dir'] ?? process.cwd();
-  const tasks = withMergeCommits(read('tasks.json'));
+  const tasks = withMergeCommits(loadTasks());
   const only = flags.only ? new Set(flags.only.split(',').map(Number)) : null;
   const workRoot = mkdtempSync(join(tmpdir(), 'router-grade-'));
   const rows = [];
@@ -333,13 +368,171 @@ function grade() {
   const text = renderGrades(flags.dir.replace(/\/+$/, '').split('/').pop(), rows);
 
   writeFileSync(join(flags.dir, 'grade.md'), `${text}\n`);
+  // for `summarize`: the verdict per task, as data
+  writeFileSync(join(flags.dir, 'grade.json'), `${JSON.stringify(Object.fromEntries(rows.map((row) => [row.pr, { status: row.grade.status }])), null, 2)}\n`);
   console.log(text);
 }
 
-const commands = { collect, classify, report, replay, grade };
+// ---- A4: the frozen benchmark, one comparable record per run, and the comparison with the accepted baseline -------------------------------
+
+function behaviorNow() {
+  return fingerprint((path) => (existsSync(join(REPO_ROOT, path)) ? readFileSync(join(REPO_ROOT, path), 'utf8') : null));
+}
+
+// Freezes the benchmark from the merged tasks `collect` found (collects first when there is nothing yet).
+function benchmark() {
+  if (!existsSync(join(out, 'tasks.json'))) collect();
+
+  const manifest = freezeBenchmark(read('tasks.json'), { repo, createdAt: today() });
+
+  mkdirSync(join(REPO_ROOT, 'eval'), { recursive: true });
+  writeFileSync(BENCHMARK_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`froze ${manifest.tasks.length} tasks → eval/benchmark.json   (tiers ${Object.entries(manifest.tiers).map(([tier, n]) => `${tier}: ${n}`).join('  ')}; version ${BENCHMARK_VERSION})`);
+  console.log('Commit it: it is the set every later run is measured against. Re-freezing changes what "the same" means — do it rarely, and re-measure the baseline after.');
+}
+
+// One comparable record from a replay folder (results.json) and its grade (grade.json), tied to the behaviour files it was run with.
+function summarize() {
+  const dir = flags.dir ?? replayDest();
+
+  if (!existsSync(join(dir, 'results.json'))) throw new Error(`${dir}/results.json is missing — run "replay" first`);
+
+  const results = readJson(join(dir, 'results.json'));
+  const grades = existsSync(join(dir, 'grade.json')) ? readJson(join(dir, 'grade.json')) : {};
+  const tasks = loadTasks();
+  const similarity = {};
+
+  for (const result of results) {
+    const model = join(dir, `pr-${result.pr}.model.diff`);
+    const real = join(dir, `pr-${result.pr}.pr.diff`);
+
+    similarity[result.pr] = existsSync(model) && existsSync(real) ? diffSimilarity(readFileSync(model, 'utf8'), readFileSync(real, 'utf8')) : null;
+  }
+
+  if (Object.keys(grades).length === 0) console.error('no grade.json next to the results: the pass rate will be empty — run "grade --dir …" first');
+
+  const summary = buildSummary({
+    label: flags.label ?? dir.split('/').pop(),
+    model: flags.model ?? dir.split('/').pop().replace(/^replay-(claude-)?/, ''),
+    by: flags.by ?? (dir.includes('replay-claude-') ? 'claude' : 'openai'),
+    behaviorHash: behaviorNow().hash,
+    benchmarkVersion: flags.benchmark === 'true' ? BENCHMARK_VERSION : null,
+    date: today(),
+    results,
+    grades,
+    similarity,
+    tiers: Object.fromEntries(tasks.map((task) => [task.pr, task.truth.tier])),
+  });
+
+  writeFileSync(join(dir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  writeFileSync(join(dir, 'summary.md'), `${renderSummary(summary)}\n`);
+  console.log(renderSummary(summary));
+
+  return summary;
+}
+
+function baselineSummary() {
+  if (!existsSync(BASELINE_PATH)) return null;
+
+  const file = readJson(BASELINE_PATH).summary?.file;
+
+  return file && existsSync(join(REPO_ROOT, file)) ? readJson(join(REPO_ROOT, file)) : null;
+}
+
+function compareCommand() {
+  if (!flags.cand) throw new Error('compare needs --cand <summary.json> (and --base <summary.json>, or the accepted baseline)');
+
+  const base = flags.base ? readJson(flags.base) : baselineSummary();
+
+  if (!base) throw new Error('no --base and no accepted baseline result (eval/baseline.json has none yet): measure one with "eval" and "accept" it');
+
+  const cand = readJson(flags.cand);
+  const result = compareSummaries(base, cand);
+
+  console.log(renderComparison(base, cand, result));
+
+  return result;
+}
+
+// The whole measure on the frozen set: replay (spends the plan of the claude CLI logged in here) → grade → summary → comparison.
+async function evaluate() {
+  if (!flags.model) throw new Error('eval needs --model (and --by claude|openai, --label "what changed")');
+
+  flags.benchmark = 'true';
+  flags.by = flags.by ?? 'claude';
+  flags['max-tier'] = flags['max-tier'] ?? '3';
+
+  await replay();
+  flags.dir = replayDest();
+  grade();
+  const summary = summarize();
+
+  // kept next to the other results, so a baseline can point at it and a later run can be compared with it
+  if (flags.keep !== 'false') {
+    const file = join('eval', 'results', `${today()}-${String(flags.label ?? flags.model).replace(/[^\w.-]+/g, '_')}.json`);
+
+    mkdirSync(dirname(join(REPO_ROOT, file)), { recursive: true });
+    writeFileSync(join(REPO_ROOT, file), `${JSON.stringify(summary, null, 2)}\n`);
+    console.log(`\nkept as ${file}`);
+    flags.cand = join(REPO_ROOT, file);
+  } else {
+    flags.cand = join(flags.dir, 'summary.json');
+  }
+
+  const base = baselineSummary();
+
+  if (!base) return console.log('\nno accepted baseline result to compare with — if this is the one to compare against, `accept` it');
+
+  console.log(`\n${renderComparison(base, summary, compareSummaries(base, summary))}`);
+}
+
+// This behaviour (and, with --summary, its result) becomes the baseline later runs are compared with and CI checks the files against.
+function accept() {
+  let summary = null;
+
+  if (flags.summary) {
+    const absolute = flags.summary.startsWith('/') ? flags.summary : join(process.cwd(), flags.summary);
+    const relative = absolute.startsWith(REPO_ROOT) ? absolute.slice(REPO_ROOT.length) : null;
+
+    if (!relative) throw new Error('--summary must be a file inside the repository (eval/results/…): the baseline points at it and the commit carries it');
+
+    const data = readJson(absolute);
+
+    summary = { file: relative, label: data.label, model: data.model, date: data.date, passRate: data.totals.passRate, costPerPass: data.totals.costPerPass, n: data.totals.n };
+  }
+
+  mkdirSync(join(REPO_ROOT, 'eval'), { recursive: true });
+  writeFileSync(BASELINE_PATH, `${JSON.stringify({ acceptedAt: today(), behavior: behaviorNow(), summary }, null, 2)}\n`);
+  console.log(`eval/baseline.json: behaviour ${behaviorNow().hash}${summary ? `, result ${summary.label} (${Math.round((summary.passRate ?? 0) * 100)} % passed)` : ' — no measured result attached'}`);
+}
+
+function checkBehaviorCommand() {
+  // In a pull request: from the files it changes (--against origin/main). Otherwise: whether the files still match what the baseline measured.
+  if (flags.against) {
+    const changed = execFileSync('git', ['diff', '--name-only', flags.against, 'HEAD'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const result = checkPullRequest(changed);
+
+    console.log(result.message);
+    if (!result.ok && process.env.GITHUB_ACTIONS === 'true') console.log(`::warning title=Assistant behaviour changed without a new baseline::${result.message}`);
+
+    process.exit(0);
+  }
+
+  const baseline = existsSync(BASELINE_PATH) ? readJson(BASELINE_PATH) : null;
+  const result = checkBehavior(baseline, behaviorNow());
+
+  console.log(result.message);
+
+  // In CI a warning annotation (it cannot run a model, so it never fails the build); anywhere else the exit code says it.
+  if (!result.ok && process.env.GITHUB_ACTIONS === 'true') console.log(`::warning title=Assistant behaviour changed without a new baseline::${result.message}`);
+
+  process.exit(result.ok || flags.warn === 'true' ? 0 : 1);
+}
+
+const commands = { collect, classify, report, replay, grade, benchmark, summarize, compare: compareCommand, accept, 'check-behavior': checkBehaviorCommand, eval: evaluate };
 
 if (!commands[command]) {
-  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report | replay --url … --model … | grade --dir …');
+  console.error('usage: run.mjs collect | classify --by heuristic|claude|openai | report | replay --url … --model … | grade --dir … | benchmark | eval --by claude --model … --label … | summarize | compare | accept | check-behavior');
   process.exit(1);
 }
 
