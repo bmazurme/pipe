@@ -6,6 +6,9 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { BoardsAgentController, BoardsController } from './boards.controller';
 import { BoardMetricsService } from './board-metrics.service';
 import { DriftService } from './drift.service';
+import { WorkerAutoUpdateService } from './worker-auto-update.service';
+import { BoardAutoUpdateSettings } from './entities/board-auto-update-settings.entity';
+import { Job } from '../worker/entities/job.entity';
 import { Worker } from '../worker/entities/worker.entity';
 import { BoardsService } from './boards.service';
 import { NasService } from './nas.service';
@@ -33,6 +36,8 @@ import { ScriptUpdate } from './entities/script-update.entity';
       RouterReboot,
       BoardMetric,
       Worker,
+      BoardAutoUpdateSettings,
+      Job,
     ]),
     AuthModule,
     TelegramModule,
@@ -46,6 +51,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
     RouterService,
     BoardMetricsService,
     DriftService,
+    WorkerAutoUpdateService,
   ],
   exports: [
     BoardsService,

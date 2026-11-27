@@ -3200,6 +3200,50 @@
         }
       }
     },
+    "/api/v1/boards/auto-update": {
+      "get": {
+        "operationId": "BoardsController_autoUpdateView",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "BoardsController_saveAutoUpdate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAutoUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/boards/{host}/updates": {
       "post": {
         "operationId": "BoardsController_update",
@@ -9926,6 +9970,10 @@
           },
           "oomKilled": {
             "type": "boolean"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "DIGEST_PATTERN"
           }
         },
         "required": [
@@ -9970,6 +10018,10 @@
           },
           "workerEgress": {
             "type": "boolean"
+          },
+          "workerImageLatest": {
+            "type": "string",
+            "pattern": "DIGEST_PATTERN"
           }
         }
       },
@@ -10017,6 +10069,27 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "SaveAutoUpdateDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "enabled",
+          "window",
+          "timezone"
         ]
       },
       "CreateImproveIssueDto": {

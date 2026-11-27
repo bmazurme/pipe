@@ -45,13 +45,15 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=5
+AGENT_VERSION=6
 # The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
 METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
 # The worker update: the only image it will pull and the only container names it will touch (see the header). Tests change the image.
 # S1(3): the worker egress filter (infra/worker-egress) — the agent only asks it whether it is in place.
 EGRESS_SCRIPT="${EGRESS_SCRIPT:-/usr/local/lib/pipe-worker-egress/worker-egress.sh}"
 WORKER_IMAGE="${WORKER_IMAGE:-ghcr.io/bmazurme/pipe-worker:stable}"
+# R2: where `stable` of that image is asked for (anonymous, read-only — the same two requests the auto-deploy makes); tests point it at a fake.
+GHCR_HOST="${GHCR_HOST:-https://ghcr.io}"
 WORKER_NAME_RE='^pipe-worker-pi-[a-z0-9][a-z0-9-]{0,40}$'
 # How long a new worker container must stay up before the old one is thrown away.
 WORKER_STAY_UP_SEC="${WORKER_STAY_UP_SEC:-45}"
@@ -92,24 +94,47 @@ list_worker_containers() { # names, one per line
   docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "$WORKER_NAME_RE" || true
 }
 
+# R2: which release a worker container is on, and which one `stable` is now — so bridge can tell «behind» and, when the owner switched it on, update by
+# itself. Both are manifest-list digests (what `docker pull` records in RepoDigests and what the registry answers for the tag); either may be missing, and
+# then nothing is said — never a guess.
+container_digest() { # container name
+  local id repo
+  repo="${WORKER_IMAGE%:*}"
+  id="$(docker inspect -f '{{.Image}}' "$1" 2>/dev/null)" || return 0
+  docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$id" 2>/dev/null | grep -F "$repo@" | head -1 | sed 's/.*@//' || true
+}
+latest_worker_digest() {
+  local repo tag path token
+  repo="${WORKER_IMAGE%:*}"; tag="${WORKER_IMAGE##*:}"; path="${repo#*/}"
+  command -v curl >/dev/null 2>&1 || return 0
+  token="$(curl -fsS --max-time 15 "$GHCR_HOST/token?scope=repository:$path:pull&service=ghcr.io" 2>/dev/null | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])' 2>/dev/null)" || return 0
+  curl -fsSI --max-time 15 -H "Authorization: Bearer $token" \
+    -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+    "$GHCR_HOST/v2/$path/manifests/$tag" 2>/dev/null \
+    | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}' || true
+}
+
 collect_workers() {
   local name rows=""
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    rows="$rows$(docker inspect -f '{{.Name}}|{{.Config.Image}}|{{.State.Running}}|{{.RestartCount}}|{{.State.StartedAt}}|{{.State.OOMKilled}}' "$name" 2>/dev/null)"$'\n'
+    rows="$rows$(docker inspect -f '{{.Name}}|{{.Config.Image}}|{{.State.Running}}|{{.RestartCount}}|{{.State.StartedAt}}|{{.State.OOMKilled}}' "$name" 2>/dev/null)|$(container_digest "$name")"$'\n'
   done < <(list_worker_containers)
   ROWS="$rows" python3 -c '
 import json, os
 out = []
 for line in os.environ.get("ROWS", "").splitlines():
     parts = line.split("|")
-    if len(parts) == 6 and parts[0].startswith("/"):
+    if len(parts) == 7 and parts[0].startswith("/"):
         row = {"name": parts[0][1:], "image": parts[1][:200], "running": parts[2] == "true", "oomKilled": parts[5] == "true"}
         # How many times docker restarted it by itself, and since when it has been up: a worker that crash-loops shows here, nowhere else.
         if parts[3].isdigit():
             row["restartCount"] = int(parts[3])
         if parts[4] and not parts[4].startswith("0001"):
             row["startedAt"] = parts[4][:40]
+        # The release the container runs (the manifest-list digest it was pulled as); absent when it was not pulled from the registry.
+        if parts[6].startswith("sha256:"):
+            row["digest"] = parts[6][:80]
         out.append(row)
 print(json.dumps(out[:8]))
 '
@@ -135,7 +160,9 @@ collect_health() {
   if [ -n "$workers" ] && [ "$workers" != "[]" ]; then
     if [ -x "$EGRESS_SCRIPT" ] && "$EGRESS_SCRIPT" check >/dev/null 2>&1; then egress=true; else egress=false; fi
   fi
-  WORKERS_JSON="${workers:-[]}" EGRESS="$egress" DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
+  local latest=""
+  if [ -n "$workers" ] && [ "$workers" != "[]" ]; then latest="$(latest_worker_digest 2>/dev/null || true)"; fi
+  WORKERS_JSON="${workers:-[]}" EGRESS="$egress" LATEST_DIGEST="$latest" DISK_USED="${used:-}" DISK_FREE_MB="${free:-}" INODES_USED="${inodes:-}" SSH_PASSWORD="${passwd:-}" SSH_KEYS="$keys" SSHD_ACTIVE="$active" python3 -c '
 import json, os
 def num(name):
     v = os.environ.get(name, "")
@@ -155,6 +182,9 @@ except ValueError:
 if workers:
     health["workers"] = workers
     health["workerEgress"] = {"true": True, "false": False}.get(os.environ.get("EGRESS", ""))
+    latest = os.environ.get("LATEST_DIGEST", "")
+    if latest.startswith("sha256:"):
+        health["workerImageLatest"] = latest[:80]
 print(json.dumps({k: v for k, v in health.items() if v is not None}))
 '
 }

@@ -30,6 +30,7 @@ const board = (over: Record<string, unknown> = {}) => ({
   pending: null,
   lastUpdate: null,
   workers: [],
+  imageBehind: [],
   workerPending: null,
   workerLast: null,
   ...over,
@@ -51,6 +52,7 @@ beforeEach(() => {
         return failUpdate ? json({ message: failUpdate }, 409) : json({ id: 5, sha: 'x', repoPaths: [], status: 'pending' });
       }
       if (path === 'boards') return json(boards);
+      if (path === 'boards/auto-update') return json({ enabled: false, window: '03:00-05:00', timezone: 'Europe/Moscow', inWindowNow: false, last: null });
 
       return json([]);
     }),
@@ -281,4 +283,12 @@ describe('BoardsPage', () => {
       expect(await screen.findByText('Плата давно не отчитывалась')).toBeTruthy();
     });
   });
+
+  it('says a worker container runs an older release than stable (R2)', async () => {
+    boards = [board({ workers: [{ name: 'pipe-worker-pi-red', image: 'ghcr.io/x/pipe-worker:stable', running: true }], imageBehind: ['pipe-worker-pi-red'] })];
+    renderPage();
+
+    expect(await screen.findByText(/образ не последний: red/)).toBeInTheDocument();
+  });
 });
+

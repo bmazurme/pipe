@@ -41,6 +41,8 @@ case "$url" in
       /api/v1/boards/agent/pending*) cat "$FAKE_PENDING" ;;
       *) n=$(( $(ls "$FAKE_CALLS" | wc -l) + 1 )); printf '%s %s\n%s\n' "$method" "$path" "$data" > "$FAKE_CALLS/$n" ;;
     esac ;;
+  "$GHCR_HOST"/token*) [ -z "${FAKE_GHCR_DOWN:-}" ] || exit 22; echo '{"token":"t"}' ;;
+  "$GHCR_HOST"/v2/*/manifests/*) [ -z "${FAKE_GHCR_DOWN:-}" ] || exit 22; [ -n "${FAKE_LATEST:-}" ] || exit 22; printf 'HTTP/2 200\r\ndocker-content-digest: %s\r\n\r\n' "$FAKE_LATEST" ;;
   "$GITHUB_API"/repos/*/compare/*) printf '{"status": "%s"}' "$FAKE_COMPARE" ;;
   "$RAW_HOST"/*) path="${url#"$RAW_HOST"/*/*/}"; [ -f "$FAKE_REPO/$path" ] || exit 22; cp "$FAKE_REPO/$path" "$out" ;;
   *) path="${url#"$RAW_BASE"/}"; [ -f "$FAKE_REPO/main/$path" ] || exit 22; cp "$FAKE_REPO/main/$path" "$out" ;;
@@ -50,7 +52,7 @@ chmod +x "$T/bin/curl"
 # the lock is the boards' flock; here nothing else runs
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/flock"; chmod +x "$T/bin/flock"
 
-export METRICS_EVERY_SEC=0 BRIDGE_RESOLVE="" BRIDGE_API_URL="https://bridge.example" BRIDGE_API_KEY="brk_test" GITHUB_API="https://api.github.example" RAW_HOST="https://raw.example"
+export METRICS_EVERY_SEC=0 BRIDGE_RESOLVE="" BRIDGE_API_URL="https://bridge.example" BRIDGE_API_KEY="brk_test" GITHUB_API="https://api.github.example" GHCR_HOST="https://ghcr.example" RAW_HOST="https://raw.example"
 export RAW_BASE="https://raw.example/o/r/main" FAKE_REPO="$T/repo" FAKE_PENDING="$T/pending.json" FAKE_CALLS="$T/calls" FAKE_COMPARE=behind FAKE_ARGV="$T/argv" FAKE_STDIN="$T/stdin"
 export STATE_DIR="$T/state" BOARD_HOST="ubuntu-red" BRIDGE_PI_DIR="$T/board/bridge-pi" MANIFEST_FILE="$T/manifest.txt"
 export CHECK_SCRIPT="$HERE/../scriptcheck/check-scripts.sh" SCRIPTCHECK_MANIFEST="$T/manifest.txt" MAIN_SHA="$SHA" STATE_DIR_CHECK="$T/check-state"
@@ -112,7 +114,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "5"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "6"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -233,7 +235,7 @@ fi
 
 # ---- the bridge key never appears on curl's command line, only in the config on its stdin
 fresh; : > "$T/argv"; : > "$T/stdin"; decision 40 infra/backup/uploads-pull.sh; agent apply
-[ -s "$T/argv" ] && ! grep -q 'brk_test' "$T/argv" && ! grep -qi 'authorization' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "apply: the bridge key is on curl's stdin, not in its argv" $?
+[ -s "$T/argv" ] && ! grep -q 'brk_test' "$T/argv" && ! grep -qi 'authorization: bearer brk' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "apply: the bridge key is on curl's stdin, not in its argv" $?
 : > "$T/argv"; : > "$T/stdin"; agent selftest
 ! grep -q 'brk_test' "$T/argv" && grep -q 'Authorization: Bearer brk_test' "$T/stdin"; check "selftest: the bridge key is on curl's stdin, not in its argv" $?
 
@@ -331,6 +333,9 @@ if a[:1] == ["inspect"]:
 if a[:2] == ["image", "inspect"]:
     ref = a[-1]
     if "{{.Id}}" in a: print(state["pull_id"]); sys.exit(0)
+    if any("RepoDigests" in x for x in a):
+        for d in state["images"].get(ref, {}).get("digests", []): print(d)
+        sys.exit(0)
     print(json.dumps(state["images"].get(ref, {}).get("env", []))); sys.exit(0)
 if a[:1] == ["pull"]:
     if state.get("pull_fail"): print("pull access denied", file=sys.stderr); sys.exit(1)
@@ -397,6 +402,38 @@ body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 sys.exit(0 if body["health"].get("workers") == [{"name": "pipe-worker-pi-red", "image": "ghcr.io/bmazurme/pipe-worker:stable", "running": True, "oomKilled": False, "restartCount": 0, "startedAt": "2026-11-27T01:00:00.123456789Z"}] else 1)
 PY
 check "report: lists the board's worker containers with their image and state" $?
+
+echo "# R2: which release a worker container runs, and which one stable is now"
+digest_world() { # container's digest ('' = none)
+  docker_world pipe-worker-pi-red
+  python3 - "$FD/state.json" "$1" <<'PY'
+import json, sys
+path, digest = sys.argv[1:]
+s = json.load(open(path))
+s["images"]["sha256:old"]["digests"] = ["ghcr.io/bmazurme/pipe-worker@" + digest, "other.example/x@sha256:" + "9" * 64] if digest else []
+json.dump(s, open(path, "w"))
+PY
+}
+D1="sha256:$(printf '1%.0s' $(seq 64))"; D2="sha256:$(printf '2%.0s' $(seq 64))"
+health_field() { python3 - "$T/calls/1" "$1" <<'PY'
+import json, sys
+body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
+h = body["health"]
+key = sys.argv[2]
+if key == "digest": print((h.get("workers") or [{}])[0].get("digest", "-"))
+else: print(h.get(key, "-"))
+PY
+}
+fresh; digest_world "$D1"; echo '{"update": null}' > "$T/pending.json"; FAKE_LATEST="$D2" agent report
+[ "$(health_field digest)" = "$D1" ]; check "digest: the worker container's release is reported (the manifest-list digest of ITS repository)" $?
+[ "$(health_field workerImageLatest)" = "$D2" ]; check "digest: what stable is now is reported next to it" $?
+fresh; digest_world ""; echo '{"update": null}' > "$T/pending.json"; FAKE_LATEST="$D2" agent report
+[ "$(health_field digest)" = "-" ]; check "digest: a container whose image was not pulled from the registry says nothing (no guess)" $?
+fresh; digest_world "$D1"; echo '{"update": null}' > "$T/pending.json"; FAKE_GHCR_DOWN=1 FAKE_LATEST="$D2" agent report
+[ "$(health_field workerImageLatest)" = "-" ] && [ "$(health_field digest)" = "$D1" ]; check "digest: a registry that does not answer leaves out the latest, and the report still goes" $?
+[ "$(cat "$T/code")" = 0 ]; check "digest: ...with exit 0" $?
+fresh; rm -rf "$FD"; mkdir -p "$FD"; echo '{"update": null}' > "$T/pending.json"; FAKE_LATEST="$D2" agent report
+[ "$(health_field workerImageLatest)" = "-" ]; check "digest: a board with no worker container does not ask the registry at all" $?
 
 echo "# S1(3): the agent says whether the worker egress filter is in place (so a missing or flushed one shows on the «Дрейф» tile)"
 egress_reported() { python3 - "$T/calls/1" "$1" <<'PY'

@@ -23,6 +23,10 @@ export interface DriftBoard {
   workers: BoardWorker[];
   /** Said by the agent (v5+) on boards that run workers; undefined = an agent that does not say, which is not a finding. */
   workerEgress?: boolean;
+  /** R2: the worker containers that run a release other than the current `stable`. */
+  imageBehind?: string[];
+  /** A worker decision is waiting for the agent: the update is on its way, not a finding. */
+  updatePending?: boolean;
   workerLast: {
     status: string;
     result: string | null;
@@ -107,6 +111,14 @@ function boardItems(board: DriftBoard, now: Date): DriftItem[] {
       'worker-egress',
       'warn',
       'фильтр домашней сети для воркеров не включён — контейнер может ходить в LAN и на саму плату (S1, infra/worker-egress)',
+    );
+  }
+
+  if ((board.imageBehind?.length ?? 0) > 0 && !board.updatePending) {
+    add(
+      'worker-behind',
+      'warn',
+      `воркер на образе не последнего релиза (${(board.imageBehind as string[]).map((name) => name.replace(/^pipe-worker-/, '')).join(', ')}) — «Обновить worker» на странице «Платы» или включите автообновление`,
     );
   }
 

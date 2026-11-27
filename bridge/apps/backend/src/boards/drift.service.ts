@@ -43,6 +43,8 @@ export class DriftService {
         outdatedScripts: board.outdated,
         workers: board.workers,
         workerEgress: board.health?.workerEgress,
+        imageBehind: board.imageBehind,
+        updatePending: board.workerPending !== null,
         workerLast: board.workerLast,
         lastUpdate: board.lastUpdate,
       })),
