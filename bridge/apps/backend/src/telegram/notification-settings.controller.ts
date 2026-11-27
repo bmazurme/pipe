@@ -11,12 +11,22 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { NotificationSettingsService } from './notification-settings.service';
+import { NotifyStatsService } from './notify-stats.service';
 
 // Browser session only (profile page) — machine clients have no business here.
 @Controller('api/v1/notification-settings')
 @UseGuards(JwtGuard)
 export class NotificationSettingsController {
-  constructor(private readonly settings: NotificationSettingsService) {}
+  constructor(
+    private readonly settings: NotificationSettingsService,
+    private readonly stats: NotifyStatsService,
+  ) {}
+
+  // R6: how many messages the bridge sent today and in the last days against the budget (≤ 5 ordinary a day), what was not sent, who is noisy.
+  @Get('budget')
+  budget() {
+    return this.stats.budget(14);
+  }
 
   @Get()
   get(@CurrentUser() currentUser: { id: number }) {

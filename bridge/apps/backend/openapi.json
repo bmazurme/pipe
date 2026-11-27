@@ -344,6 +344,24 @@
         }
       }
     },
+    "/api/v1/notification-settings/budget": {
+      "get": {
+        "operationId": "NotificationSettingsController_budget",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notification-settings": {
       "get": {
         "operationId": "NotificationSettingsController_get",

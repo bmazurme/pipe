@@ -15,4 +15,9 @@ export class TelegramOutbox extends BaseEntity {
   // the digest, so the buttons still work.
   @Column({ type: 'text', nullable: true })
   buttons: string | null;
+
+  // `quiet`: held by quiet hours for the morning digest. `burst`: held back from a burst of messages (alert-budget.ts), sent as one grouped message
+  // a minute later.
+  @Column({ type: 'varchar', length: 8, default: 'quiet' })
+  kind: 'quiet' | 'burst';
 }
