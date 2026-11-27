@@ -42,6 +42,7 @@ export class DriftService {
         online: board.online,
         outdatedScripts: board.outdated,
         workers: board.workers,
+        workerEgress: board.health?.workerEgress,
         workerLast: board.workerLast,
         lastUpdate: board.lastUpdate,
       })),

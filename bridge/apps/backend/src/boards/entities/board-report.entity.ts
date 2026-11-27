@@ -34,6 +34,8 @@ export interface BoardHealth {
   sshAuthorizedKeys?: number;
   sshdActive?: boolean;
   workers?: BoardWorker[];
+  // S1(3): whether the filter that keeps worker containers off the home network is in place; said only by a board that has workers.
+  workerEgress?: boolean;
 }
 
 // What a board last told bridge about the scripts installed on it. One row per (account, board): the board's own agent posts it

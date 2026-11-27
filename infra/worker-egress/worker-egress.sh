@@ -19,10 +19,13 @@
 # that). Replies to connections that came IN (Portainer's page on blue) pass first. The refusal is an ICMP "administratively
 # prohibited", so a blocked connect fails at once with EHOSTUNREACH instead of hanging, and the counters say what was tried.
 #
-# Settings (/etc/pipe-worker-egress.env): EGRESS_ALLOW — private CIDRs that may still be reached, space-separated (default none).
+# Settings (/etc/pipe-worker-egress.env, read by the script itself; EGRESS_ENV names another file): EGRESS_ALLOW — private CIDRs that may still be reached, space-separated (default none).
 # EGRESS_SUBNET / EGRESS_IFACE — the network the workers are on (default: Docker's `bridge`, docker0). EGRESS_WAIT — seconds `apply` waits
 # for Docker's DOCKER-USER chain (the unit sets 60: at boot Docker may still be starting). Tests: IPTABLES (the command).
 set -uo pipefail
+
+# The settings file is read here, not only by the unit: the board agent runs `check` on its own and must judge by the same settings.
+[ -r "${EGRESS_ENV:-/etc/pipe-worker-egress.env}" ] && . "${EGRESS_ENV:-/etc/pipe-worker-egress.env}"
 
 IPT="${IPTABLES:-iptables}"
 CHAIN="${EGRESS_CHAIN:-PIPE-WORKER-EGRESS}"

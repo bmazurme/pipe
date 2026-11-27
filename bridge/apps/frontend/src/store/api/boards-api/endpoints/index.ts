@@ -18,6 +18,8 @@ export interface BoardHealth {
   sshAuthorizedKeys?: number;
   sshdActive?: boolean;
   workers?: BoardWorker[];
+  /** Whether the filter that keeps worker containers off the home network is in place (agent v5+, boards with workers only). */
+  workerEgress?: boolean;
 }
 
 /** A worker container (pipe-worker-pi-…) the board's agent found, with the image it runs. */

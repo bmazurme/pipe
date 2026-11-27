@@ -21,6 +21,8 @@ export interface DriftBoard {
   online: boolean;
   outdatedScripts: number;
   workers: BoardWorker[];
+  /** Said by the agent (v5+) on boards that run workers; undefined = an agent that does not say, which is not a finding. */
+  workerEgress?: boolean;
   workerLast: {
     status: string;
     result: string | null;
@@ -97,6 +99,14 @@ function boardItems(board: DriftBoard, now: Date): DriftItem[] {
       'scripts',
       'warn',
       `скрипты на плате отстают от main (${board.outdatedScripts})`,
+    );
+  }
+
+  if (board.workers.length > 0 && board.workerEgress === false) {
+    add(
+      'worker-egress',
+      'warn',
+      'фильтр домашней сети для воркеров не включён — контейнер может ходить в LAN и на саму плату (S1, infra/worker-egress)',
     );
   }
 

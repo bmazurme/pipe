@@ -118,6 +118,11 @@ export class BoardHealthDto {
   @ValidateNested({ each: true })
   @Type(() => BoardWorkerDto)
   workers?: BoardWorkerDto[];
+
+  // Whether infra/worker-egress is applied on this board (agent version 5+, only boards that run workers).
+  @IsOptional()
+  @IsBoolean()
+  workerEgress?: boolean;
 }
 
 // What a board's agent posts about itself.

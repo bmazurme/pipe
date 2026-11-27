@@ -46,7 +46,7 @@ if op == "-vnxL":
 sys.exit(2)
 PY
 chmod +x "$T/bin/iptables"
-export FAKE_IPT="$T/ipt.json" IPTABLES="$T/bin/iptables" PATH="$T/bin:$PATH" EGRESS_SUBNET=172.17.0.0/16 EGRESS_IFACE=docker0
+export EGRESS_ENV=/nonexistent FAKE_IPT="$T/ipt.json" IPTABLES="$T/bin/iptables" PATH="$T/bin:$PATH" EGRESS_SUBNET=172.17.0.0/16 EGRESS_IFACE=docker0
 
 run() { bash "$SCRIPT" "$@" 2>&1; }
 rules() { python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))[sys.argv[2]]))' "$FAKE_IPT" "$1"; }
@@ -90,6 +90,13 @@ EGRESS_ALLOW="192.168.50.5/32" run check >/dev/null; check "allow: check agrees 
 run check >/dev/null; [ $? -eq 1 ]; check "allow: check says no when the settings differ from what is installed" $?
 run apply >/dev/null
 rules PIPE-WORKER-EGRESS | grep -q -- '192.168.50.5'; [ $? -ne 0 ]; check "allow: dropping the setting drops the exception" $?
+
+echo "# the settings file"
+printf 'EGRESS_ALLOW="192.168.50.9/32"\n' > "$T/env"
+EGRESS_ENV="$T/env" run apply >/dev/null
+rules PIPE-WORKER-EGRESS | grep -q -- '-d 192.168.50.9/32 -j RETURN'; check "env file: the script reads its own settings file" $?
+EGRESS_ENV="$T/env" run check >/dev/null; check "env file: check, run without the unit, agrees with what the unit installed" $?
+run apply >/dev/null
 
 echo "# status"
 out="$(run status)"
