@@ -190,9 +190,8 @@ describe('the image', () => {
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf-8');
 
   it('allows exactly the wrapper the worker runs, as the same user', () => {
-    const rule = new RegExp(`pipe-worker ALL=\\(pipe-runner\\) NOPASSWD:SETENV: ${VERIFY_WRAPPER.replace(/\//g, '\\/')}`);
-
-    assert.match(dockerfile, rule);
+    // A plain substring, not a pattern built from a path (its dots would be wildcards, and escaping them by hand is how that goes wrong).
+    assert.ok(dockerfile.includes(`pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: ${VERIFY_WRAPPER}`));
   });
 
   it('installs the wrapper root-owned, so the model cannot rewrite what runs with its rights', () => {
