@@ -123,3 +123,12 @@
 .proposalMenu {
   display: inline-flex;
 }
+
+.usdField {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.usdInput {
+  width: 100px;
+}

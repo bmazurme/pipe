@@ -17,6 +17,7 @@ import { StartAnalysisDto } from './dto/improve.dto';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveQualityService } from './improve-quality.service';
 import { ImproveController } from './improve.controller';
+import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
@@ -36,10 +37,12 @@ describe('ImproveController', () => {
     saveSettings: jest.Mock;
     getFilingLimits: jest.Mock;
     saveFilingLimits: jest.Mock;
+    saveEscalation: jest.Mock;
   };
   let controller: ImproveController;
   let contexts: { findOwned: jest.Mock };
   let quality: { summary: jest.Mock; sync: jest.Mock };
+  let escalation: { spend: jest.Mock };
 
   beforeEach(() => {
     contexts = { findOwned: jest.fn().mockResolvedValue({ id: 5 }) };
@@ -48,6 +51,9 @@ describe('ImproveController', () => {
       startRun: jest.fn().mockResolvedValue({ id: 2 }),
       startMany: jest.fn().mockResolvedValue({ started: [], skipped: [] }),
       startItems: jest.fn().mockResolvedValue({ id: 3 }),
+    };
+    escalation = {
+      spend: jest.fn().mockResolvedValue({ taskUsd: 0, dayUsd: 1.5 }),
     };
     quality = {
       summary: jest.fn().mockResolvedValue({ days: 90 }),
@@ -61,6 +67,11 @@ describe('ImproveController', () => {
       }),
       getFilingLimits: jest.fn().mockResolvedValue(LIMITS),
       saveFilingLimits: jest.fn().mockResolvedValue(LIMITS),
+      saveEscalation: jest.fn().mockResolvedValue({
+        enabled: false,
+        capTaskUsd: 5,
+        capDayUsd: 20,
+      }),
     };
     // schedules live in their own service now (#287); none of the flows under test here touches them
     controller = new ImproveController(
@@ -70,6 +81,7 @@ describe('ImproveController', () => {
       {} as unknown as ImproveIssueFilingService,
       contexts as unknown as ContextService,
       quality as unknown as ImproveQualityService,
+      escalation as unknown as ImproveEscalationService,
     );
   });
 
@@ -218,8 +230,28 @@ describe('ImproveController', () => {
         autoRepairCi: true,
         autoRedoConflicts: false,
         clarifyBeforeRun: 'off',
+        escalateOnFailure: false,
+        escalationCapTaskUsd: 5,
+        escalationCapDayUsd: 20,
+        escalationSpentDayUsd: 1.5,
         ...LIMITS,
       });
+    });
+
+    it('shows the escalation switch and limits that were saved', async () => {
+      autoStart.getSettings.mockResolvedValue({
+        escalateOnFailure: true,
+        escalationCapTaskUsd: 3,
+        escalationCapDayUsd: 9,
+      });
+
+      await expect(controller.settings(user)).resolves.toEqual(
+        expect.objectContaining({
+          escalateOnFailure: true,
+          escalationCapTaskUsd: 3,
+          escalationCapDayUsd: 9,
+        }),
+      );
     });
   });
 
@@ -254,6 +286,23 @@ describe('ImproveController', () => {
         minValue: undefined,
         maxOpenPerCategory: undefined,
         dailyIssueCap: 2,
+      });
+    });
+
+    it('passes the escalation switch and limits on, only the ones sent', async () => {
+      autoStart.saveEscalation.mockResolvedValue({
+        enabled: true,
+        capTaskUsd: 5,
+        capDayUsd: 20,
+      });
+
+      await expect(
+        controller.saveSettings({ escalateOnFailure: true }, user),
+      ).resolves.toEqual(expect.objectContaining({ escalateOnFailure: true }));
+      expect(autoStart.saveEscalation).toHaveBeenCalledWith(7, {
+        enabled: true,
+        capTaskUsd: undefined,
+        capDayUsd: undefined,
       });
     });
 

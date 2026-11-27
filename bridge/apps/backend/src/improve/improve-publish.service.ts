@@ -160,6 +160,8 @@ export class ImprovePublishService {
         } else if (decision.action === 'fail') {
           await this.finish(run, ImproveRunStatus.Failed, {
             error: `${decision.reason}. Результат сохранён: «Повторить публикацию» откроет PR как есть`,
+            // The model's own work did not pass the check twice: a stronger one may (A9).
+            failureCause: 'task',
           });
           await this.notifier.send(
             `🔴 Задача #${run.issueNumber}: ${decision.reason}. PR не открыт; результат сохранён — «Повторить публикацию» откроет его как есть`,
@@ -368,7 +370,13 @@ export class ImprovePublishService {
     patch: Partial<
       Pick<
         ImproveRun,
-        'error' | 'note' | 'branch' | 'prNumber' | 'prUrl' | 'result'
+        | 'error'
+        | 'note'
+        | 'branch'
+        | 'prNumber'
+        | 'prUrl'
+        | 'result'
+        | 'failureCause'
       >
     >,
   ): Promise<void> {

@@ -85,7 +85,9 @@ function taskKeyOf(sourceFile: { id: number; taskKey: string | null }): string {
 export type JobStatusRow = Pick<
   Job,
   'id' | 'userId' | 'status' | 'resultFileId' | 'errorMessage'
->;
+> &
+  // Read by findStatuses only (A9 tells a task failure from a lost worker with it).
+  Partial<Pick<Job, 'failureKind'>>;
 
 // What a Claude run that Anthropic refused prints (e.g. "Failed to authenticate. API Error: 403 Request not allowed").
 // Also covers an organization that has disabled Claude subscription access.
@@ -666,7 +668,14 @@ export class WorkerService implements OnModuleInit {
 
     return this.jobRepository.find({
       where: { id: In(ids) },
-      select: ['id', 'userId', 'status', 'resultFileId', 'errorMessage'],
+      select: [
+        'id',
+        'userId',
+        'status',
+        'resultFileId',
+        'errorMessage',
+        'failureKind',
+      ],
     });
   }
 

@@ -444,6 +444,44 @@ describe('ImproveService.advanceOne', () => {
     expect(cancelledRun.status).toBe(ImproveRunStatus.Cancelled);
   });
 
+  describe("A9: which failures are the task's", () => {
+    const failWith = async (job: Record<string, unknown>) => {
+      const { service } = setup();
+      const failedRun = run();
+
+      await service.advanceOne(
+        failedRun as never,
+        { userId: 3, status: 'failed', ...job } as never,
+      );
+
+      return failedRun as { failureCause?: string | null };
+    };
+
+    it('marks a job that failed on its own as a task failure, for the escalation sweep', async () => {
+      expect((await failWith({ errorMessage: 'timed out' })).failureCause).toBe(
+        'task',
+      );
+    });
+
+    it("does not for a lost worker, a provider's bad moment, or a refusal of the account", async () => {
+      expect(
+        (await failWith({ errorMessage: 'x', failureKind: 'lost' }))
+          .failureCause,
+      ).toBeNull();
+      expect(
+        (
+          await failWith({
+            errorMessage: 'API Error: 529 {"type":"overloaded_error"}',
+          })
+        ).failureCause,
+      ).toBeNull();
+      expect(
+        (await failWith({ errorMessage: 'Claude usage limit reached' }))
+          .failureCause,
+      ).toBeNull();
+    });
+  });
+
   it('moves straight onto the auto-retried job without failing the run', async () => {
     const { service, runs, workers } = setup();
     workers.findRetriesOf.mockResolvedValue(

@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -268,6 +269,24 @@ export class SaveSettingsDto {
   @IsOptional()
   @IsIn(['off', 'costly', 'always'])
   clarifyBeforeRun?: 'off' | 'costly' | 'always';
+
+  // A9: when a run on a cheap model fails, or CI stays red after the automatic repairs, try once more on the model a step up.
+  @IsOptional()
+  @IsBoolean()
+  escalateOnFailure?: boolean;
+
+  // A9: no step up for a task that has already cost this much (USD, all its runs), nor while the last 24 hours of Improve runs have.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000)
+  escalationCapTaskUsd?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(10000)
+  escalationCapDayUsd?: number;
 
   // The brake on automatic issue filing (improve-throttle.ts). A missing field keeps what is stored.
   @IsOptional()

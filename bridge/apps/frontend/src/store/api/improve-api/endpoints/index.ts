@@ -27,6 +27,14 @@ export interface ImproveSettings {
   autoRedoConflicts: boolean;
   /** A6: read the task with a cheap model before the run and wait for the owner's answers to what is blocking. */
   clarifyBeforeRun: 'off' | 'costly' | 'always';
+  /** A9: when a run on a cheap model fails, or CI stays red after the automatic repairs, try once more on the model a step up. */
+  escalateOnFailure: boolean;
+  /** A9: no step up for a task that has already cost this much (USD, all its runs)… */
+  escalationCapTaskUsd: number;
+  /** …nor while the Improve runs of the last 24 hours have cost this much in all. */
+  escalationCapDayUsd: number;
+  /** What the last 24 hours of Improve runs have cost so far (a floor: a job that reported no cost counts for nothing). */
+  escalationSpentDayUsd: number;
   /** The brake on automatic issue filing: proposals worth less than this (1–5) are not filed. */
   minValue: number;
   /** Open issues of one direction at which that direction waits. */
@@ -80,7 +88,9 @@ export interface ImproveRun {
   model: string;
   /** Set on an 'auto' issue run once the router has chosen: the model and why, in words. */
   routing?: { model: string; source: 'rule' | 'classifier' | 'fallback' | 'executor'; reason: string; tier?: number; needsGenerated?: boolean; rule?: string } | null;
-  trigger: 'manual' | 'schedule' | 'ci' | 'chat';
+  trigger: 'manual' | 'schedule' | 'ci' | 'chat' | 'conflict' | 'escalation';
+  /** A9: set on a run that is the one more attempt a step up, after this run. */
+  escalatedFromRunId?: number | null;
   scheduleId: number | null;
   status: ImproveRunStatus;
   jobId: number | null;
@@ -171,9 +181,24 @@ export interface QualityGroup extends QualityFigures {
   key: string;
 }
 
+/** A9: does the ladder pay — the pull requests that needed a step up, against starting on the stronger model straight away. */
+export interface EscalationFigures {
+  prs: number;
+  merged: number;
+  closed: number;
+  open: number;
+  costUsd: number | null;
+  costPerMergedUsd: number | null;
+  directCostPerMergedUsd: number | null;
+  directMerged: number;
+  started: number;
+  endedWithoutPr: number;
+}
+
 export interface QualityView {
   days: number;
   total: QualityFigures;
+  escalation: EscalationFigures;
   byModel: QualityGroup[];
   byTier: QualityGroup[];
 }

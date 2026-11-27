@@ -24,9 +24,12 @@ const figures = (over: object = {}) => ({
   ...over,
 });
 
+const NO_ESCALATION = { prs: 0, merged: 0, closed: 0, open: 0, costUsd: null, costPerMergedUsd: null, directCostPerMergedUsd: null, directMerged: 0, started: 0, endedWithoutPr: 0 };
+
 const VIEW = {
   days: 90,
   total: figures(),
+  escalation: NO_ESCALATION,
   byModel: [
     { key: 'haiku', ...figures({ opened: 6, merged: 5, firstGreenRate: 0.8 }) },
     { key: 'sonnet', ...figures({ opened: 4, merged: 3, firstGreenRate: 0.5, medianHoursToMerge: 3.25 }) },
@@ -133,5 +136,44 @@ describe('QualityTab', () => {
     renderTab();
 
     expect(await screen.findByText(/boom|Не удалось загрузить показатели качества/)).toBeTruthy();
+  });
+
+  describe('the ladder of models (A9)', () => {
+    const withEscalation = (escalation: object) => ({ ...VIEW, escalation: { ...NO_ESCALATION, ...escalation } });
+
+    it('shows nothing about it until there was a step up', async () => {
+      stub(VIEW);
+      renderTab();
+
+      await screen.findByText('Качество помощника');
+      await screen.findByText('По моделям');
+      expect(screen.queryByText('Лестница моделей')).toBeNull();
+    });
+
+    it('sets the cost of a step up against starting on the strong model, and says when it is too early to tell', async () => {
+      stub(withEscalation({ started: 3, prs: 2, merged: 2, costPerMergedUsd: 0.9, directCostPerMergedUsd: 0.8, directMerged: 4 }));
+      renderTab();
+
+      expect(await screen.findByText('Лестница моделей')).toBeInTheDocument();
+      expect(tile('Эскалаций запущено')).toBe('3');
+      expect(tile('PR после эскалации / влито')).toBe('2 / 2');
+      expect(tile('За влитый (с эскалацией)')).toBe('$0.90');
+      expect(tile('За влитый (сразу на сильной)')).toBe('$0.80');
+      expect(screen.getByText(/мало, чтобы сравнивать/)).toBeInTheDocument();
+    });
+
+    it('says the ladder saves when it does, and when it does not', async () => {
+      stub(withEscalation({ started: 6, prs: 6, merged: 6, costPerMergedUsd: 0.5, directCostPerMergedUsd: 0.8, directMerged: 4 }));
+      const { unmount } = renderTab();
+
+      expect(await screen.findByText(/выходит дешевле/)).toBeInTheDocument();
+      unmount();
+      store.dispatch(improveApi.util.resetApiState());
+
+      stub(withEscalation({ started: 6, prs: 6, merged: 6, costPerMergedUsd: 1.1, directCostPerMergedUsd: 0.8, directMerged: 4 }));
+      renderTab();
+
+      expect(await screen.findByText(/лестница здесь не экономит/)).toBeInTheDocument();
+    });
   });
 });

@@ -3,6 +3,7 @@
 // prompt, a model or the router is a guess (A4 builds on them).
 
 import type { FirstCi, OutcomeState } from './entities/improve-outcome.entity';
+import { nextModel } from './escalation';
 
 export interface OutcomeRow {
   prNumber: number;
@@ -15,6 +16,8 @@ export interface OutcomeRow {
   openedAt: Date;
   mergedAt: Date | null;
   reverted: boolean;
+  /** A9: the model the work started on when it needed one more attempt a step up (the pull request, or its CI repairs, ended on the next one); null when it never did. */
+  escalatedFrom?: string | null;
 }
 
 export interface QualityFigures {
@@ -42,9 +45,29 @@ export interface QualityGroup extends QualityFigures {
   key: string;
 }
 
+// A9 — does the ladder pay? The pull requests that needed one more attempt a step up, against the ones that were started on that stronger model straight away.
+export interface EscalationFigures {
+  /** Pull requests that needed the step up. */
+  prs: number;
+  merged: number;
+  closed: number;
+  open: number;
+  /** All they cost: the cheap attempts and the step up. Null when none of them reported a cost. */
+  costUsd: number | null;
+  /** The same, per merged pull request. */
+  costPerMergedUsd: number | null;
+  /** What a pull request started straight on that stronger model cost per merged one, and how many merged ones that is based on. */
+  directCostPerMergedUsd: number | null;
+  directMerged: number;
+  /** Runs started as a step up in the period, and how many of the issue ones ended without a pull request (filled in by the service from the runs). */
+  started: number;
+  endedWithoutPr: number;
+}
+
 export interface QualityView {
   days: number;
   total: QualityFigures;
+  escalation: EscalationFigures;
   byModel: QualityGroup[];
   byTier: QualityGroup[];
 }
@@ -163,6 +186,41 @@ function groupBy(
     .map(([key, list]) => ({ key, ...figures(list) }));
 }
 
+export function escalationFigures(rows: OutcomeRow[]): EscalationFigures {
+  const escalated = rows.filter((row) => row.escalatedFrom);
+  const stronger = new Set(
+    escalated.flatMap((row) => {
+      const to = nextModel(row.escalatedFrom as string);
+
+      return to ? [to] : [];
+    }),
+  );
+  const direct = rows.filter(
+    (row) => !row.escalatedFrom && stronger.has(row.model),
+  );
+  const mine = figures(escalated);
+  const theirs = figures(direct);
+  const costs = escalated.filter((row) => row.costUsd !== null);
+
+  return {
+    prs: escalated.length,
+    merged: mine.merged,
+    closed: mine.closed,
+    open: mine.open,
+    costUsd: costs.length
+      ? round(
+          costs.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+          3,
+        )
+      : null,
+    costPerMergedUsd: mine.costPerMergedUsd,
+    directCostPerMergedUsd: theirs.costPerMergedUsd,
+    directMerged: theirs.merged,
+    started: 0,
+    endedWithoutPr: 0,
+  };
+}
+
 export function summarizeQuality(
   rows: OutcomeRow[],
   days: number,
@@ -174,6 +232,7 @@ export function summarizeQuality(
   return {
     days,
     total: figures(inPeriod),
+    escalation: escalationFigures(inPeriod),
     byModel: groupBy(
       inPeriod,
       (row) => row.model,

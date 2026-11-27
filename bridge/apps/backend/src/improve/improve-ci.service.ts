@@ -17,6 +17,8 @@ import {
   ImproveRunStatus,
 } from './entities/improve-run.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
+import { escalationNote, isStepUp } from './escalation';
+import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveService } from './improve.service';
 import {
   formatFailures,
@@ -43,6 +45,8 @@ export class ImproveCiService {
     private readonly github: GithubApiService,
     private readonly improve: ImproveService,
     private readonly notifier: NotifyService,
+    // A9: the one more repair on a stronger model; absent in tests that do not exercise it.
+    @Optional() private readonly escalation?: ImproveEscalationService,
     @Optional() private readonly control?: LoopControlService,
   ) {}
 
@@ -146,9 +150,50 @@ export class ImproveCiService {
 
     if (repairs.length >= MAX_REPAIRS_PER_PR) {
       if (!this.hasHandled(parent, pull.headSha, 'exhausted')) {
+        // A9: before asking a person, one more repair on the model a step up (when switched on, once per pull request, within the cost limits).
+        const step = await this.escalation?.forRepair(parent, repairs);
+
+        if (this.escalation && step?.decision.action === 'escalate') {
+          const failed = await this.github.failedChecks(pull.headSha);
+
+          if (failed.length > 0) {
+            try {
+              const run = await this.improve.startRepair(
+                parent,
+                {
+                  number: prNumber,
+                  headSha: pull.headSha,
+                  branch: parent.branch as string,
+                },
+                formatFailures(failed),
+                {
+                  model: step.decision.to,
+                  fromRunId: step.lastRepairId,
+                  note: escalationNote(step.from, step.decision.to, 'ci'),
+                },
+              );
+
+              await this.markHandled(parent, pull.headSha, 'exhausted');
+              await this.notifier.send(
+                `⬆️ PR #${prNumber}: CI красный после ${MAX_REPAIRS_PER_PR} автоисправлений на ${step.from} — ещё одна попытка на ${step.decision.to} (запуск #${run.id})\n${parent.prUrl ?? ''}`.trim(),
+              );
+
+              return 'escalated';
+            } catch (error) {
+              if (error instanceof ConflictException) return 'repair-running';
+              throw error;
+            }
+          }
+        }
+
         await this.markHandled(parent, pull.headSha, 'exhausted');
+
+        const refusal = step
+          ? this.escalation?.describeRefusal(step.decision, step.settings)
+          : null;
+
         await this.notifier.send(
-          `🔴 PR #${prNumber}: CI красный, автоисправления исчерпаны (${MAX_REPAIRS_PER_PR}) — нужен человек\n${parent.prUrl ?? ''}`.trim(),
+          `🔴 PR #${prNumber}: CI красный, автоисправления исчерпаны (${MAX_REPAIRS_PER_PR}${repairs.some(isStepUp) ? ', в том числе на ступень выше' : ''}) — нужен человек${refusal ? `; ${refusal}` : ''}\n${parent.prUrl ?? ''}`.trim(),
         );
       }
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { GithubApiService } from '../loop/github-api.service';
 import { Job } from '../worker/entities/job.entity';
@@ -9,7 +9,8 @@ import {
   type FirstCi,
   ImproveOutcome,
 } from './entities/improve-outcome.entity';
-import { ImproveRun } from './entities/improve-run.entity';
+import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
+import { isStepUp } from './escalation';
 import {
   needsRefresh,
   type OutcomeRow,
@@ -55,8 +56,30 @@ export class ImproveQualityService {
     }
 
     const rows = await this.outcomes.find({ where: { userId } });
+    const view = summarizeQuality(rows as OutcomeRow[], days);
 
-    return summarizeQuality(rows as OutcomeRow[], days);
+    // The step-ups that did not end in a pull request leave no outcome row, so they are counted from the runs.
+    const since = new Date(Date.now() - days * 24 * 60 * 60_000);
+    const stepUps = await this.runs.find({
+      where: {
+        userId,
+        escalatedFromRunId: Not(IsNull()),
+        createdAt: MoreThan(since),
+      },
+    });
+
+    view.escalation.started = stepUps.length;
+    view.escalation.endedWithoutPr = stepUps.filter(
+      (run) =>
+        run.kind === 'issue' &&
+        [
+          ImproveRunStatus.Failed,
+          ImproveRunStatus.NoChanges,
+          ImproveRunStatus.Cancelled,
+        ].includes(run.status),
+    ).length;
+
+    return view;
   }
 
   @Interval(SYNC_EVERY_MS)
@@ -170,7 +193,17 @@ export class ImproveQualityService {
       firstCi = state === 'pending' ? null : state;
     }
 
-    const jobIds = runs
+    // A9: the run this work was the step up after. For a failed issue run it has no pull request, so it is not among `runs`, but what it cost is
+    // part of what this pull request cost.
+    const stepUp = runs.find(isStepUp);
+    const origin = stepUp
+      ? (runs.find((run) => run.id === stepUp.escalatedFromRunId) ??
+        (await this.runs.findOne({
+          where: { id: stepUp.escalatedFromRunId as number },
+        })))
+      : null;
+    const costed = origin && !runs.includes(origin) ? [...runs, origin] : runs;
+    const jobIds = costed
       .map((run) => run.jobId)
       .filter((id): id is number => id !== null);
     const jobs = jobIds.length
@@ -189,9 +222,12 @@ export class ImproveQualityService {
         tier: root.routing?.tier ?? null,
         state: times.merged ? 'merged' : times.open ? 'open' : 'closed',
         firstCi,
+        // The step-up repair is counted as an escalation, not as one more automatic repair.
         ciRepairs: runs.filter(
-          (run) => run.kind === 'repair' && run.trigger === 'ci',
+          (run) =>
+            run.kind === 'repair' && run.trigger === 'ci' && !isStepUp(run),
         ).length,
+        escalatedFrom: origin?.model ?? null,
         costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
         openedAt: new Date(times.createdAt),
         mergedAt: times.mergedAt ? new Date(times.mergedAt) : null,

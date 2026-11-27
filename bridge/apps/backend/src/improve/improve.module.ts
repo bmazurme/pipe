@@ -21,6 +21,7 @@ import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveCiService } from './improve-ci.service';
+import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveQualityService } from './improve-quality.service';
 import { ImproveController } from './improve.controller';
 import { ImproveService } from './improve.service';
@@ -48,6 +49,7 @@ import { ImproveService } from './improve.service';
   providers: [
     ImproveService,
     ImproveCiService,
+    ImproveEscalationService,
     ImproveScheduleService,
     ImproveAutoStartService,
     ImproveIssueFilingService,

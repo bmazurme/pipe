@@ -10498,6 +10498,14 @@
           "gateRetries": {
             "type": "number"
           },
+          "escalatedFromRunId": {
+            "type": "number",
+            "nullable": true
+          },
+          "failureCause": {
+            "type": "object",
+            "nullable": true
+          },
           "finishedAt": {
             "format": "date-time",
             "type": "string",
@@ -10537,6 +10545,8 @@
           "ciHandled",
           "contextId",
           "gateRetries",
+          "escalatedFromRunId",
+          "failureCause",
           "finishedAt",
           "id",
           "createdAt",
@@ -10913,6 +10923,19 @@
               "costly",
               "always"
             ]
+          },
+          "escalateOnFailure": {
+            "type": "boolean"
+          },
+          "escalationCapTaskUsd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "escalationCapDayUsd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
           },
           "minValue": {
             "type": "number",

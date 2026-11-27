@@ -4488,6 +4488,8 @@ export interface components {
             };
             contextId: number | null;
             gateRetries: number;
+            escalatedFromRunId: number | null;
+            failureCause: Record<string, never> | null;
             /** Format: date-time */
             finishedAt: string | null;
             id: number;
@@ -4584,6 +4586,9 @@ export interface components {
             autoRedoConflicts?: boolean;
             /** @enum {string} */
             clarifyBeforeRun?: "off" | "costly" | "always";
+            escalateOnFailure?: boolean;
+            escalationCapTaskUsd?: number;
+            escalationCapDayUsd?: number;
             minValue?: number;
             maxOpenPerCategory?: number;
             dailyIssueCap?: number;

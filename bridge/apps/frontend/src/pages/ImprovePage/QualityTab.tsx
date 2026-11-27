@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChartAreaStackedNormalized } from '@gravity-ui/icons';
 import { Alert, Button, Card, Select, Skeleton, Text } from '@gravity-ui/uikit';
 
-import { getErrorMessage, type QualityFigures, type QualityGroup, useGetImproveQualityQuery, useRefreshImproveQualityMutation } from '../../store/api';
+import { type EscalationFigures, getErrorMessage, type QualityFigures, type QualityGroup, useGetImproveQualityQuery, useRefreshImproveQualityMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
 import styles from './QualityTab.module.css';
@@ -96,6 +96,45 @@ function Tiles({ total }: { total: QualityFigures }) {
   );
 }
 
+// A9: does the ladder of models pay. Few step ups say little, and the page says so.
+const ENOUGH_TO_COMPARE = 5;
+
+function verdict(escalation: EscalationFigures): string | null {
+  if (escalation.costPerMergedUsd === null || escalation.directCostPerMergedUsd === null) return null;
+  if (escalation.merged < ENOUGH_TO_COMPARE) return `Влитых после эскалации пока ${escalation.merged} — мало, чтобы сравнивать.`;
+
+  return escalation.costPerMergedUsd < escalation.directCostPerMergedUsd
+    ? 'Начинать дешёвой моделью и подниматься — выходит дешевле, чем сразу на сильной.'
+    : 'Сразу на сильной модели выходит не дороже: лестница здесь не экономит.';
+}
+
+function Escalations({ escalation }: { escalation: EscalationFigures }) {
+  if (escalation.started === 0 && escalation.prs === 0) return null;
+
+  const text = verdict(escalation);
+
+  return (
+    <div className={styles.block}>
+      <Text variant="subheader-1">Лестница моделей</Text>
+      <div className={styles.tiles}>
+        <Tile label="Эскалаций запущено" value={String(escalation.started)} hint={`Из задач без PR после эскалации закончились ничем: ${escalation.endedWithoutPr}`} />
+        <Tile label="PR после эскалации / влито" value={`${escalation.prs} / ${escalation.merged}`} hint={`Закрыто без слияния: ${escalation.closed}; ещё открыто: ${escalation.open}`} />
+        <Tile label="За влитый (с эскалацией)" value={usd(escalation.costPerMergedUsd)} hint="Всё потраченное на такие PR — и дешёвые попытки, и ступень выше — делённое на число влитых" />
+        <Tile
+          label="За влитый (сразу на сильной)"
+          value={usd(escalation.directCostPerMergedUsd)}
+          hint={`Для сравнения: PR, начатые сразу на той же модели, на которую поднимались. Влитых таких: ${escalation.directMerged}`}
+        />
+      </div>
+      {text && (
+        <Text color="secondary" variant="caption-2">
+          {text}
+        </Text>
+      )}
+    </div>
+  );
+}
+
 // A1: how good the assistant is, in numbers. These are the figures any change of a prompt, a model or the router is judged by (A4).
 export function QualityTab() {
   const [days, setDays] = useState('90');
@@ -133,6 +172,7 @@ export function QualityTab() {
       ) : (
         <>
           <Tiles total={data.total} />
+          <Escalations escalation={data.escalation} />
           <Table title="По моделям" firstColumn="Модель" groups={data.byModel} label={(key) => key} />
           <Table title="По ярусам" firstColumn="Ярус" groups={data.byTier} label={tierLabel} />
           <Text color="secondary" variant="caption-2">

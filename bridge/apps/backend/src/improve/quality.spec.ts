@@ -1,4 +1,5 @@
 import {
+  escalationFigures,
   figures,
   needsRefresh,
   type OutcomeRow,
@@ -168,5 +169,83 @@ describe('summarizeQuality', () => {
       0,
     );
     expect(view.byTier.map((g) => g.key)).toEqual(['1', '3', 'none']);
+  });
+});
+
+describe('escalationFigures', () => {
+  it('is empty when nothing escalated', () => {
+    expect(escalationFigures([row()])).toMatchObject({
+      prs: 0,
+      merged: 0,
+      costUsd: null,
+      costPerMergedUsd: null,
+      directCostPerMergedUsd: null,
+    });
+  });
+
+  it('sets what the step ups cost per merged pull request against starting on the stronger model straight away', () => {
+    const rows = [
+      // two pull requests that started on haiku and needed sonnet: one merged ($0.9 in all), one closed ($0.3)
+      row({
+        prNumber: 1,
+        model: 'sonnet',
+        escalatedFrom: 'haiku',
+        costUsd: 0.9,
+      }),
+      row({
+        prNumber: 2,
+        model: 'sonnet',
+        escalatedFrom: 'haiku',
+        costUsd: 0.3,
+        state: 'closed',
+        mergedAt: null,
+      }),
+      // started on sonnet directly: $0.8 each, both merged
+      row({ prNumber: 3, model: 'sonnet', costUsd: 0.8 }),
+      row({ prNumber: 4, model: 'sonnet', costUsd: 0.8 }),
+      // another model, not the comparison
+      row({ prNumber: 5, model: 'opus', costUsd: 9 }),
+    ];
+
+    expect(escalationFigures(rows)).toMatchObject({
+      prs: 2,
+      merged: 1,
+      closed: 1,
+      costUsd: 1.2,
+      // the closed one is a cost with nothing to show for it
+      costPerMergedUsd: 1.2,
+      directCostPerMergedUsd: 0.8,
+      directMerged: 2,
+    });
+  });
+
+  it('compares a step up to opus with opus runs, not with sonnet ones', () => {
+    const rows = [
+      row({ prNumber: 1, model: 'opus', escalatedFrom: 'sonnet', costUsd: 2 }),
+      row({ prNumber: 2, model: 'opus', costUsd: 1.5 }),
+      row({ prNumber: 3, model: 'sonnet', costUsd: 0.1 }),
+    ];
+
+    expect(escalationFigures(rows)).toMatchObject({
+      prs: 1,
+      directCostPerMergedUsd: 1.5,
+      directMerged: 1,
+    });
+  });
+
+  it('is part of the summary and follows its period', () => {
+    const inPeriod = row({
+      model: 'sonnet',
+      escalatedFrom: 'haiku',
+      openedAt: hoursAgo(5),
+    });
+    const old = row({
+      prNumber: 2,
+      model: 'sonnet',
+      escalatedFrom: 'haiku',
+      openedAt: hoursAgo(24 * 100),
+    });
+
+    expect(summarizeQuality([inPeriod, old], 30, NOW).escalation.prs).toBe(1);
   });
 });

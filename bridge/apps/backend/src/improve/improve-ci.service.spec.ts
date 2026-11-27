@@ -41,6 +41,7 @@ function setup(
     behind?: number;
     rerun?: number;
     rerunFails?: boolean;
+    escalation?: Record<string, unknown>;
   } = {},
 ) {
   const runs = {
@@ -84,6 +85,7 @@ function setup(
     github as never,
     improve as never,
     notifier as never,
+    over.escalation as never,
   );
 
   return { service, runs, settings, github, improve, notifier };
@@ -186,6 +188,139 @@ describe('ImproveCiService.checkOne', () => {
     expect(notifier.send).toHaveBeenCalledWith(
       expect.stringContaining('автоисправления исчерпаны'),
     );
+  });
+
+  describe('A9: one more repair a step up', () => {
+    const twoRepairs = [
+      { id: 20, baseSha: 'a', model: 'haiku', escalatedFromRunId: null },
+      { id: 21, baseSha: 'b', model: 'haiku', escalatedFromRunId: null },
+    ];
+    const escalation = (decision: unknown, refusal: string | null = null) => ({
+      forRepair: jest.fn().mockResolvedValue({
+        decision,
+        settings: { enabled: true, capTaskUsd: 5, capDayUsd: 20 },
+        from: 'haiku',
+        lastRepairId: 21,
+      }),
+      describeRefusal: jest.fn().mockReturnValue(refusal),
+    });
+
+    it('starts the attempt on the stronger model instead of calling for a person', async () => {
+      const { service, improve, notifier } = setup({
+        repairs: twoRepairs,
+        escalation: escalation({ action: 'escalate', to: 'sonnet' }),
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('escalated');
+      expect(improve.startRepair).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ number: 55, headSha: 'head-1' }),
+        expect.any(String),
+        {
+          model: 'sonnet',
+          fromRunId: 21,
+          note: expect.stringContaining('CI'),
+        },
+      );
+      expect(notifier.send).toHaveBeenCalledTimes(1);
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('на sonnet'),
+      );
+      expect(notifier.send).not.toHaveBeenCalledWith(
+        expect.stringContaining('нужен человек'),
+      );
+    });
+
+    it('does not start it again for the same head commit', async () => {
+      const { service, improve } = setup({
+        repairs: [
+          ...twoRepairs,
+          {
+            id: 22,
+            baseSha: 'head-1',
+            model: 'sonnet',
+            escalatedFromRunId: 21,
+          },
+        ],
+        escalation: escalation({ action: 'escalate', to: 'opus' }),
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('already-tried');
+      expect(improve.startRepair).not.toHaveBeenCalled();
+    });
+
+    it('asks a person once the step up was already taken', async () => {
+      const { service, improve, notifier } = setup({
+        repairs: [
+          ...twoRepairs,
+          { id: 22, baseSha: 'older', model: 'sonnet', escalatedFromRunId: 21 },
+        ],
+        escalation: escalation({ action: 'skip', reason: 'already-escalated' }),
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('exhausted');
+      expect(improve.startRepair).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('в том числе на ступень выше'),
+      );
+    });
+
+    it('says in the alert why it did not go up when the money said no', async () => {
+      const { service, improve, notifier } = setup({
+        repairs: twoRepairs,
+        escalation: escalation(
+          { action: 'skip', reason: 'day-cap' },
+          'на ступень выше не поднимаюсь — за сутки потрачено больше лимита $20.00',
+        ),
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('exhausted');
+      expect(improve.startRepair).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('лимита $20.00'),
+      );
+    });
+
+    it('keeps the plain alert when escalation is switched off', async () => {
+      const { service, notifier } = setup({
+        repairs: twoRepairs,
+        escalation: escalation({ action: 'skip', reason: 'off' }),
+      });
+
+      await service.checkOne(parent as never);
+
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'автоисправления исчерпаны (2) — нужен человек',
+        ),
+      );
+    });
+
+    it('waits for the next tick when another start for the pull request is still handing off', async () => {
+      const { service, improve, notifier } = setup({
+        repairs: twoRepairs,
+        escalation: escalation({ action: 'escalate', to: 'sonnet' }),
+      });
+
+      improve.startRepair.mockRejectedValueOnce(new ConflictException('busy'));
+
+      expect(await service.checkOne(parent as never)).toBe('repair-running');
+      expect(notifier.send).not.toHaveBeenCalled();
+    });
+
+    it('asks a person when there is nothing left to repair (only cancelled runs)', async () => {
+      const { service, improve, notifier } = setup({
+        repairs: twoRepairs,
+        failed: [],
+        escalation: escalation({ action: 'escalate', to: 'sonnet' }),
+      });
+
+      expect(await service.checkOne(parent as never)).toBe('exhausted');
+      expect(improve.startRepair).not.toHaveBeenCalled();
+      expect(notifier.send).toHaveBeenCalledWith(
+        expect.stringContaining('нужен человек'),
+      );
+    });
   });
 
   it('ignores a run that was only cancelled (nothing to repair)', async () => {

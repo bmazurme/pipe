@@ -35,7 +35,9 @@ import {
   StartRunDto,
 } from './dto/improve.dto';
 import { ContextService } from '../context/context.service';
+import { escalationFromSettings, type EscalationSettings } from './escalation';
 import { ImproveAutoStartService } from './improve-auto-start.service';
+import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveQualityService } from './improve-quality.service';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -54,6 +56,7 @@ export class ImproveController {
     private readonly issueFiling: ImproveIssueFilingService,
     private readonly contexts: ContextService,
     private readonly quality: ImproveQualityService,
+    private readonly escalation: ImproveEscalationService,
   ) {}
 
   // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
@@ -330,6 +333,7 @@ export class ImproveController {
       autoRepairCi: settings?.autoRepairCi ?? true,
       autoRedoConflicts: settings?.autoRedoConflicts ?? false,
       clarifyBeforeRun: settings?.clarifyBeforeRun ?? 'off',
+      ...(await this.escalationView(user.id, escalationFromSettings(settings))),
       ...(await this.autoStart.getFilingLimits(user.id)),
     };
   }
@@ -350,6 +354,11 @@ export class ImproveController {
       dto.autoRedoConflicts,
       dto.clarifyBeforeRun,
     );
+    const escalation = await this.autoStart.saveEscalation(user.id, {
+      enabled: dto.escalateOnFailure,
+      capTaskUsd: dto.escalationCapTaskUsd,
+      capDayUsd: dto.escalationCapDayUsd,
+    });
     const limits = await this.autoStart.saveFilingLimits(user.id, {
       minValue: dto.minValue,
       maxOpenPerCategory: dto.maxOpenPerCategory,
@@ -361,7 +370,18 @@ export class ImproveController {
       autoRepairCi: saved.autoRepairCi,
       autoRedoConflicts: saved.autoRedoConflicts,
       clarifyBeforeRun: saved.clarifyBeforeRun,
+      ...(await this.escalationView(user.id, escalation)),
       ...limits,
+    };
+  }
+
+  // A9: the switch, the two limits and what the last 24 hours of Improve runs have cost so far (a floor: a job that reported no cost counts for nothing).
+  private async escalationView(userId: number, settings: EscalationSettings) {
+    return {
+      escalateOnFailure: settings.enabled,
+      escalationCapTaskUsd: settings.capTaskUsd,
+      escalationCapDayUsd: settings.capDayUsd,
+      escalationSpentDayUsd: (await this.escalation.spend(userId, null)).dayUsd,
     };
   }
 }
