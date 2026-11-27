@@ -180,6 +180,15 @@ export class ImproveController {
     return this.improve.startPrMerge(dto.prNumber);
   }
 
+  // A6: a run that waits for the owner's answers starts now, with the answers there are.
+  @Post('runs/:id/continue')
+  continueRun(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.improve.continueRun(id, user.id);
+  }
+
   @Post('runs/:id/cancel')
   cancelRun(
     @Param('id', ParseIntPipe) id: number,
@@ -320,6 +329,7 @@ export class ImproveController {
       autoStartModel: settings?.autoStartModel ?? null,
       autoRepairCi: settings?.autoRepairCi ?? true,
       autoRedoConflicts: settings?.autoRedoConflicts ?? false,
+      clarifyBeforeRun: settings?.clarifyBeforeRun ?? 'off',
       ...(await this.autoStart.getFilingLimits(user.id)),
     };
   }
@@ -338,6 +348,7 @@ export class ImproveController {
         : dto.autoStartModel || null,
       dto.autoRepairCi,
       dto.autoRedoConflicts,
+      dto.clarifyBeforeRun,
     );
     const limits = await this.autoStart.saveFilingLimits(user.id, {
       minValue: dto.minValue,
@@ -349,6 +360,7 @@ export class ImproveController {
       autoStartModel: saved.autoStartModel,
       autoRepairCi: saved.autoRepairCi,
       autoRedoConflicts: saved.autoRedoConflicts,
+      clarifyBeforeRun: saved.clarifyBeforeRun,
       ...limits,
     };
   }

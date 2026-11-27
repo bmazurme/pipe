@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 
 import { MAX_CONTEXT_LENGTH } from '../context/context.limits';
 import { ContextService } from '../context/context.service';
@@ -85,6 +85,22 @@ export class QuestionsService {
   }
 
   // Cards of one kind: with something still open, or fully resolved (the archive). Newest activity first.
+  // The questions one job reported (A6: the reading before a run), oldest first.
+  async forJob(userId: number, jobId: number): Promise<TaskQuestion[]> {
+    return this.questionRepository.find({
+      where: { userId, jobId },
+      order: { id: 'ASC' },
+    });
+  }
+
+  // The owner went on without answering: what was left open is settled, so the card does not stay as an open task.
+  async resolveForJob(userId: number, jobId: number): Promise<void> {
+    await this.questionRepository.update(
+      { userId, jobId, resolvedAt: IsNull() },
+      { resolvedAt: new Date() },
+    );
+  }
+
   async listCards(
     userId: number,
     archived: boolean,

@@ -7,6 +7,8 @@ export const RUN_STATUS_LABEL: Record<ImproveRunStatus, string> = {
   queued: 'В очереди',
   running: 'Выполняется',
   publishing: 'Открываем PR',
+  clarifying: 'Читаем задачу',
+  awaiting_answer: 'Ждёт ответов',
   pr_open: 'PR открыт',
   pr_updated: 'PR исправлен',
   issue_open: 'Issue открыт',
@@ -21,6 +23,8 @@ export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'suc
   queued: 'normal',
   running: 'info',
   publishing: 'info',
+  clarifying: 'info',
+  awaiting_answer: 'warning',
   pr_open: 'success',
   pr_updated: 'success',
   issue_open: 'success',
@@ -34,7 +38,7 @@ export const RUN_STATUS_THEME: Record<ImproveRunStatus, 'normal' | 'info' | 'suc
 export const FAST_POLL_MS = 5000;
 export const SLOW_POLL_MS = 30000;
 
-export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['preparing', 'queued', 'running', 'publishing'];
+export const ACTIVE_RUN_STATUSES: ImproveRunStatus[] = ['preparing', 'queued', 'running', 'publishing', 'clarifying', 'awaiting_answer'];
 
 export const isActiveRun = (run: Pick<ImproveRun, 'status'> | null | undefined): boolean =>
   Boolean(run) && ACTIVE_RUN_STATUSES.includes((run as ImproveRun).status);

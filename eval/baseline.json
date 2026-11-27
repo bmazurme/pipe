@@ -1,17 +1,18 @@
 {
   "acceptedAt": "2026-11-27",
   "behavior": {
-    "hash": "fcd5669349e36604",
+    "hash": "7bc478dcee601467",
     "files": {
       "CLAUDE.md": "fbebe332a04fb864ec6631ddc8623c730a4e0cd897fb9c66ae7d905307d1e15b",
       "bridge/apps/backend/src/improve/definition-of-done.ts": "02b0667c34d758c7ed494740a1021a71f4f778218d90d2df8ff4e14a5c1d5cfb",
       "bridge/apps/backend/src/improve/verification.ts": "a2e2f83134f919c183190cb1d6c26c73db8e8ec1a882ab11d66db5219917b862",
       "bridge/apps/backend/src/improve/analysis.ts": "7e97b6c5d305e1af9abbc65f72d8437ccc147799a87d0f6acfd74952a6f0fa2e",
+      "bridge/apps/backend/src/improve/clarify.ts": "35174fcf5f733876bae1cd76c08504d5e5bea118a907fbe548666e3f08d34da4",
       "bridge/apps/backend/src/router/router-policy.ts": "038579e6caafc6dfc5cd1dc9c0bcf00eac4b6e4bcf482140b34e1da73e812e1f",
       "bridge/apps/backend/src/router/router-classifier.service.ts": "0844afad5f5d40b439e168bc5dca945fe6e8cf3a3fe83fc799eaff7aeebaf095",
       "worker/src/taskQuestions.ts": "3453a905a3fce8955ac789e82be677683130f90f6f25017ecd5391c5dbe51ce4",
       "worker/src/taskContext.ts": "aca7afe1e6d46d3bd79c42d9433e4c07d950ef57e9f8892f1aa7d865beb48edc",
-      "worker/src/modelRunners/claudeRunner.ts": "fa2923db6f32010eee3ad94908109c13b93be8b78eed4d3ae5934cd70226f657",
+      "worker/src/modelRunners/claudeRunner.ts": "5330da8012a3f623c6717cd2858a7a8f3607ac3d0ff6fcea34ff55e407e2ee84",
       "scripts/verify-changed.mjs": "d9314f97a4a0d1d6c448dd3eb05c7a071d6143de6e5c840fbfb521783c0978ff"
     }
   },

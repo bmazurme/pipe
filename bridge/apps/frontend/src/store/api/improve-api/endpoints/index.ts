@@ -5,6 +5,10 @@ export type ImproveRunStatus =
   | 'queued'
   | 'running'
   | 'publishing'
+  /** A6: a cheap model is reading the task before the run… */
+  | 'clarifying'
+  /** …and found something only the owner can decide: the run waits for the answers. */
+  | 'awaiting_answer'
   | 'pr_open'
   | 'pr_updated'
   // Only ever set by Lab (a worker asked to open a GitHub Issue instead of a pull request); listed here since
@@ -21,6 +25,8 @@ export interface ImproveSettings {
   autoRepairCi: boolean;
   /** Close an Improve PR that conflicts with the base and do its issue again on the current base (once per issue). */
   autoRedoConflicts: boolean;
+  /** A6: read the task with a cheap model before the run and wait for the owner's answers to what is blocking. */
+  clarifyBeforeRun: 'off' | 'costly' | 'always';
   /** The brake on automatic issue filing: proposals worth less than this (1–5) are not filed. */
   minValue: number;
   /** Open issues of one direction at which that direction waits. */
@@ -251,6 +257,12 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось остановить'),
     }),
+    // A6: a run waiting for answers starts now, with the answers there are.
+    continueImproveRun: builder.mutation<ImproveRun, number>({
+      query: (id) => ({ url: `improve/runs/${id}/continue`, method: 'POST' }),
+      invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось запустить'),
+    }),
     retryImprovePublish: builder.mutation<ImproveRun, number>({
       query: (id) => ({ url: `improve/runs/${id}/retry-publish`, method: 'POST' }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
@@ -318,6 +330,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 });
 
 export const {
+  useContinueImproveRunMutation,
   useGetImproveQualityQuery,
   useRefreshImproveQualityMutation,
   useGetLoopControlQuery,

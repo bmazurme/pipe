@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Play, Plus, TrashBin } from '@gravity-ui/icons';
-import { Alert, Button, Card, Icon, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
+import { Alert, Button, Card, Icon, SegmentedRadioGroup, Select, Skeleton, Switch, Text, TextInput } from '@gravity-ui/uikit';
 import { Dialog } from '../../shared/ui/Dialog';
 import { Clock } from '@gravity-ui/icons';
 
@@ -107,6 +107,40 @@ function AutoRepairCard() {
           disabled={isLoading || !data}
           onUpdate={(autoRedoConflicts) => void save({ autoRedoConflicts })}
           content="При конфликте с main закрывать PR и переделывать задачу"
+        />
+      </div>
+    </Card>
+  );
+}
+
+const CLARIFY_OPTIONS = [
+  { value: 'off', content: 'Выключено' },
+  { value: 'costly', content: 'Sonnet/Opus' },
+  { value: 'always', content: 'Все запуски' },
+];
+
+// A6: ask BEFORE the expensive run, not after.
+function ClarifyCard() {
+  const { data } = useGetImproveSettingsQuery();
+  const [save, { isLoading }] = useSaveImproveSettingsMutation();
+
+  return (
+    <Card view="outlined" className={styles.card}>
+      <SectionHeader title="Вопросы до запуска" />
+      <Text color="secondary" variant="body-2">
+        Запуск стоит минут и токенов, а вопрос, возникший в его конце («вы имели в виду A или B?»), значит «выбросить и переделать». Поэтому перед запуском Haiku
+        читает задачу и репозиторий и перечисляет то, что блокирует (не больше трёх вопросов; не то, что видно из репозитория или CLAUDE.md). Если такое есть, запуск ждёт ваших
+        ответов на странице «Вопросы» и стартует сам, когда вы ответите на все — ответы попадают в задачу; можно и «Запустить без ответов». Если ничего не блокирует, запуск идёт как раньше.
+        «Sonnet/Opus» — только когда модель выбрана вручную и это не Haiku; выбор «auto» не читается (его роутер почти всегда отправляет задачу в Haiku).
+      </Text>
+      <div className={styles.toolbar}>
+        <Text variant="body-2">Читать задачу заранее:</Text>
+        <SegmentedRadioGroup
+          size="m"
+          disabled={isLoading || !data}
+          value={data?.clarifyBeforeRun ?? 'off'}
+          onUpdate={(value) => void save({ clarifyBeforeRun: value as 'off' | 'costly' | 'always' })}
+          options={CLARIFY_OPTIONS}
         />
       </div>
     </Card>
@@ -307,6 +341,8 @@ export function SchedulesTab() {
 
       <AutoStartCard />
       <AutoRepairCard />
+
+      <ClarifyCard />
       <FilingLimitsCard />
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)} maxWidth="s" aria-labelledby="schedule-delete-title">

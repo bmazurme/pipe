@@ -110,6 +110,8 @@ export class ImproveHandoffService {
     prepared?: PreparedSnapshot,
     // A saved Context (Context page) the run's worker job carries as background text; the job keeps its own snapshot.
     contextId: number | null = null,
+    // The baseline lets the worker run `verify-changed` on its result; a job that only READS the task (A6) has nothing to verify.
+    withBaseline = true,
   ) {
     // 'auto': the model router picks (a few seconds of Haiku, or none when a rule of the owner's decides by words); a model the owner
     // named passes through, and so does every run that is not an issue run (analysis, repair, chat fix), which always has one.
@@ -143,7 +145,7 @@ export class ImproveHandoffService {
           baseBranch,
         },
         baseline,
-        withBaseline: true,
+        withBaseline,
         fileName,
         taskKey,
         model: chosen,

@@ -33,6 +33,11 @@ export class ImproveSettings {
   @Column({ type: 'boolean', default: false })
   autoRedoConflicts: boolean;
 
+  // A6: before a run, a cheap model reads the task and the repository and lists what is unclear; the run waits for the owner's answers when it
+  // finds something blocking. 'off' (default), 'costly' (a run on an explicitly chosen Sonnet/Opus or another non-Haiku model), 'always'.
+  @Column({ type: 'varchar', length: 8, default: 'off' })
+  clarifyBeforeRun: 'off' | 'costly' | 'always';
+
   // The brake on automatic issue filing (see improve-throttle.ts): proposals below this value (1–5) are not filed.
   @Column({ type: 'smallint', default: 3 })
   minValue: number;

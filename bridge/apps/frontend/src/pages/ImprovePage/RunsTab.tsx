@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRightFromSquare, Rocket, Stop } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Label, SegmentedRadioGroup, Skeleton, Text } from '@gravity-ui/uikit';
+import { Link } from 'react-router-dom';
 
 import { formatRelativeTime } from '../../shared/lib/formatRelativeTime';
 import { Dialog } from '../../shared/ui/Dialog';
-import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
+import { getErrorMessage, ImproveRun, useCancelImproveRunMutation, useContinueImproveRunMutation, useListImproveRunsQuery, useRetryImprovePublishMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import styles from './ImprovePage.module.css';
 import { FAST_POLL_MS, isActiveRun, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
@@ -31,6 +32,7 @@ export function RunsTab() {
   const [pollingInterval, setPollingInterval] = useState(FAST_POLL_MS);
   const { data: runs, isLoading, isError, error: listError, refetch } = useListImproveRunsQuery(undefined, { pollingInterval, skipPollingIfUnfocused: true });
   const [cancel, { isLoading: isCancelling, originalArgs: cancellingId, error }] = useCancelImproveRunMutation();
+  const [continueRun, { isLoading: isContinuing, originalArgs: continuingId }] = useContinueImproveRunMutation();
   const [retry, { isLoading: isRetrying, error: retryError }] = useRetryImprovePublishMutation();
   const hasActive = Boolean(runs?.some((run) => isActiveRun(run)));
   const [filter, setFilter] = useState<RunFilter>('all');
@@ -134,6 +136,18 @@ export function RunsTab() {
               <Button view="outlined" size="s" loading={isRetrying} onClick={() => void retry(run.id)}>
                 Повторить публикацию
               </Button>
+            )}
+            {run.status === 'awaiting_answer' && (
+              <>
+                <Link to="/questions">
+                  <Button view="outlined" size="s">
+                    Ответить
+                  </Button>
+                </Link>
+                <Button view="outlined" size="s" loading={isContinuing && continuingId === run.id} aria-label={`Запустить без ответов запуск #${run.id}`} onClick={() => void continueRun(run.id)}>
+                  Запустить без ответов
+                </Button>
+              </>
             )}
             {isActiveRun(run) && run.status !== 'publishing' && (
               <Button view="flat-danger" size="s" loading={isCancelling && cancellingId === run.id} aria-label={`Остановить запуск #${run.id}`} onClick={() => setConfirmCancel({ id: run.id })}>
