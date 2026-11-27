@@ -24,6 +24,7 @@ import { AnalysisCategory, DEFAULT_CATEGORIES, isCategory } from './analysis';
 import {
   CreateImproveIssueDto,
   CreateIssuesDto,
+  DeclineItemDto,
   SaveScheduleDto,
   SaveSettingsDto,
   StartAnalysisDto,
@@ -231,6 +232,24 @@ export class ImproveController {
       dto.indices,
       await this.ownContext(user.id, dto.contextId),
     );
+  }
+
+  // The owner turns a proposal down with a reason; the next analysis is told why. DELETE takes it back.
+  @Post('runs/:id/items/:index/decline')
+  declineItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('index', ParseIntPipe) index: number,
+    @Body() dto: DeclineItemDto,
+  ) {
+    return this.issueFiling.setDeclined(id, index, dto.reason);
+  }
+
+  @Delete('runs/:id/items/:index/decline')
+  restoreItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('index', ParseIntPipe) index: number,
+  ) {
+    return this.issueFiling.setDeclined(id, index, null);
   }
 
   // Files the chosen proposals of a finished analysis as GitHub issues.

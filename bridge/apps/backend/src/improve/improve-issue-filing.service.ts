@@ -12,7 +12,12 @@ import { GithubApiService } from '../loop/github-api.service';
 import { issueBody, normalizeTitle } from './analysis';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
-import { AnalysisResult, message, PR_LABEL } from './improve-shared';
+import {
+  AnalysisResult,
+  type DeclineReason,
+  message,
+  PR_LABEL,
+} from './improve-shared';
 import {
   countOpenByCategory,
   limitsFromSettings,
@@ -61,7 +66,7 @@ export class ImproveIssueFilingService {
       const item = stored.items[index];
 
       if (!item) continue;
-      if (item.issueNumber || item.duplicateOf) continue;
+      if (item.issueNumber || item.duplicateOf || item.declined) continue;
 
       const duplicate = existing.get(normalizeTitle(item.title));
 
@@ -174,6 +179,36 @@ export class ImproveIssueFilingService {
     }
 
     run.note = await this.fileProposals(run, indices);
+
+    return this.runs.save(run);
+  }
+
+  // The owner turns a proposal down with a reason (or takes the decision back with `null`). A declined proposal is never filed, and the next
+  // analysis is told why it was declined. Only a proposal nothing has happened to yet can be declined.
+  async setDeclined(
+    id: number,
+    index: number,
+    reason: DeclineReason | null,
+  ): Promise<ImproveRun> {
+    const run = await this.runs.findOne({ where: { id, kind: 'analysis' } });
+
+    if (!run?.result) throw new NotFoundException('Analysis run not found');
+
+    const stored = JSON.parse(run.result) as AnalysisResult;
+    const item = stored.items[index];
+
+    if (!item) throw new NotFoundException('Proposal not found');
+
+    if (item.issueNumber || item.started || item.duplicateOf) {
+      throw new ConflictException(
+        'Предложение уже создано, дубликат или в работе — отклонить его нельзя',
+      );
+    }
+
+    if (reason === null) delete item.declined;
+    else item.declined = { reason, at: new Date().toISOString() };
+
+    run.result = JSON.stringify(stored);
 
     return this.runs.save(run);
   }

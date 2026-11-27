@@ -111,3 +111,15 @@
     min-height: 40px;
   }
 }
+
+/* One proposal of an analysis: its checkbox (or plain text) and, to the right, the decline menu / the undo button. */
+.proposalRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.proposalMenu {
+  display: inline-flex;
+}

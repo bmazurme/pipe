@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Magnifier } from '@gravity-ui/icons';
-import { Alert, Button, Checkbox, Label, Loader, Select, Switch, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Checkbox, DropdownMenu, Label, Loader, Select, Switch, Text } from '@gravity-ui/uikit';
 
 import {
   AnalysisCategory,
   getErrorMessage,
   ImproveRun,
+  type DeclineReason,
   useCreateImproveIssuesMutation,
+  useDeclineImproveItemMutation,
   useGetImproveRunQuery,
   useListImproveRunsQuery,
+  useRestoreImproveItemMutation,
   useStartImproveAnalysisMutation,
   useStartImproveItemsMutation,
 } from '../../store/api';
@@ -16,7 +19,7 @@ import { EmptyState } from '../../widgets/EmptyState';
 import { useModelOptions } from '../WorkerPage/useModelOptions';
 import { ContextSelect } from './ContextSelect';
 import styles from './ImprovePage.module.css';
-import { ALL_CATEGORIES, analysisItems, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
+import { ALL_CATEGORIES, analysisItems, DECLINE_REASON_LABEL, DEFAULT_CATEGORIES, CATEGORY_LABEL, FAST_POLL_MS, isActiveRun, readStoredModel, storeModel, RUN_STATUS_LABEL, RUN_STATUS_THEME, SLOW_POLL_MS } from './improveLabels';
 
 // "польза 4/5 · объём s" — what the analysis rated the proposal; nothing for an analysis made before it rated them.
 function priorityText(item: { value?: number; effort?: string }): string {
@@ -26,6 +29,8 @@ function priorityText(item: { value?: number; effort?: string }): string {
 function AnalysisRun({ run, model, contextId }: { run: ImproveRun; model: string; contextId: number | null }) {
   const [createIssues, { isLoading }] = useCreateImproveIssuesMutation();
   const [startItems, { isLoading: isStarting }] = useStartImproveItemsMutation();
+  const [declineItem] = useDeclineImproveItemMutation();
+  const [restoreItem] = useRestoreImproveItemMutation();
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   // Fetched only once the user opens the run, and polled only while it is active.
@@ -35,7 +40,7 @@ function AnalysisRun({ run, model, contextId }: { run: ImproveRun; model: string
   });
   const items = detail ? analysisItems(detail) : [];
   // Positions (in `items`) of the only proposals either action can touch: not filed, not started, not a duplicate.
-  const selectable = items.reduce<number[]>((indices, item, index) => (!item.issueNumber && !item.duplicateOf && !item.started ? [...indices, index] : indices), []);
+  const selectable = items.reduce<number[]>((indices, item, index) => (!item.issueNumber && !item.duplicateOf && !item.started && !item.declined ? [...indices, index] : indices), []);
   // Empty by default: every selectable proposal counts as ticked until the owner unticks one, so the one-click
   // behaviour is unchanged. Tracking what's unticked (not ticked) means a proposal that drops out of `selectable`
   // (filed, started, found a duplicate) is never sent again, whether or not its index was ever toggled.
@@ -51,6 +56,26 @@ function AnalysisRun({ run, model, contextId }: { run: ImproveRun; model: string
 
       return next;
     });
+
+  const handleDecline = async (index: number, reason: DeclineReason) => {
+    setError(null);
+
+    try {
+      await declineItem({ id: run.id, index, reason }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось отклонить предложение'));
+    }
+  };
+
+  const handleRestore = async (index: number) => {
+    setError(null);
+
+    try {
+      await restoreItem({ id: run.id, index }).unwrap();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Не удалось вернуть предложение'));
+    }
+  };
 
   const handleCreate = async () => {
     setError(null);
@@ -80,19 +105,44 @@ function AnalysisRun({ run, model, contextId }: { run: ImproveRun; model: string
         {open && !detail && detailError && <Text variant="caption-2" color="danger">Не удалось загрузить предложения</Text>}
         {items.map((item, index) =>
           selectable.includes(index) ? (
-            <Checkbox key={item.title} checked={tickedIndices.includes(index)} onUpdate={() => toggle(index)}>
+            <div key={item.title} className={styles.proposalRow}>
+              <Checkbox checked={tickedIndices.includes(index)} onUpdate={() => toggle(index)}>
+                <Text variant="caption-2" color="secondary">
+                  {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}{priorityText(item)}
+                </Text>
+              </Checkbox>
+              {run.status === 'analyzed' && (
+                <DropdownMenu
+                  size="s"
+                  switcherWrapperClassName={styles.proposalMenu}
+                  renderSwitcher={(props) => (
+                    <Button {...props} view="flat-secondary" size="xs" aria-label={`Отклонить: ${item.title}`}>
+                      Отклонить…
+                    </Button>
+                  )}
+                  items={(Object.keys(DECLINE_REASON_LABEL) as DeclineReason[]).map((reason) => ({
+                    text: DECLINE_REASON_LABEL[reason],
+                    action: () => void handleDecline(index, reason),
+                  }))}
+                />
+              )}
+            </div>
+          ) : (
+            <div key={item.title} className={styles.proposalRow}>
               <Text variant="caption-2" color="secondary">
                 {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}{priorityText(item)}
+                {item.skipped && ` · придержано: ${item.skipped}`}
+                {item.issueNumber && ` · issue #${item.issueNumber}`}
+                {item.started && ' · в работе'}
+                {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}
+                {item.declined && ` · отклонено: ${DECLINE_REASON_LABEL[item.declined.reason].toLowerCase()}`}
               </Text>
-            </Checkbox>
-          ) : (
-            <Text key={item.title} variant="caption-2" color="secondary">
-              {CATEGORY_LABEL[item.category]} · {item.title} · риск: {item.risk}{priorityText(item)}
-              {item.skipped && ` · придержано: ${item.skipped}`}
-              {item.issueNumber && ` · issue #${item.issueNumber}`}
-              {item.started && ' · в работе'}
-              {item.duplicateOf && ` · дубликат #${item.duplicateOf}`}
-            </Text>
+              {item.declined && run.status === 'analyzed' && (
+                <Button view="flat-secondary" size="xs" aria-label={`Вернуть: ${item.title}`} onClick={() => void handleRestore(index)}>
+                  Вернуть
+                </Button>
+              )}
+            </div>
           ),
         )}
         {run.note && <Text variant="caption-2" color="secondary">{run.note}</Text>}

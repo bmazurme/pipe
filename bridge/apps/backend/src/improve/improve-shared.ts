@@ -18,6 +18,17 @@ export function preparingStaleMs(downloadTotalMs: number): number {
   return downloadTotalMs + 5 * 60_000;
 }
 
+// Why the owner turned a proposal down — one click, kept on the proposal and fed back to the next analysis (analysis.ts buildProposalDigest),
+// so «too small» and «wrong» teach it different things.
+export const DECLINE_REASONS = [
+  'too-small',
+  'wrong',
+  'duplicate',
+  'not-now',
+  'already-done',
+] as const;
+export type DeclineReason = (typeof DECLINE_REASONS)[number];
+
 export interface AnalysisResult {
   categories: AnalysisCategory[];
   autoCreate: boolean;
@@ -29,6 +40,8 @@ export interface AnalysisResult {
       started?: boolean;
       // Why the filing brake held this proposal back (improve-throttle.ts); a person can still file it by hand.
       skipped?: string;
+      // The owner declined it (see DECLINE_REASONS); it is never filed while this is set.
+      declined?: { reason: DeclineReason; at: string };
     }
   >;
 }

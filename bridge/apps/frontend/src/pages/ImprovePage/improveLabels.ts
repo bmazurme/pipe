@@ -194,3 +194,12 @@ export function validateScheduleForm(form: ScheduleForm): ImproveScheduleInput |
 
   return { name: form.name.trim(), enabled: form.enabled, hour: time.hour, minute: time.minute, timezone: form.timezone, count, model: form.model, ...context, ...weekdays };
 }
+
+// Why a proposal was turned down, as the owner picks it (the analysis is told the meaning, see backend analysis.ts).
+export const DECLINE_REASON_LABEL: Record<'too-small' | 'wrong' | 'duplicate' | 'not-now' | 'already-done', string> = {
+  'too-small': 'Слишком мелко',
+  wrong: 'Неверно',
+  duplicate: 'Дубликат',
+  'not-now': 'Не сейчас',
+  'already-done': 'Уже сделано',
+};

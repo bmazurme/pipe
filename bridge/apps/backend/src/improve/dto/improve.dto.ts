@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -16,6 +16,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ALL_CATEGORIES } from '../analysis';
+import { DECLINE_REASONS, type DeclineReason } from '../improve-shared';
 
 // Each issue number / index can start a paid worker run or file a GitHub issue.
 export const MAX_BATCH_ISSUES = 20;
@@ -280,4 +281,10 @@ export class SaveSettingsDto {
   @Min(0)
   @Max(50)
   dailyIssueCap?: number;
+}
+
+export class DeclineItemDto {
+  @ApiProperty({ enum: DECLINE_REASONS })
+  @IsIn(DECLINE_REASONS)
+  reason: DeclineReason;
 }

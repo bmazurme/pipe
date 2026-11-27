@@ -204,6 +204,7 @@ export function buildLogDigest(
 
 export interface PastProposalItem extends BacklogItem {
   issueNumber?: number;
+  declined?: { reason: string; at?: string };
   duplicateOf?: number;
   started?: boolean;
   // Why the filing brake held this proposal back (improve-throttle.ts); a person can still file it by hand.
@@ -212,7 +213,21 @@ export interface PastProposalItem extends BacklogItem {
 
 const MAX_PROPOSAL_DIGEST_ITEMS = 30;
 
+// What each reason means to the analysis, in the words it should act on.
+const DECLINE_MEANING: Record<string, string> = {
+  'too-small': 'too small to be worth a change — aim higher',
+  wrong:
+    'wrong, or based on a misreading of the code — do not propose this again',
+  duplicate: 'duplicates work that exists',
+  'not-now': 'not now — may be right later',
+  'already-done': 'already done',
+};
+
 function proposalOutcome(item: PastProposalItem): string {
+  if (item.declined) {
+    return `declined by the owner: ${DECLINE_MEANING[item.declined.reason] ?? item.declined.reason}`;
+  }
+
   if (item.duplicateOf) return `duplicate of #${item.duplicateOf}`;
   if (item.issueNumber) {
     return item.started

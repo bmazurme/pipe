@@ -1938,6 +1938,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/runs/{id}/items/{index}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_declineItem"];
+        delete: operations["ImproveController_restoreItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/runs/{id}/create-issues": {
         parameters: {
             query?: never;
@@ -4277,6 +4293,10 @@ export interface components {
             contextId?: number | null;
             model: string;
             indices?: number[];
+        };
+        DeclineItemDto: {
+            /** @enum {string} */
+            reason: "too-small" | "wrong" | "duplicate" | "not-now" | "already-done";
         };
         CreateIssuesDto: {
             indices?: number[];
@@ -7787,6 +7807,54 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_declineItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclineItemDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_restoreItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

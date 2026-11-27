@@ -226,6 +226,67 @@ describe('ImprovePage analysis', () => {
     await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/create-issues', body: { indices: [0] } }));
   });
 
+  describe('declining a proposal', () => {
+    it('offers the reasons and sends the chosen one for that proposal', async () => {
+      const user = userEvent.setup();
+
+      renderPage('/improve?tab=analysis');
+      await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+      await screen.findByText(/Add rate limit/);
+
+      await user.click(screen.getByRole('button', { name: 'Отклонить: Add rate limit' }));
+      for (const label of ['Слишком мелко', 'Неверно', 'Дубликат', 'Не сейчас', 'Уже сделано']) {
+        expect(await screen.findByText(label)).toBeTruthy();
+      }
+      await user.click(screen.getByText('Слишком мелко'));
+
+      await waitFor(() => expect(sent).toContainEqual({ method: 'POST', path: 'improve/runs/20/items/0/decline', body: { reason: 'too-small' } }));
+    });
+
+    it('shows a declined proposal as declined, leaves it out of the actions, and lets the owner take it back', async () => {
+      const user = userEvent.setup();
+      const declinedRun = {
+        ...ANALYSIS_RUN,
+        id: 22,
+        result: JSON.stringify({
+          categories: ['security', 'tests'],
+          autoCreate: false,
+          items: [
+            { category: 'security', title: 'Proposal X', risk: 'low', body: 'x', declined: { reason: 'wrong', at: '2026-11-27T10:00:00.000Z' } },
+            { category: 'tests', title: 'Proposal Y', risk: 'low', body: 'x' },
+          ],
+        }),
+      };
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          const path = new URL(request.url).pathname.replace('/api/v1/', '');
+          const body = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+
+          if (request.method !== 'GET') sent.push({ method: request.method, path, body });
+          if (path === 'improve/status') return json(STATUS);
+          if (path === 'improve/runs' && request.method === 'GET') return json([{ ...declinedRun, result: undefined, hasResult: true }]);
+          if (path === 'improve/schedules') return json([]);
+          if (path === 'improve/settings') return json({ autoStartModel: null });
+
+          return json(declinedRun);
+        }),
+      );
+      renderPage('/improve?tab=analysis');
+      await user.click(await screen.findByRole('button', { name: 'Показать предложения' }));
+      await screen.findByText(/Proposal X/);
+
+      expect(screen.getByText(/отклонено: неверно/)).toBeTruthy();
+      // only Proposal Y is left to file or start
+      expect(screen.getByRole('button', { name: 'Создать issues (1)' })).toBeTruthy();
+
+      await user.click(screen.getByRole('button', { name: 'Вернуть: Proposal X' }));
+
+      await waitFor(() => expect(sent).toContainEqual({ method: 'DELETE', path: 'improve/runs/22/items/0/decline', body: undefined }));
+    });
+  });
+
   describe('proposal selection', () => {
     const THREE_ITEM_RUN = {
       ...ANALYSIS_RUN,
