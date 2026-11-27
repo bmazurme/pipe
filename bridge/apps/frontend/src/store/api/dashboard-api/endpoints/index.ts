@@ -253,6 +253,27 @@ function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
 
+/** One day of what the bridge said to the owner (R6): the alert budget is measured by `sent`. */
+export interface NotifyBudgetDay {
+  day: string;
+  /** Ordinary messages that left (a grouped burst message and a morning digest count as one each). */
+  sent: number;
+  urgent: number;
+  /** Repeats of a message word for word, not said again. */
+  deduped: number;
+  /** Messages folded into a group message. */
+  grouped: number;
+  /** Messages kept for the morning digest. */
+  quiet: number;
+}
+
+export interface NotifyBudget {
+  target: number;
+  noisy: number;
+  today: NotifyBudgetDay & { verdict: 'ok' | 'over' | 'noisy'; top: Array<{ kind: string; attempts: number }> };
+  days: NotifyBudgetDay[];
+}
+
 const dashboardApiEndpoints = dashboardApi.injectEndpoints({
   endpoints: (builder) => ({
     getDashboardNodes: builder.query<NodesStatus, void>({
@@ -279,6 +300,10 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardRouter: builder.query<DashboardRouter[], void>({
       query: () => 'dashboard/router',
     }),
+    getNotifyBudget: builder.query<NotifyBudget, void>({
+      query: () => 'notification-settings/budget',
+      transformErrorResponse: errorMessage('Не удалось загрузить счётчик сообщений'),
+    }),
     getDashboardDeploys: builder.query<DashboardDeploy[], void>({
       query: () => 'dashboard/deploys',
     }),
@@ -303,6 +328,7 @@ export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
   useGetDashboardDeploysQuery,
+  useGetNotifyBudgetQuery,
   useGetDashboardBoardMetricsQuery,
   useGetDashboardNasQuery,
   useGetDashboardCloudQuery,

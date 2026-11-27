@@ -1,0 +1,25 @@
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}

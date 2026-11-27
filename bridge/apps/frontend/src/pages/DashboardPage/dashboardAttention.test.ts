@@ -61,6 +61,22 @@ describe('buildAttention', () => {
     expect(buildAttention({ ...calm, drift: null })).toEqual([]);
   });
 
+  it('says when the bridge got noisy today, and who is noisiest; says nothing within the budget or merely over it', () => {
+    const budget = (sent: number, verdict: 'ok' | 'over' | 'noisy') => ({
+      target: 5,
+      noisy: 15,
+      today: { day: '2026-10-08', sent, urgent: 0, deduped: 0, grouped: 0, quiet: 0, verdict, top: [{ kind: '🔴 Задача #N: не удалось открыть PR', attempts: 9 }] },
+      days: [],
+    });
+
+    expect(buildAttention({ ...calm, alerts: budget(16, 'noisy') })).toEqual([
+      { id: 'alerts', level: 'warn', text: 'Тревоги: сегодня 16 сообщений при цели ≤ 5 — шумит «🔴 Задача #N: не удалось открыть PR»' },
+    ]);
+    expect(buildAttention({ ...calm, alerts: budget(7, 'over') })).toEqual([]);
+    expect(buildAttention({ ...calm, alerts: budget(2, 'ok') })).toEqual([]);
+    expect(buildAttention({ ...calm, alerts: null })).toEqual([]);
+  });
+
   it('names the channels, with the first reason and how many more there are; says nothing when they are fine or unknown', () => {
     const channels = (status: DashboardChannels['status'], reasons: string[]): DashboardChannels => ({ status, reasons, channels: [], vantages: [] });
 
