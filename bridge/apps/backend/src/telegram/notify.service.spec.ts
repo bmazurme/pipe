@@ -193,7 +193,11 @@ describe('NotifyService urgent and weekends', () => {
     await service.send('weekend event');
 
     expect(telegram.send).not.toHaveBeenCalled();
-    expect(save).toHaveBeenCalledWith({ text: 'weekend event', buttons: null });
+    expect(save).toHaveBeenCalledWith({
+      text: 'weekend event',
+      buttons: null,
+      kind: 'quiet',
+    });
   });
 
   it('delivers the same notification on a weekend when weekends are not quiet', async () => {

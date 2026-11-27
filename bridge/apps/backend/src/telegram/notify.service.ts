@@ -4,12 +4,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AlertFallbackService } from './alert-fallback.service';
+import { AlertGate, buildBurstMessage } from './alert-budget';
 import { TelegramOutbox } from './entities/telegram-outbox.entity';
 import { NotificationSettingsService } from './notification-settings.service';
-import { buildDigests, isQuietNow } from './quiet-hours';
+import { NotifyStatsService } from './notify-stats.service';
+import { buildDigests, formatLocalTime, isQuietNow } from './quiet-hours';
 import { InlineButton, TelegramService } from './telegram.service';
 
 const FLUSH_EVERY_MS = 60_000;
+// A message held back from a burst waits at least this long, so the ones that follow join the same group message.
+const BURST_HOLD_MS = 45_000;
 
 export interface NotifyOptions {
   // Delivered even while it is quiet (if the owner allows it): something broke that cannot wait for the morning digest.
@@ -24,10 +28,14 @@ export interface NotifyOptions {
 // NOTIFY_QUIET_HOURS / NOTIFY_TIMEZONE, default 23:00-08:00 Europe/Moscow, "off"
 // disables) a notification is stored instead of sent, and the first flush after
 // the window ends delivers them as one digest.
+//
+// R6, the alert budget (alert-budget.ts): before anything leaves, the same text again within the hour is not said again, and a burst of ordinary
+// messages is held and goes out as one grouped message; the daily counts (what left, what did not, who is noisy) are kept for the Dashboard.
 @Injectable()
 export class NotifyService {
   private readonly logger = new Logger(NotifyService.name);
   private flushing = false;
+  private readonly gate = new AlertGate();
 
   constructor(
     private readonly telegram: TelegramService,
@@ -35,14 +43,48 @@ export class NotifyService {
     @InjectRepository(TelegramOutbox)
     private readonly outbox: Repository<TelegramOutbox>,
     @Optional() private readonly fallback?: AlertFallbackService,
+    @Optional() private readonly stats?: NotifyStatsService,
   ) {}
 
   async send(text: string, options: NotifyOptions = {}): Promise<boolean> {
+    const now = Date.now();
+    const urgent = options.urgent === true;
+
+    this.track(this.stats?.attempt(text));
+
+    // The same text again: nothing to add. Answered `true` — the owner knows, and a caller that retries on `false` must not.
+    const decision = this.gate.decide(text, urgent, now);
+
+    if (decision === 'dedupe') {
+      this.track(this.stats?.count('deduped'));
+
+      return true;
+    }
+
     if (await this.isQuiet(options)) {
+      this.gate.remember(text, now);
+      this.track(this.stats?.count('quiet'));
+
       return this.enqueue(text, null);
     }
 
-    return this.deliver(await this.telegram.send(text), text, options);
+    // A burst: this one waits for the group message (urgent never does).
+    if (decision === 'hold') {
+      this.gate.remember(text, now);
+      this.track(this.stats?.count('grouped'));
+
+      return this.enqueue(text, null, 'burst');
+    }
+
+    const sent = this.deliver(await this.telegram.send(text), text, options);
+
+    if (sent) {
+      this.gate.remember(text, now);
+      if (!urgent) this.gate.recordSent(now);
+      this.track(this.stats?.count(urgent ? 'urgent' : 'sent'));
+    }
+
+    return sent;
   }
 
   // What Telegram did not carry and cannot wait is also handed to the other way out (a webhook, e-mail), when one is set up: the point
@@ -62,15 +104,29 @@ export class NotifyService {
     buttons: InlineButton[][],
     options: NotifyOptions = {},
   ): Promise<boolean> {
+    this.track(this.stats?.attempt(text));
+
     if (await this.isQuiet(options)) {
+      this.track(this.stats?.count('quiet'));
+
       return this.enqueue(text, buttons);
     }
 
-    return this.deliver(
+    // A message with buttons is an offer somebody has to act on: never deduplicated or held, but it counts toward the budget and the burst.
+    const sent = this.deliver(
       await this.telegram.sendWithButtons(text, buttons),
       text,
       options,
     );
+
+    if (sent) {
+      if (options.urgent !== true) this.gate.recordSent(Date.now());
+      this.track(
+        this.stats?.count(options.urgent === true ? 'urgent' : 'sent'),
+      );
+    }
+
+    return sent;
   }
 
   @Interval(FLUSH_EVERY_MS)
@@ -92,15 +148,34 @@ export class NotifyService {
         return;
       }
 
-      const plain = rows.filter((row) => !row.buttons);
-      const withButtons = rows.filter((row) => row.buttons);
+      const burst = rows.filter((row) => row.kind === 'burst');
+      const held = rows.filter((row) => row.kind !== 'burst');
+      const plain = held.filter((row) => !row.buttons);
+      const withButtons = held.filter((row) => row.buttons);
+      const { timezone } = await this.settings.effective();
+
+      // The held-back messages of a burst, as ONE message — once the burst has had time to finish (the oldest has waited BURST_HOLD_MS).
+      const ready =
+        burst.length > 0 &&
+        Date.now() - burst[0].createdAt.getTime() >= BURST_HOLD_MS;
+
+      if (ready) {
+        const text = buildBurstMessage(
+          burst.map((row) => ({
+            text: row.text,
+            time: formatLocalTime(row.createdAt, timezone),
+          })),
+        );
+
+        if (await this.telegram.send(text)) {
+          await this.outbox.delete(burst.map((row) => row.id));
+          this.track(this.stats?.count('sent'));
+        }
+      }
 
       // Rows are deleted only after Telegram accepted them, so an outage
       // leaves the queue intact for the next tick instead of losing it.
-      const digests = buildDigests(
-        plain,
-        (await this.settings.effective()).timezone,
-      );
+      const digests = buildDigests(plain, timezone);
       let delivered = true;
 
       for (const digest of digests) {
@@ -109,6 +184,7 @@ export class NotifyService {
 
       if (delivered && plain.length) {
         await this.outbox.delete(plain.map((row) => row.id));
+        this.track(this.stats?.count('sent', digests.length));
       }
 
       for (const row of withButtons) {
@@ -119,6 +195,7 @@ export class NotifyService {
 
         if (sent) {
           await this.outbox.delete(row.id);
+          this.track(this.stats?.count('sent'));
         }
       }
     } catch (error) {
@@ -133,6 +210,7 @@ export class NotifyService {
   private async enqueue(
     text: string,
     buttons: InlineButton[][] | null,
+    kind: 'quiet' | 'burst' = 'quiet',
   ): Promise<boolean> {
     if (!this.telegram.isConfigured()) {
       return false;
@@ -142,6 +220,7 @@ export class NotifyService {
       await this.outbox.save({
         text,
         buttons: buttons ? JSON.stringify(buttons) : null,
+        kind,
       });
 
       return true;
@@ -152,6 +231,11 @@ export class NotifyService {
 
       return false;
     }
+  }
+
+  // The statistics never delay, fail or crash a notification: their own errors are theirs.
+  private track(pending: Promise<void> | undefined): void {
+    pending?.catch(() => undefined);
   }
 
   private async isQuiet(options: NotifyOptions = {}): Promise<boolean> {

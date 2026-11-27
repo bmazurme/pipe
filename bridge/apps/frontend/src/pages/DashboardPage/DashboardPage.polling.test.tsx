@@ -34,6 +34,7 @@ vi.mock('../../store/api', async (importOriginal) => {
     useGetDashboardNasQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardCloudQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardChannelsQuery: () => ({ isError: false, isLoading: false, data: undefined }),
+    useGetNotifyBudgetQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDriftQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardUpsQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardRouterQuery: () => ({ isError: false, isLoading: false, data: [] }),
@@ -50,6 +51,7 @@ vi.mock('./UpsCard', () => ({ UpsCard: () => null }));
 vi.mock('./RouterCard', () => ({ RouterCard: () => null }));
 vi.mock('./BoardMetricsCard', () => ({ BoardMetricsCard: () => null }));
 vi.mock('./DriftCard', () => ({ DriftCard: () => null }));
+vi.mock('./AlertsCard', () => ({ AlertsCard: () => null }));
 
 import { DashboardPage } from './DashboardPage';
 

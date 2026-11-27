@@ -37,6 +37,8 @@ import { Secret } from '../secrets/entities/secret.entity';
 import { TaskCard } from '../tasks/entities/task-card.entity';
 import { TaskColumn } from '../tasks/entities/task-column.entity';
 import { NotificationSettings } from '../telegram/entities/notification-settings.entity';
+import { NotifyDay } from '../telegram/entities/notify-day.entity';
+import { NotifyKind } from '../telegram/entities/notify-kind.entity';
 import { TelegramOutbox } from '../telegram/entities/telegram-outbox.entity';
 import { StoredFile } from '../storage/entities/stored-file.entity';
 import { DayOff } from '../time/entities/day-off.entity';
@@ -110,6 +112,8 @@ export const ENTITIES = [
   LoopEvent,
   ClientHeartbeat,
   TelegramOutbox,
+  NotifyDay,
+  NotifyKind,
   NotificationSettings,
   AppLog,
   ImproveRun,
