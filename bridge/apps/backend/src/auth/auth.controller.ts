@@ -37,6 +37,7 @@ import {
   RefreshTokenGuard,
   RequestWithAuthSession,
 } from './guards/refresh-token.guard';
+import { RequireStepUp } from './step-up/require-step-up.decorator';
 
 // None of these routes are polled — every one is a human clicking something
 // (or a refresh-token rotation the frontend fires on a 401) — so a much
@@ -104,6 +105,7 @@ export class AuthController {
     );
   }
 
+  @RequireStepUp()
   @UseGuards(JwtGuard)
   @Post('api-keys')
   @ApiOperation({
@@ -140,6 +142,7 @@ export class AuthController {
     return apiKeys.map(ApiKeyResponseDto.fromEntity);
   }
 
+  @RequireStepUp()
   @UseGuards(JwtGuard)
   @Delete('api-keys/:id')
   @ApiOperation({ summary: 'Revoke an API key' })
@@ -167,6 +170,7 @@ export class AuthController {
     return this.emergencyKeysService.status(currentUser.id);
   }
 
+  @RequireStepUp()
   @UseGuards(JwtGuard)
   @Post('emergency-key')
   @ApiOperation({
@@ -189,6 +193,7 @@ export class AuthController {
     return created;
   }
 
+  @RequireStepUp()
   @UseGuards(JwtGuard)
   @Delete('emergency-key')
   @HttpCode(HttpStatus.NO_CONTENT)

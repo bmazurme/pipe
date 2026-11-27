@@ -47,6 +47,19 @@ export class DeploymentAccessService {
     return !!user && this.isAllowedToSignIn(user.email);
   }
 
+  /** The account that is the owner: the first EMAILS entry that has signed in, otherwise the first account. */
+  async ownerId(): Promise<number | null> {
+    for (const email of this.allowedEmails()) {
+      const user = await this.usersService.findByEmail(email);
+
+      if (user) return user.id;
+    }
+
+    if (this.allowedEmails().length > 0) return null;
+
+    return (await this.usersService.findOwner())?.id ?? null;
+  }
+
   async isOwner(userId: number): Promise<boolean> {
     const allowed = this.allowedEmails();
 

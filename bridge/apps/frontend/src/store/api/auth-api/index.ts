@@ -1,6 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 
-import baseQuery from "../../base-query";
+import baseQuery from "../../base-query-with-step-up";
 import { API_URL } from "../env";
 
 export type OauthProvider = "yandex" | "github";

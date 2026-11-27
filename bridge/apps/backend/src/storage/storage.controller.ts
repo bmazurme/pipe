@@ -30,6 +30,7 @@ import { UploadFileMetaDto } from './dto/upload-file-meta.dto';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
 import { StorageService } from './storage.service';
 import { respondDownloadError } from './file-store/send-stored-file';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 @Controller('api/v1/storage')
 @UseGuards(JwtOrApiKeyGuard)
@@ -110,6 +111,7 @@ export class StorageController {
   // confirmation dialog (StoragePage.tsx); findOwned already enforces that
   // the caller actually owns this file before storageService.delete()
   // touches it, same guard as the download/peek routes above.
+  @RequireStepUp()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

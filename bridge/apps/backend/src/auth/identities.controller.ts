@@ -18,6 +18,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthProvider } from './entities/auth-identity.entity';
 import { JwtGuard } from './guards/jwt.guard';
 import { IdentitiesService, IdentityView } from './identities.service';
+import { RequireStepUp } from './step-up/require-step-up.decorator';
 
 const PROVIDERS = { yandex: 'yandex', github: 'github' } as const;
 
@@ -46,6 +47,7 @@ export class IdentitiesController {
     return this.identitiesService.setEnabled(currentUser.id, provider, true);
   }
 
+  @RequireStepUp()
   @Post(':provider/disable')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -59,6 +61,7 @@ export class IdentitiesController {
     return this.identitiesService.setEnabled(currentUser.id, provider, false);
   }
 
+  @RequireStepUp()
   @Delete(':provider')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

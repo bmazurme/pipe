@@ -21,6 +21,7 @@ import { CreateSecretDto } from './dto/create-secret.dto';
 import { SecretResponseDto } from './dto/secret-response.dto';
 import { UpdateSecretDto } from './dto/update-secret.dto';
 import { SecretsService } from './secrets.service';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // Browser-only (JwtGuard, no API-key fallback): a personal vault the user
 // manages from the frontend, not a credential any machine client
@@ -44,6 +45,7 @@ export class SecretsController {
 
   // Declared before the ':id' routes. Every value leaves in one response, so
   // the audit line names only the user, never a secret.
+  @RequireStepUp()
   @Get('export')
   @Header('Cache-Control', 'no-store')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -75,6 +77,7 @@ export class SecretsController {
     return SecretResponseDto.fromEntity(secret);
   }
 
+  @RequireStepUp()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(
@@ -87,6 +90,7 @@ export class SecretsController {
   // Deliberately separate from list() — reveal is one explicit user action
   // (a click, not a render), not something that happens just by loading the
   // page the vault lives on.
+  @RequireStepUp()
   @Get(':id/value')
   @Header('Cache-Control', 'no-store')
   async reveal(
