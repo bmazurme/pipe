@@ -427,6 +427,18 @@ describe('Analysis tab polling', () => {
   };
 
   it('polls every 30 s when no run is active and every 5 s when one is', async () => {
+    // The page asks for the list again by a timer (fake here) but handles each answer in real time: on a busy CI machine an answer can land
+    // after the fake clock has already moved on, and the switch from the 30 s to the 5 s interval (it happens only once a poll has answered
+    // «running») was seen late — three times, whatever window the test asked for. So the clock moves one second at a time and every step
+    // gives the answers a moment of real time to be handled: the page sees the same sequence it would in a browser, however slow the machine.
+    const realSetTimeout = globalThis.setTimeout;
+    const advance = async (ms: number) => {
+      for (let done = 0; done < ms; done += 1000) {
+        await vi.advanceTimersByTimeAsync(Math.min(1000, ms - done));
+        await new Promise<void>((resolve) => realSetTimeout(resolve, 15));
+      }
+    };
+
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     try {
@@ -435,18 +447,16 @@ describe('Analysis tab polling', () => {
       await screen.findByText('Анализ: Безопасность');
       const idle = listFetches();
 
-      await vi.advanceTimersByTimeAsync(20000);
+      await advance(20000);
       expect(listFetches()).toBe(idle);
-      await vi.advanceTimersByTimeAsync(11000);
+      await advance(11000);
       expect(listFetches()).toBe(idle + 1);
 
       setRuns('running');
-      await vi.advanceTimersByTimeAsync(30000);
+      await advance(30000);
       const active = listFetches();
 
-      // 5 s polling gives three polls in 16 s; the test needs two, so the switch from the 30 s to the 5 s interval (it happens only once a poll
-      // has answered «running», which on a loaded CI machine can lag by a few seconds) cannot make it fail — it used to ask for two polls in 11 s.
-      await vi.advanceTimersByTimeAsync(16000);
+      await advance(11000);
       expect(listFetches()).toBeGreaterThanOrEqual(active + 2);
     } finally {
       vi.useRealTimers();
