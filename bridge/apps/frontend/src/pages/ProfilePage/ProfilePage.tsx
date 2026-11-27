@@ -27,6 +27,7 @@ import { EmergencyKeySection } from './EmergencyKeySection';
 import { IdentitiesSection } from './IdentitiesSection';
 import { LogsSection } from './LogsSection';
 import { NotificationsSection } from './NotificationsSection';
+import { TwoFactorSection } from './TwoFactorSection';
 import styles from './ProfilePage.module.css';
 
 const TABS = ['account', 'access', 'logs'] as const;
@@ -182,6 +183,7 @@ export function ProfilePage() {
         <TabPanel value="access">
           {activeTab === 'access' && (
             <div className={styles.panel}>
+              <TwoFactorSection />
               <IdentitiesSection />
               <EmergencyKeySection />
               <ApiKeysSection />

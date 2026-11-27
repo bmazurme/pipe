@@ -16,6 +16,7 @@ import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CreateProviderCredentialDto } from './dto/create-provider-credential.dto';
 import { ProviderCredentialResponseDto } from './dto/provider-credential-response.dto';
 import { ProviderCredentialsService } from './provider-credentials.service';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // Browser session only: a worker never lists or reads these — it receives the one key a job needs, inside the claim.
 @Controller('api/v1/worker/provider-credentials')
@@ -32,6 +33,7 @@ export class ProviderCredentialsController {
     return credentials.map(ProviderCredentialResponseDto.fromEntity);
   }
 
+  @RequireStepUp()
   @Post()
   async create(
     @Body() dto: CreateProviderCredentialDto,
@@ -42,6 +44,7 @@ export class ProviderCredentialsController {
     return ProviderCredentialResponseDto.fromEntity(credential);
   }
 
+  @RequireStepUp()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

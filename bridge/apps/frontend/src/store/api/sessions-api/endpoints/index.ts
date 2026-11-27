@@ -19,6 +19,25 @@ export interface Identity {
   createdAt: string;
 }
 
+// Second factor for dangerous actions (S6).
+export interface TwoFactorStatus {
+  enabled: boolean;
+  setupPending: boolean;
+  recoveryCodesLeft: number;
+  // The backend refuses guarded actions while none is set up (STEP_UP_ENFORCE).
+  enforced: boolean;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  otpauthUri: string;
+}
+
+export interface StepUpGrant {
+  token: string;
+  expiresAt: string;
+}
+
 const sessionsApiEndpoints = sessionsApi.injectEndpoints({
   endpoints: (builder) => ({
     listSessions: builder.query<Session[], void>({
@@ -57,6 +76,31 @@ const sessionsApiEndpoints = sessionsApi.injectEndpoints({
         method: "POST",
       }),
     }),
+    getTwoFactorStatus: builder.query<TwoFactorStatus, void>({
+      query: () => "auth/2fa",
+      providesTags: ["TwoFactor"],
+    }),
+    setupTwoFactor: builder.mutation<TwoFactorSetup, void>({
+      query: () => ({ url: "auth/2fa/setup", method: "POST" }),
+      invalidatesTags: ["TwoFactor"],
+    }),
+    // The recovery codes are in this response only — shown once.
+    enableTwoFactor: builder.mutation<{ recoveryCodes: string[] }, string>({
+      query: (code) => ({ url: "auth/2fa/enable", method: "POST", body: { code } }),
+      invalidatesTags: ["TwoFactor"],
+    }),
+    verifyStepUp: builder.mutation<StepUpGrant, string>({
+      query: (code) => ({ url: "auth/2fa/verify", method: "POST", body: { code } }),
+      invalidatesTags: ["TwoFactor"],
+    }),
+    disableTwoFactor: builder.mutation<void, string>({
+      query: (code) => ({ url: "auth/2fa/disable", method: "POST", body: { code } }),
+      invalidatesTags: ["TwoFactor"],
+    }),
+    regenerateRecoveryCodes: builder.mutation<{ recoveryCodes: string[] }, string>({
+      query: (code) => ({ url: "auth/2fa/recovery-codes", method: "POST", body: { code } }),
+      invalidatesTags: ["TwoFactor"],
+    }),
   }),
 });
 
@@ -67,5 +111,11 @@ export const {
   useSetIdentityEnabledMutation,
   useUnlinkIdentityMutation,
   useStartIdentityLinkMutation,
+  useGetTwoFactorStatusQuery,
+  useSetupTwoFactorMutation,
+  useEnableTwoFactorMutation,
+  useVerifyStepUpMutation,
+  useDisableTwoFactorMutation,
+  useRegenerateRecoveryCodesMutation,
 } = sessionsApiEndpoints;
 export { sessionsApiEndpoints };

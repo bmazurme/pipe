@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 import { AppLayout } from './app/layout/AppLayout';
 import { AuthProvider } from './app/providers/AuthProvider';
+import { StepUpProvider } from './app/providers/StepUpProvider';
 import { AppThemeProvider } from './app/providers/ThemeProvider';
 import { LoginPage } from './pages/LoginPage';
 import { OAuthErrorPage } from './pages/OAuthErrorPage';
@@ -90,6 +91,7 @@ export function App() {
     <AppThemeProvider>
       <BrowserRouter>
         <AuthProvider>
+          <StepUpProvider />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/oauth-error" element={<OAuthErrorPage />} />

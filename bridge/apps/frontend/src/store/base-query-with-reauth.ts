@@ -5,7 +5,7 @@ import type {
   FetchBaseQueryError,
 } from '@reduxjs/toolkit/query';
 
-import baseQuery from './base-query';
+import baseQuery from './base-query-with-step-up';
 import type { RootState } from './index';
 import { logout, setCredentials } from './slices/auth-slice';
 

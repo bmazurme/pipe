@@ -327,3 +327,136 @@ describe('TelegramCommandsService: the router', () => {
     expect(telegram.send).not.toHaveBeenCalled();
   });
 });
+
+describe('TelegramCommandsService with the second factor on', () => {
+  const msg = (text: string, id = 42) => ({ message: { text, chat: { id } } });
+  const cb = (data: string, id = 42) => ({
+    callback_query: { id: 'q1', data, message: { chat: { id } } },
+  });
+  const asked = () => Math.floor(Date.now() / 60_000);
+
+  function withStepUp(enabled = true) {
+    const router = {
+      statusText: jest.fn().mockResolvedValue('ROUTER STATUS'),
+      requestFromTelegram: jest.fn().mockResolvedValue('REQUESTED'),
+    };
+    const telegram = {
+      chatId: () => '42',
+      send: jest.fn().mockResolvedValue(true),
+      sendWithButtons: jest.fn().mockResolvedValue(true),
+      answerCallback: jest.fn().mockResolvedValue(undefined),
+    };
+    const stepUp = {
+      isEnabled: jest.fn().mockResolvedValue(enabled),
+      verifyFactor: jest.fn().mockResolvedValue('totp'),
+      audit: jest.fn(),
+    };
+    const access = { ownerId: jest.fn().mockResolvedValue(1) };
+    const service = new TelegramCommandsService(
+      {} as never,
+      telegram as never,
+      {} as never,
+      {} as never,
+      undefined,
+      router as never,
+      undefined,
+      stepUp as never,
+      access as never,
+    );
+
+    return { service, router, telegram, stepUp };
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  it('the confirmed button asks for a code instead of rebooting', async () => {
+    const { service, router, telegram } = withStepUp();
+
+    await service.handle(cb(`rr:go:${asked()}`));
+
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+    expect(telegram.send).toHaveBeenCalledWith(
+      expect.stringContaining('/confirm'),
+    );
+  });
+
+  it('reboots once the right code arrives, and audits it', async () => {
+    const { service, router, stepUp, telegram } = withStepUp();
+
+    await service.handle(cb(`rr:go:${asked()}`));
+    await service.handle(msg('/confirm 123456'));
+
+    expect(stepUp.verifyFactor).toHaveBeenCalledWith(1, '123456');
+    expect(router.requestFromTelegram).toHaveBeenCalledTimes(1);
+    expect(telegram.send).toHaveBeenCalledWith('REQUESTED');
+    expect(stepUp.audit).toHaveBeenCalledWith(
+      'warn',
+      'stepup.telegram',
+      expect.any(String),
+      { userId: 1 },
+    );
+  });
+
+  it('a wrong code reboots nothing and keeps the action waiting', async () => {
+    const { service, router, stepUp } = withStepUp();
+
+    stepUp.verifyFactor.mockRejectedValueOnce(new Error('wrong'));
+    await service.handle(cb(`rr:go:${asked()}`));
+    await service.handle(msg('/confirm 000000'));
+
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+
+    await service.handle(msg('/confirm 123456'));
+
+    expect(router.requestFromTelegram).toHaveBeenCalledTimes(1);
+  });
+
+  it('the code works once: the action is spent after the reboot', async () => {
+    const { service, router } = withStepUp();
+
+    await service.handle(cb(`rr:go:${asked()}`));
+    await service.handle(msg('/confirm 123456'));
+    await service.handle(msg('/confirm 123456'));
+
+    expect(router.requestFromTelegram).toHaveBeenCalledTimes(1);
+  });
+
+  it('a /confirm with nothing waiting does nothing', async () => {
+    const { service, router, stepUp, telegram } = withStepUp();
+
+    await service.handle(msg('/confirm 123456'));
+
+    expect(stepUp.verifyFactor).not.toHaveBeenCalled();
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+    expect(telegram.send).toHaveBeenCalledWith('Нечего подтверждать.');
+  });
+
+  it('the wait ends after five minutes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-03T12:00:00Z'));
+    const { service, router, stepUp } = withStepUp();
+
+    await service.handle(cb(`rr:go:${asked()}`));
+    jest.setSystemTime(new Date('2026-11-03T12:06:00Z'));
+    await service.handle(msg('/confirm 123456'));
+
+    expect(stepUp.verifyFactor).not.toHaveBeenCalled();
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+  });
+
+  it("does not take a /confirm from any chat but the owner's", async () => {
+    const { service, router } = withStepUp();
+
+    await service.handle(cb(`rr:go:${asked()}`));
+    await service.handle(msg('/confirm 123456', 999));
+
+    expect(router.requestFromTelegram).not.toHaveBeenCalled();
+  });
+
+  it('reboots straight away while two-factor is not set up', async () => {
+    const { service, router } = withStepUp(false);
+
+    await service.handle(cb(`rr:go:${asked()}`));
+
+    expect(router.requestFromTelegram).toHaveBeenCalledTimes(1);
+  });
+});

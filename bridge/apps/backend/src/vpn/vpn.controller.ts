@@ -17,6 +17,7 @@ import { ConfirmActionDto } from './dto/confirm-action.dto';
 import { ProvisionVpnServerDto } from './dto/provision-vpn-server.dto';
 import { SetWorkerSecretDto } from './dto/set-worker-secret.dto';
 import { VpnService, VpnStatus } from './vpn.service';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // Browser session, deployment owner only — deliberately not JwtOrApiKeyGuard. This manages
 // deploy-triggering GitHub credentials and worker provider keys; sync/
@@ -44,6 +45,7 @@ export class VpnController {
     return this.vpnService.getStatus();
   }
 
+  @RequireStepUp()
   @Post('sync')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -57,6 +59,7 @@ export class VpnController {
     await this.vpnService.syncWorkerVpnConfig();
   }
 
+  @RequireStepUp()
   @Post('worker-secrets')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -70,6 +73,7 @@ export class VpnController {
     await this.vpnService.setWorkerSecret(dto.name, dto.value);
   }
 
+  @RequireStepUp()
   @Post('provision')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)

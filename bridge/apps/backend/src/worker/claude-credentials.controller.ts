@@ -19,6 +19,7 @@ import { ClaudeCredentialsService } from './claude-credentials.service';
 import { ClaudeCredentialResponseDto } from './dto/claude-credential-response.dto';
 import { CreateClaudeCredentialDto } from './dto/create-claude-credential.dto';
 import { UpdateClaudeCredentialDto } from './dto/update-claude-credential.dto';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // Writes (create, replace, remove) need a browser session: a personal API key lives on
 // disk in sync's and reports' config and must not be able to plant or wipe the
@@ -49,6 +50,7 @@ export class ClaudeCredentialsController {
     }));
   }
 
+  @RequireStepUp()
   @Post()
   @UseGuards(JwtGuard)
   async create(
@@ -64,6 +66,7 @@ export class ClaudeCredentialsController {
     return ClaudeCredentialResponseDto.fromEntity(credential);
   }
 
+  @RequireStepUp()
   @Patch(':id')
   @UseGuards(JwtGuard)
   async replaceToken(
@@ -80,6 +83,7 @@ export class ClaudeCredentialsController {
     return ClaudeCredentialResponseDto.fromEntity(credential);
   }
 
+  @RequireStepUp()
   @Delete(':id')
   @UseGuards(JwtGuard)
   @HttpCode(HttpStatus.NO_CONTENT)

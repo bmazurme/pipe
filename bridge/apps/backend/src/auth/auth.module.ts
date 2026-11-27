@@ -14,6 +14,8 @@ import { EmergencyKeysService } from './emergency-keys.service';
 import { ApiKey } from './entities/api-key.entity';
 import { AuthIdentity } from './entities/auth-identity.entity';
 import { EmergencyKey } from './entities/emergency-key.entity';
+import { RecoveryCode } from './entities/recovery-code.entity';
+import { UserTotp } from './entities/user-totp.entity';
 import { DeploymentAccessService } from './deployment-access';
 import { Session } from './entities/session.entity';
 import { IdentitiesController } from './identities.controller';
@@ -23,11 +25,21 @@ import { JwtGuard } from './guards/jwt.guard';
 import { OwnerGuard } from './guards/owner.guard';
 import { SessionsService } from './sessions.service';
 import { WorkerKeysService } from './worker-keys.service';
+import { StepUpController } from './step-up/step-up.controller';
+import { StepUpGuard } from './step-up/step-up.guard';
+import { StepUpService } from './step-up/step-up.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Session, ApiKey, AuthIdentity, EmergencyKey]),
+    TypeOrmModule.forFeature([
+      Session,
+      ApiKey,
+      AuthIdentity,
+      EmergencyKey,
+      UserTotp,
+      RecoveryCode,
+    ]),
     TelegramModule,
     UsersModule,
     PassportModule,
@@ -46,7 +58,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, IdentitiesController],
+  controllers: [AuthController, IdentitiesController, StepUpController],
   providers: [
     AuthService,
     JwtStrategy,
@@ -59,6 +71,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtOrApiKeyGuard,
     DeploymentAccessService,
     OwnerGuard,
+    StepUpService,
+    StepUpGuard,
   ],
   exports: [
     AuthService,
@@ -71,6 +85,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtOrApiKeyGuard,
     DeploymentAccessService,
     OwnerGuard,
+    StepUpService,
+    StepUpGuard,
   ],
 })
 export class AuthModule {}

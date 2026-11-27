@@ -5,7 +5,7 @@ import baseQuery from "../../base-query-with-reauth";
 const sessionsApi = createApi({
   reducerPath: "sessionsApi",
   baseQuery,
-  tagTypes: ["Sessions", "Identities"],
+  tagTypes: ["Sessions", "Identities", "TwoFactor"],
   endpoints: () => ({}),
 });
 

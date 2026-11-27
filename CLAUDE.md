@@ -173,6 +173,7 @@ A parcel is a zip plus a manifest (`__sync_manifest__.json` or `__subscription_m
 
 Rules that apply to any change here:
 - Two guards: `JwtGuard` (browser session — `purge`, `secrets` and `vpn` provisioning never use the machine guard) and `JwtOrApiKeyGuard` (a JWT or a personal API key — how sync/reports/worker authenticate).
+- Dangerous actions (secret reveal, key issue/delete, VPN provisioning/connection changes, credential and worker changes, Storage delete) carry `@RequireStepUp()` (`auth/step-up/`, S6): a TOTP code is traded for a 5-minute `X-Step-Up` grant; place it AFTER the route's session guard — it reads `request.user`. A new route that hands out or destroys a credential should get it, and `test/step-up.e2e-spec.ts` is where its order is proven.
 - `ClaudeCredential.token`, `VpnConnection.panelApiToken` and `Secret.value` are encrypted at rest (AES-256-GCM, `src/crypto/encrypted-column.transformer.ts`, key `CREDENTIALS_ENC_KEY`).
 - A global `ThrottlerGuard` rate-limits every route; auth/OAuth controllers carry a much stricter override.
 - `GET /api/v1/health` is readiness (DB reachable, no pending migrations); `GET /` stays a trivial no-DB liveness check on purpose. The Swarm healthcheck and deploy smoke test target the former.

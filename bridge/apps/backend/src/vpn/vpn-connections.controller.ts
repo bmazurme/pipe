@@ -24,6 +24,7 @@ import { subscriptionName } from './subscription';
 import { SubscriptionService } from './subscription.service';
 import { VpnConnectionsService } from './vpn-connections.service';
 import { VpnService, VpnStatus } from './vpn.service';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // Browser session, deployment owner only, same as VpnController.
 @Controller('api/v1/vpn/connections')
@@ -41,6 +42,7 @@ export class VpnConnectionsController {
     return connections.map(VpnConnectionResponseDto.fromEntity);
   }
 
+  @RequireStepUp()
   @Post()
   async create(
     @Body() dto: CreateVpnConnectionDto,
@@ -77,6 +79,7 @@ export class VpnConnectionsController {
     return VpnConnectionResponseDto.fromEntity(connection);
   }
 
+  @RequireStepUp()
   @Patch(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -103,12 +106,14 @@ export class VpnConnectionsController {
     return VpnConnectionResponseDto.fromEntity(connection);
   }
 
+  @RequireStepUp()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.vpnConnectionsService.remove(id);
   }
 
+  @RequireStepUp()
   @Post(':id/activate')
   @HttpCode(HttpStatus.NO_CONTENT)
   async activate(@Param('id', ParseIntPipe) id: number): Promise<void> {
@@ -129,6 +134,7 @@ export class VpnConnectionsController {
     return this.vpnService.checkConnectionStatus(id, force === '1');
   }
 
+  @RequireStepUp()
   @Get(':id/connection-link')
   @Header('Cache-Control', 'no-store')
   async getConnectionLink(

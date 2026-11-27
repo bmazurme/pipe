@@ -1,5 +1,7 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { HttpException, Injectable, Optional } from '@nestjs/common';
 
+import { DeploymentAccessService } from '../auth/deployment-access';
+import { StepUpService } from '../auth/step-up/step-up.service';
 import { BoardsService } from '../boards/boards.service';
 import { RouterService } from '../boards/router.service';
 import { TelegramChatsService } from '../telegram/telegram-chats.service';
@@ -23,9 +25,11 @@ export interface TelegramUpdate extends ObservedUpdate {
 }
 
 const HELP_TEXT =
-  '/status — последние циклы\n/pause [причина] — остановить новую автоматическую работу\n/resume — продолжить\n/router — состояние роутера и перезагрузка\n/help — эта справка';
+  '/status — последние циклы\n/pause [причина] — остановить новую автоматическую работу\n/resume — продолжить\n/router — состояние роутера и перезагрузка\n/confirm <код> — подтвердить опасное действие кодом 2FA\n/help — эта справка';
 const MAX_REASON = 200;
 const ROUTER_CONFIRM_MINUTES = 5;
+// How long a destructive action waits for its /confirm code.
+const CONFIRM_WAIT_MS = 5 * 60_000;
 
 // Command handling shared by both ways an update can arrive: the webhook
 // controller and the long-polling loop. Lives in the loop module (not
@@ -43,7 +47,69 @@ export class TelegramCommandsService {
     @Optional() private readonly control?: LoopControlService,
     @Optional() private readonly router?: RouterService,
     @Optional() private readonly chats?: TelegramChatsService,
+    // The second factor (DEVELOPMENT-PLAN.md S6): when the owner has it on, a destructive command waits for `/confirm <code>`.
+    @Optional() private readonly stepUp?: StepUpService,
+    @Optional() private readonly access?: DeploymentAccessService,
   ) {}
+
+  // The one destructive action waiting for a code. In memory on purpose: a restart cancels it, which is the safe way to forget.
+  private pending: { action: 'router-reboot'; expiresAt: number } | null = null;
+
+  private async ownerWithSecondFactor(): Promise<number | null> {
+    if (!this.stepUp || !this.access) return null;
+
+    const ownerId = await this.access.ownerId();
+
+    return ownerId !== null && (await this.stepUp.isEnabled(ownerId))
+      ? ownerId
+      : null;
+  }
+
+  private async confirm(code: string | undefined): Promise<void> {
+    const pending = this.pending;
+
+    if (!pending || pending.expiresAt < Date.now()) {
+      this.pending = null;
+      await this.telegram.send('Нечего подтверждать.');
+
+      return;
+    }
+
+    const ownerId = await this.ownerWithSecondFactor();
+
+    if (ownerId === null || !this.stepUp || !code) {
+      await this.telegram.send('Пришлите так: /confirm 123456');
+
+      return;
+    }
+
+    try {
+      await this.stepUp.verifyFactor(ownerId, code);
+    } catch (error) {
+      // The service has already logged the miss and raised the alarm when it is the third one in a row.
+      await this.telegram.send(
+        error instanceof HttpException && error.getStatus() === 429
+          ? '🔒 Слишком много неверных кодов. Подождите несколько минут.'
+          : 'Код не подошёл. Действие всё ещё ждёт — пришлите /confirm ещё раз.',
+      );
+
+      return;
+    }
+
+    this.pending = null;
+    this.stepUp.audit(
+      'warn',
+      'stepup.telegram',
+      'Router reboot confirmed in Telegram',
+      {
+        userId: ownerId,
+      },
+    );
+
+    if (pending.action === 'router-reboot' && this.router) {
+      await this.telegram.send(await this.router.requestFromTelegram());
+    }
+  }
 
   async handle(update: TelegramUpdate): Promise<void> {
     // Which channels and groups the bot is in (for the promo bindings); a chat that is not the owner's is otherwise ignored below.
@@ -99,6 +165,8 @@ export class TelegramCommandsService {
       await this.telegram.sendWithButtons(await this.router.statusText(), [
         [{ text: '🔄 Перезагрузить роутер', callback_data: 'rr:ask' }],
       ]);
+    } else if (command === '/confirm') {
+      await this.confirm(text.trim().split(/\s+/).slice(1).join(' '));
     } else if (command === '/help' || command === '/start') {
       await this.telegram.send(HELP_TEXT);
     }
@@ -166,6 +234,19 @@ export class TelegramCommandsService {
       if (askedMinutesAgo > ROUTER_CONFIRM_MINUTES) {
         await this.telegram.answerCallback(query.id, 'Кнопка устарела');
         await this.telegram.send('Кнопка устарела. /router — спросить снова.');
+
+        return;
+      }
+
+      if (await this.ownerWithSecondFactor()) {
+        this.pending = {
+          action: 'router-reboot',
+          expiresAt: Date.now() + CONFIRM_WAIT_MS,
+        };
+        await this.telegram.answerCallback(query.id, 'Нужен код');
+        await this.telegram.send(
+          '🔐 Перезагрузка роутера — опасное действие. Пришлите /confirm и код из приложения-аутентификатора (6 цифр). Ждёт 5 минут.',
+        );
 
         return;
       }

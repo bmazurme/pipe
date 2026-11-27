@@ -32,6 +32,7 @@ import {
 import { limitProbeWanted } from './limit-probe';
 import { RunCredentialsService } from './run-credentials.service';
 import { WorkersService } from './workers.service';
+import { RequireStepUp } from '../auth/step-up/require-step-up.decorator';
 
 // The workers the owner manages from the Worker page (browser session only), plus the two calls a worker makes about
 // itself: redeeming its one-time enrollment code (public — the code is the credential, and the route is throttled) and
@@ -51,6 +52,7 @@ export class WorkersController {
     return this.workersService.list(currentUser.id);
   }
 
+  @RequireStepUp()
   @Post()
   @UseGuards(JwtGuard)
   create(
@@ -97,6 +99,7 @@ export class WorkersController {
     return config;
   }
 
+  @RequireStepUp()
   @Delete('legacy/:name')
   @UseGuards(JwtGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -118,6 +121,7 @@ export class WorkersController {
   }
 
   // A new one-time code: connects a worker that has not enrolled yet, or reconnects one (its old key is revoked).
+  @RequireStepUp()
   @Post(':id/enroll-code')
   @UseGuards(JwtGuard)
   renewEnrollment(
@@ -138,6 +142,7 @@ export class WorkersController {
     await this.workersService.requestLimitsRefresh(id, currentUser.id);
   }
 
+  @RequireStepUp()
   @Delete(':id')
   @UseGuards(JwtGuard)
   remove(

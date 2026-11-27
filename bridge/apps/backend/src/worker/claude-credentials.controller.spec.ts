@@ -2,6 +2,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
+import { StepUpGuard } from '../auth/step-up/step-up.guard';
 import { ClaudeCredentialsController } from './claude-credentials.controller';
 
 const guardsOf = (target: object): unknown[] =>
@@ -10,16 +11,19 @@ const guardsOf = (target: object): unknown[] =>
 describe('ClaudeCredentialsController guards', () => {
   const proto = ClaudeCredentialsController.prototype;
 
-  it('requires a browser session to create a token', () => {
-    expect(guardsOf(proto.create)).toEqual([JwtGuard]);
+  it('requires a browser session and a second factor to create a token', () => {
+    // The browser session first, then the second factor (it reads request.user).
+    expect(guardsOf(proto.create)).toEqual([JwtGuard, StepUpGuard]);
   });
 
-  it('requires a browser session to delete a token', () => {
-    expect(guardsOf(proto.remove)).toEqual([JwtGuard]);
+  it('requires a browser session and a second factor to delete a token', () => {
+    // The browser session first, then the second factor (it reads request.user).
+    expect(guardsOf(proto.remove)).toEqual([JwtGuard, StepUpGuard]);
   });
 
-  it('requires a browser session to replace a token', () => {
-    expect(guardsOf(proto.replaceToken)).toEqual([JwtGuard]);
+  it('requires a browser session and a second factor to replace a token', () => {
+    // The browser session first, then the second factor (it reads request.user).
+    expect(guardsOf(proto.replaceToken)).toEqual([JwtGuard, StepUpGuard]);
   });
 
   it('still lets an API key read the list', () => {
