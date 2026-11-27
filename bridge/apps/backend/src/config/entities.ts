@@ -14,6 +14,7 @@ import { Chat } from '../chat/entities/chat.entity';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { Context } from '../context/entities/context.entity';
+import { ImproveOutcome } from '../improve/entities/improve-outcome.entity';
 import { ImproveRun } from '../improve/entities/improve-run.entity';
 import { ImproveSchedule } from '../improve/entities/improve-schedule.entity';
 import { ImproveSettings } from '../improve/entities/improve-settings.entity';
@@ -112,6 +113,7 @@ export const ENTITIES = [
   NotificationSettings,
   AppLog,
   ImproveRun,
+  ImproveOutcome,
   ImproveSchedule,
   ImproveSettings,
   LabProject,
