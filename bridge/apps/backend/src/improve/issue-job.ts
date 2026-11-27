@@ -18,6 +18,8 @@ export type IssueJobInput = {
   model: string;
   // A saved Context the job carries; omitted from the job input unless set.
   contextId?: number | null;
+  // Put the baseline (path → sha256) in the parcel so the worker can run scripts/verify-changed.mjs; only the repository's own runs (Improve) have it.
+  withBaseline?: boolean;
   requiredCapability?: WorkerCapability;
 };
 
@@ -33,6 +35,7 @@ export async function launchIssueJob(
     input.task,
     new Date(),
     input.baseline,
+    { includeBaseline: input.withBaseline },
   );
   const stored = await deps.storage.createFromBuffer(
     userId,

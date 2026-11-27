@@ -143,6 +143,7 @@ export class ImproveHandoffService {
           baseBranch,
         },
         baseline,
+        withBaseline: true,
         fileName,
         taskKey,
         model: chosen,

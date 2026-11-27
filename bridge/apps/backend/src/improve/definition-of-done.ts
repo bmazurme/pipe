@@ -5,12 +5,17 @@
 
 export const DEFINITION_OF_DONE = `## Definition of done (added automatically)
 
-CI will build, lint and test this change exactly like a person's, and a red CI makes the pull request useless. Before you finish, run the commands for every package you touched (see CLAUDE.md for the full list) and fix what they report.
+CI will build, lint and test this change exactly like a person's, and a red CI makes the pull request useless. Before you finish, run ONE command from the repository root:
 
-**Dependencies are not installed.** The repository arrives as a bare snapshot with no \`node_modules\`: run \`npm install\` first, once, from the folder the commands below name (the snapshot has no lockfile, so install resolves from each \`package.json\`; any lockfile it writes is left out of the result automatically) (\`bridge/\` for the bridge backend and frontend, the repository root for worker, sync, harness and packages/protocol, \`reports/\` for reports). It takes a few minutes and works through the proxy. A shell is available: do not skip the checks because they look slow, and never say a check passed that you did not run.
+\`node scripts/verify-changed.mjs\`
 
+It works out what you changed (against \`.pipe-baseline.json\`, which comes with the repository), runs the checks of every package you touched **and of every package that depends on it** (a change to \`packages/protocol\` is checked in sync, worker, harness, reports and the bridge frontend too), and says at the end what failed and what it could **not** verify. Fix what it reports and run it again until it passes; put its last lines in your final message. \`--plan\` shows what it would run.
 
-- **bridge backend** (\`bridge/apps/backend\`): \`npx eslint --fix <the files you changed>\` (CI fails on a single prettier formatting error), \`npx tsc --noEmit -p tsconfig.json\`, then \`npx jest <the folder you changed>\`.
+**Dependencies are not installed.** The repository arrives as a bare snapshot with no \`node_modules\`: the script runs \`npm install\` itself where one is missing (the snapshot has no lockfile, so install resolves from each \`package.json\`; any lockfile it writes is left out of the result automatically). It takes a few minutes and works through the proxy. A shell is available: do not skip the checks because they look slow, and never say a check passed that you did not run.
+
+The script only reports; formatting is fixed with \`npx eslint --fix <the files you changed>\` (CI fails on a single prettier formatting error) — run that first in \`bridge/apps/backend\` or \`bridge/apps/frontend\` if you touched them. If the script cannot run at all, fall back to the commands for each package you touched:
+
+- **bridge backend** (\`bridge/apps/backend\`): \`npx eslint --fix <the files you changed>\`, \`npx tsc --noEmit -p tsconfig.json\`, then \`npx jest <the folder you changed>\`.
 - **bridge frontend** (\`bridge/apps/frontend\`): \`npx eslint --fix src\`, \`npx tsc --noEmit -p tsconfig.json\`, then \`npm test -w frontend -- <a name matching what you changed>\` from \`bridge/\`.
 - **worker, sync, harness, packages/protocol**: \`npm run lint\` and \`npm test\` in that package (\`packages/protocol\` must be built first: \`npm run build\`).
 - **reports**: the \`npm test\` / \`npm run typecheck\` / \`npm run lint\` commands for the workspace you touched.

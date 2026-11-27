@@ -134,6 +134,15 @@ npm test    # tsc -b && node --test 'dist/**/*.test.js'
 npm run lint    # flat-config ESLint, shared base in the repo root's eslint.config.base.mjs
 ```
 
+### verify-changed (one command for what you touched and what depends on it)
+```bash
+# from the repo root
+node scripts/verify-changed.mjs          # lint/typecheck/tests of every changed package AND every package that depends on it
+node scripts/verify-changed.mjs --plan   # only say what it would run
+node scripts/verify-changed.mjs --files a.ts b.ts   # treat these paths as the change
+```
+`scripts/verify-changed.mjs` holds the one map «package → who depends on it» (protocol → sync, worker, harness, reports, bridge frontend; reports-shared → reports client/server); a new package.json must be added to it (`scripts/verify-changed.test.mjs` fails otherwise — it runs in CI's «infra scripts» job). «Changed» is read from git (against the merge base with `origin/main`), or, in the bare snapshot bridge hands a worker (no `.git`), from `.pipe-baseline.json` (path → sha256, added to Improve's parcels only; never published as a change). It installs what is missing, runs protocol's build first for anything that reads it, skips the checks of a package whose dependency already failed, regenerates `openapi.json` and the protocol types when a controller/DTO/entity changed (needs Postgres — says «NOT VERIFIED» when it cannot), and asks for a migration when an entity changed without one. Exit 1 when a check failed. Improve's Definition of done points the worker at this one command.
+
 ### cross-repo E2E pipeline
 ```bash
 # from the repo root
