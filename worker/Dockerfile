@@ -41,25 +41,26 @@ WORKDIR /app
 # unprivileged container user is the containerized equivalent of the
 # dedicated `pipe-worker` OS user the bare-metal install (see
 # systemd/pipe-worker.service) uses for the same reason.
-RUN addgroup -S pipe-worker && adduser -S pipe-worker -G pipe-worker
-
-# A second user for the claude CLI (WORKER_RUN_AS=pipe-runner): job code is arbitrary code execution, so it must not run
-# as the user that owns the worker's key and VPN config in .worker-state. Both users share the group pipe-jobs, which
-# owns the work directory; sudo lets pipe-worker start the CLI (and only that) as pipe-runner.
-RUN addgroup -S pipe-jobs && adduser -S -h /home/pipe-runner -G pipe-jobs pipe-runner \
- && mkdir -p /home/pipe-runner && chown pipe-runner:pipe-jobs /home/pipe-runner \
+#
+# The ids are PINNED to what the image has always had (adduser -S hands them out in this order from 100/101): a named volume made by an older image
+# keeps its files owned by these numbers, and a worker under another uid could not read its own key.
+#
+# A second user for the claude CLI (WORKER_RUN_AS=pipe-runner): job code is arbitrary code execution, so it must not run as the user that owns the
+# worker's key and VPN config in .worker-state. Both users share the group pipe-jobs, which owns the work directory.
+#
+# How the worker switches to it (S1): NOT sudo. sudo is a setuid binary, which `no-new-privileges` forbids and `--cap-drop ALL` starves, so a hardened
+# container could not use it. The entrypoint (docker-entrypoint.sh) starts the worker as pipe-worker with only CAP_SETUID/CAP_SETGID, and the worker
+# starts job code through `setpriv`, which drops every capability first (worker/src/runAs.ts, WORKER_RUN_AS_VIA=setpriv).
+RUN addgroup -S -g 101 pipe-worker && adduser -S -u 100 -G pipe-worker pipe-worker \
+ && addgroup -S -g 102 pipe-jobs && adduser -S -u 101 -h /home/pipe-runner -G pipe-jobs pipe-runner \
+ && mkdir -p /home/pipe-runner && chown pipe-runner:pipe-jobs /home/pipe-runner && chmod 0700 /home/pipe-runner \
  && addgroup pipe-worker pipe-jobs && addgroup pipe-runner pipe-jobs \
- && apk add --no-cache sudo \
- && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/claude' > /etc/sudoers.d/pipe-worker \
- && echo 'pipe-worker ALL=(pipe-runner) NOPASSWD:SETENV: /usr/local/bin/pipe-verify' >> /etc/sudoers.d/pipe-worker \
- # What the runner creates must be deletable (and readable) by the worker: sudo's default umask 022 would make every directory it creates 755, and the worker
- # could not clean the job directory up. umask_override makes sudo use exactly this one.
- && printf '%s\n' 'Defaults:pipe-worker umask=0002' 'Defaults:pipe-worker umask_override' >> /etc/sudoers.d/pipe-worker \
- && chmod 0440 /etc/sudoers.d/pipe-worker
+ && apk add --no-cache setpriv \
+ && id -u pipe-worker | grep -qx 100 && id -u pipe-runner | grep -qx 101 && getent group pipe-jobs | grep -q ':102:'
 
 # A3: the check the worker runs on a result before it leaves (scripts/verify-changed.mjs of the job's own repository). It executes the code the model
-# just wrote, so it too runs as pipe-runner — through this one root-owned wrapper, the only other command sudo allows. `--probe` lets the worker tell
-# «the image has no wrapper» from «a check failed».
+# just wrote, so it too runs as pipe-runner, through this one root-owned wrapper. `--probe` lets the worker tell «the image has no wrapper» from «a
+# check failed».
 RUN printf '%s\n' '#!/bin/sh' 'set -eu' '[ "${1:-}" = "--probe" ] && exit 0' 'cd "$1"' 'exec /usr/local/bin/node scripts/verify-changed.mjs' > /usr/local/bin/pipe-verify \
  && chmod 0755 /usr/local/bin/pipe-verify && chown root:root /usr/local/bin/pipe-verify
 
@@ -100,9 +101,15 @@ RUN mkdir -p /app/.worker-work /app/.worker-state \
  && chmod 2770 /app/.worker-work
 ENV WORKER_STATE_DIR=/app/.worker-state
 # Job code (claude --dangerously-skip-permissions: arbitrary code driven by task text) runs as pipe-runner, which cannot read the worker's key or VPN
-# config in .worker-state. On by default; the worker refuses to start if the sudo rule above does not work, so a broken image fails loudly. To run
+# config in .worker-state. On by default; the worker refuses to start if the user switch above does not work, so a broken image fails loudly. To run
 # jobs as the worker's own user anyway (not advised), start the container with -e WORKER_RUN_AS= (empty).
 ENV WORKER_RUN_AS=pipe-runner
-USER pipe-worker
+ENV WORKER_RUN_AS_VIA=setpriv
+ENV WORKER_RUN_AS_GROUP=pipe-jobs
 
+# Root only until the entrypoint has dropped to pipe-worker (see docker-entrypoint.sh); an image run with --user skips that step.
+COPY worker/docker-entrypoint.sh /usr/local/bin/pipe-entrypoint
+RUN chmod 0755 /usr/local/bin/pipe-entrypoint && chown root:root /usr/local/bin/pipe-entrypoint
+USER root
+ENTRYPOINT ["/usr/local/bin/pipe-entrypoint"]
 CMD ["node", "dist/index.js"]

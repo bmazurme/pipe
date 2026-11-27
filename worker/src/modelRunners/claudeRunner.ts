@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { CancelledError } from '../cancelled.js';
+import { applyRunnerIdentity, asUser } from '../runAs.js';
 import { ClaudeStreamParser, type ClaudeReport, type StreamDelta } from './claudeUsage.js';
 
 export interface RunResult {
@@ -51,14 +52,14 @@ export function buildClaudeEnv(
   return env;
 }
 
-// The command that starts the CLI. With WORKER_RUN_AS set it goes through `sudo -n -E -u <user>`, so job code runs as
-// another OS user that cannot read the worker's own key and VPN config (see README "Two OS users").
+// The command that starts the CLI. With WORKER_RUN_AS set it goes through `sudo -n -E -u <user>` (or `setpriv` in the container image, see runAs.ts), so
+// job code runs as another OS user that cannot read the worker's own key and VPN config (see README "Two OS users").
 export function claudeCommand(
   args: string[],
   runAs: string | undefined = process.env.WORKER_RUN_AS?.trim() || undefined,
 ): { command: string; args: string[] } {
   if (!runAs) return { command: 'claude', args };
-  return { command: 'sudo', args: ['-n', '-E', '-u', runAs, 'claude', ...args] };
+  return asUser(runAs, ['claude', ...args]);
 }
 
 // A scratch directory for one run. With WORKER_RUN_AS it is group-writable (setgid), so the other user can write
@@ -92,13 +93,13 @@ export function shareRunDir(dir: string, runAs: string | undefined = process.env
 }
 
 // Startup check for WORKER_RUN_AS: throws when the worker may not run the CLI as that user. It runs the very command a job runs
-// (`sudo -n -E -u <user> claude --version`), because the image's sudoers rule allows exactly that and nothing else: the previous check, `sudo -n -u
-// <user> true`, was refused by the rule itself, so the worker refused to start whenever WORKER_RUN_AS was set and the isolation had never been on.
+// (`sudo -n -E -u <user> claude --version`, or the setpriv form in the image), because the sudoers rule allows exactly that and nothing else: the previous
+// check, `sudo -n -u <user> true`, was refused by the rule itself, so the worker refused to start whenever WORKER_RUN_AS was set and the isolation had never been on.
 export function verifyRunAs(runAs: string, run: typeof spawnSync = spawnSync): void {
   const cmd = claudeCommand(['--version'], runAs);
   const result = run(cmd.command, cmd.args, { stdio: 'ignore' });
   if (result.error || result.status !== 0) {
-    throw new Error(`WORKER_RUN_AS=${runAs} is set but "${cmd.command} ${cmd.args.join(' ')}" failed — check the sudoers rule and that ${runAs} can run claude (see worker/README.md)`);
+    throw new Error(`WORKER_RUN_AS=${runAs} is set but "${cmd.command} ${cmd.args.join(' ')}" failed — check the sudoers rule (or, with WORKER_RUN_AS_VIA=setpriv, that the container keeps CAP_SETUID and CAP_SETGID) and that ${runAs} can run claude (see worker/README.md)`);
   }
 }
 
@@ -151,11 +152,10 @@ export function runClaude(
     // tools built on common HTTP libraries do). Set whichever flavor it
     // reads; unused ones are harmless.
     const env = buildClaudeEnv(process.env, proxyUrl, claudeToken);
-    // The worker's own HOME/USER are not the other user's; sudo sets them for the target user.
-    if (process.env.WORKER_RUN_AS?.trim()) {
-      delete env.HOME;
-      delete env.USER;
-    }
+    // The worker's own HOME/USER are not the other user's (sudo sets them for the target user; setpriv does not, see runAs.ts).
+    const runAsUser = process.env.WORKER_RUN_AS?.trim();
+
+    if (runAsUser) applyRunnerIdentity(env, runAsUser);
     const cmd = claudeCommand(args);
     const child = spawn(cmd.command, cmd.args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], env, detached: process.platform !== 'win32' });
     // A CLI that exits before reading everything closes the pipe (EPIPE); the exit code reports that, not this.

@@ -109,7 +109,7 @@ Worker добавляется на странице **Worker → Worker'ы → �
 |---|---|---|
 | `BRIDGE_API_URL` | да | URL bridge backend, например `https://bridge.example.com` |
 | `WORKER_STATE_DIR` | нет (по умолчанию `./.worker-state`, в Docker `/app/.worker-state`) | где подключённый worker хранит свой ключ. Должен переживать перезапуск (том) |
-| `WORKER_RUN_AS` | в образе Docker — `pipe-runner` (включено); пустое значение выключает; вне Docker — нет | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет ту же команду, что запускает задача, — `sudo -n -E -u … claude --version` (правило sudoers разрешает только её) — и не стартует, если не получилось. См. «Два пользователя ОС» |
+| `WORKER_RUN_AS` | в образе Docker — `pipe-runner` (включено); пустое значение выключает; вне Docker — нет | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …` (в образе — через `setpriv`, см. «Жёсткий контейнер»). Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет ту же команду, что запускает задача, — `sudo -n -E -u … claude --version` (правило sudoers разрешает только её) — и не стартует, если не получилось. См. «Два пользователя ОС» |
 | `WORKER_VERIFY` | включено; `off`/`0`/`false` выключает | A3: после модели и до отправки результата worker сам запускает `node scripts/verify-changed.mjs` из снимка (только если в посылке есть `.pipe-baseline.json` и сам скрипт — это запуски Improve на репозитории проекта) и кладёт вердикт в результат (`.pipe-verify.json`: `passed` / `failed` / `unverified`). См. «Проверка результата перед PR» |
 | `WORKER_VERIFY_TIMEOUT_SEC` | `1500` | Сколько секунд может идти эта проверка (установка зависимостей, lint, типы, тесты затронутых пакетов). Не уложилась — вердикт `unverified`, задача не падает |
 | `WORKER_ENROLL_CODE` | нет | одноразовый код со страницы Worker: при старте, если ключа ещё нет, обменивается на ключ. Допускает `WORKER_ENROLL_CODE_FILE` |
@@ -428,6 +428,32 @@ The `docker run` command the Add-worker dialog generates caps the container: `--
 пользователю `pipe-runner` `umask 007`. Без `WORKER_RUN_AS` поведение прежнее (CLI от пользователя worker'а).
 
 **Cold standby.** A worker that follows the active connection also gets `vpnStandbyLinks`: the links of the connections marked «Резерв» on the VPN page. They are outbounds in its Xray config that nothing routes to and nothing probes while a link of the main pool is alive; when every main link is dead the traffic goes through a standby link. A worker without a main pool ignores them. A different subset of standby links alone does not restart a running tunnel (subscriptions re-pick their servers on every refresh); only the standby appearing or going does.
+
+### Жёсткий контейнер: без sudo, без capabilities, корень только для чтения (S1)
+
+`sudo` — setuid-программа: с `--security-opt no-new-privileges` она не работает, а `--cap-drop ALL` лишает её нужных прав. Поэтому образ больше **не использует sudo**
+(`WORKER_RUN_AS_VIA=setpriv`, переменная образа; вне Docker по умолчанию `sudo`, как раньше). Как это устроено:
+
+1. `ENTRYPOINT` (`docker-entrypoint.sh`) — единственное, что работает от root, и только пока не отдаст управление: он запускает worker от `pipe-worker` с двумя capabilities,
+   `CAP_SETUID` и `CAP_SETGID`, как *ambient* (переживают смену пользователя), с урезанным bounding-set и `no-new-privs`.
+2. worker запускает код задачи через `setpriv --reuid=pipe-runner --regid=pipe-jobs --init-groups --inh-caps=-all --ambient-caps=-all --no-new-privs …` (`src/runAs.ts`): процесс задачи —
+   `pipe-runner` **без единой capability** и без возможности её получить; `HOME`/`USER` ему задаёт worker.
+3. uid/gid пользователей закреплены в `Dockerfile` (`100/101`, `101/102`): том, созданный старым образом, хранит файлы под этими номерами.
+
+Контейнер можно запускать так (агент плат делает это сам, см. `infra/boardagent/README.md`, `WORKER_HARDEN=1`):
+
+```
+docker run … --cap-drop ALL --cap-add SETUID --cap-add SETGID --cap-add SETPCAP \
+  --security-opt no-new-privileges --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+  --tmpfs /home/pipe-runner:rw,nosuid,nodev,uid=101,gid=102,mode=0700,size=384m \
+  -v <имя>-state:/app/.worker-state -v <имя>-work:/app/.worker-work  …
+```
+
+(`SETPCAP` нужен только чтобы урезать bounding-set; без него это пропускается, остальное не меняется.) Писать можно только в два тома, `/tmp` и домашний каталог runner'а в tmpfs.
+Образ работает и с обычными правами Docker, без этих флагов. Проверено запуском контейнера: worker стартует («pipe-worker ready», то есть `setpriv … claude --version` прошёл);
+процесс задачи — `uid=101`, `CapPrm/CapEff/CapAmb = 0`, `NoNewPrivs=1`, не читает `.worker-state` и `/proc/1/environ`, `setpriv --reuid=pipe-worker|0` → `Operation not permitted`,
+sudo отсутствует, запись в `/app` и `/etc` — `Read-only file system`, в каталог задачи, `$HOME` и `/tmp` — можно, и worker удаляет то, что создал runner.
 
 ### Права на каталог задачи (исправлено 2026-11-27)
 

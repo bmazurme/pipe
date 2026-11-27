@@ -30,6 +30,10 @@
 # does not the old container is put back and started. What it will touch is fixed HERE, not by bridge: only containers with that name
 # pattern whose image is that repository, only the `stable` tag of it, and only a container whose settings it can reproduce exactly
 # (named volumes, env, restart policy, limits — a bind mount, a published port, a device or extra privileges is refused, never guessed).
+# S1(2), hardening: it reproduces what only REMOVES privilege (--cap-drop, --read-only, --security-opt no-new-privileges, a tmpfs at /tmp or the runner's
+# home) and accepts exactly the three capabilities the image's entrypoint needs (SETUID, SETGID, SETPCAP) — any other added capability, a custom seccomp or
+# apparmor profile, or a tmpfs anywhere else is still refused. With WORKER_HARDEN=1 in the settings file it also ADDS that whole set when it recreates a
+# worker (and a named volume for the work directory, which a read-only root needs); off by default, so it is turned on one board at a time.
 #
 # Settings (/etc/pipe-boardagent.env, mode 600): BRIDGE_API_URL (https://api.bridge.ntlstl.dev), BRIDGE_API_KEY (a boards-only API key of
 # the OWNER, brk_…), OWNER, REPO, BRANCH, STATE_DIR, BRIDGE_PI_DIR, MANIFEST_FILE, CHECK_SCRIPT, BOARD_HOST. Tests: GITHUB_API.
@@ -45,7 +49,11 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=6
+AGENT_VERSION=7
+# S1(2): add the container hardening (see the header) when a worker is recreated. Off unless the board's settings file says WORKER_HARDEN=1.
+WORKER_HARDEN="${WORKER_HARDEN:-0}"
+WORKER_HARDEN_TMP_SIZE="${WORKER_HARDEN_TMP_SIZE:-128m}"
+WORKER_HARDEN_HOME_SIZE="${WORKER_HARDEN_HOME_SIZE:-384m}"
 # The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
 METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
 # The worker update: the only image it will pull and the only container names it will touch (see the header). Tests change the image.
@@ -384,7 +392,7 @@ print(json.dumps(data))
 # Reads one container's settings and prints the `docker run` arguments that reproduce them (NUL-separated), or a reason it will not do it
 # (exit 3). Only what it can reproduce exactly is accepted — see the header.
 worker_run_args() { # inspect-json image-env-json
-  INSPECT="$1" IMAGE_ENV="$2" python3 -c '
+  INSPECT="$1" IMAGE_ENV="$2" HARDEN="$WORKER_HARDEN" TMP_SIZE="$WORKER_HARDEN_TMP_SIZE" HOME_SIZE="$WORKER_HARDEN_HOME_SIZE" python3 -c '
 import json, os, sys
 c = json.loads(os.environ["INSPECT"])[0]
 image_env = set(json.loads(os.environ.get("IMAGE_ENV") or "[]"))
@@ -393,13 +401,27 @@ def refuse(why):
     sys.stdout.write(why); sys.exit(3)
 if hc.get("Privileged"): refuse("the container is privileged")
 if hc.get("Devices"): refuse("the container has devices")
-if hc.get("CapAdd"): refuse("the container adds capabilities")
+# Only what the image needs: the entrypoint keeps CAP_SETUID/CAP_SETGID for the worker and cuts the bounding set with CAP_SETPCAP. Anything else added is a decision for a person.
+CAP_ADD_OK = {"SETUID", "SETGID", "SETPCAP"}
+def cap(name): return str(name).upper().replace("CAP_", "", 1)
+cap_add = [cap(n) for n in (hc.get("CapAdd") or [])]
+if set(cap_add) - CAP_ADD_OK: refuse("the container adds capabilities (" + ",".join(sorted(set(cap_add) - CAP_ADD_OK)) + ")")
+cap_drop = [cap(n) for n in (hc.get("CapDrop") or [])]
+if any(not n.replace("_", "").isalpha() for n in cap_drop): refuse("the container drops a capability it cannot name")
+sec = [str(o).replace(":true", "") for o in (hc.get("SecurityOpt") or [])]
+if set(sec) - {"no-new-privileges"}: refuse("the container has a security option it will not copy (" + ",".join(sorted(set(sec) - {"no-new-privileges"})) + ")")
 if hc.get("PortBindings"): refuse("the container publishes ports")
 if hc.get("NetworkMode") not in ("default", "bridge"): refuse("the container uses the network " + str(hc.get("NetworkMode")))
 if hc.get("PidMode") or hc.get("IpcMode") not in ("", None, "private", "shareable"): refuse("the container shares a namespace")
-if hc.get("Tmpfs"): refuse("the container has tmpfs mounts")
+# A tmpfs only where the image has a reason for one, and only with plain options.
+TMPFS_OK = ("/tmp", "/home/pipe-runner")
+tmpfs = dict(hc.get("Tmpfs") or {})
+for path, opts in tmpfs.items():
+    if path not in TMPFS_OK: refuse("the container has a tmpfs at " + path)
+    if not all(ch.isalnum() or ch in "=,_-" for ch in str(opts)): refuse("the container has a tmpfs with options it will not copy")
 for m in c.get("Mounts") or []:
-    if m.get("Type") != "volume": refuse("the container has a " + str(m.get("Type")) + " mount")
+    # A tmpfs is listed here too; it was judged above, from HostConfig.
+    if m.get("Type") not in ("volume", "tmpfs"): refuse("the container has a " + str(m.get("Type")) + " mount")
 args = []
 policy = (hc.get("RestartPolicy") or {}).get("Name") or ""
 if policy and policy != "no": args += ["--restart", policy]
@@ -408,8 +430,29 @@ if isinstance(timeout, int) and timeout > 0: args += ["--stop-timeout", str(time
 if hc.get("NanoCpus"): args += ["--cpus", ("%.3f" % (hc["NanoCpus"] / 1e9)).rstrip("0").rstrip(".")]
 if hc.get("Memory"): args += ["--memory", str(hc["Memory"])]
 if hc.get("CpuShares"): args += ["--cpu-shares", str(hc["CpuShares"])]
-for m in c.get("Mounts") or []:
+volumes = [m for m in (c.get("Mounts") or []) if m.get("Type") == "volume"]
+for m in volumes:
     args += ["-v", m["Name"] + ":" + m["Destination"] + ("" if m.get("RW", True) else ":ro")]
+# S1(2): what makes the container smaller, copied as it is; with WORKER_HARDEN=1 the whole set is made sure of.
+harden = os.environ.get("HARDEN") == "1"
+readonly = bool(hc.get("ReadonlyRootfs"))
+if harden:
+    if "ALL" not in cap_drop: cap_drop.append("ALL")
+    for n in ("SETUID", "SETGID", "SETPCAP"):
+        if n not in cap_add: cap_add.append(n)
+    if "no-new-privileges" not in sec: sec.append("no-new-privileges")
+    readonly = True
+    tmpfs.setdefault("/tmp", "rw,nosuid,nodev,size=" + os.environ.get("TMP_SIZE", "128m"))
+    # uid/gid of pipe-runner and pipe-jobs, pinned in the image (worker/Dockerfile).
+    tmpfs.setdefault("/home/pipe-runner", "rw,nosuid,nodev,uid=101,gid=102,mode=0700,size=" + os.environ.get("HOME_SIZE", "384m"))
+    # A read-only root has nowhere for jobs to be unpacked: the work directory needs a volume of its own (it inherits the image directory ownership).
+    if not any(m.get("Destination") == "/app/.worker-work" for m in volumes):
+        args += ["-v", (c.get("Name") or "worker").lstrip("/") + "-work:/app/.worker-work"]
+for n in cap_drop: args += ["--cap-drop", n]
+for n in cap_add: args += ["--cap-add", n]
+if "no-new-privileges" in sec: args += ["--security-opt", "no-new-privileges"]
+if readonly: args += ["--read-only"]
+for path, opts in tmpfs.items(): args += ["--tmpfs", path + (":" + opts if opts else "")]
 for e in cfg.get("Env") or []:
     if e not in image_env: args += ["-e", e]
 sys.stdout.write("\0".join(args) + ("\0" if args else ""))
@@ -457,7 +500,9 @@ update_one_worker() { # name new-image-id work-dir
     return 1
   fi
   docker rm "old-$name" >/dev/null 2>&1 || true
-  echo "$name: updated (${old_id#sha256:} → ${new_id#sha256:})" | sed -E 's/([0-9a-f]{12})[0-9a-f]+/\1/g'
+  local hardened=""
+  printf '%s\0' "${args[@]}" | tr '\0' '\n' | grep -qx -- '--read-only' && hardened=", hardened"
+  echo "$name: updated (${old_id#sha256:} → ${new_id#sha256:}$hardened)" | sed -E 's/([0-9a-f]{12})[0-9a-f]+/\1/g'
   return 0
 }
 
