@@ -12,6 +12,7 @@ describe('tileOfAttention', () => {
     expect(tileOfAttention('cloud:yc-vm')).toBe('tile-cloud');
     expect(tileOfAttention('channels')).toBe('tile-channels');
     expect(tileOfAttention('board:ubuntu-blue')).toBe('tile-boards');
+    expect(tileOfAttention('drift')).toBe('tile-drift');
     expect(tileOfAttention('nas:MyCloudEX2Ultra')).toBe('tile-nas');
     expect(tileOfAttention('ups:ups')).toBe('tile-ups');
     expect(tileOfAttention('router:asus')).toBe('tile-router');
@@ -24,7 +25,7 @@ describe('tileOfAttention', () => {
   it('only leads to tiles the bar lists', () => {
     const ids = new Set(DASHBOARD_TILES.map((tile) => tile.id));
 
-    for (const id of ['vpn', 'nodes', 'backup', 'release', 'cloud:x', 'channels', 'board:x', 'nas:x', 'ups:x', 'router:x']) {
+    for (const id of ['vpn', 'nodes', 'backup', 'release', 'cloud:x', 'channels', 'board:x', 'drift', 'nas:x', 'ups:x', 'router:x']) {
       expect(ids.has(tileOfAttention(id) as string)).toBe(true);
     }
   });

@@ -1698,6 +1698,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/boards/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["BoardsController_driftView"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boards/{host}/updates": {
         parameters: {
             query?: never;
@@ -4188,6 +4204,9 @@ export interface components {
             name: string;
             image: string;
             running: boolean;
+            restartCount?: number;
+            startedAt?: string;
+            oomKilled?: boolean;
         };
         BoardHealthDto: {
             diskUsedPct?: number;
@@ -7437,6 +7456,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
+    BoardsController_driftView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { BoardsAgentController, BoardsController } from './boards.controller';
 import { BoardMetricsService } from './board-metrics.service';
+import { DriftService } from './drift.service';
+import { Worker } from '../worker/entities/worker.entity';
 import { BoardsService } from './boards.service';
 import { NasService } from './nas.service';
 import { CloudService } from './cloud.service';
@@ -30,6 +32,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
       RouterReport,
       RouterReboot,
       BoardMetric,
+      Worker,
     ]),
     AuthModule,
     TelegramModule,
@@ -42,6 +45,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
     UpsService,
     RouterService,
     BoardMetricsService,
+    DriftService,
   ],
   exports: [
     BoardsService,

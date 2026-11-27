@@ -25,6 +25,24 @@ export interface BoardWorker {
   name: string;
   image: string;
   running: boolean;
+  restartCount?: number;
+  startedAt?: string;
+  oomKilled?: boolean;
+}
+
+export type DriftLevel = 'bad' | 'warn';
+
+/** One thing that has drifted or is failing quietly (R1): a worker container that restarts, an image that is not `stable`, a failed update. */
+export interface DriftItem {
+  id: string;
+  level: DriftLevel;
+  subject: string;
+  text: string;
+}
+
+export interface DriftView {
+  status: 'ok' | 'warn' | 'bad';
+  items: DriftItem[];
 }
 
 export interface Board {
@@ -64,6 +82,11 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
       providesTags: ['Boards'],
       transformErrorResponse: errorMessage('Не удалось загрузить платы'),
     }),
+    getDrift: builder.query<DriftView, void>({
+      query: () => 'boards/drift',
+      providesTags: ['Boards'],
+      transformErrorResponse: errorMessage('Не удалось получить дрейф'),
+    }),
     requestBoardUpdate: builder.mutation<{ id: number; sha: string; repoPaths: string[]; status: string }, string>({
       query: (host) => ({ url: `boards/${encodeURIComponent(host)}/updates`, method: 'POST' }),
       invalidatesTags: ['Boards'],
@@ -89,6 +112,7 @@ const boardsApiEndpoints = boardsApi.injectEndpoints({
 
 export const {
   useListBoardsQuery,
+  useGetDriftQuery,
   useRequestBoardUpdateMutation,
   useCancelBoardUpdateMutation,
   useRequestWorkerUpdateMutation,

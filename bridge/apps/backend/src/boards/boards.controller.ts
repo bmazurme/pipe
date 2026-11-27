@@ -32,6 +32,8 @@ import { NasService } from './nas.service';
 import { CloudService } from './cloud.service';
 import { UpsService } from './ups.service';
 import { RouterService } from './router.service';
+import { DriftService } from './drift.service';
+import type { DriftView } from './drift';
 
 // What a board's own agent calls (infra/boardagent): a personal API key of the OWNER, like the other machine clients. A key of any other
 // account is refused — the boards are the owner's.
@@ -155,11 +157,21 @@ export class BoardsAgentController {
 @Controller('api/v1/boards')
 @UseGuards(JwtGuard, OwnerGuard)
 export class BoardsController {
-  constructor(private readonly boards: BoardsService) {}
+  constructor(
+    private readonly boards: BoardsService,
+    private readonly drift: DriftService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: { id: number }) {
     return this.boards.list(user.id);
+  }
+
+  // R1: what has drifted or is failing quietly — worker containers that restart, images that are not `stable`, workers on an old version,
+  // updates that failed. The Dashboard shows it; the same list goes to Telegram once a day.
+  @Get('drift')
+  driftView(@CurrentUser() user: { id: number }): Promise<DriftView> {
+    return this.drift.view(user.id);
   }
 
   @Post(':host/updates')
