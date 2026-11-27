@@ -66,6 +66,7 @@ function setup() {
     storage as never,
     notifier as never,
     appLogs as never,
+    {} as never,
   );
   const improve = new ImproveService(
     runs as never,

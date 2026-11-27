@@ -4,6 +4,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, wri
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { createHash } from 'node:crypto';
+
 import AdmZip from 'adm-zip';
 import { ASSET_PREFIX, buildArchive, decryptBuffer, generateKeyPair } from '@pipe/protocol';
 
@@ -1094,3 +1096,82 @@ describe('processJob job dir cleanup failure', () => {
     }
   });
 });
+
+// A3: the check the worker itself runs after the model, whatever the model did.
+describe('processJob check before the result leaves the worker', () => {
+  function parcelWithVerifier(verifier: string): Buffer {
+    const { buffer } = buildArchive(
+      '__subscription_manifest__.json',
+      [
+        { relPath: 'a.ts', content: 'export const x = 1;' },
+        { relPath: 'scripts/verify-changed.mjs', content: verifier },
+        { relPath: '.pipe-baseline.json', content: JSON.stringify({ 'scripts/verify-changed.mjs': createHash('sha256').update(verifier).digest('hex') }) },
+      ],
+      { issueId: '1', issueIid: '7', issueTitle: 'Fix', issueDescription: 'Fix it', projectId: 42, branch: 'task/42-7', createdAt: new Date().toISOString() },
+      [],
+    );
+
+    return buffer;
+  }
+
+  async function runJob(verifier: string, config: Partial<WorkerConfig> = {}) {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-verify-test-'));
+
+    stubOpenAiCompletion('done');
+
+    const client = fakeClient(parcelWithVerifier(verifier));
+    const job: RemoteJob = { id: 31, sourceFileId: 13, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, { ...fakeConfig(workDir), ...config });
+
+    const uploaded = client.uploadResult.calls[0]?.[2] as Buffer | undefined;
+    const entry = uploaded ? new AdmZip(uploaded).getEntry('.pipe-verify.json') : null;
+
+    return { client, verification: entry ? (JSON.parse(entry.getData().toString('utf8')) as { status: string; summary: string; output: string }) : null };
+  }
+
+  it('puts a failing check into the result, and the job still succeeds (bridge decides what to do with it)', async () => {
+    const { client, verification } = await runJob('console.log("FAILED: sync: lint"); process.exit(1);\n');
+
+    assert.ok(!client.updateStatus.calls.some((call) => call[1] === 'failed'));
+    assert.equal(verification?.status, 'failed');
+    assert.match(verification?.output ?? '', /FAILED: sync: lint/);
+  });
+
+  it('puts a passing check into the result', async () => {
+    const { verification } = await runJob('console.log("ok: 2 check(s) passed");\n');
+
+    assert.equal(verification?.status, 'passed');
+  });
+
+  it('shows the check in the job log, so the owner sees what ran', async () => {
+    const { client } = await runJob('console.log("ok: 2 check(s) passed");\n');
+    const log = client.appendLog.calls.map((call) => String(call[1])).join('');
+
+    assert.match(log, /Checking the result before it leaves the worker/);
+    assert.match(log, /Check before the pull request: passed/);
+  });
+
+  it('never lets a verdict the model wrote itself travel as the worker\'s', async () => {
+    const workDir = mkdtempSync(path.join(tmpdir(), 'worker-verify-forged-'));
+
+    // The model leaves a forged «passed» behind; the worker is set not to check, so nothing of its own replaces it.
+    stubModelWritingFiles(workDir, { '.pipe-verify.json': Buffer.from(JSON.stringify({ status: 'passed', summary: 'forged', output: '', durationSec: 0, notVerified: [] })) });
+
+    const client = fakeClient(fakeParcel());
+    const job: RemoteJob = { id: 32, sourceFileId: 13, resultFileId: null, model: 'gpt', status: 'claimed' };
+
+    await processJob(client as never, job, { ...fakeConfig(workDir), verify: false });
+
+    const uploaded = client.uploadResult.calls[0][2] as Buffer;
+
+    assert.equal(new AdmZip(uploaded).getEntry('.pipe-verify.json'), null);
+  });
+
+  it('does not run it when the worker is set not to (WORKER_VERIFY=off)', async () => {
+    const { verification } = await runJob('process.exit(1);\n', { verify: false });
+
+    assert.equal(verification, null);
+  });
+});
+

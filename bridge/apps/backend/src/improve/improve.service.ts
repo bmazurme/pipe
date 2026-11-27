@@ -785,7 +785,8 @@ export class ImproveService {
     run.status = ImproveRunStatus.Publishing;
     run.error = null;
     run.finishedAt = null;
-    await this.publisher.publish(run, job.resultFileId);
+    // The owner pressed «publish again»: a result whose check failed is published as it is, on their say.
+    await this.publisher.publish(run, job.resultFileId, { skipGate: true });
 
     return run;
   }

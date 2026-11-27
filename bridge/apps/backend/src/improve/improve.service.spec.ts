@@ -105,6 +105,7 @@ function setup(
     storage as never,
     notifier as never,
     appLogs as never,
+    {} as never,
   );
   const service = new ImproveService(
     runs as never,

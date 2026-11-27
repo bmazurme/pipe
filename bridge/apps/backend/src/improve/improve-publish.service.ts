@@ -7,16 +7,27 @@ import { GithubApiService } from '../loop/github-api.service';
 import { findProtected } from '../loop/protected-paths';
 import { StorageService } from '../storage/storage.service';
 import { NotifyService } from '../telegram/notify.service';
+import { withDefinitionOfDone } from './definition-of-done';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
+import { ImproveHandoffService } from './improve-handoff.service';
 import { buildResultTree, message, PR_LABEL } from './improve-shared';
 import {
+  applyChanges,
   Change,
   describeChanges,
   diffResult,
   MAX_CHANGED_BYTES,
   MAX_CHANGED_FILES,
   readResultParcel,
+  readResultVerification,
 } from './parcel';
+import {
+  describeForPr,
+  gateDecision,
+  parseVerification,
+  retryTask,
+  type Verification,
+} from './verification';
 
 // GitHub answers a fine-grained token that lacks a permission with this one line, which says nothing
 // about WHICH permission — name them, so the owner does not have to guess (it cost three failed runs once).
@@ -44,10 +55,16 @@ export class ImprovePublishService {
     private readonly storage: StorageService,
     private readonly notifier: NotifyService,
     private readonly appLogs: AppLogService,
+    private readonly handoff: ImproveHandoffService,
   ) {}
 
   // result parcel → diff against the baseline → branch → PR.
-  async publish(run: ImproveRun, resultFileId: number | null): Promise<void> {
+  // `skipGate`: the owner chose to publish a result whose check failed (the button on a failed run).
+  async publish(
+    run: ImproveRun,
+    resultFileId: number | null,
+    options: { skipGate?: boolean } = {},
+  ): Promise<void> {
     try {
       if (!resultFileId) throw new Error('У задачи worker нет результата');
 
@@ -61,7 +78,8 @@ export class ImprovePublishService {
         run.baseline = stored?.baseline ?? null;
       }
       const file = await this.storage.findOwned(resultFileId, run.userId);
-      const result = await readResultParcel(await this.storage.readBytes(file));
+      const resultBytes = await this.storage.readBytes(file);
+      const result = await readResultParcel(resultBytes);
 
       const changes = diffResult(
         JSON.parse(run.baseline ?? '{}') as Record<string, string>,
@@ -108,6 +126,48 @@ export class ImprovePublishService {
         );
       }
 
+      // A3: the worker checked its own result before sending it. A red check is not turned into a pull request until the worker has had one more
+      // go at it; CI after the PR stays the judge (and the fallback) either way. Only a new pull request is gated — a repair is a commit on one.
+      let verification: Verification | null = null;
+      let gateNote: string | null = null;
+
+      if (run.kind === 'issue') {
+        const raw = await readResultVerification(resultBytes).catch(() => null);
+
+        verification = raw ? parseVerification(raw) : null;
+
+        const decision = gateDecision(verification, run.gateRetries ?? 0, {
+          skipGate: options.skipGate,
+        });
+
+        if (decision.action === 'retry') {
+          if (
+            await this.retryAfterGate(
+              run,
+              allowed,
+              verification as Verification,
+            )
+          ) {
+            await this.storage.delete(file).catch(() => undefined);
+
+            return;
+          }
+
+          // The second go could not be started: the work is not thrown away, the pull request is opened and CI tells the rest.
+          gateNote =
+            'Проверка перед PR не прошла, а повторный запуск worker не удалось начать';
+        } else if (decision.action === 'fail') {
+          await this.finish(run, ImproveRunStatus.Failed, {
+            error: `${decision.reason}. Результат сохранён: «Повторить публикацию» откроет PR как есть`,
+          });
+          await this.notifier.send(
+            `🔴 Задача #${run.issueNumber}: ${decision.reason}. PR не открыт; результат сохранён — «Повторить публикацию» откроет его как есть`,
+          );
+
+          return;
+        }
+      }
+
       if (run.kind === 'repair') {
         await this.commitRepair(run, allowed);
         await this.finish(run, ImproveRunStatus.PrUpdated, {
@@ -123,13 +183,20 @@ export class ImprovePublishService {
         return;
       }
 
-      const pr = await this.openPullRequest(run, allowed, note);
+      const pr = await this.openPullRequest(
+        run,
+        allowed,
+        [note, gateNote].filter(Boolean).join('. ') || null,
+        describeForPr(verification, (run.gateRetries ?? 0) > 0),
+      );
 
       await this.finish(run, ImproveRunStatus.PrOpen, {
         branch: pr.branch,
         prNumber: pr.number,
         prUrl: pr.url,
-        note: [describeChanges(allowed), note].filter(Boolean).join('. '),
+        note: [describeChanges(allowed), note, gateNote]
+          .filter(Boolean)
+          .join('. '),
       });
       await this.storage.delete(file).catch(() => undefined);
       await this.notifier.send(
@@ -164,10 +231,79 @@ export class ImprovePublishService {
     await this.github.updateBranch(run.branch as string, commit);
   }
 
+  // A second go at the task before any pull request exists: the snapshot the run started from WITH the worker's changes on it, and the check's
+  // output in the task. The baseline stays the original one, so the final diff is still the whole change. The same run moves on to the new job
+  // (one row, one PR). Returns false when it could not be started; never throws.
+  private async retryAfterGate(
+    run: ImproveRun,
+    changes: Change[],
+    verification: Verification,
+  ): Promise<boolean> {
+    try {
+      const baseSha = run.baseSha as string;
+      const { files } = await this.handoff.snapshotAt(baseSha);
+      const issue = await this.github.getIssue(run.issueNumber as number);
+      const { job } = await this.handoff.handToWorker(
+        run.userId,
+        run.model,
+        {
+          number: run.issueNumber as number,
+          title: run.issueTitle,
+          body: retryTask(withDefinitionOfDone(issue.body), verification),
+        },
+        `improve:${run.issueNumber}`,
+        `improve-${run.issueNumber}.subscription.zip`,
+        undefined,
+        {
+          baseSha,
+          files: applyChanges(files, changes),
+          baseline: JSON.parse(run.baseline ?? '{}') as Record<string, string>,
+        },
+      );
+      const moved = await this.runs.update(
+        { id: run.id, status: ImproveRunStatus.Publishing },
+        {
+          status: ImproveRunStatus.Queued,
+          jobId: job.id,
+          error: null,
+          finishedAt: null,
+          gateRetries: (run.gateRetries ?? 0) + 1,
+          note: 'Проверка перед PR не прошла — worker исправляет результат (вторая попытка)',
+        },
+      );
+
+      if (moved.affected !== 1) return false;
+
+      Object.assign(run, {
+        status: ImproveRunStatus.Queued,
+        jobId: job.id,
+        gateRetries: (run.gateRetries ?? 0) + 1,
+      });
+      this.log(
+        'info',
+        'improve.gate_retry',
+        `Run ${run.id} (issue #${run.issueNumber}): the check failed (${verification.summary}) — second go as job ${job.id}`,
+        { runId: run.id, jobId: job.id },
+      );
+      await this.notifier.send(
+        `🔁 Задача #${run.issueNumber}: проверка перед PR не прошла — worker исправляет результат (вторая попытка)`,
+      );
+
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Run ${run.id}: the second go after a failed check could not be started: ${message(error)}`,
+      );
+
+      return false;
+    }
+  }
+
   private async openPullRequest(
     run: ImproveRun,
     changes: Change[],
     note: string | null,
+    verificationText: string | null = null,
   ) {
     const baseSha = run.baseSha as string;
     const commit = await this.github.createCommit(
@@ -191,6 +327,7 @@ export class ImprovePublishService {
           '',
           `Automated by bridge Improve (run ${run.id}, model ${run.model}, trigger ${run.trigger}): ${describeChanges(changes)}.`,
           ...(note ? ['', `⚠️ ${note}`] : []),
+          ...(verificationText ? ['', verificationText] : []),
           '',
           'Не влито автоматически — проверьте и влейте как обычно (CI → Telegram → Merge).',
         ].join('\n'),

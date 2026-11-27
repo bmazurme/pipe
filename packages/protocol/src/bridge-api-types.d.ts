@@ -4308,6 +4308,7 @@ export interface components {
                 sha?: string;
                 actions?: string[];
             };
+            gateRetries: number;
             /** Format: date-time */
             finishedAt: string | null;
             id: number;

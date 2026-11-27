@@ -110,6 +110,8 @@ Worker добавляется на странице **Worker → Worker'ы → �
 | `BRIDGE_API_URL` | да | URL bridge backend, например `https://bridge.example.com` |
 | `WORKER_STATE_DIR` | нет (по умолчанию `./.worker-state`, в Docker `/app/.worker-state`) | где подключённый worker хранит свой ключ. Должен переживать перезапуск (том) |
 | `WORKER_RUN_AS` | в образе Docker — `pipe-runner` (включено); пустое значение выключает; вне Docker — нет | ОС-пользователь, от имени которого запускается `claude` CLI: `sudo -n -E -u $WORKER_RUN_AS claude …`. Задача — произвольный код, и без этого он читает ключ worker'а и VPN-конфиг из `WORKER_STATE_DIR`. При старте worker проверяет ту же команду, что запускает задача, — `sudo -n -E -u … claude --version` (правило sudoers разрешает только её) — и не стартует, если не получилось. См. «Два пользователя ОС» |
+| `WORKER_VERIFY` | включено; `off`/`0`/`false` выключает | A3: после модели и до отправки результата worker сам запускает `node scripts/verify-changed.mjs` из снимка (только если в посылке есть `.pipe-baseline.json` и сам скрипт — это запуски Improve на репозитории проекта) и кладёт вердикт в результат (`.pipe-verify.json`: `passed` / `failed` / `unverified`). См. «Проверка результата перед PR» |
+| `WORKER_VERIFY_TIMEOUT_SEC` | `1500` | Сколько секунд может идти эта проверка (установка зависимостей, lint, типы, тесты затронутых пакетов). Не уложилась — вердикт `unverified`, задача не падает |
 | `WORKER_ENROLL_CODE` | нет | одноразовый код со страницы Worker: при старте, если ключа ещё нет, обменивается на ключ. Допускает `WORKER_ENROLL_CODE_FILE` |
 | `BRIDGE_API_KEY` | нет (устарело) | персональный API-ключ bridge (`brk_...`) — прежний способ; пока задан, он главнее подключения кодом |
 | `POLL_INTERVAL_SEC` | нет (по умолчанию `10`) | интервал опроса bridge на новые задачи |
@@ -426,6 +428,17 @@ The `docker run` command the Add-worker dialog generates caps the container: `--
 пользователю `pipe-runner` `umask 007`. Без `WORKER_RUN_AS` поведение прежнее (CLI от пользователя worker'а).
 
 **Cold standby.** A worker that follows the active connection also gets `vpnStandbyLinks`: the links of the connections marked «Резерв» on the VPN page. They are outbounds in its Xray config that nothing routes to and nothing probes while a link of the main pool is alive; when every main link is dead the traffic goes through a standby link. A worker without a main pool ignores them. A different subset of standby links alone does not restart a running tunnel (subscriptions re-pick their servers on every refresh); only the standby appearing or going does.
+
+### Проверка результата перед PR (A3)
+
+Модель в Definition of done просят запустить `node scripts/verify-changed.mjs`, но она может забыть или соврать. Поэтому worker запускает эту проверку **сам**, после модели:
+
+- только для посылки с `.pipe-baseline.json` и `scripts/verify-changed.mjs` (запуск Improve на репозитории проекта); для остальных задач ничего не меняется;
+- от имени `pipe-runner`, как и модель: проверка исполняет только что написанный моделью код (`npm test`, install-скрипты), он не должен видеть ключ worker'а. Для этого образ разрешает sudo ровно одну команду кроме `claude` — корневую обёртку `/usr/local/bin/pipe-verify <каталог>` (`--probe` отвечает «обёртка есть»). Образ без обёртки (worker ещё не обновлён) даёт вердикт `unverified`, а не «проверки упали»;
+- если модель изменила сам `verify-changed.mjs`, его вердикту не верят (`unverified`: судья — CI); `.pipe-verify.json`, написанный самой моделью, worker стирает до проверки;
+- вердикт идёт в посылку-результат; bridge решает, что с ним делать: `passed`/`unverified` — открывает PR (с вердиктом в описании); `failed` — один раз возвращает worker'у с выводом проверки **до** PR; снова `failed` — PR не открывается, владелец получает сообщение, а «Повторить публикацию» откроет результат как есть.
+
+Порядок выката: сначала bridge (он автоматический), потом worker'ы кнопкой «Обновить worker» — иначе старый bridge принял бы `.pipe-verify.json` за изменённый файл.
 
 ### Домашняя сеть недоступна контейнеру (`infra/worker-egress`)
 

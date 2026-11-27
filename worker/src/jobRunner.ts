@@ -22,6 +22,7 @@ import { resolveProvider } from './providers.js';
 import { requireShell } from './shell.js';
 import { extractQuestions, withQuestionsInstruction } from './taskQuestions.js';
 import { withContext } from './taskContext.js';
+import { clearVerification, verifyJob, writeVerification } from './verification.js';
 
 export const SHUTDOWN_FAILURE_MESSAGE = 'Worker was stopped (SIGTERM) before the job finished — start it again';
 
@@ -292,6 +293,22 @@ export async function processJob(
         log(`Open questions reported: ${questions.length}\n`);
       } catch (questionsError) {
         jlog.warn({ err: questionsError }, 'could not report open questions');
+      }
+    }
+
+    // A3: the check the model was told to run, run by the worker itself, so it happens whether the model remembered or not. Best-effort: a
+    // check that cannot run says so in the result (`unverified`); it never fails a finished run.
+    clearVerification(jobDir);
+    if (config.verify !== false && !cancel.signal.aborted) {
+      try {
+        const verification = await verifyJob(jobDir, { runAs: config.runAs, proxyUrl: config.proxyUrl, timeoutSec: config.verifyTimeoutSec, redact, log, signal: cancel.signal });
+
+        if (verification) {
+          writeVerification(jobDir, verification);
+          log(`Check before the pull request: ${verification.status} — ${verification.summary} (${verification.durationSec}s)\n`);
+        }
+      } catch (verifyError) {
+        jlog.warn({ err: verifyError }, 'could not check the result before uploading it');
       }
     }
 
