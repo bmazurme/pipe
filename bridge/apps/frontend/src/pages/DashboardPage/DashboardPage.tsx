@@ -15,6 +15,7 @@ import {
   useGetDashboardCloudQuery,
   useGetDashboardNasQuery,
   useGetDashboardUpsQuery,
+  useGetDashboardRestoreDrillQuery,
   useGetDashboardRouterQuery,
   useGetDashboardNodesQuery,
   useGetVpnConnectionStatusQuery,
@@ -32,6 +33,7 @@ import { AlertsCard } from './AlertsCard';
 import { DriftCard } from './DriftCard';
 import { CloudCard } from './CloudCard';
 import { NasCard } from './NasCard';
+import { RestoreDrillRow } from './RestoreDrillRow';
 import { RouterCard } from './RouterCard';
 import { UpsCard } from './UpsCard';
 import { ReleasesCard } from './ReleasesCard';
@@ -188,6 +190,7 @@ export function DashboardPage() {
   const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const ups = useGetDashboardUpsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const router = useGetDashboardRouterQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const restoreDrill = useGetDashboardRestoreDrillQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const deploys = useGetDashboardDeploysQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
 
   const vpnDown = vpnActive.isError || !vpnActive.data?.lastOnline;
@@ -202,6 +205,7 @@ export function DashboardPage() {
     nodesError: nodes.isError,
     nodesDown: nodesList.filter((node) => node.state !== 'ready').map((node) => node.label),
     backupIssue: !backups.isLoading && backupIssue,
+    restoreDrill: restoreDrill.data && Array.isArray(restoreDrill.data.reasons) ? restoreDrill.data : null,
     boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
     cloud: Array.isArray(cloud.data) ? cloud.data : [],
     channels: channels.data && Array.isArray(channels.data.channels) ? channels.data : null,
@@ -216,7 +220,7 @@ export function DashboardPage() {
 
   // When the newest answer came in, and one button that asks all of them again: the tiles poll on their own, but after fixing something
   // «did it help?» should not mean waiting out a minute.
-  const queries = [vpnActive, nodes, backups, boardMetrics, cloud, channels, drift, alerts, nas, ups, router, deploys];
+  const queries = [vpnActive, nodes, backups, restoreDrill, boardMetrics, cloud, channels, drift, alerts, nas, ups, router, deploys];
   const stamps = queries.map((query) => query.fulfilledTimeStamp).filter((stamp): stamp is number => typeof stamp === 'number');
   const updatedAt = stamps.length > 0 ? Math.max(...stamps) : null;
   const refreshing = queries.some((query) => query.isFetching);
@@ -331,6 +335,7 @@ export function DashboardPage() {
               )}
             </div>
           )}
+          <RestoreDrillRow />
         </Card>
 
         <ReleasesCard />

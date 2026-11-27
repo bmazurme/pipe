@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps } from '../../store/api';
 import { type AttentionInput, buildAttention, summarize } from './dashboardAttention';
 
 const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], ups: [], router: [], lastDeploy: null };
@@ -12,7 +12,17 @@ const ups = (status: DashboardUps['status'], reasons: string[] = []): DashboardU
 const router = (status: DashboardRouter['status'], reasons: string[] = []): DashboardRouter => ({ host: 'asus', reportedAt: '2026-11-03T12:00:00Z', status, reasons, data: { reachable: true, sshOk: true }, reboot: null });
 const deploy = (result: DashboardDeploy['result'], prNumbers: number[] = []): DashboardDeploy => ({ sha: '9781a0d'.padEnd(40, 'a'), previousSha: null, result, detail: null, prNumbers, at: '2026-10-30T12:00:00Z' });
 
+const drill = (status: DashboardRestoreDrill['status'], reasons: string[] = []): DashboardRestoreDrill => ({ status, reasons, lastAt: null, lastOkAt: null, backupAgeHours: null, restoreSeconds: null, nextDueAt: null, counts: {}, recent: [] });
+
 describe('buildAttention', () => {
+  it('names a restore drill that is late or failed, and stays quiet when it is fine', () => {
+    expect(buildAttention({ ...calm, restoreDrill: drill('ok') })).toEqual([]);
+    expect(buildAttention({ ...calm, restoreDrill: null })).toEqual([]);
+    expect(buildAttention({ ...calm, restoreDrill: drill('bad', ['Восстановление не проверялось 36 дн', 'второе']) })).toEqual([
+      { id: 'restore-drill', level: 'bad', text: 'Восстановление бэкапа: Восстановление не проверялось 36 дн (и ещё 1)' },
+    ]);
+  });
+
   it('is empty when everything is fine', () => {
     expect(buildAttention({ ...calm, boards: [board('ubuntu-red', 'ok')], nas: [nas('ok')], ups: [ups('ok')], router: [router('ok')], lastDeploy: deploy('deployed') })).toEqual([]);
   });

@@ -2993,6 +2993,27 @@
         }
       }
     },
+    "/api/v1/boards/agent/restore-drill": {
+      "post": {
+        "operationId": "BoardsAgentController_restoreDrill",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreDrillReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/boards/agent/cloud": {
       "post": {
         "operationId": "BoardsAgentController_cloudReport",
@@ -3403,6 +3424,24 @@
                   "items": {
                     "type": "object"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/restore-drill": {
+      "get": {
+        "operationId": "DashboardController_getRestoreDrill",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
                 }
               }
             }
@@ -9791,6 +9830,59 @@
           "raid",
           "volume",
           "disks"
+        ]
+      },
+      "RestoreDrillReportDto": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "HOST_PATTERN"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "backupCreatedAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "restoreSeconds": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "tables": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "rows": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1000000000000000
+          },
+          "counts": {
+            "type": "object",
+            "nullable": true
+          },
+          "lastMigration": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "host",
+          "ok"
         ]
       },
       "CloudMemoryDto": {

@@ -1,4 +1,4 @@
-import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps, DriftView, NotifyBudget } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps, DriftView, NotifyBudget } from '../../store/api';
 
 // What the Dashboard header says in one line, and the list under it: everything on the page that is not fine, from every tile - so the
 // answer to "is anything wrong?" does not need scrolling through them. Pure; the page feeds it what its queries returned.
@@ -18,6 +18,8 @@ export interface AttentionInput {
   /** Swarm nodes that are not ready, by label. */
   nodesDown: string[];
   backupIssue: boolean;
+  /** R7: how the last restore of a backup went; null until the answer is in. */
+  restoreDrill?: DashboardRestoreDrill | null;
   boards: DashboardBoardMetrics[];
   cloud?: DashboardCloud[];
   channels?: DashboardChannels | null;
@@ -42,6 +44,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
   if (input.nodesError) items.push({ id: 'nodes', level: 'bad', text: 'Узлы: не удалось получить состояние кластера' });
   else if (input.nodesDown.length > 0) items.push({ id: 'nodes', level: 'bad', text: `Узлы не в строю: ${input.nodesDown.join(', ')}` });
   if (input.backupIssue) items.push({ id: 'backup', level: 'bad', text: 'Бэкап: нет свежей копии базы' });
+
+  if (input.restoreDrill && input.restoreDrill.status !== 'ok') {
+    const { reasons } = input.restoreDrill;
+
+    items.push({ id: 'restore-drill', level: input.restoreDrill.status, text: `Восстановление бэкапа: ${reasons[0] ?? 'есть замечания'}${reasons.length > 1 ? ` (и ещё ${reasons.length - 1})` : ''}` });
+  }
 
   for (const board of input.boards) {
     if (board.status === 'ok') continue;

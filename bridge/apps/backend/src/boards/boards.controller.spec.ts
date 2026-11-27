@@ -30,6 +30,7 @@ describe('BoardsAgentController', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
 
@@ -142,6 +143,7 @@ describe('BoardsAgentController ups', () => {
       { record } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const dto = { host: 'ubuntu-blue', status: 'OL CHRG' };
 
@@ -159,6 +161,7 @@ describe('BoardsAgentController router', () => {
       {} as never,
       {} as never,
       router as never,
+      {} as never,
       {} as never,
     );
 
@@ -192,6 +195,7 @@ describe('BoardsAgentController cloud', () => {
       {} as never,
       {} as never,
       { record } as never,
+      {} as never,
     );
     const dto = { host: 'yc-vm', uptimeSec: 100 };
 
@@ -205,5 +209,25 @@ describe('BoardsAgentController cloud', () => {
         BoardsAgentController.prototype.cloudReport,
       ),
     ).toBe(204);
+  });
+});
+
+describe('BoardsAgentController restore drill', () => {
+  it("records a drill's report for the calling account", async () => {
+    const record = jest.fn().mockResolvedValue(undefined);
+    const controller = new BoardsAgentController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { record } as never,
+    );
+    const dto = { host: 'mac', ok: true };
+
+    await controller.restoreDrill(dto as never, { id: 7 });
+
+    expect(record).toHaveBeenCalledWith(7, dto);
   });
 });

@@ -8,6 +8,7 @@ describe('tileOfAttention', () => {
     expect(tileOfAttention('vpn-list')).toBe('tile-vpn');
     expect(tileOfAttention('nodes')).toBe('tile-nodes');
     expect(tileOfAttention('backup')).toBe('tile-backups');
+    expect(tileOfAttention('restore-drill')).toBe('tile-backups');
     expect(tileOfAttention('release')).toBe('tile-releases');
     expect(tileOfAttention('cloud:yc-vm')).toBe('tile-cloud');
     expect(tileOfAttention('channels')).toBe('tile-channels');

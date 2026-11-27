@@ -11,13 +11,36 @@ The copies live on the Pi; the NAS is the fourth copy (a container that pulls `l
 | `pull.sh`, `install-pull.sh` | the copy on a **second Pi**: it pulls `latest` from the primary (rsync over a key restricted to read-only `rrsync` — no shell, no writes), verifies checksum/meta/age, then swaps its own `latest`. Daily 03:30 Moscow + hourly freshness check (age counted from the backup's creation, so a primary that stopped backing up is noticed too) |
 | `mirror-s3.sh`, `install-mirror.sh` | the **third copy**: the second Pi uploads the (encrypted, verified) `latest` to the Garage bucket `bridge-backups` — to an immutable `snapshots/<time>/` prefix, compares it with the local files, and only then rewrites the pointer object `LATEST`. Daily 03:45 Moscow, after the pull |
 | `uploads-pull.sh`, `install-uploads.sh` | the **uploaded files** (`bridge_uploads`: parcels in transit, chat attachments) — the database dump does not hold them. red pulls the volume over a restricted read-only `rrsync` key into `/srv/uploads-mirror/current`, keeps what the primary deletes in `deleted/<date>/` (14 days), refuses a run that would delete more than half of the files (and more than `MAX_DELETE_FILES`, default 50 — parcels are a mailbox, a downloaded file is deleted, so a few files can all legitimately go in a day), then mirrors to the Garage bucket `bridge-uploads`. Daily 04:10 Moscow + hourly freshness check |
+| `restore-drill.sh`, `install-drill.sh`, `install-drill-mac.sh` | the **monthly restore drill** (R7, below): the latest backup is restored into a throwaway Postgres, checked, timed and **reported to bridge** (Dashboard + Telegram). `restore-check.sh` is the quick check on a board; this one is the exercise with a record |
 | `verify-from-workstation.sh` | run on YOUR machine: fetches `latest` from a Pi, decrypts it with your private age key and restores it into a throwaway Postgres — the check that stays possible once the boards no longer hold the key |
-| `test.sh` | 71 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
+| `test.sh`, `test-drill.sh` | 71 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
 ```bash
 # on a Mac, in a container (the scripts use flock / mv -T / sha256sum):
 docker run --rm -v "$PWD":/r debian:bookworm-slim bash -c 'apt-get update -qq && apt-get install -y -qq age && bash /r/infra/backup/test.sh'
 ```
+
+## The monthly restore drill
+
+`restore-drill.sh` does what `verify-from-workstation.sh` does and then reports it: it fetches `latest` (a local `BACKUP_DIR`, or `SOURCE_HOST` over ssh), checks the checksum, decrypts with `AGE_IDENTITY`, restores into a throwaway `postgres:16-alpine`, and counts **exactly**
+(not from statistics): the tables that came back with rows, the total rows, and the rows of the key tables (`KEY_TABLES`; `REQUIRED_TABLES`, default `users`, must be non-empty). It fails when the checksum or decryption fails, `pg_restore` fails, a required table is missing or empty, or fewer tables
+hold rows than the dump had. Either way it posts the result to `POST /api/v1/boards/agent/restore-drill` — a failed drill too, with the reason — with the time the restore took and the age of the restored backup (the measured RPO). A report that cannot be delivered is kept and sent on the next run.
+
+Where it runs matters: **the age private key must not sit on a board that holds the backups**, so the drill runs where the key already is — your Mac:
+
+```bash
+bash infra/backup/install-drill-mac.sh        # a launchd agent, Mondays 10:00; settings in ~/.config/pipe/restore-drill.env
+# fill in AGE_IDENTITY, BRIDGE_URL and BRIDGE_API_KEY (a personal key with scope «boards», Profile → API keys), then once by hand:
+bash ~/.local/share/pipe-restore-drill/restore-drill.sh
+```
+
+(`install-drill.sh` is the systemd version for a Linux machine that has the key.) The trigger is weekly but `--if-due 30` makes the drill happen only when the last good one is 30+ days old — so a Mac that was off for a week catches up, and a failed drill does not postpone the next attempt.
+Docker not running or the home network out of reach → the run is skipped (exit 3) and nothing is reported: that is not a broken backup, and the 35-day rule below catches a drill that never gets to run.
+
+What bridge does with it (`bridge/apps/backend/src/boards/restore-drill.ts`): the Dashboard's Backups tile shows «восстановление проверено N дней назад», the restored backup's age, the restore time and what came back; **warn** after 30 days, **bad** after 35, on a failed drill, on a key table that had rows last time and is empty now,
+on a restored copy older than 36 h, on a restore slower than 30 min. Telegram: at once for a failed drill, and once a day while the last good drill is older than 35 days. A drill that has never run is only a warning on the Dashboard. Exit codes: 0 ok · 1 failed (reported) · 2 passed but the report was not delivered · 3 skipped.
+
+RPO/RTO and what they are measured by: `docs/ha-dr-plan.md`, «RPO и RTO».
 
 ## Install on a Pi
 

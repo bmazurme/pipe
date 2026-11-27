@@ -1577,6 +1577,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/boards/agent/restore-drill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["BoardsAgentController_restoreDrill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/boards/agent/cloud": {
         parameters: {
             query?: never;
@@ -1857,6 +1873,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["DashboardController_getNas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/restore-drill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DashboardController_getRestoreDrill"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4365,6 +4397,17 @@ export interface components {
             raid: components["schemas"]["NasRaidDto"];
             volume: components["schemas"]["NasVolumeDto"];
             disks: components["schemas"]["NasDiskDto"][];
+        };
+        RestoreDrillReportDto: {
+            host: string;
+            ok: boolean;
+            backupCreatedAt?: string | null;
+            restoreSeconds?: number | null;
+            tables?: number | null;
+            rows?: number | null;
+            counts?: Record<string, never> | null;
+            lastMigration?: string | null;
+            error?: string | null;
         };
         CloudMemoryDto: {
             totalMb: number;
@@ -7575,6 +7618,27 @@ export interface operations {
             };
         };
     };
+    BoardsAgentController_restoreDrill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreDrillReportDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     BoardsAgentController_cloudReport: {
         parameters: {
             query?: never;
@@ -7954,6 +8018,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
+    DashboardController_getRestoreDrill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

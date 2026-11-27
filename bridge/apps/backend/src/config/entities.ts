@@ -9,6 +9,7 @@ import { BoardReport } from '../boards/entities/board-report.entity';
 import { BoardMetric } from '../boards/entities/board-metric.entity';
 import { CloudReport } from '../boards/entities/cloud-report.entity';
 import { NasReport } from '../boards/entities/nas-report.entity';
+import { RestoreDrill } from '../boards/entities/restore-drill.entity';
 import { UpsReport } from '../boards/entities/ups-report.entity';
 import { RouterReport } from '../boards/entities/router-report.entity';
 import { RouterReboot } from '../boards/entities/router-reboot.entity';
@@ -77,6 +78,7 @@ export const ENTITIES = [
   BoardReport,
   BoardAutoUpdateSettings,
   NasReport,
+  RestoreDrill,
   CloudReport,
   UpsReport,
   RouterReport,

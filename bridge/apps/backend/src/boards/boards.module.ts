@@ -12,12 +12,14 @@ import { Job } from '../worker/entities/job.entity';
 import { Worker } from '../worker/entities/worker.entity';
 import { BoardsService } from './boards.service';
 import { NasService } from './nas.service';
+import { RestoreDrillService } from './restore-drill.service';
 import { CloudService } from './cloud.service';
 import { UpsService } from './ups.service';
 import { RouterService } from './router.service';
 import { BoardReport } from './entities/board-report.entity';
 import { BoardMetric } from './entities/board-metric.entity';
 import { NasReport } from './entities/nas-report.entity';
+import { RestoreDrill } from './entities/restore-drill.entity';
 import { CloudReport } from './entities/cloud-report.entity';
 import { UpsReport } from './entities/ups-report.entity';
 import { RouterReport } from './entities/router-report.entity';
@@ -30,6 +32,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
       BoardReport,
       ScriptUpdate,
       NasReport,
+      RestoreDrill,
       CloudReport,
       UpsReport,
       RouterReport,
@@ -46,6 +49,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
   providers: [
     BoardsService,
     NasService,
+    RestoreDrillService,
     CloudService,
     UpsService,
     RouterService,
@@ -56,6 +60,7 @@ import { ScriptUpdate } from './entities/script-update.entity';
   exports: [
     BoardsService,
     NasService,
+    RestoreDrillService,
     CloudService,
     UpsService,
     RouterService,

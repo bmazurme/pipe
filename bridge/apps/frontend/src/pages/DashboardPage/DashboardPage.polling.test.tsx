@@ -38,6 +38,7 @@ vi.mock('../../store/api', async (importOriginal) => {
     useGetDriftQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardUpsQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardRouterQuery: () => ({ isError: false, isLoading: false, data: [] }),
+    useGetDashboardRestoreDrillQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardDeploysQuery: () => ({ isError: false, isLoading: false, data: [] }),
   };
 });
