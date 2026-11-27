@@ -1,9 +1,14 @@
 import { createHash, randomBytes } from 'crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
+import { ApiKeyScope, DEFAULT_EXPIRY_DAYS } from './api-key-scope';
 import { ApiKey } from './entities/api-key.entity';
 
 // Distinct from anything else in the system (bridge's OAuth JWTs) so a guard can
@@ -12,7 +17,7 @@ export const API_KEY_PREFIX = 'brk_';
 const TOKEN_BYTES = 24;
 const PREFIX_DISPLAY_LENGTH = 12;
 
-export type ApiKeyScope = 'boards';
+export type { ApiKeyScope };
 
 export interface CreatedApiKey {
   id: number;
@@ -25,6 +30,7 @@ export interface CreatedApiKey {
 }
 
 const LAST_USED_TOUCH_EVERY_MS = 60_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ApiKeysService {
@@ -47,7 +53,8 @@ export class ApiKeysService {
     userId: number,
     name: string,
     scope: ApiKeyScope | null = null,
-    expiresInDays: number | null = null,
+    // Not given = DEFAULT_EXPIRY_DAYS; null = never, which has to be asked for (S5).
+    expiresInDays: number | null = DEFAULT_EXPIRY_DAYS,
   ): Promise<CreatedApiKey> {
     const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
@@ -63,6 +70,8 @@ export class ApiKeysService {
         expiresAt,
         lastUsedAt: null,
         revokedAt: null,
+        notifiedExpiringAt: null,
+        notifiedStaleAt: null,
       }),
     );
 
@@ -126,6 +135,62 @@ export class ApiKeysService {
     }
 
     return { userId: apiKey.userId, scope: apiKey.scope ?? null };
+  }
+
+  // A new key in the place of an old one: the same name, scope and lifetime (a key that never expires stays so — that was a choice). The old one is
+  // revoked and then LOOKED FOR among the active keys: a rotation that left the old key working would be worse than none, so if it is still
+  // there the new key is revoked again and nothing changes. Null when the key is not the user's or already revoked.
+  async rotate(id: number, userId: number): Promise<CreatedApiKey | null> {
+    const old = await this.apiKeyRepository.findOne({
+      where: { id, userId, revokedAt: IsNull() },
+    });
+
+    if (!old) return null;
+
+    const lifetimeDays = old.expiresAt
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(old.expiresAt).getTime() -
+              new Date(old.createdAt).getTime()) /
+              DAY_MS,
+          ),
+        )
+      : null;
+    const created = await this.create(
+      userId,
+      old.name,
+      old.scope ?? null,
+      lifetimeDays,
+    );
+    const revoked = await this.revoke(old.id, userId);
+    const stillActive = await this.apiKeyRepository.findOne({
+      where: { keyHash: old.keyHash, revokedAt: IsNull() },
+    });
+
+    if (!revoked || stillActive) {
+      await this.revoke(created.id, userId);
+
+      throw new InternalServerErrorException(
+        'The old key could not be revoked, so nothing was changed',
+      );
+    }
+
+    return created;
+  }
+
+  // The keys the hygiene sweep looks at: active ones, with their reminder marks.
+  findForHygiene(): Promise<ApiKey[]> {
+    return this.apiKeyRepository.find({ where: { revokedAt: IsNull() } });
+  }
+
+  async markNotified(id: number, kind: 'stale' | 'expiring'): Promise<void> {
+    await this.apiKeyRepository.update(
+      id,
+      kind === 'stale'
+        ? { notifiedStaleAt: new Date() }
+        : { notifiedExpiringAt: new Date() },
+    );
   }
 
   async revoke(id: number, userId: number): Promise<boolean> {

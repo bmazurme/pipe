@@ -137,6 +137,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/api-keys/{id}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace an API key with a new one of the same name, scope and term; the old one stops working (verified) */
+        post: operations["AuthController_rotateApiKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/api-keys/{id}": {
         parameters: {
             query?: never;
@@ -3679,7 +3696,7 @@ export interface components {
         CreateApiKeyDto: {
             name: string;
             /** @enum {string} */
-            scope?: "boards";
+            scope?: "boards" | "readonly" | "reports-sync";
             /** @enum {number} */
             expiresInDays?: 30 | 90 | 365;
         };
@@ -3687,7 +3704,7 @@ export interface components {
             id: number;
             name: string;
             prefix: string;
-            scope: string | null;
+            scope: Record<string, never> | null;
             token: string;
             /** Format: date-time */
             expiresAt: string | null;
@@ -3698,7 +3715,7 @@ export interface components {
             id: number;
             name: string;
             prefix: string;
-            scope: string | null;
+            scope: Record<string, never> | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -5159,6 +5176,27 @@ export interface operations {
                 "application/json": components["schemas"]["CreateApiKeyDto"];
             };
         };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiKeyResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_rotateApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             201: {
                 headers: {

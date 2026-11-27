@@ -134,6 +134,79 @@ describe('JwtOrApiKeyGuard', () => {
     });
   });
 
+  describe('a readonly or reports-sync API key (S5)', () => {
+    const scoped = (method: string, path: string) => {
+      const request: {
+        headers: Record<string, string>;
+        method: string;
+        originalUrl: string;
+        user?: unknown;
+      } = {
+        headers: { 'x-api-key': `${API_KEY_PREFIX}k` },
+        method,
+        originalUrl: path,
+      };
+      const context = {
+        switchToHttp: () => ({ getRequest: () => request }),
+        getHandler: () => undefined,
+        getClass: () => undefined,
+      } as unknown as ExecutionContext;
+
+      return { request, context };
+    };
+
+    it('a readonly key reads', async () => {
+      apiKeysService.validate.mockResolvedValue({
+        userId: 5,
+        scope: 'readonly',
+      });
+      const { request, context } = scoped('GET', '/api/v1/worker/jobs?x=1');
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(request.user).toEqual({ id: 5 });
+    });
+
+    it('a readonly key cannot write', async () => {
+      apiKeysService.validate.mockResolvedValue({
+        userId: 5,
+        scope: 'readonly',
+      });
+      const { request, context } = scoped('DELETE', '/api/v1/storage/3');
+
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(request.user).toBeUndefined();
+    });
+
+    it('a readonly key is refused where the route hands out secrets (machine-only)', async () => {
+      apiKeysService.validate.mockResolvedValue({
+        userId: 5,
+        scope: 'readonly',
+      });
+      reflector.getAllAndOverride.mockReturnValue(true);
+      const { context } = scoped('GET', '/api/v1/worker/me/config');
+
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('a reports-sync key reaches Storage and nothing else', async () => {
+      apiKeysService.validate.mockResolvedValue({
+        userId: 5,
+        scope: 'reports-sync',
+      });
+
+      await expect(
+        guard.canActivate(scoped('POST', '/api/v1/storage').context),
+      ).resolves.toBe(true);
+      await expect(
+        guard.canActivate(scoped('GET', '/api/v1/secrets').context),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
   it('delegates to JwtGuard when no API key is present, leaving it unaffected', async () => {
     jwtGuard.canActivate.mockResolvedValue(true);
     const context = contextWithHeaders({

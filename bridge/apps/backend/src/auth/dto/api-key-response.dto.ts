@@ -1,3 +1,4 @@
+import type { ApiKeyScope } from '../api-key-scope';
 import { ApiKey } from '../entities/api-key.entity';
 
 // Never includes the secret itself — only what a listing needs to tell keys
@@ -6,7 +7,7 @@ export class ApiKeyResponseDto {
   id: number;
   name: string;
   prefix: string;
-  scope: 'boards' | null;
+  scope: ApiKeyScope | null;
   createdAt: Date;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
