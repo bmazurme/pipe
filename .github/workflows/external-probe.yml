@@ -9,7 +9,9 @@ name: External probe
 # State is an open issue labelled `outage` (no `loop` label, so the self-improvement loop never picks
 # it up): opened after two failed rounds in a row, commented and closed on recovery. GitHub notifies
 # the repository owner by mail/app on issue events; Telegram is a second channel when the bot secrets
-# are set (it may itself be unreachable, which is the point of having the issue).
+# are set (it may itself be unreachable, which is the point of having the issue). ntfy is a third channel, independent of both: set the secret NTFY_URL
+# (https://ntfy.sh/<a topic nobody can guess>) and every message below also goes there — a push to the phone that needs neither Telegram nor the
+# home network. The second vantage point is the cloud VM (infra/watchdog); bridge's own heartbeat to a dead-man's-switch is EXTERNAL_HEARTBEAT_URL (R9).
 
 on:
   schedule:
@@ -55,14 +57,19 @@ jobs:
           FAILED: ${{ steps.probe.outputs.failed }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_URL: ${{ secrets.NTFY_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           repo="${{ github.repository }}"
           open="$(gh issue list -R "$repo" --label outage --state open --json number --jq '.[0].number // empty')"
-          say() { # Telegram is optional and best-effort
-            [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
-            curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=$1" || true
+          say() { # Telegram and ntfy are optional and best-effort, each on its own: one being down must not silence the other
+            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+              curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=$1" || true
+            fi
+            if [ -n "${NTFY_URL:-}" ]; then
+              curl -s -m 15 -o /dev/null -H "Title: bridge (GitHub-проба)" -H "Priority: high" -d "$1" "${NTFY_URL}" || true
+            fi
           }
 
           if [ -n "$FAILED" ]; then

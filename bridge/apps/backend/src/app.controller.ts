@@ -1,11 +1,15 @@
-import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Optional, Res } from '@nestjs/common';
 import { Response } from 'express';
 
 import { AppService } from './app.service';
+import { ExternalHeartbeatService } from './external-heartbeat/external-heartbeat.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    @Optional() private readonly heartbeat?: ExternalHeartbeatService,
+  ) {}
 
   @Get()
   getHealth(): string {
@@ -22,6 +26,9 @@ export class AppController {
     res.status(
       health.status === 'ok' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE,
     );
-    return health;
+    // R9: whether the dead man's hand (the heartbeat to the external watcher) is set up and getting through — only a yes/no and times, never the address.
+    return this.heartbeat
+      ? { ...health, externalHeartbeat: this.heartbeat.status() }
+      : health;
   }
 }

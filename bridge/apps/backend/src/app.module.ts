@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ExternalHeartbeatService } from './external-heartbeat/external-heartbeat.service';
 
 import { AuthModule } from './auth/auth.module';
 import { ChatModule } from './chat/chat.module';
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
 import { RouterModule } from './router/router.module';
 import { TunnelModule } from './tunnel/tunnel.module';
 import { VpnModule } from './vpn/vpn.module';
+import { TelegramModule } from './telegram/telegram.module';
 import { WorkerModule } from './worker/worker.module';
 
 import { TypeOrmModuleConfig } from './config/type-orm.config';
@@ -81,8 +83,15 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     TunnelModule,
     RouterModule,
     WorkerModule,
+    // NotifyService, for the heartbeat's own «it does not get through» message. Last on purpose: where a module is first imported decides the
+    // order of the routes in the generated OpenAPI file.
+    TelegramModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    AppService,
+    ExternalHeartbeatService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

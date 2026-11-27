@@ -34,10 +34,22 @@ describe('Health (e2e)', () => {
     const response = await request(app.getHttpServer()).get('/api/v1/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       status: 'ok',
       database: true,
       pendingMigrations: false,
+    });
+  });
+
+  it('GET /api/v1/health says the external heartbeat (R9) is not set up when no address is configured — and never an address', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v1/health');
+
+    expect(response.body.externalHeartbeat).toEqual({
+      configured: false,
+      lastOkAt: null,
+      lastFailureAt: null,
+      lastFailure: null,
+      lastSkippedAt: null,
     });
   });
 });
