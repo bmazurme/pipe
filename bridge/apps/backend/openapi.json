@@ -3328,6 +3328,51 @@
         }
       }
     },
+    "/api/v1/improve/quality": {
+      "get": {
+        "operationId": "ImproveController_qualityView",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improve/quality/refresh": {
+      "post": {
+        "operationId": "ImproveController_refreshQuality",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/runs": {
       "get": {
         "operationId": "ImproveController_runs",

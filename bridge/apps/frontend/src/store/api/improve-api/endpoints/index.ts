@@ -145,6 +145,33 @@ export interface LoopControlState {
   pausedAt: string | null;
 }
 
+/** What one group of pull requests (all of them, one model, one size tier) came to; the same figures as the backend's `quality.ts`. */
+export interface QualityFigures {
+  opened: number;
+  merged: number;
+  closed: number;
+  open: number;
+  /** 0–1, null when no first CI has finished. */
+  firstGreenRate: number | null;
+  repairsPerMerged: number | null;
+  medianHoursToMerge: number | null;
+  costPerMergedUsd: number | null;
+  withoutCost: number;
+  revertRate: number | null;
+}
+
+export interface QualityGroup extends QualityFigures {
+  /** The model's name, or the tier number, or `none` for a run on a fixed model (not routed). */
+  key: string;
+}
+
+export interface QualityView {
+  days: number;
+  total: QualityFigures;
+  byModel: QualityGroup[];
+  byTier: QualityGroup[];
+}
+
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
     // The kill-switch of the automation.
@@ -180,6 +207,17 @@ const improveApiEndpoints = improveApi.injectEndpoints({
     >({
       query: (body) => ({ url: 'improve/issues', method: 'POST', body }),
       invalidatesTags: ['ImproveIssues', 'ImproveRuns'],
+    }),
+    // A1: how good the assistant is, in numbers (first-attempt CI, repairs, time to merge, cost per merged pull request, reverts).
+    getImproveQuality: builder.query<QualityView, number>({
+      query: (days) => `improve/quality?days=${days}`,
+      providesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось загрузить показатели качества'),
+    }),
+    refreshImproveQuality: builder.mutation<{ checked: number; remaining: number }, void>({
+      query: () => ({ url: 'improve/quality/refresh', method: 'POST' }),
+      invalidatesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось обновить данные из GitHub'),
     }),
     listImproveRuns: builder.query<ImproveRun[], void>({
       query: () => 'improve/runs',
@@ -280,6 +318,8 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 });
 
 export const {
+  useGetImproveQualityQuery,
+  useRefreshImproveQualityMutation,
   useGetLoopControlQuery,
   usePauseLoopMutation,
   useResumeLoopMutation,

@@ -9,6 +9,8 @@ import { StorageModule } from '../storage/storage.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { UsersModule } from '../users/users.module';
 import { WorkerModule } from '../worker/worker.module';
+import { Job } from '../worker/entities/job.entity';
+import { ImproveOutcome } from './entities/improve-outcome.entity';
 import { ImproveRun } from './entities/improve-run.entity';
 import { ImproveSchedule } from './entities/improve-schedule.entity';
 import { ImproveSettings } from './entities/improve-settings.entity';
@@ -18,12 +20,19 @@ import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImprovePublishService } from './improve-publish.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveCiService } from './improve-ci.service';
+import { ImproveQualityService } from './improve-quality.service';
 import { ImproveController } from './improve.controller';
 import { ImproveService } from './improve.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ImproveRun, ImproveSchedule, ImproveSettings]),
+    TypeOrmModule.forFeature([
+      ImproveRun,
+      ImproveSchedule,
+      ImproveSettings,
+      ImproveOutcome,
+      Job,
+    ]),
     LoopModule,
     StorageModule,
     TelegramModule,
@@ -42,6 +51,7 @@ import { ImproveService } from './improve.service';
     ImproveIssueFilingService,
     ImprovePublishService,
     ImproveHandoffService,
+    ImproveQualityService,
   ],
 })
 export class ImproveModule {}

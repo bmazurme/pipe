@@ -37,6 +37,7 @@ import {
 import { ContextService } from '../context/context.service';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { ImproveQualityService } from './improve-quality.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
@@ -52,6 +53,7 @@ export class ImproveController {
     private readonly autoStart: ImproveAutoStartService,
     private readonly issueFiling: ImproveIssueFilingService,
     private readonly contexts: ContextService,
+    private readonly quality: ImproveQualityService,
   ) {}
 
   // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
@@ -118,6 +120,22 @@ export class ImproveController {
             )
         : undefined,
     );
+  }
+
+  // A1: how good the assistant is, in numbers — first-attempt CI, repairs, time to merge, cost per merged pull request, reverts; by model and tier.
+  @Get('quality')
+  qualityView(
+    @Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.quality.summary(user.id, Math.min(Math.max(days, 1), 365));
+  }
+
+  // Reads GitHub again now instead of waiting for the next scheduled sync (at most 40 pull requests per call; `remaining` says how many are left).
+  @Post('quality/refresh')
+  @HttpCode(HttpStatus.OK)
+  refreshQuality(@CurrentUser() user: { id: number }) {
+    return this.quality.sync(user.id);
   }
 
   @Get('runs')

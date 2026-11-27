@@ -7,10 +7,11 @@ import { LoopControlBanner } from './LoopControlBanner';
 import styles from './ImprovePage.module.css';
 import { AnalysisTab } from './AnalysisTab';
 import { IssuesTab } from './IssuesTab';
+import { QualityTab } from './QualityTab';
 import { RunsTab } from './RunsTab';
 import { SchedulesTab } from './SchedulesTab';
 
-const TABS = ['issues', 'analysis', 'runs', 'schedules'] as const;
+const TABS = ['issues', 'analysis', 'runs', 'quality', 'schedules'] as const;
 
 export function ImprovePage() {
   const [activeTab, setActiveTab] = useTabParam(TABS, 'issues');
@@ -43,6 +44,7 @@ export function ImprovePage() {
           <Tab value="issues">Задачи</Tab>
           <Tab value="analysis">Анализ</Tab>
           <Tab value="runs">Запуски</Tab>
+          <Tab value="quality">Качество</Tab>
           <Tab value="schedules">Расписания</Tab>
         </TabList>
 
@@ -50,6 +52,7 @@ export function ImprovePage() {
         <TabPanel value="issues">{activeTab === 'issues' && <IssuesTab configured={status?.configured ?? true} />}</TabPanel>
         <TabPanel value="analysis">{activeTab === 'analysis' && <AnalysisTab configured={status?.configured ?? true} />}</TabPanel>
         <TabPanel value="runs">{activeTab === 'runs' && <RunsTab />}</TabPanel>
+        <TabPanel value="quality">{activeTab === 'quality' && <QualityTab />}</TabPanel>
         <TabPanel value="schedules">{activeTab === 'schedules' && <SchedulesTab />}</TabPanel>
       </TabProvider>
     </div>

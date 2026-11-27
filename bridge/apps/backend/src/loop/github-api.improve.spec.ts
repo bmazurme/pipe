@@ -330,4 +330,44 @@ describe('GithubApiService (improve)', () => {
     expect(failed).toHaveLength(1);
     expect(failed[0].annotations).toEqual([]);
   });
+
+  it('reads when a pull request was opened and merged (A1)', async () => {
+    const calls = stubFetch(() => ({
+      state: 'closed',
+      merged: true,
+      created_at: '2026-11-01T10:00:00Z',
+      merged_at: '2026-11-01T11:00:00Z',
+      closed_at: '2026-11-01T11:00:00Z',
+    }));
+
+    await expect(service().pullTimes(7)).resolves.toEqual({
+      open: false,
+      merged: true,
+      createdAt: '2026-11-01T10:00:00Z',
+      mergedAt: '2026-11-01T11:00:00Z',
+      closedAt: '2026-11-01T11:00:00Z',
+    });
+    expect(calls[0].url).toContain('/pulls/7');
+  });
+
+  it('finds the commit a pull request was opened with, or null when it has none', async () => {
+    stubFetch(() => [{ sha: 'first' }]);
+    await expect(service().firstCommitSha(7)).resolves.toBe('first');
+
+    jest.restoreAllMocks();
+    stubFetch(() => []);
+    await expect(service().firstCommitSha(7)).resolves.toBeNull();
+  });
+
+  it('lists the titles of recently merged pull requests only', async () => {
+    const calls = stubFetch(() => [
+      { number: 3, title: 'a', merged_at: '2026-11-01T00:00:00Z' },
+      { number: 2, title: 'closed unmerged', merged_at: null },
+    ]);
+
+    await expect(service().recentMergedTitles()).resolves.toEqual([
+      { number: 3, title: 'a' },
+    ]);
+    expect(calls[0].url).toContain('base=main');
+  });
 });

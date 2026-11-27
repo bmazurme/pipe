@@ -15,6 +15,7 @@ import { ContextService } from '../context/context.service';
 import { DEFAULT_CATEGORIES } from './analysis';
 import { StartAnalysisDto } from './dto/improve.dto';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { ImproveQualityService } from './improve-quality.service';
 import { ImproveController } from './improve.controller';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -38,6 +39,7 @@ describe('ImproveController', () => {
   };
   let controller: ImproveController;
   let contexts: { findOwned: jest.Mock };
+  let quality: { summary: jest.Mock; sync: jest.Mock };
 
   beforeEach(() => {
     contexts = { findOwned: jest.fn().mockResolvedValue({ id: 5 }) };
@@ -46,6 +48,10 @@ describe('ImproveController', () => {
       startRun: jest.fn().mockResolvedValue({ id: 2 }),
       startMany: jest.fn().mockResolvedValue({ started: [], skipped: [] }),
       startItems: jest.fn().mockResolvedValue({ id: 3 }),
+    };
+    quality = {
+      summary: jest.fn().mockResolvedValue({ days: 90 }),
+      sync: jest.fn().mockResolvedValue({ checked: 1, remaining: 0 }),
     };
     autoStart = {
       getSettings: jest.fn().mockResolvedValue(null),
@@ -63,7 +69,27 @@ describe('ImproveController', () => {
       autoStart as unknown as ImproveAutoStartService,
       {} as unknown as ImproveIssueFilingService,
       contexts as unknown as ContextService,
+      quality as unknown as ImproveQualityService,
     );
+  });
+
+  describe('quality', () => {
+    it('asks for 90 days by default and never for more than a year or less than a day', async () => {
+      await controller.qualityView(90, user);
+      await controller.qualityView(5000, user);
+      await controller.qualityView(0, user);
+
+      expect(quality.summary.mock.calls.map((call) => call[1])).toEqual([
+        90, 365, 1,
+      ]);
+    });
+
+    it('refreshes on request', async () => {
+      await expect(controller.refreshQuality(user)).resolves.toEqual({
+        checked: 1,
+        remaining: 0,
+      });
+    });
   });
 
   describe('startAnalysis', () => {

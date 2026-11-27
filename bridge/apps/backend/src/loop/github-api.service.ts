@@ -67,6 +67,14 @@ export interface TreeEntry {
   sha: string | null;
 }
 
+export interface PullTimes {
+  open: boolean;
+  merged: boolean;
+  createdAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+}
+
 export type CiState = 'success' | 'pending' | 'failure' | 'none';
 
 // One failed check run of a commit, with what GitHub shows for it: the run's own summary and
@@ -439,6 +447,47 @@ export class GithubApiService {
     };
 
     return data.commits.map((entry) => entry.commit.message);
+  }
+
+  // The dates of a pull request and whether it was merged — what the quality page (A1) measures time to merge from.
+  async pullTimes(number: number): Promise<PullTimes> {
+    const pr = (await this.get(`/pulls/${number}`)) as {
+      state: string;
+      merged: boolean;
+      created_at: string;
+      merged_at: string | null;
+      closed_at: string | null;
+    };
+
+    return {
+      open: pr.state === 'open',
+      merged: pr.merged,
+      createdAt: pr.created_at,
+      mergedAt: pr.merged_at,
+      closedAt: pr.closed_at,
+    };
+  }
+
+  // The commit a pull request was OPENED with — its CI result is "did the first attempt pass", before any repair.
+  async firstCommitSha(number: number): Promise<string | null> {
+    const commits = (await this.get(
+      `/pulls/${number}/commits?per_page=1`,
+    )) as Array<{ sha: string }>;
+
+    return commits[0]?.sha ?? null;
+  }
+
+  // The newest pull requests closed on the base branch, titles only — a revert is a merged pull request called `Revert "… (#N)"`.
+  async recentMergedTitles(
+    limit = 100,
+  ): Promise<Array<{ number: number; title: string }>> {
+    const pulls = (await this.get(
+      `/pulls?state=closed&base=${encodeURIComponent(this.baseBranch())}&sort=updated&direction=desc&per_page=${Math.min(limit, 100)}`,
+    )) as Array<{ number: number; title: string; merged_at: string | null }>;
+
+    return pulls
+      .filter((pull) => pull.merged_at !== null)
+      .map((pull) => ({ number: pull.number, title: pull.title }));
   }
 
   // Closes a pull request with a comment saying why (the comment first, so the reason is there when someone opens the closed PR).
