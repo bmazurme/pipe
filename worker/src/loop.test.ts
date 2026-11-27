@@ -137,15 +137,17 @@ describe('configFor', () => {
 
     assert.equal(config.workerName, 'old-host');
     assert.equal(config.chatTools, 'read');
+    assert.equal(config.chatToolsViaBridge, undefined);
     assert.equal(config.pollIntervalSec, 10);
   });
 
-  it('a managed worker takes the page’s settings, and loses the bridge tools its key cannot reach', () => {
+  it('a managed worker takes the page’s settings, and asks bridge for the chat tools (its own key cannot reach the older ones)', () => {
     const config = configFor(baseConfig, managed, remote());
 
     assert.equal(config.pollIntervalSec, 3);
     assert.equal(config.jobTimeoutSec, 600);
-    assert.equal(config.chatTools, 'off');
+    assert.equal(config.chatTools, 'read');
+    assert.equal(config.chatToolsViaBridge, true);
     assert.equal(config.bridgeApiKey, 'brw_k');
     assert.equal(config.proxyUrl, 'http://vpn:1080');
   });

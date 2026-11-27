@@ -79,7 +79,7 @@ export async function openAiCompatibleChat(
   // Hears the answer as the model writes it (streaming keys only); used to show progress in the chat.
   onProgress?: (text: string) => void | Promise<void>,
 ): Promise<string> {
-  const instructions = toolset ? `${CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION;
+  const instructions = toolset ? `${toolset.systemPrompt ?? CHAT_TOOLS_SYSTEM_PROMPT}\n\n${CHAT_ACTIONS_INSTRUCTION}` : CHAT_ACTIONS_INSTRUCTION;
   const contextBlock = withContext('', context).trim();
   const messages: ChatCompletionMessage[] = [
     {

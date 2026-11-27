@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Optional,
   Param,
   ParseIntPipe,
   Post,
@@ -20,6 +21,10 @@ import { RunCredentialsService } from '../worker/run-credentials.service';
 import { WorkersService } from '../worker/workers.service';
 import { sendAttachment } from './attachments';
 import { ChatAttachmentsService } from './chat-attachments.service';
+import {
+  ChatSystemFactsService,
+  lastUserMessage,
+} from './chat-system-facts.service';
 import { ChatService } from './chat.service';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 import { ClaimedTurnResponseDto } from './dto/claimed-turn-response.dto';
@@ -36,6 +41,8 @@ export class ChatTurnsController {
     private readonly chatAttachments: ChatAttachmentsService,
     private readonly workersService: WorkersService,
     private readonly runCredentials: RunCredentialsService,
+    // A11; absent in tests that do not exercise it.
+    @Optional() private readonly systemFacts?: ChatSystemFactsService,
   ) {}
 
   @Post('claim')
@@ -92,13 +99,25 @@ export class ChatTurnsController {
 
     const { claudeToken, provider } = resolved;
 
+    // A11: a question about the system (what broke, explain run N) gets a live snapshot in front of the model — for the owner only, and never for
+    // the router's own internal questions. The facts are text; nothing about the turn can change anything.
+    const facts =
+      claimed.chat.purpose === null || claimed.chat.purpose === undefined
+        ? await this.systemFacts?.forMessage(
+            currentUser.id,
+            lastUserMessage(claimed.history),
+          )
+        : null;
+    const context =
+      [claimed.chat.contextText, facts].filter(Boolean).join('\n\n') || null;
+
     const payload: ClaimedTurnResponseDto = {
       messageId: claimed.message.id,
       chatId: claimed.chat.id,
       model: claimed.chat.model,
       provider,
       claudeToken,
-      context: claimed.chat.contextText ?? null,
+      context,
       history: claimed.history,
       toolless: claimed.chat.purpose === 'router',
     };

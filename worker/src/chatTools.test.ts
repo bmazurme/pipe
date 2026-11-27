@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
-import { createChatToolset, parseChatToolsMode } from './chatTools.js';
+import { combineToolsets, createBridgeToolset, createChatToolset, parseChatToolsMode, toolsetForTurn } from './chatTools.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -33,9 +33,11 @@ function stubBridge(routes: Record<string, unknown>): Call[] {
 }
 
 describe('parseChatToolsMode', () => {
-  it('defaults to off and accepts read/write in any case', () => {
-    assert.equal(parseChatToolsMode(undefined), 'off');
-    assert.equal(parseChatToolsMode(''), 'off');
+  it('defaults to read (A11: the tools are read-only and for the owner), off only when asked, and accepts read/write in any case', () => {
+    assert.equal(parseChatToolsMode(undefined), 'read');
+    assert.equal(parseChatToolsMode(''), 'read');
+    assert.equal(parseChatToolsMode('off'), 'off');
+    assert.equal(parseChatToolsMode(' OFF '), 'off');
     assert.equal(parseChatToolsMode('Read'), 'read');
     assert.equal(parseChatToolsMode(' write '), 'write');
   });
@@ -143,5 +145,139 @@ describe('createChatToolset', () => {
     const toolset = createChatToolset('https://b', 'k', 'read')!;
 
     assert.equal(await toolset.execute('rm_rf', {}), 'Unknown tool: rm_rf');
+  });
+});
+
+const BRIDGE_TOOLS = {
+  definitions: [{ type: 'function', function: { name: 'system_status', description: 'd', parameters: { type: 'object', properties: {}, required: [] } } }],
+  prompt: 'You can look at the live system.',
+};
+
+describe('createBridgeToolset (A11)', () => {
+  it('asks bridge which tools there are, with the worker key', async () => {
+    const calls = stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+    const toolset = await createBridgeToolset('https://b', 'brw_key');
+
+    assert.equal(toolset?.definitions[0].function.name, 'system_status');
+    assert.equal(toolset?.systemPrompt, 'You can look at the live system.');
+    assert.equal(calls[0].url, 'https://b/api/v1/chat/tools');
+    assert.equal(calls[0].auth, 'Bearer brw_key');
+  });
+
+  it('is absent when bridge offers none (not the owner) or refuses', async () => {
+    stubBridge({ '/api/v1/chat/tools': { definitions: [], prompt: '' } });
+    assert.equal(await createBridgeToolset('https://b', 'k'), null);
+
+    globalThis.fetch = (async () => new Response('no', { status: 403 })) as typeof fetch;
+    assert.equal(await createBridgeToolset('https://b', 'k'), null);
+  });
+
+  it('relays a call to bridge and returns its answer', async () => {
+    const calls = stubBridge({ '/api/v1/chat/tools/call': { result: 'RENDERED' }, '/api/v1/chat/tools': BRIDGE_TOOLS });
+    const toolset = await createBridgeToolset('https://b', 'brw_key');
+
+    // the stub matches by substring, so the longer route must be looked up first
+    calls.length = 0;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body as string) : undefined });
+
+      return new Response(JSON.stringify({ result: 'RENDERED' }), { status: 200 });
+    }) as typeof fetch;
+
+    assert.equal(await toolset!.execute('explain_run', { id: 5 }), 'RENDERED');
+    assert.equal(calls[0].url, 'https://b/api/v1/chat/tools/call');
+    assert.equal(calls[0].method, 'POST');
+    assert.deepEqual(calls[0].body, { name: 'explain_run', args: { id: 5 } });
+  });
+
+  it('turns a refusal or an outage into text the model can explain, not a crash', async () => {
+    stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+
+    const toolset = await createBridgeToolset('https://b', 'k');
+
+    globalThis.fetch = (async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+    assert.match(await toolset!.execute('system_status', {}), /Tool system_status failed: bridge answered 403/);
+
+    globalThis.fetch = (async () => {
+      throw new Error('ECONNRESET');
+    }) as typeof fetch;
+    assert.match(await toolset!.execute('system_status', {}), /Tool system_status failed: .*ECONNRESET/);
+  });
+});
+
+describe('combineToolsets', () => {
+  const make = (name: string, answer: string) => ({
+    definitions: [{ type: 'function' as const, function: { name, description: '', parameters: {} } }],
+    systemPrompt: `prompt-${name}`,
+    execute: async () => answer,
+  });
+
+  it('is whichever one exists when the other does not', () => {
+    const one = make('a', 'A');
+
+    assert.equal(combineToolsets(one, null), one);
+    assert.equal(combineToolsets(null, one), one);
+    assert.equal(combineToolsets(null, null), null);
+  });
+
+  it('offers both and sends a call to the set that has the name', async () => {
+    const both = combineToolsets(make('a', 'from-a'), make('b', 'from-b'))!;
+
+    assert.deepEqual(both.definitions.map((d) => d.function.name), ['a', 'b']);
+    assert.equal(await both.execute('a', {}), 'from-a');
+    assert.equal(await both.execute('b', {}), 'from-b');
+    assert.equal(both.systemPrompt, 'prompt-a prompt-b');
+  });
+});
+
+describe('toolsetForTurn', () => {
+  const base = { bridgeApiUrl: 'https://b', bridgeApiKey: 'k' };
+
+  it('offers nothing when switched off or without a key', async () => {
+    stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+
+    assert.equal(await toolsetForTurn({ ...base, chatTools: 'off' }), null);
+    assert.equal(await toolsetForTurn({ ...base, chatTools: 'read', bridgeApiKey: undefined }), null);
+  });
+
+  it('a worker added from the UI gets bridge\'s tools only', async () => {
+    stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+
+    const toolset = await toolsetForTurn({ ...base, chatTools: 'read', chatToolsViaBridge: true });
+
+    assert.deepEqual(toolset?.definitions.map((d) => d.function.name), ['system_status']);
+  });
+
+  it('a worker with a personal key also keeps the older tools that look at jobs and parcels', async () => {
+    stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+
+    const names = (await toolsetForTurn({ ...base, chatTools: 'read' }))?.definitions.map((d) => d.function.name);
+
+    assert.deepEqual(names, ['system_status', 'get_worker_status', 'list_jobs', 'get_job', 'list_files']);
+  });
+
+  it('only write mode can start a job', async () => {
+    stubBridge({ '/api/v1/chat/tools': BRIDGE_TOOLS });
+
+    const read = (await toolsetForTurn({ ...base, chatTools: 'read' }))?.definitions.map((d) => d.function.name);
+    const write = (await toolsetForTurn({ ...base, chatTools: 'write' }))?.definitions.map((d) => d.function.name);
+
+    assert.ok(!read?.includes('create_job'));
+    assert.ok(write?.includes('create_job'));
+  });
+
+  it('carries on without bridge\'s tools when bridge cannot be asked, and says so', async () => {
+    const warnings: string[] = [];
+
+    globalThis.fetch = (async () => {
+      throw new Error('ETIMEDOUT');
+    }) as typeof fetch;
+
+    assert.equal(await toolsetForTurn({ ...base, chatTools: 'read', chatToolsViaBridge: true }, (m) => warnings.push(m)), null);
+    assert.match(warnings[0], /Could not ask bridge for chat tools: ETIMEDOUT/);
+
+    const legacy = await toolsetForTurn({ ...base, chatTools: 'read' }, () => undefined);
+
+    assert.deepEqual(legacy?.definitions.map((d) => d.function.name), ['get_worker_status', 'list_jobs', 'get_job', 'list_files']);
   });
 });

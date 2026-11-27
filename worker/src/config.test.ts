@@ -72,10 +72,11 @@ describe('loadConfig', () => {
     });
   }
 
-  it('keeps chat tools off by default and parses the level', () => {
+  it('reads chat tools by default (A11), and parses the level', () => {
     const base = { BRIDGE_API_URL: 'http://x', BRIDGE_API_KEY: 'k' };
 
-    assert.equal(loadConfig(base).chatTools, 'off');
+    assert.equal(loadConfig(base).chatTools, 'read');
+    assert.equal(loadConfig({ ...base, WORKER_CHAT_TOOLS: 'off' }).chatTools, 'off');
     assert.equal(loadConfig({ ...base, WORKER_CHAT_TOOLS: 'read' }).chatTools, 'read');
     assert.equal(loadConfig({ ...base, WORKER_CHAT_TOOLS: 'WRITE' }).chatTools, 'write');
     assert.throws(() => loadConfig({ ...base, WORKER_CHAT_TOOLS: 'yes' }), /WORKER_CHAT_TOOLS must be/);

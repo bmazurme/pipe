@@ -21,6 +21,8 @@ export interface ToolDefinition {
 export interface ChatToolset {
   definitions: ToolDefinition[];
   execute(name: string, args: Record<string, unknown>): Promise<string>;
+  // What the model is told about these tools; absent: CHAT_TOOLS_SYSTEM_PROMPT.
+  systemPrompt?: string;
 }
 
 const MAX_RESULT_CHARS = 3000;
@@ -29,7 +31,9 @@ const MODELS = ['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen'];
 export function parseChatToolsMode(raw: string | undefined): ChatToolsMode {
   const value = (raw ?? '').trim().toLowerCase();
 
-  if (value === '' || value === 'off') return 'off';
+  // A11: reading is on unless it is switched off — the tools are read-only and served by bridge for the owner only.
+  if (value === '') return 'read';
+  if (value === 'off') return 'off';
   if (value === 'read' || value === 'write') return value;
 
   throw new Error(`WORKER_CHAT_TOOLS must be "off", "read" or "write", got "${raw}"`);
@@ -173,6 +177,78 @@ export function createChatToolset(apiUrl: string, apiKey: string, mode: ChatTool
   }
 
   return { definitions, execute };
+}
+
+// A11 — the read tools that bridge itself serves (system_status, explain_run, recent_runs). The worker only relays: it asks which tools there are and
+// forwards the model's calls, with its own key — which is why this works for a worker added from the UI, whose key reaches nothing else. Null when the
+// account is not the owner (bridge offers no tools) or bridge cannot be asked.
+export async function createBridgeToolset(apiUrl: string, apiKey: string): Promise<ChatToolset | null> {
+  const base = `${apiUrl}/api/v1/chat/tools`;
+  const response = await bridgeFetch(base, { headers: bearer(apiKey) });
+
+  if (!response.ok) return null;
+
+  const offered = (await response.json()) as { definitions?: ToolDefinition[]; prompt?: string };
+  const definitions = Array.isArray(offered.definitions) ? offered.definitions : [];
+
+  if (definitions.length === 0) return null;
+
+  return {
+    definitions,
+    systemPrompt: offered.prompt || undefined,
+    async execute(name, args) {
+      try {
+        const answer = await bridgeFetch(`${base}/call`, {
+          method: 'POST',
+          headers: bearer(apiKey, true),
+          body: JSON.stringify({ name, args }),
+        });
+
+        if (!answer.ok) return `Tool ${name} failed: bridge answered ${answer.status}: ${(await answer.text()).slice(0, 200)}`;
+
+        const body = (await answer.json()) as { result?: string };
+
+        return clip(String(body.result ?? ''));
+      } catch (error) {
+        return `Tool ${name} failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    },
+  };
+}
+
+// Two sets of tools as one; a name goes to the set that has it.
+export function combineToolsets(first: ChatToolset | null, second: ChatToolset | null): ChatToolset | null {
+  if (!first || !second) return first ?? second;
+
+  const names = new Set(first.definitions.map((definition) => definition.function.name));
+
+  return {
+    definitions: [...first.definitions, ...second.definitions],
+    systemPrompt: [first.systemPrompt, second.systemPrompt].filter(Boolean).join(' ') || undefined,
+    execute: (name, args) => (names.has(name) ? first.execute(name, args) : second.execute(name, args)),
+  };
+}
+
+// What a chat turn is offered. `viaBridge` = a worker added from the UI (its key reaches only worker routes): only bridge's own tools. A worker with
+// a personal key also keeps the older tools that look at jobs and Storage directly. Never throws: a turn without tools is still a turn.
+export async function toolsetForTurn(
+  config: { chatTools: ChatToolsMode; bridgeApiUrl: string; bridgeApiKey?: string; chatToolsViaBridge?: boolean },
+  warn: (message: string) => void = () => undefined,
+): Promise<ChatToolset | null> {
+  if (config.chatTools === 'off' || !config.bridgeApiKey) return null;
+
+  let bridgeTools: ChatToolset | null = null;
+
+  try {
+    bridgeTools = await createBridgeToolset(config.bridgeApiUrl, config.bridgeApiKey);
+  } catch (error) {
+    warn(`Could not ask bridge for chat tools: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (config.chatToolsViaBridge) return bridgeTools;
+
+  // Bridge's tools first: they are the ones that know what is wrong; the direct ones are for parcels and starting jobs.
+  return combineToolsets(bridgeTools, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey, config.chatTools));
 }
 
 export const CHAT_TOOLS_SYSTEM_PROMPT =

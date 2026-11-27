@@ -34,9 +34,10 @@ export interface LoopDeps {
 export function configFor(baseConfig: WorkerConfig, session: Session, remote: RemoteWorkerConfig | null): WorkerConfig {
   const base: WorkerConfig = { ...baseConfig, workerName: session.name };
 
-  // A managed worker's key only reaches worker routes: the bridge tools for gpt chat need a personal API key.
+  // A managed worker's key only reaches worker routes: the tools that look at jobs and Storage need a personal API key. The chat tools bridge serves itself
+  // (A11) do not, so a managed worker keeps whatever WORKER_CHAT_TOOLS says and asks bridge for them.
   return session.mode === 'managed'
-    ? { ...(remote ? applyRemoteConfig(base, remote) : base), bridgeApiKey: session.key, chatTools: 'off' }
+    ? { ...(remote ? applyRemoteConfig(base, remote) : base), bridgeApiKey: session.key, chatToolsViaBridge: true }
     : base;
 }
 
