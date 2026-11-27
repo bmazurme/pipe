@@ -60,6 +60,21 @@ export class BoardWorkerDto {
 
   @IsBoolean()
   running: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  restartCount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  startedAt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  oomKilled?: boolean;
 }
 
 // What a board can say about itself besides its scripts (infra/boardagent `collect_health`): the root disk and the SSH door. Every field

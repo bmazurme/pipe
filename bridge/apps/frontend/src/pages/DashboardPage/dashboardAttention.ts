@@ -1,4 +1,4 @@
-import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRouter, DashboardUps, DriftView } from '../../store/api';
 
 // What the Dashboard header says in one line, and the list under it: everything on the page that is not fine, from every tile - so the
 // answer to "is anything wrong?" does not need scrolling through them. Pure; the page feeds it what its queries returned.
@@ -21,6 +21,8 @@ export interface AttentionInput {
   boards: DashboardBoardMetrics[];
   cloud?: DashboardCloud[];
   channels?: DashboardChannels | null;
+  /** What has drifted or fails quietly (worker containers that restart, old images, failed updates). */
+  drift?: DriftView | null;
   nas: DashboardNas[];
   ups: DashboardUps[];
   router: DashboardRouter[];
@@ -55,6 +57,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     const { reasons } = input.channels;
 
     items.push({ id: 'channels', level: input.channels.status, text: `Каналы: ${reasons[0] ?? 'есть замечания'}${reasons.length > 1 ? ` (и ещё ${reasons.length - 1})` : ''}` });
+  }
+
+  if (input.drift && input.drift.items.length > 0) {
+    const [first, ...rest] = input.drift.items;
+
+    items.push({ id: 'drift', level: input.drift.status === 'bad' ? 'bad' : 'warn', text: `Дрейф: ${shortHost(first.subject)} — ${first.text}${rest.length > 0 ? ` (и ещё ${rest.length})` : ''}` });
   }
 
   for (const nas of input.nas) {

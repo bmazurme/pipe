@@ -51,6 +51,16 @@ describe('buildAttention', () => {
     expect(buildAttention({ ...calm })).toEqual([]);
   });
 
+  it('names the first thing that drifted and how many more there are; says nothing when nothing did', () => {
+    const drift = (status: 'ok' | 'warn' | 'bad', items: Array<{ id: string; level: 'bad' | 'warn'; subject: string; text: string }>) => ({ status, items });
+
+    expect(buildAttention({ ...calm, drift: drift('bad', [{ id: 'a', level: 'bad', subject: 'ubuntu-red', text: 'контейнер воркера не запущен' }, { id: 'b', level: 'warn', subject: 'x', text: 'y' }]) })).toEqual([
+      { id: 'drift', level: 'bad', text: 'Дрейф: red — контейнер воркера не запущен (и ещё 1)' },
+    ]);
+    expect(buildAttention({ ...calm, drift: drift('ok', []) })).toEqual([]);
+    expect(buildAttention({ ...calm, drift: null })).toEqual([]);
+  });
+
   it('names the channels, with the first reason and how many more there are; says nothing when they are fine or unknown', () => {
     const channels = (status: DashboardChannels['status'], reasons: string[]): DashboardChannels => ({ status, reasons, channels: [], vantages: [] });
 

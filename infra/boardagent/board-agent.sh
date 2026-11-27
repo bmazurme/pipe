@@ -45,7 +45,7 @@ BRIDGE_PI_DIR="${BRIDGE_PI_DIR:-/home/pi/bridge-pi}"
 MANIFEST_FILE="${MANIFEST_FILE:-/usr/local/lib/pipe-boardagent/manifest.txt}"
 CHECK_SCRIPT="${CHECK_SCRIPT:-/usr/local/lib/pipe-scriptcheck/check-scripts.sh}"
 HOST="${BOARD_HOST:-$(hostname)}"
-AGENT_VERSION=3
+AGENT_VERSION=4
 # The vital signs go to bridge this often (a run of `apply` is every minute; one in two sends).
 METRICS_EVERY_SEC="${METRICS_EVERY_SEC:-120}"
 # The worker update: the only image it will pull and the only container names it will touch (see the header). Tests change the image.
@@ -83,7 +83,8 @@ bridge() {
   bridge_request "$timeout" "$method" "$path" "$body"
 }
 
-# The worker containers on this board — JSON [{name, image, running}] for bridge, which shows «Обновить worker» only where there are some.
+# The worker containers on this board — JSON [{name, image, running, restartCount, startedAt, oomKilled}] for bridge: «Обновить worker» is shown
+# only where there are some, and the drift check (R1) reads the restarts.
 list_worker_containers() { # names, one per line
   command -v docker >/dev/null 2>&1 || return 0
   docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "$WORKER_NAME_RE" || true
@@ -93,15 +94,21 @@ collect_workers() {
   local name rows=""
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    rows="$rows$(docker inspect -f '{{.Name}}|{{.Config.Image}}|{{.State.Running}}' "$name" 2>/dev/null)"$'\n'
+    rows="$rows$(docker inspect -f '{{.Name}}|{{.Config.Image}}|{{.State.Running}}|{{.RestartCount}}|{{.State.StartedAt}}|{{.State.OOMKilled}}' "$name" 2>/dev/null)"$'\n'
   done < <(list_worker_containers)
   ROWS="$rows" python3 -c '
 import json, os
 out = []
 for line in os.environ.get("ROWS", "").splitlines():
     parts = line.split("|")
-    if len(parts) == 3 and parts[0].startswith("/"):
-        out.append({"name": parts[0][1:], "image": parts[1][:200], "running": parts[2] == "true"})
+    if len(parts) == 6 and parts[0].startswith("/"):
+        row = {"name": parts[0][1:], "image": parts[1][:200], "running": parts[2] == "true", "oomKilled": parts[5] == "true"}
+        # How many times docker restarted it by itself, and since when it has been up: a worker that crash-loops shows here, nowhere else.
+        if parts[3].isdigit():
+            row["restartCount"] = int(parts[3])
+        if parts[4] and not parts[4].startswith("0001"):
+            row["startedAt"] = parts[4][:40]
+        out.append(row)
 print(json.dumps(out[:8]))
 '
 }

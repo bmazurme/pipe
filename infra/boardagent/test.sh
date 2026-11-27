@@ -112,7 +112,7 @@ python3 - "$T/calls/1" "$SHA" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
 scripts = {s["repoPath"]: s["status"] for s in body["scripts"]}
-ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "3"
+ok = (body["host"] == "ubuntu-red" and body["mainSha"] == sys.argv[2] and body["agentVersion"] == "4"
       and scripts == {"infra/backup/uploads-pull.sh": "outdated", "infra/backup/backup.sh": "current", "infra/notify/notify-telegram": "outdated"})
 sys.exit(0 if ok else 1)
 PY
@@ -315,7 +315,9 @@ def fmt(template, c):
     for k, v in {"{{.Name}}": c["inspect"]["Name"], "{{.Config.Image}}": c["inspect"]["Config"]["Image"],
                  "{{.State.Running}}": str(c["running"]).lower(), "{{.Image}}": c["inspect"]["Image"],
                  "{{.Config.StopTimeout}}": str(c["inspect"]["Config"].get("StopTimeout", "<nil>")),
-                 "{{.RestartCount}}": "0"}.items():
+                 "{{.RestartCount}}": str(c.get("restarts", 0)),
+                 "{{.State.StartedAt}}": c.get("started", "2026-11-27T01:00:00.123456789Z"),
+                 "{{.State.OOMKilled}}": str(c.get("oom", False)).lower()}.items():
         r = r.replace(k, v)
     return r
 if a[:1] == ["ps"]:
@@ -392,7 +394,7 @@ fresh; docker_world pipe-worker-pi-red; echo '{"update": null}' > "$T/pending.js
 python3 - "$T/calls/1" <<'PY'
 import json, sys
 body = json.loads(open(sys.argv[1]).read().split("\n", 1)[1])
-sys.exit(0 if body["health"].get("workers") == [{"name": "pipe-worker-pi-red", "image": "ghcr.io/bmazurme/pipe-worker:stable", "running": True}] else 1)
+sys.exit(0 if body["health"].get("workers") == [{"name": "pipe-worker-pi-red", "image": "ghcr.io/bmazurme/pipe-worker:stable", "running": True, "oomKilled": False, "restartCount": 0, "startedAt": "2026-11-27T01:00:00.123456789Z"}] else 1)
 PY
 check "report: lists the board's worker containers with their image and state" $?
 fresh; rm -rf "$FD"; mkdir -p "$FD"; agent report

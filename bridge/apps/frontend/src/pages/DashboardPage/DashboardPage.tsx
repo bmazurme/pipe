@@ -10,6 +10,7 @@ import {
   useGetDashboardBoardMetricsQuery,
   useGetDashboardDeploysQuery,
   useGetDashboardChannelsQuery,
+  useGetDriftQuery,
   useGetDashboardCloudQuery,
   useGetDashboardNasQuery,
   useGetDashboardUpsQuery,
@@ -26,6 +27,7 @@ import { SectionHeader } from '../../widgets/SectionHeader';
 import { GithubConnectionCard } from './GithubConnectionCard';
 import { BoardMetricsCard } from './BoardMetricsCard';
 import { ChannelsCard } from './ChannelsCard';
+import { DriftCard } from './DriftCard';
 import { CloudCard } from './CloudCard';
 import { NasCard } from './NasCard';
 import { RouterCard } from './RouterCard';
@@ -179,6 +181,7 @@ export function DashboardPage() {
   const boardMetrics = useGetDashboardBoardMetricsQuery(24, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const cloud = useGetDashboardCloudQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const channels = useGetDashboardChannelsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
+  const drift = useGetDriftQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const nas = useGetDashboardNasQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const ups = useGetDashboardUpsQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
   const router = useGetDashboardRouterQuery(undefined, { pollingInterval: BOARD_POLL_INTERVAL_MS, skipPollingIfUnfocused: true });
@@ -199,6 +202,7 @@ export function DashboardPage() {
     boards: Array.isArray(boardMetrics.data) ? boardMetrics.data : [],
     cloud: Array.isArray(cloud.data) ? cloud.data : [],
     channels: channels.data && Array.isArray(channels.data.channels) ? channels.data : null,
+    drift: drift.data && Array.isArray(drift.data.items) ? drift.data : null,
     nas: Array.isArray(nas.data) ? nas.data : [],
     ups: Array.isArray(ups.data) ? ups.data : [],
     router: Array.isArray(router.data) ? router.data : [],
@@ -208,7 +212,7 @@ export function DashboardPage() {
 
   // When the newest answer came in, and one button that asks all of them again: the tiles poll on their own, but after fixing something
   // «did it help?» should not mean waiting out a minute.
-  const queries = [vpnActive, nodes, backups, boardMetrics, cloud, channels, nas, ups, router, deploys];
+  const queries = [vpnActive, nodes, backups, boardMetrics, cloud, channels, drift, nas, ups, router, deploys];
   const stamps = queries.map((query) => query.fulfilledTimeStamp).filter((stamp): stamp is number => typeof stamp === 'number');
   const updatedAt = stamps.length > 0 ? Math.max(...stamps) : null;
   const refreshing = queries.some((query) => query.isFetching);
@@ -333,6 +337,8 @@ export function DashboardPage() {
       <ChannelsCard />
 
       <BoardMetricsCard />
+
+      <DriftCard />
 
       <div className={styles.grid}>
         <NasCard />

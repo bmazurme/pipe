@@ -3164,6 +3164,24 @@
         }
       }
     },
+    "/api/v1/boards/drift": {
+      "get": {
+        "operationId": "BoardsController_driftView",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/boards/{host}/updates": {
       "post": {
         "operationId": "BoardsController_update",
@@ -9827,6 +9845,18 @@
             "maxLength": 200
           },
           "running": {
+            "type": "boolean"
+          },
+          "restartCount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "startedAt": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "oomKilled": {
             "type": "boolean"
           }
         },

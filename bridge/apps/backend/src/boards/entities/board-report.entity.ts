@@ -18,6 +18,11 @@ export interface BoardWorker {
   name: string;
   image: string;
   running: boolean;
+  // Since the container was created (an update starts it again at 0), when it last started, and whether the kernel killed it for memory;
+  // all optional — an agent older than version 4 does not say.
+  restartCount?: number;
+  startedAt?: string;
+  oomKilled?: boolean;
 }
 
 // What the board reported about its disk and SSH; every field optional (see BoardHealthDto).
