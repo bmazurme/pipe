@@ -118,3 +118,103 @@ describe('ChatTurnsController claim', () => {
     );
   });
 });
+
+describe('ChatTurnsController claim — the system snapshot (A11)', () => {
+  const setup = (
+    over: {
+      purpose?: string | null;
+      facts?: string | null;
+      history?: Array<{ role: string; content: string }>;
+    } = {},
+  ) => {
+    const chatService = {
+      claim: jest.fn().mockResolvedValue({
+        chat: {
+          id: 2,
+          model: 'sonnet',
+          contextText: 'ctx',
+          purpose: over.purpose ?? null,
+        },
+        message: { id: 3 },
+        history: over.history ?? [{ role: 'user', content: 'что сломалось?' }],
+      }),
+    };
+    const systemFacts = {
+      forMessage: jest
+        .fn()
+        .mockResolvedValue(over.facts === undefined ? 'SNAPSHOT' : over.facts),
+    };
+    const controller = controllerWith({
+      chatService,
+      workersService: {},
+      systemFacts,
+      runCredentials: {
+        resolve: jest
+          .fn()
+          .mockResolvedValue({ claudeToken: null, provider: null }),
+      },
+    });
+    const r = {
+      status: jest.fn().mockReturnThis(),
+      end: jest.fn(),
+      json: jest.fn(),
+    };
+
+    return { controller, systemFacts, r };
+  };
+
+  it('puts the snapshot after the chat context, for the last thing the user said', async () => {
+    const { controller, systemFacts, r } = setup({
+      history: [
+        { role: 'user', content: 'привет' },
+        { role: 'assistant', content: 'здравствуйте' },
+        { role: 'user', content: 'что сломалось?' },
+      ],
+    });
+
+    await controller.claim({ id: 1 }, r as never);
+
+    expect(systemFacts.forMessage).toHaveBeenCalledWith(1, 'что сломалось?');
+    expect(r.json).toHaveBeenCalledWith(
+      expect.objectContaining({ context: 'ctx\n\nSNAPSHOT' }),
+    );
+  });
+
+  it('is the whole context when the chat had none', async () => {
+    const { controller, r } = setup();
+
+    (
+      controller as unknown as { chatService: { claim: jest.Mock } }
+    ).chatService.claim.mockResolvedValue({
+      chat: { id: 2, model: 'sonnet', contextText: null, purpose: null },
+      message: { id: 3 },
+      history: [{ role: 'user', content: 'что сломалось?' }],
+    });
+    await controller.claim({ id: 1 }, r as never);
+
+    expect(r.json).toHaveBeenCalledWith(
+      expect.objectContaining({ context: 'SNAPSHOT' }),
+    );
+  });
+
+  it('leaves the context as it was when the message is not about the system', async () => {
+    const { controller, r } = setup({ facts: null });
+
+    await controller.claim({ id: 1 }, r as never);
+
+    expect(r.json).toHaveBeenCalledWith(
+      expect.objectContaining({ context: 'ctx' }),
+    );
+  });
+
+  it("never gives the router's internal questions a snapshot", async () => {
+    const { controller, systemFacts, r } = setup({ purpose: 'router' });
+
+    await controller.claim({ id: 1 }, r as never);
+
+    expect(systemFacts.forMessage).not.toHaveBeenCalled();
+    expect(r.json).toHaveBeenCalledWith(
+      expect.objectContaining({ context: 'ctx' }),
+    );
+  });
+});

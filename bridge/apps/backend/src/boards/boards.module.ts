@@ -60,6 +60,8 @@ import { ScriptUpdate } from './entities/script-update.entity';
     UpsService,
     RouterService,
     BoardMetricsService,
+    // A11: chat reads the drift view to answer «what is broken».
+    DriftService,
   ],
 })
 export class BoardsModule {}

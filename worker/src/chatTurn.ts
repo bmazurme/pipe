@@ -2,7 +2,7 @@ import { ChatBridgeClient, ClaimedChatTurn } from './chatBridgeClient.js';
 import { clipReasoning, clipReply } from './chatReply.js';
 import { claudeChat } from './chatRunners/claudeChat.js';
 import { openAiCompatibleChat } from './chatRunners/openAiCompatibleChat.js';
-import { createChatToolset } from './chatTools.js';
+import { toolsetForTurn } from './chatTools.js';
 import { resolveChatProvider } from './chatProviders.js';
 import { CancelledError } from './cancelled.js';
 import { CHAT_TURN_TIMEOUT_SEC, type WorkerConfig } from './config.js';
@@ -39,7 +39,7 @@ export async function processChatTurn(
       ? await claudeChat(turn.history, provider.claudeModel, config.workDir, config.proxyUrl, (attachmentId) => client.downloadAttachment(turn.messageId, attachmentId), (report) => {
           reports.push(client.reportClaudeUsage(report));
         }, turn.claudeToken, (text) => client.reportProgress(turn.messageId, text), turn.context, chatTimeoutSec * 1000, options.shutdown, turn.toolless)
-      : { text: await openAiCompatibleChat(turn.history, provider, config.proxyUrl, createChatToolset(config.bridgeApiUrl, config.bridgeApiKey ?? '', config.chatTools), turn.context, (text) => client.reportProgress(turn.messageId, text)), reasoning: null };
+      : { text: await openAiCompatibleChat(turn.history, provider, config.proxyUrl, await toolsetForTurn(config, (message) => clog.warn({}, message)), turn.context, (text) => client.reportProgress(turn.messageId, text)), reasoning: null };
 
     await Promise.all(reports);
     await client.complete(turn.messageId, clipReply(text), reasoning ? clipReasoning(reasoning) : null);

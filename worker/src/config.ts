@@ -28,9 +28,11 @@ export interface WorkerConfig {
   chatTimeoutSec?: number;
   // Seconds a running job may keep going after SIGTERM/SIGINT before it is stopped; 0 (default) = stop at once.
   shutdownGraceSec?: number;
-  // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): off by
-  // default; `read` looks at jobs/files/worker status, `write` may also start jobs.
+  // Bridge-native tools for gpt/deepseek/qwen chat turns (chatTools.ts): `read` (the default) looks at what is wrong, at a run in detail and at recent
+  // runs — served by bridge, read-only, for the owner only; `write` may also start jobs (a personal key); `off` switches them off.
   chatTools: ChatToolsMode;
+  // A worker added from the UI: its own key reaches only worker routes, so only bridge's own tools are offered (set by loop.ts).
+  chatToolsViaBridge?: boolean;
   // OS user the claude CLI runs as (via sudo), so job code cannot read the worker's own key; absent: the worker's user.
   runAs?: string;
   // The check run after the model and before the result leaves the worker (verification.ts); on by default, WORKER_VERIFY=off turns it off.
