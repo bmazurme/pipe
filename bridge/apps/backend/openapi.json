@@ -170,6 +170,34 @@
         }
       }
     },
+    "/api/v1/auth/api-keys/{id}/rotate": {
+      "post": {
+        "operationId": "AuthController_rotateApiKey",
+        "summary": "Replace an API key with a new one of the same name, scope and term; the old one stops working (verified)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKeyResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/api-keys/{id}": {
       "delete": {
         "operationId": "AuthController_revokeApiKey",
@@ -7150,7 +7178,9 @@
           "scope": {
             "type": "string",
             "enum": [
-              "boards"
+              "boards",
+              "readonly",
+              "reports-sync"
             ]
           },
           "expiresInDays": {
@@ -7179,7 +7209,7 @@
             "type": "string"
           },
           "scope": {
-            "type": "string",
+            "type": "object",
             "nullable": true
           },
           "token": {
@@ -7218,7 +7248,7 @@
             "type": "string"
           },
           "scope": {
-            "type": "string",
+            "type": "object",
             "nullable": true
           },
           "createdAt": {

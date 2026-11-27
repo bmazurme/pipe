@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 
+import { scopeAllows } from '../api-key-scope';
 import { API_KEY_PREFIX, ApiKeysService } from '../api-keys.service';
 import { BOARD_AGENT_KEY_ALLOWED } from '../decorators/board-agent-key-allowed.decorator';
 import { MACHINE_ONLY } from '../decorators/machine-only.decorator';
@@ -85,6 +86,29 @@ export class JwtOrApiKeyGuard implements CanActivate {
         if (!allowed) {
           throw new ForbiddenException(
             'A boards-only key cannot call this route',
+          );
+        }
+      }
+
+      // A scope narrower than the whole account (S5): reads only, or what reports' server calls. (`boards` was decided above, by the route's marker.)
+      if (apiKey.scope === 'readonly' || apiKey.scope === 'reports-sync') {
+        const machineOnly = this.reflector.getAllAndOverride<boolean>(
+          MACHINE_ONLY,
+          [context.getHandler(), context.getClass()],
+        );
+
+        if (
+          !scopeAllows(
+            apiKey.scope,
+            {
+              method: request.method,
+              path: request.originalUrl ?? request.path,
+            },
+            { machineOnly: Boolean(machineOnly) },
+          )
+        ) {
+          throw new ForbiddenException(
+            `A ${apiKey.scope} key cannot call this route`,
           );
         }
       }

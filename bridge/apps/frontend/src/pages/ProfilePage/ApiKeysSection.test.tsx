@@ -100,7 +100,7 @@ describe('ApiKeysSection', () => {
 
     const posts = requests.filter((r) => r.method === 'POST');
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(await posts[0].text())).toEqual({ name: 'sync-cli' });
+    expect(JSON.parse(await posts[0].text())).toEqual({ name: 'sync-cli', expiresInDays: 90 });
     expect(clipboard).toHaveBeenCalledWith('brk_secret-plaintext-token');
   });
 
@@ -209,8 +209,8 @@ describe('ApiKeysSection', () => {
   });
 });
 
-describe('ApiKeysSection boards-only key', () => {
-  it('sends scope "boards" when the checkbox is ticked', async () => {
+describe('ApiKeysSection scopes', () => {
+  it('sends scope "boards" when it is chosen', async () => {
     const user = userEvent.setup();
     const requests: Request[] = [];
 
@@ -230,12 +230,46 @@ describe('ApiKeysSection boards-only key', () => {
 
     await user.click(screen.getByRole('button', { name: 'Создать' }));
     await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'board-1');
-    await user.click(screen.getByLabelText('только для плат'));
+    await user.click(screen.getByRole('radio', { name: 'Только плат' }));
     await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
 
     await screen.findByText('brk_board-token');
     const posts = requests.filter((r) => r.method === 'POST');
-    expect(JSON.parse(await posts[0].text())).toEqual({ name: 'board-1', scope: 'boards' });
+    expect(JSON.parse(await posts[0].text())).toEqual({ name: 'board-1', scope: 'boards', expiresInDays: 90 });
+  });
+
+  it('sends scope "readonly" for a read-only key, and says what it cannot do', async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST') return jsonResponse({ ...KEYS[0], scope: 'readonly', token: 'brk_ro' });
+        return jsonResponse([]);
+      }),
+    );
+
+    renderSection();
+    await screen.findByText('Ключей ещё нет');
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+    await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'dashboard');
+    await user.click(screen.getByRole('radio', { name: 'Только чтение' }));
+
+    expect(screen.getByText(/Менять и удалять нельзя/)).toBeTruthy();
+
+    await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
+    await screen.findByText('brk_ro');
+    expect(JSON.parse(await requests.find((r) => r.method === 'POST')!.text())).toEqual({ name: 'dashboard', scope: 'readonly', expiresInDays: 90 });
+  });
+
+  it('shows the scope of a key in the list', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([{ ...KEYS[1], scope: 'reports-sync', lastUsedAt: new Date().toISOString() }])));
+
+    renderSection();
+
+    expect(await screen.findByText(/для reports \(sync\)/)).toBeTruthy();
   });
 });
 
@@ -258,13 +292,40 @@ describe('ApiKeysSection expiry', () => {
 
     await user.click(screen.getByRole('button', { name: 'Создать' }));
     await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'sync-cli');
-    await user.click(await screen.findByText('Бессрочно'));
-    await user.click(await screen.findByText('90 дней'));
+    await user.click(await screen.findByText('90 дней (по умолчанию)'));
+    await user.click(await screen.findByText('30 дней'));
     await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
 
     await screen.findByText('brk_x');
     const post = requests.find((r) => r.method === 'POST')!;
-    expect(JSON.parse(await post.text())).toEqual({ name: 'sync-cli', expiresInDays: 90 });
+    expect(JSON.parse(await post.text())).toEqual({ name: 'sync-cli', expiresInDays: 30 });
+  });
+
+  it('sends null, and warns, when «never» is chosen on purpose', async () => {
+    const user = userEvent.setup();
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST') return jsonResponse({ ...KEYS[0], token: 'brk_forever' });
+        return jsonResponse([]);
+      }),
+    );
+
+    renderSection();
+    await screen.findByText('Ключей ещё нет');
+    await user.click(screen.getByRole('button', { name: 'Создать' }));
+    await user.type(await screen.findByPlaceholderText('sync-cli на ноутбуке'), 'forever');
+    await user.click(await screen.findByText('90 дней (по умолчанию)'));
+    await user.click(await screen.findByText('Бессрочно (осознанно)'));
+
+    expect(screen.getByText(/Бессрочный ключ — осознанный выбор/)).toBeTruthy();
+
+    await user.click((await screen.findAllByRole('button', { name: 'Создать' })).at(-1)!);
+    await screen.findByText('brk_forever');
+    expect(JSON.parse(await requests.find((r) => r.method === 'POST')!.text())).toEqual({ name: 'forever', expiresInDays: null });
   });
 
   it('marks an expired key and shows the date of a live one', async () => {
@@ -309,21 +370,25 @@ describe('ApiKeysSection new-key dialog', () => {
     return requests;
   };
 
-  it('fills the name from a quick choice, and the boards-only switch for the boards agent', async () => {
+  it('fills the name from a quick choice, and the scope that integration needs', async () => {
     const user = userEvent.setup();
     const requests = await openDialog(user);
 
     await user.click(screen.getByRole('button', { name: 'агент плат' }));
     expect(screen.getByPlaceholderText('sync-cli на ноутбуке')).toHaveValue('агент плат');
-    expect(screen.getByLabelText('только для плат')).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Только плат' })).toBeChecked();
 
     await user.click(screen.getByRole('button', { name: 'reports' }));
     expect(screen.getByPlaceholderText('sync-cli на ноутбуке')).toHaveValue('reports');
-    expect(screen.getByLabelText('только для плат')).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: 'reports (sync)' })).toBeChecked();
 
+    await user.click(screen.getByRole('button', { name: 'sync-cli' }));
+    expect(screen.getByRole('radio', { name: 'Полный доступ' })).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: 'reports' }));
     await user.click(await createButton());
     await screen.findByText('brk_new-token');
-    expect(JSON.parse(await requests.find((r) => r.method === 'POST')!.text())).toEqual({ name: 'reports' });
+    expect(JSON.parse(await requests.find((r) => r.method === 'POST')!.text())).toEqual({ name: 'reports', scope: 'reports-sync', expiresInDays: 90 });
   });
 
   it('creates the key on Enter in the name field', async () => {
@@ -340,11 +405,13 @@ describe('ApiKeysSection new-key dialog', () => {
     const user = userEvent.setup();
 
     await openDialog(user);
-    expect(screen.getByText(/Работает, пока вы его не отзовёте/)).toBeTruthy();
-
-    await user.click(await screen.findByText('Бессрочно'));
-    await user.click(await screen.findByText('30 дней'));
+    // 90 days is what is chosen from the start, with its date and the reminder promise
     expect(screen.getByText(/Перестанет работать \d{1,2} \S+ \d{4}/)).toBeTruthy();
+    expect(screen.getByText(/придёт напоминание в Telegram/)).toBeTruthy();
+
+    await user.click(await screen.findByText('90 дней (по умолчанию)'));
+    await user.click(await screen.findByText('Бессрочно (осознанно)'));
+    expect(screen.getByText(/Бессрочный ключ — осознанный выбор/)).toBeTruthy();
   });
 
   it('asks once more before closing with the token not copied, and keeps it until then', async () => {
@@ -410,5 +477,91 @@ describe('ApiKeysSection new-key dialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Скопировать ключ' }));
     expect(await screen.findByText(/Браузер не дал скопировать/)).toBeTruthy();
+  });
+});
+
+describe('ApiKeysSection rotation (S5)', () => {
+  const stubRotation = (rotateAnswer: () => Response) => {
+    const requests: Request[] = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        requests.push(request.clone());
+        if (request.method === 'POST' && request.url.endsWith('/rotate')) return rotateAnswer();
+
+        return jsonResponse([{ ...KEYS[0], scope: 'reports-sync', lastUsedAt: new Date().toISOString() }]);
+      }),
+    );
+
+    return requests;
+  };
+
+  it('asks first, says what happens to the old key, and sends nothing until confirmed', async () => {
+    const user = userEvent.setup();
+    const requests = stubRotation(() => jsonResponse({ ...KEYS[0], token: 'brk_rotated' }));
+
+    renderSection();
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить ключ: sync-cli' }));
+
+    expect(await screen.findByText('Перевыпустить ключ «sync-cli»?')).toBeTruthy();
+    expect(screen.getByText(/прежний перестанет работать сразу/)).toBeTruthy();
+    expect(requests.some((r) => r.url.endsWith('/rotate'))).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Отмена' }));
+    expect(requests.some((r) => r.url.endsWith('/rotate'))).toBe(false);
+  });
+
+  it('shows the new token once, with the note that the old key was checked dead', async () => {
+    const user = userEvent.setup();
+    const requests = stubRotation(() => jsonResponse({ ...KEYS[0], scope: 'reports-sync', expiresAt: '2027-02-10T00:00:00Z', token: 'brk_rotated-secret' }, 201));
+
+    stubClipboard();
+    renderSection();
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить ключ: sync-cli' }));
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить' }));
+
+    expect(await screen.findByText('brk_rotated-secret')).toBeTruthy();
+    expect(screen.getByText('Ключ перевыпущен')).toBeTruthy();
+    expect(screen.getByText('Старый ключ проверен: он больше не работает.')).toBeTruthy();
+    expect(screen.getAllByText(/для reports \(sync\)/).length).toBeGreaterThan(0);
+    expect(requests.some((r) => r.method === 'POST' && r.url.endsWith('/auth/api-keys/1/rotate'))).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Скопировать ключ' }));
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+    expect(screen.queryByText('brk_rotated-secret')).toBeNull();
+  });
+
+  it('asks once more before closing with the new token not copied', async () => {
+    const user = userEvent.setup();
+
+    stubRotation(() => jsonResponse({ ...KEYS[0], token: 'brk_unsaved-rotation' }, 201));
+    renderSection();
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить ключ: sync-cli' }));
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить' }));
+    await screen.findByText('brk_unsaved-rotation');
+    await user.click(screen.getByRole('button', { name: 'Готово' }));
+
+    expect(screen.getByText('brk_unsaved-rotation')).toBeTruthy();
+    expect(screen.getByText(/Вы ещё не скопировали ключ/)).toBeTruthy();
+  });
+
+  it('says the old key was left as it was when the rotation fails', async () => {
+    const user = userEvent.setup();
+
+    stubRotation(() => jsonResponse({ message: 'The old key could not be revoked, so nothing was changed' }, 500));
+    renderSection();
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить ключ: sync-cli' }));
+    await user.click(await screen.findByRole('button', { name: 'Перевыпустить' }));
+
+    expect(await screen.findByText(/Старый ключ остался как был/)).toBeTruthy();
+  });
+
+  it('says a key nobody used for a month is probably forgotten', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([{ ...KEYS[0], lastUsedAt: new Date(Date.now() - 45 * 86_400_000).toISOString() }])));
+
+    renderSection();
+
+    expect(await screen.findByText(/Не использовался 45 дн\./)).toBeTruthy();
   });
 });

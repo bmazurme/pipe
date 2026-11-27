@@ -121,7 +121,8 @@ export class AuthController {
       currentUser.id,
       dto.name,
       dto.scope ?? null,
-      dto.expiresInDays ?? null,
+      // Not sent = the default term; null = «never», asked for on purpose.
+      dto.expiresInDays,
     );
     this.authService.announceCredentialCreated(
       'api-key',
@@ -140,6 +141,37 @@ export class AuthController {
   async listApiKeys(@CurrentUser() currentUser: { id: number }) {
     const apiKeys = await this.apiKeysService.findActiveByUser(currentUser.id);
     return apiKeys.map(ApiKeyResponseDto.fromEntity);
+  }
+
+  // The same key again, with a new secret: the old one is revoked and checked to be dead before the new token is returned.
+  @RequireStepUp()
+  @UseGuards(JwtGuard)
+  @Post('api-keys/:id/rotate')
+  @ApiOperation({
+    summary:
+      'Replace an API key with a new one of the same name, scope and term; the old one stops working (verified)',
+  })
+  async rotateApiKey(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: { id: number },
+    @Req() request: ExpressRequest,
+  ) {
+    const created = await this.apiKeysService.rotate(id, currentUser.id);
+
+    if (!created) {
+      throw new NotFoundException('API key not found');
+    }
+
+    this.authService.announceCredentialCreated(
+      'api-key',
+      currentUser.id,
+      created.name,
+      request.ip,
+      created.scope,
+      created.expiresAt,
+    );
+
+    return CreatedApiKeyResponseDto.fromCreatedApiKey(created);
   }
 
   @RequireStepUp()

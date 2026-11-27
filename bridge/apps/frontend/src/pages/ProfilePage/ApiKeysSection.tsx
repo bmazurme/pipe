@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Key, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowsRotateRight, Key, Plus, TrashBin } from '@gravity-ui/icons';
 import {
   ActionTooltip,
   Alert,
@@ -24,6 +24,8 @@ import { useAppSelector } from '../../store/hooks';
 import { apiKeysSelector } from '../../store/slices';
 import styles from './ProfilePage.module.css';
 import { ApiKeyDialog } from './ApiKeyDialog';
+import { describeScope, idleDays, STALE_AFTER_DAYS } from './apiKeyDialogUtils';
+import { RotateKeyDialog } from './RotateKeyDialog';
 
 function describeExpiry(expiresAt: string | null | undefined): string {
   if (!expiresAt) return '';
@@ -44,6 +46,7 @@ export function ApiKeysSection() {
   const [error, setError] = useState<string | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [rotating, setRotating] = useState<ApiKey | null>(null);
 
   const handleRevoke = async (apiKey: ApiKey) => {
     setError(null);
@@ -74,7 +77,7 @@ export function ApiKeysSection() {
 
         <Text color="secondary" variant="caption-2">
           Единственный способ подключить интеграцию — sync-cli, reports, worker,
-          ntlstl.time, свои скрипты. Ключ действует до отзыва или до выбранного срока; в запросе его
+          ntlstl.time, свои скрипты. Ключ живёт 90 дней, если не выбрать другое (бессрочный — осознанный выбор), и может быть ограничен: только чтение, только reports или только платы; в запросе его
           передают заголовком <code>X-Api-Key</code>.
         </Text>
 
@@ -126,11 +129,27 @@ export function ApiKeysSection() {
                     {apiKey.name}
                   </Text>
                   <Text color="secondary" variant="caption-2" ellipsis>
-                    {apiKey.prefix}… · {describeExpiry(apiKey.expiresAt)}{apiKey.scope === 'boards' ? 'только для плат · ' : ''}{apiKey.lastUsedAt
+                    {apiKey.prefix}… · {describeExpiry(apiKey.expiresAt)}{apiKey.scope ? `${describeScope(apiKey.scope)} · ` : ''}{apiKey.lastUsedAt
                       ? `использован ${formatRelativeTime(apiKey.lastUsedAt)}`
                       : 'ещё не использован'}
                   </Text>
+                  {idleDays(apiKey.lastUsedAt, apiKey.createdAt) >= STALE_AFTER_DAYS && (
+                    <Text color="warning" variant="caption-2">
+                      Не использовался {idleDays(apiKey.lastUsedAt, apiKey.createdAt)} дн. — отзовите, если не нужен.
+                    </Text>
+                  )}
                 </div>
+
+                <ActionTooltip title="Перевыпустить: тот же ключ с новым секретом">
+                  <Button
+                    view="flat"
+                    aria-label={`Перевыпустить ключ: ${apiKey.name}`}
+                    disabled={revokingId !== null}
+                    onClick={() => setRotating(apiKey)}
+                  >
+                    <Icon data={ArrowsRotateRight} size={16} />
+                  </Button>
+                </ActionTooltip>
 
                 <ActionTooltip title="Отозвать ключ">
                   <Button
@@ -150,6 +169,7 @@ export function ApiKeysSection() {
       </div>
 
       <ApiKeyDialog open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      <RotateKeyDialog apiKey={rotating} onClose={() => setRotating(null)} />
     </Card>
   );
 }
