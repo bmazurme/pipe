@@ -1,7 +1,7 @@
 # Build context is the repo root (npm workspaces share a single lockfile),
 # so this is built with:
 #   docker build -f apps/backend/Dockerfile -t bridge-backend .
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 # node:22-alpine bundles npm 10.9.8, which has a bug resolving nested
 # optionalDependencies (e.g. vitest's own esbuild copy) that makes npm ci
@@ -19,7 +19,7 @@ RUN npm run build -w backend
 # the root node_modules and leaves nothing to nest here.
 RUN mkdir -p apps/backend/node_modules
 
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
