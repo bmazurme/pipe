@@ -3,7 +3,7 @@ import {
   Alert, Button, Dialog, DialogBody, DialogFooter, DialogHeader, Icon, Label, SegmentedRadioGroup, Select, Text, TextInput, useToaster,
 } from '@gravity-ui/uikit';
 import { ArrowsRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, Shuffle, TrashBin, Tray } from '@gravity-ui/icons';
-import type { AnalysisKindType, SubscriptionIssueType, WorkerModelType } from '@reports/shared';
+import type { AnalysisKindType, LeakScanModeType, SubscriptionIssueType, WorkerModelType } from '@reports/shared';
 
 import PageHeader from '../../components/page-header';
 import { EmptyState, ErrorState, PageSkeleton } from '../../components/state';
@@ -15,11 +15,13 @@ import {
   useGetSubscriptionIssuesQuery,
   useRemoveSubscriptionIssueMutation,
   useSetAutoStartWorkerModelMutation,
+  useSetLeakScanModeMutation,
   useStartAnalysisMutation,
 } from '../../store/api';
 import { useDocumentTitle } from '../../hooks/use-document-title';
 import { describeError } from '../../utils/describe-error';
 import { isAnalysisIssue } from './analysis';
+import { leakScanModeOf } from './leakScanMode';
 import {
   STEP_BADGE_THEME, STEP_TITLES, countByGroup, filterIssues, groupByProject, type StatusFilter,
 } from './status';
@@ -29,6 +31,12 @@ import BacklogPanel from './components/backlog-panel';
 import IssueStepper from './components/issue-stepper';
 
 import style from './subscription.module.css';
+
+const LEAK_SCAN_OPTIONS: { value: LeakScanModeType; content: string }[] = [
+  { value: 'credentials', content: 'Остановить на ключах' },
+  { value: 'all', content: 'Остановить на любой находке' },
+  { value: 'warn', content: 'Только предупреждать' },
+];
 
 const AUTO_START_OPTIONS: { value: WorkerModelType | 'off'; content: string }[] = [
   { value: 'off', content: 'Вручную' },
@@ -50,6 +58,7 @@ function Subscription() {
   const { data: config } = useGetSubscriptionConfigQuery();
   const { data: codeStatus } = useGetServerCodeStatusQuery(undefined, { pollingInterval: 60_000 });
   const [setAutoStart] = useSetAutoStartWorkerModelMutation();
+  const [setLeakScanMode] = useSetLeakScanModeMutation();
   const [createManual] = useCreateManualSubscriptionIssueMutation();
   const [createMigrationTask, { isLoading: isCreatingMigration }] = useCreateMigrationTaskMutation();
   const [removeIssue] = useRemoveSubscriptionIssueMutation();
@@ -136,6 +145,20 @@ function Subscription() {
         theme: 'danger',
         title: 'Не удалось сохранить настройку',
         content: describeError(autoStartError),
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleLeakScanModeChange = async (mode: LeakScanModeType) => {
+    try {
+      await setLeakScanMode({ mode }).unwrap();
+    } catch (strictError) {
+      toaster.add({
+        name: 'leak-scan-mode-error',
+        theme: 'danger',
+        title: 'Не удалось сохранить настройку',
+        content: describeError(strictError),
         isClosable: true,
       });
     }
@@ -253,6 +276,14 @@ function Subscription() {
               onUpdate={([value]) => void handleAutoStartChange(value as WorkerModelType | 'off')}
               options={AUTO_START_OPTIONS}
               title="Какую модель запускать на worker сразу после отправки посылки"
+            />
+            <Select
+              size="m"
+              label="Проверка на утечки:"
+              value={[leakScanModeOf(config)]}
+              onUpdate={([value]) => void handleLeakScanModeChange(value as LeakScanModeType)}
+              options={LEAK_SCAN_OPTIONS}
+              title="Что делать, если в посылке перед отправкой нашлось что-то похожее на секрет. Остальные находки (адреса, почта) эвристика даёт и на обычном коде, поэтому по умолчанию они только предупреждают."
             />
             <TextInput
               className={style.search}

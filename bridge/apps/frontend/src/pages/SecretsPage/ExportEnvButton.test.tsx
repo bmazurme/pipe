@@ -49,10 +49,33 @@ describe('ExportEnvButton', () => {
     expect(urls.some((u) => u.endsWith('/secrets/export'))).toBe(false);
 
     await user.click(screen.getByText('Скачать .env'));
+    expect(urls.some((u) => u.endsWith('/secrets/export'))).toBe(false);
+    expect(await screen.findByText('В файле значения секретов в открытом виде (1)')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Всё равно скачать' }));
 
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(urls.filter((u) => u.endsWith('/secrets/export'))).toHaveLength(1);
     expect(createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes no file when the warning is cancelled', async () => {
+    const user = userEvent.setup();
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        urls.push(request.url);
+        return new Response(JSON.stringify([secret]), { status: 200, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+
+    renderPage();
+    await waitFor(() => expect((screen.getByText('Скачать .env').closest('button') as HTMLButtonElement).disabled).toBe(false));
+    await user.click(screen.getByText('Скачать .env'));
+    await user.click(await screen.findByRole('button', { name: 'Отмена' }));
+
+    expect(screen.queryByText(/значения секретов в открытом виде/)).toBeNull();
+    expect(urls.some((u) => u.endsWith('/secrets/export'))).toBe(false);
   });
 
   it('is disabled when there are no secrets', async () => {

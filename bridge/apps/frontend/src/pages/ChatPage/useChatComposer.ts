@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { TSubmitData } from '@gravity-ui/aikit';
+import { findCredentials, maskCredentials, type CredentialFinding } from '@pipe/protocol/credentials';
 
 import { ChatAttachmentMeta, ChatModelId, MAX_ATTACHMENTS_PER_MESSAGE, useCreateChatMutation, useSendMessageMutation } from '../../store/api';
 import { attachmentProblem, deleteChatAttachment, uploadChatAttachment } from './chatAttachments';
@@ -9,6 +10,13 @@ interface QueuedMessage {
   chatId: number;
   content: string;
   files: ChatAttachmentMeta[];
+}
+
+// A message that looks like it carries a key: held back, with what it would look like once the key is hidden,
+// until the person decides. Bridge hides such a value in the stored message in any case.
+export interface HeldMessage {
+  masked: string;
+  findings: CredentialFinding[];
 }
 
 interface UseChatComposerParams {
@@ -45,6 +53,7 @@ export function useChatComposer({
   // The text of a message that could not be sent — AIKit has already cleared the composer, so it is kept here to resend.
   const [failedDraft, setFailedDraft] = useState<string | null>(null);
   const [queued, setQueued] = useState<QueuedMessage | null>(null);
+  const [held, setHeld] = useState<HeldMessage | null>(null);
 
   // The chat must exist before a file can be uploaded to it, so attaching in the empty state
   // starts the chat (with the model currently picked) just as sending would.
@@ -123,22 +132,46 @@ export function useChatComposer({
     [ensureChat, sendMessage],
   );
 
-  const send = async (data: TSubmitData) => {
+  const dispatch = async (content: string) => {
     if (hasPendingReply && activeChatId !== null) {
       const files = pendingFiles;
 
       setPendingFiles([]);
       setQueued((current) =>
         current && current.chatId === activeChatId
-          ? { ...current, content: `${current.content}\n\n${data.content}`, files: [...current.files, ...files] }
-          : { chatId: activeChatId, content: data.content, files },
+          ? { ...current, content: `${current.content}\n\n${content}`, files: [...current.files, ...files] }
+          : { chatId: activeChatId, content, files },
       );
 
       return;
     }
 
-    await deliver(data.content, pendingFiles);
+    await deliver(content, pendingFiles);
   };
+
+  const send = async (data: TSubmitData) => {
+    const findings = findCredentials(data.content);
+
+    if (findings.length > 0) {
+      setHeld({ masked: maskCredentials(data.content), findings });
+
+      return;
+    }
+
+    await dispatch(data.content);
+  };
+
+  // The held message goes out with the keys hidden — the only way it goes out.
+  const sendHeldMasked = async () => {
+    if (!held) return;
+
+    const { masked } = held;
+
+    setHeld(null);
+    await dispatch(masked);
+  };
+
+  const discardHeld = () => setHeld(null);
 
   // Sends the queued message once the reply it waited for is in. A failed reply holds it back, so the question is not
   // asked into a broken turn — it comes back as a draft to resend.
@@ -181,6 +214,7 @@ export function useChatComposer({
 
   // Leaving the chat being written in: what was prepared for it is dropped (a queued message stays with its chat).
   const reset = () => {
+    setHeld(null);
     setPendingFiles([]);
     setChatError(null);
     setFailedDraft(null);
@@ -198,6 +232,9 @@ export function useChatComposer({
     chatError,
     failedDraft,
     queued,
+    held,
+    sendHeldMasked,
+    discardHeld,
     attachFiles,
     removePending,
     send,

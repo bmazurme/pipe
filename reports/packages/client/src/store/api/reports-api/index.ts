@@ -33,6 +33,7 @@ import type {
   SubscriptionPushPayload,
   SubscriptionStateEntryType,
   TrackedProjectType,
+  LeakScanModeType,
 } from '@reports/shared';
 
 import baseQuery from '../../base-query';
@@ -240,6 +241,12 @@ const reportsApi = createApi({
       transformResponse: unwrap<SubscriptionConfigType>('Не удалось сохранить настройку'),
       invalidatesTags: ['SubscriptionConfig'],
     }),
+    // What a push does when the leak check finds something: stop for keys (default), stop for anything, or only warn.
+    setLeakScanMode: builder.mutation<SubscriptionConfigType, { mode: LeakScanModeType }>({
+      query: (body) => ({ url: 'subscription/config/leak-scan-mode', method: 'PUT', body }),
+      transformResponse: unwrap<SubscriptionConfigType>('Не удалось сохранить настройку'),
+      invalidatesTags: ['SubscriptionConfig'],
+    }),
     getSubscriptionIssueTime: builder.query<{ humanTimeEstimate: string | null }, { projectId: number; iid: string }>({
       query: ({ projectId, iid }) => `subscription/issues/${projectId}/${iid}/time`,
       transformResponse: unwrap<{ humanTimeEstimate: string | null }>('Не удалось получить текущую оценку времени'),
@@ -405,6 +412,7 @@ export const {
   useGetUpdateProgressQuery,
   useApplyUpdateMutation,
   useSetAutoStartWorkerModelMutation,
+  useSetLeakScanModeMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
   useLazyGetSubscriptionDraftQuery,

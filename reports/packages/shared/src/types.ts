@@ -220,15 +220,21 @@ export type EncryptionSettingsType = {
   privateKey: string;
 };
 
+export type LeakScanModeType = 'credentials' | 'all' | 'warn';
+
 export type SubscriptionConfigType = {
   trackedProjects: TrackedProjectType[];
   dictionary: DictionaryEntryType[];
   commentTemplates: CommentTemplateType[];
   encryption: EncryptionSettingsType;
-  // When true, handlePushSubscriptionIssue aborts instead of just warning if
-  // its final leak scan (right before upload) finds something — the sync
-  // CLI's own --strict equivalent. Defaults to false/undefined (warn-only,
-  // today's behavior) for anyone who hasn't opted in.
+  // What the push does when its final leak scan (right before upload) finds
+  // something. 'credentials' (the default, S7): aborts when a value is a key
+  // by its shape (a provider token, a PEM header, a JWT, a password in a URL),
+  // and only warns about the broad heuristic findings (hostnames, emails, …),
+  // which on real code are mostly false positives. 'all': aborts on any
+  // finding — the sync CLI's --strict. 'warn': never aborts.
+  leakScanMode?: LeakScanModeType;
+  // Superseded by leakScanMode, still read when that is absent: true = 'all', false = 'warn'.
   leakScanStrict?: boolean;
   // Worker model to start automatically for a task right after its parcel is
   // pushed (bridge's POST /worker/jobs). Absent = off: today's behavior, where

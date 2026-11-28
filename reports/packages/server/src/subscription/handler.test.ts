@@ -87,6 +87,7 @@ const {
 const { setIssueState, getIssueState, getAllIssueStates } = await import('./state-props');
 const { setSubscriptionConfig, addTrackedProject } = await import('./config-props');
 const { buildArchive } = await import('./pack');
+const { leakScanMode } = await import('./push');
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8' });
@@ -450,6 +451,80 @@ describe('handlePushSubscriptionIssue', () => {
     expect(String(events()[0].data)).toMatch(/leakScanStrict/);
     expect(storageCalled).toBe(false);
     expect(getIssueState('173', '6')?.step).toBe('init');
+  });
+
+  // S7: by default a push stops for a key by its shape; the broad heuristic only warns unless asked to abort ('all').
+  const GITHUB_TOKEN = 'ghp_AbCdEfGhIjKlMnOpQrSt1234';
+  const pushWith = async (config: Record<string, unknown>, description: string) => {
+    const { dir } = initTrackedProject('173');
+    setSubscriptionConfig({
+      trackedProjects: [{ gitlabProjectId: '173', path: dir, include: ['**/*.ts'] }],
+      dictionary: [],
+      commentTemplates: [],
+      encryption: { enabled: false, publicKey: '', privateKey: '' },
+      ...config,
+    });
+    setIssueState('173', '6', { step: 'init', branch: 'task/173-6' });
+    git(dir, ['checkout', '-b', 'task/173-6']);
+
+    let storageCalled = false;
+    globalThis.fetch = (async (url: string) => {
+      if (url.includes('/issues/6')) {
+        return Response.json({ id: 1, iid: 6, project_id: 173, title: 't', description: '' });
+      }
+      if (url.includes('/api/v1/storage')) {
+        storageCalled = true;
+        return Response.json({ id: 1 });
+      }
+      return Response.json({});
+    }) as typeof fetch;
+
+    const { res, events } = makeRes();
+    await handlePushSubscriptionIssue(makeReq({ projectId: '173', iid: '6' }, { issueId: '1', title: 't', description }), res);
+
+    return { events: events(), storageCalled, step: getIssueState('173', '6')?.step };
+  };
+  const aborted = (events: Array<{ type: string; data?: unknown }>) => events.find((event) => event.type === 'error');
+
+  it('by default stops a parcel that holds a key by its shape, names where, and never prints the key', async () => {
+    const { events, storageCalled, step } = await pushWith({}, `ключ ${GITHUB_TOKEN}`);
+
+    expect(String(aborted(events)?.data)).toMatch(/found 1 key\(s\).*issue description:1 — токен GitHub \(ghp_\*\*\*\)/);
+    expect(JSON.stringify(events)).not.toContain('AbCdEf');
+    expect(storageCalled).toBe(false);
+    expect(step).toBe('init');
+  });
+
+  it('by default only warns about an email, which the broad heuristic finds', async () => {
+    const { events, storageCalled } = await pushWith({}, 'Contact me at leaked@example.com');
+
+    expect(aborted(events)).toBeUndefined();
+    expect(storageCalled).toBe(true);
+  });
+
+  it("in mode 'all' stops on any finding, including an email", async () => {
+    const { events, storageCalled } = await pushWith({ leakScanMode: 'all' }, 'Contact me at leaked@example.com');
+
+    expect(String(aborted(events)?.data)).toMatch(/leakScanStrict: 1 possible leak/);
+    expect(storageCalled).toBe(false);
+  });
+
+  it("in mode 'warn' lets even a key go (it is warned about, not stopped)", async () => {
+    const { events, storageCalled } = await pushWith({ leakScanMode: 'warn' }, `ключ ${GITHUB_TOKEN}`);
+
+    expect(aborted(events)).toBeUndefined();
+    expect(storageCalled).toBe(true);
+  });
+
+  it('a config saved before the mode existed keeps what it had: leakScanStrict true is all, false is warn', async () => {
+    expect(leakScanMode({ leakScanStrict: true })).toBe('all');
+    expect(leakScanMode({ leakScanStrict: false })).toBe('warn');
+    expect(leakScanMode({})).toBe('credentials');
+    expect(leakScanMode({ leakScanMode: 'warn', leakScanStrict: true })).toBe('warn');
+
+    const { storageCalled } = await pushWith({ leakScanStrict: false }, `ключ ${GITHUB_TOKEN}`);
+
+    expect(storageCalled).toBe(true);
   });
 });
 

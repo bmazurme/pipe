@@ -27,6 +27,7 @@ import {
   ChatMessageStatus,
 } from './entities/chat-message.entity';
 import { MAX_ERROR_MESSAGE_LENGTH, MAX_PROGRESS_LENGTH } from './chat.limits';
+import { redactChatText } from '../logs/redact';
 
 // A turn that has been Running longer than this is assumed lost (worker died or the claim response never arrived).
 export const STALE_TURN_MS = 30 * 60 * 1000;
@@ -339,7 +340,8 @@ export class ChatService {
     const userMessage = await this.messageRepository.save({
       chatId,
       role: ChatMessageRole.User,
-      content,
+      // A key pasted into a chat does not stay in the history (nor reach the model, which is given the history).
+      content: redactChatText(content),
       status: ChatMessageStatus.Complete,
     });
 
@@ -498,7 +500,7 @@ export class ChatService {
 
     await this.messageRepository.update(
       { id: messageId, status: ChatMessageStatus.Running },
-      { progress: text.slice(0, MAX_PROGRESS_LENGTH) },
+      { progress: redactChatText(text).slice(0, MAX_PROGRESS_LENGTH) },
     );
   }
 
@@ -510,9 +512,9 @@ export class ChatService {
   ): Promise<ChatMessage> {
     const message = await this.findRunningAssistantMessage(messageId, userId);
 
-    message.content = content;
+    message.content = redactChatText(content);
     message.progress = null;
-    message.reasoning = reasoning || null;
+    message.reasoning = reasoning ? redactChatText(reasoning) : null;
     message.status = ChatMessageStatus.Complete;
 
     return this.messageRepository.save(message);
@@ -529,7 +531,7 @@ export class ChatService {
     message.errorMessage =
       errorMessage === undefined
         ? null
-        : errorMessage.slice(-MAX_ERROR_MESSAGE_LENGTH);
+        : redactChatText(errorMessage).slice(-MAX_ERROR_MESSAGE_LENGTH);
     message.progress = null;
 
     return this.messageRepository.save(message);

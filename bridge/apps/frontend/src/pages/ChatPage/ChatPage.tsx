@@ -511,6 +511,32 @@ export function ChatPage() {
         description={isMobile ? undefined : 'Диалог с моделью (Claude, GPT, DeepSeek, Qwen) через worker. В чатах с Claude можно прикреплять изображения и файлы, а весь диалог — сохранить в Context.'}
       />
 
+      {composer.held && (
+        <Alert
+          theme="warning"
+          view="filled"
+          title="Сообщение похоже на ключ или пароль — не отправлено"
+          message={
+            <span className={styles.errorText}>
+              Нашлось: {composer.held.findings.map((finding) => `${finding.label} (${finding.preview})`).join(', ')}. В чате ключи не хранятся:
+              в истории и у модели останется «[скрыто: …]». Если ключ нужен для задачи, положите его в «Секреты».
+              <span className={styles.draftPreview}>«{composer.held.masked}»</span>
+            </span>
+          }
+          actions={
+            <div className={styles.alertActions}>
+              <Button view="normal" size="s" onClick={() => void composer.sendHeldMasked()}>
+                Скрыть и отправить
+              </Button>
+              <Button view="flat" size="s" onClick={composer.discardHeld}>
+                Не отправлять
+              </Button>
+            </div>
+          }
+          onClose={composer.discardHeld}
+        />
+      )}
+
       {composer.chatError && (
         <Alert
           theme="danger"

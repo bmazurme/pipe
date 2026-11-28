@@ -4,6 +4,7 @@ export * from './dictionary.js';
 export * from './pack.js';
 export * from './issueParcel.js';
 export * from './walk.js';
+export * from './credentials.js';
 export * from './leakScan.js';
 export * from './markdownImages.js';
 export * from './gitlabClient.js';

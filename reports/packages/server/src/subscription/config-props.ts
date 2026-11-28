@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { writeJsonFileSync } from '@pipe/protocol';
-import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, MigrationProjectType, SubscriptionConfigType, TrackedProjectType, WorkerModelType } from '@reports/shared';
+import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, LeakScanModeType, MigrationProjectType, SubscriptionConfigType, TrackedProjectType, WorkerModelType } from '@reports/shared';
 
 import { generateKeyPair } from './encryption';
 
@@ -149,6 +149,12 @@ export const setLeakScanStrict = (leakScanStrict: boolean): SubscriptionConfigTy
   const config = getSubscriptionConfig();
 
   return save({ ...config, leakScanStrict });
+};
+
+export const setLeakScanMode = (leakScanMode: LeakScanModeType): SubscriptionConfigType => {
+  const { leakScanStrict: _legacy, ...config } = getSubscriptionConfig();
+
+  return save({ ...config, leakScanMode });
 };
 
 export const setAutoStartWorkerModel = (autoStartWorkerModel: WorkerModelType | undefined): SubscriptionConfigType => {
