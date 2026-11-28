@@ -38,6 +38,7 @@ vi.mock('../../store/api', async (importOriginal) => {
     useGetDriftQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardUpsQuery: () => ({ isError: false, isLoading: false, data: [] }),
     useGetDashboardRouterQuery: () => ({ isError: false, isLoading: false, data: [] }),
+    useGetRotationQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardRestoreDrillQuery: () => ({ isError: false, isLoading: false, data: undefined }),
     useGetDashboardDeploysQuery: () => ({ isError: false, isLoading: false, data: [] }),
   };
@@ -46,6 +47,7 @@ vi.mock('../../store/api', async (importOriginal) => {
 vi.mock('./GithubConnectionCard', () => ({ GithubConnectionCard: () => null }));
 vi.mock('./ReleasesCard', () => ({ ReleasesCard: () => null }));
 vi.mock('./NasCard', () => ({ NasCard: () => null }));
+vi.mock('./RotationCard', () => ({ RotationCard: () => null }));
 vi.mock('./CloudCard', () => ({ CloudCard: () => null }));
 vi.mock('./ChannelsCard', () => ({ ChannelsCard: () => null }));
 vi.mock('./UpsCard', () => ({ UpsCard: () => null }));

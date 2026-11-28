@@ -64,7 +64,11 @@ export interface RotationView {
 @Injectable()
 export class RotationService {
   private readonly logger = new Logger(RotationService.name);
-  private pendingCache: { at: number; pending: number | null; current: string | null } | null = null;
+  private pendingCache: {
+    at: number;
+    pending: number | null;
+    current: string | null;
+  } | null = null;
   private sweeping = false;
 
   constructor(
@@ -79,7 +83,10 @@ export class RotationService {
 
   async view(userId: number, now = new Date()): Promise<RotationView> {
     const rows = await this.ensure(userId);
-    const copyRows = await this.checks.find({ where: { userId }, order: { label: 'ASC' } });
+    const copyRows = await this.checks.find({
+      where: { userId },
+      order: { label: 'ASC' },
+    });
     const pending = await this.pending(now);
     const copies = assessCopies(
       copyRows.map((row) => ({
@@ -95,14 +102,19 @@ export class RotationService {
     const items = CATALOG.map((entry) => {
       const row = rows.find((r) => r.key === entry.key);
       const base = this.assess(entry, row?.lastRotatedAt ?? null, copies, now);
-      const assessed = entry.key === 'enc-key' ? assessEncKey(base, pending.pending, pending.current) : base;
+      const assessed =
+        entry.key === 'enc-key'
+          ? assessEncKey(base, pending.pending, pending.current)
+          : base;
 
       return {
         key: entry.key,
         label: entry.label,
         effect: entry.effect,
         intervalDays: entry.intervalDays,
-        lastRotatedAt: row?.lastRotatedAt ? row.lastRotatedAt.toISOString() : null,
+        lastRotatedAt: row?.lastRotatedAt
+          ? row.lastRotatedAt.toISOString()
+          : null,
         ...(entry.key === 'enc-key' ? { pendingValues: pending.pending } : {}),
         ...assessed,
       };
@@ -127,26 +139,44 @@ export class RotationService {
     };
   }
 
-  async markRotated(userId: number, key: string, at?: string, now = new Date()): Promise<void> {
+  async markRotated(
+    userId: number,
+    key: string,
+    at?: string,
+    now = new Date(),
+  ): Promise<void> {
     const entry = CATALOG.find((e) => e.key === key);
 
     if (!entry) throw new BadRequestException(`Unknown key "${key}"`);
     if (entry.intervalDays <= 0) {
-      throw new BadRequestException('This key is judged by its verified copies, not by a date');
+      throw new BadRequestException(
+        'This key is judged by its verified copies, not by a date',
+      );
     }
 
     const when = at ? new Date(at) : now;
 
     if (when.getTime() > now.getTime() + DAY) {
-      throw new BadRequestException('The date of a change cannot be in the future');
+      throw new BadRequestException(
+        'The date of a change cannot be in the future',
+      );
     }
 
     await this.ensure(userId);
-    await this.items.update({ userId, key }, { lastRotatedAt: when, notifiedAt: null });
+    await this.items.update(
+      { userId, key },
+      { lastRotatedAt: when, notifiedAt: null },
+    );
   }
 
-  async recordKeyCheck(userId: number, dto: KeyCheckReportDto, now = new Date()): Promise<void> {
-    const existing = await this.checks.findOne({ where: { userId, label: dto.label } });
+  async recordKeyCheck(
+    userId: number,
+    dto: KeyCheckReportDto,
+    now = new Date(),
+  ): Promise<void> {
+    const existing = await this.checks.findOne({
+      where: { userId, label: dto.label },
+    });
 
     await this.checks.upsert(
       {
@@ -155,7 +185,8 @@ export class RotationService {
         lastCheckAt: now,
         ok: dto.ok,
         lastOkAt: dto.ok ? now : (existing?.lastOkAt ?? null),
-        backupCreatedAt: dto.backupCreatedAt ?? existing?.backupCreatedAt ?? null,
+        backupCreatedAt:
+          dto.backupCreatedAt ?? existing?.backupCreatedAt ?? null,
         error: dto.ok ? null : (dto.error ?? null),
       },
       ['userId', 'label'],
@@ -191,17 +222,26 @@ export class RotationService {
 
         const row = rows.find((r) => r.key === item.key);
 
-        if (row?.notifiedAt && now.getTime() - row.notifiedAt.getTime() < ROTATION_REMIND_DAYS * DAY) continue;
+        if (
+          row?.notifiedAt &&
+          now.getTime() - row.notifiedAt.getTime() < ROTATION_REMIND_DAYS * DAY
+        )
+          continue;
 
         // Marked first: a failing send must not be retried every six hours.
-        await this.items.update({ userId: owner, key: item.key }, { notifiedAt: now });
+        await this.items.update(
+          { userId: owner, key: item.key },
+          { notifiedAt: now },
+        );
         await this.notifier.send(rotationAlert(item.label, item.reasons));
         sent += 1;
       }
 
       return sent;
     } catch (error) {
-      this.logger.warn(`Rotation sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `Rotation sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       return 0;
     } finally {
@@ -216,14 +256,27 @@ export class RotationService {
     now: Date,
   ): ItemAssessment {
     if (entry.key === 'age-key') {
-      return { status: copies.status, reasons: copies.reasons, dueAt: null, daysLeft: null };
+      return {
+        status: copies.status,
+        reasons: copies.reasons,
+        dueAt: null,
+        daysLeft: null,
+      };
     }
 
-    return assessItem({ key: entry.key, intervalDays: entry.intervalDays, lastRotatedAt }, now);
+    return assessItem(
+      { key: entry.key, intervalDays: entry.intervalDays, lastRotatedAt },
+      now,
+    );
   }
 
-  private async pending(now: Date): Promise<{ pending: number | null; current: string | null }> {
-    if (this.pendingCache && now.getTime() - this.pendingCache.at < PENDING_CACHE_MS) {
+  private async pending(
+    now: Date,
+  ): Promise<{ pending: number | null; current: string | null }> {
+    if (
+      this.pendingCache &&
+      now.getTime() - this.pendingCache.at < PENDING_CACHE_MS
+    ) {
       return this.pendingCache;
     }
 
@@ -237,7 +290,9 @@ export class RotationService {
       current = status.currentKeyId;
     } catch (error) {
       // A malformed CREDENTIALS_ENC_KEY_CURRENT is a configuration problem the rest of bridge will already be shouting about.
-      this.logger.warn(`Could not count values under old keys: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `Could not count values under old keys: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     this.pendingCache = { at: now.getTime(), pending, current };
@@ -247,12 +302,19 @@ export class RotationService {
 
   private async ensure(userId: number): Promise<RotationItem[]> {
     const rows = await this.items.find({ where: { userId } });
-    const missing = CATALOG.filter((entry) => !rows.some((r) => r.key === entry.key));
+    const missing = CATALOG.filter(
+      (entry) => !rows.some((r) => r.key === entry.key),
+    );
 
     if (missing.length === 0) return rows;
 
     await this.items.upsert(
-      missing.map((entry) => ({ userId, key: entry.key, lastRotatedAt: null, notifiedAt: null })),
+      missing.map((entry) => ({
+        userId,
+        key: entry.key,
+        lastRotatedAt: null,
+        notifiedAt: null,
+      })),
       ['userId', 'key'],
     );
 

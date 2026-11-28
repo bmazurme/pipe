@@ -19,9 +19,6 @@ import { RotationService } from './rotation.service';
     TypeOrmModule.forFeature([RotationItem, KeyCopyCheck]),
   ],
   controllers: [RotationController, RotationAgentController],
-  providers: [
-    RotationService,
-    ReencryptService,
-  ],
+  providers: [RotationService, ReencryptService],
 })
 export class RotationModule {}

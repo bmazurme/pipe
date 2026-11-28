@@ -60,7 +60,9 @@ describe('encrypted column key rotation (S11)', () => {
   it('refuses to write under a current key whose secret is not set', () => {
     process.env.CREDENTIALS_ENC_KEY_CURRENT = 'v3';
 
-    expect(() => encryptedColumn.to('x')).toThrow(/CREDENTIALS_ENC_KEY_V3 is required/);
+    expect(() => encryptedColumn.to('x')).toThrow(
+      /CREDENTIALS_ENC_KEY_V3 is required/,
+    );
   });
 
   it('keyIdOf recognises only our shape', () => {

@@ -12,8 +12,9 @@ The copies live on the Pi; the NAS is the fourth copy (a container that pulls `l
 | `mirror-s3.sh`, `install-mirror.sh` | the **third copy**: the second Pi uploads the (encrypted, verified) `latest` to the Garage bucket `bridge-backups` — to an immutable `snapshots/<time>/` prefix, compares it with the local files, and only then rewrites the pointer object `LATEST`. Daily 03:45 Moscow, after the pull |
 | `uploads-pull.sh`, `install-uploads.sh` | the **uploaded files** (`bridge_uploads`: parcels in transit, chat attachments) — the database dump does not hold them. red pulls the volume over a restricted read-only `rrsync` key into `/srv/uploads-mirror/current`, keeps what the primary deletes in `deleted/<date>/` (14 days), refuses a run that would delete more than half of the files (and more than `MAX_DELETE_FILES`, default 50 — parcels are a mailbox, a downloaded file is deleted, so a few files can all legitimately go in a day), then mirrors to the Garage bucket `bridge-uploads`. Daily 04:10 Moscow + hourly freshness check |
 | `restore-drill.sh`, `install-drill.sh`, `install-drill-mac.sh` | the **monthly restore drill** (R7, below): the latest backup is restored into a throwaway Postgres, checked, timed and **reported to bridge** (Dashboard + Telegram). `restore-check.sh` is the quick check on a board; this one is the exercise with a record |
+| `key-check.sh` | S11: does **this copy of the age key** open the newest backup? Run once per copy (`--label usb --identity …`); the result goes to bridge and the Dashboard counts verified copies (two are wanted). Runbook: `docs/key-rotation.md` |
 | `verify-from-workstation.sh` | run on YOUR machine: fetches `latest` from a Pi, decrypts it with your private age key and restores it into a throwaway Postgres — the check that stays possible once the boards no longer hold the key |
-| `test.sh`, `test-drill.sh` | 71 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
+| `test.sh`, `test-drill.sh`, `test-key-check.sh` | 71 checks with fake `pg_dump`/`pg_restore` (bad dumps never replace `latest`, encryption, `--check`, pull: tampered / older / unreachable source) |
 
 ```bash
 # on a Mac, in a container (the scripts use flock / mv -T / sha256sum):
@@ -110,6 +111,13 @@ an uploads volume (`failover-red.sh` skips it); the S3_* settings travel in the 
 `age-keygen -o key.txt` (prints the public key); keep `key.txt` in the password manager and on paper —
 without it an encrypted backup cannot be restored. On the boards `restore-check.sh` can only verify unencrypted backups; for encrypted ones run
 `AGE_IDENTITY=<key file> infra/backup/verify-from-workstation.sh [host]` from the machine that holds the key.
+
+## Two copies of the key, and a check that each opens a backup
+
+The private key is the only way to read an encrypted backup, so a second copy kept apart from the Mac (USB, paper, a password manager) is part of the backup, and an untried copy is a hope.
+`key-check.sh --label <name> --identity <file>` decrypts the newest backup with that copy (age authenticates the whole file) and looks for the Postgres dump header inside, then reports which copy
+worked and when. The key is only read — never printed or copied. Exit codes: 0 opened · 1 did not (reported, with the reason) · 2 opened but the report was not delivered · 3 skipped (source unreachable).
+The Dashboard's «Ключи и ротация» card wants two copies verified within 180 days; the whole calendar (JWT, encryption key, bot token, Postgres password) and the steps are in `docs/key-rotation.md`.
 
 ## Restore
 

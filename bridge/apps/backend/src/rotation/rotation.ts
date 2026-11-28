@@ -5,11 +5,7 @@
 export type RotationStatus = 'ok' | 'warn' | 'bad';
 
 export type RotationKey =
-  | 'jwt'
-  | 'enc-key'
-  | 'age-key'
-  | 'telegram-bot'
-  | 'db-password';
+  'jwt' | 'enc-key' | 'age-key' | 'telegram-bot' | 'db-password';
 
 export interface CatalogEntry {
   key: RotationKey;
@@ -31,25 +27,29 @@ export const CATALOG: CatalogEntry[] = [
     key: 'enc-key',
     label: 'CREDENTIALS_ENC_KEY (шифрование токенов и секретов в базе)',
     intervalDays: 365,
-    effect: 'без перешифровки значения под старым ключом не читаются; порядок — в docs/key-rotation.md',
+    effect:
+      'без перешифровки значения под старым ключом не читаются; порядок — в docs/key-rotation.md',
   },
   {
     key: 'age-key',
     label: 'Ключ age для бэкапов (расшифровка)',
     intervalDays: 0,
-    effect: 'без ключа бэкап не восстановить; нужны минимум две отдельно хранимые копии, обе проверены расшифровкой',
+    effect:
+      'без ключа бэкап не восстановить; нужны минимум две отдельно хранимые копии, обе проверены расшифровкой',
   },
   {
     key: 'telegram-bot',
     label: 'Токен Telegram-бота',
     intervalDays: 365,
-    effect: 'бот управляет роутером и переключением: смена токена в BotFather и в настройках bridge, пока не сменили — тревоги не идут',
+    effect:
+      'бот управляет роутером и переключением: смена токена в BotFather и в настройках bridge, пока не сменили — тревоги не идут',
   },
   {
     key: 'db-password',
     label: 'Пароль Postgres',
     intervalDays: 365,
-    effect: 'меняется в базе, в стеке bridge и на реплике одновременно; на минуту bridge недоступен',
+    effect:
+      'меняется в базе, в стеке bridge и на реплике одновременно; на минуту bridge недоступен',
   },
 ];
 
@@ -77,7 +77,10 @@ export interface ItemAssessment {
   daysLeft: number | null;
 }
 
-export function assessItem(item: ItemState, now: Date = new Date()): ItemAssessment {
+export function assessItem(
+  item: ItemState,
+  now: Date = new Date(),
+): ItemAssessment {
   if (item.intervalDays <= 0) {
     return { status: 'ok', reasons: [], dueAt: null, daysLeft: null };
   }
@@ -85,7 +88,9 @@ export function assessItem(item: ItemState, now: Date = new Date()): ItemAssessm
   if (!item.lastRotatedAt) {
     return {
       status: 'warn',
-      reasons: ['Когда ключ меняли в последний раз, неизвестно — отметьте дату (или смените и отметьте)'],
+      reasons: [
+        'Когда ключ меняли в последний раз, неизвестно — отметьте дату (или смените и отметьте)',
+      ],
       dueAt: null,
       daysLeft: null,
     };
@@ -112,7 +117,12 @@ export function assessItem(item: ItemState, now: Date = new Date()): ItemAssessm
     };
   }
 
-  return { status: 'ok', reasons: [], dueAt: new Date(due).toISOString(), daysLeft: left };
+  return {
+    status: 'ok',
+    reasons: [],
+    dueAt: new Date(due).toISOString(),
+    daysLeft: left,
+  };
 }
 
 export interface CopyState {
@@ -130,7 +140,10 @@ export interface CopiesAssessment {
   verified: number;
 }
 
-export function assessCopies(copies: CopyState[], now: Date = new Date()): CopiesAssessment {
+export function assessCopies(
+  copies: CopyState[],
+  now: Date = new Date(),
+): CopiesAssessment {
   const bad: string[] = [];
   const warn: string[] = [];
   let verified = 0;
@@ -138,25 +151,33 @@ export function assessCopies(copies: CopyState[], now: Date = new Date()): Copie
   if (copies.length === 0) {
     return {
       status: 'warn',
-      reasons: ['Ни одна копия ключа age не проверялась расшифровкой бэкапа (infra/backup/key-check.sh)'],
+      reasons: [
+        'Ни одна копия ключа age не проверялась расшифровкой бэкапа (infra/backup/key-check.sh)',
+      ],
       verified: 0,
     };
   }
 
   for (const copy of copies) {
     if (!copy.ok) {
-      bad.push(`Копия «${copy.label}» не расшифровала последний бэкап: ${copy.error || 'причина не названа'}`);
+      bad.push(
+        `Копия «${copy.label}» не расшифровала последний бэкап: ${copy.error || 'причина не названа'}`,
+      );
     }
 
     if (!copy.lastOkAt) continue;
 
     const age = days(now.getTime() - copy.lastOkAt.getTime());
 
-    if (age > KEY_CHECK_BAD_DAYS) bad.push(`Копия «${copy.label}» не проверялась ${age} дн`);
+    if (age > KEY_CHECK_BAD_DAYS)
+      bad.push(`Копия «${copy.label}» не проверялась ${age} дн`);
     else {
       verified += 1;
 
-      if (age > KEY_CHECK_WARN_DAYS) warn.push(`Копию «${copy.label}» пора проверить: ${age} дн с последней проверки`);
+      if (age > KEY_CHECK_WARN_DAYS)
+        warn.push(
+          `Копию «${copy.label}» пора проверить: ${age} дн с последней проверки`,
+        );
     }
   }
 
@@ -174,7 +195,11 @@ export function assessCopies(copies: CopyState[], now: Date = new Date()): Copie
 }
 
 // The encryption key's extra fact: values still under an older key mean a rotation was started and not finished.
-export function assessEncKey(base: ItemAssessment, pending: number | null, currentKeyId: string | null): ItemAssessment {
+export function assessEncKey(
+  base: ItemAssessment,
+  pending: number | null,
+  currentKeyId: string | null,
+): ItemAssessment {
   if (pending === null || pending === 0) return base;
 
   const reasons = [
@@ -186,7 +211,11 @@ export function assessEncKey(base: ItemAssessment, pending: number | null, curre
 }
 
 export function worst(...statuses: RotationStatus[]): RotationStatus {
-  return statuses.includes('bad') ? 'bad' : statuses.includes('warn') ? 'warn' : 'ok';
+  return statuses.includes('bad')
+    ? 'bad'
+    : statuses.includes('warn')
+      ? 'warn'
+      : 'ok';
 }
 
 // Telegram: only overdue items and a failed key check; «due in 20 days» is for the Dashboard.
