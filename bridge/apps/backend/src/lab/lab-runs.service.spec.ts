@@ -498,6 +498,8 @@ describe('LabRunsService: the branch of a run', () => {
     expect(workers.create).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ requiredCapability: 'fusion' }),
+      undefined,
+      expect.any(String),
     );
     expect(saved.executor).toBe('fusion');
   });
@@ -544,6 +546,8 @@ describe('LabRunsService: the branch of a run', () => {
     expect(workers.create).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ model: 'haiku' }),
+      undefined,
+      expect.any(String),
     );
     expect(saved).toMatchObject({ model: 'haiku', routing, jobId: 42 });
   });
@@ -558,6 +562,8 @@ describe('LabRunsService: the branch of a run', () => {
     expect(workers.create).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ model: 'opus' }),
+      undefined,
+      expect.any(String),
     );
     expect(saved.routing).toBeUndefined();
   });
@@ -581,6 +587,8 @@ describe('LabRunsService: the branch of a run', () => {
         model: 'sonnet',
         requiredCapability: 'fusion',
       }),
+      undefined,
+      expect.any(String),
     );
     expect(saved.executor).toBe('fusion');
   });
@@ -605,6 +613,8 @@ describe('LabRunsService: the branch of a run', () => {
     expect(workers.create).toHaveBeenLastCalledWith(
       1,
       expect.objectContaining({ model: 'custom', providerCredentialId: 3 }),
+      undefined,
+      expect.any(String),
     );
   });
 

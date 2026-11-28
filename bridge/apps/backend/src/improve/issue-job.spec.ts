@@ -49,22 +49,32 @@ describe('launchIssueJob', () => {
         direction: StoredFileDirection.Outbound,
       },
     );
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 7,
-      model: 'sonnet',
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 7,
+        model: 'sonnet',
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it('passes contextId and requiredCapability when set', async () => {
     const { workers, run } = setup();
 
     await run({ contextId: 5, requiredCapability: 'fusion' });
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 7,
-      model: 'sonnet',
-      contextId: 5,
-      requiredCapability: 'fusion',
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 7,
+        model: 'sonnet',
+        contextId: 5,
+        requiredCapability: 'fusion',
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it('makes a custom model\'s job with the key stored in the run, and no "custom:" string', async () => {
@@ -72,10 +82,15 @@ describe('launchIssueJob', () => {
 
     await run({ model: 'custom:12' });
 
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 7,
-      model: 'custom',
-      providerCredentialId: 12,
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 7,
+        model: 'custom',
+        providerCredentialId: 12,
+      },
+      undefined,
+      undefined,
+    );
   });
 });

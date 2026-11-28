@@ -1,6 +1,7 @@
 import { StoredFileDirection } from '../storage/entities/stored-file.entity';
 import type { StorageService } from '../storage/storage.service';
 import type { WorkerCapability } from '../worker/capabilities';
+import type { Urgency } from '../worker/limit-planner';
 import type { WorkerService } from '../worker/worker.service';
 import { jobModelOf } from './improve-shared';
 import { buildIssueParcel, type IssueRef, type SnapshotFile } from './parcel';
@@ -21,6 +22,8 @@ export type IssueJobInput = {
   // Put the baseline (path → sha256) in the parcel so the worker can run scripts/verify-changed.mjs; only the repository's own runs (Improve) have it.
   withBaseline?: boolean;
   requiredCapability?: WorkerCapability;
+  // R10: who asked — the Claude-limit planner holds back a 'deferrable' job when the plan's window is nearly used up.
+  urgency?: Urgency;
 };
 
 // Issue parcel → outbound `issue` file in Storage → Worker job pointing at it. The one
@@ -47,14 +50,19 @@ export async function launchIssueJob(
       direction: StoredFileDirection.Outbound,
     },
   );
-  const job = await deps.workers.create(userId, {
-    sourceFileId: stored.id,
-    ...jobModelOf(input.model),
-    ...(input.contextId ? { contextId: input.contextId } : {}),
-    ...(input.requiredCapability
-      ? { requiredCapability: input.requiredCapability }
-      : {}),
-  });
+  const job = await deps.workers.create(
+    userId,
+    {
+      sourceFileId: stored.id,
+      ...jobModelOf(input.model),
+      ...(input.contextId ? { contextId: input.contextId } : {}),
+      ...(input.requiredCapability
+        ? { requiredCapability: input.requiredCapability }
+        : {}),
+    },
+    undefined,
+    input.urgency,
+  );
 
   return { job, storedFileId: stored.id };
 }

@@ -7,7 +7,7 @@ import { RouterService } from '../router/router.service';
 import { StorageService } from '../storage/storage.service';
 import { WorkerService } from '../worker/worker.service';
 import { withoutDefinitionOfDone } from './definition-of-done';
-import { message, withTransientRetry } from './improve-shared';
+import { message, urgencyOf, withTransientRetry } from './improve-shared';
 import { launchIssueJob } from './issue-job';
 import {
   isExcludedPath,
@@ -112,6 +112,8 @@ export class ImproveHandoffService {
     contextId: number | null = null,
     // The baseline lets the worker run `verify-changed` on its result; a job that only READS the task (A6) has nothing to verify.
     withBaseline = true,
+    // R10: the trigger of the run this is for (improve-shared.ts urgencyOf); a person's own start by default.
+    trigger = 'manual',
   ) {
     // 'auto': the model router picks (a few seconds of Haiku, or none when a rule of the owner's decides by words); a model the owner
     // named passes through, and so does every run that is not an issue run (analysis, repair, chat fix), which always has one.
@@ -150,6 +152,7 @@ export class ImproveHandoffService {
         taskKey,
         model: chosen,
         contextId,
+        urgency: urgencyOf(trigger),
       },
     );
 

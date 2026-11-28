@@ -184,6 +184,8 @@ describe("ImproveService.startRun with the model 'auto'", () => {
     expect(workers.create).toHaveBeenCalledWith(
       3,
       expect.objectContaining({ model: 'haiku' }),
+      undefined,
+      expect.any(String),
     );
     expect(runs.update.mock.calls[0][1]).toMatchObject({
       status: 'queued',
@@ -203,6 +205,8 @@ describe("ImproveService.startRun with the model 'auto'", () => {
     expect(workers.create).toHaveBeenCalledWith(
       3,
       expect.objectContaining({ model: 'opus' }),
+      undefined,
+      'urgent',
     );
     expect(runs.update.mock.calls[0][1]).not.toHaveProperty('routing');
     expect(runs.update.mock.calls[0][1]).not.toHaveProperty('model');
@@ -243,10 +247,15 @@ describe('ImproveService.startRun', () => {
         direction: 'outbound',
       }),
     );
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 99,
-      model: 'sonnet',
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 99,
+        model: 'sonnet',
+      },
+      undefined,
+      expect.any(String),
+    );
     expect(runs.save).toHaveBeenCalledWith(
       expect.objectContaining({
         issueNumber: 7,
@@ -610,6 +619,8 @@ describe('ImproveService CI repair', () => {
     expect(workers.create).toHaveBeenCalledWith(
       3,
       expect.objectContaining({ model: 'sonnet' }),
+      undefined,
+      'deferrable',
     );
     expect(run).toMatchObject({
       kind: 'repair',

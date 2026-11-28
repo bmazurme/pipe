@@ -35,6 +35,13 @@ import {
 } from '../storage/entities/stored-file.entity';
 import { isWorkerCapability } from './capabilities';
 import { ClaudeCredentialsService } from './claude-credentials.service';
+import {
+  clock,
+  isClaudeModel,
+  planJob,
+  resetAfterFailure,
+  type Urgency,
+} from './limit-planner';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import {
@@ -93,6 +100,16 @@ export type JobStatusRow = Pick<
 // Also covers an organization that has disabled Claude subscription access.
 export const AUTH_FAILURE_PATTERN =
   /Failed to authenticate|\b401\b|\b403\b.*Request not allowed|has disabled Claude subscription access/i;
+
+// R10: how many times one parcel may be put back after a plan limit (each round waits for a reset, so this is days, not a loop).
+export const MAX_LIMIT_ROUNDS = 3;
+
+// The later of two moments (either may be absent).
+function laterOf(a: Date | null, b: Date | undefined): Date | null {
+  if (!b) return a;
+
+  return a && a.getTime() > b.getTime() ? a : b;
+}
 
 export const DEFAULT_JOBS_PAGE = 200;
 export const MAX_JOBS_PAGE = 500;
@@ -273,6 +290,9 @@ export class WorkerService implements OnModuleInit {
       history?: { text: string; count: number } | null;
       notBefore?: Date;
     },
+    // R10: who asked. Absent = a person did, through the API: nothing is held back or moved. An automatic caller says
+    // 'deferrable'; the owner's own start from Improve says 'urgent' (it may move to a token with room, nothing more).
+    urgency?: Urgency,
   ): Promise<Job> {
     const sourceFile = await this.storageService.findOwned(
       dto.sourceFileId,
@@ -369,6 +389,12 @@ export class WorkerService implements OnModuleInit {
           ? await this.runHistory(userId, taskKey)
           : null;
 
+    const plan = await this.planForLimits(userId, dto, urgency);
+    const notBefore = laterOf(
+      dto.notBefore ?? carried?.notBefore ?? null,
+      plan.until,
+    );
+
     return this.jobRepository.save({
       userId,
       sourceFileId: sourceFile.id,
@@ -378,16 +404,153 @@ export class WorkerService implements OnModuleInit {
       historyText: history?.text ?? null,
       historyCount: history?.count ?? null,
       model: dto.model,
-      claudeCredentialId: dto.claudeCredentialId ?? null,
+      claudeCredentialId: plan.credentialId ?? dto.claudeCredentialId ?? null,
       providerCredentialId: dto.providerCredentialId ?? null,
       targetWorkerId: dto.targetWorkerId ?? null,
       requiredCapability: dto.requiredCapability ?? null,
       timeoutSec: dto.timeoutSec ?? null,
       notifyOnFinish: dto.notifyOnFinish === true,
       resultPublicKey: dto.resultPublicKey ?? null,
-      notBefore: dto.notBefore ?? carried?.notBefore ?? null,
+      notBefore,
+      deferrable: urgency === 'deferrable',
+      ...(plan.note ? { logs: `[bridge] ${plan.note}\n` } : {}),
       status: JobStatus.Queued,
     });
+  }
+
+  // R10: what the Claude plan's limits say about this job, before it is queued (limit-planner.ts). Never throws and never blocks the
+  // job: whatever goes wrong here, the job is made as it would have been. `LIMIT_PLANNER=off` switches it off.
+  private async planForLimits(
+    userId: number,
+    dto: Pick<CreateJobDto, 'model' | 'claudeCredentialId'>,
+    urgency: Urgency | undefined,
+  ): Promise<{ credentialId?: number; until?: Date; note?: string }> {
+    if (
+      urgency === undefined ||
+      process.env.LIMIT_PLANNER === 'off' ||
+      !isClaudeModel(dto.model)
+    ) {
+      return {};
+    }
+
+    try {
+      const decision = planJob({
+        model: dto.model,
+        urgency,
+        // The owner's own pick is binding; for an automatic job it is only where it would go first.
+        ...(urgency === 'urgent'
+          ? { pinnedCredentialId: dto.claudeCredentialId ?? null }
+          : { preferredCredentialId: dto.claudeCredentialId ?? null }),
+        tokens: await this.claudeCredentialsService.planTokens(userId),
+      });
+
+      if (decision.action === 'switch') {
+        this.recordPlan(
+          userId,
+          'job.limit_switched',
+          decision.reason,
+          dto.model,
+        );
+
+        return { credentialId: decision.credentialId, note: decision.reason };
+      }
+
+      if (decision.action === 'defer') {
+        const note = `${decision.reason} (до ${clock(decision.until)}; «Запустить сейчас» снимает отсрочку)`;
+
+        this.recordPlan(userId, 'job.limit_deferred', note, dto.model);
+
+        return { until: decision.until, note };
+      }
+
+      if (decision.warning) {
+        const note = `${decision.warning}${decision.alternativeModel ? `; ${decision.alternativeModel} свободна — выберите её, если срочно` : ''}`;
+
+        this.recordPlan(userId, 'job.limit_warned', note, dto.model);
+
+        return { note };
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Limit planner skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return {};
+  }
+
+  private recordPlan(
+    userId: number,
+    event: string,
+    message: string,
+    model: string,
+  ): void {
+    void this.appLogs?.record({
+      level: 'info',
+      source: 'job',
+      event,
+      message,
+      meta: { model, userId },
+    });
+  }
+
+  // R10: a deferrable job that failed because the plan's limit was hit is put back for after the reset instead of staying failed — the
+  // plan said so itself ("rejected", with the window's reset time), so the task is not at fault. At most MAX_LIMIT_ROUNDS times per
+  // parcel, so a window that never frees cannot keep one parcel circling for ever. Never throws; returns the new job, if any.
+  async requeueAfterLimit(job: Job): Promise<Job | null> {
+    if (
+      process.env.LIMIT_PLANNER === 'off' ||
+      job.status !== JobStatus.Failed ||
+      !job.deferrable ||
+      job.sourceFileId === null ||
+      job.usedClaudeCredentialId == null ||
+      !isClaudeModel(job.model)
+    ) {
+      return null;
+    }
+
+    try {
+      const until = resetAfterFailure(
+        await this.claudeCredentialsService.limitsOf(
+          job.usedClaudeCredentialId,
+          job.userId,
+        ),
+      );
+
+      if (!until) return null;
+
+      const rounds = await this.jobRepository.count({
+        where: {
+          sourceFileId: job.sourceFileId,
+          limitDeferredAt: Not(IsNull()),
+        },
+      });
+
+      if (rounds >= MAX_LIMIT_ROUNDS) return null;
+
+      const retried = await this.retry(job.id, job.userId, until);
+
+      await this.jobRepository.update(job.id, { limitDeferredAt: new Date() });
+      await this.appendLog(
+        retried.id,
+        job.userId,
+        `[bridge] Задание #${job.id} упало на лимите плана Claude — поставлено заново до ${clock(until)}.\n`,
+      );
+      this.recordPlan(
+        job.userId,
+        'job.limit_requeued',
+        `Job ${job.id} failed on the plan limit and was put back as job ${retried.id} until ${until.toISOString()}`,
+        job.model,
+      );
+
+      return retried;
+    } catch (error) {
+      this.logger.warn(
+        `Re-queue after limit of job ${job.id} skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return null;
+    }
   }
 
   // Runs a failed (or stopped) job again as a NEW job over the same parcel, model
@@ -495,6 +658,8 @@ export class WorkerService implements OnModuleInit {
             : null,
         notBefore,
       },
+      // An automatic job stays automatic when it is run again (R10).
+      job.deferrable ? 'deferrable' : undefined,
     );
 
     void this.appLogs?.record({
@@ -1226,7 +1391,9 @@ export class WorkerService implements OnModuleInit {
 
     if (dto.status === JobStatus.Failed) {
       logJobOutcome(this.appLogs, saved);
-      const requeued = await this.retryAfterInfraFailure(saved);
+      const requeued =
+        (await this.retryAfterInfraFailure(saved)) ??
+        (await this.requeueAfterLimit(saved));
 
       if (!requeued) {
         await this.finishNotifier.notify(saved);

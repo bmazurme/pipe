@@ -177,6 +177,8 @@ describe('ImproveService analysis', () => {
     expect(withContext.workers.create).toHaveBeenCalledWith(
       3,
       expect.objectContaining({ contextId: 4 }),
+      undefined,
+      expect.any(String),
     );
 
     const without = setup();

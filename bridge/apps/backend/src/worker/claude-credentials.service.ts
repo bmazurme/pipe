@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 
 import type { ClaudeLimits } from './claude-limits';
+import type { PlanToken } from './limit-planner';
 import { ClaudeCredential } from './entities/claude-credential.entity';
 import { Job } from './entities/job.entity';
 
@@ -68,6 +69,31 @@ export class ClaudeCredentialsService {
     limits: ClaudeLimits,
   ): Promise<void> {
     await this.repository.update({ id, userId }, { limits });
+  }
+
+  // What the limit planner needs of every token of the account, in the order a job takes them — never the token value itself.
+  async planTokens(userId: number): Promise<PlanToken[]> {
+    const rows = await this.repository.find({
+      where: { userId },
+      order: { id: 'ASC' },
+      select: { id: true, limits: true, authFailedAt: true },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      limits: row.limits,
+      authFailed: row.authFailedAt !== null,
+    }));
+  }
+
+  // The last report of this token's plan limits, with the id check every read here has.
+  async limitsOf(id: number, userId: number): Promise<ClaudeLimits | null> {
+    const credential = await this.repository.findOne({
+      where: { id, userId },
+      select: { id: true, limits: true },
+    });
+
+    return credential?.limits ?? null;
   }
 
   // A job on this token was refused by Anthropic; best-effort like recordLimits.

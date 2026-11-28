@@ -146,11 +146,16 @@ describe('ImproveHandoffService.handToWorker', () => {
       'improve-7.subscription.zip',
       expect.objectContaining({ channel: 'issue', taskKey: 'improve:7' }),
     );
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 99,
-      model: 'sonnet',
-      contextId: 4,
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 99,
+        model: 'sonnet',
+        contextId: 4,
+      },
+      undefined,
+      'urgent',
+    );
     expect(result).toEqual(
       expect.objectContaining({
         job: { id: 321 },
@@ -179,10 +184,15 @@ describe('ImproveHandoffService.handToWorker', () => {
     expect(github.getBranchSha).not.toHaveBeenCalled();
     expect(github.downloadZipball).toHaveBeenCalledWith('head-sha');
     expect(result.baseSha).toBe('head-sha');
-    expect(workers.create).toHaveBeenCalledWith(3, {
-      sourceFileId: 99,
-      model: 'opus',
-    });
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      {
+        sourceFileId: 99,
+        model: 'opus',
+      },
+      undefined,
+      'urgent',
+    );
   });
 });
 
@@ -278,5 +288,37 @@ describe('ImproveHandoffService snapshot download retry', () => {
 
     await expect(service.snapshotAt('s')).rejects.toThrow('GitHub 502');
     expect(github.downloadZipball).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ImproveHandoffService.handToWorker — who asked (R10)', () => {
+  it.each([
+    ['manual', 'urgent'],
+    ['chat', 'urgent'],
+    ['schedule', 'deferrable'],
+    ['ci', 'deferrable'],
+    ['conflict', 'deferrable'],
+  ])('a %s run is %s for the limit planner', async (trigger, urgency) => {
+    const { service, workers } = setup();
+
+    await service.handToWorker(
+      3,
+      'sonnet',
+      { number: 7, title: 't', body: 'b' },
+      'improve:7',
+      'improve-7.subscription.zip',
+      undefined,
+      undefined,
+      null,
+      true,
+      trigger,
+    );
+
+    expect(workers.create).toHaveBeenCalledWith(
+      3,
+      expect.anything(),
+      undefined,
+      urgency,
+    );
   });
 });

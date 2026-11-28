@@ -340,6 +340,7 @@ export class LabRunsService {
           model,
           contextId: input.contextId,
           requiredCapability: requiredCapabilityOf(run.executor) ?? undefined,
+          urgency: run.trigger === 'schedule' ? 'deferrable' : 'urgent',
         },
       );
 

@@ -9,6 +9,12 @@ import type { Change } from './parcel';
 
 export const PR_LABEL = 'loop';
 
+// R10: the owner pressing the button, or typing in the chat, is urgent; a schedule, a CI repair, a conflict redo is not — it can wait for the
+// Claude plan's window to reset.
+export function urgencyOf(trigger: string): 'urgent' | 'deferrable' {
+  return trigger === 'manual' || trigger === 'chat' ? 'urgent' : 'deferrable';
+}
+
 export const PREPARE_ABANDONED_ERROR =
   'Подготовка прервана перезапуском — запустите задачу снова';
 

@@ -506,6 +506,7 @@ export class LabDigestService {
           fileName: `lab-digest-${dto.weekStart}.zip`,
           taskKey: `lab-digest:${saved.id}`,
           model,
+          urgency: 'urgent',
         },
       );
 

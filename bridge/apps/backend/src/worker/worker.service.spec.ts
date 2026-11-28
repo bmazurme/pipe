@@ -460,6 +460,7 @@ describe('WorkerService', () => {
         targetWorkerId: null,
         requiredCapability: null,
         notBefore: null,
+        deferrable: false,
         timeoutSec: null,
         notifyOnFinish: false,
         resultPublicKey: null,

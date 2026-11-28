@@ -150,6 +150,15 @@ export class Job extends BaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   notBefore: Date | null;
 
+  // R10: made by something automatic (a schedule, a repair, an analysis) rather than asked for by the owner — the scheduler may hold it
+  // back until a Claude plan window resets, and put it back when it failed on that limit.
+  @Column({ type: 'boolean', default: false })
+  deferrable: boolean;
+
+  // R10: this job failed on a plan limit and was put back for after the reset (the new job carries on); counts the rounds per parcel.
+  @Column({ type: 'timestamptz', nullable: true })
+  limitDeferredAt: Date | null;
+
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.Queued })
   status: JobStatus;
 

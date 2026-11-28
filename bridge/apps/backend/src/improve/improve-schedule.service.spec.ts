@@ -350,6 +350,8 @@ describe('schedules', () => {
       expect(workers.create).toHaveBeenCalledWith(
         3,
         expect.objectContaining({ model: 'sonnet', contextId: 4 }),
+        undefined,
+        expect.any(String),
       );
     });
 

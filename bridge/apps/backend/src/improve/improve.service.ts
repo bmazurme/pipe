@@ -400,6 +400,8 @@ export class ImproveService {
         undefined,
         snapshot,
         contextId,
+        true,
+        run.trigger,
       );
 
     // Guarded by status: a run that was failed as lost in the meantime stays so.
@@ -481,6 +483,7 @@ export class ImproveService {
         prepared,
         contextId,
         false,
+        run.trigger,
       );
       const res = await this.runs.update(
         { id: run.id, status: ImproveRunStatus.Preparing },
@@ -731,6 +734,10 @@ export class ImproveService {
         `improve:${parent.issueNumber}:repair:${attempt}`,
         `improve-${parent.issueNumber}-repair-${attempt}.subscription.zip`,
         { sha: pull.headSha, branch: pull.branch },
+        undefined,
+        null,
+        true,
+        'ci',
       );
     const run = await this.runs.save(
       this.runs.create({
@@ -895,6 +902,10 @@ export class ImproveService {
           `improve:pr-${prNumber}:chat:${attempt}`,
           `improve-pr-${prNumber}-chat-${attempt}.subscription.zip`,
           { sha: pull.headSha, branch: pull.headRef },
+          undefined,
+          null,
+          true,
+          'chat',
         );
 
       // Guarded by status: a run that was failed as lost in the meantime stays so.
@@ -1464,6 +1475,8 @@ export class ImproveService {
         undefined,
         prepStep.value,
         contextId,
+        true,
+        run.trigger,
       );
 
       // Guarded by status: a run cancelled or swept while preparing stays so.
