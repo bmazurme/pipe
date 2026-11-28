@@ -9,7 +9,7 @@ vi.mock('@pipe/protocol', async (importOriginal) => ({
 
 vi.mock('./encryption', () => ({ generateKeyPair: () => ({ publicKey: 'pub', privateKey: 'priv' }) }));
 
-import { generateAndSaveKeyPair, setSubscriptionConfig } from './config-props';
+import { generateAndSaveKeyPair, setLeakScanMode, setSubscriptionConfig } from './config-props';
 
 describe('subscription-config.json file mode', () => {
   it('setSubscriptionConfig writes owner-only', () => {
@@ -24,5 +24,24 @@ describe('subscription-config.json file mode', () => {
 
     expect(writeJsonFileSync).toHaveBeenCalledTimes(1);
     expect(writeJsonFileSync).toHaveBeenCalledWith(expect.stringMatching(/subscription-config\.json$/), expect.anything(), { mode: 0o600 });
+  });
+});
+
+describe('setLeakScanMode', () => {
+  it('stores the mode and drops the legacy leakScanStrict it replaces', () => {
+    setSubscriptionConfig({
+      trackedProjects: [],
+      dictionary: [],
+      commentTemplates: [],
+      encryption: { enabled: false, publicKey: '', privateKey: '' },
+      leakScanStrict: true,
+    });
+    writeJsonFileSync.mockClear();
+
+    const saved = setLeakScanMode('warn');
+
+    expect(saved.leakScanMode).toBe('warn');
+    expect('leakScanStrict' in saved).toBe(false);
+    expect(writeJsonFileSync).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,9 +8,12 @@ export function ExportEnvButton() {
   const { data: secrets } = useListSecretsQuery();
   const [exportSecrets, { isFetching }] = useLazyExportSecretsQuery();
   const [error, setError] = useState<string | null>(null);
+  // The file holds every secret in the clear — one more click, with what that means, before it is made.
+  const [confirming, setConfirming] = useState(false);
 
-  const handleClick = async () => {
+  const handleDownload = async () => {
     setError(null);
+    setConfirming(false);
     const result = await exportSecrets();
     if (result.data === undefined) {
       setError('Не удалось скачать .env');
@@ -30,11 +33,30 @@ export function ExportEnvButton() {
         view="outlined"
         size="l"
         loading={isFetching}
-        disabled={isFetching || !secrets || secrets.length === 0}
-        onClick={() => void handleClick()}
+        disabled={isFetching || !secrets || secrets.length === 0 || confirming}
+        onClick={() => setConfirming(true)}
       >
         Скачать .env
       </Button>
+      {confirming && (
+        <Alert
+          theme="warning"
+          view="filled"
+          title={`В файле значения секретов в открытом виде (${secrets?.length ?? 0})`}
+          message="Не отправляйте его в чат, задачу или репозиторий, не прикладывайте к посылке и удалите после использования."
+          actions={
+            <div className={styles.importRow}>
+              <Button view="normal" size="s" onClick={() => void handleDownload()}>
+                Всё равно скачать
+              </Button>
+              <Button view="flat" size="s" onClick={() => setConfirming(false)}>
+                Отмена
+              </Button>
+            </div>
+          }
+          onClose={() => setConfirming(false)}
+        />
+      )}
       {error && <Alert theme="danger" view="filled" message={error} onClose={() => setError(null)} />}
     </div>
   );

@@ -1,7 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { SubscriptionPushPayload, SubscriptionStateEntryType } from '@reports/shared';
-import { formatLeakFindings, scanForLeaks } from '@pipe/protocol';
+import { formatLeakFindings, scanForCredentials, scanForLeaks } from '@pipe/protocol';
+import type { LeakScanModeType } from '@reports/shared';
 
 import { getSubscriptionConfig, findTrackedProject } from './config-props';
 import { requireTrackedProject } from './work-tree';
@@ -29,6 +30,15 @@ function isGithubProject(projectId: string | number): boolean {
 // Pushes one task's parcel to bridge: the tracked tree (or both migration
 // repositories), anonymized, leak-scanned, archived, optionally encrypted.
 // The domain half of the Push button, like pullSubscriptionIssue for Pull.
+// A config saved before leakScanMode existed has leakScanStrict (true / false) or neither.
+export function leakScanMode(config: { leakScanMode?: LeakScanModeType; leakScanStrict?: boolean }): LeakScanModeType {
+  if (config.leakScanMode) return config.leakScanMode;
+  if (config.leakScanStrict === true) return 'all';
+  if (config.leakScanStrict === false) return 'warn';
+
+  return 'credentials';
+}
+
 export async function pushSubscriptionIssue(
   projectId: string,
   iid: string,
@@ -97,19 +107,37 @@ export async function pushSubscriptionIssue(
     console.warn(`[subscription ${projectId}:${iid}] ${images.length} image(s) were not leak-scanned.`);
   }
 
-  const leaks = scanForLeaks([
+  const scanTargets = [
     ...files.map((f) => ({ source: f.relPath, content: f.content })),
     { source: 'issue title', content: issueTitle },
     { source: 'issue description', content: issueDescription },
     ...issueComments.map((comment, index) => ({ source: `issue comment ${index + 1}`, content: comment.body })),
-  ]);
+  ];
+  const leaks = scanForLeaks(scanTargets);
+  const mode = leakScanMode(getSubscriptionConfig());
+
   if (leaks.length > 0) {
     console.warn(`[subscription ${projectId}:${iid}] ${formatLeakFindings(leaks)}`);
 
-    if (getSubscriptionConfig().leakScanStrict) {
+    if (mode === 'all') {
       throw new Error(
         `leakScanStrict: ${leaks.length} possible leak(s) found — push aborted. ` +
-          'Disable "Строгая проверка на утечки" in Settings to push anyway.',
+          'Switch «Проверка на утечки» on the Subscription page to «Только ключи» or «Только предупреждать» to push anyway.',
+      );
+    }
+  }
+
+  // Whatever the heuristic says, a value that is a key by its shape does not leave the machine
+  // (unless the check was switched to warn-only): this is what the default mode is for.
+  if (mode === 'credentials') {
+    const credentials = scanForCredentials(scanTargets);
+
+    if (credentials.length > 0) {
+      const shown = credentials.slice(0, 3).map((hit) => `${hit.source}:${hit.line} — ${hit.label} (${hit.preview})`);
+
+      throw new Error(
+        `leakScanStrict: found ${credentials.length} key(s) in the parcel — push aborted: ${shown.join('; ')}${credentials.length > shown.length ? '; …' : ''}. ` +
+          'Add the value to the dictionary (Purge) so it is replaced, or switch «Проверка на утечки» to «Только предупреждать».',
       );
     }
   }

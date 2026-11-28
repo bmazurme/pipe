@@ -28,11 +28,19 @@ printing a warning (via `formatLeakFindings`) for anything that still looks
 real. It is advisory only by default, not a hard gate — it doesn't block the
 push or throw — because the heuristic has real false-positive and
 false-negative rates (see `packages/protocol/src/leakScan.ts` for the exact
-allowlists/thresholds and their reasoning). An opt-in strict mode exists on
+allowlists/thresholds and their reasoning). Stricter modes exist on
 top of that advisory default: sync's `--strict` flag
-(`push`/`push-issue`/`gitlab-worker`) and reports' `leakScanStrict` setting
-both abort the push instead of just warning when the scan finds something
-(see IMPROVEMENTS_TECH.md 1.5). Neither leak-scan mode runs in
+(`push`/`push-issue`/`gitlab-worker`) aborts the push instead of just warning
+when the scan finds anything (see IMPROVEMENTS_TECH.md 1.5). Reports has three
+modes (`leakScanMode`, Subscription → «Проверка на утечки»): `credentials`, the
+default, aborts only for a value that is a key by its shape (a provider token,
+a PEM header, a JWT, a password in a URL — `@pipe/protocol/credentials`) and
+only warns about the rest; `all` aborts on any finding (the old strict mode;
+a config saved with `leakScanStrict: true` means this); `warn` never aborts
+(`leakScanStrict: false`). The default is not «abort on anything» because on
+real code the broad heuristic is mostly noise — about 2400 hostname findings
+(`res.status`, `this.logger.warn`) over 109 ordinary TypeScript files — so a
+strict default would stop every push until someone switched it off. Neither leak-scan mode runs in
 `agent-runner`, which is deliberately dictionary-free by design (see
 sync's README) — there's no "did the dictionary miss something" question to
 ask when no dictionary is in play. Images are a separate gap: the scan is

@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, MigrationProjectType, TrackedProjectType } from '@reports/shared';
+import type { CommentTemplateType, DictionaryEntryType, EncryptionSettingsType, LeakScanModeType, MigrationProjectType, TrackedProjectType } from '@reports/shared';
 
 import {
   getSubscriptionConfig,
@@ -15,6 +15,7 @@ import {
   generateAndSaveKeyPair,
   setAutoStartWorkerModel,
   setLeakScanStrict,
+  setLeakScanMode,
   removeMigration,
 } from './config-props';
 import { createMigration } from './migration';
@@ -122,6 +123,20 @@ export function handleSetLeakScanStrict(req: Request<Record<string, string>>, re
   const { leakScanStrict } = req.body as { leakScanStrict: boolean };
 
   withSync(res, 'Set leak scan strict mode', () => setLeakScanStrict(Boolean(leakScanStrict)));
+}
+
+const LEAK_SCAN_MODES: readonly LeakScanModeType[] = ['credentials', 'all', 'warn'];
+
+export function handleSetLeakScanMode(req: Request<Record<string, string>>, res: Response) {
+  const { mode } = req.body as { mode?: unknown };
+
+  withSync(res, 'Set leak scan mode', () => {
+    if (!LEAK_SCAN_MODES.includes(mode as LeakScanModeType)) {
+      throw new Error(`mode must be one of: ${LEAK_SCAN_MODES.join(', ')}`);
+    }
+
+    return setLeakScanMode(mode as LeakScanModeType);
+  });
 }
 
 export const WORKER_MODELS = ['sonnet', 'opus', 'haiku', 'gpt', 'deepseek', 'qwen'] as const;

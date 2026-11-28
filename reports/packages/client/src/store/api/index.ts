@@ -28,6 +28,7 @@ export {
   useGetUpdateProgressQuery,
   useApplyUpdateMutation,
   useSetAutoStartWorkerModelMutation,
+  useSetLeakScanModeMutation,
   useGetSubscriptionIssueTimeQuery,
   useInitSubscriptionIssueMutation,
   useLazyGetSubscriptionDraftQuery,

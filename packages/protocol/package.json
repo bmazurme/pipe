@@ -44,6 +44,10 @@
       "types": "./dist/walk.d.ts",
       "default": "./dist/walk.js"
     },
+    "./credentials": {
+      "types": "./dist/credentials.d.ts",
+      "default": "./dist/credentials.js"
+    },
     "./leakScan": {
       "types": "./dist/leakScan.d.ts",
       "default": "./dist/leakScan.js"

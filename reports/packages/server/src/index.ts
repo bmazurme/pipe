@@ -40,6 +40,7 @@ import {
   handleGenerateEncryptionKeyPair,
   handleSetAutoStartWorkerModel,
   handleSetLeakScanStrict,
+  handleSetLeakScanMode,
 } from './subscription/config-handler';
 import { handleCreateBacklogIssues, handleGetBacklog, handleListAnalysisModules, handleStartAnalysis } from './subscription/analysis-handler';
 import { handlePurgeApply } from './subscription/purge-handler';
@@ -140,6 +141,7 @@ app.delete('/api/subscription/config/comment-templates/:id', handleRemoveComment
 app.put('/api/subscription/config/encryption', handleSetEncryptionSettings);
 app.post('/api/subscription/config/encryption/generate', handleGenerateEncryptionKeyPair);
 app.put('/api/subscription/config/leak-scan-strict', handleSetLeakScanStrict);
+app.put('/api/subscription/config/leak-scan-mode', handleSetLeakScanMode);
 app.put('/api/subscription/config/auto-start-worker', handleSetAutoStartWorkerModel);
 app.post('/api/subscription/analysis', handleStartAnalysis);
 app.get('/api/subscription/analysis/modules/:projectId', handleListAnalysisModules);

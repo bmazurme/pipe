@@ -55,6 +55,52 @@ export function redact(text: string): string {
   );
 }
 
+// What chat messages keep. A chat is prose: "token: refresh" or "password: пароль не подходит" must come
+// through untouched, so unlike `redact` above this masks only values that are credentials by their shape
+// (a provider prefix, a PEM header, a JWT, userinfo in a URL). The same shapes, with the same labels, are
+// what the Chat composer warns about before sending (packages/protocol/src/credentials.ts) — keep the two lists
+// in step; bridge's backend does not depend on @pipe/protocol, so this one is written out here.
+const CHAT_CREDENTIAL_PATTERNS: Array<[RegExp, string]> = [
+  [
+    /\b(?:sk-ant-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9_-]{16,})\b/g,
+    '[скрыто: ключ Anthropic / OpenAI]',
+  ],
+  [
+    /\b(?:ghp_|gho_|ghs_|github_pat_)[A-Za-z0-9_]{16,}\b/g,
+    '[скрыто: токен GitHub]',
+  ],
+  [/\bglpat-[A-Za-z0-9_-]{16,}\b/g, '[скрыто: токен GitLab]'],
+  [/\b\d{8,10}:[A-Za-z0-9_-]{30,}\b/g, '[скрыто: токен Telegram-бота]'],
+  [
+    new RegExp(
+      `\\b(?:${BRIDGE_KEY_PREFIXES.join('|')})[A-Za-z0-9_-]{16,}\\b`,
+      'g',
+    ),
+    '[скрыто: ключ bridge]',
+  ],
+  [
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+    '[скрыто: JWT]',
+  ],
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{20,}/g, '[скрыто: заголовок Bearer]'],
+  [
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+    '[скрыто: приватный ключ]',
+  ],
+  [
+    /\b[a-z][a-z0-9+.-]{0,20}:\/\/[^\s/@:]{1,100}:[^\s/@]{3,200}@/gi,
+    '[скрыто: пароль в адресе]',
+  ],
+];
+
+/** Text of a chat message (the user's, the model's) with every credential-shaped value hidden. */
+export function redactChatText(text: string): string {
+  return CHAT_CREDENTIAL_PATTERNS.reduce(
+    (value, [pattern, replacement]) => value.replace(pattern, replacement),
+    text,
+  );
+}
+
 const MAX_META_CHARS = 2000;
 
 // Meta is a flat bag of small values; anything else (objects, long strings) is

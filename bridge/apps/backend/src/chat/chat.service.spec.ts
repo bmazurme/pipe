@@ -237,6 +237,65 @@ describe('ChatService', () => {
     });
   });
 
+  // A key pasted into a chat (or echoed by the model) is not kept: the history is also what the model is given.
+  describe('credentials in messages', () => {
+    const KEY = 'ghp_AbCdEfGhIjKlMnOpQrSt1234';
+    const running = {
+      id: 99,
+      chatId: 1,
+      role: ChatMessageRole.Assistant,
+      content: '',
+      status: ChatMessageStatus.Running,
+    };
+
+    it('hides a credential in the user message when it is saved, and leaves ordinary text alone', async () => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      chatRepository.save!.mockResolvedValue({ id: 1 });
+      messageRepository.save!.mockImplementation((m) =>
+        Promise.resolve({ id: 10, ...m }),
+      );
+
+      const { userMessage } = await service.sendMessage(
+        1,
+        7,
+        `клонируй с токеном ${KEY}, а password: пароль не подходит — почему?`,
+      );
+
+      expect(userMessage.content).toBe(
+        'клонируй с токеном [скрыто: токен GitHub], а password: пароль не подходит — почему?',
+      );
+    });
+
+    it('hides a credential in the model reply, its reasoning, its partial text and a failure', async () => {
+      chatRepository.findOne!.mockResolvedValue({ id: 1, userId: 7 });
+      messageRepository.findOne!.mockResolvedValue({ ...running });
+      messageRepository.save!.mockImplementation((m) => Promise.resolve(m));
+      messageRepository.update = jest.fn().mockResolvedValue({ affected: 1 });
+
+      const done = await service.completeTurn(
+        99,
+        7,
+        `вот ${KEY}`,
+        `думаю про ${KEY}`,
+      );
+
+      expect(done.content).toBe('вот [скрыто: токен GitHub]');
+      expect(done.reasoning).toBe('думаю про [скрыто: токен GitHub]');
+
+      messageRepository.findOne!.mockResolvedValue({ ...running });
+      await service.reportProgress(99, 7, `пишу ${KEY}`);
+      expect(messageRepository.update).toHaveBeenCalledWith(
+        { id: 99, status: ChatMessageStatus.Running },
+        { progress: 'пишу [скрыто: токен GitHub]' },
+      );
+
+      messageRepository.findOne!.mockResolvedValue({ ...running });
+      const failed = await service.failTurn(99, 7, `401 for ${KEY}`);
+
+      expect(failed.errorMessage).toBe('401 for [скрыто: токен GitHub]');
+    });
+  });
+
   describe('claim', () => {
     // node-postgres (via TypeORM's Repository.query) returns
     // [rows, affectedCount] for an UPDATE, not a flat rows array — these

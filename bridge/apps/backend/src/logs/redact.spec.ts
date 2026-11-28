@@ -1,4 +1,4 @@
-import { redact, sanitizeMeta } from './redact';
+import { redact, redactChatText, sanitizeMeta } from './redact';
 
 describe('redact', () => {
   it.each([
@@ -85,5 +85,43 @@ describe('sanitizeMeta', () => {
   it('returns null for empty or missing meta', () => {
     expect(sanitizeMeta(undefined)).toBeNull();
     expect(sanitizeMeta({})).toBeNull();
+  });
+});
+
+describe('redactChatText', () => {
+  it.each([
+    ['key sk-ant-oat01-AbCdEfGhIjKlMnOp', '[скрыто: ключ Anthropic / OpenAI]'],
+    ['token ghp_abcdefghijklmnop1234', '[скрыто: токен GitHub]'],
+    ['using glpat-abcdefghijklmnop1234', '[скрыто: токен GitLab]'],
+    [
+      'bot 1234567890:AAEhBP0av28ZQ-abcdefghijklmnopqrstuvwxyz',
+      '[скрыто: токен Telegram-бота]',
+    ],
+    ['worker brw_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6', '[скрыто: ключ bridge]'],
+    [
+      'jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijkl1234',
+      '[скрыто: JWT]',
+    ],
+    ['Bearer abcdefghijklmnopqrstuvwxyz', '[скрыто: заголовок Bearer]'],
+    [
+      '-----BEGIN PRIVATE KEY-----\nMIIEvQ\n-----END PRIVATE KEY-----',
+      '[скрыто: приватный ключ]',
+    ],
+    [
+      'GET https://user:s3cret@example.com/x',
+      '[скрыто: пароль в адресе]example.com/x',
+    ],
+  ])('hides %s', (input, expected) => {
+    const out = redactChatText(input);
+
+    expect(out).toContain(expected);
+    expect(out).not.toMatch(/s3cret|AbCdEf|abcdefghijklmnop|A1b2C3|MIIEvQ/);
+  });
+
+  it('leaves prose and code that merely mention a token or a password untouched', () => {
+    const text =
+      'Почему token: refresh не работает? password=changeme, sk-короткий, user@example.com, https://example.com/a?b=c';
+
+    expect(redactChatText(text)).toBe(text);
   });
 });

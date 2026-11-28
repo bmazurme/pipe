@@ -93,4 +93,57 @@ describe('useChatComposer', () => {
     expect(result.current.failedDraft).toBe('hello');
     expect(result.current.chatError).toBe('boom');
   });
+
+  describe('a message that carries a key', () => {
+    const KEY = 'ghp_AbCdEfGhIjKlMnOpQrSt1234';
+
+    it('is held back instead of sent, and only the hidden version is kept', async () => {
+      const { result } = setup();
+
+      await act(() => result.current.send({ content: `клонируй с ${KEY}` }));
+
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(result.current.held?.masked).toBe('клонируй с [скрыто: токен GitHub]');
+      expect(result.current.held?.findings).toEqual([{ label: 'токен GitHub', preview: 'ghp_***' }]);
+      expect(JSON.stringify(result.current.held)).not.toContain('AbCdEf');
+    });
+
+    it('goes out with the key hidden, together with the files attached', async () => {
+      const { result } = setup();
+
+      await act(() => result.current.attachFiles([new File(['x'], 'a.png')]));
+      await act(() => result.current.send({ content: `ключ ${KEY}` }));
+      await act(() => result.current.sendHeldMasked());
+
+      expect(mocks.sendMessage).toHaveBeenCalledWith({ chatId: 1, content: 'ключ [скрыто: токен GitHub]', attachmentIds: [7] });
+      expect(result.current.held).toBeNull();
+    });
+
+    it('is queued hidden when a reply is still on its way', async () => {
+      const { result } = setup({ hasPendingReply: true });
+
+      await act(() => result.current.send({ content: `ключ ${KEY}` }));
+      await act(() => result.current.sendHeldMasked());
+
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(result.current.queued?.content).toBe('ключ [скрыто: токен GitHub]');
+    });
+
+    it('can be dropped, and leaving the chat drops it too; an ordinary message is not held', async () => {
+      const { result } = setup();
+
+      await act(() => result.current.send({ content: `ключ ${KEY}` }));
+      act(() => result.current.discardHeld());
+      expect(result.current.held).toBeNull();
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+      await act(() => result.current.send({ content: `ключ ${KEY}` }));
+      act(() => result.current.reset());
+      expect(result.current.held).toBeNull();
+
+      await act(() => result.current.send({ content: 'почему token: refresh не работает?' }));
+      expect(result.current.held).toBeNull();
+      expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
 });
