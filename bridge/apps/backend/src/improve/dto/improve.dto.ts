@@ -83,6 +83,27 @@ export class StartPrFixDto {
   model: string;
 }
 
+export class SaveKnowledgeDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(400)
+  title: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(6000)
+  text: string;
+
+  @IsIn(['claude-md', 'docs'])
+  target: 'claude-md' | 'docs';
+
+  // Where it came from, for the pull request's description ("вопрос 12-3", "Context «Правила»").
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  source?: string;
+}
+
 export class StartPrMergeDto {
   @IsInt()
   @Min(1)

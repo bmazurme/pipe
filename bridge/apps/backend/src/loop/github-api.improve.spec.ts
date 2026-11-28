@@ -370,4 +370,41 @@ describe('GithubApiService (improve)', () => {
     ]);
     expect(calls[0].url).toContain('base=main');
   });
+
+  describe('getFileText', () => {
+    it('reads a file at a ref, with the path encoded and the text decoded from base64', async () => {
+      const calls = stubFetch(() => ({
+        encoding: 'base64',
+        content: Buffer.from('# Привет\n', 'utf-8').toString('base64'),
+      }));
+
+      await expect(
+        service().getFileText('docs/my file.md', 'abc123'),
+      ).resolves.toBe('# Привет\n');
+      expect(calls[0].url).toBe(
+        'https://api.github.com/repos/o/r/contents/docs/my%20file.md?ref=abc123',
+      );
+    });
+
+    it('is null for a file that is not there, and fails for any other error', async () => {
+      stubFetch(() => new Response('{"message":"Not Found"}', { status: 404 }));
+      await expect(
+        service().getFileText('docs/x.md', 'abc'),
+      ).resolves.toBeNull();
+
+      jest.restoreAllMocks();
+      stubFetch(() => new Response('{"message":"Bad"}', { status: 500 }));
+      await expect(service().getFileText('docs/x.md', 'abc')).rejects.toThrow(
+        'GitHub 500',
+      );
+    });
+
+    it('refuses an answer that is not a file (a directory listing)', async () => {
+      stubFetch(() => [{ name: 'a.md' }]);
+
+      await expect(service().getFileText('docs', 'abc')).rejects.toThrow(
+        /did not return the text/,
+      );
+    });
+  });
 });

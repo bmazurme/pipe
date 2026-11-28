@@ -9,6 +9,7 @@ import { ContextSummary, getErrorMessage, useDeleteContextMutation, useLazyGetCo
 import { EmptyState } from '../../widgets/EmptyState';
 import { PageHeader } from '../../widgets/PageHeader';
 import { ContextDialog } from './ContextDialog';
+import { ContextKnowledge } from './ContextKnowledge';
 import { contextFilename } from './contextExport';
 import styles from './ContextPage.module.css';
 
@@ -23,6 +24,8 @@ export function ContextPage() {
   // `undefined` = dialog closed; `null` = creating; otherwise editing that context, or creating a copy of it.
   const [editing, setEditing] = useState<{ mode: 'edit' | 'copy'; id: number } | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<ContextSummary | null>(null);
+  // A8: the context being saved as permanent knowledge.
+  const [savingKnowledge, setSavingKnowledge] = useState<ContextSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [fetchContext] = useLazyGetContextQuery();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -107,6 +110,15 @@ export function ContextPage() {
                 <Button
                   view="flat-secondary"
                   size="s"
+                  title="Записать как постоянное знание в репозиторий (через pull request)"
+                  aria-label={`В репозиторий: ${context.name}`}
+                  onClick={() => setSavingKnowledge(context)}
+                >
+                  В репозиторий
+                </Button>
+                <Button
+                  view="flat-secondary"
+                  size="s"
                   aria-label={`Скачать: ${context.name}`}
                   loading={downloadingId === context.id}
                   onClick={() => void handleDownload(context)}
@@ -129,6 +141,8 @@ export function ContextPage() {
           ))}
         </ul>
       )}
+
+      {savingKnowledge !== null && <ContextKnowledge context={savingKnowledge} onClose={() => setSavingKnowledge(null)} />}
 
       {editing !== undefined && (
         <ContextDialog

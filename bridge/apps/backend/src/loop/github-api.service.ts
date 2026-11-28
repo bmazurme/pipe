@@ -283,6 +283,29 @@ export class GithubApiService {
     return data.object.sha;
   }
 
+  // A file's text at a commit (or branch); null when it does not exist there.
+  async getFileText(path: string, ref: string): Promise<string | null> {
+    const encoded = path.split('/').map(encodeURIComponent).join('/');
+
+    try {
+      const data = (await this.get(
+        `/contents/${encoded}?ref=${encodeURIComponent(ref)}`,
+      )) as { content?: string; encoding?: string };
+
+      if (data.encoding !== 'base64' || typeof data.content !== 'string') {
+        throw new Error(`GitHub did not return the text of ${path}`);
+      }
+
+      return Buffer.from(data.content, 'base64').toString('utf-8');
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('GitHub 404')) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   async getCommitTreeSha(commitSha: string): Promise<string> {
     const data = (await this.get(`/git/commits/${commitSha}`)) as {
       tree: { sha: string };
