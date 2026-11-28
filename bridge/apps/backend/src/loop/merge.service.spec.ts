@@ -23,6 +23,7 @@ function setup(
     files?: string[];
     ci?: string;
     configured?: boolean;
+    reviews?: unknown;
   } = {},
 ) {
   const github = {
@@ -45,6 +46,7 @@ function setup(
       github as never,
       telegram as never,
       config as never,
+      over.reviews as never,
     ),
     github,
     telegram,
@@ -133,6 +135,57 @@ describe('MergeService.evaluate', () => {
 });
 
 describe('MergeService.offer', () => {
+  it('is the review card (A12) when one can be made, still with the pinned merge button', async () => {
+    const reviews = {
+      build: jest.fn().mockResolvedValue({
+        number: 9,
+        title: 'Fix docs',
+        url: 'https://github.com/o/r/pull/9',
+        risk: { level: 'low', text: 'Риск: низкий (документация)' },
+        diff: {
+          files: 1,
+          additions: 3,
+          deletions: 1,
+          areas: [{ name: 'документация', files: 1 }],
+          largest: [{ path: 'docs/deploy.md', additions: 3, deletions: 1 }],
+        },
+        attention: [],
+        checked: ['CI зелёный'],
+        notChecked: ['Diff человеком не читался — это и есть ваше ревью'],
+        run: null,
+      }),
+      improveUrl: jest.fn().mockReturnValue('https://bridge.example/improve'),
+    };
+    const { service, telegram } = setup({ reviews });
+
+    await service.offer(9);
+
+    const [text, buttons] = telegram.sendWithButtons.mock.calls[0];
+
+    expect(reviews.build).toHaveBeenCalledWith(9);
+    expect(text).toContain('Риск: низкий (документация)');
+    expect(text).toContain('Не проверено: Diff человеком не читался');
+    expect(text.endsWith('Влить в main (squash)?')).toBe(true);
+    expect(buttons[0][0].callback_data).toBe('merge:9:abc1234');
+  });
+
+  it('falls back to the one-line offer when the card cannot be made — the button is never lost for it', async () => {
+    const reviews = {
+      build: jest.fn().mockRejectedValue(new Error('GitHub 502')),
+      improveUrl: jest.fn(),
+    };
+    const { service, telegram } = setup({ reviews });
+
+    await service.offer(9);
+
+    const [text, buttons] = telegram.sendWithButtons.mock.calls[0];
+
+    expect(text).toBe(
+      '🟢 CI зелёный: PR #9 «Fix docs»\nПроверки пройдены. Влить в main (squash)?',
+    );
+    expect(buttons[0][0].callback_data).toBe('merge:9:abc1234');
+  });
+
   it('attaches a sha-pinned merge button for a PR that passes every check', async () => {
     const { service, telegram } = setup();
 

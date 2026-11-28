@@ -23,12 +23,11 @@ interface Rule {
 }
 
 // First match wins, so the order is the order of precedence: tests and docs first (a test of an auth module is still only a test).
+export const TEST_PATH =
+  /(\.(spec|test)\.(ts|tsx|js|mjs)$|(^|\/)(__tests__|test|tests)\/)/;
+
 const RULES: Rule[] = [
-  {
-    risk: 'low',
-    why: 'тесты',
-    test: /(\.(spec|test)\.(ts|tsx|js|mjs)$|(^|\/)(__tests__|test|tests)\/)/,
-  },
+  { risk: 'low', why: 'тесты', test: TEST_PATH },
   { risk: 'low', why: 'документация', test: /(\.md$|^docs\/|^LICENSE$)/ },
 
   // The things that take the system or its data down, or hand it to someone.

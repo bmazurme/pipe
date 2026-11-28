@@ -2105,6 +2105,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/prs/{number}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ImproveController_prReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/knowledge": {
         parameters: {
             query?: never;
@@ -8460,6 +8476,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImproveRun"];
                 };
+            };
+        };
+    };
+    ImproveController_prReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

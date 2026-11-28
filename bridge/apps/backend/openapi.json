@@ -3823,6 +3823,26 @@
         }
       }
     },
+    "/api/v1/improve/prs/{number}/review": {
+      "get": {
+        "operationId": "ImproveController_prReview",
+        "parameters": [
+          {
+            "name": "number",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/improve/knowledge": {
       "post": {
         "operationId": "ImproveController_saveKnowledge",

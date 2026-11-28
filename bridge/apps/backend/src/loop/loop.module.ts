@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { BoardsModule } from '../boards/boards.module';
 import { ImproveRun } from '../improve/entities/improve-run.entity';
+import { Job } from '../worker/entities/job.entity';
 import { TelegramModule } from '../telegram/telegram.module';
 import { ClientHeartbeatService } from './client-heartbeat.service';
 import { ClientsController } from './clients.controller';
@@ -20,6 +21,7 @@ import { LoopDeployController } from './loop-deploy.controller';
 import { LoopDeployService } from './loop-deploy.service';
 import { LoopService } from './loop.service';
 import { MergeService } from './merge.service';
+import { ReviewCardService } from './review-card.service';
 import { TelegramCommandsService } from './telegram-commands.service';
 import { TelegramPollerService } from './telegram-poller.service';
 import { TelegramWebhookController } from './telegram-webhook.controller';
@@ -34,6 +36,7 @@ import { TelegramWebhookController } from './telegram-webhook.controller';
       LoopControl,
       DeployRecord,
       ImproveRun,
+      Job,
     ]),
     TelegramModule,
     BoardsModule,
@@ -51,10 +54,17 @@ import { TelegramWebhookController } from './telegram-webhook.controller';
     LoopDeployService,
     GithubApiService,
     MergeService,
+    ReviewCardService,
     ClientHeartbeatService,
     TelegramCommandsService,
     TelegramPollerService,
   ],
-  exports: [LoopService, LoopControlService, GithubApiService, MergeService],
+  exports: [
+    LoopService,
+    LoopControlService,
+    GithubApiService,
+    MergeService,
+    ReviewCardService,
+  ],
 })
 export class LoopModule {}
