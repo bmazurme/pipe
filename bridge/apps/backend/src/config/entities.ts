@@ -8,6 +8,8 @@ import { BoardAutoUpdateSettings } from '../boards/entities/board-auto-update-se
 import { BoardReport } from '../boards/entities/board-report.entity';
 import { BoardMetric } from '../boards/entities/board-metric.entity';
 import { CloudReport } from '../boards/entities/cloud-report.entity';
+import { KeyCopyCheck } from '../rotation/entities/key-copy-check.entity';
+import { RotationItem } from '../rotation/entities/rotation-item.entity';
 import { NasReport } from '../boards/entities/nas-report.entity';
 import { RestoreDrill } from '../boards/entities/restore-drill.entity';
 import { UpsReport } from '../boards/entities/ups-report.entity';
@@ -79,6 +81,8 @@ export const ENTITIES = [
   BoardAutoUpdateSettings,
   NasReport,
   RestoreDrill,
+  RotationItem,
+  KeyCopyCheck,
   CloudReport,
   UpsReport,
   RouterReport,

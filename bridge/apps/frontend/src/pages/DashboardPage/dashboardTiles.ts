@@ -20,6 +20,7 @@ export const DASHBOARD_TILES: DashboardTile[] = [
   { id: 'tile-nas', label: 'NAS' },
   { id: 'tile-ups', label: 'ИБП' },
   { id: 'tile-router', label: 'Роутер' },
+  { id: 'tile-rotation', label: 'Ключи' },
   { id: 'tile-github', label: 'GitHub' },
 ];
 
@@ -54,6 +55,8 @@ export function tileOfAttention(id: string): string | null {
       return 'tile-ups';
     case 'router':
       return 'tile-router';
+    case 'rotation':
+      return 'tile-rotation';
     default:
       return null;
   }

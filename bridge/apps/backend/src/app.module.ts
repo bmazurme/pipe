@@ -34,6 +34,7 @@ import { UsersModule } from './users/users.module';
 import { RouterModule } from './router/router.module';
 import { TunnelModule } from './tunnel/tunnel.module';
 import { VpnModule } from './vpn/vpn.module';
+import { RotationModule } from './rotation/rotation.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { WorkerModule } from './worker/worker.module';
 
@@ -63,6 +64,7 @@ import { TypeOrmModuleConfig } from './config/type-orm.config';
     ImproveModule,
     LabModule,
     BoardsModule,
+    RotationModule,
     LogsModule,
     LinksModule,
     LoopModule,

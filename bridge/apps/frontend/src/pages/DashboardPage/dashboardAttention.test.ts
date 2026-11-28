@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps, RotationView } from '../../store/api';
 import { type AttentionInput, buildAttention, summarize } from './dashboardAttention';
 
 const calm: AttentionInput = { vpnDown: false, vpnListError: false, nodesError: false, nodesDown: [], backupIssue: false, boards: [], nas: [], ups: [], router: [], lastDeploy: null };
@@ -14,7 +14,22 @@ const deploy = (result: DashboardDeploy['result'], prNumbers: number[] = []): Da
 
 const drill = (status: DashboardRestoreDrill['status'], reasons: string[] = []): DashboardRestoreDrill => ({ status, reasons, lastAt: null, lastOkAt: null, backupAgeHours: null, restoreSeconds: null, nextDueAt: null, counts: {}, recent: [] });
 
+const rotation = (...items: [string, 'ok' | 'warn' | 'bad', string[]][]): RotationView => ({
+  status: 'warn',
+  items: items.map(([key, status, reasons]) => ({ key: key as RotationView['items'][number]['key'], label: key.toUpperCase(), effect: '', intervalDays: 365, lastRotatedAt: null, dueAt: null, daysLeft: null, status, reasons })),
+  keyCopies: { verified: 0, status: 'ok', reasons: [], copies: [] },
+});
+
 describe('buildAttention', () => {
+  it('names each key that is late or unverified, and stays quiet about the ones that are fine', () => {
+    expect(buildAttention({ ...calm, rotation: rotation(['jwt', 'ok', [] ]) })).toEqual([]);
+    expect(buildAttention({ ...calm, rotation: null })).toEqual([]);
+    expect(buildAttention({ ...calm, rotation: rotation(['jwt', 'ok', []], ['enc-key', 'bad', ['Смена просрочена на 5 дн', 'второе']], ['age-key', 'warn', ['Проверенных копий ключа 1']]) }).map((item) => [item.id, item.level, item.text])).toEqual([
+      ['rotation:enc-key', 'bad', 'Ключи: ENC-KEY — Смена просрочена на 5 дн (и ещё 1)'],
+      ['rotation:age-key', 'warn', 'Ключи: AGE-KEY — Проверенных копий ключа 1'],
+    ]);
+  });
+
   it('names a restore drill that is late or failed, and stays quiet when it is fine', () => {
     expect(buildAttention({ ...calm, restoreDrill: drill('ok') })).toEqual([]);
     expect(buildAttention({ ...calm, restoreDrill: null })).toEqual([]);

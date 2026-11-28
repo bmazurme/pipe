@@ -1,4 +1,4 @@
-import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps, DriftView, NotifyBudget } from '../../store/api';
+import type { DashboardBoardMetrics, DashboardChannels, DashboardCloud, DashboardDeploy, DashboardNas, DashboardRestoreDrill, DashboardRouter, DashboardUps, DriftView, NotifyBudget, RotationView } from '../../store/api';
 
 // What the Dashboard header says in one line, and the list under it: everything on the page that is not fine, from every tile - so the
 // answer to "is anything wrong?" does not need scrolling through them. Pure; the page feeds it what its queries returned.
@@ -20,6 +20,8 @@ export interface AttentionInput {
   backupIssue: boolean;
   /** R7: how the last restore of a backup went; null until the answer is in. */
   restoreDrill?: DashboardRestoreDrill | null;
+  /** S11: the rotation calendar and the backup key's copies; null until the answer is in. */
+  rotation?: RotationView | null;
   boards: DashboardBoardMetrics[];
   cloud?: DashboardCloud[];
   channels?: DashboardChannels | null;
@@ -49,6 +51,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     const { reasons } = input.restoreDrill;
 
     items.push({ id: 'restore-drill', level: input.restoreDrill.status, text: `Восстановление бэкапа: ${reasons[0] ?? 'есть замечания'}${reasons.length > 1 ? ` (и ещё ${reasons.length - 1})` : ''}` });
+  }
+
+  for (const item of input.rotation?.items ?? []) {
+    if (item.status === 'ok') continue;
+
+    items.push({ id: `rotation:${item.key}`, level: item.status, text: `Ключи: ${item.label} — ${item.reasons[0] ?? 'есть замечания'}${item.reasons.length > 1 ? ` (и ещё ${item.reasons.length - 1})` : ''}` });
   }
 
   for (const board of input.boards) {

@@ -62,6 +62,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:?REFRESH_JWT_SECRET is required}
       CREDENTIALS_ENC_KEY: ${CREDENTIALS_ENC_KEY:?CREDENTIALS_ENC_KEY is required}
+      # Rotation of that key (docs/key-rotation.md): the new keys sit beside the old one, CURRENT names the one new values are written under.
+      # Empty = no rotation in progress. The old keys stay as long as any backup or value written under them exists.
+      CREDENTIALS_ENC_KEY_CURRENT: ${CREDENTIALS_ENC_KEY_CURRENT:-}
+      CREDENTIALS_ENC_KEY_V2: ${CREDENTIALS_ENC_KEY_V2:-}
+      CREDENTIALS_ENC_KEY_V3: ${CREDENTIALS_ENC_KEY_V3:-}
+      CREDENTIALS_ENC_KEY_V4: ${CREDENTIALS_ENC_KEY_V4:-}
       # Where uploaded files live: the volume (local, default) or an S3 bucket (Garage, docs/ha-dr-plan.md).
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       S3_ENDPOINT: ${S3_ENDPOINT:-}

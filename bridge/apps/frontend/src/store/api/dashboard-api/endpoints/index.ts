@@ -49,6 +49,42 @@ export interface DashboardRestoreDrill {
   }>;
 }
 
+export type RotationStatus = 'ok' | 'warn' | 'bad';
+
+export type RotationKey = 'jwt' | 'enc-key' | 'age-key' | 'telegram-bot' | 'db-password';
+
+/** S11: one thing on the rotation calendar, with bridge's verdict. */
+export interface RotationItem {
+  key: RotationKey;
+  label: string;
+  /** What changing it does. */
+  effect: string;
+  /** 0 = not on a calendar (the age key is judged by its verified copies). */
+  intervalDays: number;
+  lastRotatedAt: string | null;
+  dueAt: string | null;
+  daysLeft: number | null;
+  status: RotationStatus;
+  reasons: string[];
+  /** Only for the encryption key: values still under an older key (null = could not be counted). */
+  pendingValues?: number | null;
+}
+
+export interface KeyCopy {
+  label: string;
+  ok: boolean;
+  lastCheckAt: string;
+  lastOkAt: string | null;
+  backupCreatedAt: string | null;
+  error: string | null;
+}
+
+export interface RotationView {
+  status: RotationStatus;
+  items: RotationItem[];
+  keyCopies: { verified: number; status: RotationStatus; reasons: string[]; copies: KeyCopy[] };
+}
+
 export interface GithubConnection {
   /** Whether the calls to GitHub go through the proxy right now. */
   enabled: boolean;
@@ -313,6 +349,15 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardRestoreDrill: builder.query<DashboardRestoreDrill, void>({
       query: () => 'dashboard/restore-drill',
     }),
+    getRotation: builder.query<RotationView, void>({
+      query: () => 'rotation',
+      providesTags: ['Rotation'],
+    }),
+    markRotated: builder.mutation<void, { key: RotationKey; at?: string }>({
+      query: ({ key, at }) => ({ url: `rotation/${key}/rotated`, method: 'POST', body: at ? { at } : {} }),
+      invalidatesTags: ['Rotation'],
+      transformErrorResponse: errorMessage('Не удалось отметить смену'),
+    }),
     getDashboardBoardMetrics: builder.query<DashboardBoardMetrics[], number>({
       query: (hours) => `dashboard/board-metrics?hours=${hours}`,
     }),
@@ -359,6 +404,8 @@ export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
   useGetDashboardRestoreDrillQuery,
+  useGetRotationQuery,
+  useMarkRotatedMutation,
   useGetDashboardDeploysQuery,
   useGetNotifyBudgetQuery,
   useGetDashboardBoardMetricsQuery,

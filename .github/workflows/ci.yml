@@ -167,6 +167,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: bash infra/scriptcheck/test.sh
       - run: bash infra/backup/test-drill.sh
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq age && bash infra/backup/test-key-check.sh
       - run: bash infra/boardagent/test.sh
       - run: bash infra/nas/test.sh
       - run: bash infra/vmbackup/test.sh

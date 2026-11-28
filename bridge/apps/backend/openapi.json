@@ -5399,6 +5399,75 @@
         }
       }
     },
+    "/api/v1/rotation": {
+      "get": {
+        "operationId": "RotationController_view",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rotation/{key}/rotated": {
+      "post": {
+        "operationId": "RotationController_rotated",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRotatedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/boards/agent/key-check": {
+      "post": {
+        "operationId": "RotationAgentController_keyCheck",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCheckReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "operationId": "LogsController_list",
@@ -11935,6 +12004,40 @@
       "UpdateSecretDto": {
         "type": "object",
         "properties": {}
+      },
+      "MarkRotatedDto": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          }
+        }
+      },
+      "KeyCheckReportDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "pattern": "/^[A-Za-z0-9][A-Za-z0-9._ -]{0,39}$/"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "backupCreatedAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "label",
+          "ok"
+        ]
       },
       "AppLog": {
         "type": "object",
