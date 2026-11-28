@@ -83,6 +83,7 @@ describe('ImproveController', () => {
       quality as unknown as ImproveQualityService,
       escalation as unknown as ImproveEscalationService,
       {} as never,
+      {} as never,
     );
   });
 

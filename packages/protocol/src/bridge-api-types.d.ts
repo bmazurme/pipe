@@ -2105,6 +2105,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveController_saveKnowledge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/pr-fix": {
         parameters: {
             query?: never;
@@ -4661,6 +4677,13 @@ export interface components {
             contextId?: number | null;
             issueNumber: number;
             model: string;
+        };
+        SaveKnowledgeDto: {
+            title: string;
+            text: string;
+            /** @enum {string} */
+            target: "claude-md" | "docs";
+            source?: string;
         };
         StartPrFixDto: {
             prNumber: number;
@@ -8436,6 +8459,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImproveRun"];
+                };
+            };
+        };
+    };
+    ImproveController_saveKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveKnowledgeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

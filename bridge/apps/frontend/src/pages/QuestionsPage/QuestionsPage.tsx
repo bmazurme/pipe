@@ -15,6 +15,7 @@ import {
 import { EmptyState } from '../../widgets/EmptyState';
 import { JobDetailDialog } from '../WorkerPage/JobDetailDialog';
 import { PageHeader } from '../../widgets/PageHeader';
+import { SaveKnowledgeDialog } from '../ImprovePage/SaveKnowledgeDialog';
 import styles from './QuestionsPage.module.css';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -46,6 +47,8 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, onDelete
   // What is waiting for its second click: 'card' or `q:<id>`.
   const [armed, setArmed] = useState<string | null>(null);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A8: the answer being saved as permanent knowledge (a pull request into the repository).
+  const [knowledgeFor, setKnowledgeFor] = useState<{ id: number; text: string; answer: string } | null>(null);
 
   useEffect(
     () => () => {
@@ -120,6 +123,18 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, onDelete
               {armed === `q:${question.id}` ? 'Удалить?' : null}
             </Button>
             {question.answer && <Text className={styles.answerText}>{question.answer}</Text>}
+            {question.answer && (
+              <Button
+                size="xs"
+                view="flat-secondary"
+                disabled={disabled}
+                title="Открыть pull request, который запишет этот ответ в репозиторий как постоянное знание"
+                aria-label={`В репозиторий: ${question.text}`}
+                onClick={() => setKnowledgeFor({ id: question.id, text: question.text, answer: question.answer as string })}
+              >
+                В репозиторий
+              </Button>
+            )}
             {!question.resolved && (
               <form
                 className={styles.answer}
@@ -164,6 +179,15 @@ function CardView({ card, onToggle, onAnswer, onSaveContext, onOpenJob, onDelete
           {armed === 'card' ? 'Нажмите ещё раз — удалить карточку' : 'Удалить карточку'}
         </Button>
       </div>
+      {knowledgeFor && (
+        <SaveKnowledgeDialog
+          key={knowledgeFor.id}
+          initialTitle={knowledgeFor.text}
+          initialText={knowledgeFor.answer}
+          source={`вопрос ${card.taskKey}`}
+          onClose={() => setKnowledgeFor(null)}
+        />
+      )}
       {hasAnswers && contextSaved && (
         <Text variant="caption-2" color="secondary" className={styles.answerText}>
           Context «Ответы: {card.taskKey}» {contextUpdated ? 'обновлён' : 'создан'} — выберите его при запуске следующего Worker job.

@@ -153,6 +153,23 @@ function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
 
+export type KnowledgeTarget = 'claude-md' | 'docs';
+
+export interface KnowledgeInput {
+  title: string;
+  text: string;
+  target: KnowledgeTarget;
+  /** Where it came from, for the pull request's description. */
+  source?: string;
+}
+
+export interface SavedKnowledge {
+  number: number;
+  url: string;
+  branch: string;
+  path: string;
+}
+
 export interface LoopControlState {
   paused: boolean;
   reason: string | null;
@@ -290,6 +307,11 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       providesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось загрузить карточки моделей'),
     }),
+    // A8: «сохранить как постоянное знание» — a pull request that adds the entry to CLAUDE.md or docs/knowledge.md.
+    saveKnowledge: builder.mutation<SavedKnowledge, KnowledgeInput>({
+      query: (body) => ({ url: 'improve/knowledge', method: 'POST', body }),
+      transformErrorResponse: errorMessage('Не удалось открыть PR'),
+    }),
     refreshImproveQuality: builder.mutation<{ checked: number; remaining: number }, void>({
       query: () => ({ url: 'improve/quality/refresh', method: 'POST' }),
       invalidatesTags: ['ImproveRuns'],
@@ -403,6 +425,7 @@ export const {
   useContinueImproveRunMutation,
   useGetImproveQualityQuery,
   useGetImproveModelCardsQuery,
+  useSaveKnowledgeMutation,
   useRefreshImproveQualityMutation,
   useGetLoopControlQuery,
   usePauseLoopMutation,

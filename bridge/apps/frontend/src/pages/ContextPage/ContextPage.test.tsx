@@ -59,6 +59,18 @@ const renderPage = () =>
   );
 
 describe('ContextPage', () => {
+  it('opens the permanent-knowledge dialog with the context’s own text, fetched when it is picked', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'В репозиторий: Project notes' }));
+
+    expect((await screen.findByLabelText('Заголовок знания') as HTMLInputElement).value).toBe('Project notes');
+    expect((screen.getByLabelText('Текст знания') as HTMLTextAreaElement).value).toBe('Use pnpm. No default exports.');
+    expect(requested).toContain('contexts/1');
+  });
+
   it('lists saved contexts with their size, without loading any text', async () => {
     renderPage();
 

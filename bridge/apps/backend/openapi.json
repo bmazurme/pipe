@@ -3823,6 +3823,34 @@
         }
       }
     },
+    "/api/v1/improve/knowledge": {
+      "post": {
+        "operationId": "ImproveController_saveKnowledge",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveKnowledgeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/pr-fix": {
       "post": {
         "operationId": "ImproveController_startPrFix",
@@ -10848,6 +10876,37 @@
         "required": [
           "issueNumber",
           "model"
+        ]
+      },
+      "SaveKnowledgeDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "claude-md",
+              "docs"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "title",
+          "text",
+          "target"
         ]
       },
       "StartPrFixDto": {

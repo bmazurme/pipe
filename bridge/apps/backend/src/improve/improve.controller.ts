@@ -25,6 +25,7 @@ import {
   CreateImproveIssueDto,
   CreateIssuesDto,
   DeclineItemDto,
+  SaveKnowledgeDto,
   SaveScheduleDto,
   SaveSettingsDto,
   StartAnalysisDto,
@@ -39,6 +40,7 @@ import { escalationFromSettings, type EscalationSettings } from './escalation';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
+import { ImproveKnowledgeService } from './improve-knowledge.service';
 import { ImproveQualityService } from './improve-quality.service';
 import { RouterSettingsService } from '../router/router-settings.service';
 import { ImproveScheduleService } from './improve-schedule.service';
@@ -59,6 +61,7 @@ export class ImproveController {
     private readonly quality: ImproveQualityService,
     private readonly escalation: ImproveEscalationService,
     private readonly routerSettings: RouterSettingsService,
+    private readonly knowledge: ImproveKnowledgeService,
   ) {}
 
   // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
@@ -182,6 +185,15 @@ export class ImproveController {
       null,
       await this.ownContext(user.id, dto.contextId),
     );
+  }
+
+  // A8: «сохранить как постоянное знание» (Questions, Context) — a pull request that adds the entry to CLAUDE.md or docs/knowledge.md.
+  @Post('knowledge')
+  saveKnowledge(
+    @Body() dto: SaveKnowledgeDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.knowledge.save(user.id, dto);
   }
 
   // The chat's "fix this PR" card, after the person confirmed it.

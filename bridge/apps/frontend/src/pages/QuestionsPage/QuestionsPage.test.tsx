@@ -64,6 +64,21 @@ const renderPage = () =>
   );
 
 describe('QuestionsPage', () => {
+  it('offers to save an answered question as permanent knowledge, from its own wording, and not an unanswered one', async () => {
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await screen.findByText('Проект 173');
+    expect(screen.queryByRole('button', { name: 'В репозиторий: Какую ветку брать за основу?' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'В репозиторий: Нужна ли миграция?' }));
+
+    expect(await screen.findByText('Сохранить как постоянное знание')).toBeTruthy();
+    expect((screen.getByLabelText('Заголовок знания') as HTMLInputElement).value).toBe('Нужна ли миграция?');
+    expect((screen.getByLabelText('Текст знания') as HTMLTextAreaElement).value).toBe('Нужна');
+  });
+
   it('shows a card tagged with the project number and its questions as checkboxes', async () => {
     renderPage();
 
