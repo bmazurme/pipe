@@ -21,6 +21,34 @@ export interface BackupStatus {
   error?: string;
 }
 
+export type RestoreDrillStatus = 'ok' | 'warn' | 'bad';
+
+/** R7: the monthly restore drill (infra/backup/restore-drill.sh), with bridge's verdict. */
+export interface DashboardRestoreDrill {
+  status: RestoreDrillStatus;
+  reasons: string[];
+  lastAt: string | null;
+  lastOkAt: string | null;
+  /** How old the restored backup was when it was restored — the recovery point as measured, in hours. */
+  backupAgeHours: number | null;
+  /** How long loading it into a fresh Postgres took. */
+  restoreSeconds: number | null;
+  nextDueAt: string | null;
+  /** Exact row counts of the key tables in the last good drill. */
+  counts: Record<string, number>;
+  recent: Array<{
+    ranAt: string;
+    host: string;
+    ok: boolean;
+    backupCreatedAt: string | null;
+    restoreSeconds: number | null;
+    tables: number | null;
+    rows: number | null;
+    lastMigration: string | null;
+    error: string | null;
+  }>;
+}
+
 export interface GithubConnection {
   /** Whether the calls to GitHub go through the proxy right now. */
   enabled: boolean;
@@ -282,6 +310,9 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
     getDashboardBackups: builder.query<BackupStatus, void>({
       query: () => 'dashboard/backups',
     }),
+    getDashboardRestoreDrill: builder.query<DashboardRestoreDrill, void>({
+      query: () => 'dashboard/restore-drill',
+    }),
     getDashboardBoardMetrics: builder.query<DashboardBoardMetrics[], number>({
       query: (hours) => `dashboard/board-metrics?hours=${hours}`,
     }),
@@ -327,6 +358,7 @@ const dashboardApiEndpoints = dashboardApi.injectEndpoints({
 export const {
   useGetDashboardNodesQuery,
   useGetDashboardBackupsQuery,
+  useGetDashboardRestoreDrillQuery,
   useGetDashboardDeploysQuery,
   useGetNotifyBudgetQuery,
   useGetDashboardBoardMetricsQuery,

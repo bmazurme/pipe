@@ -34,6 +34,7 @@ export function tileOfAttention(id: string): string | null {
     case 'nodes':
       return 'tile-nodes';
     case 'backup':
+    case 'restore-drill':
       return 'tile-backups';
     case 'release':
       return 'tile-releases';

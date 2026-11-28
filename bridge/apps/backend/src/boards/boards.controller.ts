@@ -27,11 +27,13 @@ import {
 } from './dto/boards.dto';
 import { BoardMetricsDto } from './dto/board-metrics.dto';
 import { NasReportDto } from './dto/nas.dto';
+import { RestoreDrillReportDto } from './dto/restore-drill.dto';
 import { CloudReportDto } from './dto/cloud.dto';
 import { UpsReportDto } from './dto/ups.dto';
 import { RouterRebootResultDto, RouterReportDto } from './dto/router.dto';
 import { BoardMetricsService } from './board-metrics.service';
 import { NasService } from './nas.service';
+import { RestoreDrillService } from './restore-drill.service';
 import { CloudService } from './cloud.service';
 import { UpsService } from './ups.service';
 import { RouterService } from './router.service';
@@ -52,6 +54,7 @@ export class BoardsAgentController {
     private readonly ups: UpsService,
     private readonly router: RouterService,
     private readonly cloud: CloudService,
+    private readonly drills: RestoreDrillService,
   ) {}
 
   // The board's vital signs, every ~2 minutes (infra/boardagent, with the run that also asks for decisions).
@@ -72,6 +75,16 @@ export class BoardsAgentController {
     @CurrentUser() user: { id: number },
   ): Promise<void> {
     await this.nas.record(user.id, dto);
+  }
+
+  // How a restore drill went (infra/backup/restore-drill.sh), with the same boards-only key. A failed one is reported too.
+  @Post('restore-drill')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async restoreDrill(
+    @Body() dto: RestoreDrillReportDto,
+    @CurrentUser() user: { id: number },
+  ): Promise<void> {
+    await this.drills.record(user.id, dto);
   }
 
   // What the cloud VM reports about itself and its services (infra/cloudagent/report.sh), with the same boards-only key.

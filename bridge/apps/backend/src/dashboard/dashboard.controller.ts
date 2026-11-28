@@ -23,6 +23,10 @@ import {
 } from '../boards/board-metrics.service';
 import { CloudService, CloudView } from '../boards/cloud.service';
 import { NasService, NasView } from '../boards/nas.service';
+import {
+  DrillView,
+  RestoreDrillService,
+} from '../boards/restore-drill.service';
 import { RouterService, RouterView } from '../boards/router.service';
 import { UpsService, UpsView } from '../boards/ups.service';
 import { BackupStatus, BackupStatusService } from './backup-status.service';
@@ -54,6 +58,7 @@ export class DashboardController {
     private readonly ups: UpsService,
     private readonly router: RouterService,
     private readonly cloud: CloudService,
+    private readonly drills: RestoreDrillService,
   ) {}
 
   @Get('nodes')
@@ -84,6 +89,12 @@ export class DashboardController {
   @Get('nas')
   getNas(@CurrentUser() user: { id: number }): Promise<NasView[]> {
     return this.nas.list(user.id);
+  }
+
+  // R7: the monthly restore drill — when the last backup was last actually restored, how long it took, how old the restored copy was.
+  @Get('restore-drill')
+  getRestoreDrill(@CurrentUser() user: { id: number }): Promise<DrillView> {
+    return this.drills.view(user.id);
   }
 
   // The cloud VM (the first layer): memory, disk, its services, replica lag, backups (infra/cloudagent reports it).

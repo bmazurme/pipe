@@ -32,6 +32,7 @@ describe('DashboardController routes', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getNodes()).resolves.toEqual({ nodes: [] });
@@ -70,6 +71,7 @@ describe('DashboardController: the connection to GitHub', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   it('reads, saves and checks through the service', async () => {
@@ -98,6 +100,7 @@ describe('DashboardController deploys', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getDeploys()).resolves.toEqual([
@@ -115,6 +118,7 @@ describe('DashboardController nas', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -137,6 +141,7 @@ describe('DashboardController board metrics', () => {
       {} as never,
       {} as never,
       { summary } as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -176,6 +181,7 @@ describe('DashboardController ups', () => {
       { list } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(controller.getUps({ id: 7 })).resolves.toEqual([
@@ -197,6 +203,7 @@ describe('DashboardController router', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
       {} as never,
     );
 
@@ -220,6 +227,7 @@ describe('DashboardController cloud', () => {
       {} as never,
       {} as never,
       { list } as never,
+      {} as never,
     );
 
     await expect(controller.getCloud({ id: 7 })).resolves.toEqual([

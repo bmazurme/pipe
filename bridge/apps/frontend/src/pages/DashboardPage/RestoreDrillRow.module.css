@@ -1,0 +1,21 @@
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

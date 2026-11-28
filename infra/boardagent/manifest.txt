@@ -1,6 +1,7 @@
 /usr/local/lib/pipe-autodeploy/autodeploy.sh|infra/autodeploy/autodeploy.sh
 /usr/local/lib/pipe-backup/backup.sh|infra/backup/backup.sh
 /usr/local/lib/pipe-backup/restore-check.sh|infra/backup/restore-check.sh
+/usr/local/lib/pipe-backup/restore-drill.sh|infra/backup/restore-drill.sh
 /usr/local/lib/pipe-backup/pull.sh|infra/backup/pull.sh
 /usr/local/lib/pipe-backup/mirror-s3.sh|infra/backup/mirror-s3.sh
 /usr/local/lib/pipe-backup/uploads-pull.sh|infra/backup/uploads-pull.sh
