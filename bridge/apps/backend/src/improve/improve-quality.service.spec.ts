@@ -314,3 +314,86 @@ describe('ImproveQualityService.sync', () => {
     expect(github.pullTimes).not.toHaveBeenCalled();
   });
 });
+
+describe('ImproveQualityService — A10 work time and model cards', () => {
+  it('records how long the agent worked: the jobs’ own clock, the cheap attempt a step up came after included', async () => {
+    const { service, upserts } = make({
+      runs: [run({ id: 5, model: 'sonnet', jobId: 21, escalatedFromRunId: 4 })],
+      origin: {
+        id: 4,
+        model: 'haiku',
+        jobId: 20,
+        kind: 'issue',
+        prNumber: null,
+      },
+      jobs: [
+        {
+          id: 21,
+          usage: { costUsd: 0.8 },
+          startedAt: new Date('2026-12-01T10:00:00Z'),
+          finishedAt: new Date('2026-12-01T10:10:00Z'),
+        },
+        {
+          id: 20,
+          usage: { costUsd: 0.3 },
+          startedAt: new Date('2026-12-01T09:00:00Z'),
+          finishedAt: new Date('2026-12-01T09:05:00Z'),
+        },
+      ],
+    });
+
+    await service.sync(1, NOW);
+
+    expect((upserts[0] as { workSeconds: number }).workSeconds).toBe(900);
+  });
+
+  it('records nothing when no job has a finish time', async () => {
+    const { service, upserts } = make({
+      jobs: [{ id: 11, usage: { costUsd: 0.4 } }],
+    });
+
+    await service.sync(1, NOW);
+
+    expect(
+      (upserts[0] as { workSeconds: number | null }).workSeconds,
+    ).toBeNull();
+  });
+
+  it('builds the cards and the advice from the stored outcomes and the router table it is given', async () => {
+    const { service, outcomes } = make();
+    const merged = (n: number) => ({
+      prNumber: n,
+      model: 'haiku',
+      tier: 2,
+      state: 'merged',
+      firstCi: 'success',
+      ciRepairs: 0,
+      costUsd: 0.2,
+      openedAt: new Date(),
+      mergedAt: new Date(),
+      reverted: false,
+      escalatedFrom: null,
+      workSeconds: 300,
+    });
+
+    outcomes.find.mockResolvedValue([1, 2, 3, 4, 5, 6].map(merged));
+
+    const cards = await service.modelCards(1, 90, {
+      1: 'haiku',
+      2: 'haiku',
+      3: 'haiku',
+      4: 'opus',
+    });
+
+    expect(cards.cells).toEqual([
+      expect.objectContaining({
+        model: 'haiku',
+        tier: 2,
+        merged: 6,
+        medianWorkMinutes: 5,
+        verdict: 'solid',
+      }),
+    ]);
+    expect(cards.advice.find((a) => a.tier === 2)?.status).toBe('keep');
+  });
+});

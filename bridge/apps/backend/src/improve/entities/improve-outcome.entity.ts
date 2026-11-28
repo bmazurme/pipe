@@ -59,6 +59,11 @@ export class ImproveOutcome extends BaseEntity {
   @Column({ type: 'varchar', length: 16, nullable: true })
   escalatedFrom: string | null;
 
+  // A10: seconds the agent worked on it — the jobs' own clock (started to finished) summed over every run of this pull request, the cheap attempt a step up
+  // came after included. Null for outcomes recorded before this was measured, or when no job reported a finish.
+  @Column({ type: 'int', nullable: true })
+  workSeconds: number | null;
+
   // A later pull request reverted this one.
   @Column({ type: 'boolean', default: false })
   reverted: boolean;

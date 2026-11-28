@@ -11,6 +11,7 @@ import {
 } from './entities/improve-outcome.entity';
 import { ImproveRun, ImproveRunStatus } from './entities/improve-run.entity';
 import { isStepUp } from './escalation';
+import { buildModelCards, type ModelCards } from './model-cards';
 import {
   needsRefresh,
   type OutcomeRow,
@@ -80,6 +81,17 @@ export class ImproveQualityService {
     ).length;
 
     return view;
+  }
+
+  // A10: what each model closes at each tier, and what that says about the router's table (advice only — see model-cards.ts).
+  async modelCards(
+    userId: number,
+    days: number,
+    tierModels: Record<number, string>,
+  ): Promise<ModelCards> {
+    const rows = await this.outcomes.find({ where: { userId } });
+
+    return buildModelCards(rows as OutcomeRow[], tierModels, days);
   }
 
   @Interval(SYNC_EVERY_MS)
@@ -213,6 +225,16 @@ export class ImproveQualityService {
       .map((job) => job.usage?.costUsd)
       .filter((cost): cost is number => typeof cost === 'number');
 
+    const seconds = jobs
+      .filter((job) => job.startedAt && job.finishedAt)
+      .map(
+        (job) =>
+          ((job.finishedAt as Date).getTime() -
+            (job.startedAt as Date).getTime()) /
+          1000,
+      )
+      .filter((value) => value >= 0);
+
     await this.outcomes.upsert(
       {
         userId,
@@ -229,6 +251,9 @@ export class ImproveQualityService {
         ).length,
         escalatedFrom: origin?.model ?? null,
         costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
+        workSeconds: seconds.length
+          ? Math.round(seconds.reduce((a, b) => a + b, 0))
+          : null,
         openedAt: new Date(times.createdAt),
         mergedAt: times.mergedAt ? new Date(times.mergedAt) : null,
         closedAt: times.closedAt ? new Date(times.closedAt) : null,

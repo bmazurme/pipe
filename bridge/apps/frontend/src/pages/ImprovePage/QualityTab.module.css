@@ -66,3 +66,10 @@
 .table tbody th {
   font-weight: 500;
 }
+
+.adviceRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}

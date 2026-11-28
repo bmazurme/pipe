@@ -18,6 +18,8 @@ export interface OutcomeRow {
   reverted: boolean;
   /** A9: the model the work started on when it needed one more attempt a step up (the pull request, or its CI repairs, ended on the next one); null when it never did. */
   escalatedFrom?: string | null;
+  /** A10: seconds the agent worked on it (every job of the pull request, the cheap attempt and the repairs included); null when not recorded. */
+  workSeconds?: number | null;
 }
 
 export interface QualityFigures {
