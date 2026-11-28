@@ -47,6 +47,15 @@ export interface PullInfo {
   headRepo: string | null;
   labels: string[];
   htmlUrl: string;
+  // The description (A3 puts the worker's own check in it); empty when there is none.
+  body?: string;
+}
+
+export interface PullFileStat {
+  path: string;
+  additions: number;
+  deletions: number;
+  status: string;
 }
 
 export interface IssueInfo {
@@ -119,6 +128,7 @@ export class GithubApiService {
       head: { sha: string; ref: string; repo: { full_name: string } | null };
       labels: Array<{ name: string }>;
       html_url: string;
+      body: string | null;
     };
 
     return {
@@ -134,7 +144,37 @@ export class GithubApiService {
       headRepo: pr.head.repo?.full_name ?? null,
       labels: pr.labels.map((label) => label.name),
       htmlUrl: pr.html_url,
+      body: pr.body ?? '',
     };
+  }
+
+  // The files of a PR with how much of each changed (A12's review card). Capped like listPullFiles.
+  async listPullFileStats(number: number): Promise<PullFileStat[]> {
+    const files: PullFileStat[] = [];
+
+    for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+      const batch = (await this.get(
+        `/pulls/${number}/files?per_page=100&page=${page}`,
+      )) as Array<{
+        filename: string;
+        additions?: number;
+        deletions?: number;
+        status?: string;
+      }>;
+
+      for (const file of batch) {
+        files.push({
+          path: file.filename,
+          additions: file.additions ?? 0,
+          deletions: file.deletions ?? 0,
+          status: file.status ?? 'modified',
+        });
+      }
+
+      if (batch.length < 100) return files;
+    }
+
+    throw new Error('PR слишком большой, чтобы показать список файлов');
   }
 
   // Every changed file, paged. A PR bigger than the cap is refused rather

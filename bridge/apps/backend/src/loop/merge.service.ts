@@ -1,10 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { NotifyService } from '../telegram/notify.service';
 import { GithubApiService, PullInfo } from './github-api.service';
 import { LOOP_PR_LABEL } from './github-events';
 import { findProtected } from './protected-paths';
+import { formatReviewCard } from './review-card';
+import { ReviewCardService } from './review-card.service';
 
 export type MergeVerdict =
   | { ok: true; pr: PullInfo }
@@ -24,6 +26,8 @@ export class MergeService {
     private readonly github: GithubApiService,
     private readonly telegram: NotifyService,
     private readonly configService: ConfigService,
+    // A12 (optional: what builds this service without it keeps the one-line offer).
+    @Optional() private readonly reviews?: ReviewCardService,
   ) {}
 
   async evaluate(
@@ -110,7 +114,7 @@ export class MergeService {
       const { pr } = verdict;
 
       await this.telegram.sendWithButtons(
-        `🟢 CI зелёный: PR #${pr.number} «${pr.title}»\nПроверки пройдены. Влить в ${pr.baseRef} (squash)?`,
+        await this.offerText(pr.number, pr.title, pr.baseRef),
         [
           [
             {
@@ -130,6 +134,30 @@ export class MergeService {
     await this.telegram.send(
       `🟢 CI зелёный на PR #${number}, но merge из Telegram недоступен: ${verdict.reason}${link}`,
     );
+  }
+
+  // A12: the review card; the old one-liner when the card cannot be made (GitHub hiccup) — the offer itself never fails for it.
+  private async offerText(
+    number: number,
+    title: string,
+    base: string,
+  ): Promise<string> {
+    const question = `Влить в ${base} (squash)?`;
+
+    if (this.reviews) {
+      try {
+        return formatReviewCard(await this.reviews.build(number), {
+          improveUrl: this.reviews.improveUrl(),
+          question,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `review card #${number} failed: ${errorMessage(error)}`,
+        );
+      }
+    }
+
+    return `🟢 CI зелёный: PR #${number} «${title}»\nПроверки пройдены. ${question}`;
   }
 
   // Runs on the owner's button press. Returns the text to show them.

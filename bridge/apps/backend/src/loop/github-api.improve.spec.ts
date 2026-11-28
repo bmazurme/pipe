@@ -407,4 +407,57 @@ describe('GithubApiService (improve)', () => {
       );
     });
   });
+
+  describe('listPullFileStats', () => {
+    it('reads the files of a pull request with how much of each changed', async () => {
+      stubFetch(() => [
+        { filename: 'a.ts', additions: 3, deletions: 1, status: 'modified' },
+        { filename: 'b.ts' },
+      ]);
+
+      await expect(service().listPullFileStats(4)).resolves.toEqual([
+        { path: 'a.ts', additions: 3, deletions: 1, status: 'modified' },
+        { path: 'b.ts', additions: 0, deletions: 0, status: 'modified' },
+      ]);
+    });
+
+    it('goes on to the next page while a page is full, and refuses a pull request bigger than the cap', async () => {
+      const page = Array.from({ length: 100 }, (_, i) => ({
+        filename: `f${i}.ts`,
+        additions: 1,
+        deletions: 0,
+        status: 'added',
+      }));
+      const calls = stubFetch((url) => (url.includes('page=2') ? [] : page));
+
+      await expect(service().listPullFileStats(4)).resolves.toHaveLength(100);
+      expect(calls).toHaveLength(2);
+
+      jest.restoreAllMocks();
+      stubFetch(() => page);
+      await expect(service().listPullFileStats(4)).rejects.toThrow(
+        /слишком большой/,
+      );
+    });
+  });
+
+  it('hands back the description of a pull request', async () => {
+    stubFetch(() => ({
+      number: 4,
+      title: 't',
+      state: 'open',
+      merged: false,
+      draft: false,
+      mergeable: true,
+      base: { ref: 'main' },
+      head: { sha: 's', ref: 'b', repo: { full_name: 'o/r' } },
+      labels: [],
+      html_url: 'u',
+      body: 'the description',
+    }));
+
+    await expect(service().getPull(4)).resolves.toMatchObject({
+      body: 'the description',
+    });
+  });
 });

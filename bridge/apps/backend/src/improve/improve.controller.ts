@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Body,
   Controller,
@@ -36,6 +37,7 @@ import {
   StartRunDto,
 } from './dto/improve.dto';
 import { ContextService } from '../context/context.service';
+import { ReviewCardService } from '../loop/review-card.service';
 import { escalationFromSettings, type EscalationSettings } from './escalation';
 import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveEscalationService } from './improve-escalation.service';
@@ -62,6 +64,7 @@ export class ImproveController {
     private readonly escalation: ImproveEscalationService,
     private readonly routerSettings: RouterSettingsService,
     private readonly knowledge: ImproveKnowledgeService,
+    private readonly reviews: ReviewCardService,
   ) {}
 
   // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
@@ -185,6 +188,23 @@ export class ImproveController {
       null,
       await this.ownContext(user.id, dto.contextId),
     );
+  }
+
+  // A12: the review card of a pull request — what the change is, its risk, what was and was not checked, what the run cost.
+  @Get('prs/:number/review')
+  async prReview(@Param('number', ParseIntPipe) number: number) {
+    if (number < 1) throw new BadRequestException('Некорректный номер PR');
+
+    try {
+      return {
+        ...(await this.reviews.build(number)),
+        improveUrl: this.reviews.improveUrl() ?? null,
+      };
+    } catch (error) {
+      throw new BadGatewayException(
+        error instanceof Error ? error.message : 'GitHub не ответил',
+      );
+    }
   }
 
   // A8: «сохранить как постоянное знание» (Questions, Context) — a pull request that adds the entry to CLAUDE.md or docs/knowledge.md.

@@ -153,6 +153,35 @@ function errorMessage(fallback: string) {
   return (response: { data?: unknown }) => (response.data as { message?: string } | undefined)?.message ?? fallback;
 }
 
+export interface PrReview {
+  number: number;
+  title: string;
+  url: string;
+  risk: { level: 'low' | 'medium' | 'high'; text: string };
+  diff: {
+    files: number;
+    additions: number;
+    deletions: number;
+    areas: Array<{ name: string; files: number }>;
+    largest: Array<{ path: string; additions: number; deletions: number }>;
+  };
+  /** Worth a look before merging, drawn from the files. */
+  attention: string[];
+  checked: string[];
+  notChecked: string[];
+  run: {
+    model: string;
+    tier: number | null;
+    trigger: string;
+    attempts: number;
+    ciRepairs: number;
+    escalated: boolean;
+    workMinutes: number | null;
+    costUsd: number | null;
+  } | null;
+  improveUrl: string | null;
+}
+
 export type KnowledgeTarget = 'claude-md' | 'docs';
 
 export interface KnowledgeInput {
@@ -336,6 +365,11 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       invalidatesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось запустить правку'),
     }),
+    // A12: the review card of a pull request — the change in a few lines, its risk, what was and was not checked, what the run cost.
+    getImprovePrReview: builder.query<PrReview, number>({
+      query: (number) => `improve/prs/${number}/review`,
+      transformErrorResponse: errorMessage('Не удалось собрать карточку PR'),
+    }),
     // The chat's "merge this PR" card, after the person confirmed it there.
     startImprovePrMerge: builder.mutation<
       { merged: boolean; reason: string; prUrl?: string; baseRef?: string },
@@ -439,6 +473,7 @@ export const {
   useStartImproveRunMutation,
   useStartImprovePrFixMutation,
   useStartImprovePrMergeMutation,
+  useGetImprovePrReviewQuery,
   useCancelImproveRunMutation,
   useRetryImprovePublishMutation,
   useStartImproveAnalysisMutation,

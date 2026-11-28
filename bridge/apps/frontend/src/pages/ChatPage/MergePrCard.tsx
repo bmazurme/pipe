@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Card, Text } from '@gravity-ui/uikit';
 
 import { useStartImprovePrMergeMutation } from '../../store/api/improve-api/endpoints';
+import { PrReviewCard } from '../ImprovePage/PrReviewCard';
 import type { MergePrAction } from './chatActions';
 import styles from './PrFixCard.module.css';
 
@@ -57,6 +58,7 @@ export function MergePrCard({ action, onDone }: Props) {
         Bridge заново проверит, что PR открыт, CI зелёный, нет конфликтов и не затронуты защищённые пути — иначе
         откажет. Метод — squash.
       </Text>
+      <PrReviewCard number={action.pr} />
       {result && !result.merged && <Alert theme="warning" message={result.reason} />}
       {error && <Alert theme="danger" message={error} />}
       <div className={styles.actions}>
