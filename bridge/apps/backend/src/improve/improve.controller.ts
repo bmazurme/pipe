@@ -40,6 +40,7 @@ import { ImproveAutoStartService } from './improve-auto-start.service';
 import { ImproveEscalationService } from './improve-escalation.service';
 import { ImproveIssueFilingService } from './improve-issue-filing.service';
 import { ImproveQualityService } from './improve-quality.service';
+import { RouterSettingsService } from '../router/router-settings.service';
 import { ImproveScheduleService } from './improve-schedule.service';
 import { ImproveService } from './improve.service';
 
@@ -57,6 +58,7 @@ export class ImproveController {
     private readonly contexts: ContextService,
     private readonly quality: ImproveQualityService,
     private readonly escalation: ImproveEscalationService,
+    private readonly routerSettings: RouterSettingsService,
   ) {}
 
   // A context named in a request must be one of the caller's own (404 otherwise, like a schedule's); no context = null.
@@ -132,6 +134,22 @@ export class ImproveController {
     @CurrentUser() user: { id: number },
   ) {
     return this.quality.summary(user.id, Math.min(Math.max(days, 1), 365));
+  }
+
+  // A10: model cards — what each model closes at each size tier (success, first CI, repairs, work time, cost), and the router's table checked against them.
+  // Advice only: the owner applies a change in the router settings.
+  @Get('quality/model-cards')
+  async modelCards(
+    @Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    const settings = await this.routerSettings.get(user.id);
+
+    return this.quality.modelCards(
+      user.id,
+      Math.min(Math.max(days, 1), 365),
+      settings.tierModels,
+    );
   }
 
   // Reads GitHub again now instead of waiting for the next scheduled sync (at most 40 pull requests per call; `remaining` says how many are left).

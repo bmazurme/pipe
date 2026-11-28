@@ -5,6 +5,7 @@ import { Alert, Button, Card, Select, Skeleton, Text } from '@gravity-ui/uikit';
 import { type EscalationFigures, getErrorMessage, type QualityFigures, type QualityGroup, useGetImproveQualityQuery, useRefreshImproveQualityMutation } from '../../store/api';
 import { EmptyState } from '../../widgets/EmptyState';
 import { SectionHeader } from '../../widgets/SectionHeader';
+import { ModelCards } from './ModelCards';
 import styles from './QualityTab.module.css';
 
 const PERIODS = [
@@ -175,6 +176,7 @@ export function QualityTab() {
           <Escalations escalation={data.escalation} />
           <Table title="По моделям" firstColumn="Модель" groups={data.byModel} label={(key) => key} />
           <Table title="По ярусам" firstColumn="Ярус" groups={data.byTier} label={tierLabel} />
+          <ModelCards days={Number(days)} />
           <Text color="secondary" variant="caption-2">
             Период — по дате открытия PR. «С 1-го раза» считается только по PR, у которых CI уже закончился. Ярус ставит маршрутизатор; у запуска на заданной модели яруса нет.
           </Text>

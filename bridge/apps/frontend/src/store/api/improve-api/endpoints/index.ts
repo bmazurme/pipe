@@ -203,6 +203,45 @@ export interface QualityView {
   byTier: QualityGroup[];
 }
 
+export type CardVerdict = 'solid' | 'weak' | 'thin';
+
+/** A10: what one model closes at one size tier, from the pull requests that were started on it. */
+export interface ModelCell {
+  model: string;
+  tier: number;
+  prs: number;
+  merged: number;
+  closed: number;
+  open: number;
+  /** Times this model was not enough here and the work was retried a step up. */
+  stepUps: number;
+  closeRate: number | null;
+  samples: number;
+  firstGreenRate: number | null;
+  repairsPerMerged: number | null;
+  revertRate: number | null;
+  medianWorkMinutes: number | null;
+  costPerMergedUsd: number | null;
+  verdict: CardVerdict;
+}
+
+export type AdviceStatus = 'keep' | 'switch' | 'collect' | 'no-data';
+
+export interface TierAdvice {
+  tier: number;
+  current: string;
+  status: AdviceStatus;
+  suggested?: string;
+  reason: string;
+}
+
+export interface ModelCards {
+  days: number;
+  cells: ModelCell[];
+  advice: TierAdvice[];
+  rules: { minSamples: number; solidCloseRate: number; solidFirstGreenRate: number; maxRevertRate: number; cheaperRatio: number };
+}
+
 const improveApiEndpoints = improveApi.injectEndpoints({
   endpoints: (builder) => ({
     // The kill-switch of the automation.
@@ -244,6 +283,12 @@ const improveApiEndpoints = improveApi.injectEndpoints({
       query: (days) => `improve/quality?days=${days}`,
       providesTags: ['ImproveRuns'],
       transformErrorResponse: errorMessage('Не удалось загрузить показатели качества'),
+    }),
+    // A10: model cards — what each model closes at each tier, and the router's table checked against them (advice only).
+    getImproveModelCards: builder.query<ModelCards, number>({
+      query: (days) => `improve/quality/model-cards?days=${days}`,
+      providesTags: ['ImproveRuns'],
+      transformErrorResponse: errorMessage('Не удалось загрузить карточки моделей'),
     }),
     refreshImproveQuality: builder.mutation<{ checked: number; remaining: number }, void>({
       query: () => ({ url: 'improve/quality/refresh', method: 'POST' }),
@@ -357,6 +402,7 @@ const improveApiEndpoints = improveApi.injectEndpoints({
 export const {
   useContinueImproveRunMutation,
   useGetImproveQualityQuery,
+  useGetImproveModelCardsQuery,
   useRefreshImproveQualityMutation,
   useGetLoopControlQuery,
   usePauseLoopMutation,

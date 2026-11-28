@@ -2041,6 +2041,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/improve/quality/model-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ImproveController_modelCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/improve/quality/refresh": {
         parameters: {
             query?: never;
@@ -8299,6 +8315,27 @@ export interface operations {
         };
     };
     ImproveController_qualityView: {
+        parameters: {
+            query: {
+                days: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ImproveController_modelCards: {
         parameters: {
             query: {
                 days: number;

@@ -3695,6 +3695,33 @@
         }
       }
     },
+    "/api/v1/improve/quality/model-cards": {
+      "get": {
+        "operationId": "ImproveController_modelCards",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/improve/quality/refresh": {
       "post": {
         "operationId": "ImproveController_refreshQuality",

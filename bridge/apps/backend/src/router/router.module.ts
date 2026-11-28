@@ -19,6 +19,6 @@ import { RouterService } from './router.service';
   ],
   controllers: [RouterController],
   providers: [RouterService, RouterSettingsService, RouterClassifierService],
-  exports: [RouterService],
+  exports: [RouterService, RouterSettingsService],
 })
 export class RouterModule {}

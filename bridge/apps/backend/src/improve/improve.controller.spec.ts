@@ -82,6 +82,7 @@ describe('ImproveController', () => {
       contexts as unknown as ContextService,
       quality as unknown as ImproveQualityService,
       escalation as unknown as ImproveEscalationService,
+      {} as never,
     );
   });
 
