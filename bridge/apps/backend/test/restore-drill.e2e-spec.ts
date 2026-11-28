@@ -73,7 +73,11 @@ describe('Restore drill (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect(res.body).toMatchObject({ status: 'warn', lastAt: null, recent: [] });
+    expect(res.body).toMatchObject({
+      status: 'warn',
+      lastAt: null,
+      recent: [],
+    });
   });
 
   it('takes a good drill from a boards key and shows it, RPO and restore time included', async () => {
