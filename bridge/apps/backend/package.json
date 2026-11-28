@@ -19,6 +19,7 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts",
     "migration:check": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts --check /tmp/migration-check",
     "openapi:generate": "node dist/generate-openapi.js",
+    "reencrypt": "node dist/reencrypt-cli.js",
     "openapi:check": "node dist/generate-openapi.js && git diff --exit-code openapi.json",
     "e2e:seed-user": "node dist/scripts/seed-e2e-user.js"
   },
